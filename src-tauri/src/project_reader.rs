@@ -45,19 +45,26 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
     };
 
     match ProjectFile::from_data_file(&project_file_path) {
-        Ok(_project) => {
+        Ok(project) => {
+            // Extract tempo
+            let tempo = project.settings.tempo.tempo as f32;
+
+            // Extract time signature
+            let numerator = project.settings.control.metronome.metronome_time_signature + 1;
+            let denominator = 2u32.pow(project.settings.control.metronome.metronome_time_signature_denominator as u32);
+            let time_signature = format!("{}/{}", numerator, denominator);
+
             // Extract metadata from the project file
-            // Note: These fields might need adjustment based on actual ProjectFile structure
             Ok(ProjectMetadata {
                 name: path
                     .file_name()
                     .and_then(|n| n.to_str())
                     .unwrap_or("Unknown")
                     .to_string(),
-                tempo: 120.0, // TODO: Extract from project file
-                swing: 50,     // TODO: Extract from project file
-                time_signature: "4/4".to_string(), // TODO: Extract from project file
-                pattern_length: 16, // TODO: Extract from project file
+                tempo,
+                swing: 50, // TODO: Find swing in project settings if available
+                time_signature,
+                pattern_length: 16, // TODO: Extract from current pattern if needed
             })
         }
         Err(e) => Err(format!("Failed to read project file: {:?}", e)),
@@ -87,11 +94,25 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
         }
 
         match BankFile::from_data_file(&bank_file_path) {
-            Ok(_bank_data) => {
+            Ok(bank_data) => {
+                // Debug print basic bank info
+                eprintln!("Bank {} loaded successfully, part_names: {:?}", bank_letter, bank_data.part_names);
+
                 let mut parts = Vec::new();
 
                 // Each bank has 4 parts (1-4)
                 for part_id in 0..4 {
+                    // Extract part name from the byte array
+                    let part_name_bytes = &bank_data.part_names[part_id as usize];
+                    let part_name = String::from_utf8_lossy(part_name_bytes)
+                        .trim_end_matches('\0')
+                        .to_string();
+                    let part_name = if part_name.is_empty() {
+                        format!("Part {}", part_id + 1)
+                    } else {
+                        part_name
+                    };
+
                     let mut patterns = Vec::new();
 
                     // Each part has 16 patterns (1-16)
@@ -99,13 +120,13 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                         patterns.push(Pattern {
                             id: pattern_id,
                             name: format!("Pattern {}", pattern_id + 1),
-                            length: 16, // TODO: Extract from bank data
+                            length: 16, // TODO: Extract actual pattern length from bank_data.patterns
                         });
                     }
 
                     parts.push(Part {
                         id: part_id,
-                        name: format!("Part {}", part_id + 1),
+                        name: part_name,
                         patterns,
                     });
                 }
