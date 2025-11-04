@@ -40,7 +40,6 @@ interface SampleSlots {
 interface ProjectMetadata {
   name: string;
   tempo: number;
-  swing: number;
   time_signature: string;
   pattern_length: number;
   current_state: CurrentState;
@@ -67,7 +66,7 @@ interface Bank {
   parts: Part[];
 }
 
-type TabType = "overview" | "banks" | "samples" | "settings";
+type TabType = "overview" | "banks" | "samples";
 
 export function ProjectDetail() {
   const [searchParams] = useSearchParams();
@@ -162,12 +161,6 @@ export function ProjectDetail() {
             >
               Samples ({metadata.sample_slots.static_slots.length + metadata.sample_slots.flex_slots.length})
             </button>
-            <button
-              className={`tab ${activeTab === "settings" ? "active" : ""}`}
-              onClick={() => setActiveTab("settings")}
-            >
-              Settings
-            </button>
           </div>
 
           <div className="tab-content">
@@ -219,6 +212,40 @@ export function ProjectDetail() {
                       </span>
                     </div>
                   )}
+                </section>
+
+                <section className="mixer-section">
+                  <h2>Mixer Settings</h2>
+                  <div className="metadata-grid">
+                    <div className="metadata-item">
+                      <span className="metadata-label">Gain AB</span>
+                      <span className="metadata-value">{metadata.mixer_settings.gain_ab}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">Gain CD</span>
+                      <span className="metadata-value">{metadata.mixer_settings.gain_cd}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">Direct AB</span>
+                      <span className="metadata-value">{metadata.mixer_settings.dir_ab}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">Direct CD</span>
+                      <span className="metadata-value">{metadata.mixer_settings.dir_cd}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">Phones Mix</span>
+                      <span className="metadata-value">{metadata.mixer_settings.phones_mix}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">Main Level</span>
+                      <span className="metadata-value">{metadata.mixer_settings.main_level}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">Cue Level</span>
+                      <span className="metadata-value">{metadata.mixer_settings.cue_level}</span>
+                    </div>
+                  </div>
                 </section>
               </div>
             )}
@@ -292,43 +319,6 @@ export function ProjectDetail() {
               </div>
             )}
 
-            {activeTab === "settings" && (
-              <div className="settings-tab">
-                <section className="mixer-section">
-                  <h2>Mixer</h2>
-                  <div className="metadata-grid">
-                    <div className="metadata-item">
-                      <span className="metadata-label">Gain AB</span>
-                      <span className="metadata-value">{metadata.mixer_settings.gain_ab}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Gain CD</span>
-                      <span className="metadata-value">{metadata.mixer_settings.gain_cd}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Direct AB</span>
-                      <span className="metadata-value">{metadata.mixer_settings.dir_ab}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Direct CD</span>
-                      <span className="metadata-value">{metadata.mixer_settings.dir_cd}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Phones Mix</span>
-                      <span className="metadata-value">{metadata.mixer_settings.phones_mix}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Main Level</span>
-                      <span className="metadata-value">{metadata.mixer_settings.main_level}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Cue Level</span>
-                      <span className="metadata-value">{metadata.mixer_settings.cue_level}</span>
-                    </div>
-                  </div>
-                </section>
-              </div>
-            )}
           </div>
         </div>
       )}

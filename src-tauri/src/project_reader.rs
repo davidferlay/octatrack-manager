@@ -6,7 +6,6 @@ use std::path::Path;
 pub struct ProjectMetadata {
     pub name: String,
     pub tempo: f32,
-    pub swing: u8,
     pub time_signature: String,
     pub pattern_length: u16,
     pub current_state: CurrentState,
@@ -179,6 +178,31 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
             // Extract OS version
             let os_version = project.metadata.os_version.clone();
 
+            // Extract current pattern length from the active bank file
+            let pattern_length = {
+                let current_bank = project.states.bank + 1; // Bank is 0-indexed, files are 1-indexed
+                let current_pattern = project.states.pattern as usize;
+
+                // Try to load the current bank file to get pattern length
+                let bank_file_name = format!("bank{:02}.work", current_bank);
+                let bank_file_path = path.join(&bank_file_name);
+
+                // If .work doesn't exist, try .strd
+                let bank_file_path = if bank_file_path.exists() {
+                    bank_file_path
+                } else {
+                    let bank_file_name = format!("bank{:02}.strd", current_bank);
+                    path.join(&bank_file_name)
+                };
+
+                // Try to read the bank file and extract pattern length
+                if let Ok(bank_data) = BankFile::from_data_file(&bank_file_path) {
+                    bank_data.patterns.0[current_pattern].scale.master_len as u16
+                } else {
+                    16 // Default to 16 if bank file can't be read
+                }
+            };
+
             // Extract metadata from the project file
             Ok(ProjectMetadata {
                 name: path
@@ -187,9 +211,8 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                     .unwrap_or("Unknown")
                     .to_string(),
                 tempo,
-                swing: 50, // TODO: Find swing in project settings if available
                 time_signature,
-                pattern_length: 16, // TODO: Extract from current pattern if needed
+                pattern_length,
                 current_state,
                 mixer_settings,
                 sample_slots,
@@ -249,10 +272,14 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
 
                     // Each part has 16 patterns (1-16)
                     for pattern_id in 0..16 {
+                        // Extract actual pattern length from bank data
+                        // Each pattern stores its master length in the scale settings
+                        let pattern_length = bank_data.patterns.0[pattern_id as usize].scale.master_len as u16;
+
                         patterns.push(Pattern {
                             id: pattern_id,
                             name: format!("Pattern {}", pattern_id + 1),
-                            length: 16, // TODO: Extract actual pattern length from bank_data.patterns
+                            length: pattern_length,
                         });
                     }
 
