@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import "./App.css";
 
 interface OctatrackProject {
@@ -56,6 +57,43 @@ function App() {
     });
   }
 
+  async function browseDirectory() {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: "Select Octatrack Directory"
+      });
+
+      if (selected) {
+        setIsScanning(true);
+        try {
+          const foundLocations = await invoke<OctatrackLocation[]>("scan_custom_directory", { path: selected });
+
+          // Merge with existing locations, avoiding duplicates based on path
+          setLocations(prev => {
+            const existingPaths = new Set(prev.map(loc => loc.path));
+            const newLocations = foundLocations.filter(loc => !existingPaths.has(loc.path));
+            const merged = [...prev, ...newLocations];
+
+            // Update open locations to include new ones
+            setOpenLocations(new Set(merged.map((_, idx) => idx)));
+
+            return merged;
+          });
+
+          setHasScanned(true);
+        } catch (error) {
+          console.error("Error scanning directory:", error);
+        } finally {
+          setIsScanning(false);
+        }
+      }
+    } catch (error) {
+      console.error("Error opening directory dialog:", error);
+    }
+  }
+
   function getDeviceTypeLabel(type: string): string {
     switch (type) {
       case "CompactFlash":
@@ -81,6 +119,13 @@ function App() {
           className="scan-button"
         >
           {isScanning ? "Scanning..." : "Scan for Devices"}
+        </button>
+        <button
+          onClick={browseDirectory}
+          disabled={isScanning}
+          className="scan-button browse-button"
+        >
+          Browse...
         </button>
       </div>
 

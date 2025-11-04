@@ -296,6 +296,25 @@ fn scan_home_directory() -> Vec<OctatrackLocation> {
     group_sets_by_parent(all_sets)
 }
 
+/// Scans a specific directory for Octatrack Sets
+pub fn scan_directory(path: &str) -> Vec<OctatrackLocation> {
+    let path = Path::new(path);
+
+    if !path.exists() || !path.is_dir() {
+        return Vec::new();
+    }
+
+    // Scan for Sets in the specified directory
+    let sets = scan_for_sets(path, 3);
+
+    if sets.is_empty() {
+        return Vec::new();
+    }
+
+    // Group Sets by their parent directory
+    group_sets_by_parent(sets)
+}
+
 /// Discovers Octatrack locations by scanning removable drives and home directory
 pub fn discover_devices() -> Vec<OctatrackLocation> {
     let mut locations = Vec::new();
