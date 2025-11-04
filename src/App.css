@@ -175,6 +175,29 @@ h1 {
   border-bottom: 1px solid var(--elektron-border-gray);
 }
 
+.location-header.clickable {
+  cursor: pointer;
+  user-select: none;
+  transition: opacity 0.15s ease;
+}
+
+.location-header.clickable:hover {
+  opacity: 0.8;
+}
+
+.location-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.collapse-indicator {
+  font-size: 0.75rem;
+  color: var(--elektron-orange);
+  transition: transform 0.2s ease;
+  min-width: 1rem;
+}
+
 .location-header h3 {
   margin: 0;
   font-size: 1.125rem;
@@ -211,6 +234,18 @@ h1 {
 /* Sets Section */
 .sets-section {
   margin-top: 1.5rem;
+  animation: fadeIn 0.2s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .sets-section h4 {
