@@ -9,6 +9,38 @@ A desktop application for managing Elektron Octatrack projects, built with Tauri
 - **Cross-Platform**: Works on Linux, macOS, and Windows
 - **Modern UI**: Clean, responsive interface built with React and TypeScript
 
+## Installation
+
+### Download Pre-built Binaries
+
+Download the latest release for your platform from the [Releases page](https://github.com/davidferlay/octatrack-manager/releases):
+
+#### Linux
+- **Debian/Ubuntu**: Download `.deb` and install with `sudo dpkg -i octatrack-manager_*.deb`
+- **Fedora/RHEL**: Download `.rpm` and install with `sudo rpm -i octatrack-manager-*.rpm`
+- **AppImage**: Download `.AppImage`, make it executable with `chmod +x`, then run it
+
+#### Windows
+- Download the `.msi` installer and run it
+- Or download the `.exe` standalone installer
+
+#### macOS
+
+**Important**: The app is not code-signed, so macOS will block it by default.
+
+1. Download the `.dmg` file for your architecture:
+   - Intel Macs: `_x64_darwin.dmg`
+   - Apple Silicon (M1/M2/M3/M4): `_aarch64_darwin.dmg`
+
+2. Open the `.dmg` and drag the app to Applications
+
+3. **Remove the quarantine flag** (required for unsigned apps):
+   ```bash
+   xattr -cr /Applications/octatrack-manager.app
+   ```
+
+4. Now you can open the app normally
+
 
 ## Usage
 
