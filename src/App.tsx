@@ -36,8 +36,8 @@ function App() {
 
   return (
     <main className="container">
-      <h1>Octatrack Device Manager</h1>
-      <p className="subtitle">Discover and manage your Elektron Octatrack devices</p>
+      <h1>Octatrack Manager</h1>
+      <p className="subtitle">Discover and manage your Elektron Octatrack projects</p>
 
       <div className="scan-section">
         <button

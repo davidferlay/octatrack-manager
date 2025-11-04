@@ -12,9 +12,9 @@
   "app": {
     "windows": [
       {
-        "title": "octatrack-manager",
-        "width": 800,
-        "height": 600
+        "title": "Octatrack Manager",
+        "width": 1200,
+        "height": 800
       }
     ],
     "security": {
