@@ -97,7 +97,10 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
             let time_signature = format!("{}/{}", numerator, denominator);
 
             // Extract current state
-            let bank_letters = ["A", "B", "C", "D"];
+            let bank_letters = [
+                "A", "B", "C", "D", "E", "F", "G", "H",
+                "I", "J", "K", "L", "M", "N", "O", "P"
+            ];
             let bank_name = bank_letters.get(project.states.bank as usize)
                 .unwrap_or(&"A")
                 .to_string();
@@ -202,8 +205,11 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
     let mut banks = Vec::new();
 
     // Bank files are named bank01.work, bank02.work, etc.
-    // Octatrack has banks A-D (1-4)
-    let bank_letters = ["A", "B", "C", "D"];
+    // Octatrack supports up to 16 banks (A-P)
+    let bank_letters = [
+        "A", "B", "C", "D", "E", "F", "G", "H",
+        "I", "J", "K", "L", "M", "N", "O", "P"
+    ];
 
     for (idx, bank_letter) in bank_letters.iter().enumerate() {
         let bank_num = idx + 1;
