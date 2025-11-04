@@ -1,6 +1,6 @@
 mod device_detection;
 
-use device_detection::{discover_devices, OctatrackDevice};
+use device_detection::{discover_devices, OctatrackLocation};
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -9,7 +9,7 @@ fn greet(name: &str) -> String {
 }
 
 #[tauri::command]
-fn scan_devices() -> Vec<OctatrackDevice> {
+fn scan_devices() -> Vec<OctatrackLocation> {
     discover_devices()
 }
 
