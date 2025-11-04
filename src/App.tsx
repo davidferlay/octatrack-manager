@@ -2,35 +2,55 @@ import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
+interface OctatrackProject {
+  name: string;
+  path: string;
+  has_project_file: boolean;
+  has_banks: boolean;
+}
+
 interface OctatrackSet {
   name: string;
   path: string;
-  has_audio: boolean;
-  has_presets: boolean;
+  has_audio_pool: boolean;
+  projects: OctatrackProject[];
 }
 
-interface OctatrackDevice {
+interface OctatrackLocation {
   name: string;
-  mount_point: string;
-  device_type: "CompactFlash" | "Usb";
+  path: string;
+  device_type: "CompactFlash" | "Usb" | "LocalCopy";
   sets: OctatrackSet[];
 }
 
 function App() {
-  const [devices, setDevices] = useState<OctatrackDevice[]>([]);
+  const [locations, setLocations] = useState<OctatrackLocation[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
 
   async function scanDevices() {
     setIsScanning(true);
     try {
-      const foundDevices = await invoke<OctatrackDevice[]>("scan_devices");
-      setDevices(foundDevices);
+      const foundLocations = await invoke<OctatrackLocation[]>("scan_devices");
+      setLocations(foundLocations);
       setHasScanned(true);
     } catch (error) {
       console.error("Error scanning devices:", error);
     } finally {
       setIsScanning(false);
+    }
+  }
+
+  function getDeviceTypeLabel(type: string): string {
+    switch (type) {
+      case "CompactFlash":
+        return "CF Card";
+      case "LocalCopy":
+        return "Local Copy";
+      case "Usb":
+        return "USB";
+      default:
+        return type;
     }
   }
 
@@ -49,47 +69,65 @@ function App() {
         </button>
       </div>
 
-      {hasScanned && devices.length === 0 && (
+      {hasScanned && locations.length === 0 && (
         <div className="no-devices">
-          <p>No Octatrack devices found.</p>
+          <p>No Octatrack content found.</p>
           <p className="hint">
-            Make sure your Octatrack CF card is mounted or your device is connected.
+            Make sure your Octatrack CF card is mounted or you have local copies in your home directory (Documents, Music, Downloads, etc.).
           </p>
         </div>
       )}
 
-      {devices.length > 0 && (
+      {locations.length > 0 && (
         <div className="devices-list">
-          <h2>Found {devices.length} device{devices.length > 1 ? 's' : ''}</h2>
-          {devices.map((device, idx) => (
-            <div key={idx} className="device-card">
-              <div className="device-header">
-                <h3>{device.name || "Untitled Device"}</h3>
-                <span className="device-type">{device.device_type}</span>
+          <h2>Found {locations.length} location{locations.length > 1 ? 's' : ''}</h2>
+          {locations.map((location, locIdx) => (
+            <div key={locIdx} className={`location-card location-type-${location.device_type.toLowerCase()}`}>
+              <div className="location-header">
+                <h3>{location.name || "Untitled Location"}</h3>
+                <span className="device-type">{getDeviceTypeLabel(location.device_type)}</span>
               </div>
-              <p className="mount-point">
-                <strong>Location:</strong> {device.mount_point}
+              <p className="location-path">
+                <strong>Path:</strong> {location.path}
               </p>
 
-              {device.sets.length > 0 && (
+              {location.sets.length > 0 && (
                 <div className="sets-section">
-                  <h4>Sets ({device.sets.length})</h4>
-                  <div className="sets-grid">
-                    {device.sets.map((set, setIdx) => (
-                      <div key={setIdx} className="set-card">
+                  <h4>Sets ({location.sets.length})</h4>
+                  {location.sets.map((set, setIdx) => (
+                    <div key={setIdx} className="set-card">
+                      <div className="set-header">
                         <div className="set-name">{set.name}</div>
                         <div className="set-info">
-                          <span className={set.has_audio ? "status-yes" : "status-no"}>
-                            {set.has_audio ? "✓ Audio" : "✗ Audio"}
+                          <span className={set.has_audio_pool ? "status-yes" : "status-no"}>
+                            {set.has_audio_pool ? "✓ Audio Pool" : "✗ Audio Pool"}
                           </span>
-                          <span className={set.has_presets ? "status-yes" : "status-no"}>
-                            {set.has_presets ? "✓ Presets" : "✗ Presets"}
+                          <span className="project-count">
+                            {set.projects.length} Project{set.projects.length !== 1 ? 's' : ''}
                           </span>
                         </div>
-                        <div className="set-path">{set.path}</div>
                       </div>
-                    ))}
-                  </div>
+                      <div className="set-path">{set.path}</div>
+
+                      {set.projects.length > 0 && (
+                        <div className="projects-grid">
+                          {set.projects.map((project, projIdx) => (
+                            <div key={projIdx} className="project-card">
+                              <div className="project-name">{project.name}</div>
+                              <div className="project-info">
+                                <span className={project.has_project_file ? "status-yes" : "status-no"}>
+                                  {project.has_project_file ? "✓ Project" : "✗ Project"}
+                                </span>
+                                <span className={project.has_banks ? "status-yes" : "status-no"}>
+                                  {project.has_banks ? "✓ Banks" : "✗ Banks"}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
