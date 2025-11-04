@@ -181,7 +181,14 @@ function App() {
                       {set.projects.length > 0 && (
                         <div className="projects-grid">
                           {set.projects.map((project, projIdx) => (
-                            <div key={projIdx} className="project-card">
+                            <div
+                              key={projIdx}
+                              className="project-card clickable-project"
+                              onClick={() => {
+                                alert(`Project: ${project.name}\n\nPath: ${project.path}\n\n✓ Project file: ${project.has_project_file ? 'Yes' : 'No'}\n✓ Banks: ${project.has_banks ? 'Yes' : 'No'}\n\n[Project detail view coming in next update]`);
+                              }}
+                              title="Click to view project details"
+                            >
                               <div className="project-name">{project.name}</div>
                               <div className="project-info">
                                 <span className={project.has_project_file ? "status-yes" : "status-no"}>
