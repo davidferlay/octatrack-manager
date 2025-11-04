@@ -460,3 +460,194 @@ h1 {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--elektron-light-gray);
 }
+
+/* Project Detail Page */
+.project-header {
+  padding: 1.5rem 2rem;
+  background-color: var(--elektron-dark-gray);
+  border-bottom: 2px solid var(--elektron-orange);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.back-button {
+  border: 1px solid var(--elektron-border-gray);
+  background-color: var(--elektron-medium-gray);
+  color: var(--elektron-text-primary);
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.back-button:hover {
+  background-color: var(--elektron-orange);
+  color: var(--elektron-black);
+  border-color: var(--elektron-orange);
+}
+
+.project-header h1 {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+.project-path-info {
+  padding: 1rem 2rem;
+  background-color: var(--elektron-dark-gray);
+  border-bottom: 1px solid var(--elektron-border-gray);
+  color: var(--elektron-text-secondary);
+  font-size: 0.875rem;
+  font-family: 'Courier New', monospace;
+}
+
+.project-path-info strong {
+  color: var(--elektron-text-dim);
+  font-weight: normal;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.5px;
+}
+
+.loading-section,
+.error-section {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: var(--elektron-text-secondary);
+}
+
+.error-section {
+  color: #FF6666;
+}
+
+.project-content {
+  padding: 2rem;
+}
+
+.project-content section {
+  margin-bottom: 2rem;
+}
+
+.project-content h2 {
+  margin: 0 0 1rem 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--elektron-orange);
+}
+
+/* Metadata Section */
+.metadata-section {
+  background-color: var(--elektron-dark-gray);
+  border: 1px solid var(--elektron-border-gray);
+  border-left: 3px solid var(--elektron-orange);
+  padding: 1.5rem;
+}
+
+.metadata-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.metadata-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.metadata-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--elektron-text-dim);
+}
+
+.metadata-value {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--elektron-text-primary);
+  font-family: 'Courier New', monospace;
+}
+
+/* Banks Section */
+.banks-section {
+  margin-top: 2rem;
+}
+
+.bank-card {
+  background-color: var(--elektron-dark-gray);
+  border: 1px solid var(--elektron-border-gray);
+  border-left: 3px solid var(--elektron-orange);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.bank-card h3 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--elektron-text-primary);
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--elektron-border-gray);
+}
+
+.parts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.part-card {
+  background-color: var(--elektron-medium-gray);
+  border: 1px solid var(--elektron-border-gray);
+  padding: 1rem;
+}
+
+.part-card h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--elektron-text-secondary);
+}
+
+.patterns-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.5rem;
+}
+
+.pattern-card {
+  background-color: var(--elektron-black);
+  border: 1px solid var(--elektron-border-gray);
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.15s ease;
+}
+
+.pattern-card:hover {
+  border-color: var(--elektron-orange);
+  background-color: #151515;
+}
+
+.pattern-name {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--elektron-text-primary);
+  font-family: 'Courier New', monospace;
+}
+
+.pattern-length {
+  font-size: 0.7rem;
+  color: var(--elektron-text-dim);
+}
