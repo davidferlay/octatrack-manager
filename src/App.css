@@ -73,7 +73,8 @@ h1 {
 /* Scan Section */
 .scan-section {
   display: flex;
-  justify-content: flex-start;
+  justify-content: center;
+  gap: 1rem;
   padding: 1.5rem 2rem;
   background-color: var(--elektron-dark-gray);
   border-bottom: 1px solid var(--elektron-border-gray);
@@ -104,6 +105,22 @@ h1 {
 .scan-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.browse-button {
+  background-color: transparent;
+  color: var(--elektron-orange);
+  border: 1px solid var(--elektron-orange);
+}
+
+.browse-button:hover:not(:disabled) {
+  background-color: var(--elektron-orange);
+  color: var(--elektron-black);
+}
+
+.browse-button:active:not(:disabled) {
+  background-color: var(--elektron-orange-dark);
+  border-color: var(--elektron-orange-dark);
 }
 
 /* No Devices Message */
