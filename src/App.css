@@ -651,3 +651,184 @@ h1 {
   font-size: 0.7rem;
   color: var(--elektron-text-dim);
 }
+
+/* Tabs Navigation */
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  padding: 1rem 2rem 0;
+  background-color: var(--elektron-dark-gray);
+  border-bottom: 2px solid var(--elektron-border-gray);
+}
+
+.tab {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  background-color: transparent;
+  color: var(--elektron-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.2s ease;
+  position: relative;
+  top: 2px;
+}
+
+.tab:hover {
+  color: var(--elektron-text-primary);
+  background-color: rgba(255, 102, 0, 0.1);
+}
+
+.tab.active {
+  color: var(--elektron-orange);
+  border-bottom-color: var(--elektron-orange);
+  background-color: var(--elektron-black);
+}
+
+/* Tab Content */
+.tab-content {
+  padding: 0;
+}
+
+.overview-tab,
+.banks-tab,
+.samples-tab,
+.settings-tab {
+  padding: 2rem;
+}
+
+/* Samples Tab */
+.samples-section {
+  margin-bottom: 3rem;
+}
+
+.samples-section:last-child {
+  margin-bottom: 0;
+}
+
+.samples-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.sample-card {
+  background-color: var(--elektron-medium-gray);
+  border: 1px solid var(--elektron-border-gray);
+  padding: 1rem;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.sample-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background-color: transparent;
+  transition: background-color 0.15s ease;
+}
+
+.sample-card:hover {
+  border-color: var(--elektron-orange);
+  background-color: #252525;
+}
+
+.sample-card:hover::before {
+  background-color: var(--elektron-orange);
+}
+
+.sample-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.sample-id {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--elektron-orange);
+  font-family: 'Courier New', monospace;
+}
+
+.sample-gain {
+  font-size: 0.75rem;
+  color: var(--elektron-text-dim);
+  font-family: 'Courier New', monospace;
+}
+
+.sample-name {
+  font-family: 'Courier New', monospace;
+  font-size: 0.875rem;
+  color: var(--elektron-text-primary);
+  margin: 0.5rem 0;
+  word-break: break-all;
+}
+
+.sample-info {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.sample-mode,
+.sample-loop {
+  font-size: 0.7rem;
+  padding: 0.25rem 0.5rem;
+  background-color: var(--elektron-black);
+  color: var(--elektron-text-dim);
+  border: 1px solid var(--elektron-border-gray);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Current State Section */
+.current-state-section {
+  background-color: var(--elektron-dark-gray);
+  border: 1px solid var(--elektron-border-gray);
+  border-left: 3px solid var(--elektron-orange);
+  padding: 1.5rem;
+  margin-top: 2rem;
+}
+
+.track-states {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: var(--elektron-medium-gray);
+  border-left: 3px solid var(--elektron-orange);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.state-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--elektron-text-dim);
+}
+
+.state-value {
+  color: var(--elektron-orange);
+  font-family: 'Courier New', monospace;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+/* Mixer Section */
+.mixer-section {
+  background-color: var(--elektron-dark-gray);
+  border: 1px solid var(--elektron-border-gray);
+  border-left: 3px solid var(--elektron-orange);
+  padding: 1.5rem;
+}

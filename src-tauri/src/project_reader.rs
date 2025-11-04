@@ -9,6 +9,48 @@ pub struct ProjectMetadata {
     pub swing: u8,
     pub time_signature: String,
     pub pattern_length: u16,
+    pub current_state: CurrentState,
+    pub mixer_settings: MixerSettings,
+    pub sample_slots: SampleSlots,
+    pub os_version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CurrentState {
+    pub bank: u8,
+    pub bank_name: String,
+    pub pattern: u8,
+    pub part: u8,
+    pub track: u8,
+    pub muted_tracks: Vec<u8>,
+    pub soloed_tracks: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MixerSettings {
+    pub gain_ab: u8,
+    pub gain_cd: u8,
+    pub dir_ab: u8,
+    pub dir_cd: u8,
+    pub phones_mix: u8,
+    pub main_level: u8,
+    pub cue_level: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SampleSlots {
+    pub static_slots: Vec<SampleSlot>,
+    pub flex_slots: Vec<SampleSlot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SampleSlot {
+    pub slot_id: u8,
+    pub slot_type: String,
+    pub path: String,
+    pub gain: u8,
+    pub loop_mode: String,
+    pub timestretch_mode: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,6 +96,86 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
             let denominator = 2u32.pow(project.settings.control.metronome.metronome_time_signature_denominator as u32);
             let time_signature = format!("{}/{}", numerator, denominator);
 
+            // Extract current state
+            let bank_letters = ["A", "B", "C", "D"];
+            let bank_name = bank_letters.get(project.states.bank as usize)
+                .unwrap_or(&"A")
+                .to_string();
+
+            // Extract muted/soloed tracks
+            let mut muted_tracks = Vec::new();
+            let mut soloed_tracks = Vec::new();
+            for i in 0..8 {
+                if project.states.track_mute_mask & (1 << i) != 0 {
+                    muted_tracks.push(i);
+                }
+                if project.states.track_solo_mask & (1 << i) != 0 {
+                    soloed_tracks.push(i);
+                }
+            }
+
+            let current_state = CurrentState {
+                bank: project.states.bank,
+                bank_name,
+                pattern: project.states.pattern,
+                part: project.states.part,
+                track: project.states.track,
+                muted_tracks,
+                soloed_tracks,
+            };
+
+            // Extract mixer settings
+            let mixer_settings = MixerSettings {
+                gain_ab: project.settings.mixer.gain_ab,
+                gain_cd: project.settings.mixer.gain_cd,
+                dir_ab: project.settings.mixer.dir_ab,
+                dir_cd: project.settings.mixer.dir_cd,
+                phones_mix: project.settings.mixer.phones_mix,
+                main_level: project.settings.mixer.main_level,
+                cue_level: project.settings.mixer.cue_level,
+            };
+
+            // Extract sample slots
+            let mut static_slots = Vec::new();
+            for slot_opt in project.slots.static_slots.iter() {
+                if let Some(slot) = slot_opt {
+                    if let Some(path) = &slot.path {
+                        static_slots.push(SampleSlot {
+                            slot_id: slot.slot_id,
+                            slot_type: "Static".to_string(),
+                            path: path.to_string_lossy().to_string(),
+                            gain: slot.gain,
+                            loop_mode: format!("{:?}", slot.loop_mode),
+                            timestretch_mode: format!("{:?}", slot.timestrech_mode),
+                        });
+                    }
+                }
+            }
+
+            let mut flex_slots = Vec::new();
+            for slot_opt in project.slots.flex_slots.iter() {
+                if let Some(slot) = slot_opt {
+                    if let Some(path) = &slot.path {
+                        flex_slots.push(SampleSlot {
+                            slot_id: slot.slot_id,
+                            slot_type: "Flex".to_string(),
+                            path: path.to_string_lossy().to_string(),
+                            gain: slot.gain,
+                            loop_mode: format!("{:?}", slot.loop_mode),
+                            timestretch_mode: format!("{:?}", slot.timestrech_mode),
+                        });
+                    }
+                }
+            }
+
+            let sample_slots = SampleSlots {
+                static_slots,
+                flex_slots,
+            };
+
+            // Extract OS version
+            let os_version = project.metadata.os_version.clone();
+
             // Extract metadata from the project file
             Ok(ProjectMetadata {
                 name: path
@@ -65,6 +187,10 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                 swing: 50, // TODO: Find swing in project settings if available
                 time_signature,
                 pattern_length: 16, // TODO: Extract from current pattern if needed
+                current_state,
+                mixer_settings,
+                sample_slots,
+                os_version,
             })
         }
         Err(e) => Err(format!("Failed to read project file: {:?}", e)),
