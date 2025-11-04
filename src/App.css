@@ -400,9 +400,24 @@ h1 {
   transition: all 0.15s ease;
 }
 
+.project-card.clickable-project {
+  cursor: pointer;
+  user-select: none;
+}
+
 .project-card:hover {
   border-color: var(--elektron-orange);
   background-color: #151515;
+}
+
+.project-card.clickable-project:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(255, 102, 0, 0.2);
+}
+
+.project-card.clickable-project:active {
+  transform: translateY(0);
+  box-shadow: none;
 }
 
 .project-name {
