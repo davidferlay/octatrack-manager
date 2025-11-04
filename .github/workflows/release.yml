@@ -54,6 +54,7 @@ jobs:
           NO_STRIP: 1
         with:
           releaseId: ${{ github.event.release.id }}
+          tagName: ${{ github.ref_name }}
           args: ${{ matrix.args }}
 
       - name: Build and upload artifacts (Windows/macOS)
@@ -63,4 +64,5 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           releaseId: ${{ github.event.release.id }}
+          tagName: ${{ github.ref_name }}
           args: ${{ matrix.args }}
