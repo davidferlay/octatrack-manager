@@ -27,6 +27,7 @@ function App() {
   const [locations, setLocations] = useState<OctatrackLocation[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
+  const [openLocations, setOpenLocations] = useState<Set<number>>(new Set());
 
   async function scanDevices() {
     setIsScanning(true);
@@ -34,11 +35,25 @@ function App() {
       const foundLocations = await invoke<OctatrackLocation[]>("scan_devices");
       setLocations(foundLocations);
       setHasScanned(true);
+      // Open all locations by default
+      setOpenLocations(new Set(foundLocations.map((_, idx) => idx)));
     } catch (error) {
       console.error("Error scanning devices:", error);
     } finally {
       setIsScanning(false);
     }
+  }
+
+  function toggleLocation(index: number) {
+    setOpenLocations(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(index)) {
+        newSet.delete(index);
+      } else {
+        newSet.add(index);
+      }
+      return newSet;
+    });
   }
 
   function getDeviceTypeLabel(type: string): string {
@@ -81,17 +96,25 @@ function App() {
       {locations.length > 0 && (
         <div className="devices-list">
           <h2>Found {locations.length} location{locations.length > 1 ? 's' : ''}</h2>
-          {locations.map((location, locIdx) => (
-            <div key={locIdx} className={`location-card location-type-${location.device_type.toLowerCase()}`}>
-              <div className="location-header">
-                <h3>{location.name || "Untitled Location"}</h3>
-                <span className="device-type">{getDeviceTypeLabel(location.device_type)}</span>
-              </div>
-              <p className="location-path">
-                <strong>Path:</strong> {location.path}
-              </p>
+          {locations.map((location, locIdx) => {
+            const isOpen = openLocations.has(locIdx);
+            return (
+              <div key={locIdx} className={`location-card location-type-${location.device_type.toLowerCase()}`}>
+                <div
+                  className="location-header clickable"
+                  onClick={() => toggleLocation(locIdx)}
+                >
+                  <div className="location-header-left">
+                    <span className="collapse-indicator">{isOpen ? '▼' : '▶'}</span>
+                    <h3>{location.name || "Untitled Location"}</h3>
+                  </div>
+                  <span className="device-type">{getDeviceTypeLabel(location.device_type)}</span>
+                </div>
+                <p className="location-path">
+                  <strong>Path:</strong> {location.path}
+                </p>
 
-              {location.sets.length > 0 && (
+                {isOpen && location.sets.length > 0 && (
                 <div className="sets-section">
                   <h4>Sets ({location.sets.length})</h4>
                   {location.sets.map((set, setIdx) => (
@@ -129,9 +152,10 @@ function App() {
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-          ))}
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </main>
