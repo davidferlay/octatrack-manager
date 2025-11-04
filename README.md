@@ -2,6 +2,14 @@
 
 A desktop application for managing Elektron Octatrack projects, built with Tauri and React.
 
+<p align="center">
+  <img
+    src="public/octatrack-manager-osx.jpg"
+    alt="Octatrack Manager screnshot on OSX.jpg"
+    style="width:80%; height:auto;"
+  />
+</p>
+
 ## Features
 
 - **Device Discovery**: Automatically scan for Octatrack CF cards mounted on your computer
