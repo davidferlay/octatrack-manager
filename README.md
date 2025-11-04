@@ -59,15 +59,26 @@ Download the latest release for your platform from the [Releases page](https://g
 
 ## How It Works
 
-The application scans all mounted drives on your system looking for the characteristic Octatrack directory structure:
-- **Audio/** folder containing samples and `.ot` files
-- **Presets/** folder containing `.work` project files
+The application automatically scans for Octatrack Sets in these locations:
 
-When a valid Octatrack set is found, it's displayed with:
-- Set name
-- Mount location
-- Audio folder status
-- Presets folder status (with `.work` files)
+**Removable Drives:**
+- CF cards and USB drives (when mounted)
+
+**Home Directory:**
+- `~/Documents`
+- `~/Music`
+- `~/Desktop`
+- `~/Downloads`
+- `~/octatrack`, `~/Octatrack`, or `~/OCTATRACK`
+
+The scanner searches up to 3 levels deep looking for the characteristic Octatrack directory structure:
+- **AUDIO/** folder (may contain WAV/AIFF samples)
+- Project folders containing `.work` files
+
+When a valid Octatrack Set is found, it displays:
+- Set name and location
+- Audio pool status
+- Projects with bank information
 
 
 ## Architecture
