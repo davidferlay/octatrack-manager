@@ -114,11 +114,12 @@ function App() {
                   <strong>Path:</strong> {location.path}
                 </p>
 
-                {isOpen && location.sets.length > 0 && (
-                <div className="sets-section">
-                  <h4>Sets ({location.sets.length})</h4>
-                  {location.sets.map((set, setIdx) => (
-                    <div key={setIdx} className="set-card">
+                {location.sets.length > 0 && (
+                <div className={`sets-section ${isOpen ? 'open' : 'closed'}`}>
+                  <div className="sets-section-content">
+                    <h4>Sets ({location.sets.length})</h4>
+                    {location.sets.map((set, setIdx) => (
+                      <div key={setIdx} className="set-card">
                       <div className="set-header">
                         <div className="set-name">{set.name}</div>
                         <div className="set-info">
@@ -151,6 +152,7 @@ function App() {
                       )}
                     </div>
                   ))}
+                  </div>
                 </div>
                 )}
               </div>

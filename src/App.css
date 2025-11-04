@@ -233,19 +233,30 @@ h1 {
 
 /* Sets Section */
 .sets-section {
-  margin-top: 1.5rem;
-  animation: fadeIn 0.2s ease-in;
+  display: grid;
+  grid-template-rows: 0fr;
+  margin-top: 0;
+  transition: grid-template-rows 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              margin-top 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 0;
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.sets-section.open {
+  grid-template-rows: 1fr;
+  margin-top: 1.5rem;
+  opacity: 1;
+}
+
+.sets-section.closed {
+  grid-template-rows: 0fr;
+  margin-top: 0;
+  opacity: 0;
+}
+
+.sets-section-content {
+  overflow: hidden;
+  min-height: 0;
 }
 
 .sets-section h4 {
