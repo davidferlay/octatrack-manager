@@ -46,6 +46,25 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
+      - name: Update version from git tag
+        shell: bash
+        run: |
+          # Extract version from tag (e.g., v0.0.3 -> 0.0.3)
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "Setting version to $VERSION"
+
+          # Update Cargo.toml
+          sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+
+          # Update tauri.conf.json
+          sed -i.bak "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
+
+          # Show the changes
+          echo "Updated Cargo.toml:"
+          grep "^version" src-tauri/Cargo.toml
+          echo "Updated tauri.conf.json:"
+          grep "\"version\"" src-tauri/tauri.conf.json
+
       - name: Build and upload artifacts (Ubuntu)
         if: matrix.platform == 'ubuntu-22.04'
         uses: tauri-apps/tauri-action@v0
