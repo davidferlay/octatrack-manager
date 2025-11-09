@@ -1044,3 +1044,155 @@ h1 {
   border-left: 3px solid var(--elektron-orange);
   padding: 1.5rem;
 }
+
+/* Pattern Grid Visualization */
+.pattern-grid-section {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 2px solid var(--elektron-border-gray);
+}
+
+.pattern-grid-section h4 {
+  margin-bottom: 1.5rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--elektron-text-primary);
+}
+
+.pattern-grid-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Page labels */
+.pattern-grid-pages {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2px;
+  margin-bottom: 0.5rem;
+}
+
+.page-label {
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--elektron-orange);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 0.25rem;
+}
+
+/* Pattern grid */
+.pattern-grid {
+  display: grid;
+  grid-template-columns: repeat(16, 1fr);
+  gap: 2px;
+  background-color: var(--elektron-dark-gray);
+  padding: 1rem;
+  border-radius: 4px;
+}
+
+/* Individual step */
+.pattern-step {
+  aspect-ratio: 1;
+  background-color: var(--elektron-black);
+  border: 1px solid var(--elektron-border-gray);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: default;
+  transition: all 0.1s ease;
+  min-height: 50px;
+}
+
+.pattern-step:hover {
+  background-color: var(--elektron-dark-gray);
+  border-color: var(--elektron-orange);
+  transform: scale(1.05);
+  z-index: 10;
+}
+
+/* Step with trig */
+.pattern-step.has-trig {
+  background-color: rgba(255, 108, 55, 0.15);
+  border-color: var(--elektron-orange);
+}
+
+/* Step number */
+.step-number {
+  font-size: 0.65rem;
+  color: var(--elektron-text-dim);
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+}
+
+/* Step indicators */
+.step-indicators {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  justify-content: center;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.step-indicators span {
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Indicator colors */
+.indicator-trigger {
+  color: var(--elektron-orange);
+}
+
+.indicator-trigless {
+  color: #66cc66;
+}
+
+.indicator-plock {
+  color: #4a9eff;
+  font-size: 0.65rem;
+}
+
+.indicator-oneshot {
+  color: #ff6b9d;
+  font-size: 0.65rem;
+}
+
+.indicator-swing {
+  color: #ffcc00;
+  font-size: 0.7rem;
+}
+
+.indicator-slide {
+  color: #00cccc;
+  font-size: 0.8rem;
+}
+
+/* Grid legend */
+.pattern-grid-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  padding: 1rem;
+  background-color: var(--elektron-dark-gray);
+  border-radius: 4px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--elektron-text-primary);
+}
+
+.legend-item span {
+  font-size: 1rem;
+  font-weight: 700;
+}

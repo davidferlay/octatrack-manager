@@ -79,6 +79,17 @@ pub struct TrackSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrigStep {
+    pub step: u8,              // Step number (0-63)
+    pub trigger: bool,         // Has trigger trig
+    pub trigless: bool,        // Has trigless trig
+    pub plock: bool,           // Has parameter lock
+    pub oneshot: bool,         // Has oneshot trig (audio only)
+    pub swing: bool,           // Has swing trig
+    pub slide: bool,           // Has slide trig (audio only)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrackInfo {
     pub track_id: u8,
     pub track_type: String,        // "Audio" or "MIDI"
@@ -87,6 +98,7 @@ pub struct TrackInfo {
     pub per_track_scale: Option<String>, // Track scale in per-track mode
     pub pattern_settings: TrackSettings,
     pub trig_counts: TrigCounts,   // Per-track trig statistics
+    pub steps: Vec<TrigStep>,      // Per-step trig information (64 steps)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -359,6 +371,35 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                             masks.iter().map(|&mask| mask.count_ones() as u16).sum()
                         }
 
+                        // Helper function to decode trig bitmasks into a 64-element boolean array
+                        // Trig masks are stored in a specific order across 8 bytes (see ot-tools-io docs)
+                        fn decode_trig_masks(masks: &[u8]) -> [bool; 64] {
+                            let mut steps = [false; 64];
+
+                            // The masks are stored in this order (each byte = 8 steps):
+                            // byte[0]: steps 48-55 (1st half of 4th page)
+                            // byte[1]: steps 56-63 (2nd half of 4th page)
+                            // byte[2]: steps 32-39 (1st half of 3rd page)
+                            // byte[3]: steps 40-47 (2nd half of 3rd page)
+                            // byte[4]: steps 16-23 (1st half of 2nd page)
+                            // byte[5]: steps 24-31 (2nd half of 2nd page)
+                            // byte[6]: steps 8-15  (2nd half of 1st page)
+                            // byte[7]: steps 0-7   (1st half of 1st page)
+
+                            let byte_to_step_offset = [48, 56, 32, 40, 16, 24, 8, 0];
+
+                            for (byte_idx, &mask) in masks.iter().enumerate() {
+                                let step_offset = byte_to_step_offset[byte_idx];
+                                for bit_pos in 0..8 {
+                                    if mask & (1 << bit_pos) != 0 {
+                                        steps[step_offset + bit_pos] = true;
+                                    }
+                                }
+                            }
+
+                            steps
+                        }
+
                         // Count all trig types across all tracks
                         let mut trigger_count = 0u16;
                         let mut trigless_count = 0u16;
@@ -508,6 +549,27 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                                 (None, None)
                             };
 
+                            // Decode trig masks to get per-step information
+                            let trigger_steps = decode_trig_masks(&audio_track.trig_masks.trigger);
+                            let trigless_steps = decode_trig_masks(&audio_track.trig_masks.trigless);
+                            let plock_steps = decode_trig_masks(&audio_track.trig_masks.plock);
+                            let oneshot_steps = decode_trig_masks(&audio_track.trig_masks.oneshot);
+                            let swing_steps = decode_trig_masks(&audio_track.trig_masks.swing);
+                            let slide_steps = decode_trig_masks(&audio_track.trig_masks.slide);
+
+                            let mut steps = Vec::new();
+                            for step in 0..64 {
+                                steps.push(TrigStep {
+                                    step: step as u8,
+                                    trigger: trigger_steps[step],
+                                    trigless: trigless_steps[step],
+                                    plock: plock_steps[step],
+                                    oneshot: oneshot_steps[step],
+                                    swing: swing_steps[step],
+                                    slide: slide_steps[step],
+                                });
+                            }
+
                             tracks.push(TrackInfo {
                                 track_id: idx as u8,
                                 track_type: "Audio".to_string(),
@@ -530,6 +592,7 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                                     slide: track_slide_count,
                                     total: track_trigger_count + track_trigless_count + track_plock_count + track_oneshot_count,
                                 },
+                                steps,
                             });
                         }
 
@@ -587,6 +650,25 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                                 (None, None)
                             };
 
+                            // Decode trig masks to get per-step information
+                            let trigger_steps = decode_trig_masks(&midi_track.trig_masks.trigger);
+                            let trigless_steps = decode_trig_masks(&midi_track.trig_masks.trigless);
+                            let plock_steps = decode_trig_masks(&midi_track.trig_masks.plock);
+                            let swing_steps = decode_trig_masks(&midi_track.trig_masks.swing);
+
+                            let mut steps = Vec::new();
+                            for step in 0..64 {
+                                steps.push(TrigStep {
+                                    step: step as u8,
+                                    trigger: trigger_steps[step],
+                                    trigless: trigless_steps[step],
+                                    plock: plock_steps[step],
+                                    oneshot: false,  // MIDI tracks don't have oneshot trigs
+                                    swing: swing_steps[step],
+                                    slide: false,     // MIDI tracks don't have slide trigs
+                                });
+                            }
+
                             tracks.push(TrackInfo {
                                 track_id: (idx + 8) as u8,
                                 track_type: "MIDI".to_string(),
@@ -609,6 +691,7 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                                     slide: 0,    // MIDI tracks don't have slide trigs
                                     total: track_trigger_count + track_trigless_count + track_plock_count,
                                 },
+                                steps,
                             });
                         }
 

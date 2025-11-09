@@ -71,6 +71,16 @@ interface TrackSettings {
   oneshot_trk: boolean;
 }
 
+interface TrigStep {
+  step: number;              // Step number (0-63)
+  trigger: boolean;          // Has trigger trig
+  trigless: boolean;         // Has trigless trig
+  plock: boolean;            // Has parameter lock
+  oneshot: boolean;          // Has oneshot trig (audio only)
+  swing: boolean;            // Has swing trig
+  slide: boolean;            // Has slide trig (audio only)
+}
+
 interface TrackInfo {
   track_id: number;
   track_type: string;        // "Audio" or "MIDI"
@@ -79,6 +89,7 @@ interface TrackInfo {
   per_track_scale: string | null; // Track scale in per-track mode
   pattern_settings: TrackSettings;
   trig_counts: TrigCounts;   // Per-track trig statistics
+  steps: TrigStep[];         // Per-step trig information (64 steps)
 }
 
 interface Pattern {
@@ -484,6 +495,64 @@ export function ProjectDetail() {
                                 <div className="pattern-detail-item">
                                   <span className="pattern-detail-label">Track Scale:</span>
                                   <span className="pattern-detail-value">{trackData.per_track_scale || '-'}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Pattern Grid Visualization */}
+                            <div className="pattern-grid-section">
+                              <h4>Pattern Grid</h4>
+                              <div className="pattern-grid-container">
+                                {/* Page markers */}
+                                <div className="pattern-grid-pages">
+                                  <div className="page-label">Page 1</div>
+                                  <div className="page-label">Page 2</div>
+                                  <div className="page-label">Page 3</div>
+                                  <div className="page-label">Page 4</div>
+                                </div>
+
+                                {/* Grid */}
+                                <div className="pattern-grid">
+                                  {trackData.steps.slice(0, pattern.length).map((step) => {
+                                    const hasTrig = step.trigger || step.trigless;
+                                    const trigTypes = [];
+                                    if (step.trigger) trigTypes.push('trigger');
+                                    if (step.trigless) trigTypes.push('trigless');
+                                    if (step.plock) trigTypes.push('plock');
+                                    if (step.oneshot) trigTypes.push('oneshot');
+                                    if (step.swing) trigTypes.push('swing');
+                                    if (step.slide) trigTypes.push('slide');
+
+                                    return (
+                                      <div
+                                        key={step.step}
+                                        className={`pattern-step ${hasTrig ? 'has-trig' : ''} ${trigTypes.join(' ')}`}
+                                        title={`Step ${step.step + 1}${trigTypes.length > 0 ? '\n' + trigTypes.join(', ') : ''}`}
+                                      >
+                                        <div className="step-number">{step.step + 1}</div>
+                                        {hasTrig && (
+                                          <div className="step-indicators">
+                                            {step.trigger && <span className="indicator-trigger">●</span>}
+                                            {step.trigless && <span className="indicator-trigless">○</span>}
+                                            {step.plock && <span className="indicator-plock">P</span>}
+                                            {step.oneshot && <span className="indicator-oneshot">1</span>}
+                                            {step.swing && <span className="indicator-swing">♪</span>}
+                                            {step.slide && <span className="indicator-slide">~</span>}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+
+                                {/* Legend */}
+                                <div className="pattern-grid-legend">
+                                  <div className="legend-item"><span className="indicator-trigger">●</span> Trigger</div>
+                                  <div className="legend-item"><span className="indicator-trigless">○</span> Trigless</div>
+                                  <div className="legend-item"><span className="indicator-plock">P</span> P-Lock</div>
+                                  <div className="legend-item"><span className="indicator-oneshot">1</span> One-Shot</div>
+                                  <div className="legend-item"><span className="indicator-swing">♪</span> Swing</div>
+                                  <div className="legend-item"><span className="indicator-slide">~</span> Slide</div>
                                 </div>
                               </div>
                             </div>
