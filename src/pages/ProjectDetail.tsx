@@ -438,30 +438,22 @@ export function ProjectDetail() {
                                   <span className="pattern-detail-label">P-Locks:</span>
                                   <span className="pattern-detail-value">{trackData.trig_counts.plock}</span>
                                 </div>
-                                {trackData.trig_counts.trigless > 0 && (
-                                  <div className="pattern-detail-item">
-                                    <span className="pattern-detail-label">Trigless:</span>
-                                    <span className="pattern-detail-value">{trackData.trig_counts.trigless}</span>
-                                  </div>
-                                )}
-                                {trackData.trig_counts.oneshot > 0 && (
-                                  <div className="pattern-detail-item">
-                                    <span className="pattern-detail-label">One-Shot:</span>
-                                    <span className="pattern-detail-value">{trackData.trig_counts.oneshot}</span>
-                                  </div>
-                                )}
-                                {trackData.trig_counts.slide > 0 && (
-                                  <div className="pattern-detail-item">
-                                    <span className="pattern-detail-label">Slide:</span>
-                                    <span className="pattern-detail-value">{trackData.trig_counts.slide}</span>
-                                  </div>
-                                )}
-                                {trackData.swing_amount > 0 && (
-                                  <div className="pattern-detail-item">
-                                    <span className="pattern-detail-label">Swing:</span>
-                                    <span className="pattern-detail-value">{trackData.swing_amount + 50}%</span>
-                                  </div>
-                                )}
+                                <div className="pattern-detail-item">
+                                  <span className="pattern-detail-label">Trigless:</span>
+                                  <span className="pattern-detail-value">{trackData.trig_counts.trigless}</span>
+                                </div>
+                                <div className="pattern-detail-item">
+                                  <span className="pattern-detail-label">One-Shot:</span>
+                                  <span className="pattern-detail-value">{trackData.trig_counts.oneshot}</span>
+                                </div>
+                                <div className="pattern-detail-item">
+                                  <span className="pattern-detail-label">Slide:</span>
+                                  <span className="pattern-detail-value">{trackData.trig_counts.slide}</span>
+                                </div>
+                                <div className="pattern-detail-item">
+                                  <span className="pattern-detail-label">Swing:</span>
+                                  <span className="pattern-detail-value">{trackData.swing_amount > 0 ? `${trackData.swing_amount + 50}%` : '-'}</span>
+                                </div>
                               </div>
                               <div className="pattern-detail-separator"></div>
                               <div className="pattern-detail-group">
@@ -473,36 +465,26 @@ export function ProjectDetail() {
                                   <span className="pattern-detail-label">Trig Quant:</span>
                                   <span className="pattern-detail-value">{trackData.pattern_settings.trig_quant}</span>
                                 </div>
-                                {trackData.pattern_settings.start_silent && (
-                                  <div className="pattern-detail-item">
-                                    <span className="pattern-detail-label">Start Silent:</span>
-                                    <span className="pattern-detail-value">Yes</span>
-                                  </div>
-                                )}
-                                {trackData.pattern_settings.plays_free && (
-                                  <div className="pattern-detail-item">
-                                    <span className="pattern-detail-label">Plays Free:</span>
-                                    <span className="pattern-detail-value">Yes</span>
-                                  </div>
-                                )}
-                                {trackData.pattern_settings.oneshot_trk && (
-                                  <div className="pattern-detail-item">
-                                    <span className="pattern-detail-label">One-Shot Track:</span>
-                                    <span className="pattern-detail-value">Yes</span>
-                                  </div>
-                                )}
-                                {trackData.per_track_len !== null && (
-                                  <div className="pattern-detail-item">
-                                    <span className="pattern-detail-label">Track Len:</span>
-                                    <span className="pattern-detail-value">{trackData.per_track_len}</span>
-                                  </div>
-                                )}
-                                {trackData.per_track_scale && (
-                                  <div className="pattern-detail-item">
-                                    <span className="pattern-detail-label">Track Scale:</span>
-                                    <span className="pattern-detail-value">{trackData.per_track_scale}</span>
-                                  </div>
-                                )}
+                                <div className="pattern-detail-item">
+                                  <span className="pattern-detail-label">Start Silent:</span>
+                                  <span className="pattern-detail-value">{trackData.pattern_settings.start_silent ? 'Yes' : 'No'}</span>
+                                </div>
+                                <div className="pattern-detail-item">
+                                  <span className="pattern-detail-label">Plays Free:</span>
+                                  <span className="pattern-detail-value">{trackData.pattern_settings.plays_free ? 'Yes' : 'No'}</span>
+                                </div>
+                                <div className="pattern-detail-item">
+                                  <span className="pattern-detail-label">One-Shot Track:</span>
+                                  <span className="pattern-detail-value">{trackData.pattern_settings.oneshot_trk ? 'Yes' : 'No'}</span>
+                                </div>
+                                <div className="pattern-detail-item">
+                                  <span className="pattern-detail-label">Track Len:</span>
+                                  <span className="pattern-detail-value">{trackData.per_track_len !== null ? trackData.per_track_len : '-'}</span>
+                                </div>
+                                <div className="pattern-detail-item">
+                                  <span className="pattern-detail-label">Track Scale:</span>
+                                  <span className="pattern-detail-value">{trackData.per_track_scale || '-'}</span>
+                                </div>
                               </div>
                             </div>
                           </div>
