@@ -253,6 +253,7 @@ export function ProjectDetail() {
 
       {isLoading && (
         <div className="loading-section">
+          <div className="loading-spinner"></div>
           <p>Loading project data...</p>
         </div>
       )}
