@@ -36,6 +36,8 @@ export function HomePage() {
   const [isScanning, setIsScanning] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
   const [openLocations, setOpenLocations] = useState<Set<number>>(new Set());
+  const [isIndividualProjectsOpen, setIsIndividualProjectsOpen] = useState(true);
+  const [isLocationsOpen, setIsLocationsOpen] = useState(true);
   const navigate = useNavigate();
 
   async function scanDevices() {
@@ -157,44 +159,54 @@ export function HomePage() {
       {(locations.length > 0 || standaloneProjects.length > 0) && (
         <div className="devices-list">
           {standaloneProjects.length > 0 && (
-            <div className="location-card location-type-localcopy">
-              <div className="location-header">
-                <div className="location-header-left">
-                  <h3>Individual Projects</h3>
-                </div>
-              </div>
-              <div className="sets-section open">
-                <div className="sets-section-content">
-                  <div className="projects-grid">
-                    {standaloneProjects.map((project, projIdx) => (
-                      <div
-                        key={projIdx}
-                        className="project-card clickable-project"
-                        onClick={() => {
-                          navigate(`/project?path=${encodeURIComponent(project.path)}&name=${encodeURIComponent(project.name)}`);
-                        }}
-                        title="Click to view project details"
-                      >
-                        <div className="project-name">{project.name}</div>
-                        <div className="project-info">
-                          <span className={project.has_project_file ? "status-yes" : "status-no"}>
-                            {project.has_project_file ? "✓ Project" : "✗ Project"}
-                          </span>
-                          <span className={project.has_banks ? "status-yes" : "status-no"}>
-                            {project.has_banks ? "✓ Banks" : "✗ Banks"}
-                          </span>
-                        </div>
+            <div style={{ marginBottom: '2rem' }}>
+              <h2
+                className="clickable"
+                onClick={() => setIsIndividualProjectsOpen(!isIndividualProjectsOpen)}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
+              >
+                <span>{isIndividualProjectsOpen ? '▼' : '▶'}</span>
+                Found {standaloneProjects.length} individual project{standaloneProjects.length > 1 ? 's' : ''}
+              </h2>
+              {isIndividualProjectsOpen && (
+                <div className="projects-grid">
+                  {standaloneProjects.map((project, projIdx) => (
+                    <div
+                      key={projIdx}
+                      className="project-card clickable-project"
+                      onClick={() => {
+                        navigate(`/project?path=${encodeURIComponent(project.path)}&name=${encodeURIComponent(project.name)}`);
+                      }}
+                      title="Click to view project details"
+                    >
+                      <div className="project-name">{project.name}</div>
+                      <div className="project-info">
+                        <span className={project.has_project_file ? "status-yes" : "status-no"}>
+                          {project.has_project_file ? "✓ Project" : "✗ Project"}
+                        </span>
+                        <span className={project.has_banks ? "status-yes" : "status-no"}>
+                          {project.has_banks ? "✓ Banks" : "✗ Banks"}
+                        </span>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
+              )}
             </div>
           )}
 
           {locations.length > 0 && (
             <>
-              <h2>Found {locations.length} location{locations.length > 1 ? 's' : ''}</h2>
+              <h2
+                className="clickable"
+                onClick={() => setIsLocationsOpen(!isLocationsOpen)}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
+              >
+                <span>{isLocationsOpen ? '▼' : '▶'}</span>
+                Found {locations.length} location{locations.length > 1 ? 's' : ''}
+              </h2>
+              {isLocationsOpen && (
+                <>
           {locations.map((location, locIdx) => {
             const isOpen = openLocations.has(locIdx);
             return (
@@ -264,8 +276,10 @@ export function HomePage() {
               </div>
             );
           })}
-            </>
-          )}
+              </>
+            )}
+          </>
+        )}
         </div>
       )}
     </main>
