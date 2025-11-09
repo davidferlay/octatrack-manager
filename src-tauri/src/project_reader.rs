@@ -57,6 +57,9 @@ pub struct Pattern {
     pub id: u8,
     pub name: String,
     pub length: u16,
+    pub part_assignment: u8,  // Which part (0-3 for Parts 1-4) this pattern is assigned to
+    pub scale_mode: String,   // "Normal" or "Per Track"
+    pub tempo_info: Option<String>,  // Pattern tempo if set, or None if using project tempo
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -274,12 +277,26 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                     for pattern_id in 0..16 {
                         // Extract actual pattern length from bank data
                         // Each pattern stores its master length in the scale settings
-                        let pattern_length = bank_data.patterns.0[pattern_id as usize].scale.master_len as u16;
+                        let pattern = &bank_data.patterns.0[pattern_id as usize];
+                        let pattern_length = pattern.scale.master_len as u16;
+
+                        // Extract part assignment (0-3 for Parts 1-4)
+                        let part_assignment = pattern.part_assignment;
+
+                        // Extract scale mode (0 = NORMAL, 1 = PER TRACK)
+                        let scale_mode = if pattern.scale.scale_mode == 0 {
+                            "Normal".to_string()
+                        } else {
+                            "Per Track".to_string()
+                        };
 
                         patterns.push(Pattern {
                             id: pattern_id,
                             name: format!("Pattern {}", pattern_id + 1),
                             length: pattern_length,
+                            part_assignment,
+                            scale_mode,
+                            tempo_info: None,  // Will add tempo calculation later if needed
                         });
                     }
 

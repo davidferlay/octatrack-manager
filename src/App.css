@@ -628,16 +628,23 @@ h1 {
 .pattern-card {
   background-color: var(--elektron-black);
   border: 1px solid var(--elektron-border-gray);
-  padding: 0.5rem 0.75rem;
+  padding: 0.75rem;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 0.5rem;
   transition: all 0.15s ease;
 }
 
 .pattern-card:hover {
   border-color: var(--elektron-orange);
   background-color: #151515;
+}
+
+.pattern-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .pattern-name {
@@ -647,9 +654,31 @@ h1 {
   font-family: 'Courier New', monospace;
 }
 
+.pattern-part {
+  font-size: 0.7rem;
+  color: var(--elektron-orange);
+  font-weight: 500;
+}
+
+.pattern-details {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--elektron-border-gray);
+}
+
 .pattern-length {
   font-size: 0.7rem;
   color: var(--elektron-text-dim);
+}
+
+.pattern-scale {
+  font-size: 0.65rem;
+  color: var(--elektron-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 /* Bank Selector */

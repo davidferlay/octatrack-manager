@@ -52,6 +52,9 @@ interface Pattern {
   id: number;
   name: string;
   length: number;
+  part_assignment: number;  // Which part (0-3 for Parts 1-4) this pattern is assigned to
+  scale_mode: string;       // "Normal" or "Per Track"
+  tempo_info: string | null; // Pattern tempo if set, or null if using project tempo
 }
 
 interface Part {
@@ -293,8 +296,14 @@ export function ProjectDetail() {
                       <div className="patterns-list">
                         {banks[selectedBankIndex].parts[0]?.patterns.map((pattern) => (
                           <div key={pattern.id} className="pattern-card">
-                            <span className="pattern-name">{pattern.name}</span>
-                            <span className="pattern-length">{pattern.length} steps</span>
+                            <div className="pattern-header">
+                              <span className="pattern-name">{pattern.name}</span>
+                              <span className="pattern-part">→ Part {pattern.part_assignment + 1}</span>
+                            </div>
+                            <div className="pattern-details">
+                              <span className="pattern-length">{pattern.length} steps</span>
+                              <span className="pattern-scale">{pattern.scale_mode}</span>
+                            </div>
                           </div>
                         ))}
                       </div>
