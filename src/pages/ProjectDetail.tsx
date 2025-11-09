@@ -563,14 +563,6 @@ export function ProjectDetail() {
                             <div className="pattern-grid-section">
                               <h4>Pattern Grid</h4>
                               <div className="pattern-grid-container">
-                                {/* Page markers */}
-                                <div className="pattern-grid-pages">
-                                  <div className="page-label">Page 1</div>
-                                  <div className="page-label">Page 2</div>
-                                  <div className="page-label">Page 3</div>
-                                  <div className="page-label">Page 4</div>
-                                </div>
-
                                 {/* Grid */}
                                 <div className="pattern-grid">
                                   {trackData.steps.slice(0, pattern.length).map((step) => {
