@@ -1,7 +1,7 @@
 mod device_detection;
 mod project_reader;
 
-use device_detection::{discover_devices, scan_directory, OctatrackLocation};
+use device_detection::{discover_devices, scan_directory, ScanResult};
 use project_reader::{read_project_metadata, read_project_banks, ProjectMetadata, Bank};
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -11,12 +11,12 @@ fn greet(name: &str) -> String {
 }
 
 #[tauri::command]
-fn scan_devices() -> Vec<OctatrackLocation> {
+fn scan_devices() -> ScanResult {
     discover_devices()
 }
 
 #[tauri::command]
-fn scan_custom_directory(path: String) -> Vec<OctatrackLocation> {
+fn scan_custom_directory(path: String) -> ScanResult {
     scan_directory(&path)
 }
 
