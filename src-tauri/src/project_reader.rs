@@ -79,6 +79,61 @@ pub struct TrackSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioParameterLocks {
+    pub machine: MachineParams,
+    pub lfo: LfoParams,
+    pub amp: AmpParams,
+    pub static_slot_id: Option<u8>,
+    pub flex_slot_id: Option<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MachineParams {
+    pub param1: Option<u8>,
+    pub param2: Option<u8>,
+    pub param3: Option<u8>,
+    pub param4: Option<u8>,
+    pub param5: Option<u8>,
+    pub param6: Option<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LfoParams {
+    pub spd1: Option<u8>,
+    pub spd2: Option<u8>,
+    pub spd3: Option<u8>,
+    pub dep1: Option<u8>,
+    pub dep2: Option<u8>,
+    pub dep3: Option<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AmpParams {
+    pub atk: Option<u8>,
+    pub hold: Option<u8>,
+    pub rel: Option<u8>,
+    pub vol: Option<u8>,
+    pub bal: Option<u8>,
+    pub f: Option<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MidiParameterLocks {
+    pub midi: MidiParams,
+    pub lfo: LfoParams,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MidiParams {
+    pub note: Option<u8>,
+    pub vel: Option<u8>,
+    pub len: Option<u8>,
+    pub not2: Option<u8>,
+    pub not3: Option<u8>,
+    pub not4: Option<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrigStep {
     pub step: u8,              // Step number (0-63)
     pub trigger: bool,         // Has trigger trig
@@ -95,6 +150,8 @@ pub struct TrigStep {
     pub velocity: Option<u8>,  // Velocity/level value (0-127)
     pub plock_count: u8,       // Number of parameter locks on this step
     pub sample_slot: Option<u8>, // Sample slot ID if locked (audio tracks)
+    pub audio_plocks: Option<AudioParameterLocks>, // Audio parameter locks (audio tracks only)
+    pub midi_plocks: Option<MidiParameterLocks>,   // MIDI parameter locks (MIDI tracks only)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -760,6 +817,40 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                                     None
                                 };
 
+                                // Extract all audio parameter locks if this step has any
+                                let audio_plocks = if plock_count > 0 {
+                                    Some(AudioParameterLocks {
+                                        machine: MachineParams {
+                                            param1: if plock.machine.param1 != 255 { Some(plock.machine.param1) } else { None },
+                                            param2: if plock.machine.param2 != 255 { Some(plock.machine.param2) } else { None },
+                                            param3: if plock.machine.param3 != 255 { Some(plock.machine.param3) } else { None },
+                                            param4: if plock.machine.param4 != 255 { Some(plock.machine.param4) } else { None },
+                                            param5: if plock.machine.param5 != 255 { Some(plock.machine.param5) } else { None },
+                                            param6: if plock.machine.param6 != 255 { Some(plock.machine.param6) } else { None },
+                                        },
+                                        lfo: LfoParams {
+                                            spd1: if plock.lfo.spd1 != 255 { Some(plock.lfo.spd1) } else { None },
+                                            spd2: if plock.lfo.spd2 != 255 { Some(plock.lfo.spd2) } else { None },
+                                            spd3: if plock.lfo.spd3 != 255 { Some(plock.lfo.spd3) } else { None },
+                                            dep1: if plock.lfo.dep1 != 255 { Some(plock.lfo.dep1) } else { None },
+                                            dep2: if plock.lfo.dep2 != 255 { Some(plock.lfo.dep2) } else { None },
+                                            dep3: if plock.lfo.dep3 != 255 { Some(plock.lfo.dep3) } else { None },
+                                        },
+                                        amp: AmpParams {
+                                            atk: if plock.amp.atk != 255 { Some(plock.amp.atk) } else { None },
+                                            hold: if plock.amp.hold != 255 { Some(plock.amp.hold) } else { None },
+                                            rel: if plock.amp.rel != 255 { Some(plock.amp.rel) } else { None },
+                                            vol: if plock.amp.vol != 255 { Some(plock.amp.vol) } else { None },
+                                            bal: if plock.amp.bal != 255 { Some(plock.amp.bal) } else { None },
+                                            f: if plock.amp.f != 255 { Some(plock.amp.f) } else { None },
+                                        },
+                                        static_slot_id: if plock.static_slot_id != 255 { Some(plock.static_slot_id) } else { None },
+                                        flex_slot_id: if plock.flex_slot_id != 255 { Some(plock.flex_slot_id) } else { None },
+                                    })
+                                } else {
+                                    None
+                                };
+
                                 steps.push(TrigStep {
                                     step: step as u8,
                                     trigger: trigger_steps[step],
@@ -776,6 +867,8 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                                     velocity,
                                     plock_count,
                                     sample_slot,
+                                    audio_plocks,
+                                    midi_plocks: None,  // No MIDI plocks for audio tracks
                                 });
                             }
 
@@ -896,6 +989,30 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                                     None
                                 };
 
+                                // Extract all MIDI parameter locks if this step has any
+                                let midi_plocks = if plock_count > 0 {
+                                    Some(MidiParameterLocks {
+                                        midi: MidiParams {
+                                            note: if plock.midi.note != 255 { Some(plock.midi.note) } else { None },
+                                            vel: if plock.midi.vel != 255 { Some(plock.midi.vel) } else { None },
+                                            len: if plock.midi.len != 255 { Some(plock.midi.len) } else { None },
+                                            not2: if plock.midi.not2 != 255 { Some(plock.midi.not2) } else { None },
+                                            not3: if plock.midi.not3 != 255 { Some(plock.midi.not3) } else { None },
+                                            not4: if plock.midi.not4 != 255 { Some(plock.midi.not4) } else { None },
+                                        },
+                                        lfo: LfoParams {
+                                            spd1: if plock.lfo.spd1 != 255 { Some(plock.lfo.spd1) } else { None },
+                                            spd2: if plock.lfo.spd2 != 255 { Some(plock.lfo.spd2) } else { None },
+                                            spd3: if plock.lfo.spd3 != 255 { Some(plock.lfo.spd3) } else { None },
+                                            dep1: if plock.lfo.dep1 != 255 { Some(plock.lfo.dep1) } else { None },
+                                            dep2: if plock.lfo.dep2 != 255 { Some(plock.lfo.dep2) } else { None },
+                                            dep3: if plock.lfo.dep3 != 255 { Some(plock.lfo.dep3) } else { None },
+                                        },
+                                    })
+                                } else {
+                                    None
+                                };
+
                                 steps.push(TrigStep {
                                     step: step as u8,
                                     trigger: trigger_steps[step],
@@ -912,6 +1029,8 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                                     velocity,
                                     plock_count,
                                     sample_slot: None, // MIDI tracks don't have sample slots
+                                    audio_plocks: None, // No audio plocks for MIDI tracks
+                                    midi_plocks,
                                 });
                             }
 
