@@ -1263,3 +1263,123 @@ h1 {
   font-size: 1.15rem;
   font-weight: 700;
 }
+
+/* Selected step highlight */
+.pattern-step.selected {
+  outline: 3px solid var(--elektron-orange);
+  outline-offset: 2px;
+  box-shadow: 0 0 8px rgba(255, 140, 0, 0.6);
+  position: relative;
+  z-index: 10;
+}
+
+/* Parameter Details Panel */
+.parameter-details-panel {
+  margin-top: 2rem;
+  background-color: var(--elektron-darker-gray);
+  border: 2px solid var(--elektron-dark-gray);
+  border-radius: 8px;
+  overflow: hidden;
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.parameter-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  background-color: var(--elektron-dark-gray);
+  border-bottom: 1px solid var(--elektron-medium-gray);
+}
+
+.parameter-panel-header h4 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: var(--elektron-orange);
+}
+
+.close-button {
+  background: none;
+  border: none;
+  color: var(--elektron-text-primary);
+  font-size: 2rem;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.close-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: var(--elektron-orange);
+}
+
+.parameter-panel-content {
+  padding: 1.5rem;
+}
+
+.param-section {
+  margin-bottom: 1.5rem;
+}
+
+.param-section:last-child {
+  margin-bottom: 0;
+}
+
+.param-section h5 {
+  margin: 0 0 0.75rem 0;
+  font-size: 1.1rem;
+  color: var(--elektron-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--elektron-medium-gray);
+  padding-bottom: 0.5rem;
+}
+
+.param-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.param-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  background-color: var(--elektron-dark-gray);
+  border-radius: 4px;
+  font-size: 0.95rem;
+}
+
+.param-item span {
+  color: var(--elektron-text-secondary);
+  font-weight: 600;
+}
+
+.param-item {
+  color: var(--elektron-orange);
+  font-weight: 700;
+}
+
+.parameter-panel-content p {
+  margin: 0;
+  color: var(--elektron-text-secondary);
+  font-style: italic;
+}

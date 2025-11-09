@@ -71,6 +71,55 @@ interface TrackSettings {
   oneshot_trk: boolean;
 }
 
+interface MachineParams {
+  param1: number | null;
+  param2: number | null;
+  param3: number | null;
+  param4: number | null;
+  param5: number | null;
+  param6: number | null;
+}
+
+interface LfoParams {
+  spd1: number | null;
+  spd2: number | null;
+  spd3: number | null;
+  dep1: number | null;
+  dep2: number | null;
+  dep3: number | null;
+}
+
+interface AmpParams {
+  atk: number | null;
+  hold: number | null;
+  rel: number | null;
+  vol: number | null;
+  bal: number | null;
+  f: number | null;
+}
+
+interface AudioParameterLocks {
+  machine: MachineParams;
+  lfo: LfoParams;
+  amp: AmpParams;
+  static_slot_id: number | null;
+  flex_slot_id: number | null;
+}
+
+interface MidiParams {
+  note: number | null;
+  vel: number | null;
+  len: number | null;
+  not2: number | null;
+  not3: number | null;
+  not4: number | null;
+}
+
+interface MidiParameterLocks {
+  midi: MidiParams;
+  lfo: LfoParams;
+}
+
 interface TrigStep {
   step: number;              // Step number (0-63)
   trigger: boolean;          // Has trigger trig
@@ -87,6 +136,8 @@ interface TrigStep {
   velocity: number | null;   // Velocity/level value (0-127)
   plock_count: number;       // Number of parameter locks on this step
   sample_slot: number | null; // Sample slot ID if locked (audio tracks)
+  audio_plocks: AudioParameterLocks | null; // Audio parameter locks (audio tracks only)
+  midi_plocks: MidiParameterLocks | null;   // MIDI parameter locks (MIDI tracks only)
 }
 
 interface TrackInfo {
@@ -144,6 +195,7 @@ export function ProjectDetail() {
   const [selectedBankIndex, setSelectedBankIndex] = useState<number>(0);
   const [selectedTrackIndex, setSelectedTrackIndex] = useState<number>(0); // Default to track 0, will be set to active track
   const [selectedPatternIndex, setSelectedPatternIndex] = useState<number>(0); // Default to pattern 0, will be set to active pattern
+  const [selectedStep, setSelectedStep] = useState<TrigStep | null>(null); // Selected step for parameter details
 
   useEffect(() => {
     if (projectPath) {
@@ -596,8 +648,10 @@ export function ProjectDetail() {
                                     return (
                                       <div
                                         key={step.step}
-                                        className={`pattern-step ${hasTrig ? 'has-trig' : ''} ${trigTypes.join(' ')}`}
+                                        className={`pattern-step ${hasTrig ? 'has-trig' : ''} ${trigTypes.join(' ')} ${selectedStep?.step === step.step ? 'selected' : ''}`}
                                         title={tooltipParts.join('\n')}
+                                        onClick={() => setSelectedStep(step)}
+                                        style={{ cursor: 'pointer' }}
                                       >
                                         <div className="step-number">{step.step + 1}</div>
                                         {hasTrig && (
@@ -645,6 +699,140 @@ export function ProjectDetail() {
                                   <div className="legend-item"><span className="indicator-note">C4</span> MIDI Note/Chord</div>
                                   <div className="legend-item"><span className="indicator-velocity">V</span> Velocity</div>
                                 </div>
+
+                                {/* Parameter Details Panel */}
+                                {selectedStep && (
+                                  <div className="parameter-details-panel">
+                                    <div className="parameter-panel-header">
+                                      <h4>Step {selectedStep.step + 1} - Parameter Locks</h4>
+                                      <button onClick={() => setSelectedStep(null)} className="close-button">×</button>
+                                    </div>
+                                    <div className="parameter-panel-content">
+                                      {selectedStep.audio_plocks && (
+                                        <>
+                                          {/* Machine Parameters */}
+                                          {(selectedStep.audio_plocks.machine.param1 !== null ||
+                                            selectedStep.audio_plocks.machine.param2 !== null ||
+                                            selectedStep.audio_plocks.machine.param3 !== null ||
+                                            selectedStep.audio_plocks.machine.param4 !== null ||
+                                            selectedStep.audio_plocks.machine.param5 !== null ||
+                                            selectedStep.audio_plocks.machine.param6 !== null) && (
+                                            <div className="param-section">
+                                              <h5>Machine</h5>
+                                              <div className="param-grid">
+                                                {selectedStep.audio_plocks.machine.param1 !== null && <div className="param-item"><span>Param 1:</span> {selectedStep.audio_plocks.machine.param1}</div>}
+                                                {selectedStep.audio_plocks.machine.param2 !== null && <div className="param-item"><span>Param 2:</span> {selectedStep.audio_plocks.machine.param2}</div>}
+                                                {selectedStep.audio_plocks.machine.param3 !== null && <div className="param-item"><span>Param 3:</span> {selectedStep.audio_plocks.machine.param3}</div>}
+                                                {selectedStep.audio_plocks.machine.param4 !== null && <div className="param-item"><span>Param 4:</span> {selectedStep.audio_plocks.machine.param4}</div>}
+                                                {selectedStep.audio_plocks.machine.param5 !== null && <div className="param-item"><span>Param 5:</span> {selectedStep.audio_plocks.machine.param5}</div>}
+                                                {selectedStep.audio_plocks.machine.param6 !== null && <div className="param-item"><span>Param 6:</span> {selectedStep.audio_plocks.machine.param6}</div>}
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {/* LFO Parameters */}
+                                          {(selectedStep.audio_plocks.lfo.spd1 !== null ||
+                                            selectedStep.audio_plocks.lfo.spd2 !== null ||
+                                            selectedStep.audio_plocks.lfo.spd3 !== null ||
+                                            selectedStep.audio_plocks.lfo.dep1 !== null ||
+                                            selectedStep.audio_plocks.lfo.dep2 !== null ||
+                                            selectedStep.audio_plocks.lfo.dep3 !== null) && (
+                                            <div className="param-section">
+                                              <h5>LFO</h5>
+                                              <div className="param-grid">
+                                                {selectedStep.audio_plocks.lfo.spd1 !== null && <div className="param-item"><span>Speed 1:</span> {selectedStep.audio_plocks.lfo.spd1}</div>}
+                                                {selectedStep.audio_plocks.lfo.spd2 !== null && <div className="param-item"><span>Speed 2:</span> {selectedStep.audio_plocks.lfo.spd2}</div>}
+                                                {selectedStep.audio_plocks.lfo.spd3 !== null && <div className="param-item"><span>Speed 3:</span> {selectedStep.audio_plocks.lfo.spd3}</div>}
+                                                {selectedStep.audio_plocks.lfo.dep1 !== null && <div className="param-item"><span>Depth 1:</span> {selectedStep.audio_plocks.lfo.dep1}</div>}
+                                                {selectedStep.audio_plocks.lfo.dep2 !== null && <div className="param-item"><span>Depth 2:</span> {selectedStep.audio_plocks.lfo.dep2}</div>}
+                                                {selectedStep.audio_plocks.lfo.dep3 !== null && <div className="param-item"><span>Depth 3:</span> {selectedStep.audio_plocks.lfo.dep3}</div>}
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {/* Amp Parameters */}
+                                          {(selectedStep.audio_plocks.amp.atk !== null ||
+                                            selectedStep.audio_plocks.amp.hold !== null ||
+                                            selectedStep.audio_plocks.amp.rel !== null ||
+                                            selectedStep.audio_plocks.amp.vol !== null ||
+                                            selectedStep.audio_plocks.amp.bal !== null ||
+                                            selectedStep.audio_plocks.amp.f !== null) && (
+                                            <div className="param-section">
+                                              <h5>Amp</h5>
+                                              <div className="param-grid">
+                                                {selectedStep.audio_plocks.amp.atk !== null && <div className="param-item"><span>Attack:</span> {selectedStep.audio_plocks.amp.atk}</div>}
+                                                {selectedStep.audio_plocks.amp.hold !== null && <div className="param-item"><span>Hold:</span> {selectedStep.audio_plocks.amp.hold}</div>}
+                                                {selectedStep.audio_plocks.amp.rel !== null && <div className="param-item"><span>Release:</span> {selectedStep.audio_plocks.amp.rel}</div>}
+                                                {selectedStep.audio_plocks.amp.vol !== null && <div className="param-item"><span>Volume:</span> {selectedStep.audio_plocks.amp.vol}</div>}
+                                                {selectedStep.audio_plocks.amp.bal !== null && <div className="param-item"><span>Balance:</span> {selectedStep.audio_plocks.amp.bal}</div>}
+                                                {selectedStep.audio_plocks.amp.f !== null && <div className="param-item"><span>F:</span> {selectedStep.audio_plocks.amp.f}</div>}
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {/* Sample Slots */}
+                                          {(selectedStep.audio_plocks.static_slot_id !== null || selectedStep.audio_plocks.flex_slot_id !== null) && (
+                                            <div className="param-section">
+                                              <h5>Sample Slots</h5>
+                                              <div className="param-grid">
+                                                {selectedStep.audio_plocks.static_slot_id !== null && <div className="param-item"><span>Static Slot:</span> {selectedStep.audio_plocks.static_slot_id}</div>}
+                                                {selectedStep.audio_plocks.flex_slot_id !== null && <div className="param-item"><span>Flex Slot:</span> {selectedStep.audio_plocks.flex_slot_id}</div>}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </>
+                                      )}
+
+                                      {selectedStep.midi_plocks && (
+                                        <>
+                                          {/* MIDI Parameters */}
+                                          {(selectedStep.midi_plocks.midi.note !== null ||
+                                            selectedStep.midi_plocks.midi.vel !== null ||
+                                            selectedStep.midi_plocks.midi.len !== null ||
+                                            selectedStep.midi_plocks.midi.not2 !== null ||
+                                            selectedStep.midi_plocks.midi.not3 !== null ||
+                                            selectedStep.midi_plocks.midi.not4 !== null) && (
+                                            <div className="param-section">
+                                              <h5>MIDI</h5>
+                                              <div className="param-grid">
+                                                {selectedStep.midi_plocks.midi.note !== null && <div className="param-item"><span>Note 1:</span> {selectedStep.midi_plocks.midi.note}</div>}
+                                                {selectedStep.midi_plocks.midi.not2 !== null && <div className="param-item"><span>Note 2:</span> {selectedStep.midi_plocks.midi.not2}</div>}
+                                                {selectedStep.midi_plocks.midi.not3 !== null && <div className="param-item"><span>Note 3:</span> {selectedStep.midi_plocks.midi.not3}</div>}
+                                                {selectedStep.midi_plocks.midi.not4 !== null && <div className="param-item"><span>Note 4:</span> {selectedStep.midi_plocks.midi.not4}</div>}
+                                                {selectedStep.midi_plocks.midi.vel !== null && <div className="param-item"><span>Velocity:</span> {selectedStep.midi_plocks.midi.vel}</div>}
+                                                {selectedStep.midi_plocks.midi.len !== null && <div className="param-item"><span>Length:</span> {selectedStep.midi_plocks.midi.len}</div>}
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {/* LFO Parameters */}
+                                          {(selectedStep.midi_plocks.lfo.spd1 !== null ||
+                                            selectedStep.midi_plocks.lfo.spd2 !== null ||
+                                            selectedStep.midi_plocks.lfo.spd3 !== null ||
+                                            selectedStep.midi_plocks.lfo.dep1 !== null ||
+                                            selectedStep.midi_plocks.lfo.dep2 !== null ||
+                                            selectedStep.midi_plocks.lfo.dep3 !== null) && (
+                                            <div className="param-section">
+                                              <h5>LFO</h5>
+                                              <div className="param-grid">
+                                                {selectedStep.midi_plocks.lfo.spd1 !== null && <div className="param-item"><span>Speed 1:</span> {selectedStep.midi_plocks.lfo.spd1}</div>}
+                                                {selectedStep.midi_plocks.lfo.spd2 !== null && <div className="param-item"><span>Speed 2:</span> {selectedStep.midi_plocks.lfo.spd2}</div>}
+                                                {selectedStep.midi_plocks.lfo.spd3 !== null && <div className="param-item"><span>Speed 3:</span> {selectedStep.midi_plocks.lfo.spd3}</div>}
+                                                {selectedStep.midi_plocks.lfo.dep1 !== null && <div className="param-item"><span>Depth 1:</span> {selectedStep.midi_plocks.lfo.dep1}</div>}
+                                                {selectedStep.midi_plocks.lfo.dep2 !== null && <div className="param-item"><span>Depth 2:</span> {selectedStep.midi_plocks.lfo.dep2}</div>}
+                                                {selectedStep.midi_plocks.lfo.dep3 !== null && <div className="param-item"><span>Depth 3:</span> {selectedStep.midi_plocks.lfo.dep3}</div>}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </>
+                                      )}
+
+                                      {!selectedStep.audio_plocks && !selectedStep.midi_plocks && (
+                                        <p>No parameter locks on this step.</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </div>
