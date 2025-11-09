@@ -285,16 +285,16 @@ export function ProjectDetail() {
               Banks ({banks.length})
             </button>
             <button
-              className={`tab ${activeTab === "static-slots" ? "active" : ""}`}
-              onClick={() => setActiveTab("static-slots")}
-            >
-              Static Slots ({metadata.sample_slots.static_slots.length})
-            </button>
-            <button
               className={`tab ${activeTab === "flex-slots" ? "active" : ""}`}
               onClick={() => setActiveTab("flex-slots")}
             >
               Flex Slots ({metadata.sample_slots.flex_slots.length})
+            </button>
+            <button
+              className={`tab ${activeTab === "static-slots" ? "active" : ""}`}
+              onClick={() => setActiveTab("static-slots")}
+            >
+              Static Slots ({metadata.sample_slots.static_slots.length})
             </button>
           </div>
 
@@ -849,15 +849,15 @@ export function ProjectDetail() {
               </div>
             )}
 
-            {activeTab === "static-slots" && (
+            {activeTab === "flex-slots" && (
               <div className="samples-tab">
                 <section className="samples-section">
-                  <h2>Static Slots ({metadata.sample_slots.static_slots.length})</h2>
+                  <h2>Flex Slots ({metadata.sample_slots.flex_slots.length})</h2>
                   <div className="samples-grid">
-                    {metadata.sample_slots.static_slots.map((slot) => (
+                    {metadata.sample_slots.flex_slots.map((slot) => (
                       <div key={slot.slot_id} className="sample-card">
                         <div className="sample-header">
-                          <span className="sample-id">S{slot.slot_id}</span>
+                          <span className="sample-id">F{slot.slot_id}</span>
                           <span className="sample-gain">Gain: {slot.gain}</span>
                         </div>
                         <div className="sample-name">{slot.path}</div>
@@ -872,15 +872,15 @@ export function ProjectDetail() {
               </div>
             )}
 
-            {activeTab === "flex-slots" && (
+            {activeTab === "static-slots" && (
               <div className="samples-tab">
                 <section className="samples-section">
-                  <h2>Flex Slots ({metadata.sample_slots.flex_slots.length})</h2>
+                  <h2>Static Slots ({metadata.sample_slots.static_slots.length})</h2>
                   <div className="samples-grid">
-                    {metadata.sample_slots.flex_slots.map((slot) => (
+                    {metadata.sample_slots.static_slots.map((slot) => (
                       <div key={slot.slot_id} className="sample-card">
                         <div className="sample-header">
-                          <span className="sample-id">F{slot.slot_id}</span>
+                          <span className="sample-id">S{slot.slot_id}</span>
                           <span className="sample-gain">Gain: {slot.gain}</span>
                         </div>
                         <div className="sample-name">{slot.path}</div>
