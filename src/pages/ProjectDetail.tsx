@@ -79,6 +79,7 @@ export function ProjectDetail() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>("overview");
+  const [selectedBankIndex, setSelectedBankIndex] = useState<number>(0);
 
   useEffect(() => {
     if (projectPath) {
@@ -94,6 +95,8 @@ export function ProjectDetail() {
       const projectBanks = await invoke<Bank[]>("load_project_banks", { path: projectPath });
       setMetadata(projectMetadata);
       setBanks(projectBanks);
+      // Set the selected bank to the currently active bank
+      setSelectedBankIndex(projectMetadata.current_state.bank);
     } catch (err) {
       console.error("Error loading project data:", err);
       setError(String(err));
@@ -252,14 +255,34 @@ export function ProjectDetail() {
 
             {activeTab === "banks" && (
               <div className="banks-tab">
-                <section className="banks-section">
-                  {banks.map((bank) => (
-                    <div key={bank.id} className="bank-card">
-                      <h3>{bank.name}</h3>
+                <div className="bank-selector-section">
+                  <label htmlFor="bank-select" className="bank-selector-label">
+                    Bank:
+                  </label>
+                  <select
+                    id="bank-select"
+                    className="bank-selector"
+                    value={selectedBankIndex}
+                    onChange={(e) => setSelectedBankIndex(Number(e.target.value))}
+                  >
+                    {banks.map((bank, index) => (
+                      <option key={bank.id} value={index}>
+                        {bank.name}{index === metadata?.current_state.bank ? ' (Active)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {banks[selectedBankIndex] && (
+                  <section className="banks-section">
+                    <div className="bank-card">
                       <div className="parts-list">
-                        {bank.parts.map((part) => (
+                        {banks[selectedBankIndex].parts.map((part) => (
                           <div key={part.id} className="part-card">
-                            <h4>{part.name}</h4>
+                            <div className="part-header">
+                              <h4>{part.name}</h4>
+                              <span className="part-info">{part.patterns.length} Patterns</span>
+                            </div>
                             <div className="patterns-list">
                               {part.patterns.map((pattern) => (
                                 <div key={pattern.id} className="pattern-card">
@@ -272,8 +295,8 @@ export function ProjectDetail() {
                         ))}
                       </div>
                     </div>
-                  ))}
-                </section>
+                  </section>
+                )}
               </div>
             )}
 
