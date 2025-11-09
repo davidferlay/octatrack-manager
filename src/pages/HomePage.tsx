@@ -168,9 +168,10 @@ export function HomePage() {
                 <span>{isIndividualProjectsOpen ? '▼' : '▶'}</span>
                 Found {standaloneProjects.length} individual project{standaloneProjects.length > 1 ? 's' : ''}
               </h2>
-              {isIndividualProjectsOpen && (
-                <div className="projects-grid">
-                  {standaloneProjects.map((project, projIdx) => (
+              <div className={`sets-section ${isIndividualProjectsOpen ? 'open' : 'closed'}`}>
+                <div className="sets-section-content">
+                  <div className="projects-grid">
+                    {standaloneProjects.map((project, projIdx) => (
                     <div
                       key={projIdx}
                       className="project-card clickable-project"
@@ -190,8 +191,9 @@ export function HomePage() {
                       </div>
                     </div>
                   ))}
+                  </div>
                 </div>
-              )}
+              </div>
             </div>
           )}
 
@@ -205,81 +207,81 @@ export function HomePage() {
                 <span>{isLocationsOpen ? '▼' : '▶'}</span>
                 Found {locations.length} location{locations.length > 1 ? 's' : ''}
               </h2>
-              {isLocationsOpen && (
-                <>
-          {locations.map((location, locIdx) => {
-            const isOpen = openLocations.has(locIdx);
-            return (
-              <div key={locIdx} className={`location-card location-type-${location.device_type.toLowerCase()}`}>
-                <div
-                  className="location-header clickable"
-                  onClick={() => toggleLocation(locIdx)}
-                >
-                  <div className="location-header-left">
-                    <span className="collapse-indicator">{isOpen ? '▼' : '▶'}</span>
-                    <h3>{location.name || "Untitled Location"}</h3>
-                  </div>
-                  <span className="device-type">{getDeviceTypeLabel(location.device_type)}</span>
-                </div>
-                <p className="location-path">
-                  <strong>Path:</strong> {location.path}
-                </p>
-
-                {location.sets.length > 0 && (
-                <div className={`sets-section ${isOpen ? 'open' : 'closed'}`}>
-                  <div className="sets-section-content">
-                    <h4>Sets ({location.sets.length})</h4>
-                    {location.sets.map((set, setIdx) => (
-                      <div key={setIdx} className="set-card">
-                      <div className="set-header">
-                        <div className="set-name">{set.name}</div>
-                        <div className="set-info">
-                          <span className={set.has_audio_pool ? "status-yes" : "status-no"}>
-                            {set.has_audio_pool ? "✓ Audio Pool" : "✗ Audio Pool"}
-                          </span>
-                          <span className="project-count">
-                            {set.projects.length} Project{set.projects.length !== 1 ? 's' : ''}
-                          </span>
+              <div className={`sets-section ${isLocationsOpen ? 'open' : 'closed'}`}>
+                <div className="sets-section-content">
+                  {locations.map((location, locIdx) => {
+                    const isOpen = openLocations.has(locIdx);
+                    return (
+                      <div key={locIdx} className={`location-card location-type-${location.device_type.toLowerCase()}`}>
+                        <div
+                          className="location-header clickable"
+                          onClick={() => toggleLocation(locIdx)}
+                        >
+                          <div className="location-header-left">
+                            <span className="collapse-indicator">{isOpen ? '▼' : '▶'}</span>
+                            <h3>{location.name || "Untitled Location"}</h3>
+                          </div>
+                          <span className="device-type">{getDeviceTypeLabel(location.device_type)}</span>
                         </div>
-                      </div>
-                      <div className="set-path">{set.path}</div>
+                        <p className="location-path">
+                          <strong>Path:</strong> {location.path}
+                        </p>
 
-                      {set.projects.length > 0 && (
-                        <div className="projects-grid">
-                          {set.projects.map((project, projIdx) => (
-                            <div
-                              key={projIdx}
-                              className="project-card clickable-project"
-                              onClick={() => {
-                                navigate(`/project?path=${encodeURIComponent(project.path)}&name=${encodeURIComponent(project.name)}`);
-                              }}
-                              title="Click to view project details"
-                            >
-                              <div className="project-name">{project.name}</div>
-                              <div className="project-info">
-                                <span className={project.has_project_file ? "status-yes" : "status-no"}>
-                                  {project.has_project_file ? "✓ Project" : "✗ Project"}
-                                </span>
-                                <span className={project.has_banks ? "status-yes" : "status-no"}>
-                                  {project.has_banks ? "✓ Banks" : "✗ Banks"}
-                                </span>
-                              </div>
+                        {location.sets.length > 0 && (
+                          <div className={`sets-section ${isOpen ? 'open' : 'closed'}`}>
+                            <div className="sets-section-content">
+                              <h4>Sets ({location.sets.length})</h4>
+                              {location.sets.map((set, setIdx) => (
+                                <div key={setIdx} className="set-card">
+                                  <div className="set-header">
+                                    <div className="set-name">{set.name}</div>
+                                    <div className="set-info">
+                                      <span className={set.has_audio_pool ? "status-yes" : "status-no"}>
+                                        {set.has_audio_pool ? "✓ Audio Pool" : "✗ Audio Pool"}
+                                      </span>
+                                      <span className="project-count">
+                                        {set.projects.length} Project{set.projects.length !== 1 ? 's' : ''}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="set-path">{set.path}</div>
+
+                                  {set.projects.length > 0 && (
+                                    <div className="projects-grid">
+                                      {set.projects.map((project, projIdx) => (
+                                        <div
+                                          key={projIdx}
+                                          className="project-card clickable-project"
+                                          onClick={() => {
+                                            navigate(`/project?path=${encodeURIComponent(project.path)}&name=${encodeURIComponent(project.name)}`);
+                                          }}
+                                          title="Click to view project details"
+                                        >
+                                          <div className="project-name">{project.name}</div>
+                                          <div className="project-info">
+                                            <span className={project.has_project_file ? "status-yes" : "status-no"}>
+                                              {project.has_project_file ? "✓ Project" : "✗ Project"}
+                                            </span>
+                                            <span className={project.has_banks ? "status-yes" : "status-no"}>
+                                              {project.has_banks ? "✓ Banks" : "✗ Banks"}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-                )}
               </div>
-            );
-          })}
-              </>
-            )}
-          </>
-        )}
+            </>
+          )}
         </div>
       )}
     </main>
