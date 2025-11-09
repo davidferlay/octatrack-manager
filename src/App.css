@@ -765,21 +765,19 @@ h1 {
 .bank-selector-section {
   display: flex;
   align-items: center;
-  gap: 2rem;
+  justify-content: space-between;
   padding: 1.5rem;
   background-color: var(--elektron-dark-gray);
   border: 1px solid var(--elektron-border-gray);
   border-left: 3px solid var(--elektron-orange);
   margin-bottom: 1.5rem;
-  flex-wrap: wrap;
 }
 
 .selector-group {
   display: flex;
   align-items: center;
   gap: 1rem;
-  flex: 1;
-  min-width: 250px;
+  flex: 0 0 auto;
 }
 
 .bank-selector-label {
@@ -792,8 +790,7 @@ h1 {
 }
 
 .bank-selector {
-  flex: 1;
-  max-width: 400px;
+  width: 220px;
   padding: 0.75rem 1rem;
   background-color: var(--elektron-black);
   color: var(--elektron-text-primary);
