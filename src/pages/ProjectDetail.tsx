@@ -79,6 +79,14 @@ interface TrigStep {
   oneshot: boolean;          // Has oneshot trig (audio only)
   swing: boolean;            // Has swing trig
   slide: boolean;            // Has slide trig (audio only)
+  recorder: boolean;         // Has recorder trig (audio only)
+  trig_condition: string | null; // Trig condition (Fill, NotFill, Pre, percentages, etc.)
+  trig_repeats: number;      // Number of trig repeats (0-7)
+  micro_timing: string | null;  // Micro-timing offset (e.g., "+1/32", "-1/64")
+  note: number | null;       // MIDI note value (0-127) for MIDI tracks
+  velocity: number | null;   // Velocity/level value (0-127)
+  plock_count: number;       // Number of parameter locks on this step
+  sample_slot: number | null; // Sample slot ID if locked (audio tracks)
 }
 
 interface TrackInfo {
@@ -522,22 +530,52 @@ export function ProjectDetail() {
                                     if (step.oneshot) trigTypes.push('oneshot');
                                     if (step.swing) trigTypes.push('swing');
                                     if (step.slide) trigTypes.push('slide');
+                                    if (step.recorder) trigTypes.push('recorder');
+
+                                    // Build comprehensive tooltip
+                                    const tooltipParts = [`Step ${step.step + 1}`];
+                                    if (trigTypes.length > 0) tooltipParts.push(`Trigs: ${trigTypes.join(', ')}`);
+                                    if (step.trig_condition) tooltipParts.push(`Condition: ${step.trig_condition}`);
+                                    if (step.trig_repeats > 0) tooltipParts.push(`Repeats: ${step.trig_repeats + 1}x`);
+                                    if (step.micro_timing) tooltipParts.push(`Timing: ${step.micro_timing}`);
+                                    if (step.note !== null) tooltipParts.push(`Note: ${step.note}`);
+                                    if (step.velocity !== null) tooltipParts.push(`Velocity: ${step.velocity}`);
+                                    if (step.plock_count > 0) tooltipParts.push(`P-Locks: ${step.plock_count}`);
+                                    if (step.sample_slot !== null) tooltipParts.push(`Sample: ${step.sample_slot}`);
+
+                                    // Helper to convert MIDI note to name
+                                    const noteName = (note: number) => {
+                                      const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+                                      const octave = Math.floor(note / 12) - 1;
+                                      return names[note % 12] + octave;
+                                    };
 
                                     return (
                                       <div
                                         key={step.step}
                                         className={`pattern-step ${hasTrig ? 'has-trig' : ''} ${trigTypes.join(' ')}`}
-                                        title={`Step ${step.step + 1}${trigTypes.length > 0 ? '\n' + trigTypes.join(', ') : ''}`}
+                                        title={tooltipParts.join('\n')}
                                       >
                                         <div className="step-number">{step.step + 1}</div>
                                         {hasTrig && (
                                           <div className="step-indicators">
+                                            {/* Primary trig indicators */}
                                             {step.trigger && <span className="indicator-trigger">●</span>}
                                             {step.trigless && <span className="indicator-trigless">○</span>}
                                             {step.plock && <span className="indicator-plock">P</span>}
                                             {step.oneshot && <span className="indicator-oneshot">1</span>}
                                             {step.swing && <span className="indicator-swing">♪</span>}
                                             {step.slide && <span className="indicator-slide">~</span>}
+                                            {step.recorder && <span className="indicator-recorder">R</span>}
+
+                                            {/* Additional data indicators */}
+                                            {step.trig_condition && <span className="indicator-condition">{step.trig_condition}</span>}
+                                            {step.trig_repeats > 0 && <span className="indicator-repeats">{step.trig_repeats + 1}x</span>}
+                                            {step.micro_timing && <span className="indicator-timing">{step.micro_timing}</span>}
+                                            {step.note !== null && <span className="indicator-note">{noteName(step.note)}</span>}
+                                            {step.velocity !== null && <span className="indicator-velocity">V{step.velocity}</span>}
+                                            {step.plock_count > 1 && <span className="indicator-plock-count">{step.plock_count}p</span>}
+                                            {step.sample_slot !== null && <span className="indicator-sample">S{step.sample_slot}</span>}
                                           </div>
                                         )}
                                       </div>
@@ -553,6 +591,12 @@ export function ProjectDetail() {
                                   <div className="legend-item"><span className="indicator-oneshot">1</span> One-Shot</div>
                                   <div className="legend-item"><span className="indicator-swing">♪</span> Swing</div>
                                   <div className="legend-item"><span className="indicator-slide">~</span> Slide</div>
+                                  <div className="legend-item"><span className="indicator-recorder">R</span> Recorder</div>
+                                  <div className="legend-item"><span className="indicator-condition">Fill</span> Condition</div>
+                                  <div className="legend-item"><span className="indicator-repeats">2x</span> Repeats</div>
+                                  <div className="legend-item"><span className="indicator-timing">μ</span> Micro-timing</div>
+                                  <div className="legend-item"><span className="indicator-note">C4</span> MIDI Note</div>
+                                  <div className="legend-item"><span className="indicator-velocity">V</span> Velocity</div>
                                 </div>
                               </div>
                             </div>
