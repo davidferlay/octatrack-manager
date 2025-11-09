@@ -852,7 +852,6 @@ export function ProjectDetail() {
             {activeTab === "flex-slots" && (
               <div className="samples-tab">
                 <section className="samples-section">
-                  <h2>Flex Slots ({metadata.sample_slots.flex_slots.length})</h2>
                   <div className="samples-grid">
                     {metadata.sample_slots.flex_slots.map((slot) => (
                       <div key={slot.slot_id} className="sample-card">
@@ -875,7 +874,6 @@ export function ProjectDetail() {
             {activeTab === "static-slots" && (
               <div className="samples-tab">
                 <section className="samples-section">
-                  <h2>Static Slots ({metadata.sample_slots.static_slots.length})</h2>
                   <div className="samples-grid">
                     {metadata.sample_slots.static_slots.map((slot) => (
                       <div key={slot.slot_id} className="sample-card">
