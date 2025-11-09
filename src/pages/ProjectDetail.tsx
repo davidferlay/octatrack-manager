@@ -275,22 +275,26 @@ export function ProjectDetail() {
 
                 {banks[selectedBankIndex] && (
                   <section className="banks-section">
+                    {/* Parts Section */}
                     <div className="bank-card">
+                      <h3>Parts ({banks[selectedBankIndex].parts.length})</h3>
                       <div className="parts-list">
                         {banks[selectedBankIndex].parts.map((part) => (
                           <div key={part.id} className="part-card">
-                            <div className="part-header">
-                              <h4>{part.name}</h4>
-                              <span className="part-info">{part.patterns.length} Patterns</span>
-                            </div>
-                            <div className="patterns-list">
-                              {part.patterns.map((pattern) => (
-                                <div key={pattern.id} className="pattern-card">
-                                  <span className="pattern-name">{pattern.name}</span>
-                                  <span className="pattern-length">{pattern.length} steps</span>
-                                </div>
-                              ))}
-                            </div>
+                            <h4>{part.name}</h4>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Patterns Section */}
+                    <div className="bank-card">
+                      <h3>Patterns ({banks[selectedBankIndex].parts[0]?.patterns.length || 0})</h3>
+                      <div className="patterns-list">
+                        {banks[selectedBankIndex].parts[0]?.patterns.map((pattern) => (
+                          <div key={pattern.id} className="pattern-card">
+                            <span className="pattern-name">{pattern.name}</span>
+                            <span className="pattern-length">{pattern.length} steps</span>
                           </div>
                         ))}
                       </div>
