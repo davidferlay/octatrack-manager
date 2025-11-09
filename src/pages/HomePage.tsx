@@ -39,7 +39,7 @@ export function HomePage() {
   const [isIndividualProjectsOpen, setIsIndividualProjectsOpen] = useState(true);
   const [isLocationsOpen, setIsLocationsOpen] = useState(true);
   const navigate = useNavigate();
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
   async function scanDevices() {
     setIsScanning(true);
