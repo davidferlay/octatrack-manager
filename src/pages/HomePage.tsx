@@ -44,11 +44,15 @@ export function HomePage() {
     setIsScanning(true);
     try {
       const result = await invoke<ScanResult>("scan_devices");
-      setLocations(result.locations);
+      // Sort locations alphabetically by name
+      const sortedLocations = [...result.locations].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+      );
+      setLocations(sortedLocations);
       setStandaloneProjects(result.standalone_projects);
       setHasScanned(true);
       // Open all locations by default
-      setOpenLocations(new Set(result.locations.map((_, idx) => idx)));
+      setOpenLocations(new Set(sortedLocations.map((_, idx) => idx)));
     } catch (error) {
       console.error("Error scanning devices:", error);
     } finally {
@@ -87,10 +91,15 @@ export function HomePage() {
             const newLocations = result.locations.filter(loc => !existingPaths.has(loc.path));
             const merged = [...prev, ...newLocations];
 
-            // Update open locations to include new ones
-            setOpenLocations(new Set(merged.map((_, idx) => idx)));
+            // Sort locations alphabetically by name
+            const sortedMerged = merged.sort((a, b) =>
+              a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+            );
 
-            return merged;
+            // Update open locations to include new ones
+            setOpenLocations(new Set(sortedMerged.map((_, idx) => idx)));
+
+            return sortedMerged;
           });
 
           // Merge standalone projects, avoiding duplicates
