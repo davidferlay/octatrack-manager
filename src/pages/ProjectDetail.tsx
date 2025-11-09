@@ -317,7 +317,7 @@ export function ProjectDetail() {
                     >
                       {banks.map((bank, index) => (
                         <option key={bank.id} value={index}>
-                          {bank.name}{index === metadata?.current_state.bank ? ' (Active)' : ''}
+                          {bank.name} ({index + 1}){index === metadata?.current_state.bank ? ' (Active)' : ''}
                         </option>
                       ))}
                     </select>
