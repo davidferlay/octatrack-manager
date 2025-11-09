@@ -1309,6 +1309,25 @@ h1 {
   color: var(--elektron-orange);
 }
 
+.parameter-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 1.5rem;
+  background-color: rgba(74, 158, 255, 0.1);
+  border-bottom: 1px solid var(--elektron-medium-gray);
+  font-size: 0.9rem;
+  color: var(--elektron-text-secondary);
+  line-height: 1.5;
+}
+
+.info-icon {
+  color: #4a9eff;
+  font-size: 1.2rem;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
 .close-button {
   background: none;
   border: none;

@@ -718,14 +718,14 @@ export function ProjectDetail() {
                                             selectedStep.audio_plocks.machine.param5 !== null ||
                                             selectedStep.audio_plocks.machine.param6 !== null) && (
                                             <div className="param-section">
-                                              <h5>Machine</h5>
+                                              <h5>Machine Parameters</h5>
                                               <div className="param-grid">
-                                                {selectedStep.audio_plocks.machine.param1 !== null && <div className="param-item"><span>Param 1:</span> {selectedStep.audio_plocks.machine.param1}</div>}
-                                                {selectedStep.audio_plocks.machine.param2 !== null && <div className="param-item"><span>Param 2:</span> {selectedStep.audio_plocks.machine.param2}</div>}
-                                                {selectedStep.audio_plocks.machine.param3 !== null && <div className="param-item"><span>Param 3:</span> {selectedStep.audio_plocks.machine.param3}</div>}
-                                                {selectedStep.audio_plocks.machine.param4 !== null && <div className="param-item"><span>Param 4:</span> {selectedStep.audio_plocks.machine.param4}</div>}
-                                                {selectedStep.audio_plocks.machine.param5 !== null && <div className="param-item"><span>Param 5:</span> {selectedStep.audio_plocks.machine.param5}</div>}
-                                                {selectedStep.audio_plocks.machine.param6 !== null && <div className="param-item"><span>Param 6:</span> {selectedStep.audio_plocks.machine.param6}</div>}
+                                                {selectedStep.audio_plocks.machine.param1 !== null && <div className="param-item"><span>PTCH (Pitch):</span> {selectedStep.audio_plocks.machine.param1}</div>}
+                                                {selectedStep.audio_plocks.machine.param2 !== null && <div className="param-item"><span>STRT (Start):</span> {selectedStep.audio_plocks.machine.param2}</div>}
+                                                {selectedStep.audio_plocks.machine.param3 !== null && <div className="param-item"><span>LEN (Length):</span> {selectedStep.audio_plocks.machine.param3}</div>}
+                                                {selectedStep.audio_plocks.machine.param4 !== null && <div className="param-item"><span>RATE (Rate):</span> {selectedStep.audio_plocks.machine.param4}</div>}
+                                                {selectedStep.audio_plocks.machine.param5 !== null && <div className="param-item"><span>RTRG (Retrigs):</span> {selectedStep.audio_plocks.machine.param5}</div>}
+                                                {selectedStep.audio_plocks.machine.param6 !== null && <div className="param-item"><span>RTIM (Retrig Time):</span> {selectedStep.audio_plocks.machine.param6}</div>}
                                               </div>
                                             </div>
                                           )}
@@ -738,14 +738,14 @@ export function ProjectDetail() {
                                             selectedStep.audio_plocks.lfo.dep2 !== null ||
                                             selectedStep.audio_plocks.lfo.dep3 !== null) && (
                                             <div className="param-section">
-                                              <h5>LFO</h5>
+                                              <h5>LFO Parameters</h5>
                                               <div className="param-grid">
-                                                {selectedStep.audio_plocks.lfo.spd1 !== null && <div className="param-item"><span>Speed 1:</span> {selectedStep.audio_plocks.lfo.spd1}</div>}
-                                                {selectedStep.audio_plocks.lfo.spd2 !== null && <div className="param-item"><span>Speed 2:</span> {selectedStep.audio_plocks.lfo.spd2}</div>}
-                                                {selectedStep.audio_plocks.lfo.spd3 !== null && <div className="param-item"><span>Speed 3:</span> {selectedStep.audio_plocks.lfo.spd3}</div>}
-                                                {selectedStep.audio_plocks.lfo.dep1 !== null && <div className="param-item"><span>Depth 1:</span> {selectedStep.audio_plocks.lfo.dep1}</div>}
-                                                {selectedStep.audio_plocks.lfo.dep2 !== null && <div className="param-item"><span>Depth 2:</span> {selectedStep.audio_plocks.lfo.dep2}</div>}
-                                                {selectedStep.audio_plocks.lfo.dep3 !== null && <div className="param-item"><span>Depth 3:</span> {selectedStep.audio_plocks.lfo.dep3}</div>}
+                                                {selectedStep.audio_plocks.lfo.spd1 !== null && <div className="param-item"><span>LFO1 Speed:</span> {selectedStep.audio_plocks.lfo.spd1}</div>}
+                                                {selectedStep.audio_plocks.lfo.spd2 !== null && <div className="param-item"><span>LFO2 Speed:</span> {selectedStep.audio_plocks.lfo.spd2}</div>}
+                                                {selectedStep.audio_plocks.lfo.spd3 !== null && <div className="param-item"><span>LFO3 Speed:</span> {selectedStep.audio_plocks.lfo.spd3}</div>}
+                                                {selectedStep.audio_plocks.lfo.dep1 !== null && <div className="param-item"><span>LFO1 Depth:</span> {selectedStep.audio_plocks.lfo.dep1}</div>}
+                                                {selectedStep.audio_plocks.lfo.dep2 !== null && <div className="param-item"><span>LFO2 Depth:</span> {selectedStep.audio_plocks.lfo.dep2}</div>}
+                                                {selectedStep.audio_plocks.lfo.dep3 !== null && <div className="param-item"><span>LFO3 Depth:</span> {selectedStep.audio_plocks.lfo.dep3}</div>}
                                               </div>
                                             </div>
                                           )}
@@ -758,14 +758,14 @@ export function ProjectDetail() {
                                             selectedStep.audio_plocks.amp.bal !== null ||
                                             selectedStep.audio_plocks.amp.f !== null) && (
                                             <div className="param-section">
-                                              <h5>Amp</h5>
+                                              <h5>Amp Envelope</h5>
                                               <div className="param-grid">
-                                                {selectedStep.audio_plocks.amp.atk !== null && <div className="param-item"><span>Attack:</span> {selectedStep.audio_plocks.amp.atk}</div>}
-                                                {selectedStep.audio_plocks.amp.hold !== null && <div className="param-item"><span>Hold:</span> {selectedStep.audio_plocks.amp.hold}</div>}
-                                                {selectedStep.audio_plocks.amp.rel !== null && <div className="param-item"><span>Release:</span> {selectedStep.audio_plocks.amp.rel}</div>}
-                                                {selectedStep.audio_plocks.amp.vol !== null && <div className="param-item"><span>Volume:</span> {selectedStep.audio_plocks.amp.vol}</div>}
-                                                {selectedStep.audio_plocks.amp.bal !== null && <div className="param-item"><span>Balance:</span> {selectedStep.audio_plocks.amp.bal}</div>}
-                                                {selectedStep.audio_plocks.amp.f !== null && <div className="param-item"><span>F:</span> {selectedStep.audio_plocks.amp.f}</div>}
+                                                {selectedStep.audio_plocks.amp.atk !== null && <div className="param-item"><span>ATK (Attack):</span> {selectedStep.audio_plocks.amp.atk}</div>}
+                                                {selectedStep.audio_plocks.amp.hold !== null && <div className="param-item"><span>HOLD (Hold):</span> {selectedStep.audio_plocks.amp.hold}</div>}
+                                                {selectedStep.audio_plocks.amp.rel !== null && <div className="param-item"><span>REL (Release):</span> {selectedStep.audio_plocks.amp.rel}</div>}
+                                                {selectedStep.audio_plocks.amp.vol !== null && <div className="param-item"><span>VOL (Volume):</span> {selectedStep.audio_plocks.amp.vol}</div>}
+                                                {selectedStep.audio_plocks.amp.bal !== null && <div className="param-item"><span>BAL (Balance):</span> {selectedStep.audio_plocks.amp.bal}</div>}
+                                                {selectedStep.audio_plocks.amp.f !== null && <div className="param-item"><span>FILT (Filter):</span> {selectedStep.audio_plocks.amp.f}</div>}
                                               </div>
                                             </div>
                                           )}
@@ -793,14 +793,14 @@ export function ProjectDetail() {
                                             selectedStep.midi_plocks.midi.not3 !== null ||
                                             selectedStep.midi_plocks.midi.not4 !== null) && (
                                             <div className="param-section">
-                                              <h5>MIDI</h5>
+                                              <h5>MIDI Parameters</h5>
                                               <div className="param-grid">
-                                                {selectedStep.midi_plocks.midi.note !== null && <div className="param-item"><span>Note 1:</span> {selectedStep.midi_plocks.midi.note}</div>}
-                                                {selectedStep.midi_plocks.midi.not2 !== null && <div className="param-item"><span>Note 2:</span> {selectedStep.midi_plocks.midi.not2}</div>}
-                                                {selectedStep.midi_plocks.midi.not3 !== null && <div className="param-item"><span>Note 3:</span> {selectedStep.midi_plocks.midi.not3}</div>}
-                                                {selectedStep.midi_plocks.midi.not4 !== null && <div className="param-item"><span>Note 4:</span> {selectedStep.midi_plocks.midi.not4}</div>}
-                                                {selectedStep.midi_plocks.midi.vel !== null && <div className="param-item"><span>Velocity:</span> {selectedStep.midi_plocks.midi.vel}</div>}
-                                                {selectedStep.midi_plocks.midi.len !== null && <div className="param-item"><span>Length:</span> {selectedStep.midi_plocks.midi.len}</div>}
+                                                {selectedStep.midi_plocks.midi.note !== null && <div className="param-item"><span>NOTE 1:</span> {selectedStep.midi_plocks.midi.note}</div>}
+                                                {selectedStep.midi_plocks.midi.not2 !== null && <div className="param-item"><span>NOTE 2:</span> {selectedStep.midi_plocks.midi.not2}</div>}
+                                                {selectedStep.midi_plocks.midi.not3 !== null && <div className="param-item"><span>NOTE 3:</span> {selectedStep.midi_plocks.midi.not3}</div>}
+                                                {selectedStep.midi_plocks.midi.not4 !== null && <div className="param-item"><span>NOTE 4:</span> {selectedStep.midi_plocks.midi.not4}</div>}
+                                                {selectedStep.midi_plocks.midi.vel !== null && <div className="param-item"><span>VEL (Velocity):</span> {selectedStep.midi_plocks.midi.vel}</div>}
+                                                {selectedStep.midi_plocks.midi.len !== null && <div className="param-item"><span>LEN (Length):</span> {selectedStep.midi_plocks.midi.len}</div>}
                                               </div>
                                             </div>
                                           )}
@@ -813,14 +813,14 @@ export function ProjectDetail() {
                                             selectedStep.midi_plocks.lfo.dep2 !== null ||
                                             selectedStep.midi_plocks.lfo.dep3 !== null) && (
                                             <div className="param-section">
-                                              <h5>LFO</h5>
+                                              <h5>LFO Parameters</h5>
                                               <div className="param-grid">
-                                                {selectedStep.midi_plocks.lfo.spd1 !== null && <div className="param-item"><span>Speed 1:</span> {selectedStep.midi_plocks.lfo.spd1}</div>}
-                                                {selectedStep.midi_plocks.lfo.spd2 !== null && <div className="param-item"><span>Speed 2:</span> {selectedStep.midi_plocks.lfo.spd2}</div>}
-                                                {selectedStep.midi_plocks.lfo.spd3 !== null && <div className="param-item"><span>Speed 3:</span> {selectedStep.midi_plocks.lfo.spd3}</div>}
-                                                {selectedStep.midi_plocks.lfo.dep1 !== null && <div className="param-item"><span>Depth 1:</span> {selectedStep.midi_plocks.lfo.dep1}</div>}
-                                                {selectedStep.midi_plocks.lfo.dep2 !== null && <div className="param-item"><span>Depth 2:</span> {selectedStep.midi_plocks.lfo.dep2}</div>}
-                                                {selectedStep.midi_plocks.lfo.dep3 !== null && <div className="param-item"><span>Depth 3:</span> {selectedStep.midi_plocks.lfo.dep3}</div>}
+                                                {selectedStep.midi_plocks.lfo.spd1 !== null && <div className="param-item"><span>LFO1 Speed:</span> {selectedStep.midi_plocks.lfo.spd1}</div>}
+                                                {selectedStep.midi_plocks.lfo.spd2 !== null && <div className="param-item"><span>LFO2 Speed:</span> {selectedStep.midi_plocks.lfo.spd2}</div>}
+                                                {selectedStep.midi_plocks.lfo.spd3 !== null && <div className="param-item"><span>LFO3 Speed:</span> {selectedStep.midi_plocks.lfo.spd3}</div>}
+                                                {selectedStep.midi_plocks.lfo.dep1 !== null && <div className="param-item"><span>LFO1 Depth:</span> {selectedStep.midi_plocks.lfo.dep1}</div>}
+                                                {selectedStep.midi_plocks.lfo.dep2 !== null && <div className="param-item"><span>LFO2 Depth:</span> {selectedStep.midi_plocks.lfo.dep2}</div>}
+                                                {selectedStep.midi_plocks.lfo.dep3 !== null && <div className="param-item"><span>LFO3 Depth:</span> {selectedStep.midi_plocks.lfo.dep3}</div>}
                                               </div>
                                             </div>
                                           )}
