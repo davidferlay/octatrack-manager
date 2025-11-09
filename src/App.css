@@ -649,17 +649,12 @@ h1 {
 .pattern-card {
   background-color: var(--elektron-black);
   border: 1px solid var(--elektron-border-gray);
-  border-left: 3px solid var(--elektron-border-gray);
-  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--elektron-orange);
+  padding: 2rem;
   display: flex;
-  align-items: center;
-  gap: 1.5rem;
+  flex-direction: column;
+  gap: 2rem;
   transition: all 0.15s ease;
-}
-
-.pattern-card:hover {
-  border-left-color: var(--elektron-orange);
-  background-color: #151515;
 }
 
 .pattern-header {
@@ -667,98 +662,96 @@ h1 {
   align-items: center;
   gap: 1rem;
   flex-wrap: wrap;
-  min-width: 250px;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--elektron-border-gray);
 }
 
 .pattern-name {
-  font-size: 0.875rem;
-  font-weight: 600;
+  font-size: 1.25rem;
+  font-weight: 700;
   color: var(--elektron-text-primary);
   font-family: 'Courier New', monospace;
-  min-width: 80px;
 }
 
 .pattern-part {
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   color: var(--elektron-orange);
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
 }
 
 .pattern-swing-indicator {
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   color: #4a9eff;
-  font-weight: 500;
-  padding: 0.15rem 0.5rem;
-  background-color: rgba(74, 158, 255, 0.1);
-  border: 1px solid rgba(74, 158, 255, 0.3);
-  border-radius: 3px;
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
+  background-color: rgba(74, 158, 255, 0.15);
+  border: 1px solid rgba(74, 158, 255, 0.4);
+  border-radius: 4px;
   white-space: nowrap;
 }
 
 .pattern-tempo-indicator {
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   color: #ff9966;
-  font-weight: 500;
-  padding: 0.15rem 0.5rem;
-  background-color: rgba(255, 153, 102, 0.1);
-  border: 1px solid rgba(255, 153, 102, 0.3);
-  border-radius: 3px;
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
+  background-color: rgba(255, 153, 102, 0.15);
+  border: 1px solid rgba(255, 153, 102, 0.4);
+  border-radius: 4px;
   white-space: nowrap;
 }
 
 .pattern-track-indicator {
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   color: #66cc66;
-  font-weight: 500;
-  padding: 0.15rem 0.5rem;
-  background-color: rgba(102, 204, 102, 0.1);
-  border: 1px solid rgba(102, 204, 102, 0.3);
-  border-radius: 3px;
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
+  background-color: rgba(102, 204, 102, 0.15);
+  border: 1px solid rgba(102, 204, 102, 0.4);
+  border-radius: 4px;
   white-space: nowrap;
 }
 
 .pattern-details {
   display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  flex: 1;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 2rem;
 }
 
 .pattern-detail-group {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 1.5rem;
-  flex-wrap: wrap;
+  padding: 1.5rem;
+  background-color: var(--elektron-dark-gray);
+  border-radius: 4px;
 }
 
 .pattern-detail-separator {
-  width: 1px;
-  height: 24px;
-  background-color: var(--elektron-border-gray);
+  display: none;
 }
 
 .pattern-detail-item {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 0.5rem;
 }
 
 .pattern-detail-label {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   color: var(--elektron-text-dim);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-weight: 500;
+  letter-spacing: 0.75px;
+  font-weight: 600;
   white-space: nowrap;
 }
 
 .pattern-detail-value {
-  font-size: 0.75rem;
+  font-size: 1rem;
   color: var(--elektron-text-primary);
   font-family: 'Courier New', monospace;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 /* Bank and Track Selector */
