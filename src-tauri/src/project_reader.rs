@@ -438,12 +438,13 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                             None
                         };
 
-                        // Attempt to extract tempo info
+                        // Calculate BPM from tempo bytes
+                        // Formula: BPM = (tempo_1 + 1) * 10
                         // Default values are tempo_1: 11, tempo_2: 64 (= 120 BPM)
+                        let bpm = (pattern.tempo_1 as u32 + 1) * 10;
                         let tempo_info = if pattern.tempo_1 != 11 || pattern.tempo_2 != 64 {
-                            // Pattern has custom tempo - we'll display the raw values for now
-                            // as the exact formula isn't documented in ot-tools-io yet
-                            Some(format!("Custom ({}/{})", pattern.tempo_1, pattern.tempo_2))
+                            // Pattern has custom tempo
+                            Some(format!("{} BPM", bpm))
                         } else {
                             None
                         };
