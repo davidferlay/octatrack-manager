@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useNavigate } from "react-router-dom";
@@ -39,6 +39,7 @@ export function HomePage() {
   const [isIndividualProjectsOpen, setIsIndividualProjectsOpen] = useState(true);
   const [isLocationsOpen, setIsLocationsOpen] = useState(true);
   const navigate = useNavigate();
+  const [isPending, startTransition] = useTransition();
 
   async function scanDevices() {
     setIsScanning(true);
@@ -185,7 +186,9 @@ export function HomePage() {
                       key={projIdx}
                       className="project-card clickable-project"
                       onClick={() => {
-                        navigate(`/project?path=${encodeURIComponent(project.path)}&name=${encodeURIComponent(project.name)}`);
+                        startTransition(() => {
+                          navigate(`/project?path=${encodeURIComponent(project.path)}&name=${encodeURIComponent(project.name)}`);
+                        });
                       }}
                       title="Click to view project details"
                     >
@@ -262,7 +265,9 @@ export function HomePage() {
                                           key={projIdx}
                                           className="project-card clickable-project"
                                           onClick={() => {
-                                            navigate(`/project?path=${encodeURIComponent(project.path)}&name=${encodeURIComponent(project.name)}`);
+                                            startTransition(() => {
+                                              navigate(`/project?path=${encodeURIComponent(project.path)}&name=${encodeURIComponent(project.name)}`);
+                                            });
                                           }}
                                           title="Click to view project details"
                                         >

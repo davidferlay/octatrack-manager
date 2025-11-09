@@ -21,13 +21,19 @@ fn scan_custom_directory(path: String) -> ScanResult {
 }
 
 #[tauri::command]
-fn load_project_metadata(path: String) -> Result<ProjectMetadata, String> {
-    read_project_metadata(&path)
+async fn load_project_metadata(path: String) -> Result<ProjectMetadata, String> {
+    // Run on a blocking thread pool to avoid blocking the main event loop
+    tauri::async_runtime::spawn_blocking(move || {
+        read_project_metadata(&path)
+    }).await.unwrap()
 }
 
 #[tauri::command]
-fn load_project_banks(path: String) -> Result<Vec<Bank>, String> {
-    read_project_banks(&path)
+async fn load_project_banks(path: String) -> Result<Vec<Bank>, String> {
+    // Run on a blocking thread pool to avoid blocking the main event loop
+    tauri::async_runtime::spawn_blocking(move || {
+        read_project_banks(&path)
+    }).await.unwrap()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

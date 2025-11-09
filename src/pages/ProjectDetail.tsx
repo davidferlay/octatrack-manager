@@ -199,7 +199,12 @@ export function ProjectDetail() {
 
   useEffect(() => {
     if (projectPath) {
-      loadProjectData();
+      // Use requestAnimationFrame to ensure loading UI is painted before data loading
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          loadProjectData();
+        }, 10);
+      });
     }
   }, [projectPath]);
 
