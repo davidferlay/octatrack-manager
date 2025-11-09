@@ -1402,3 +1402,34 @@ h1 {
   color: var(--elektron-text-secondary);
   font-style: italic;
 }
+
+/* Loading Section */
+.loading-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  gap: 1.5rem;
+}
+
+.loading-spinner {
+  width: 60px;
+  height: 60px;
+  border: 4px solid var(--elektron-dark-gray);
+  border-top-color: var(--elektron-orange);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-section p {
+  font-size: 1.2rem;
+  color: var(--elektron-text-secondary);
+  margin: 0;
+}
