@@ -87,6 +87,14 @@ pub struct TrigStep {
     pub oneshot: bool,         // Has oneshot trig (audio only)
     pub swing: bool,           // Has swing trig
     pub slide: bool,           // Has slide trig (audio only)
+    pub recorder: bool,        // Has recorder trig (audio only)
+    pub trig_condition: Option<String>, // Trig condition (Fill, NotFill, Pre, percentages, etc.)
+    pub trig_repeats: u8,      // Number of trig repeats (0-7)
+    pub micro_timing: Option<String>,  // Micro-timing offset (e.g., "+1/32", "-1/64")
+    pub note: Option<u8>,      // MIDI note value (0-127) for MIDI tracks
+    pub velocity: Option<u8>,  // Velocity/level value (0-127)
+    pub plock_count: u8,       // Number of parameter locks on this step
+    pub sample_slot: Option<u8>, // Sample slot ID if locked (audio tracks)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -400,6 +408,174 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                             steps
                         }
 
+                        // Helper function to decode recorder trig masks (32-byte array)
+                        // Only first 8 bytes are used for standard trig positions
+                        fn decode_recorder_masks(masks: &[u8]) -> [bool; 64] {
+                            let mut steps = [false; 64];
+                            // Only use first 8 bytes, same encoding as other trig masks
+                            if masks.len() >= 8 {
+                                let byte_to_step_offset = [48, 56, 32, 40, 16, 24, 8, 0];
+                                for (byte_idx, &mask) in masks[0..8].iter().enumerate() {
+                                    let step_offset = byte_to_step_offset[byte_idx];
+                                    for bit_pos in 0..8 {
+                                        if mask & (1 << bit_pos) != 0 {
+                                            steps[step_offset + bit_pos] = true;
+                                        }
+                                    }
+                                }
+                            }
+                            steps
+                        }
+
+                        // Helper function to decode trig condition from byte value
+                        fn decode_trig_condition(condition_byte: u8) -> Option<String> {
+                            // Need to handle micro-timing offset in upper bit
+                            let condition = condition_byte % 128;
+                            match condition {
+                                0 => None,
+                                1 => Some("Fill".to_string()),
+                                2 => Some("NotFill".to_string()),
+                                3 => Some("Pre".to_string()),
+                                4 => Some("NotPre".to_string()),
+                                5 => Some("Nei".to_string()),
+                                6 => Some("NotNei".to_string()),
+                                7 => Some("1st".to_string()),
+                                8 => Some("Not1st".to_string()),
+                                9 => Some("1%".to_string()),
+                                10 => Some("2%".to_string()),
+                                11 => Some("4%".to_string()),
+                                12 => Some("6%".to_string()),
+                                13 => Some("9%".to_string()),
+                                14 => Some("13%".to_string()),
+                                15 => Some("19%".to_string()),
+                                16 => Some("25%".to_string()),
+                                17 => Some("33%".to_string()),
+                                18 => Some("41%".to_string()),
+                                19 => Some("50%".to_string()),
+                                20 => Some("59%".to_string()),
+                                21 => Some("67%".to_string()),
+                                22 => Some("75%".to_string()),
+                                23 => Some("81%".to_string()),
+                                24 => Some("87%".to_string()),
+                                25 => Some("91%".to_string()),
+                                26 => Some("94%".to_string()),
+                                27 => Some("96%".to_string()),
+                                28 => Some("98%".to_string()),
+                                29 => Some("99%".to_string()),
+                                30 => Some("1:2".to_string()),
+                                31 => Some("2:2".to_string()),
+                                32 => Some("1:3".to_string()),
+                                33 => Some("2:3".to_string()),
+                                34 => Some("3:3".to_string()),
+                                35 => Some("1:4".to_string()),
+                                36 => Some("2:4".to_string()),
+                                37 => Some("3:4".to_string()),
+                                38 => Some("4:4".to_string()),
+                                39 => Some("1:5".to_string()),
+                                40 => Some("2:5".to_string()),
+                                41 => Some("3:5".to_string()),
+                                42 => Some("4:5".to_string()),
+                                43 => Some("5:5".to_string()),
+                                44 => Some("1:6".to_string()),
+                                45 => Some("2:6".to_string()),
+                                46 => Some("3:6".to_string()),
+                                47 => Some("4:6".to_string()),
+                                48 => Some("5:6".to_string()),
+                                49 => Some("6:6".to_string()),
+                                50 => Some("1:7".to_string()),
+                                51 => Some("2:7".to_string()),
+                                52 => Some("3:7".to_string()),
+                                53 => Some("4:7".to_string()),
+                                54 => Some("5:7".to_string()),
+                                55 => Some("6:7".to_string()),
+                                56 => Some("7:7".to_string()),
+                                57 => Some("1:8".to_string()),
+                                58 => Some("2:8".to_string()),
+                                59 => Some("3:8".to_string()),
+                                60 => Some("4:8".to_string()),
+                                61 => Some("5:8".to_string()),
+                                62 => Some("6:8".to_string()),
+                                63 => Some("7:8".to_string()),
+                                64 => Some("8:8".to_string()),
+                                _ => None,
+                            }
+                        }
+
+                        // Helper function to get trig repeat count from byte
+                        fn get_trig_repeats(repeat_byte: u8) -> u8 {
+                            // Trig repeats are encoded as: repeats * 32
+                            // So divide by 32 to get the actual repeat count (0-7)
+                            repeat_byte / 32
+                        }
+
+                        // Helper function to parse micro-timing offset (simplified)
+                        fn parse_micro_timing(bytes: [u8; 2]) -> Option<String> {
+                            let first = bytes[0] % 32;  // Remove trig repeat component
+                            let second_offset = bytes[1] >= 128;
+
+                            // Simple micro-timing detection
+                            if first == 0 && !second_offset {
+                                return None; // No offset
+                            }
+
+                            // Map common offset values (simplified)
+                            match (first, second_offset) {
+                                (0, false) => None,
+                                (1, true) => Some("+1/128".to_string()),
+                                (3, false) => Some("+1/64".to_string()),
+                                (6, false) => Some("+1/32".to_string()),
+                                (11, true) => Some("+23/384".to_string()),
+                                (20, true) => Some("-23/384".to_string()),
+                                (26, false) => Some("-1/32".to_string()),
+                                (29, false) => Some("-1/64".to_string()),
+                                (30, true) => Some("-1/128".to_string()),
+                                _ => Some(format!("{}{}",if first < 15 {"+"} else {"-"}, "μ")),
+                            }
+                        }
+
+                        // Helper function to count non-default parameter locks
+                        fn count_audio_plocks(plock: &ot_tools_io::patterns::AudioTrackParameterLocks) -> u8 {
+                            let mut count = 0;
+                            if plock.machine.param1 != 255 { count += 1; }
+                            if plock.machine.param2 != 255 { count += 1; }
+                            if plock.machine.param3 != 255 { count += 1; }
+                            if plock.machine.param4 != 255 { count += 1; }
+                            if plock.machine.param5 != 255 { count += 1; }
+                            if plock.machine.param6 != 255 { count += 1; }
+                            if plock.lfo.spd1 != 255 { count += 1; }
+                            if plock.lfo.spd2 != 255 { count += 1; }
+                            if plock.lfo.spd3 != 255 { count += 1; }
+                            if plock.lfo.dep1 != 255 { count += 1; }
+                            if plock.lfo.dep2 != 255 { count += 1; }
+                            if plock.lfo.dep3 != 255 { count += 1; }
+                            if plock.amp.atk != 255 { count += 1; }
+                            if plock.amp.hold != 255 { count += 1; }
+                            if plock.amp.rel != 255 { count += 1; }
+                            if plock.amp.vol != 255 { count += 1; }
+                            if plock.amp.bal != 255 { count += 1; }
+                            if plock.amp.f != 255 { count += 1; }
+                            if plock.static_slot_id != 255 { count += 1; }
+                            if plock.flex_slot_id != 255 { count += 1; }
+                            count
+                        }
+
+                        fn count_midi_plocks(plock: &ot_tools_io::patterns::MidiTrackParameterLocks) -> u8 {
+                            let mut count = 0;
+                            if plock.midi.note != 255 { count += 1; }
+                            if plock.midi.vel != 255 { count += 1; }
+                            if plock.midi.len != 255 { count += 1; }
+                            if plock.midi.not2 != 255 { count += 1; }
+                            if plock.midi.not3 != 255 { count += 1; }
+                            if plock.midi.not4 != 255 { count += 1; }
+                            if plock.lfo.spd1 != 255 { count += 1; }
+                            if plock.lfo.spd2 != 255 { count += 1; }
+                            if plock.lfo.spd3 != 255 { count += 1; }
+                            if plock.lfo.dep1 != 255 { count += 1; }
+                            if plock.lfo.dep2 != 255 { count += 1; }
+                            if plock.lfo.dep3 != 255 { count += 1; }
+                            count
+                        }
+
                         // Count all trig types across all tracks
                         let mut trigger_count = 0u16;
                         let mut trigless_count = 0u16;
@@ -556,9 +732,34 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                             let oneshot_steps = decode_trig_masks(&audio_track.trig_masks.oneshot);
                             let swing_steps = decode_trig_masks(&audio_track.trig_masks.swing);
                             let slide_steps = decode_trig_masks(&audio_track.trig_masks.slide);
+                            let recorder_steps = decode_recorder_masks(&audio_track.trig_masks.recorder);
 
                             let mut steps = Vec::new();
                             for step in 0..64 {
+                                let offset_repeat_cond = audio_track.trig_offsets_repeats_conditions[step];
+                                let trig_repeats = get_trig_repeats(offset_repeat_cond[0]);
+                                let trig_condition = decode_trig_condition(offset_repeat_cond[1]);
+                                let micro_timing = parse_micro_timing(offset_repeat_cond);
+
+                                let plock = &audio_track.plocks.0[step];
+                                let plock_count = count_audio_plocks(plock);
+
+                                // Get sample slot if locked
+                                let sample_slot = if plock.static_slot_id != 255 {
+                                    Some(plock.static_slot_id)
+                                } else if plock.flex_slot_id != 255 {
+                                    Some(plock.flex_slot_id)
+                                } else {
+                                    None
+                                };
+
+                                // Get velocity from amp parameter lock
+                                let velocity = if plock.amp.vol != 255 {
+                                    Some(plock.amp.vol)
+                                } else {
+                                    None
+                                };
+
                                 steps.push(TrigStep {
                                     step: step as u8,
                                     trigger: trigger_steps[step],
@@ -567,6 +768,14 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                                     oneshot: oneshot_steps[step],
                                     swing: swing_steps[step],
                                     slide: slide_steps[step],
+                                    recorder: recorder_steps[step],
+                                    trig_condition,
+                                    trig_repeats,
+                                    micro_timing,
+                                    note: None,  // No note for audio tracks
+                                    velocity,
+                                    plock_count,
+                                    sample_slot,
                                 });
                             }
 
@@ -658,6 +867,27 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
 
                             let mut steps = Vec::new();
                             for step in 0..64 {
+                                let offset_repeat_cond = midi_track.trig_offsets_repeats_conditions[step];
+                                let trig_repeats = get_trig_repeats(offset_repeat_cond[0]);
+                                let trig_condition = decode_trig_condition(offset_repeat_cond[1]);
+                                let micro_timing = parse_micro_timing(offset_repeat_cond);
+
+                                let plock = &midi_track.plocks[step];
+                                let plock_count = count_midi_plocks(plock);
+
+                                // Get MIDI note and velocity from parameter locks
+                                let note = if plock.midi.note != 255 {
+                                    Some(plock.midi.note)
+                                } else {
+                                    None
+                                };
+
+                                let velocity = if plock.midi.vel != 255 {
+                                    Some(plock.midi.vel)
+                                } else {
+                                    None
+                                };
+
                                 steps.push(TrigStep {
                                     step: step as u8,
                                     trigger: trigger_steps[step],
@@ -666,6 +896,14 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                                     oneshot: false,  // MIDI tracks don't have oneshot trigs
                                     swing: swing_steps[step],
                                     slide: false,     // MIDI tracks don't have slide trigs
+                                    recorder: false,  // MIDI tracks don't have recorder trigs
+                                    trig_condition,
+                                    trig_repeats,
+                                    micro_timing,
+                                    note,
+                                    velocity,
+                                    plock_count,
+                                    sample_slot: None, // MIDI tracks don't have sample slots
                                 });
                             }
 

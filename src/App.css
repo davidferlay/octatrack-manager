@@ -1075,7 +1075,7 @@ h1 {
 
 .page-label {
   text-align: center;
-  font-size: 0.75rem;
+  font-size: 0.9rem;
   color: var(--elektron-orange);
   font-weight: 600;
   text-transform: uppercase;
@@ -1101,11 +1101,12 @@ h1 {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   position: relative;
   cursor: default;
   transition: all 0.1s ease;
   min-height: 50px;
+  padding: 4px 2px;
 }
 
 .pattern-step:hover {
@@ -1123,10 +1124,11 @@ h1 {
 
 /* Step number */
 .step-number {
-  font-size: 0.65rem;
+  font-size: 0.9rem;
   color: var(--elektron-text-dim);
   font-weight: 600;
   font-family: 'Courier New', monospace;
+  margin-top: 6px;
 }
 
 /* Step indicators */
@@ -1136,11 +1138,13 @@ h1 {
   gap: 2px;
   justify-content: center;
   align-items: center;
-  margin-top: 2px;
+  flex: 1;
+  align-content: center;
+  margin-bottom: 12px;
 }
 
 .step-indicators span {
-  font-size: 0.75rem;
+  font-size: 1.1rem;
   font-weight: 700;
   line-height: 1;
 }
@@ -1156,22 +1160,78 @@ h1 {
 
 .indicator-plock {
   color: #4a9eff;
-  font-size: 0.65rem;
+  font-size: 0.95rem;
 }
 
 .indicator-oneshot {
   color: #ff6b9d;
-  font-size: 0.65rem;
+  font-size: 0.95rem;
 }
 
 .indicator-swing {
   color: #ffcc00;
-  font-size: 0.7rem;
+  font-size: 1.05rem;
 }
 
 .indicator-slide {
   color: #00cccc;
-  font-size: 0.8rem;
+  font-size: 1.1rem;
+}
+
+.indicator-recorder {
+  color: #ff9900;
+  font-size: 0.95rem;
+}
+
+.indicator-condition {
+  color: #cc99ff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background-color: rgba(204, 153, 255, 0.2);
+  padding: 1px 3px;
+  border-radius: 2px;
+}
+
+.indicator-repeats {
+  color: #ff66cc;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.indicator-timing {
+  color: #99ccff;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.indicator-note {
+  color: #66ff99;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background-color: rgba(102, 255, 153, 0.2);
+  padding: 1px 3px;
+  border-radius: 2px;
+}
+
+.indicator-velocity {
+  color: #ffaa66;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.indicator-plock-count {
+  color: #4a9eff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background-color: rgba(74, 158, 255, 0.2);
+  padding: 1px 2px;
+  border-radius: 2px;
+}
+
+.indicator-sample {
+  color: #ffcc66;
+  font-size: 0.7rem;
+  font-weight: 600;
 }
 
 /* Grid legend */
@@ -1188,11 +1248,11 @@ h1 {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.875rem;
+  font-size: 1rem;
   color: var(--elektron-text-primary);
 }
 
 .legend-item span {
-  font-size: 1rem;
+  font-size: 1.15rem;
   font-weight: 700;
 }
