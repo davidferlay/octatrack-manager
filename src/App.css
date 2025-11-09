@@ -674,14 +674,14 @@ h1 {
 }
 
 .pattern-part {
-  font-size: 0.875rem;
+  font-size: 1rem;
   color: var(--elektron-orange);
   font-weight: 600;
   white-space: nowrap;
 }
 
 .pattern-swing-indicator {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: #4a9eff;
   font-weight: 600;
   padding: 0.35rem 0.75rem;
@@ -692,7 +692,7 @@ h1 {
 }
 
 .pattern-tempo-indicator {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: #ff9966;
   font-weight: 600;
   padding: 0.35rem 0.75rem;
@@ -703,7 +703,7 @@ h1 {
 }
 
 .pattern-track-indicator {
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   color: #66cc66;
   font-weight: 600;
   padding: 0.35rem 0.75rem;

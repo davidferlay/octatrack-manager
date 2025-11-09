@@ -403,7 +403,7 @@ export function ProjectDetail() {
                               <span className="pattern-part">→ Part {pattern.part_assignment + 1}</span>
                               <span className="pattern-track-indicator">T{trackData.track_id + 1} ({trackData.track_type})</span>
                               {trackData.trig_counts.swing > 0 && <span className="pattern-swing-indicator">♪ {trackData.swing_amount + 50}%</span>}
-                              {pattern.tempo_info && <span className="pattern-tempo-indicator">⌚ {pattern.tempo_info}</span>}
+                              {pattern.tempo_info && <span className="pattern-tempo-indicator">{pattern.tempo_info}</span>}
                             </div>
                             <div className="pattern-details">
                               <div className="pattern-detail-group">
