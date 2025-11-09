@@ -179,7 +179,7 @@ interface Bank {
   parts: Part[];
 }
 
-type TabType = "overview" | "banks" | "samples";
+type TabType = "overview" | "banks" | "static-slots" | "flex-slots";
 
 export function ProjectDetail() {
   const [searchParams] = useSearchParams();
@@ -285,10 +285,16 @@ export function ProjectDetail() {
               Banks ({banks.length})
             </button>
             <button
-              className={`tab ${activeTab === "samples" ? "active" : ""}`}
-              onClick={() => setActiveTab("samples")}
+              className={`tab ${activeTab === "static-slots" ? "active" : ""}`}
+              onClick={() => setActiveTab("static-slots")}
             >
-              Samples ({metadata.sample_slots.static_slots.length + metadata.sample_slots.flex_slots.length})
+              Static Slots ({metadata.sample_slots.static_slots.length})
+            </button>
+            <button
+              className={`tab ${activeTab === "flex-slots" ? "active" : ""}`}
+              onClick={() => setActiveTab("flex-slots")}
+            >
+              Flex Slots ({metadata.sample_slots.flex_slots.length})
             </button>
           </div>
 
@@ -843,7 +849,7 @@ export function ProjectDetail() {
               </div>
             )}
 
-            {activeTab === "samples" && (
+            {activeTab === "static-slots" && (
               <div className="samples-tab">
                 <section className="samples-section">
                   <h2>Static Slots ({metadata.sample_slots.static_slots.length})</h2>
@@ -863,7 +869,11 @@ export function ProjectDetail() {
                     ))}
                   </div>
                 </section>
+              </div>
+            )}
 
+            {activeTab === "flex-slots" && (
+              <div className="samples-tab">
                 <section className="samples-section">
                   <h2>Flex Slots ({metadata.sample_slots.flex_slots.length})</h2>
                   <div className="samples-grid">
