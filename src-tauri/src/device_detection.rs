@@ -5,6 +5,12 @@ use sysinfo::Disks;
 use walkdir::WalkDir;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanResult {
+    pub locations: Vec<OctatrackLocation>,
+    pub standalone_projects: Vec<OctatrackProject>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OctatrackLocation {
     pub name: String,
     pub path: String,
@@ -91,10 +97,12 @@ fn has_valid_audio_pool(audio_path: &Path) -> bool {
 
 /// Checks if a directory is an Octatrack Set
 /// Requirements:
-/// - Must have AUDIO subdirectory (structure requirement)
-/// - Must have at least one subdirectory with .work files (projects)
+/// - Must have an AUDIO directory (the defining characteristic of a Set)
+/// - Must have at least one project subdirectory
 /// - Must not be a system directory
-/// Note: AUDIO directory can be empty - Sets with projects but no samples are valid
+///
+/// Note: A directory without an AUDIO directory is NOT considered a Set,
+/// even if it contains multiple projects - those are individual projects
 fn is_octatrack_set(path: &Path) -> bool {
     if !path.is_dir() {
         return false;
@@ -105,15 +113,13 @@ fn is_octatrack_set(path: &Path) -> bool {
         return false;
     }
 
-    // A Set MUST have an AUDIO directory (the audio pool)
-    let audio_path = path.join("AUDIO");
-    if !audio_path.exists() || !audio_path.is_dir() {
+    // Check for AUDIO directory - this is the defining characteristic of a Set
+    let has_audio_dir = path.join("AUDIO").is_dir();
+    if !has_audio_dir {
         return false;
     }
 
-    // Must have at least one subdirectory with .work files (projects)
-    // This is the KEY requirement that distinguishes real Octatrack Sets from random folders
-    let mut has_project = false;
+    // Must also have at least one project subdirectory
     if let Ok(entries) = fs::read_dir(path) {
         for entry in entries.flatten() {
             let entry_path = entry.path();
@@ -121,26 +127,12 @@ fn is_octatrack_set(path: &Path) -> bool {
                 && entry_path.file_name().and_then(|n| n.to_str()) != Some("AUDIO")
                 && is_octatrack_project(&entry_path)
             {
-                has_project = true;
-                break;
+                return true; // Found a Set: has AUDIO dir + at least one project
             }
         }
     }
 
-    if !has_project {
-        return false; // No valid projects found - not an Octatrack Set
-    }
-
-    // At this point we have AUDIO directory + valid projects, so it's a Set
-    // Optional: Verify AUDIO contents if it has files (quality check for false positives)
-    // But an empty AUDIO directory with valid projects is still a valid Set
-    if has_valid_audio_pool(&audio_path) {
-        return true; // Has audio files - definitely valid
-    }
-
-    // AUDIO is empty, but we have valid projects, so still a valid Set
-    // (Projects can exist without audio samples in the pool)
-    true
+    false // Has AUDIO dir but no projects - not a valid Set
 }
 
 /// Checks if a directory is an Octatrack Project (contains .work files)
@@ -198,10 +190,13 @@ fn scan_for_projects(set_path: &Path) -> Vec<OctatrackProject> {
     projects
 }
 
-/// Scans a location for Sets
-fn scan_for_sets(location_path: &Path, max_depth: usize) -> Vec<OctatrackSet> {
+/// Scans a location for Sets and individual projects
+fn scan_for_sets(location_path: &Path, max_depth: usize) -> (Vec<OctatrackSet>, Vec<OctatrackProject>) {
     let mut sets = Vec::new();
+    let mut standalone_projects = Vec::new();
+    let mut set_paths = std::collections::HashSet::new();
 
+    // First pass: collect all Sets
     for entry in WalkDir::new(location_path)
         .max_depth(max_depth)
         .into_iter()
@@ -209,9 +204,20 @@ fn scan_for_sets(location_path: &Path, max_depth: usize) -> Vec<OctatrackSet> {
     {
         let path = entry.path();
 
+        // Check if it's a Set (contains project subdirectories)
         if is_octatrack_set(path) {
             let audio_pool = path.join("AUDIO");
             let projects = scan_for_projects(path);
+
+            // Check if AUDIO directory exists and contains valid audio files
+            let has_audio_pool = audio_pool.exists()
+                && audio_pool.is_dir()
+                && has_valid_audio_pool(&audio_pool);
+
+            // Store the canonical path to avoid duplicate detection
+            if let Ok(canonical_path) = path.canonicalize() {
+                set_paths.insert(canonical_path);
+            }
 
             sets.push(OctatrackSet {
                 name: path
@@ -220,26 +226,77 @@ fn scan_for_sets(location_path: &Path, max_depth: usize) -> Vec<OctatrackSet> {
                     .unwrap_or("Unknown")
                     .to_string(),
                 path: path.to_string_lossy().to_string(),
-                has_audio_pool: audio_pool.exists() && audio_pool.is_dir(),
+                has_audio_pool,
                 projects,
             });
         }
     }
 
-    sets
+    // Second pass: collect standalone projects (not part of any Set)
+    for entry in WalkDir::new(location_path)
+        .max_depth(max_depth)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.path();
+
+        if is_octatrack_project(path) {
+            // Check if this path is itself a Set or is a subdirectory of any Set
+            let is_set_or_part_of_set = if let Ok(canonical_path) = path.canonicalize() {
+                set_paths.iter().any(|set_path| {
+                    canonical_path.starts_with(set_path)
+                })
+            } else {
+                false
+            };
+
+            // Only add if it's NOT a Set and NOT part of a Set
+            if !is_set_or_part_of_set {
+                let has_project_file = path.join("project.work").exists();
+                let has_banks = path.join("bank01.work").exists();
+
+                standalone_projects.push(OctatrackProject {
+                    name: path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("Unknown")
+                        .to_string(),
+                    path: path.to_string_lossy().to_string(),
+                    has_project_file,
+                    has_banks,
+                });
+            }
+        }
+    }
+
+    (sets, standalone_projects)
 }
 
 /// Groups Sets by their parent directory and creates locations
-fn group_sets_by_parent(sets: Vec<OctatrackSet>) -> Vec<OctatrackLocation> {
+/// Returns (locations, deduplicated_standalone_projects)
+fn group_sets_by_parent(sets: Vec<OctatrackSet>, standalone_projects: Vec<OctatrackProject>) -> (Vec<OctatrackLocation>, Vec<OctatrackProject>) {
     use std::collections::HashMap;
+    use std::collections::HashSet;
 
     let mut grouped: HashMap<String, Vec<OctatrackSet>> = HashMap::new();
 
+    // Deduplicate Sets by path
+    let mut seen_set_paths = HashSet::new();
     for set in sets {
-        // Get the parent directory of this Set
-        if let Some(parent_path) = Path::new(&set.path).parent() {
-            let parent_str = parent_path.to_string_lossy().to_string();
-            grouped.entry(parent_str).or_insert_with(Vec::new).push(set);
+        if seen_set_paths.insert(set.path.clone()) {
+            if let Some(parent_path) = Path::new(&set.path).parent() {
+                let parent_str = parent_path.to_string_lossy().to_string();
+                grouped.entry(parent_str).or_insert_with(Vec::new).push(set);
+            }
+        }
+    }
+
+    // Deduplicate standalone projects by path
+    let mut deduplicated_projects = Vec::new();
+    let mut seen_project_paths = HashSet::new();
+    for project in standalone_projects {
+        if seen_project_paths.insert(project.path.clone()) {
+            deduplicated_projects.push(project);
         }
     }
 
@@ -259,16 +316,20 @@ fn group_sets_by_parent(sets: Vec<OctatrackSet>) -> Vec<OctatrackLocation> {
         });
     }
 
-    locations
+    (locations, deduplicated_projects)
 }
 
 /// Scans the user's home directory for local copies of Octatrack content
-fn scan_home_directory() -> Vec<OctatrackLocation> {
+fn scan_home_directory() -> ScanResult {
     let mut all_sets = Vec::new();
+    let mut all_standalone_projects = Vec::new();
 
     // Get the home directory
     let Some(home_dir) = dirs::home_dir() else {
-        return Vec::new();
+        return ScanResult {
+            locations: Vec::new(),
+            standalone_projects: Vec::new(),
+        };
     };
 
     // Common locations where users might store Octatrack backups
@@ -287,51 +348,72 @@ fn scan_home_directory() -> Vec<OctatrackLocation> {
             continue;
         }
 
-        // Scan for Sets in this path
-        let sets = scan_for_sets(&search_path, 3);
+        // Scan for Sets and standalone projects in this path
+        let (sets, standalone_projects) = scan_for_sets(&search_path, 3);
         all_sets.extend(sets);
+        all_standalone_projects.extend(standalone_projects);
     }
 
     // Group Sets by their parent directory
-    group_sets_by_parent(all_sets)
+    let (locations, standalone_projects) = group_sets_by_parent(all_sets, all_standalone_projects);
+    ScanResult {
+        locations,
+        standalone_projects,
+    }
 }
 
-/// Scans a specific directory for Octatrack Sets
-pub fn scan_directory(path: &str) -> Vec<OctatrackLocation> {
+/// Scans a specific directory for Octatrack Sets and standalone projects
+pub fn scan_directory(path: &str) -> ScanResult {
     let path = Path::new(path);
 
     if !path.exists() || !path.is_dir() {
-        return Vec::new();
+        return ScanResult {
+            locations: Vec::new(),
+            standalone_projects: Vec::new(),
+        };
     }
 
-    // Scan for Sets in the specified directory
-    let sets = scan_for_sets(path, 3);
+    // Scan for Sets and standalone projects in the specified directory
+    let (sets, standalone_projects) = scan_for_sets(path, 3);
 
-    if sets.is_empty() {
-        return Vec::new();
+    if sets.is_empty() && standalone_projects.is_empty() {
+        return ScanResult {
+            locations: Vec::new(),
+            standalone_projects: Vec::new(),
+        };
     }
 
     // Group Sets by their parent directory
-    group_sets_by_parent(sets)
+    let (locations, standalone_projects) = group_sets_by_parent(sets, standalone_projects);
+    ScanResult {
+        locations,
+        standalone_projects,
+    }
 }
 
 /// Discovers Octatrack locations by scanning removable drives and home directory
-pub fn discover_devices() -> Vec<OctatrackLocation> {
-    let mut locations = Vec::new();
+pub fn discover_devices() -> ScanResult {
+    use std::collections::HashMap;
+    use std::collections::HashSet;
+
+    let mut all_locations: HashMap<String, OctatrackLocation> = HashMap::new();
+    let mut all_standalone_projects = Vec::new();
 
     // First, scan removable drives
     let disks = Disks::new_with_refreshed_list();
     let mut all_removable_sets = Vec::new();
+    let mut all_removable_projects = Vec::new();
 
     for disk in disks.list() {
         let mount_point = disk.mount_point();
         let mount_str = mount_point.to_string_lossy();
 
-        // Skip system mount points
+        // Skip system mount points and home directory (home is scanned separately)
         if mount_str.starts_with("/sys")
             || mount_str.starts_with("/proc")
             || mount_str.starts_with("/dev")
             || mount_str == "/"
+            || mount_str.starts_with("/home")
             || mount_str.starts_with("/System/")
             || mount_str.starts_with("/Library/")
             || mount_str.starts_with("/private/")
@@ -342,23 +424,48 @@ pub fn discover_devices() -> Vec<OctatrackLocation> {
             continue;
         }
 
-        // Scan for Octatrack sets
-        let sets = scan_for_sets(mount_point, 3);
+        // Scan for Octatrack sets and standalone projects
+        let (sets, standalone_projects) = scan_for_sets(mount_point, 3);
         all_removable_sets.extend(sets);
+        all_removable_projects.extend(standalone_projects);
     }
 
     // Group removable Sets by parent directory and mark as CompactFlash
-    let mut removable_locations = group_sets_by_parent(all_removable_sets);
+    let (mut removable_locations, removable_standalone) = group_sets_by_parent(all_removable_sets, all_removable_projects);
     for location in &mut removable_locations {
         location.device_type = DeviceType::CompactFlash;
     }
-    locations.append(&mut removable_locations);
+    for location in removable_locations {
+        all_locations.insert(location.path.clone(), location);
+    }
+    all_standalone_projects.extend(removable_standalone);
 
     // Then, scan home directory for local copies
-    let mut home_locations = scan_home_directory();
-    locations.append(&mut home_locations);
+    let home_result = scan_home_directory();
+    for location in home_result.locations {
+        let path_key = location.path.clone();
+        // Merge with existing location if path already exists, otherwise add new
+        if let Some(existing) = all_locations.get_mut(&path_key) {
+            existing.sets.extend(location.sets);
+        } else {
+            all_locations.insert(path_key, location);
+        }
+    }
+    all_standalone_projects.extend(home_result.standalone_projects);
 
-    locations
+    // Deduplicate standalone projects by path
+    let mut deduplicated_projects = Vec::new();
+    let mut seen_project_paths = HashSet::new();
+    for project in all_standalone_projects {
+        if seen_project_paths.insert(project.path.clone()) {
+            deduplicated_projects.push(project);
+        }
+    }
+
+    ScanResult {
+        locations: all_locations.into_values().collect(),
+        standalone_projects: deduplicated_projects,
+    }
 }
 
 #[cfg(test)]

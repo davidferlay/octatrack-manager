@@ -18,8 +18,16 @@ A desktop application for managing Elektron Octatrack projects, built with Tauri
 
 ## Features
 
-- **Device Discovery**: Automatically scan for Octatrack CF cards mounted on your computer
-- **Project Management**: View all projects on your Octatrack devices with their audio and preset information
+- **Device Discovery**: Automatically scan for Octatrack CF cards and local backups
+- **Set Management**: Browse Octatrack Sets with audio pool and project information
+- **Individual Projects**: Discover standalone projects without audio pools
+- **Project Details**: View comprehensive project information including:
+  - Tempo, time signature, and OS version
+  - Current state (bank, pattern, part, track)
+  - Mixer settings (gain, direct, levels)
+  - All banks with parts and patterns
+  - Sample slots (static and flex) with paths and settings
+- **Custom Directory Scanning**: Browse and add custom directories to scan
 - **Cross-Platform**: Works on Linux, macOS, and Windows
 - **Modern UI**: Clean, responsive interface built with React and TypeScript
 
@@ -58,14 +66,25 @@ Download the latest release for your platform from the [Releases page](https://g
 
 ## Usage
 
-1. **Scan for Devices**: Click the "Scan for Devices" button to discover mounted Octatrack CF cards
-2. **View Sets**: Browse all sets found on your devices, including their audio and preset information
-3. **Device Information**: See mount points and device types for each discovered Octatrack
+1. **Scan for Devices**: Click "Scan for Devices" to discover:
+   - Mounted Octatrack CF cards
+   - Local backups in common directories (Documents, Music, Downloads, etc.)
+2. **Browse Custom Directories**: Use "Browse..." to add any directory to scan
+3. **View Sets**: Explore Sets grouped by location with:
+   - Audio pool status (✓/✗)
+   - Number of projects in each Set
+   - Device type (CF Card, USB, Local Copy)
+4. **Individual Projects**: Projects without Sets appear in a dedicated "Individual Projects" section
+5. **Project Details**: Click any project to view:
+   - Complete metadata (tempo, time signature, current state)
+   - Mixer settings
+   - All 16 banks with their parts and patterns
+   - Sample slots with assignment details
 
 
 ## How It Works
 
-The application automatically scans for Octatrack Sets in these locations:
+The application automatically scans for Octatrack content in these locations:
 
 **Removable Drives:**
 - CF cards and USB drives (when mounted)
@@ -77,36 +96,62 @@ The application automatically scans for Octatrack Sets in these locations:
 - `~/Downloads`
 - `~/octatrack`, `~/Octatrack`, or `~/OCTATRACK`
 
-The scanner searches up to 3 levels deep looking for the characteristic Octatrack directory structure:
-- **AUDIO/** folder (may contain WAV/AIFF samples)
-- Project folders containing `.work` files
 
-When a valid Octatrack Set is found, it displays:
-- Set name and location
-- Audio pool status
-- Projects with bank information
+### Sets vs Individual Projects
+
+The scanner distinguishes between two types of Octatrack content:
+
+**Sets** (directories with an `AUDIO/` folder):
+- Must contain an `AUDIO/` directory (even if empty)
+- Must have at least one project subdirectory with `.work` files
+- Audio pool status indicates if the `AUDIO/` folder contains valid WAV/AIFF samples
+- Displayed grouped by location
+
+**Individual Projects** (standalone):
+- Directories containing `.work` files directly
+- No parent `AUDIO/` directory
+- All individual projects are collected in a single top-level "Individual Projects" section
+- Useful for managing single projects or backups without full Set structure
 
 
-## Architecture
+### Project File Parsing
 
-- **Frontend**: React + TypeScript + Vite
-- **Backend**: Rust + Tauri
-- **Core Library**: [ot-tools-io](https://gitlab.com/ot-tools/ot-tools-io) for Octatrack file operations
+When you click on a project, the app parses the `project.work` and `bank*.work` files to display:
+- Project metadata (tempo, time signature, OS version)
+- Current state (active bank, pattern, part, track, muted/soloed tracks)
+- Mixer settings (gains, direct outputs, levels)
+- All 16 banks (A-P) with their 4 parts each
+- Pattern names and lengths for each part
+- Sample slot assignments (static and flex) with paths and settings
 
 
 
+## Development
 
-## Available Commands
 
-- `npm run tauri:dev` - Start development server
-- `npm run tauri:build` - Build production bundles (.deb, .rpm, .AppImage)
+### Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/davidferlay/octatrack-manager.git
+cd octatrack-manager
+# Install dependencies
+npm install
+# Start development server
+npm run tauri:dev
+```
+
+### Available Commands
+
+- `npm run tauri:dev` - Start development server (hot-reload for both frontend and backend)
+- `npm run tauri:build` - Build production bundles (.deb, .rpm, .AppImage, .dmg, .msi)
 - `npm run dev` - Start Vite dev server only (frontend)
 - `npm run build` - Build frontend only
 
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit issues and pull requests.
+Contributions and feedbacks are welcome! Please feel free to submit issues and pull requests.
 
 
 ## Credits
@@ -114,6 +159,9 @@ Contributions are welcome! Please feel free to submit issues and pull requests.
 Built with:
 - [Tauri](https://tauri.app/) - Desktop application framework
 - [React](https://react.dev/) - UI framework
+- [TypeScript](https://www.typescriptlang.org/) - Type-safe JavaScript
+- [Vite](https://vitejs.dev/) - Frontend build tool
 - [ot-tools-io](https://gitlab.com/ot-tools/ot-tools-io) - Octatrack file I/O library
-- [sysinfo](https://github.com/GuillaumeGomez/sysinfo) - System information library
+- [sysinfo](https://github.com/GuillaumeGomez/sysinfo) - System information for device detection
+- [walkdir](https://github.com/BurntSushi/walkdir) - Recursive directory traversal
 

@@ -25,8 +25,14 @@ interface OctatrackLocation {
   sets: OctatrackSet[];
 }
 
+interface ScanResult {
+  locations: OctatrackLocation[];
+  standalone_projects: OctatrackProject[];
+}
+
 export function HomePage() {
   const [locations, setLocations] = useState<OctatrackLocation[]>([]);
+  const [standaloneProjects, setStandaloneProjects] = useState<OctatrackProject[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
   const [openLocations, setOpenLocations] = useState<Set<number>>(new Set());
@@ -35,11 +41,12 @@ export function HomePage() {
   async function scanDevices() {
     setIsScanning(true);
     try {
-      const foundLocations = await invoke<OctatrackLocation[]>("scan_devices");
-      setLocations(foundLocations);
+      const result = await invoke<ScanResult>("scan_devices");
+      setLocations(result.locations);
+      setStandaloneProjects(result.standalone_projects);
       setHasScanned(true);
       // Open all locations by default
-      setOpenLocations(new Set(foundLocations.map((_, idx) => idx)));
+      setOpenLocations(new Set(result.locations.map((_, idx) => idx)));
     } catch (error) {
       console.error("Error scanning devices:", error);
     } finally {
@@ -70,18 +77,25 @@ export function HomePage() {
       if (selected) {
         setIsScanning(true);
         try {
-          const foundLocations = await invoke<OctatrackLocation[]>("scan_custom_directory", { path: selected });
+          const result = await invoke<ScanResult>("scan_custom_directory", { path: selected });
 
           // Merge with existing locations, avoiding duplicates based on path
           setLocations(prev => {
             const existingPaths = new Set(prev.map(loc => loc.path));
-            const newLocations = foundLocations.filter(loc => !existingPaths.has(loc.path));
+            const newLocations = result.locations.filter(loc => !existingPaths.has(loc.path));
             const merged = [...prev, ...newLocations];
 
             // Update open locations to include new ones
             setOpenLocations(new Set(merged.map((_, idx) => idx)));
 
             return merged;
+          });
+
+          // Merge standalone projects, avoiding duplicates
+          setStandaloneProjects(prev => {
+            const existingPaths = new Set(prev.map(proj => proj.path));
+            const newProjects = result.standalone_projects.filter(proj => !existingPaths.has(proj.path));
+            return [...prev, ...newProjects];
           });
 
           setHasScanned(true);
@@ -131,7 +145,7 @@ export function HomePage() {
         </button>
       </div>
 
-      {hasScanned && locations.length === 0 && (
+      {hasScanned && locations.length === 0 && standaloneProjects.length === 0 && (
         <div className="no-devices">
           <p>No Octatrack content found.</p>
           <p className="hint">
@@ -140,9 +154,47 @@ export function HomePage() {
         </div>
       )}
 
-      {locations.length > 0 && (
+      {(locations.length > 0 || standaloneProjects.length > 0) && (
         <div className="devices-list">
-          <h2>Found {locations.length} location{locations.length > 1 ? 's' : ''}</h2>
+          {standaloneProjects.length > 0 && (
+            <div className="location-card location-type-localcopy">
+              <div className="location-header">
+                <div className="location-header-left">
+                  <h3>Individual Projects</h3>
+                </div>
+              </div>
+              <div className="sets-section open">
+                <div className="sets-section-content">
+                  <div className="projects-grid">
+                    {standaloneProjects.map((project, projIdx) => (
+                      <div
+                        key={projIdx}
+                        className="project-card clickable-project"
+                        onClick={() => {
+                          navigate(`/project?path=${encodeURIComponent(project.path)}&name=${encodeURIComponent(project.name)}`);
+                        }}
+                        title="Click to view project details"
+                      >
+                        <div className="project-name">{project.name}</div>
+                        <div className="project-info">
+                          <span className={project.has_project_file ? "status-yes" : "status-no"}>
+                            {project.has_project_file ? "✓ Project" : "✗ Project"}
+                          </span>
+                          <span className={project.has_banks ? "status-yes" : "status-no"}>
+                            {project.has_banks ? "✓ Banks" : "✗ Banks"}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {locations.length > 0 && (
+            <>
+              <h2>Found {locations.length} location{locations.length > 1 ? 's' : ''}</h2>
           {locations.map((location, locIdx) => {
             const isOpen = openLocations.has(locIdx);
             return (
@@ -212,6 +264,8 @@ export function HomePage() {
               </div>
             );
           })}
+            </>
+          )}
         </div>
       )}
     </main>
