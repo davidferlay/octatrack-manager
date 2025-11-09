@@ -53,13 +53,57 @@ pub struct SampleSlot {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrigCounts {
+    pub trigger: u16,      // Standard trigger trigs
+    pub trigless: u16,     // Trigless trigs (p-locks without triggering)
+    pub plock: u16,        // Parameter lock trigs
+    pub oneshot: u16,      // One-shot trigs
+    pub swing: u16,        // Swing trigs
+    pub slide: u16,        // Parameter slide trigs
+    pub total: u16,        // Total of all trig types
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerTrackSettings {
+    pub master_len: String,        // Master length in per-track mode (can be "INF")
+    pub master_scale: String,      // Master scale in per-track mode
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrackSettings {
+    pub start_silent: bool,
+    pub plays_free: bool,
+    pub trig_mode: String,         // "ONE", "ONE2", "HOLD"
+    pub trig_quant: String,        // Quantization setting
+    pub oneshot_trk: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrackInfo {
+    pub track_id: u8,
+    pub track_type: String,        // "Audio" or "MIDI"
+    pub swing_amount: u8,          // 0-30 (50-80 on device)
+    pub per_track_len: Option<u8>, // Track length in per-track mode
+    pub per_track_scale: Option<String>, // Track scale in per-track mode
+    pub pattern_settings: TrackSettings,
+    pub trig_counts: TrigCounts,   // Per-track trig statistics
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Pattern {
     pub id: u8,
     pub name: String,
     pub length: u16,
-    pub part_assignment: u8,  // Which part (0-3 for Parts 1-4) this pattern is assigned to
-    pub scale_mode: String,   // "Normal" or "Per Track"
-    pub tempo_info: Option<String>,  // Pattern tempo if set, or None if using project tempo
+    pub part_assignment: u8,       // Which part (0-3 for Parts 1-4) this pattern is assigned to
+    pub scale_mode: String,        // "Normal" or "Per Track"
+    pub master_scale: String,      // Playback speed multiplier (2x, 3/2x, 1x, 3/4x, 1/2x, 1/4x, 1/8x)
+    pub chain_mode: String,        // "Project" or "Pattern"
+    pub tempo_info: Option<String>, // Pattern tempo if set, or None if using project tempo
+    pub active_tracks: u8,         // Number of tracks with at least one trigger trig
+    pub trig_counts: TrigCounts,   // Detailed trig statistics
+    pub per_track_settings: Option<PerTrackSettings>, // Settings for per-track mode
+    pub has_swing: bool,           // Whether pattern has any swing trigs
+    pub tracks: Vec<TrackInfo>,    // Per-track information
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -290,13 +334,297 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                             "Per Track".to_string()
                         };
 
+                        // Extract master scale (playback speed multiplier)
+                        // 0=2x, 1=3/2x, 2=1x, 3=3/4x, 4=1/2x, 5=1/4x, 6=1/8x
+                        let master_scale = match pattern.scale.master_scale {
+                            0 => "2x",
+                            1 => "3/2x",
+                            2 => "1x",
+                            3 => "3/4x",
+                            4 => "1/2x",
+                            5 => "1/4x",
+                            6 => "1/8x",
+                            _ => "1x",
+                        }.to_string();
+
+                        // Extract chain mode
+                        let chain_mode = if pattern.chain_behaviour.use_project_setting == 1 {
+                            "Project".to_string()
+                        } else {
+                            "Pattern".to_string()
+                        };
+
+                        // Helper function to count set bits in trig masks
+                        fn count_trigs(masks: &[u8]) -> u16 {
+                            masks.iter().map(|&mask| mask.count_ones() as u16).sum()
+                        }
+
+                        // Count all trig types across all tracks
+                        let mut trigger_count = 0u16;
+                        let mut trigless_count = 0u16;
+                        let mut plock_count = 0u16;
+                        let mut oneshot_count = 0u16;
+                        let mut swing_count = 0u16;
+                        let mut slide_count = 0u16;
+                        let mut active_tracks = 0u8;
+
+                        // Process audio tracks
+                        for audio_track in &pattern.audio_track_trigs.0 {
+                            trigger_count += count_trigs(&audio_track.trig_masks.trigger);
+                            trigless_count += count_trigs(&audio_track.trig_masks.trigless);
+                            plock_count += count_trigs(&audio_track.trig_masks.plock);
+                            oneshot_count += count_trigs(&audio_track.trig_masks.oneshot);
+                            swing_count += count_trigs(&audio_track.trig_masks.swing);
+                            slide_count += count_trigs(&audio_track.trig_masks.slide);
+
+                            if audio_track.trig_masks.trigger.iter().any(|&mask| mask != 0) {
+                                active_tracks += 1;
+                            }
+                        }
+
+                        // Process MIDI tracks
+                        for midi_track in &pattern.midi_track_trigs.0 {
+                            trigger_count += count_trigs(&midi_track.trig_masks.trigger);
+                            trigless_count += count_trigs(&midi_track.trig_masks.trigless);
+                            plock_count += count_trigs(&midi_track.trig_masks.plock);
+                            swing_count += count_trigs(&midi_track.trig_masks.swing);
+
+                            if midi_track.trig_masks.trigger.iter().any(|&mask| mask != 0) {
+                                active_tracks += 1;
+                            }
+                        }
+
+                        let total_trigs = trigger_count + trigless_count + plock_count + oneshot_count;
+                        let has_swing = swing_count > 0;
+
+                        let trig_counts = TrigCounts {
+                            trigger: trigger_count,
+                            trigless: trigless_count,
+                            plock: plock_count,
+                            oneshot: oneshot_count,
+                            swing: swing_count,
+                            slide: slide_count,
+                            total: total_trigs,
+                        };
+
+                        // Extract per-track mode settings if in per-track mode
+                        let per_track_settings = if pattern.scale.scale_mode == 1 {
+                            // Calculate master length in per-track mode
+                            let master_len = if pattern.scale.master_len_per_track == 255
+                                && pattern.scale.master_len_per_track_multiplier == 255 {
+                                "INF".to_string()
+                            } else {
+                                let len = (pattern.scale.master_len_per_track as u16 + 1)
+                                    * (pattern.scale.master_len_per_track_multiplier as u16 + 1);
+                                format!("{}", len)
+                            };
+
+                            let master_scale_pt = match pattern.scale.master_scale_per_track {
+                                0 => "2x",
+                                1 => "3/2x",
+                                2 => "1x",
+                                3 => "3/4x",
+                                4 => "1/2x",
+                                5 => "1/4x",
+                                6 => "1/8x",
+                                _ => "1x",
+                            }.to_string();
+
+                            Some(PerTrackSettings {
+                                master_len,
+                                master_scale: master_scale_pt,
+                            })
+                        } else {
+                            None
+                        };
+
+                        // Attempt to extract tempo info
+                        // Default values are tempo_1: 11, tempo_2: 64 (= 120 BPM)
+                        let tempo_info = if pattern.tempo_1 != 11 || pattern.tempo_2 != 64 {
+                            // Pattern has custom tempo - we'll display the raw values for now
+                            // as the exact formula isn't documented in ot-tools-io yet
+                            Some(format!("Custom ({}/{})", pattern.tempo_1, pattern.tempo_2))
+                        } else {
+                            None
+                        };
+
+                        // Extract per-track information
+                        let mut tracks = Vec::new();
+
+                        // Process audio tracks (0-7)
+                        for (idx, audio_track) in pattern.audio_track_trigs.0.iter().enumerate() {
+                            let track_trigger_count = count_trigs(&audio_track.trig_masks.trigger);
+                            let track_trigless_count = count_trigs(&audio_track.trig_masks.trigless);
+                            let track_plock_count = count_trigs(&audio_track.trig_masks.plock);
+                            let track_oneshot_count = count_trigs(&audio_track.trig_masks.oneshot);
+                            let track_swing_count = count_trigs(&audio_track.trig_masks.swing);
+                            let track_slide_count = count_trigs(&audio_track.trig_masks.slide);
+
+                            let trig_mode = match audio_track.pattern_settings.trig_mode {
+                                0 => "ONE",
+                                1 => "ONE2",
+                                2 => "HOLD",
+                                _ => "ONE",
+                            }.to_string();
+
+                            let trig_quant = match audio_track.pattern_settings.trig_quant {
+                                0 => "TR.LEN",
+                                1 => "1/16",
+                                2 => "2/16",
+                                3 => "3/16",
+                                4 => "4/16",
+                                5 => "6/16",
+                                6 => "8/16",
+                                7 => "12/16",
+                                8 => "16/16",
+                                9 => "24/16",
+                                10 => "32/16",
+                                11 => "48/16",
+                                12 => "64/16",
+                                13 => "96/16",
+                                14 => "128/16",
+                                15 => "192/16",
+                                16 => "256/16",
+                                255 => "DIRECT",
+                                _ => "TR.LEN",
+                            }.to_string();
+
+                            let (per_track_len, per_track_scale) = if pattern.scale.scale_mode == 1 {
+                                (
+                                    Some(audio_track.scale_per_track_mode.per_track_len),
+                                    Some(match audio_track.scale_per_track_mode.per_track_scale {
+                                        0 => "2x",
+                                        1 => "3/2x",
+                                        2 => "1x",
+                                        3 => "3/4x",
+                                        4 => "1/2x",
+                                        5 => "1/4x",
+                                        6 => "1/8x",
+                                        _ => "1x",
+                                    }.to_string())
+                                )
+                            } else {
+                                (None, None)
+                            };
+
+                            tracks.push(TrackInfo {
+                                track_id: idx as u8,
+                                track_type: "Audio".to_string(),
+                                swing_amount: audio_track.swing_amount,
+                                per_track_len,
+                                per_track_scale,
+                                pattern_settings: TrackSettings {
+                                    start_silent: audio_track.pattern_settings.start_silent != 255,
+                                    plays_free: audio_track.pattern_settings.plays_free != 0,
+                                    trig_mode,
+                                    trig_quant,
+                                    oneshot_trk: audio_track.pattern_settings.oneshot_trk != 0,
+                                },
+                                trig_counts: TrigCounts {
+                                    trigger: track_trigger_count,
+                                    trigless: track_trigless_count,
+                                    plock: track_plock_count,
+                                    oneshot: track_oneshot_count,
+                                    swing: track_swing_count,
+                                    slide: track_slide_count,
+                                    total: track_trigger_count + track_trigless_count + track_plock_count + track_oneshot_count,
+                                },
+                            });
+                        }
+
+                        // Process MIDI tracks (8-15)
+                        for (idx, midi_track) in pattern.midi_track_trigs.0.iter().enumerate() {
+                            let track_trigger_count = count_trigs(&midi_track.trig_masks.trigger);
+                            let track_trigless_count = count_trigs(&midi_track.trig_masks.trigless);
+                            let track_plock_count = count_trigs(&midi_track.trig_masks.plock);
+                            let track_swing_count = count_trigs(&midi_track.trig_masks.swing);
+
+                            let trig_mode = match midi_track.pattern_settings.trig_mode {
+                                0 => "ONE",
+                                1 => "ONE2",
+                                2 => "HOLD",
+                                _ => "ONE",
+                            }.to_string();
+
+                            let trig_quant = match midi_track.pattern_settings.trig_quant {
+                                0 => "TR.LEN",
+                                1 => "1/16",
+                                2 => "2/16",
+                                3 => "3/16",
+                                4 => "4/16",
+                                5 => "6/16",
+                                6 => "8/16",
+                                7 => "12/16",
+                                8 => "16/16",
+                                9 => "24/16",
+                                10 => "32/16",
+                                11 => "48/16",
+                                12 => "64/16",
+                                13 => "96/16",
+                                14 => "128/16",
+                                15 => "192/16",
+                                16 => "256/16",
+                                255 => "DIRECT",
+                                _ => "TR.LEN",
+                            }.to_string();
+
+                            let (per_track_len, per_track_scale) = if pattern.scale.scale_mode == 1 {
+                                (
+                                    Some(midi_track.scale_per_track_mode.per_track_len),
+                                    Some(match midi_track.scale_per_track_mode.per_track_scale {
+                                        0 => "2x",
+                                        1 => "3/2x",
+                                        2 => "1x",
+                                        3 => "3/4x",
+                                        4 => "1/2x",
+                                        5 => "1/4x",
+                                        6 => "1/8x",
+                                        _ => "1x",
+                                    }.to_string())
+                                )
+                            } else {
+                                (None, None)
+                            };
+
+                            tracks.push(TrackInfo {
+                                track_id: (idx + 8) as u8,
+                                track_type: "MIDI".to_string(),
+                                swing_amount: midi_track.swing_amount,
+                                per_track_len,
+                                per_track_scale,
+                                pattern_settings: TrackSettings {
+                                    start_silent: midi_track.pattern_settings.start_silent != 255,
+                                    plays_free: midi_track.pattern_settings.plays_free != 0,
+                                    trig_mode,
+                                    trig_quant,
+                                    oneshot_trk: midi_track.pattern_settings.oneshot_trk != 0,
+                                },
+                                trig_counts: TrigCounts {
+                                    trigger: track_trigger_count,
+                                    trigless: track_trigless_count,
+                                    plock: track_plock_count,
+                                    oneshot: 0,  // MIDI tracks don't have oneshot trigs
+                                    swing: track_swing_count,
+                                    slide: 0,    // MIDI tracks don't have slide trigs
+                                    total: track_trigger_count + track_trigless_count + track_plock_count,
+                                },
+                            });
+                        }
+
                         patterns.push(Pattern {
                             id: pattern_id,
                             name: format!("Pattern {}", pattern_id + 1),
                             length: pattern_length,
                             part_assignment,
                             scale_mode,
-                            tempo_info: None,  // Will add tempo calculation later if needed
+                            master_scale,
+                            chain_mode,
+                            tempo_info,
+                            active_tracks,
+                            trig_counts,
+                            per_track_settings,
+                            has_swing,
+                            tracks,
                         });
                     }
 

@@ -48,13 +48,53 @@ interface ProjectMetadata {
   os_version: string;
 }
 
+interface TrigCounts {
+  trigger: number;      // Standard trigger trigs
+  trigless: number;     // Trigless trigs (p-locks without triggering)
+  plock: number;        // Parameter lock trigs
+  oneshot: number;      // One-shot trigs
+  swing: number;        // Swing trigs
+  slide: number;        // Parameter slide trigs
+  total: number;        // Total of all trig types
+}
+
+interface PerTrackSettings {
+  master_len: string;        // Master length in per-track mode (can be "INF")
+  master_scale: string;      // Master scale in per-track mode
+}
+
+interface TrackSettings {
+  start_silent: boolean;
+  plays_free: boolean;
+  trig_mode: string;         // "ONE", "ONE2", "HOLD"
+  trig_quant: string;        // Quantization setting
+  oneshot_trk: boolean;
+}
+
+interface TrackInfo {
+  track_id: number;
+  track_type: string;        // "Audio" or "MIDI"
+  swing_amount: number;      // 0-30 (50-80 on device)
+  per_track_len: number | null; // Track length in per-track mode
+  per_track_scale: string | null; // Track scale in per-track mode
+  pattern_settings: TrackSettings;
+  trig_counts: TrigCounts;   // Per-track trig statistics
+}
+
 interface Pattern {
   id: number;
   name: string;
   length: number;
-  part_assignment: number;  // Which part (0-3 for Parts 1-4) this pattern is assigned to
-  scale_mode: string;       // "Normal" or "Per Track"
-  tempo_info: string | null; // Pattern tempo if set, or null if using project tempo
+  part_assignment: number;       // Which part (0-3 for Parts 1-4) this pattern is assigned to
+  scale_mode: string;            // "Normal" or "Per Track"
+  master_scale: string;          // Playback speed multiplier (2x, 3/2x, 1x, etc.)
+  chain_mode: string;            // "Project" or "Pattern"
+  tempo_info: string | null;     // Pattern tempo if set, or null if using project tempo
+  active_tracks: number;         // Number of tracks with at least one trigger trig
+  trig_counts: TrigCounts;       // Detailed trig statistics
+  per_track_settings: PerTrackSettings | null; // Settings for per-track mode
+  has_swing: boolean;            // Whether pattern has any swing trigs
+  tracks: TrackInfo[];           // Per-track information
 }
 
 interface Part {
@@ -83,6 +123,7 @@ export function ProjectDetail() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [selectedBankIndex, setSelectedBankIndex] = useState<number>(0);
+  const [selectedTrackIndex, setSelectedTrackIndex] = useState<number | null>(null); // null means "all tracks"
 
   useEffect(() => {
     if (projectPath) {
@@ -100,6 +141,8 @@ export function ProjectDetail() {
       setBanks(projectBanks);
       // Set the selected bank to the currently active bank
       setSelectedBankIndex(projectMetadata.current_state.bank);
+      // Set the selected track to the currently active track
+      setSelectedTrackIndex(projectMetadata.current_state.track);
     } catch (err) {
       console.error("Error loading project data:", err);
       setError(String(err));
@@ -259,21 +302,51 @@ export function ProjectDetail() {
             {activeTab === "banks" && (
               <div className="banks-tab">
                 <div className="bank-selector-section">
-                  <label htmlFor="bank-select" className="bank-selector-label">
-                    Bank:
-                  </label>
-                  <select
-                    id="bank-select"
-                    className="bank-selector"
-                    value={selectedBankIndex}
-                    onChange={(e) => setSelectedBankIndex(Number(e.target.value))}
-                  >
-                    {banks.map((bank, index) => (
-                      <option key={bank.id} value={index}>
-                        {bank.name}{index === metadata?.current_state.bank ? ' (Active)' : ''}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="selector-group">
+                    <label htmlFor="bank-select" className="bank-selector-label">
+                      Bank:
+                    </label>
+                    <select
+                      id="bank-select"
+                      className="bank-selector"
+                      value={selectedBankIndex}
+                      onChange={(e) => setSelectedBankIndex(Number(e.target.value))}
+                    >
+                      {banks.map((bank, index) => (
+                        <option key={bank.id} value={index}>
+                          {bank.name}{index === metadata?.current_state.bank ? ' (Active)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="selector-group">
+                    <label htmlFor="track-select" className="bank-selector-label">
+                      Track:
+                    </label>
+                    <select
+                      id="track-select"
+                      className="bank-selector"
+                      value={selectedTrackIndex === null ? "all" : selectedTrackIndex}
+                      onChange={(e) => setSelectedTrackIndex(e.target.value === "all" ? null : Number(e.target.value))}
+                    >
+                      <option value="all">All Tracks</option>
+                      <optgroup label="Audio Tracks">
+                        {[0, 1, 2, 3, 4, 5, 6, 7].map((trackNum) => (
+                          <option key={`audio-${trackNum}`} value={trackNum}>
+                            T{trackNum + 1} (Audio){trackNum === metadata?.current_state.track ? ' (Active)' : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="MIDI Tracks">
+                        {[8, 9, 10, 11, 12, 13, 14, 15].map((trackNum) => (
+                          <option key={`midi-${trackNum}`} value={trackNum}>
+                            T{trackNum + 1} (MIDI){trackNum === metadata?.current_state.track ? ' (Active)' : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    </select>
+                  </div>
                 </div>
 
                 {banks[selectedBankIndex] && (
@@ -292,20 +365,162 @@ export function ProjectDetail() {
 
                     {/* Patterns Section */}
                     <div className="bank-card">
-                      <h3>Patterns ({banks[selectedBankIndex].parts[0]?.patterns.length || 0})</h3>
+                      <h3>Patterns ({(() => {
+                        const patterns = banks[selectedBankIndex].parts[0]?.patterns || [];
+                        if (selectedTrackIndex === null) {
+                          return patterns.length;
+                        }
+                        return patterns.filter(p => p.tracks[selectedTrackIndex]?.trig_counts.trigger > 0).length;
+                      })()})</h3>
                       <div className="patterns-list">
-                        {banks[selectedBankIndex].parts[0]?.patterns.map((pattern) => (
+                        {banks[selectedBankIndex].parts[0]?.patterns
+                          .filter((pattern) => {
+                            // If no track is selected, show all patterns
+                            if (selectedTrackIndex === null) return true;
+                            // Otherwise, only show patterns where the selected track has trigger trigs
+                            return pattern.tracks[selectedTrackIndex]?.trig_counts.trigger > 0;
+                          })
+                          .map((pattern) => {
+                            // Get track-specific data if a track is selected
+                            const trackData = selectedTrackIndex !== null ? pattern.tracks[selectedTrackIndex] : null;
+                            const displayTrigCounts = trackData ? trackData.trig_counts : pattern.trig_counts;
+
+                            return (
                           <div key={pattern.id} className="pattern-card">
                             <div className="pattern-header">
                               <span className="pattern-name">{pattern.name}</span>
                               <span className="pattern-part">→ Part {pattern.part_assignment + 1}</span>
+                              {trackData && <span className="pattern-track-indicator">T{trackData.track_id + 1} ({trackData.track_type})</span>}
+                              {pattern.has_swing && <span className="pattern-swing-indicator">♪ Swing</span>}
+                              {pattern.tempo_info && <span className="pattern-tempo-indicator">⌚ {pattern.tempo_info}</span>}
                             </div>
                             <div className="pattern-details">
-                              <span className="pattern-length">{pattern.length} steps</span>
-                              <span className="pattern-scale">{pattern.scale_mode}</span>
+                              <div className="pattern-detail-group">
+                                <div className="pattern-detail-item">
+                                  <span className="pattern-detail-label">Length:</span>
+                                  <span className="pattern-detail-value">{pattern.length} steps</span>
+                                </div>
+                                <div className="pattern-detail-item">
+                                  <span className="pattern-detail-label">Speed:</span>
+                                  <span className="pattern-detail-value">{pattern.master_scale}</span>
+                                </div>
+                                <div className="pattern-detail-item">
+                                  <span className="pattern-detail-label">Mode:</span>
+                                  <span className="pattern-detail-value">{pattern.scale_mode}</span>
+                                </div>
+                                <div className="pattern-detail-item">
+                                  <span className="pattern-detail-label">Chain:</span>
+                                  <span className="pattern-detail-value">{pattern.chain_mode}</span>
+                                </div>
+                              </div>
+                              <div className="pattern-detail-separator"></div>
+                              <div className="pattern-detail-group">
+                                {selectedTrackIndex === null && (
+                                  <div className="pattern-detail-item">
+                                    <span className="pattern-detail-label">Tracks:</span>
+                                    <span className="pattern-detail-value">{pattern.active_tracks}/16</span>
+                                  </div>
+                                )}
+                                <div className="pattern-detail-item">
+                                  <span className="pattern-detail-label">Total Trigs:</span>
+                                  <span className="pattern-detail-value">{displayTrigCounts.total}</span>
+                                </div>
+                                <div className="pattern-detail-item">
+                                  <span className="pattern-detail-label">Trigger:</span>
+                                  <span className="pattern-detail-value">{displayTrigCounts.trigger}</span>
+                                </div>
+                                <div className="pattern-detail-item">
+                                  <span className="pattern-detail-label">P-Locks:</span>
+                                  <span className="pattern-detail-value">{displayTrigCounts.plock}</span>
+                                </div>
+                                {displayTrigCounts.trigless > 0 && (
+                                  <div className="pattern-detail-item">
+                                    <span className="pattern-detail-label">Trigless:</span>
+                                    <span className="pattern-detail-value">{displayTrigCounts.trigless}</span>
+                                  </div>
+                                )}
+                                {displayTrigCounts.oneshot > 0 && (
+                                  <div className="pattern-detail-item">
+                                    <span className="pattern-detail-label">One-Shot:</span>
+                                    <span className="pattern-detail-value">{displayTrigCounts.oneshot}</span>
+                                  </div>
+                                )}
+                                {displayTrigCounts.slide > 0 && (
+                                  <div className="pattern-detail-item">
+                                    <span className="pattern-detail-label">Slide:</span>
+                                    <span className="pattern-detail-value">{displayTrigCounts.slide}</span>
+                                  </div>
+                                )}
+                                {trackData && trackData.swing_amount > 0 && (
+                                  <div className="pattern-detail-item">
+                                    <span className="pattern-detail-label">Swing:</span>
+                                    <span className="pattern-detail-value">{trackData.swing_amount + 50}%</span>
+                                  </div>
+                                )}
+                              </div>
+                              {trackData && (
+                                <>
+                                  <div className="pattern-detail-separator"></div>
+                                  <div className="pattern-detail-group">
+                                    <div className="pattern-detail-item">
+                                      <span className="pattern-detail-label">Trig Mode:</span>
+                                      <span className="pattern-detail-value">{trackData.pattern_settings.trig_mode}</span>
+                                    </div>
+                                    <div className="pattern-detail-item">
+                                      <span className="pattern-detail-label">Trig Quant:</span>
+                                      <span className="pattern-detail-value">{trackData.pattern_settings.trig_quant}</span>
+                                    </div>
+                                    {trackData.pattern_settings.start_silent && (
+                                      <div className="pattern-detail-item">
+                                        <span className="pattern-detail-label">Start Silent:</span>
+                                        <span className="pattern-detail-value">Yes</span>
+                                      </div>
+                                    )}
+                                    {trackData.pattern_settings.plays_free && (
+                                      <div className="pattern-detail-item">
+                                        <span className="pattern-detail-label">Plays Free:</span>
+                                        <span className="pattern-detail-value">Yes</span>
+                                      </div>
+                                    )}
+                                    {trackData.pattern_settings.oneshot_trk && (
+                                      <div className="pattern-detail-item">
+                                        <span className="pattern-detail-label">One-Shot Track:</span>
+                                        <span className="pattern-detail-value">Yes</span>
+                                      </div>
+                                    )}
+                                    {trackData.per_track_len !== null && (
+                                      <div className="pattern-detail-item">
+                                        <span className="pattern-detail-label">Track Len:</span>
+                                        <span className="pattern-detail-value">{trackData.per_track_len}</span>
+                                      </div>
+                                    )}
+                                    {trackData.per_track_scale && (
+                                      <div className="pattern-detail-item">
+                                        <span className="pattern-detail-label">Track Scale:</span>
+                                        <span className="pattern-detail-value">{trackData.per_track_scale}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </>
+                              )}
+                              {!trackData && pattern.per_track_settings && (
+                                <>
+                                  <div className="pattern-detail-separator"></div>
+                                  <div className="pattern-detail-group">
+                                    <div className="pattern-detail-item">
+                                      <span className="pattern-detail-label">PT Master Len:</span>
+                                      <span className="pattern-detail-value">{pattern.per_track_settings.master_len}</span>
+                                    </div>
+                                    <div className="pattern-detail-item">
+                                      <span className="pattern-detail-label">PT Master Scale:</span>
+                                      <span className="pattern-detail-value">{pattern.per_track_settings.master_scale}</span>
+                                    </div>
+                                  </div>
+                                </>
+                              )}
                             </div>
                           </div>
-                        ))}
+                        )})}
                       </div>
                     </div>
                   </section>
