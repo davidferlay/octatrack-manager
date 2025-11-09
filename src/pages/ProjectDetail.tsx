@@ -83,7 +83,7 @@ interface TrigStep {
   trig_condition: string | null; // Trig condition (Fill, NotFill, Pre, percentages, etc.)
   trig_repeats: number;      // Number of trig repeats (0-7)
   micro_timing: string | null;  // Micro-timing offset (e.g., "+1/32", "-1/64")
-  note: number | null;       // MIDI note value (0-127) for MIDI tracks
+  notes: number[];           // MIDI note values (up to 4 notes for chords) for MIDI tracks
   velocity: number | null;   // Velocity/level value (0-127)
   plock_count: number;       // Number of parameter locks on this step
   sample_slot: number | null; // Sample slot ID if locked (audio tracks)
@@ -532,23 +532,66 @@ export function ProjectDetail() {
                                     if (step.slide) trigTypes.push('slide');
                                     if (step.recorder) trigTypes.push('recorder');
 
-                                    // Build comprehensive tooltip
-                                    const tooltipParts = [`Step ${step.step + 1}`];
-                                    if (trigTypes.length > 0) tooltipParts.push(`Trigs: ${trigTypes.join(', ')}`);
-                                    if (step.trig_condition) tooltipParts.push(`Condition: ${step.trig_condition}`);
-                                    if (step.trig_repeats > 0) tooltipParts.push(`Repeats: ${step.trig_repeats + 1}x`);
-                                    if (step.micro_timing) tooltipParts.push(`Timing: ${step.micro_timing}`);
-                                    if (step.note !== null) tooltipParts.push(`Note: ${step.note}`);
-                                    if (step.velocity !== null) tooltipParts.push(`Velocity: ${step.velocity}`);
-                                    if (step.plock_count > 0) tooltipParts.push(`P-Locks: ${step.plock_count}`);
-                                    if (step.sample_slot !== null) tooltipParts.push(`Sample: ${step.sample_slot}`);
-
                                     // Helper to convert MIDI note to name
                                     const noteName = (note: number) => {
                                       const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
                                       const octave = Math.floor(note / 12) - 1;
                                       return names[note % 12] + octave;
                                     };
+
+                                    // Helper to detect chord type
+                                    const detectChord = (notes: number[]) => {
+                                      if (notes.length < 2) return null;
+
+                                      // Sort notes and get intervals from root
+                                      const sortedNotes = [...notes].sort((a, b) => a - b);
+                                      const intervals = sortedNotes.slice(1).map(n => n - sortedNotes[0]);
+
+                                      // Common chord patterns (intervals in semitones from root)
+                                      const chordPatterns: { [key: string]: number[][] } = {
+                                        'maj': [[4, 7], [4, 7, 11], [4, 7, 12]],           // Major, maj7, maj octave
+                                        'min': [[3, 7], [3, 7, 10], [3, 7, 12]],           // Minor, min7, min octave
+                                        'dim': [[3, 6], [3, 6, 9]],                         // Diminished, dim7
+                                        'aug': [[4, 8]],                                     // Augmented
+                                        'sus2': [[2, 7]],                                    // Suspended 2
+                                        'sus4': [[5, 7]],                                    // Suspended 4
+                                        '7': [[4, 7, 10]],                                   // Dominant 7
+                                        'maj7': [[4, 7, 11]],                                // Major 7
+                                        'min7': [[3, 7, 10]],                                // Minor 7
+                                        '5': [[7], [7, 12]],                                 // Power chord
+                                      };
+
+                                      // Check each pattern
+                                      for (const [chordName, patterns] of Object.entries(chordPatterns)) {
+                                        for (const pattern of patterns) {
+                                          if (intervals.length === pattern.length &&
+                                              intervals.every((iv, idx) => iv === pattern[idx])) {
+                                            return `${noteName(sortedNotes[0])}${chordName}`;
+                                          }
+                                        }
+                                      }
+
+                                      return null; // Unknown chord
+                                    };
+
+                                    const chordName = detectChord(step.notes);
+                                    const noteDisplay = step.notes.length > 1
+                                      ? (chordName || step.notes.map(noteName).join('+'))
+                                      : (step.notes.length === 1 ? noteName(step.notes[0]) : null);
+
+                                    // Build comprehensive tooltip
+                                    const tooltipParts = [`Step ${step.step + 1}`];
+                                    if (trigTypes.length > 0) tooltipParts.push(`Trigs: ${trigTypes.join(', ')}`);
+                                    if (step.trig_condition) tooltipParts.push(`Condition: ${step.trig_condition}`);
+                                    if (step.trig_repeats > 0) tooltipParts.push(`Repeats: ${step.trig_repeats + 1}x`);
+                                    if (step.micro_timing) tooltipParts.push(`Timing: ${step.micro_timing}`);
+                                    if (step.notes.length > 0) {
+                                      const notesStr = step.notes.map(noteName).join(', ');
+                                      tooltipParts.push(chordName ? `Chord: ${chordName} (${notesStr})` : `Notes: ${notesStr}`);
+                                    }
+                                    if (step.velocity !== null) tooltipParts.push(`Velocity: ${step.velocity}`);
+                                    if (step.plock_count > 0) tooltipParts.push(`P-Locks: ${step.plock_count}`);
+                                    if (step.sample_slot !== null) tooltipParts.push(`Sample: ${step.sample_slot}`);
 
                                     return (
                                       <div
@@ -572,7 +615,11 @@ export function ProjectDetail() {
                                             {step.trig_condition && <span className="indicator-condition">{step.trig_condition}</span>}
                                             {step.trig_repeats > 0 && <span className="indicator-repeats">{step.trig_repeats + 1}x</span>}
                                             {step.micro_timing && <span className="indicator-timing">{step.micro_timing}</span>}
-                                            {step.note !== null && <span className="indicator-note">{noteName(step.note)}</span>}
+                                            {noteDisplay && (
+                                              <span className={`indicator-note ${chordName ? 'indicator-chord' : ''}`}>
+                                                {noteDisplay}
+                                              </span>
+                                            )}
                                             {step.velocity !== null && <span className="indicator-velocity">V{step.velocity}</span>}
                                             {step.plock_count > 1 && <span className="indicator-plock-count">{step.plock_count}p</span>}
                                             {step.sample_slot !== null && <span className="indicator-sample">S{step.sample_slot}</span>}
@@ -595,7 +642,7 @@ export function ProjectDetail() {
                                   <div className="legend-item"><span className="indicator-condition">Fill</span> Condition</div>
                                   <div className="legend-item"><span className="indicator-repeats">2x</span> Repeats</div>
                                   <div className="legend-item"><span className="indicator-timing">μ</span> Micro-timing</div>
-                                  <div className="legend-item"><span className="indicator-note">C4</span> MIDI Note</div>
+                                  <div className="legend-item"><span className="indicator-note">C4</span> MIDI Note/Chord</div>
                                   <div className="legend-item"><span className="indicator-velocity">V</span> Velocity</div>
                                 </div>
                               </div>
