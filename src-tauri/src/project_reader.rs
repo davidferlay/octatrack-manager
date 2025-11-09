@@ -91,7 +91,7 @@ pub struct TrigStep {
     pub trig_condition: Option<String>, // Trig condition (Fill, NotFill, Pre, percentages, etc.)
     pub trig_repeats: u8,      // Number of trig repeats (0-7)
     pub micro_timing: Option<String>,  // Micro-timing offset (e.g., "+1/32", "-1/64")
-    pub note: Option<u8>,      // MIDI note value (0-127) for MIDI tracks
+    pub notes: Vec<u8>,        // MIDI note values (up to 4 notes for chords on MIDI tracks)
     pub velocity: Option<u8>,  // Velocity/level value (0-127)
     pub plock_count: u8,       // Number of parameter locks on this step
     pub sample_slot: Option<u8>, // Sample slot ID if locked (audio tracks)
@@ -772,7 +772,7 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                                     trig_condition,
                                     trig_repeats,
                                     micro_timing,
-                                    note: None,  // No note for audio tracks
+                                    notes: Vec::new(),  // No notes for audio tracks
                                     velocity,
                                     plock_count,
                                     sample_slot,
@@ -875,12 +875,20 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                                 let plock = &midi_track.plocks[step];
                                 let plock_count = count_midi_plocks(plock);
 
-                                // Get MIDI note and velocity from parameter locks
-                                let note = if plock.midi.note != 255 {
-                                    Some(plock.midi.note)
-                                } else {
-                                    None
-                                };
+                                // Get all MIDI notes (up to 4 for chords) from parameter locks
+                                let mut notes = Vec::new();
+                                if plock.midi.note != 255 {
+                                    notes.push(plock.midi.note);
+                                }
+                                if plock.midi.not2 != 255 {
+                                    notes.push(plock.midi.not2);
+                                }
+                                if plock.midi.not3 != 255 {
+                                    notes.push(plock.midi.not3);
+                                }
+                                if plock.midi.not4 != 255 {
+                                    notes.push(plock.midi.not4);
+                                }
 
                                 let velocity = if plock.midi.vel != 255 {
                                     Some(plock.midi.vel)
@@ -900,7 +908,7 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                                     trig_condition,
                                     trig_repeats,
                                     micro_timing,
-                                    note,
+                                    notes,
                                     velocity,
                                     plock_count,
                                     sample_slot: None, // MIDI tracks don't have sample slots

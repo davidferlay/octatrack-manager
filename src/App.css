@@ -1213,6 +1213,13 @@ h1 {
   border-radius: 2px;
 }
 
+.indicator-chord {
+  color: #ff99dd;
+  background-color: rgba(255, 153, 221, 0.25);
+  font-weight: 800;
+  border: 1px solid rgba(255, 153, 221, 0.4);
+}
+
 .indicator-velocity {
   color: #ffaa66;
   font-size: 0.7rem;
