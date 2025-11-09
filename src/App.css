@@ -598,6 +598,27 @@ h1 {
   border-bottom: 1px solid var(--elektron-border-gray);
 }
 
+.bank-card-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--elektron-border-gray);
+  width: 100%;
+}
+
+.bank-card-header h3 {
+  margin: 0;
+  padding: 0;
+  border-bottom: none;
+  flex: 0 0 auto;
+}
+
+.bank-card-header .selector-group {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
 .parts-list {
   display: flex;
   flex-direction: column;

@@ -123,7 +123,8 @@ export function ProjectDetail() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [selectedBankIndex, setSelectedBankIndex] = useState<number>(0);
-  const [selectedTrackIndex, setSelectedTrackIndex] = useState<number | null>(null); // null means "all tracks"
+  const [selectedTrackIndex, setSelectedTrackIndex] = useState<number>(0); // Default to track 0, will be set to active track
+  const [selectedPatternIndex, setSelectedPatternIndex] = useState<number>(0); // Default to pattern 0, will be set to active pattern
 
   useEffect(() => {
     if (projectPath) {
@@ -143,6 +144,8 @@ export function ProjectDetail() {
       setSelectedBankIndex(projectMetadata.current_state.bank);
       // Set the selected track to the currently active track
       setSelectedTrackIndex(projectMetadata.current_state.track);
+      // Set the selected pattern to the currently active pattern
+      setSelectedPatternIndex(projectMetadata.current_state.pattern);
     } catch (err) {
       console.error("Error loading project data:", err);
       setError(String(err));
@@ -327,10 +330,9 @@ export function ProjectDetail() {
                     <select
                       id="track-select"
                       className="bank-selector"
-                      value={selectedTrackIndex === null ? "all" : selectedTrackIndex}
-                      onChange={(e) => setSelectedTrackIndex(e.target.value === "all" ? null : Number(e.target.value))}
+                      value={selectedTrackIndex}
+                      onChange={(e) => setSelectedTrackIndex(Number(e.target.value))}
                     >
-                      <option value="all">All Tracks</option>
                       <optgroup label="Audio Tracks">
                         {[0, 1, 2, 3, 4, 5, 6, 7].map((trackNum) => (
                           <option key={`audio-${trackNum}`} value={trackNum}>
@@ -363,34 +365,43 @@ export function ProjectDetail() {
                       </div>
                     </div>
 
-                    {/* Patterns Section */}
+                    {/* Pattern Detail Section */}
                     <div className="bank-card">
-                      <h3>Patterns ({(() => {
-                        const patterns = banks[selectedBankIndex].parts[0]?.patterns || [];
-                        if (selectedTrackIndex === null) {
-                          return patterns.length;
-                        }
-                        return patterns.filter(p => p.tracks[selectedTrackIndex]?.trig_counts.trigger > 0).length;
-                      })()})</h3>
+                      <div className="bank-card-header">
+                        <h3>Pattern Details</h3>
+                        <div className="selector-group">
+                          <label htmlFor="pattern-select" className="bank-selector-label">
+                            Pattern:
+                          </label>
+                          <select
+                            id="pattern-select"
+                            className="bank-selector"
+                            value={selectedPatternIndex}
+                            onChange={(e) => setSelectedPatternIndex(Number(e.target.value))}
+                          >
+                            {[...Array(16)].map((_, patternNum) => (
+                              <option key={patternNum} value={patternNum}>
+                                Pattern {patternNum + 1}{patternNum === metadata?.current_state.pattern ? ' (Active)' : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
                       <div className="patterns-list">
-                        {banks[selectedBankIndex].parts[0]?.patterns
-                          .filter((pattern) => {
-                            // If no track is selected, show all patterns
-                            if (selectedTrackIndex === null) return true;
-                            // Otherwise, only show patterns where the selected track has trigger trigs
-                            return pattern.tracks[selectedTrackIndex]?.trig_counts.trigger > 0;
-                          })
-                          .map((pattern) => {
-                            // Get track-specific data if a track is selected
-                            const trackData = selectedTrackIndex !== null ? pattern.tracks[selectedTrackIndex] : null;
-                            const displayTrigCounts = trackData ? trackData.trig_counts : pattern.trig_counts;
+                        {(() => {
+                          // Get the selected pattern
+                          const pattern = banks[selectedBankIndex].parts[0]?.patterns[selectedPatternIndex];
+                          if (!pattern) return null;
 
-                            return (
-                          <div key={pattern.id} className="pattern-card">
+                          // Get track-specific data for the selected track
+                          const trackData = pattern.tracks[selectedTrackIndex];
+
+                          return (
+                          <div className="pattern-card">
                             <div className="pattern-header">
                               <span className="pattern-name">{pattern.name}</span>
                               <span className="pattern-part">→ Part {pattern.part_assignment + 1}</span>
-                              {trackData && <span className="pattern-track-indicator">T{trackData.track_id + 1} ({trackData.track_type})</span>}
+                              <span className="pattern-track-indicator">T{trackData.track_id + 1} ({trackData.track_type})</span>
                               {pattern.has_swing && <span className="pattern-swing-indicator">♪ Swing</span>}
                               {pattern.tempo_info && <span className="pattern-tempo-indicator">⌚ {pattern.tempo_info}</span>}
                             </div>
@@ -415,112 +426,88 @@ export function ProjectDetail() {
                               </div>
                               <div className="pattern-detail-separator"></div>
                               <div className="pattern-detail-group">
-                                {selectedTrackIndex === null && (
-                                  <div className="pattern-detail-item">
-                                    <span className="pattern-detail-label">Tracks:</span>
-                                    <span className="pattern-detail-value">{pattern.active_tracks}/16</span>
-                                  </div>
-                                )}
                                 <div className="pattern-detail-item">
                                   <span className="pattern-detail-label">Total Trigs:</span>
-                                  <span className="pattern-detail-value">{displayTrigCounts.total}</span>
+                                  <span className="pattern-detail-value">{trackData.trig_counts.total}</span>
                                 </div>
                                 <div className="pattern-detail-item">
                                   <span className="pattern-detail-label">Trigger:</span>
-                                  <span className="pattern-detail-value">{displayTrigCounts.trigger}</span>
+                                  <span className="pattern-detail-value">{trackData.trig_counts.trigger}</span>
                                 </div>
                                 <div className="pattern-detail-item">
                                   <span className="pattern-detail-label">P-Locks:</span>
-                                  <span className="pattern-detail-value">{displayTrigCounts.plock}</span>
+                                  <span className="pattern-detail-value">{trackData.trig_counts.plock}</span>
                                 </div>
-                                {displayTrigCounts.trigless > 0 && (
+                                {trackData.trig_counts.trigless > 0 && (
                                   <div className="pattern-detail-item">
                                     <span className="pattern-detail-label">Trigless:</span>
-                                    <span className="pattern-detail-value">{displayTrigCounts.trigless}</span>
+                                    <span className="pattern-detail-value">{trackData.trig_counts.trigless}</span>
                                   </div>
                                 )}
-                                {displayTrigCounts.oneshot > 0 && (
+                                {trackData.trig_counts.oneshot > 0 && (
                                   <div className="pattern-detail-item">
                                     <span className="pattern-detail-label">One-Shot:</span>
-                                    <span className="pattern-detail-value">{displayTrigCounts.oneshot}</span>
+                                    <span className="pattern-detail-value">{trackData.trig_counts.oneshot}</span>
                                   </div>
                                 )}
-                                {displayTrigCounts.slide > 0 && (
+                                {trackData.trig_counts.slide > 0 && (
                                   <div className="pattern-detail-item">
                                     <span className="pattern-detail-label">Slide:</span>
-                                    <span className="pattern-detail-value">{displayTrigCounts.slide}</span>
+                                    <span className="pattern-detail-value">{trackData.trig_counts.slide}</span>
                                   </div>
                                 )}
-                                {trackData && trackData.swing_amount > 0 && (
+                                {trackData.swing_amount > 0 && (
                                   <div className="pattern-detail-item">
                                     <span className="pattern-detail-label">Swing:</span>
                                     <span className="pattern-detail-value">{trackData.swing_amount + 50}%</span>
                                   </div>
                                 )}
                               </div>
-                              {trackData && (
-                                <>
-                                  <div className="pattern-detail-separator"></div>
-                                  <div className="pattern-detail-group">
-                                    <div className="pattern-detail-item">
-                                      <span className="pattern-detail-label">Trig Mode:</span>
-                                      <span className="pattern-detail-value">{trackData.pattern_settings.trig_mode}</span>
-                                    </div>
-                                    <div className="pattern-detail-item">
-                                      <span className="pattern-detail-label">Trig Quant:</span>
-                                      <span className="pattern-detail-value">{trackData.pattern_settings.trig_quant}</span>
-                                    </div>
-                                    {trackData.pattern_settings.start_silent && (
-                                      <div className="pattern-detail-item">
-                                        <span className="pattern-detail-label">Start Silent:</span>
-                                        <span className="pattern-detail-value">Yes</span>
-                                      </div>
-                                    )}
-                                    {trackData.pattern_settings.plays_free && (
-                                      <div className="pattern-detail-item">
-                                        <span className="pattern-detail-label">Plays Free:</span>
-                                        <span className="pattern-detail-value">Yes</span>
-                                      </div>
-                                    )}
-                                    {trackData.pattern_settings.oneshot_trk && (
-                                      <div className="pattern-detail-item">
-                                        <span className="pattern-detail-label">One-Shot Track:</span>
-                                        <span className="pattern-detail-value">Yes</span>
-                                      </div>
-                                    )}
-                                    {trackData.per_track_len !== null && (
-                                      <div className="pattern-detail-item">
-                                        <span className="pattern-detail-label">Track Len:</span>
-                                        <span className="pattern-detail-value">{trackData.per_track_len}</span>
-                                      </div>
-                                    )}
-                                    {trackData.per_track_scale && (
-                                      <div className="pattern-detail-item">
-                                        <span className="pattern-detail-label">Track Scale:</span>
-                                        <span className="pattern-detail-value">{trackData.per_track_scale}</span>
-                                      </div>
-                                    )}
+                              <div className="pattern-detail-separator"></div>
+                              <div className="pattern-detail-group">
+                                <div className="pattern-detail-item">
+                                  <span className="pattern-detail-label">Trig Mode:</span>
+                                  <span className="pattern-detail-value">{trackData.pattern_settings.trig_mode}</span>
+                                </div>
+                                <div className="pattern-detail-item">
+                                  <span className="pattern-detail-label">Trig Quant:</span>
+                                  <span className="pattern-detail-value">{trackData.pattern_settings.trig_quant}</span>
+                                </div>
+                                {trackData.pattern_settings.start_silent && (
+                                  <div className="pattern-detail-item">
+                                    <span className="pattern-detail-label">Start Silent:</span>
+                                    <span className="pattern-detail-value">Yes</span>
                                   </div>
-                                </>
-                              )}
-                              {!trackData && pattern.per_track_settings && (
-                                <>
-                                  <div className="pattern-detail-separator"></div>
-                                  <div className="pattern-detail-group">
-                                    <div className="pattern-detail-item">
-                                      <span className="pattern-detail-label">PT Master Len:</span>
-                                      <span className="pattern-detail-value">{pattern.per_track_settings.master_len}</span>
-                                    </div>
-                                    <div className="pattern-detail-item">
-                                      <span className="pattern-detail-label">PT Master Scale:</span>
-                                      <span className="pattern-detail-value">{pattern.per_track_settings.master_scale}</span>
-                                    </div>
+                                )}
+                                {trackData.pattern_settings.plays_free && (
+                                  <div className="pattern-detail-item">
+                                    <span className="pattern-detail-label">Plays Free:</span>
+                                    <span className="pattern-detail-value">Yes</span>
                                   </div>
-                                </>
-                              )}
+                                )}
+                                {trackData.pattern_settings.oneshot_trk && (
+                                  <div className="pattern-detail-item">
+                                    <span className="pattern-detail-label">One-Shot Track:</span>
+                                    <span className="pattern-detail-value">Yes</span>
+                                  </div>
+                                )}
+                                {trackData.per_track_len !== null && (
+                                  <div className="pattern-detail-item">
+                                    <span className="pattern-detail-label">Track Len:</span>
+                                    <span className="pattern-detail-value">{trackData.per_track_len}</span>
+                                  </div>
+                                )}
+                                {trackData.per_track_scale && (
+                                  <div className="pattern-detail-item">
+                                    <span className="pattern-detail-label">Track Scale:</span>
+                                    <span className="pattern-detail-value">{trackData.per_track_scale}</span>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        )})}
+                        );
+                        })()}
                       </div>
                     </div>
                   </section>
