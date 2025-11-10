@@ -358,7 +358,7 @@ export function ProjectDetail() {
                       <optgroup label="MIDI Tracks">
                         {[8, 9, 10, 11, 12, 13, 14, 15].map((trackNum) => (
                           <option key={`midi-${trackNum}`} value={trackNum}>
-                            T{trackNum + 1} (MIDI){trackNum === metadata?.current_state.track ? ' (Active)' : ''}
+                            T{trackNum - 7} (MIDI){trackNum === metadata?.current_state.track ? ' (Active)' : ''}
                           </option>
                         ))}
                       </optgroup>
@@ -424,7 +424,7 @@ export function ProjectDetail() {
                       <optgroup label="MIDI Tracks">
                         {[8, 9, 10, 11, 12, 13, 14, 15].map((trackNum) => (
                           <option key={`midi-${trackNum}`} value={trackNum}>
-                            T{trackNum + 1} (MIDI){trackNum === metadata?.current_state.track ? ' (Active)' : ''}
+                            T{trackNum - 7} (MIDI){trackNum === metadata?.current_state.track ? ' (Active)' : ''}
                           </option>
                         ))}
                       </optgroup>
@@ -470,7 +470,7 @@ export function ProjectDetail() {
                               <span className="pattern-name">{pattern.name}</span>
                               <span className="pattern-part">→ Part {pattern.part_assignment + 1}</span>
                               <span className="pattern-track-indicator">
-                                T{trackData.track_id + 1} ({trackData.track_type})
+                                T{trackData.track_id >= 8 ? trackData.track_id - 7 : trackData.track_id + 1} ({trackData.track_type})
                               </span>
                               {pattern.tempo_info && <span className="pattern-tempo-indicator">{pattern.tempo_info}</span>}
                               <span className="pattern-tempo-indicator">Mode: {pattern.scale_mode}</span>
@@ -872,7 +872,7 @@ export function ProjectDetail() {
                       <optgroup label="MIDI Tracks">
                         {[8, 9, 10, 11, 12, 13, 14, 15].map((trackNum) => (
                           <option key={`midi-${trackNum}`} value={trackNum}>
-                            T{trackNum + 1} (MIDI){trackNum === metadata?.current_state.track ? ' (Active)' : ''}
+                            T{trackNum - 7} (MIDI){trackNum === metadata?.current_state.track ? ' (Active)' : ''}
                           </option>
                         ))}
                       </optgroup>
