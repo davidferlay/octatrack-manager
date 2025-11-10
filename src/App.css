@@ -713,13 +713,22 @@ h1 {
 
 .pattern-track-indicator {
   font-size: 0.9rem;
-  color: #66cc66;
   font-weight: 600;
   padding: 0.35rem 0.75rem;
-  background-color: rgba(102, 204, 102, 0.15);
-  border: 1px solid rgba(102, 204, 102, 0.4);
   border-radius: 4px;
   white-space: nowrap;
+}
+
+.pattern-track-indicator.audio {
+  color: #4a9eff;
+  background-color: rgba(74, 158, 255, 0.15);
+  border: 1px solid rgba(74, 158, 255, 0.4);
+}
+
+.pattern-track-indicator.midi {
+  color: #66cc66;
+  background-color: rgba(102, 204, 102, 0.15);
+  border: 1px solid rgba(102, 204, 102, 0.4);
 }
 
 .pattern-details {
