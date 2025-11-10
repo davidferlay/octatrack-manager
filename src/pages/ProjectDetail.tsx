@@ -818,23 +818,12 @@ export function ProjectDetail() {
 
                       return (
                         <div className="bank-card">
-                          <div className="bank-card-header">
-                            <h3>Track {trackData.track_id + 1} Settings ({trackData.track_type})</h3>
-                          </div>
-
                           <div className="pattern-details">
-                            <div className="pattern-detail-group">
-                              <h4 style={{marginTop: 0, marginBottom: '0.75rem', color: '#888'}}>Track Configuration</h4>
+                            <div className="pattern-detail-group track-settings-row">
                               <div className="pattern-detail-item">
                                 <span className="pattern-detail-label">Swing:</span>
                                 <span className="pattern-detail-value">{trackData.swing_amount > 0 ? `${trackData.swing_amount + 50}%` : '50% (Off)'}</span>
                               </div>
-                            </div>
-
-                            <div className="pattern-detail-separator"></div>
-
-                            <div className="pattern-detail-group">
-                              <h4 style={{marginTop: 0, marginBottom: '0.75rem', color: '#888'}}>Trigger Settings</h4>
                               <div className="pattern-detail-item">
                                 <span className="pattern-detail-label">Trig Mode:</span>
                                 <span className="pattern-detail-value">{trackData.pattern_settings.trig_mode}</span>
@@ -843,12 +832,6 @@ export function ProjectDetail() {
                                 <span className="pattern-detail-label">Trig Quantization:</span>
                                 <span className="pattern-detail-value">{trackData.pattern_settings.trig_quant}</span>
                               </div>
-                            </div>
-
-                            <div className="pattern-detail-separator"></div>
-
-                            <div className="pattern-detail-group">
-                              <h4 style={{marginTop: 0, marginBottom: '0.75rem', color: '#888'}}>Track Behavior</h4>
                               <div className="pattern-detail-item">
                                 <span className="pattern-detail-label">Start Silent:</span>
                                 <span className="pattern-detail-value">{trackData.pattern_settings.start_silent ? 'Yes' : 'No'}</span>
