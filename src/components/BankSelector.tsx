@@ -11,6 +11,11 @@ interface BankSelectorProps {
 // Special value for "all banks" option
 export const ALL_BANKS = -1;
 
+// Helper function to format bank name with number
+export function formatBankName(bankName: string, bankIndex: number): string {
+  return `${bankName} (${bankIndex + 1})`;
+}
+
 export function BankSelector({ id, banks, value, onChange, currentBank }: BankSelectorProps) {
   return (
     <div className="selector-group">
@@ -26,7 +31,7 @@ export function BankSelector({ id, banks, value, onChange, currentBank }: BankSe
         <option value={ALL_BANKS}>All Banks</option>
         {banks.map((bank, index) => (
           <option key={bank.id} value={index}>
-            {bank.name} ({index + 1}){index === currentBank ? ' (Active)' : ''}
+            {formatBankName(bank.name, index)}{index === currentBank ? ' (Active)' : ''}
           </option>
         ))}
       </select>
