@@ -78,7 +78,7 @@ interface TrigStep {
 
 // TrackInfo, Pattern, Part, and Bank interfaces are imported from ProjectsContext via Bank type
 
-type TabType = "overview" | "banks" | "tracks" | "static-slots" | "flex-slots";
+type TabType = "overview" | "parts" | "patterns" | "tracks" | "static-slots" | "flex-slots";
 
 export function ProjectDetail() {
   const [searchParams] = useSearchParams();
@@ -199,10 +199,16 @@ export function ProjectDetail() {
               Overview
             </button>
             <button
-              className={`tab ${activeTab === "banks" ? "active" : ""}`}
-              onClick={() => setActiveTab("banks")}
+              className={`tab ${activeTab === "parts" ? "active" : ""}`}
+              onClick={() => setActiveTab("parts")}
             >
-              Banks ({banks.length})
+              Parts
+            </button>
+            <button
+              className={`tab ${activeTab === "patterns" ? "active" : ""}`}
+              onClick={() => setActiveTab("patterns")}
+            >
+              Patterns
             </button>
             <button
               className={`tab ${activeTab === "tracks" ? "active" : ""}`}
@@ -311,15 +317,15 @@ export function ProjectDetail() {
               </div>
             )}
 
-            {activeTab === "banks" && (
+            {activeTab === "parts" && (
               <div className="banks-tab">
                 <div className="bank-selector-section">
                   <div className="selector-group">
-                    <label htmlFor="bank-select" className="bank-selector-label">
+                    <label htmlFor="parts-bank-select" className="bank-selector-label">
                       Bank:
                     </label>
                     <select
-                      id="bank-select"
+                      id="parts-bank-select"
                       className="bank-selector"
                       value={selectedBankIndex}
                       onChange={(e) => setSelectedBankIndex(Number(e.target.value))}
@@ -333,11 +339,11 @@ export function ProjectDetail() {
                   </div>
 
                   <div className="selector-group">
-                    <label htmlFor="track-select" className="bank-selector-label">
+                    <label htmlFor="parts-track-select" className="bank-selector-label">
                       Track:
                     </label>
                     <select
-                      id="track-select"
+                      id="parts-track-select"
                       className="bank-selector"
                       value={selectedTrackIndex}
                       onChange={(e) => setSelectedTrackIndex(Number(e.target.value))}
@@ -362,7 +368,6 @@ export function ProjectDetail() {
 
                 {banks[selectedBankIndex] && (
                   <section className="banks-section">
-                    {/* Parts Section */}
                     <div className="bank-card">
                       <h3>Parts ({banks[selectedBankIndex].parts.length})</h3>
                       <div className="parts-list">
@@ -373,8 +378,62 @@ export function ProjectDetail() {
                         ))}
                       </div>
                     </div>
+                  </section>
+                )}
+              </div>
+            )}
 
-                    {/* Pattern Detail Section */}
+            {activeTab === "patterns" && (
+              <div className="banks-tab">
+                <div className="bank-selector-section">
+                  <div className="selector-group">
+                    <label htmlFor="patterns-bank-select" className="bank-selector-label">
+                      Bank:
+                    </label>
+                    <select
+                      id="patterns-bank-select"
+                      className="bank-selector"
+                      value={selectedBankIndex}
+                      onChange={(e) => setSelectedBankIndex(Number(e.target.value))}
+                    >
+                      {banks.map((bank, index) => (
+                        <option key={bank.id} value={index}>
+                          {bank.name} ({index + 1}){index === metadata?.current_state.bank ? ' (Active)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="selector-group">
+                    <label htmlFor="patterns-track-select" className="bank-selector-label">
+                      Track:
+                    </label>
+                    <select
+                      id="patterns-track-select"
+                      className="bank-selector"
+                      value={selectedTrackIndex}
+                      onChange={(e) => setSelectedTrackIndex(Number(e.target.value))}
+                    >
+                      <optgroup label="Audio Tracks">
+                        {[0, 1, 2, 3, 4, 5, 6, 7].map((trackNum) => (
+                          <option key={`audio-${trackNum}`} value={trackNum}>
+                            T{trackNum + 1} (Audio){trackNum === metadata?.current_state.track ? ' (Active)' : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="MIDI Tracks">
+                        {[8, 9, 10, 11, 12, 13, 14, 15].map((trackNum) => (
+                          <option key={`midi-${trackNum}`} value={trackNum}>
+                            T{trackNum + 1} (MIDI){trackNum === metadata?.current_state.track ? ' (Active)' : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    </select>
+                  </div>
+                </div>
+
+                {banks[selectedBankIndex] && (
+                  <section className="banks-section">
                     <div className="bank-card">
                       <div className="bank-card-header">
                         <h3>Pattern Details</h3>
