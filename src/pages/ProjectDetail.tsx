@@ -78,7 +78,7 @@ interface TrigStep {
 
 // TrackInfo, Pattern, Part, and Bank interfaces are imported from ProjectsContext via Bank type
 
-type TabType = "overview" | "banks" | "static-slots" | "flex-slots";
+type TabType = "overview" | "banks" | "tracks" | "static-slots" | "flex-slots";
 
 export function ProjectDetail() {
   const [searchParams] = useSearchParams();
@@ -203,6 +203,12 @@ export function ProjectDetail() {
               onClick={() => setActiveTab("banks")}
             >
               Banks ({banks.length})
+            </button>
+            <button
+              className={`tab ${activeTab === "tracks" ? "active" : ""}`}
+              onClick={() => setActiveTab("tracks")}
+            >
+              Track Settings
             </button>
             <button
               className={`tab ${activeTab === "flex-slots" ? "active" : ""}`}
@@ -404,12 +410,14 @@ export function ProjectDetail() {
                             <div className="pattern-header">
                               <span className="pattern-name">{pattern.name}</span>
                               <span className="pattern-part">→ Part {pattern.part_assignment + 1}</span>
-                              <span className="pattern-track-indicator">T{trackData.track_id + 1} ({trackData.track_type})</span>
-                              {trackData.trig_counts.swing > 0 && <span className="pattern-swing-indicator">♪ {trackData.swing_amount + 50}%</span>}
+                              <span className="pattern-track-indicator">
+                                T{trackData.track_id + 1} ({trackData.track_type})
+                              </span>
                               {pattern.tempo_info && <span className="pattern-tempo-indicator">{pattern.tempo_info}</span>}
                             </div>
                             <div className="pattern-details">
                               <div className="pattern-detail-group">
+                                <h4 style={{marginTop: 0, marginBottom: '0.75rem', color: '#888'}}>Pattern Settings</h4>
                                 <div className="pattern-detail-item">
                                   <span className="pattern-detail-label">Length:</span>
                                   <span className="pattern-detail-value">{pattern.length} steps</span>
@@ -426,9 +434,22 @@ export function ProjectDetail() {
                                   <span className="pattern-detail-label">Chain:</span>
                                   <span className="pattern-detail-value">{pattern.chain_mode}</span>
                                 </div>
+                                {pattern.per_track_settings && (
+                                  <>
+                                    <div className="pattern-detail-item">
+                                      <span className="pattern-detail-label">Master Len:</span>
+                                      <span className="pattern-detail-value">{pattern.per_track_settings.master_len}</span>
+                                    </div>
+                                    <div className="pattern-detail-item">
+                                      <span className="pattern-detail-label">Master Scale:</span>
+                                      <span className="pattern-detail-value">{pattern.per_track_settings.master_scale}</span>
+                                    </div>
+                                  </>
+                                )}
                               </div>
                               <div className="pattern-detail-separator"></div>
                               <div className="pattern-detail-group">
+                                <h4 style={{marginTop: 0, marginBottom: '0.75rem', color: '#888'}}>Track {trackData.track_id + 1} Trig Stats</h4>
                                 <div className="pattern-detail-item">
                                   <span className="pattern-detail-label">Total Trigs:</span>
                                   <span className="pattern-detail-value">{trackData.trig_counts.total}</span>
@@ -438,12 +459,12 @@ export function ProjectDetail() {
                                   <span className="pattern-detail-value">{trackData.trig_counts.trigger}</span>
                                 </div>
                                 <div className="pattern-detail-item">
-                                  <span className="pattern-detail-label">P-Locks:</span>
-                                  <span className="pattern-detail-value">{trackData.trig_counts.plock}</span>
-                                </div>
-                                <div className="pattern-detail-item">
                                   <span className="pattern-detail-label">Trigless:</span>
                                   <span className="pattern-detail-value">{trackData.trig_counts.trigless}</span>
+                                </div>
+                                <div className="pattern-detail-item">
+                                  <span className="pattern-detail-label">P-Locks:</span>
+                                  <span className="pattern-detail-value">{trackData.trig_counts.plock}</span>
                                 </div>
                                 <div className="pattern-detail-item">
                                   <span className="pattern-detail-label">One-Shot:</span>
@@ -454,39 +475,8 @@ export function ProjectDetail() {
                                   <span className="pattern-detail-value">{trackData.trig_counts.slide}</span>
                                 </div>
                                 <div className="pattern-detail-item">
-                                  <span className="pattern-detail-label">Swing:</span>
-                                  <span className="pattern-detail-value">{trackData.swing_amount > 0 ? `${trackData.swing_amount + 50}%` : '-'}</span>
-                                </div>
-                              </div>
-                              <div className="pattern-detail-separator"></div>
-                              <div className="pattern-detail-group">
-                                <div className="pattern-detail-item">
-                                  <span className="pattern-detail-label">Trig Mode:</span>
-                                  <span className="pattern-detail-value">{trackData.pattern_settings.trig_mode}</span>
-                                </div>
-                                <div className="pattern-detail-item">
-                                  <span className="pattern-detail-label">Trig Quant:</span>
-                                  <span className="pattern-detail-value">{trackData.pattern_settings.trig_quant}</span>
-                                </div>
-                                <div className="pattern-detail-item">
-                                  <span className="pattern-detail-label">Start Silent:</span>
-                                  <span className="pattern-detail-value">{trackData.pattern_settings.start_silent ? 'Yes' : 'No'}</span>
-                                </div>
-                                <div className="pattern-detail-item">
-                                  <span className="pattern-detail-label">Plays Free:</span>
-                                  <span className="pattern-detail-value">{trackData.pattern_settings.plays_free ? 'Yes' : 'No'}</span>
-                                </div>
-                                <div className="pattern-detail-item">
-                                  <span className="pattern-detail-label">One-Shot Track:</span>
-                                  <span className="pattern-detail-value">{trackData.pattern_settings.oneshot_trk ? 'Yes' : 'No'}</span>
-                                </div>
-                                <div className="pattern-detail-item">
-                                  <span className="pattern-detail-label">Track Len:</span>
-                                  <span className="pattern-detail-value">{trackData.per_track_len !== null ? trackData.per_track_len : '-'}</span>
-                                </div>
-                                <div className="pattern-detail-item">
-                                  <span className="pattern-detail-label">Track Scale:</span>
-                                  <span className="pattern-detail-value">{trackData.per_track_scale || '-'}</span>
+                                  <span className="pattern-detail-label">Swing Trigs:</span>
+                                  <span className="pattern-detail-value">{trackData.trig_counts.swing}</span>
                                 </div>
                               </div>
                             </div>
@@ -764,6 +754,118 @@ export function ProjectDetail() {
                         })()}
                       </div>
                     </div>
+                  </section>
+                )}
+              </div>
+            )}
+
+            {activeTab === "tracks" && (
+              <div className="tracks-tab">
+                <div className="bank-selector-section">
+                  <div className="selector-group">
+                    <label htmlFor="track-bank-select" className="bank-selector-label">
+                      Bank:
+                    </label>
+                    <select
+                      id="track-bank-select"
+                      className="bank-selector"
+                      value={selectedBankIndex}
+                      onChange={(e) => setSelectedBankIndex(Number(e.target.value))}
+                    >
+                      {banks.map((bank, index) => (
+                        <option key={bank.id} value={index}>
+                          {bank.name} ({index + 1}){index === metadata?.current_state.bank ? ' (Active)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="selector-group">
+                    <label htmlFor="track-track-select" className="bank-selector-label">
+                      Track:
+                    </label>
+                    <select
+                      id="track-track-select"
+                      className="bank-selector"
+                      value={selectedTrackIndex}
+                      onChange={(e) => setSelectedTrackIndex(Number(e.target.value))}
+                    >
+                      <optgroup label="Audio Tracks">
+                        {[0, 1, 2, 3, 4, 5, 6, 7].map((trackNum) => (
+                          <option key={`audio-${trackNum}`} value={trackNum}>
+                            T{trackNum + 1} (Audio){trackNum === metadata?.current_state.track ? ' (Active)' : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="MIDI Tracks">
+                        {[8, 9, 10, 11, 12, 13, 14, 15].map((trackNum) => (
+                          <option key={`midi-${trackNum}`} value={trackNum}>
+                            T{trackNum + 1} (MIDI){trackNum === metadata?.current_state.track ? ' (Active)' : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    </select>
+                  </div>
+                </div>
+
+                {banks[selectedBankIndex] && (
+                  <section className="tracks-section">
+                    {(() => {
+                      const pattern = banks[selectedBankIndex].parts[0]?.patterns[selectedPatternIndex];
+                      if (!pattern) return null;
+
+                      const trackData = pattern.tracks[selectedTrackIndex];
+
+                      return (
+                        <div className="bank-card">
+                          <div className="bank-card-header">
+                            <h3>Track {trackData.track_id + 1} Settings ({trackData.track_type})</h3>
+                          </div>
+
+                          <div className="pattern-details">
+                            <div className="pattern-detail-group">
+                              <h4 style={{marginTop: 0, marginBottom: '0.75rem', color: '#888'}}>Track Configuration</h4>
+                              <div className="pattern-detail-item">
+                                <span className="pattern-detail-label">Swing:</span>
+                                <span className="pattern-detail-value">{trackData.swing_amount > 0 ? `${trackData.swing_amount + 50}%` : '50% (Off)'}</span>
+                              </div>
+                            </div>
+
+                            <div className="pattern-detail-separator"></div>
+
+                            <div className="pattern-detail-group">
+                              <h4 style={{marginTop: 0, marginBottom: '0.75rem', color: '#888'}}>Trigger Settings</h4>
+                              <div className="pattern-detail-item">
+                                <span className="pattern-detail-label">Trig Mode:</span>
+                                <span className="pattern-detail-value">{trackData.pattern_settings.trig_mode}</span>
+                              </div>
+                              <div className="pattern-detail-item">
+                                <span className="pattern-detail-label">Trig Quantization:</span>
+                                <span className="pattern-detail-value">{trackData.pattern_settings.trig_quant}</span>
+                              </div>
+                            </div>
+
+                            <div className="pattern-detail-separator"></div>
+
+                            <div className="pattern-detail-group">
+                              <h4 style={{marginTop: 0, marginBottom: '0.75rem', color: '#888'}}>Track Behavior</h4>
+                              <div className="pattern-detail-item">
+                                <span className="pattern-detail-label">Start Silent:</span>
+                                <span className="pattern-detail-value">{trackData.pattern_settings.start_silent ? 'Yes' : 'No'}</span>
+                              </div>
+                              <div className="pattern-detail-item">
+                                <span className="pattern-detail-label">Plays Free:</span>
+                                <span className="pattern-detail-value">{trackData.pattern_settings.plays_free ? 'Yes' : 'No'}</span>
+                              </div>
+                              <div className="pattern-detail-item">
+                                <span className="pattern-detail-label">One-Shot Track:</span>
+                                <span className="pattern-detail-value">{trackData.pattern_settings.oneshot_trk ? 'Yes' : 'No'}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </section>
                 )}
               </div>
