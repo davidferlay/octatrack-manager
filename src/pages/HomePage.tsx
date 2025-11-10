@@ -2,6 +2,7 @@ import { useState, useTransition } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useNavigate } from "react-router-dom";
+import { useProjects } from "../context/ProjectsContext";
 import "../App.css";
 
 interface OctatrackProject {
@@ -31,13 +32,21 @@ interface ScanResult {
 }
 
 export function HomePage() {
-  const [locations, setLocations] = useState<OctatrackLocation[]>([]);
-  const [standaloneProjects, setStandaloneProjects] = useState<OctatrackProject[]>([]);
+  const {
+    locations,
+    standaloneProjects,
+    hasScanned,
+    openLocations,
+    isIndividualProjectsOpen,
+    isLocationsOpen,
+    setLocations,
+    setStandaloneProjects,
+    setHasScanned,
+    setOpenLocations,
+    setIsIndividualProjectsOpen,
+    setIsLocationsOpen,
+  } = useProjects();
   const [isScanning, setIsScanning] = useState(false);
-  const [hasScanned, setHasScanned] = useState(false);
-  const [openLocations, setOpenLocations] = useState<Set<number>>(new Set());
-  const [isIndividualProjectsOpen, setIsIndividualProjectsOpen] = useState(true);
-  const [isLocationsOpen, setIsLocationsOpen] = useState(true);
   const navigate = useNavigate();
   const [, startTransition] = useTransition();
 
