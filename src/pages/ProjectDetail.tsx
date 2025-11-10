@@ -476,7 +476,6 @@ export function ProjectDetail() {
                             </div>
                             <div className="pattern-details">
                               <div className="pattern-detail-group">
-                                <h4 style={{marginTop: 0, marginBottom: '0.75rem', color: '#888'}}>Pattern Settings</h4>
                                 <div className="pattern-detail-item">
                                   <span className="pattern-detail-label">Mode:</span>
                                   <span className="pattern-detail-value">{pattern.scale_mode}</span>
@@ -527,7 +526,6 @@ export function ProjectDetail() {
                               </div>
                               <div className="pattern-detail-separator"></div>
                               <div className="pattern-detail-group">
-                                <h4 style={{marginTop: 0, marginBottom: '0.75rem', color: '#888'}}>Track {trackData.track_id + 1} Trig Stats</h4>
                                 <div className="pattern-detail-item">
                                   <span className="pattern-detail-label">Total Trigs:</span>
                                   <span className="pattern-detail-value">{trackData.trig_counts.total}</span>
