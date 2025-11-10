@@ -1175,6 +1175,13 @@ h1 {
   margin-bottom: 12px;
 }
 
+.note-indicator-wrapper {
+  flex-basis: 100%;
+  display: flex;
+  justify-content: center;
+  margin-top: 2px;
+}
+
 .step-indicators span {
   font-size: 1.1rem;
   font-weight: 700;
