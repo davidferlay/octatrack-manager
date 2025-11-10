@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useProjects } from "../context/ProjectsContext";
 import type { ProjectMetadata, Bank } from "../context/ProjectsContext";
-import { BankSelector } from "../components/BankSelector";
+import { BankSelector, ALL_BANKS } from "../components/BankSelector";
 import { TrackSelector, ALL_AUDIO_TRACKS, ALL_MIDI_TRACKS } from "../components/TrackSelector";
 import "../App.css";
 
@@ -338,20 +338,32 @@ export function ProjectDetail() {
                   />
                 </div>
 
-                {banks[selectedBankIndex] && (
-                  <section className="banks-section">
-                    <div className="bank-card">
-                      <h3>Parts ({banks[selectedBankIndex].parts.length})</h3>
-                      <div className="parts-list">
-                        {banks[selectedBankIndex].parts.map((part) => (
-                          <div key={part.id} className="part-card">
-                            <h4>{part.name}</h4>
+                <section className="banks-section">
+                  {(() => {
+                    // Determine which banks to display
+                    const banksToDisplay = selectedBankIndex === ALL_BANKS
+                      ? banks.map((_, index) => index)
+                      : [selectedBankIndex];
+
+                    return banksToDisplay.map((bankIndex) => {
+                      const bank = banks[bankIndex];
+                      if (!bank) return null;
+
+                      return (
+                        <div key={`bank-parts-${bankIndex}`} className="bank-card">
+                          <h3>{bank.name} - Parts ({bank.parts.length})</h3>
+                          <div className="parts-list">
+                            {bank.parts.map((part) => (
+                              <div key={part.id} className="part-card">
+                                <h4>{part.name}</h4>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  </section>
-                )}
+                        </div>
+                      );
+                    });
+                  })()}
+                </section>
               </div>
             )}
 
@@ -374,34 +386,44 @@ export function ProjectDetail() {
                   />
                 </div>
 
-                {banks[selectedBankIndex] && (
-                  <section className="banks-section">
-                    <div className="bank-card">
-                      <div className="bank-card-header">
-                        <h3>Pattern Details</h3>
-                        <div className="selector-group">
-                          <label htmlFor="pattern-select" className="bank-selector-label">
-                            Pattern:
-                          </label>
-                          <select
-                            id="pattern-select"
-                            className="bank-selector"
-                            value={selectedPatternIndex}
-                            onChange={(e) => setSelectedPatternIndex(Number(e.target.value))}
-                          >
-                            {[...Array(16)].map((_, patternNum) => (
-                              <option key={patternNum} value={patternNum}>
-                                Pattern {patternNum + 1}{patternNum === metadata?.current_state.pattern ? ' (Active)' : ''}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                      <div className="patterns-list">
-                        {(() => {
-                          // Get the selected pattern
-                          const pattern = banks[selectedBankIndex].parts[0]?.patterns[selectedPatternIndex];
-                          if (!pattern) return null;
+                <section className="banks-section">
+                  {(() => {
+                    // Determine which banks to display
+                    const banksToDisplay = selectedBankIndex === ALL_BANKS
+                      ? banks.map((_, index) => index)
+                      : [selectedBankIndex];
+
+                    return banksToDisplay.map((bankIndex) => {
+                      const bank = banks[bankIndex];
+                      if (!bank) return null;
+
+                      return (
+                        <div key={`bank-patterns-${bankIndex}`} className="bank-card">
+                          <div className="bank-card-header">
+                            <h3>{bank.name} - Pattern Details</h3>
+                            <div className="selector-group">
+                              <label htmlFor={`pattern-select-${bankIndex}`} className="bank-selector-label">
+                                Pattern:
+                              </label>
+                              <select
+                                id={`pattern-select-${bankIndex}`}
+                                className="bank-selector"
+                                value={selectedPatternIndex}
+                                onChange={(e) => setSelectedPatternIndex(Number(e.target.value))}
+                              >
+                                {[...Array(16)].map((_, patternNum) => (
+                                  <option key={patternNum} value={patternNum}>
+                                    Pattern {patternNum + 1}{patternNum === metadata?.current_state.pattern ? ' (Active)' : ''}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                          <div className="patterns-list">
+                            {(() => {
+                              // Get the selected pattern
+                              const pattern = bank.parts[0]?.patterns[selectedPatternIndex];
+                              if (!pattern) return null;
 
                           // Determine which tracks to display
                           let tracksToDisplay: number[];
@@ -775,13 +797,15 @@ export function ProjectDetail() {
                               </div>
                             </div>
                           </div>
-                          );
-                          });
-                        })()}
-                      </div>
-                    </div>
-                  </section>
-                )}
+                              );
+                              });
+                            })()}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </section>
               </div>
             )}
 
@@ -804,10 +828,18 @@ export function ProjectDetail() {
                   />
                 </div>
 
-                {banks[selectedBankIndex] && (
-                  <section className="tracks-section">
-                    {(() => {
-                      const pattern = banks[selectedBankIndex].parts[0]?.patterns[selectedPatternIndex];
+                <section className="tracks-section">
+                  {(() => {
+                    // Determine which banks to display
+                    const banksToDisplay = selectedBankIndex === ALL_BANKS
+                      ? banks.map((_, index) => index)
+                      : [selectedBankIndex];
+
+                    return banksToDisplay.map((bankIndex) => {
+                      const bank = banks[bankIndex];
+                      if (!bank) return null;
+
+                      const pattern = bank.parts[0]?.patterns[selectedPatternIndex];
                       if (!pattern) return null;
 
                       // Determine which tracks to display
@@ -825,8 +857,8 @@ export function ProjectDetail() {
                         const trackData = pattern.tracks[trackIndex];
 
                         return (
-                        <div key={`track-settings-${trackIndex}`} className="bank-card">
-                          <h3>T{trackData.track_id >= 8 ? trackData.track_id - 7 : trackData.track_id + 1} ({trackData.track_type})</h3>
+                        <div key={`bank-${bankIndex}-track-settings-${trackIndex}`} className="bank-card">
+                          <h3>{bank.name} - T{trackData.track_id >= 8 ? trackData.track_id - 7 : trackData.track_id + 1} ({trackData.track_type})</h3>
                           <div className="pattern-details">
                             <div className="pattern-detail-group track-settings-row">
                               <div className="pattern-detail-item">
@@ -858,9 +890,9 @@ export function ProjectDetail() {
                         </div>
                         );
                       });
-                    })()}
-                  </section>
-                )}
+                    });
+                  })()}
+                </section>
               </div>
             )}
 
