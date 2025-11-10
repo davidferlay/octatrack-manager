@@ -444,8 +444,8 @@ export function ProjectDetail() {
                                 T{trackData.track_id >= 8 ? trackData.track_id - 7 : trackData.track_id + 1} ({trackData.track_type})
                               </span>
                               {pattern.tempo_info && <span className="pattern-tempo-indicator">{pattern.tempo_info}</span>}
-                              <span className="pattern-tempo-indicator">Mode: {pattern.scale_mode}</span>
-                              <span className="pattern-tempo-indicator">Chain: {pattern.chain_mode}</span>
+                              <span className="pattern-tempo-indicator">Scale Mode: {pattern.scale_mode === "Normal" ? "Pattern" : pattern.scale_mode}</span>
+                              <span className="pattern-tempo-indicator">Chain after: {pattern.chain_mode}</span>
                               {pattern.scale_mode === "Per Track" ? (
                                 <>
                                   <span className="pattern-tempo-indicator">
