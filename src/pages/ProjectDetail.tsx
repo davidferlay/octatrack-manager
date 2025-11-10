@@ -5,6 +5,7 @@ import { useProjects } from "../context/ProjectsContext";
 import type { ProjectMetadata, Bank } from "../context/ProjectsContext";
 import { BankSelector, ALL_BANKS } from "../components/BankSelector";
 import { TrackSelector, ALL_AUDIO_TRACKS, ALL_MIDI_TRACKS } from "../components/TrackSelector";
+import { PatternSelector, ALL_PATTERNS } from "../components/PatternSelector";
 import "../App.css";
 
 // Most type definitions are now imported from ProjectsContext via Bank and ProjectMetadata types
@@ -401,29 +402,24 @@ export function ProjectDetail() {
                         <div key={`bank-patterns-${bankIndex}`} className="bank-card">
                           <div className="bank-card-header">
                             <h3>{bank.name} - Pattern Details</h3>
-                            <div className="selector-group">
-                              <label htmlFor={`pattern-select-${bankIndex}`} className="bank-selector-label">
-                                Pattern:
-                              </label>
-                              <select
-                                id={`pattern-select-${bankIndex}`}
-                                className="bank-selector"
-                                value={selectedPatternIndex}
-                                onChange={(e) => setSelectedPatternIndex(Number(e.target.value))}
-                              >
-                                {[...Array(16)].map((_, patternNum) => (
-                                  <option key={patternNum} value={patternNum}>
-                                    Pattern {patternNum + 1}{patternNum === metadata?.current_state.pattern ? ' (Active)' : ''}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
+                            <PatternSelector
+                              id={`pattern-select-${bankIndex}`}
+                              value={selectedPatternIndex}
+                              onChange={setSelectedPatternIndex}
+                              currentPattern={metadata?.current_state.pattern}
+                            />
                           </div>
                           <div className="patterns-list">
                             {(() => {
-                              // Get the selected pattern
-                              const pattern = bank.parts[0]?.patterns[selectedPatternIndex];
-                              if (!pattern) return null;
+                              // Determine which patterns to display
+                              const patternsToDisplay = selectedPatternIndex === ALL_PATTERNS
+                                ? [...Array(16)].map((_, i) => i)
+                                : [selectedPatternIndex];
+
+                              return patternsToDisplay.map((patternIndex) => {
+                                // Get the pattern
+                                const pattern = bank.parts[0]?.patterns[patternIndex];
+                                if (!pattern) return null;
 
                           // Determine which tracks to display
                           let tracksToDisplay: number[];
@@ -435,12 +431,12 @@ export function ProjectDetail() {
                             tracksToDisplay = [selectedTrackIndex];
                           }
 
-                          // Render pattern card for each track
-                          return tracksToDisplay.map((trackIndex) => {
-                            const trackData = pattern.tracks[trackIndex];
+                                // Render pattern card for each track
+                                return tracksToDisplay.map((trackIndex) => {
+                                  const trackData = pattern.tracks[trackIndex];
 
-                            return (
-                          <div key={`pattern-${trackIndex}`} className="pattern-card">
+                                  return (
+                                <div key={`pattern-${patternIndex}-track-${trackIndex}`} className="pattern-card">
                             <div className="pattern-header">
                               <span className="pattern-name">{pattern.name}</span>
                               <span className="pattern-part">→ Part {pattern.part_assignment + 1}</span>
@@ -797,7 +793,8 @@ export function ProjectDetail() {
                               </div>
                             </div>
                           </div>
-                              );
+                                  );
+                                });
                               });
                             })()}
                           </div>
