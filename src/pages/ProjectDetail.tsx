@@ -518,7 +518,7 @@ export function ProjectDetail() {
                               )}
                             </div>
                             <div className="pattern-details">
-                              <div className="pattern-detail-group">
+                              <div className="pattern-detail-group trig-stats-row">
                                 <div className="pattern-detail-item">
                                   <span className="pattern-detail-label">Total Trigs:</span>
                                   <span className="pattern-detail-value">{trackData.trig_counts.total}</span>
