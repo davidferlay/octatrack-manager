@@ -907,10 +907,14 @@ h1 {
 }
 
 .overview-tab,
-.banks-tab,
 .samples-tab,
 .settings-tab {
   padding: 2rem;
+}
+
+.banks-tab,
+.tracks-tab {
+  padding: 0;
 }
 
 /* Samples Tab */
