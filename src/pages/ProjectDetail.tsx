@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useProjects } from "../context/ProjectsContext";
 import type { ProjectMetadata, Bank } from "../context/ProjectsContext";
+import { BankSelector } from "../components/BankSelector";
 import { TrackSelector } from "../components/TrackSelector";
 import "../App.css";
 
@@ -321,23 +322,13 @@ export function ProjectDetail() {
             {activeTab === "parts" && (
               <div className="banks-tab">
                 <div className="bank-selector-section">
-                  <div className="selector-group">
-                    <label htmlFor="parts-bank-select" className="bank-selector-label">
-                      Bank:
-                    </label>
-                    <select
-                      id="parts-bank-select"
-                      className="bank-selector"
-                      value={selectedBankIndex}
-                      onChange={(e) => setSelectedBankIndex(Number(e.target.value))}
-                    >
-                      {banks.map((bank, index) => (
-                        <option key={bank.id} value={index}>
-                          {bank.name} ({index + 1}){index === metadata?.current_state.bank ? ' (Active)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <BankSelector
+                    id="parts-bank-select"
+                    banks={banks}
+                    value={selectedBankIndex}
+                    onChange={setSelectedBankIndex}
+                    currentBank={metadata?.current_state.bank}
+                  />
 
                   <TrackSelector
                     id="parts-track-select"
@@ -367,23 +358,13 @@ export function ProjectDetail() {
             {activeTab === "patterns" && (
               <div className="banks-tab">
                 <div className="bank-selector-section">
-                  <div className="selector-group">
-                    <label htmlFor="patterns-bank-select" className="bank-selector-label">
-                      Bank:
-                    </label>
-                    <select
-                      id="patterns-bank-select"
-                      className="bank-selector"
-                      value={selectedBankIndex}
-                      onChange={(e) => setSelectedBankIndex(Number(e.target.value))}
-                    >
-                      {banks.map((bank, index) => (
-                        <option key={bank.id} value={index}>
-                          {bank.name} ({index + 1}){index === metadata?.current_state.bank ? ' (Active)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <BankSelector
+                    id="patterns-bank-select"
+                    banks={banks}
+                    value={selectedBankIndex}
+                    onChange={setSelectedBankIndex}
+                    currentBank={metadata?.current_state.bank}
+                  />
 
                   <TrackSelector
                     id="patterns-track-select"
@@ -795,23 +776,13 @@ export function ProjectDetail() {
             {activeTab === "tracks" && (
               <div className="tracks-tab">
                 <div className="bank-selector-section">
-                  <div className="selector-group">
-                    <label htmlFor="track-bank-select" className="bank-selector-label">
-                      Bank:
-                    </label>
-                    <select
-                      id="track-bank-select"
-                      className="bank-selector"
-                      value={selectedBankIndex}
-                      onChange={(e) => setSelectedBankIndex(Number(e.target.value))}
-                    >
-                      {banks.map((bank, index) => (
-                        <option key={bank.id} value={index}>
-                          {bank.name} ({index + 1}){index === metadata?.current_state.bank ? ' (Active)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <BankSelector
+                    id="track-bank-select"
+                    banks={banks}
+                    value={selectedBankIndex}
+                    onChange={setSelectedBankIndex}
+                    currentBank={metadata?.current_state.bank}
+                  />
 
                   <TrackSelector
                     id="track-track-select"
