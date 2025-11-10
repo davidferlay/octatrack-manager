@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useProjects } from "../context/ProjectsContext";
 import type { ProjectMetadata, Bank } from "../context/ProjectsContext";
+import { TrackSelector } from "../components/TrackSelector";
 import "../App.css";
 
 // Most type definitions are now imported from ProjectsContext via Bank and ProjectMetadata types
@@ -338,32 +339,12 @@ export function ProjectDetail() {
                     </select>
                   </div>
 
-                  <div className="selector-group">
-                    <label htmlFor="parts-track-select" className="bank-selector-label">
-                      Track:
-                    </label>
-                    <select
-                      id="parts-track-select"
-                      className="bank-selector"
-                      value={selectedTrackIndex}
-                      onChange={(e) => setSelectedTrackIndex(Number(e.target.value))}
-                    >
-                      <optgroup label="Audio Tracks">
-                        {[0, 1, 2, 3, 4, 5, 6, 7].map((trackNum) => (
-                          <option key={`audio-${trackNum}`} value={trackNum}>
-                            T{trackNum + 1} (Audio){trackNum === metadata?.current_state.track ? ' (Active)' : ''}
-                          </option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="MIDI Tracks">
-                        {[8, 9, 10, 11, 12, 13, 14, 15].map((trackNum) => (
-                          <option key={`midi-${trackNum}`} value={trackNum}>
-                            T{trackNum - 7} (MIDI){trackNum === metadata?.current_state.track ? ' (Active)' : ''}
-                          </option>
-                        ))}
-                      </optgroup>
-                    </select>
-                  </div>
+                  <TrackSelector
+                    id="parts-track-select"
+                    value={selectedTrackIndex}
+                    onChange={setSelectedTrackIndex}
+                    currentTrack={metadata?.current_state.track}
+                  />
                 </div>
 
                 {banks[selectedBankIndex] && (
@@ -404,32 +385,12 @@ export function ProjectDetail() {
                     </select>
                   </div>
 
-                  <div className="selector-group">
-                    <label htmlFor="patterns-track-select" className="bank-selector-label">
-                      Track:
-                    </label>
-                    <select
-                      id="patterns-track-select"
-                      className="bank-selector"
-                      value={selectedTrackIndex}
-                      onChange={(e) => setSelectedTrackIndex(Number(e.target.value))}
-                    >
-                      <optgroup label="Audio Tracks">
-                        {[0, 1, 2, 3, 4, 5, 6, 7].map((trackNum) => (
-                          <option key={`audio-${trackNum}`} value={trackNum}>
-                            T{trackNum + 1} (Audio){trackNum === metadata?.current_state.track ? ' (Active)' : ''}
-                          </option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="MIDI Tracks">
-                        {[8, 9, 10, 11, 12, 13, 14, 15].map((trackNum) => (
-                          <option key={`midi-${trackNum}`} value={trackNum}>
-                            T{trackNum - 7} (MIDI){trackNum === metadata?.current_state.track ? ' (Active)' : ''}
-                          </option>
-                        ))}
-                      </optgroup>
-                    </select>
-                  </div>
+                  <TrackSelector
+                    id="patterns-track-select"
+                    value={selectedTrackIndex}
+                    onChange={setSelectedTrackIndex}
+                    currentTrack={metadata?.current_state.track}
+                  />
                 </div>
 
                 {banks[selectedBankIndex] && (
@@ -852,32 +813,12 @@ export function ProjectDetail() {
                     </select>
                   </div>
 
-                  <div className="selector-group">
-                    <label htmlFor="track-track-select" className="bank-selector-label">
-                      Track:
-                    </label>
-                    <select
-                      id="track-track-select"
-                      className="bank-selector"
-                      value={selectedTrackIndex}
-                      onChange={(e) => setSelectedTrackIndex(Number(e.target.value))}
-                    >
-                      <optgroup label="Audio Tracks">
-                        {[0, 1, 2, 3, 4, 5, 6, 7].map((trackNum) => (
-                          <option key={`audio-${trackNum}`} value={trackNum}>
-                            T{trackNum + 1} (Audio){trackNum === metadata?.current_state.track ? ' (Active)' : ''}
-                          </option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="MIDI Tracks">
-                        {[8, 9, 10, 11, 12, 13, 14, 15].map((trackNum) => (
-                          <option key={`midi-${trackNum}`} value={trackNum}>
-                            T{trackNum - 7} (MIDI){trackNum === metadata?.current_state.track ? ' (Active)' : ''}
-                          </option>
-                        ))}
-                      </optgroup>
-                    </select>
-                  </div>
+                  <TrackSelector
+                    id="track-track-select"
+                    value={selectedTrackIndex}
+                    onChange={setSelectedTrackIndex}
+                    currentTrack={metadata?.current_state.track}
+                  />
                 </div>
 
                 {banks[selectedBankIndex] && (
