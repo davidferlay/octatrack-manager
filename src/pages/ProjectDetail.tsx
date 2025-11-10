@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useProjects } from "../context/ProjectsContext";
 import type { ProjectMetadata, Bank } from "../context/ProjectsContext";
-import { BankSelector, ALL_BANKS } from "../components/BankSelector";
+import { BankSelector, ALL_BANKS, formatBankName } from "../components/BankSelector";
 import { TrackSelector, ALL_AUDIO_TRACKS, ALL_MIDI_TRACKS } from "../components/TrackSelector";
 import { PatternSelector, ALL_PATTERNS } from "../components/PatternSelector";
 import "../App.css";
@@ -352,7 +352,7 @@ export function ProjectDetail() {
 
                       return (
                         <div key={`bank-parts-${bankIndex}`} className="bank-card">
-                          <h3>{bank.name} - Parts ({bank.parts.length})</h3>
+                          <h3>{formatBankName(bank.name, bankIndex)} - Parts ({bank.parts.length})</h3>
                           <div className="parts-list">
                             {bank.parts.map((part) => (
                               <div key={part.id} className="part-card">
@@ -401,7 +401,7 @@ export function ProjectDetail() {
                       return (
                         <div key={`bank-patterns-${bankIndex}`} className="bank-card">
                           <div className="bank-card-header">
-                            <h3>{bank.name} - Pattern Details</h3>
+                            <h3>{formatBankName(bank.name, bankIndex)} - Pattern Details</h3>
                             <PatternSelector
                               id={`pattern-select-${bankIndex}`}
                               value={selectedPatternIndex}
@@ -855,7 +855,7 @@ export function ProjectDetail() {
 
                         return (
                         <div key={`bank-${bankIndex}-track-settings-${trackIndex}`} className="bank-card">
-                          <h3>{bank.name} - T{trackData.track_id >= 8 ? trackData.track_id - 7 : trackData.track_id + 1} ({trackData.track_type})</h3>
+                          <h3>{formatBankName(bank.name, bankIndex)} - T{trackData.track_id >= 8 ? trackData.track_id - 7 : trackData.track_id + 1} ({trackData.track_type})</h3>
                           <div className="pattern-details">
                             <div className="pattern-detail-group track-settings-row">
                               <div className="pattern-detail-item">
