@@ -540,6 +540,10 @@ export function ProjectDetail() {
                                   <span className="pattern-detail-value">{trackData.trig_counts.oneshot}</span>
                                 </div>
                                 <div className="pattern-detail-item">
+                                  <span className="pattern-detail-label">Recorder:</span>
+                                  <span className="pattern-detail-value">{trackData.steps.filter(step => step.recorder).length}</span>
+                                </div>
+                                <div className="pattern-detail-item">
                                   <span className="pattern-detail-label">Slide:</span>
                                   <span className="pattern-detail-value">{trackData.trig_counts.slide}</span>
                                 </div>
