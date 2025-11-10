@@ -728,6 +728,11 @@ h1 {
   border-radius: 4px;
 }
 
+.track-settings-row {
+  grid-template-columns: repeat(6, 1fr);
+  gap: 1rem;
+}
+
 .pattern-detail-separator {
   display: none;
 }
