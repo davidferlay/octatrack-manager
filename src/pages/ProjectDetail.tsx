@@ -440,8 +440,8 @@ export function ProjectDetail() {
                             <div className="pattern-header">
                               <span className="pattern-name">{pattern.name}</span>
                               <span className="pattern-part">→ Part {pattern.part_assignment + 1}</span>
-                              <span className="pattern-track-indicator">
-                                T{trackData.track_id >= 8 ? trackData.track_id - 7 : trackData.track_id + 1} ({trackData.track_type})
+                              <span className={`pattern-track-indicator ${trackData.track_type.toLowerCase()}`}>
+                                T{trackData.track_id >= 8 ? trackData.track_id - 7 : trackData.track_id + 1}
                               </span>
                               {pattern.tempo_info && <span className="pattern-tempo-indicator">{pattern.tempo_info}</span>}
                               <span className="pattern-tempo-indicator">Scale Mode: {pattern.scale_mode === "Normal" ? "Pattern" : pattern.scale_mode}</span>
