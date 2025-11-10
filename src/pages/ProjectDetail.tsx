@@ -240,11 +240,11 @@ export function ProjectDetail() {
                   <h2>Project Info</h2>
                   <div className="metadata-grid">
                     <div className="metadata-item">
-                      <span className="metadata-label">Tempo</span>
+                      <span className="metadata-label">Master Tempo</span>
                       <span className="metadata-value">{metadata.tempo} BPM</span>
                     </div>
                     <div className="metadata-item">
-                      <span className="metadata-label">Time Signature</span>
+                      <span className="metadata-label">Metronome Time Signature</span>
                       <span className="metadata-value">{metadata.time_signature}</span>
                     </div>
                     <div className="metadata-item">
@@ -296,11 +296,11 @@ export function ProjectDetail() {
                       <span className="metadata-value">{metadata.mixer_settings.gain_cd}</span>
                     </div>
                     <div className="metadata-item">
-                      <span className="metadata-label">Direct AB</span>
+                      <span className="metadata-label">Direct Out AB</span>
                       <span className="metadata-value">{metadata.mixer_settings.dir_ab}</span>
                     </div>
                     <div className="metadata-item">
-                      <span className="metadata-label">Direct CD</span>
+                      <span className="metadata-label">Direct Out CD</span>
                       <span className="metadata-value">{metadata.mixer_settings.dir_cd}</span>
                     </div>
                     <div className="metadata-item">
