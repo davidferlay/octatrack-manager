@@ -8,6 +8,9 @@ interface BankSelectorProps {
   currentBank?: number;
 }
 
+// Special value for "all banks" option
+export const ALL_BANKS = -1;
+
 export function BankSelector({ id, banks, value, onChange, currentBank }: BankSelectorProps) {
   return (
     <div className="selector-group">
@@ -20,6 +23,7 @@ export function BankSelector({ id, banks, value, onChange, currentBank }: BankSe
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
       >
+        <option value={ALL_BANKS}>All Banks</option>
         {banks.map((bank, index) => (
           <option key={bank.id} value={index}>
             {bank.name} ({index + 1}){index === currentBank ? ' (Active)' : ''}
