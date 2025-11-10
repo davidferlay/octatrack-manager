@@ -83,6 +83,14 @@ interface TrigStep {
 
 type TabType = "overview" | "parts" | "patterns" | "tracks" | "static-slots" | "flex-slots";
 
+// Helper function to calculate the display denominator for length fraction
+function getLengthDenominator(length: number): number {
+  if (length <= 16) return 16;
+  if (length <= 32) return 32;
+  if (length <= 48) return 48;
+  return 64;
+}
+
 export function ProjectDetail() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -449,7 +457,9 @@ export function ProjectDetail() {
                               {pattern.scale_mode === "Per Track" ? (
                                 <>
                                   <span className="pattern-tempo-indicator">
-                                    Length: {trackData.per_track_len !== null ? `${trackData.per_track_len}` : `${pattern.length}`}
+                                    Length: {trackData.per_track_len !== null
+                                      ? `${trackData.per_track_len}/${getLengthDenominator(trackData.per_track_len)}`
+                                      : `${pattern.length}/${getLengthDenominator(pattern.length)}`}
                                   </span>
                                   <span className="pattern-tempo-indicator">
                                     Speed: {trackData.per_track_scale || pattern.master_scale}
@@ -483,7 +493,7 @@ export function ProjectDetail() {
                                 </>
                               ) : (
                                 <>
-                                  <span className="pattern-tempo-indicator">Length: {pattern.length}</span>
+                                  <span className="pattern-tempo-indicator">Length: {pattern.length}/{getLengthDenominator(pattern.length)}</span>
                                   <span className="pattern-tempo-indicator">Speed: {pattern.master_scale}</span>
                                 </>
                               )}
