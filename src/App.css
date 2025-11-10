@@ -589,6 +589,10 @@ h1 {
   margin-bottom: 1.5rem;
 }
 
+.bank-card:last-child {
+  margin-bottom: 0;
+}
+
 .bank-card h3 {
   margin: 0 0 1rem 0;
   font-size: 1rem;
@@ -651,10 +655,15 @@ h1 {
   border: 1px solid var(--elektron-border-gray);
   border-left: 3px solid var(--elektron-orange);
   padding: 2rem;
+  margin-bottom: 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 2rem;
   transition: all 0.15s ease;
+}
+
+.pattern-card:last-child {
+  margin-bottom: 0;
 }
 
 .pattern-header {
