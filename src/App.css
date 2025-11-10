@@ -733,6 +733,11 @@ h1 {
   gap: 1rem;
 }
 
+.trig-stats-row {
+  grid-template-columns: repeat(8, 1fr);
+  gap: 1rem;
+}
+
 .pattern-detail-separator {
   display: none;
 }
