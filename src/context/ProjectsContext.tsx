@@ -21,6 +21,189 @@ interface OctatrackLocation {
   sets: OctatrackSet[];
 }
 
+// Project detail types (matching ProjectDetail.tsx)
+interface CurrentState {
+  bank: number;
+  bank_name: string;
+  pattern: number;
+  part: number;
+  track: number;
+  muted_tracks: number[];
+  soloed_tracks: number[];
+}
+
+interface MixerSettings {
+  gain_ab: number;
+  gain_cd: number;
+  dir_ab: number;
+  dir_cd: number;
+  phones_mix: number;
+  main_level: number;
+  cue_level: number;
+}
+
+interface SampleSlot {
+  slot_id: number;
+  slot_type: string;
+  path: string;
+  gain: number;
+  loop_mode: string;
+  timestretch_mode: string;
+}
+
+interface SampleSlots {
+  static_slots: SampleSlot[];
+  flex_slots: SampleSlot[];
+}
+
+export interface ProjectMetadata {
+  name: string;
+  tempo: number;
+  time_signature: string;
+  pattern_length: number;
+  current_state: CurrentState;
+  mixer_settings: MixerSettings;
+  sample_slots: SampleSlots;
+  os_version: string;
+}
+
+interface TrigCounts {
+  trigger: number;
+  trigless: number;
+  plock: number;
+  oneshot: number;
+  swing: number;
+  slide: number;
+  total: number;
+}
+
+interface PerTrackSettings {
+  master_len: string;
+  master_scale: string;
+}
+
+interface TrackSettings {
+  start_silent: boolean;
+  plays_free: boolean;
+  trig_mode: string;
+  trig_quant: string;
+  oneshot_trk: boolean;
+}
+
+interface MachineParams {
+  param1: number | null;
+  param2: number | null;
+  param3: number | null;
+  param4: number | null;
+  param5: number | null;
+  param6: number | null;
+}
+
+interface LfoParams {
+  spd1: number | null;
+  spd2: number | null;
+  spd3: number | null;
+  dep1: number | null;
+  dep2: number | null;
+  dep3: number | null;
+}
+
+interface AmpParams {
+  atk: number | null;
+  hold: number | null;
+  rel: number | null;
+  vol: number | null;
+  bal: number | null;
+  f: number | null;
+}
+
+interface AudioParameterLocks {
+  machine: MachineParams;
+  lfo: LfoParams;
+  amp: AmpParams;
+  static_slot_id: number | null;
+  flex_slot_id: number | null;
+}
+
+interface MidiParams {
+  note: number | null;
+  vel: number | null;
+  len: number | null;
+  not2: number | null;
+  not3: number | null;
+  not4: number | null;
+}
+
+interface MidiParameterLocks {
+  midi: MidiParams;
+  lfo: LfoParams;
+}
+
+interface TrigStep {
+  step: number;
+  trigger: boolean;
+  trigless: boolean;
+  plock: boolean;
+  oneshot: boolean;
+  swing: boolean;
+  slide: boolean;
+  recorder: boolean;
+  trig_condition: string | null;
+  trig_repeats: number;
+  micro_timing: string | null;
+  notes: number[];
+  velocity: number | null;
+  plock_count: number;
+  sample_slot: number | null;
+  audio_plocks: AudioParameterLocks | null;
+  midi_plocks: MidiParameterLocks | null;
+}
+
+interface TrackInfo {
+  track_id: number;
+  track_type: string;
+  swing_amount: number;
+  per_track_len: number | null;
+  per_track_scale: string | null;
+  pattern_settings: TrackSettings;
+  trig_counts: TrigCounts;
+  steps: TrigStep[];
+}
+
+interface Pattern {
+  id: number;
+  name: string;
+  length: number;
+  part_assignment: number;
+  scale_mode: string;
+  master_scale: string;
+  chain_mode: string;
+  tempo_info: string | null;
+  active_tracks: number;
+  trig_counts: TrigCounts;
+  per_track_settings: PerTrackSettings | null;
+  has_swing: boolean;
+  tracks: TrackInfo[];
+}
+
+interface Part {
+  id: number;
+  name: string;
+  patterns: Pattern[];
+}
+
+export interface Bank {
+  id: string;
+  name: string;
+  parts: Part[];
+}
+
+interface CachedProjectData {
+  metadata: ProjectMetadata;
+  banks: Bank[];
+  timestamp: number;
+}
+
 interface ProjectsContextType {
   locations: OctatrackLocation[];
   standaloneProjects: OctatrackProject[];
@@ -34,12 +217,17 @@ interface ProjectsContextType {
   setOpenLocations: (openLocs: Set<number> | ((prev: Set<number>) => Set<number>)) => void;
   setIsIndividualProjectsOpen: (open: boolean) => void;
   setIsLocationsOpen: (open: boolean) => void;
+  // Project detail cache methods
+  getCachedProject: (path: string) => CachedProjectData | null;
+  setCachedProject: (path: string, metadata: ProjectMetadata, banks: Bank[]) => void;
+  clearProjectCache: (path?: string) => void;
   clearAll: () => void;
 }
 
 const ProjectsContext = createContext<ProjectsContextType | undefined>(undefined);
 
 const SESSION_STORAGE_KEY = "octatrack_scanned_projects";
+const PROJECT_CACHE_KEY = "octatrack_project_cache";
 
 interface ProjectsProviderProps {
   children: ReactNode;
@@ -125,7 +313,25 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     return true;
   });
 
-  // Save to sessionStorage whenever state changes
+  // Project cache state
+  const [projectCache, setProjectCache] = useState<Map<string, CachedProjectData>>(() => {
+    try {
+      const stored = sessionStorage.getItem(PROJECT_CACHE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const cache = new Map<string, CachedProjectData>();
+        Object.entries(parsed).forEach(([key, value]) => {
+          cache.set(key, value as CachedProjectData);
+        });
+        return cache;
+      }
+    } catch (error) {
+      console.error("Error loading project cache from sessionStorage:", error);
+    }
+    return new Map();
+  });
+
+  // Save projects list to sessionStorage whenever state changes
   useEffect(() => {
     try {
       const data = {
@@ -141,6 +347,19 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       console.error("Error saving to sessionStorage:", error);
     }
   }, [locations, standaloneProjects, hasScanned, openLocations, isIndividualProjectsOpen, isLocationsOpen]);
+
+  // Save project cache to sessionStorage whenever it changes
+  useEffect(() => {
+    try {
+      const cacheObject: Record<string, CachedProjectData> = {};
+      projectCache.forEach((value, key) => {
+        cacheObject[key] = value;
+      });
+      sessionStorage.setItem(PROJECT_CACHE_KEY, JSON.stringify(cacheObject));
+    } catch (error) {
+      console.error("Error saving project cache to sessionStorage:", error);
+    }
+  }, [projectCache]);
 
   const setLocations = (newLocations: OctatrackLocation[] | ((prev: OctatrackLocation[]) => OctatrackLocation[])) => {
     setLocationsState(newLocations);
@@ -166,6 +385,45 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     setIsLocationsOpenState(open);
   };
 
+  // Project cache methods
+  const getCachedProject = (path: string): CachedProjectData | null => {
+    const cached = projectCache.get(path);
+    if (cached) {
+      // Optional: Check if cache is stale (e.g., older than 1 hour)
+      // const cacheAge = Date.now() - cached.timestamp;
+      // if (cacheAge > 3600000) return null; // 1 hour in milliseconds
+      return cached;
+    }
+    return null;
+  };
+
+  const setCachedProject = (path: string, metadata: ProjectMetadata, banks: Bank[]) => {
+    setProjectCache(prev => {
+      const newCache = new Map(prev);
+      newCache.set(path, {
+        metadata,
+        banks,
+        timestamp: Date.now(),
+      });
+      return newCache;
+    });
+  };
+
+  const clearProjectCache = (path?: string) => {
+    if (path) {
+      // Clear specific project cache
+      setProjectCache(prev => {
+        const newCache = new Map(prev);
+        newCache.delete(path);
+        return newCache;
+      });
+    } else {
+      // Clear all project cache
+      setProjectCache(new Map());
+      sessionStorage.removeItem(PROJECT_CACHE_KEY);
+    }
+  };
+
   const clearAll = () => {
     setLocationsState([]);
     setStandaloneProjectsState([]);
@@ -173,7 +431,9 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     setOpenLocationsState(new Set());
     setIsIndividualProjectsOpenState(true);
     setIsLocationsOpenState(true);
+    setProjectCache(new Map());
     sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    sessionStorage.removeItem(PROJECT_CACHE_KEY);
   };
 
   const value: ProjectsContextType = {
@@ -189,6 +449,9 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     setOpenLocations,
     setIsIndividualProjectsOpen,
     setIsLocationsOpen,
+    getCachedProject,
+    setCachedProject,
+    clearProjectCache,
     clearAll,
   };
 

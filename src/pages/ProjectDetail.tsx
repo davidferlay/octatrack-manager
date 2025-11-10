@@ -1,75 +1,11 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { useProjects } from "../context/ProjectsContext";
+import type { ProjectMetadata, Bank } from "../context/ProjectsContext";
 import "../App.css";
 
-interface CurrentState {
-  bank: number;
-  bank_name: string;
-  pattern: number;
-  part: number;
-  track: number;
-  muted_tracks: number[];
-  soloed_tracks: number[];
-}
-
-interface MixerSettings {
-  gain_ab: number;
-  gain_cd: number;
-  dir_ab: number;
-  dir_cd: number;
-  phones_mix: number;
-  main_level: number;
-  cue_level: number;
-}
-
-interface SampleSlot {
-  slot_id: number;
-  slot_type: string;
-  path: string;
-  gain: number;
-  loop_mode: string;
-  timestretch_mode: string;
-}
-
-interface SampleSlots {
-  static_slots: SampleSlot[];
-  flex_slots: SampleSlot[];
-}
-
-interface ProjectMetadata {
-  name: string;
-  tempo: number;
-  time_signature: string;
-  pattern_length: number;
-  current_state: CurrentState;
-  mixer_settings: MixerSettings;
-  sample_slots: SampleSlots;
-  os_version: string;
-}
-
-interface TrigCounts {
-  trigger: number;      // Standard trigger trigs
-  trigless: number;     // Trigless trigs (p-locks without triggering)
-  plock: number;        // Parameter lock trigs
-  oneshot: number;      // One-shot trigs
-  swing: number;        // Swing trigs
-  slide: number;        // Parameter slide trigs
-  total: number;        // Total of all trig types
-}
-
-interface PerTrackSettings {
-  master_len: string;        // Master length in per-track mode (can be "INF")
-  master_scale: string;      // Master scale in per-track mode
-}
-
-interface TrackSettings {
-  start_silent: boolean;
-  plays_free: boolean;
-  trig_mode: string;         // "ONE", "ONE2", "HOLD"
-  trig_quant: string;        // Quantization setting
-  oneshot_trk: boolean;
-}
+// Most type definitions are now imported from ProjectsContext via Bank and ProjectMetadata types
 
 interface MachineParams {
   param1: number | null;
@@ -140,50 +76,14 @@ interface TrigStep {
   midi_plocks: MidiParameterLocks | null;   // MIDI parameter locks (MIDI tracks only)
 }
 
-interface TrackInfo {
-  track_id: number;
-  track_type: string;        // "Audio" or "MIDI"
-  swing_amount: number;      // 0-30 (50-80 on device)
-  per_track_len: number | null; // Track length in per-track mode
-  per_track_scale: string | null; // Track scale in per-track mode
-  pattern_settings: TrackSettings;
-  trig_counts: TrigCounts;   // Per-track trig statistics
-  steps: TrigStep[];         // Per-step trig information (64 steps)
-}
-
-interface Pattern {
-  id: number;
-  name: string;
-  length: number;
-  part_assignment: number;       // Which part (0-3 for Parts 1-4) this pattern is assigned to
-  scale_mode: string;            // "Normal" or "Per Track"
-  master_scale: string;          // Playback speed multiplier (2x, 3/2x, 1x, etc.)
-  chain_mode: string;            // "Project" or "Pattern"
-  tempo_info: string | null;     // Pattern tempo if set, or null if using project tempo
-  active_tracks: number;         // Number of tracks with at least one trigger trig
-  trig_counts: TrigCounts;       // Detailed trig statistics
-  per_track_settings: PerTrackSettings | null; // Settings for per-track mode
-  has_swing: boolean;            // Whether pattern has any swing trigs
-  tracks: TrackInfo[];           // Per-track information
-}
-
-interface Part {
-  id: number;
-  name: string;
-  patterns: Pattern[];
-}
-
-interface Bank {
-  id: string;
-  name: string;
-  parts: Part[];
-}
+// TrackInfo, Pattern, Part, and Bank interfaces are imported from ProjectsContext via Bank type
 
 type TabType = "overview" | "banks" | "static-slots" | "flex-slots";
 
 export function ProjectDetail() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { getCachedProject, setCachedProject } = useProjects();
   const projectPath = searchParams.get("path");
   const projectName = searchParams.get("name");
 
@@ -199,12 +99,27 @@ export function ProjectDetail() {
 
   useEffect(() => {
     if (projectPath) {
-      // Use requestAnimationFrame to ensure loading UI is painted before data loading
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          loadProjectData();
-        }, 10);
-      });
+      // Check cache first
+      const cachedData = getCachedProject(projectPath);
+      if (cachedData) {
+        console.log("Loading project from cache:", projectPath);
+        setMetadata(cachedData.metadata);
+        setBanks(cachedData.banks);
+        // Set the selected bank to the currently active bank
+        setSelectedBankIndex(cachedData.metadata.current_state.bank);
+        // Set the selected track to the currently active track
+        setSelectedTrackIndex(cachedData.metadata.current_state.track);
+        // Set the selected pattern to the currently active pattern
+        setSelectedPatternIndex(cachedData.metadata.current_state.pattern);
+        setIsLoading(false);
+      } else {
+        // Use requestAnimationFrame to ensure loading UI is painted before data loading
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            loadProjectData();
+          }, 10);
+        });
+      }
     }
   }, [projectPath]);
 
@@ -212,10 +127,15 @@ export function ProjectDetail() {
     setIsLoading(true);
     setError(null);
     try {
+      console.log("Loading project from backend:", projectPath);
       const projectMetadata = await invoke<ProjectMetadata>("load_project_metadata", { path: projectPath });
       const projectBanks = await invoke<Bank[]>("load_project_banks", { path: projectPath });
       setMetadata(projectMetadata);
       setBanks(projectBanks);
+      // Cache the loaded data
+      if (projectPath) {
+        setCachedProject(projectPath, projectMetadata, projectBanks);
+      }
       // Set the selected bank to the currently active bank
       setSelectedBankIndex(projectMetadata.current_state.bank);
       // Set the selected track to the currently active track
