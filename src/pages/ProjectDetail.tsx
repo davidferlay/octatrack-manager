@@ -556,7 +556,6 @@ export function ProjectDetail() {
 
                             {/* Pattern Grid Visualization */}
                             <div className="pattern-grid-section">
-                              <h4>Pattern Grid</h4>
                               <div className="pattern-grid-container">
                                 {/* Grid */}
                                 <div className="pattern-grid">

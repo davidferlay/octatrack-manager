@@ -578,7 +578,7 @@ h1 {
 
 /* Banks Section */
 .banks-section {
-  margin-top: 2rem;
+  margin-top: 0;
 }
 
 .bank-card {
@@ -1061,9 +1061,7 @@ h1 {
 
 /* Pattern Grid Visualization */
 .pattern-grid-section {
-  margin-top: 2rem;
-  padding-top: 2rem;
-  border-top: 2px solid var(--elektron-border-gray);
+  margin-top: 0;
 }
 
 .pattern-grid-section h4 {
@@ -1289,7 +1287,7 @@ h1 {
 
 /* Parameter Details Panel */
 .parameter-details-panel {
-  margin-top: 2rem;
+  margin-top: 0.5rem;
   background-color: var(--elektron-darker-gray);
   border: 2px solid var(--elektron-dark-gray);
   border-radius: 8px;
