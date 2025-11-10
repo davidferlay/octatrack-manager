@@ -624,7 +624,8 @@ export function ProjectDetail() {
                                         {hasTrig && (
                                           <div className="step-indicators">
                                             {/* Primary trig indicators */}
-                                            {step.trigger && <span className="indicator-trigger">●</span>}
+                                            {/* Don't show trigger indicator on MIDI tracks if there are notes */}
+                                            {step.trigger && !(trackData.track_type === "MIDI" && step.notes.length > 0) && <span className="indicator-trigger">●</span>}
                                             {step.trigless && <span className="indicator-trigless">○</span>}
                                             {step.plock && <span className="indicator-plock">P</span>}
                                             {step.oneshot && <span className="indicator-oneshot">1</span>}
@@ -636,14 +637,16 @@ export function ProjectDetail() {
                                             {step.trig_condition && <span className="indicator-condition">{step.trig_condition}</span>}
                                             {step.trig_repeats > 0 && <span className="indicator-repeats">{step.trig_repeats + 1}x</span>}
                                             {step.micro_timing && <span className="indicator-timing">{step.micro_timing}</span>}
-                                            {noteDisplay && (
-                                              <span className={`indicator-note ${chordName ? 'indicator-chord' : ''}`}>
-                                                {noteDisplay}
-                                              </span>
-                                            )}
                                             {step.velocity !== null && <span className="indicator-velocity">V{step.velocity}</span>}
                                             {step.plock_count > 1 && <span className="indicator-plock-count">{step.plock_count}p</span>}
                                             {step.sample_slot !== null && <span className="indicator-sample">S{step.sample_slot}</span>}
+                                            {noteDisplay && (
+                                              <div className="note-indicator-wrapper">
+                                                <span className={`indicator-note ${chordName ? 'indicator-chord' : ''}`}>
+                                                  {noteDisplay}
+                                                </span>
+                                              </div>
+                                            )}
                                           </div>
                                         )}
                                       </div>
