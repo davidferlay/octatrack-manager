@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useProjects } from "../context/ProjectsContext";
 import type { ProjectMetadata, Bank } from "../context/ProjectsContext";
 import { BankSelector } from "../components/BankSelector";
-import { TrackSelector } from "../components/TrackSelector";
+import { TrackSelector, ALL_AUDIO_TRACKS, ALL_MIDI_TRACKS } from "../components/TrackSelector";
 import "../App.css";
 
 // Most type definitions are now imported from ProjectsContext via Bank and ProjectMetadata types
@@ -403,11 +403,22 @@ export function ProjectDetail() {
                           const pattern = banks[selectedBankIndex].parts[0]?.patterns[selectedPatternIndex];
                           if (!pattern) return null;
 
-                          // Get track-specific data for the selected track
-                          const trackData = pattern.tracks[selectedTrackIndex];
+                          // Determine which tracks to display
+                          let tracksToDisplay: number[];
+                          if (selectedTrackIndex === ALL_AUDIO_TRACKS) {
+                            tracksToDisplay = [0, 1, 2, 3, 4, 5, 6, 7];
+                          } else if (selectedTrackIndex === ALL_MIDI_TRACKS) {
+                            tracksToDisplay = [8, 9, 10, 11, 12, 13, 14, 15];
+                          } else {
+                            tracksToDisplay = [selectedTrackIndex];
+                          }
 
-                          return (
-                          <div className="pattern-card">
+                          // Render pattern card for each track
+                          return tracksToDisplay.map((trackIndex) => {
+                            const trackData = pattern.tracks[trackIndex];
+
+                            return (
+                          <div key={`pattern-${trackIndex}`} className="pattern-card">
                             <div className="pattern-header">
                               <span className="pattern-name">{pattern.name}</span>
                               <span className="pattern-part">→ Part {pattern.part_assignment + 1}</span>
@@ -764,7 +775,8 @@ export function ProjectDetail() {
                               </div>
                             </div>
                           </div>
-                        );
+                          );
+                          });
                         })()}
                       </div>
                     </div>
@@ -798,10 +810,23 @@ export function ProjectDetail() {
                       const pattern = banks[selectedBankIndex].parts[0]?.patterns[selectedPatternIndex];
                       if (!pattern) return null;
 
-                      const trackData = pattern.tracks[selectedTrackIndex];
+                      // Determine which tracks to display
+                      let tracksToDisplay: number[];
+                      if (selectedTrackIndex === ALL_AUDIO_TRACKS) {
+                        tracksToDisplay = [0, 1, 2, 3, 4, 5, 6, 7];
+                      } else if (selectedTrackIndex === ALL_MIDI_TRACKS) {
+                        tracksToDisplay = [8, 9, 10, 11, 12, 13, 14, 15];
+                      } else {
+                        tracksToDisplay = [selectedTrackIndex];
+                      }
 
-                      return (
-                        <div className="bank-card">
+                      // Render track settings for each track
+                      return tracksToDisplay.map((trackIndex) => {
+                        const trackData = pattern.tracks[trackIndex];
+
+                        return (
+                        <div key={`track-settings-${trackIndex}`} className="bank-card">
+                          <h3>T{trackData.track_id >= 8 ? trackData.track_id - 7 : trackData.track_id + 1} ({trackData.track_type})</h3>
                           <div className="pattern-details">
                             <div className="pattern-detail-group track-settings-row">
                               <div className="pattern-detail-item">
@@ -831,7 +856,8 @@ export function ProjectDetail() {
                             </div>
                           </div>
                         </div>
-                      );
+                        );
+                      });
                     })()}
                   </section>
                 )}
