@@ -478,14 +478,6 @@ export function ProjectDetail() {
                               <div className="pattern-detail-group">
                                 <h4 style={{marginTop: 0, marginBottom: '0.75rem', color: '#888'}}>Pattern Settings</h4>
                                 <div className="pattern-detail-item">
-                                  <span className="pattern-detail-label">Length:</span>
-                                  <span className="pattern-detail-value">{pattern.length} steps</span>
-                                </div>
-                                <div className="pattern-detail-item">
-                                  <span className="pattern-detail-label">Speed:</span>
-                                  <span className="pattern-detail-value">{pattern.master_scale}</span>
-                                </div>
-                                <div className="pattern-detail-item">
                                   <span className="pattern-detail-label">Mode:</span>
                                   <span className="pattern-detail-value">{pattern.scale_mode}</span>
                                 </div>
@@ -493,15 +485,42 @@ export function ProjectDetail() {
                                   <span className="pattern-detail-label">Chain:</span>
                                   <span className="pattern-detail-value">{pattern.chain_mode}</span>
                                 </div>
-                                {pattern.per_track_settings && (
+                                {pattern.scale_mode === "Per Track" ? (
                                   <>
                                     <div className="pattern-detail-item">
-                                      <span className="pattern-detail-label">Master Len:</span>
-                                      <span className="pattern-detail-value">{pattern.per_track_settings.master_len}</span>
+                                      <span className="pattern-detail-label">Track {trackData.track_id + 1} Length:</span>
+                                      <span className="pattern-detail-value">
+                                        {trackData.per_track_len !== null ? `${trackData.per_track_len} steps` : `${pattern.length} steps`}
+                                      </span>
                                     </div>
                                     <div className="pattern-detail-item">
-                                      <span className="pattern-detail-label">Master Scale:</span>
-                                      <span className="pattern-detail-value">{pattern.per_track_settings.master_scale}</span>
+                                      <span className="pattern-detail-label">Track {trackData.track_id + 1} Speed:</span>
+                                      <span className="pattern-detail-value">
+                                        {trackData.per_track_scale || pattern.master_scale}
+                                      </span>
+                                    </div>
+                                    {pattern.per_track_settings && (
+                                      <>
+                                        <div className="pattern-detail-item">
+                                          <span className="pattern-detail-label">Master Length:</span>
+                                          <span className="pattern-detail-value" style={{textDecoration: 'line-through', opacity: 0.6}}>{pattern.per_track_settings.master_len}</span>
+                                        </div>
+                                        <div className="pattern-detail-item">
+                                          <span className="pattern-detail-label">Master Speed:</span>
+                                          <span className="pattern-detail-value">{pattern.per_track_settings.master_scale}</span>
+                                        </div>
+                                      </>
+                                    )}
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className="pattern-detail-item">
+                                      <span className="pattern-detail-label">Length:</span>
+                                      <span className="pattern-detail-value">{pattern.length} steps</span>
+                                    </div>
+                                    <div className="pattern-detail-item">
+                                      <span className="pattern-detail-label">Speed:</span>
+                                      <span className="pattern-detail-value">{pattern.master_scale}</span>
                                     </div>
                                   </>
                                 )}
