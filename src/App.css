@@ -1070,6 +1070,16 @@ h1 {
   letter-spacing: 0.5px;
 }
 
+.samples-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease;
+}
+
+.samples-table th.sortable:hover {
+  background-color: var(--elektron-medium-gray);
+}
+
 .samples-table tbody tr {
   border-bottom: 1px solid var(--elektron-border-gray);
   transition: background-color 0.15s ease;
