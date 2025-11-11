@@ -1396,6 +1396,18 @@ h1 {
   width: 120px;
 }
 
+.col-format {
+  width: 80px;
+}
+
+.col-bitdepth {
+  width: 60px;
+}
+
+.col-samplerate {
+  width: 70px;
+}
+
 .samples-table th.sortable {
   cursor: pointer;
   user-select: none;

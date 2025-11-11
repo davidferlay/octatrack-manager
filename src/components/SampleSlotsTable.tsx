@@ -10,6 +10,9 @@ interface SampleSlot {
   source_location: string | null;
   file_exists: boolean;
   compatibility: string | null; // "compatible", "wrong_rate", "incompatible", "unknown"
+  file_format: string | null; // "WAV", "AIFF", etc.
+  bit_depth: number | null; // 16, 24, etc.
+  sample_rate: number | null; // 44100, 48000, etc.
 }
 
 interface SampleSlotsTableProps {
@@ -17,7 +20,7 @@ interface SampleSlotsTableProps {
   slotPrefix: string; // "F" for Flex, "S" for Static
 }
 
-type SortColumn = 'slot' | 'sample' | 'status' | 'source' | 'gain' | 'timestretch' | 'loop' | 'compatibility';
+type SortColumn = 'slot' | 'sample' | 'status' | 'source' | 'gain' | 'timestretch' | 'loop' | 'compatibility' | 'format' | 'bitdepth' | 'samplerate';
 type SortDirection = 'asc' | 'desc';
 
 // Helper function to extract filename from path
@@ -41,7 +44,7 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
   const [timestretchFilter, setTimestretchFilter] = useState<string>('all');
   const [loopFilter, setLoopFilter] = useState<string>('all');
 
-  // Column visibility state (all visible by default)
+  // Column visibility state (all visible by default except format, bitdepth, samplerate)
   const [visibleColumns, setVisibleColumns] = useState({
     slot: true,
     sample: true,
@@ -51,6 +54,9 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
     gain: true,
     timestretch: true,
     loop: true,
+    format: false,
+    bitdepth: false,
+    samplerate: false,
   });
   const [showColumnMenu, setShowColumnMenu] = useState(false);
 
@@ -241,6 +247,18 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
           compareA = a.compatibility ? (compatOrder[a.compatibility] ?? 0) : 0;
           compareB = b.compatibility ? (compatOrder[b.compatibility] ?? 0) : 0;
           break;
+        case 'format':
+          compareA = a.file_format || '';
+          compareB = b.file_format || '';
+          break;
+        case 'bitdepth':
+          compareA = a.bit_depth ?? -1;
+          compareB = b.bit_depth ?? -1;
+          break;
+        case 'samplerate':
+          compareA = a.sample_rate ?? -1;
+          compareB = b.sample_rate ?? -1;
+          break;
         default:
           return 0;
       }
@@ -343,6 +361,30 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
                     onChange={() => toggleColumn('loop')}
                   />
                   <span>Loop</span>
+                </label>
+                <label className="column-visibility-option">
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.format}
+                    onChange={() => toggleColumn('format')}
+                  />
+                  <span>Format</span>
+                </label>
+                <label className="column-visibility-option">
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.bitdepth}
+                    onChange={() => toggleColumn('bitdepth')}
+                  />
+                  <span>Bit Depth</span>
+                </label>
+                <label className="column-visibility-option">
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.samplerate}
+                    onChange={() => toggleColumn('samplerate')}
+                  />
+                  <span>Sample Rate</span>
                 </label>
               </div>
             )}
@@ -722,6 +764,21 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
                   )}
                 </th>
                 )}
+                {visibleColumns.format && (
+                  <th onClick={() => handleSort('format')} className="sortable col-format">
+                    Format {sortColumn === 'format' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </th>
+                )}
+                {visibleColumns.bitdepth && (
+                  <th onClick={() => handleSort('bitdepth')} className="sortable col-bitdepth">
+                    Bit {sortColumn === 'bitdepth' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </th>
+                )}
+                {visibleColumns.samplerate && (
+                  <th onClick={() => handleSort('samplerate')} className="sortable col-samplerate">
+                    kHz {sortColumn === 'samplerate' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </th>
+                )}
               </tr>
             </thead>
           <tbody>
@@ -754,6 +811,9 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
                 {visibleColumns.gain && <td className="col-gain">{slot.gain !== null && slot.gain !== undefined ? slot.gain : '-'}</td>}
                 {visibleColumns.timestretch && <td className="col-timestretch">{slot.timestretch_mode || '-'}</td>}
                 {visibleColumns.loop && <td className="col-loop">{slot.loop_mode || '-'}</td>}
+                {visibleColumns.format && <td className="col-format">{slot.file_format || '-'}</td>}
+                {visibleColumns.bitdepth && <td className="col-bitdepth">{slot.bit_depth !== null && slot.bit_depth !== undefined ? slot.bit_depth : '-'}</td>}
+                {visibleColumns.samplerate && <td className="col-samplerate">{slot.sample_rate !== null && slot.sample_rate !== undefined ? (slot.sample_rate / 1000).toFixed(1) : '-'}</td>}
               </tr>
             ))}
           </tbody>
