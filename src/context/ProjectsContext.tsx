@@ -219,6 +219,55 @@ export interface Bank {
   parts: Part[];
 }
 
+// Parts machine parameter interfaces
+export interface MachineParamValues {
+  // FLEX/STATIC parameters
+  ptch: number | null;
+  strt: number | null;
+  len: number | null;
+  rate: number | null;
+  rtrg: number | null;
+  rtim: number | null;
+  // THRU parameters
+  in_ab: number | null;
+  vol_ab: number | null;
+  in_cd: number | null;
+  vol_cd: number | null;
+}
+
+export interface MachineSetupValues {
+  // FLEX/STATIC setup parameters
+  xloop: number | null;
+  slic: number | null;
+  len: number | null;
+  rate: number | null;
+  tstr: number | null;
+  tsns: number | null;
+}
+
+export interface PartTrackMachine {
+  track_id: number;
+  machine_type: string;  // "Static", "Flex", "Thru", "Neighbor", "Pickup"
+  machine_params: MachineParamValues;
+  machine_setup: MachineSetupValues;
+}
+
+export interface PartTrackAmp {
+  track_id: number;
+  atk: number;
+  hold: number;
+  rel: number;
+  vol: number;
+  bal: number;
+  f: number;
+}
+
+export interface PartData {
+  part_id: number;
+  machines: PartTrackMachine[];
+  amps: PartTrackAmp[];
+}
+
 interface CachedProjectData {
   metadata: ProjectMetadata;
   banks: Bank[];

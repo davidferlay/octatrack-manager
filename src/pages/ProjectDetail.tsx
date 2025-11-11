@@ -7,6 +7,7 @@ import { BankSelector, ALL_BANKS, formatBankName } from "../components/BankSelec
 import { TrackSelector, ALL_AUDIO_TRACKS, ALL_MIDI_TRACKS } from "../components/TrackSelector";
 import { PatternSelector, ALL_PATTERNS } from "../components/PatternSelector";
 import { SampleSlotsTable } from "../components/SampleSlotsTable";
+import PartsPanel from "../components/PartsPanel";
 import "../App.css";
 
 // Most type definitions are now imported from ProjectsContext via Bank and ProjectMetadata types
@@ -430,16 +431,28 @@ export function ProjectDetail() {
                       const bank = banks[bankIndex];
                       if (!bank) return null;
 
+                      // Determine selected track for PartsPanel
+                      let trackForParts: number | undefined;
+                      if (selectedTrackIndex === ALL_AUDIO_TRACKS || selectedTrackIndex === ALL_MIDI_TRACKS) {
+                        trackForParts = undefined; // Show all tracks
+                      } else if (selectedTrackIndex >= 0 && selectedTrackIndex < 8) {
+                        trackForParts = selectedTrackIndex; // Show specific audio track
+                      } else {
+                        trackForParts = undefined; // MIDI tracks - show all
+                      }
+
+                      // Get part names from bank
+                      const partNames = bank.parts.map(part => part.name);
+
                       return (
-                        <div key={`bank-parts-${bankIndex}`} className="bank-card">
-                          <h3>{formatBankName(bank.name, bankIndex)} - Parts ({bank.parts.length})</h3>
-                          <div className="parts-list">
-                            {bank.parts.map((part) => (
-                              <div key={part.id} className="part-card">
-                                <h4>{part.name}</h4>
-                              </div>
-                            ))}
-                          </div>
+                        <div key={`bank-parts-${bankIndex}`}>
+                          <PartsPanel
+                            projectPath={projectPath || ''}
+                            bankId={bank.id}
+                            bankName={formatBankName(bank.name, bankIndex)}
+                            partNames={partNames}
+                            selectedTrack={trackForParts}
+                          />
                         </div>
                       );
                     });
