@@ -21,8 +21,13 @@ pub struct CurrentState {
     pub pattern: u8,
     pub part: u8,
     pub track: u8,
-    pub muted_tracks: Vec<u8>,
-    pub soloed_tracks: Vec<u8>,
+    pub track_othermode: u8,
+    pub midi_mode: u8,
+    pub audio_muted_tracks: Vec<u8>,
+    pub audio_soloed_tracks: Vec<u8>,
+    pub audio_cued_tracks: Vec<u8>,
+    pub midi_muted_tracks: Vec<u8>,
+    pub midi_soloed_tracks: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -229,15 +234,31 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                 .unwrap_or(&"A")
                 .to_string();
 
-            // Extract muted/soloed tracks
-            let mut muted_tracks = Vec::new();
-            let mut soloed_tracks = Vec::new();
+            // Extract muted/soloed/cued audio tracks
+            let mut audio_muted_tracks = Vec::new();
+            let mut audio_soloed_tracks = Vec::new();
+            let mut audio_cued_tracks = Vec::new();
             for i in 0..8 {
                 if project.states.track_mute_mask & (1 << i) != 0 {
-                    muted_tracks.push(i);
+                    audio_muted_tracks.push(i);
                 }
                 if project.states.track_solo_mask & (1 << i) != 0 {
-                    soloed_tracks.push(i);
+                    audio_soloed_tracks.push(i);
+                }
+                if project.states.track_cue_mask & (1 << i) != 0 {
+                    audio_cued_tracks.push(i);
+                }
+            }
+
+            // Extract muted/soloed MIDI tracks
+            let mut midi_muted_tracks = Vec::new();
+            let mut midi_soloed_tracks = Vec::new();
+            for i in 0..8 {
+                if project.states.midi_track_mute_mask & (1 << i) != 0 {
+                    midi_muted_tracks.push(i);
+                }
+                if project.states.midi_track_solo_mask & (1 << i) != 0 {
+                    midi_soloed_tracks.push(i);
                 }
             }
 
@@ -247,8 +268,13 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                 pattern: project.states.pattern,
                 part: project.states.part,
                 track: project.states.track,
-                muted_tracks,
-                soloed_tracks,
+                track_othermode: project.states.track_othermode,
+                midi_mode: project.states.midi_mode,
+                audio_muted_tracks,
+                audio_soloed_tracks,
+                audio_cued_tracks,
+                midi_muted_tracks,
+                midi_soloed_tracks,
             };
 
             // Extract mixer settings
