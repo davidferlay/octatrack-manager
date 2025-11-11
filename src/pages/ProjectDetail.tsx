@@ -538,7 +538,7 @@ export function ProjectDetail() {
                                   <span className="pattern-detail-value">{trackData.trig_counts.slide}</span>
                                 </div>
                                 <div className="pattern-detail-item">
-                                  <span className="pattern-detail-label">Swing Trigs:</span>
+                                  <span className="pattern-detail-label">Swing:</span>
                                   <span className="pattern-detail-value">{trackData.trig_counts.swing}</span>
                                 </div>
                               </div>
