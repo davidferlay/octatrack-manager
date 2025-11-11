@@ -773,8 +773,9 @@ h1 {
 
 .pattern-detail-item {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 0.5rem;
+  align-items: center;
 }
 
 .pattern-detail-label {
