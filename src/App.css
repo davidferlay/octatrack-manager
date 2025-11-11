@@ -1053,6 +1053,7 @@ h1 {
   border-collapse: collapse;
   font-family: 'Courier New', monospace;
   font-size: 0.875rem;
+  table-layout: fixed;
 }
 
 .samples-table thead {
@@ -1068,6 +1069,32 @@ h1 {
   text-transform: uppercase;
   font-size: 0.75rem;
   letter-spacing: 0.5px;
+}
+
+/* Column widths */
+.samples-table th:nth-child(1),
+.samples-table td:nth-child(1) {
+  width: 80px;
+}
+
+.samples-table th:nth-child(2),
+.samples-table td:nth-child(2) {
+  width: auto; /* Sample name takes remaining space */
+}
+
+.samples-table th:nth-child(3),
+.samples-table td:nth-child(3) {
+  width: 80px;
+}
+
+.samples-table th:nth-child(4),
+.samples-table td:nth-child(4) {
+  width: 140px;
+}
+
+.samples-table th:nth-child(5),
+.samples-table td:nth-child(5) {
+  width: 120px;
 }
 
 .samples-table th.sortable {
