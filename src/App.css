@@ -1074,7 +1074,7 @@ h1 {
 /* Column widths */
 .samples-table th:nth-child(1),
 .samples-table td:nth-child(1) {
-  width: 80px;
+  width: 80px; /* Slot */
 }
 
 .samples-table th:nth-child(2),
@@ -1084,17 +1084,22 @@ h1 {
 
 .samples-table th:nth-child(3),
 .samples-table td:nth-child(3) {
-  width: 80px;
+  width: 120px; /* Source */
 }
 
 .samples-table th:nth-child(4),
 .samples-table td:nth-child(4) {
-  width: 140px;
+  width: 80px; /* Gain */
 }
 
 .samples-table th:nth-child(5),
 .samples-table td:nth-child(5) {
-  width: 120px;
+  width: 140px; /* Timestretch */
+}
+
+.samples-table th:nth-child(6),
+.samples-table td:nth-child(6) {
+  width: 120px; /* Loop */
 }
 
 .samples-table th.sortable {

@@ -7,6 +7,7 @@ interface SampleSlot {
   gain: number | null;
   loop_mode: string | null;
   timestretch_mode: string | null;
+  source_location: string | null;
 }
 
 interface SampleSlotsTableProps {
@@ -14,7 +15,7 @@ interface SampleSlotsTableProps {
   slotPrefix: string; // "F" for Flex, "S" for Static
 }
 
-type SortColumn = 'slot' | 'sample' | 'gain' | 'timestretch' | 'loop';
+type SortColumn = 'slot' | 'sample' | 'gain' | 'timestretch' | 'loop' | 'source';
 type SortDirection = 'asc' | 'desc';
 
 // Helper function to extract filename from path
@@ -65,6 +66,10 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
           compareA = a.loop_mode || '';
           compareB = b.loop_mode || '';
           break;
+        case 'source':
+          compareA = a.source_location || '';
+          compareB = b.source_location || '';
+          break;
         default:
           return 0;
       }
@@ -89,6 +94,9 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
               <th onClick={() => handleSort('sample')} className="sortable">
                 Sample {sortColumn === 'sample' && (sortDirection === 'asc' ? '▲' : '▼')}
               </th>
+              <th onClick={() => handleSort('source')} className="sortable">
+                Source {sortColumn === 'source' && (sortDirection === 'asc' ? '▲' : '▼')}
+              </th>
               <th onClick={() => handleSort('gain')} className="sortable">
                 Gain {sortColumn === 'gain' && (sortDirection === 'asc' ? '▲' : '▼')}
               </th>
@@ -107,6 +115,7 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
                 <td title={slot.path || undefined}>
                   {slot.path ? getFilename(slot.path) : <em>Empty</em>}
                 </td>
+                <td>{slot.source_location || '-'}</td>
                 <td>{slot.gain !== null && slot.gain !== undefined ? slot.gain : '-'}</td>
                 <td>{slot.timestretch_mode || '-'}</td>
                 <td>{slot.loop_mode || '-'}</td>
