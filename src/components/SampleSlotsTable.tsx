@@ -43,6 +43,9 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
   const [gainFilter, setGainFilter] = useState<string>('all');
   const [timestretchFilter, setTimestretchFilter] = useState<string>('all');
   const [loopFilter, setLoopFilter] = useState<string>('all');
+  const [formatFilter, setFormatFilter] = useState<string>('all');
+  const [bitDepthFilter, setBitDepthFilter] = useState<string>('all');
+  const [sampleRateFilter, setSampleRateFilter] = useState<string>('all');
 
   // Column visibility state (all visible by default except format, bitdepth, samplerate)
   const [visibleColumns, setVisibleColumns] = useState({
@@ -128,6 +131,36 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
     return Array.from(modes).sort();
   };
 
+  const getUniqueFormats = () => {
+    const formats = new Set<string>();
+    slots.forEach(slot => {
+      if (slot.file_format) {
+        formats.add(slot.file_format);
+      }
+    });
+    return Array.from(formats).sort();
+  };
+
+  const getUniqueBitDepths = () => {
+    const bitDepths = new Set<number>();
+    slots.forEach(slot => {
+      if (slot.bit_depth !== null && slot.bit_depth !== undefined) {
+        bitDepths.add(slot.bit_depth);
+      }
+    });
+    return Array.from(bitDepths).sort((a, b) => a - b);
+  };
+
+  const getUniqueSampleRates = () => {
+    const sampleRates = new Set<number>();
+    slots.forEach(slot => {
+      if (slot.sample_rate !== null && slot.sample_rate !== undefined) {
+        sampleRates.add(slot.sample_rate);
+      }
+    });
+    return Array.from(sampleRates).sort((a, b) => a - b);
+  };
+
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
       // Toggle direction if same column
@@ -194,6 +227,29 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
       // Filter by loop mode
       if (loopFilter !== 'all') {
         if (slot.loop_mode !== loopFilter) {
+          return false;
+        }
+      }
+
+      // Filter by format
+      if (formatFilter !== 'all') {
+        if (slot.file_format !== formatFilter) {
+          return false;
+        }
+      }
+
+      // Filter by bit depth
+      if (bitDepthFilter !== 'all') {
+        const bitDepthValue = slot.bit_depth?.toString();
+        if (bitDepthValue !== bitDepthFilter) {
+          return false;
+        }
+      }
+
+      // Filter by sample rate
+      if (sampleRateFilter !== 'all') {
+        const sampleRateValue = slot.sample_rate?.toString();
+        if (sampleRateValue !== sampleRateFilter) {
           return false;
         }
       }
@@ -765,19 +821,145 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
                 </th>
                 )}
                 {visibleColumns.format && (
-                  <th onClick={() => handleSort('format')} className="sortable col-format">
-                    Format {sortColumn === 'format' && (sortDirection === 'asc' ? '▲' : '▼')}
-                  </th>
+                <th className="filterable-header col-format">
+                  <div className="header-content">
+                    <span className="sort-indicator" onClick={() => handleSort('format')}>
+                      {sortColumn === 'format' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </span>
+                    <span onClick={() => handleSort('format')} className="sortable-label">
+                      Format
+                    </span>
+                    <button
+                      className={`filter-icon ${openDropdown === 'format' || formatFilter !== 'all' ? 'active' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenDropdown(openDropdown === 'format' ? null : 'format');
+                      }}
+                    >
+                      ⋮
+                    </button>
+                  </div>
+                  {openDropdown === 'format' && (
+                    <div className="filter-dropdown">
+                      <div className="dropdown-options">
+                        <label className="dropdown-option">
+                          <input
+                            type="radio"
+                            name="format"
+                            checked={formatFilter === 'all'}
+                            onChange={() => setFormatFilter('all')}
+                          />
+                          <span>All</span>
+                        </label>
+                        {getUniqueFormats().map((format) => (
+                          <label key={format} className="dropdown-option">
+                            <input
+                              type="radio"
+                              name="format"
+                              checked={formatFilter === format}
+                              onChange={() => setFormatFilter(format)}
+                            />
+                            <span>{format}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </th>
                 )}
                 {visibleColumns.bitdepth && (
-                  <th onClick={() => handleSort('bitdepth')} className="sortable col-bitdepth">
-                    Bit {sortColumn === 'bitdepth' && (sortDirection === 'asc' ? '▲' : '▼')}
-                  </th>
+                <th className="filterable-header col-bitdepth">
+                  <div className="header-content">
+                    <span className="sort-indicator" onClick={() => handleSort('bitdepth')}>
+                      {sortColumn === 'bitdepth' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </span>
+                    <span onClick={() => handleSort('bitdepth')} className="sortable-label">
+                      Bit
+                    </span>
+                    <button
+                      className={`filter-icon ${openDropdown === 'bitdepth' || bitDepthFilter !== 'all' ? 'active' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenDropdown(openDropdown === 'bitdepth' ? null : 'bitdepth');
+                      }}
+                    >
+                      ⋮
+                    </button>
+                  </div>
+                  {openDropdown === 'bitdepth' && (
+                    <div className="filter-dropdown">
+                      <div className="dropdown-options">
+                        <label className="dropdown-option">
+                          <input
+                            type="radio"
+                            name="bitdepth"
+                            checked={bitDepthFilter === 'all'}
+                            onChange={() => setBitDepthFilter('all')}
+                          />
+                          <span>All</span>
+                        </label>
+                        {getUniqueBitDepths().map((bitDepth) => (
+                          <label key={bitDepth} className="dropdown-option">
+                            <input
+                              type="radio"
+                              name="bitdepth"
+                              checked={bitDepthFilter === bitDepth.toString()}
+                              onChange={() => setBitDepthFilter(bitDepth.toString())}
+                            />
+                            <span>{bitDepth}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </th>
                 )}
                 {visibleColumns.samplerate && (
-                  <th onClick={() => handleSort('samplerate')} className="sortable col-samplerate">
-                    kHz {sortColumn === 'samplerate' && (sortDirection === 'asc' ? '▲' : '▼')}
-                  </th>
+                <th className="filterable-header col-samplerate">
+                  <div className="header-content">
+                    <span className="sort-indicator" onClick={() => handleSort('samplerate')}>
+                      {sortColumn === 'samplerate' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </span>
+                    <span onClick={() => handleSort('samplerate')} className="sortable-label">
+                      kHz
+                    </span>
+                    <button
+                      className={`filter-icon ${openDropdown === 'samplerate' || sampleRateFilter !== 'all' ? 'active' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenDropdown(openDropdown === 'samplerate' ? null : 'samplerate');
+                      }}
+                    >
+                      ⋮
+                    </button>
+                  </div>
+                  {openDropdown === 'samplerate' && (
+                    <div className="filter-dropdown">
+                      <div className="dropdown-options">
+                        <label className="dropdown-option">
+                          <input
+                            type="radio"
+                            name="samplerate"
+                            checked={sampleRateFilter === 'all'}
+                            onChange={() => setSampleRateFilter('all')}
+                          />
+                          <span>All</span>
+                        </label>
+                        {getUniqueSampleRates().map((sampleRate) => (
+                          <label key={sampleRate} className="dropdown-option">
+                            <input
+                              type="radio"
+                              name="samplerate"
+                              checked={sampleRateFilter === sampleRate.toString()}
+                              onChange={() => setSampleRateFilter(sampleRate.toString())}
+                            />
+                            <span>{(sampleRate / 1000).toFixed(1)} kHz</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </th>
                 )}
               </tr>
             </thead>
