@@ -107,7 +107,7 @@ export function ProjectDetail() {
   const [selectedBankIndex, setSelectedBankIndex] = useState<number>(0);
   const [selectedTrackIndex, setSelectedTrackIndex] = useState<number>(0); // Default to track 0, will be set to active track
   const [selectedPatternIndex, setSelectedPatternIndex] = useState<number>(0); // Default to pattern 0, will be set to active pattern
-  const [selectedStep, setSelectedStep] = useState<TrigStep | null>(null); // Selected step for parameter details
+  const [selectedStepNumber, setSelectedStepNumber] = useState<number | null>(null); // Selected step number (synchronized across all patterns)
 
   useEffect(() => {
     if (projectPath) {
@@ -736,9 +736,9 @@ export function ProjectDetail() {
                                     return (
                                       <div
                                         key={step.step}
-                                        className={`pattern-step ${hasTrig ? 'has-trig' : ''} ${trigTypes.join(' ')} ${selectedStep?.step === step.step ? 'selected' : ''}`}
+                                        className={`pattern-step ${hasTrig ? 'has-trig' : ''} ${trigTypes.join(' ')} ${selectedStepNumber === step.step ? 'selected' : ''}`}
                                         title={tooltipParts.join('\n')}
-                                        onClick={() => setSelectedStep(step)}
+                                        onClick={() => setSelectedStepNumber(step.step)}
                                         style={{ cursor: 'pointer' }}
                                       >
                                         <div className="step-number">{step.step + 1}</div>
@@ -797,11 +797,16 @@ export function ProjectDetail() {
                                 )}
 
                                 {/* Parameter Details Panel */}
-                                {selectedStep && (
+                                {selectedStepNumber !== null && (() => {
+                                  // Find the step data for this specific pattern/track
+                                  const selectedStep = trackData.steps.find(s => s.step === selectedStepNumber);
+                                  if (!selectedStep) return null;
+
+                                  return (
                                   <div className="parameter-details-panel">
                                     <div className="parameter-panel-header">
                                       <h4>Step {selectedStep.step + 1} - Parameter Locks</h4>
-                                      <button onClick={() => setSelectedStep(null)} className="close-button">×</button>
+                                      <button onClick={() => setSelectedStepNumber(null)} className="close-button">×</button>
                                     </div>
                                     <div className="parameter-panel-content">
                                       {selectedStep.audio_plocks && (
@@ -951,7 +956,8 @@ export function ProjectDetail() {
                                       })()}
                                     </div>
                                   </div>
-                                )}
+                                  );
+                                })()}
                                     </>
                                   );
                                 })()}
