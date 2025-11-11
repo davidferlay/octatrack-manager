@@ -902,6 +902,9 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
 
                         // Process MIDI tracks (8-15)
                         for (idx, midi_track) in pattern.midi_track_trigs.0.iter().enumerate() {
+                            // Get default note from BankFile's Part data for this MIDI track
+                            let track_default_note = bank_data.parts.unsaved[part_id as usize].midi_track_params_values[idx].midi.note;
+
                             let track_trigger_count = count_trigs(&midi_track.trig_masks.trigger);
                             let track_trigless_count = count_trigs(&midi_track.trig_masks.trigless);
                             let track_plock_count = count_trigs(&midi_track.trig_masks.plock);
@@ -971,18 +974,47 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                                 let plock_count = count_midi_plocks(plock);
 
                                 // Get all MIDI notes (up to 4 for chords) from parameter locks
+                                // NOT2, NOT3, NOT4 are stored as OFFSETS from the base note
                                 let mut notes = Vec::new();
+
+                                // Determine the base note: use parameter-locked NOTE if present, otherwise use track default
+                                let base_note = if plock.midi.note != 255 {
+                                    plock.midi.note
+                                } else {
+                                    track_default_note
+                                };
+
+                                // Debug logging
+                                if plock_count > 0 {
+                                    eprintln!("DEBUG: Step {} - base_note={}, not2={}, not3={}, not4={}",
+                                        step, base_note, plock.midi.not2, plock.midi.not3, plock.midi.not4);
+                                }
+
+                                // Add NOTE1 if it's parameter-locked
                                 if plock.midi.note != 255 {
                                     notes.push(plock.midi.note);
                                 }
+
+                                // Add NOT2, NOT3, NOT4 as offsets from the base note
+                                // Octatrack stores offsets with 64 as center: stored_value = 64 + offset
+                                // So to get the actual note: note = base_note + (stored_value - 64)
                                 if plock.midi.not2 != 255 {
-                                    notes.push(plock.midi.not2);
+                                    let offset = (plock.midi.not2 as i16) - 64;
+                                    let note2 = ((base_note as i16) + offset).clamp(0, 127) as u8;
+                                    eprintln!("DEBUG: NOT2 calculation: {} + ({} - 64) = {} + {} = {}", base_note, plock.midi.not2, base_note, offset, note2);
+                                    notes.push(note2);
                                 }
                                 if plock.midi.not3 != 255 {
-                                    notes.push(plock.midi.not3);
+                                    let offset = (plock.midi.not3 as i16) - 64;
+                                    let note3 = ((base_note as i16) + offset).clamp(0, 127) as u8;
+                                    eprintln!("DEBUG: NOT3 calculation: {} + ({} - 64) = {} + {} = {}", base_note, plock.midi.not3, base_note, offset, note3);
+                                    notes.push(note3);
                                 }
                                 if plock.midi.not4 != 255 {
-                                    notes.push(plock.midi.not4);
+                                    let offset = (plock.midi.not4 as i16) - 64;
+                                    let note4 = ((base_note as i16) + offset).clamp(0, 127) as u8;
+                                    eprintln!("DEBUG: NOT4 calculation: {} + ({} - 64) = {} + {} = {}", base_note, plock.midi.not4, base_note, offset, note4);
+                                    notes.push(note4);
                                 }
 
                                 let velocity = if plock.midi.vel != 255 {
