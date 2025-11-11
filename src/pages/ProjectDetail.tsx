@@ -240,13 +240,13 @@ export function ProjectDetail() {
               className={`tab ${activeTab === "flex-slots" ? "active" : ""}`}
               onClick={() => setActiveTab("flex-slots")}
             >
-              Flex Slots ({metadata.sample_slots.flex_slots.length})
+              Flex Slots (128)
             </button>
             <button
               className={`tab ${activeTab === "static-slots" ? "active" : ""}`}
               onClick={() => setActiveTab("static-slots")}
             >
-              Static Slots ({metadata.sample_slots.static_slots.length})
+              Static Slots (128)
             </button>
           </div>
 
@@ -1062,21 +1062,28 @@ export function ProjectDetail() {
             {activeTab === "flex-slots" && (
               <div className="samples-tab">
                 <section className="samples-section">
-                  <div className="samples-grid">
-                    {metadata.sample_slots.flex_slots.map((slot) => (
-                      <div key={slot.slot_id} className="sample-card">
-                        <div className="sample-header">
-                          <span className="sample-id">F{slot.slot_id}</span>
-                          <span className="sample-gain">Gain: {slot.gain}</span>
-                        </div>
-                        <div className="sample-name">{slot.path}</div>
-                        <div className="sample-info">
-                          <span className="sample-mode">{slot.timestretch_mode}</span>
-                          <span className="sample-loop">{slot.loop_mode}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <table className="samples-table">
+                    <thead>
+                      <tr>
+                        <th>Slot</th>
+                        <th>Sample</th>
+                        <th>Gain</th>
+                        <th>Timestretch</th>
+                        <th>Loop</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {metadata.sample_slots.flex_slots.map((slot) => (
+                        <tr key={slot.slot_id}>
+                          <td>F{slot.slot_id}</td>
+                          <td>{slot.path || <em>Empty</em>}</td>
+                          <td>{slot.gain !== null && slot.gain !== undefined ? slot.gain : '-'}</td>
+                          <td>{slot.timestretch_mode || '-'}</td>
+                          <td>{slot.loop_mode || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </section>
               </div>
             )}
@@ -1084,21 +1091,28 @@ export function ProjectDetail() {
             {activeTab === "static-slots" && (
               <div className="samples-tab">
                 <section className="samples-section">
-                  <div className="samples-grid">
-                    {metadata.sample_slots.static_slots.map((slot) => (
-                      <div key={slot.slot_id} className="sample-card">
-                        <div className="sample-header">
-                          <span className="sample-id">S{slot.slot_id}</span>
-                          <span className="sample-gain">Gain: {slot.gain}</span>
-                        </div>
-                        <div className="sample-name">{slot.path}</div>
-                        <div className="sample-info">
-                          <span className="sample-mode">{slot.timestretch_mode}</span>
-                          <span className="sample-loop">{slot.loop_mode}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <table className="samples-table">
+                    <thead>
+                      <tr>
+                        <th>Slot</th>
+                        <th>Sample</th>
+                        <th>Gain</th>
+                        <th>Timestretch</th>
+                        <th>Loop</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {metadata.sample_slots.static_slots.map((slot) => (
+                        <tr key={slot.slot_id}>
+                          <td>S{slot.slot_id}</td>
+                          <td>{slot.path || <em>Empty</em>}</td>
+                          <td>{slot.gain !== null && slot.gain !== undefined ? slot.gain : '-'}</td>
+                          <td>{slot.timestretch_mode || '-'}</td>
+                          <td>{slot.loop_mode || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </section>
               </div>
             )}

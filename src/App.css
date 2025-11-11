@@ -1047,6 +1047,53 @@ h1 {
   letter-spacing: 0.5px;
 }
 
+/* Samples Table */
+.samples-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'Courier New', monospace;
+  font-size: 0.875rem;
+}
+
+.samples-table thead {
+  background-color: var(--elektron-black);
+  border-bottom: 2px solid var(--elektron-orange);
+}
+
+.samples-table th {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  font-weight: 600;
+  color: var(--elektron-orange);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.5px;
+}
+
+.samples-table tbody tr {
+  border-bottom: 1px solid var(--elektron-border-gray);
+  transition: background-color 0.15s ease;
+}
+
+.samples-table tbody tr:hover {
+  background-color: var(--elektron-medium-gray);
+}
+
+.samples-table td {
+  padding: 0.75rem 1rem;
+  color: var(--elektron-text-primary);
+}
+
+.samples-table td:first-child {
+  color: var(--elektron-orange);
+  font-weight: 600;
+}
+
+.samples-table td em {
+  color: var(--elektron-text-dim);
+  font-style: italic;
+}
+
 /* Current State Section */
 .current-state-section {
   background-color: var(--elektron-dark-gray);
