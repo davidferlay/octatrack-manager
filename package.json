@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "PATH=\"$HOME/.cargo/bin:$PATH\" tauri dev",
-    "tauri:build": "NO_STRIP=1 PATH=\"$HOME/.cargo/bin:$PATH\" tauri build"
+    "tauri:build": "NO_STRIP=1 PATH=\"$HOME/.cargo/bin:$PATH\" tauri build",
+    "prepare": "husky"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
@@ -24,6 +26,7 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
+    "husky": "^9.1.7",
     "typescript": "~5.8.3",
     "vite": "^7.0.4"
   }
