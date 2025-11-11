@@ -36,6 +36,10 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
   const [compatibilityFilter, setCompatibilityFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [hideEmpty, setHideEmpty] = useState(false);
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
+  const [gainFilter, setGainFilter] = useState<string>('all');
+  const [timestretchFilter, setTimestretchFilter] = useState<string>('all');
+  const [loopFilter, setLoopFilter] = useState<string>('all');
 
   // Dropdown state
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
@@ -51,6 +55,47 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Helper functions to get unique values
+  const getUniqueSources = () => {
+    const sources = new Set<string>();
+    slots.forEach(slot => {
+      if (slot.source_location) {
+        sources.add(slot.source_location);
+      }
+    });
+    return Array.from(sources).sort();
+  };
+
+  const getUniqueGains = () => {
+    const gains = new Set<number>();
+    slots.forEach(slot => {
+      if (slot.gain !== null && slot.gain !== undefined) {
+        gains.add(slot.gain);
+      }
+    });
+    return Array.from(gains).sort((a, b) => a - b);
+  };
+
+  const getUniqueTimestretches = () => {
+    const modes = new Set<string>();
+    slots.forEach(slot => {
+      if (slot.timestretch_mode) {
+        modes.add(slot.timestretch_mode);
+      }
+    });
+    return Array.from(modes).sort();
+  };
+
+  const getUniqueLoopModes = () => {
+    const modes = new Set<string>();
+    slots.forEach(slot => {
+      if (slot.loop_mode) {
+        modes.add(slot.loop_mode);
+      }
+    });
+    return Array.from(modes).sort();
+  };
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
@@ -91,6 +136,35 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
       }
       if (statusFilter === 'missing' && slot.file_exists) {
         return false;
+      }
+
+      // Filter by source
+      if (sourceFilter !== 'all') {
+        if (slot.source_location !== sourceFilter) {
+          return false;
+        }
+      }
+
+      // Filter by gain
+      if (gainFilter !== 'all') {
+        const gainValue = slot.gain?.toString();
+        if (gainValue !== gainFilter) {
+          return false;
+        }
+      }
+
+      // Filter by timestretch
+      if (timestretchFilter !== 'all') {
+        if (slot.timestretch_mode !== timestretchFilter) {
+          return false;
+        }
+      }
+
+      // Filter by loop mode
+      if (loopFilter !== 'all') {
+        if (slot.loop_mode !== loopFilter) {
+          return false;
+        }
       }
 
       return true;
@@ -164,6 +238,10 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
           {searchText && <span className="filter-badge">Filtered by: {searchText}</span>}
           {compatibilityFilter !== 'all' && <span className="filter-badge">Compat: {compatibilityFilter}</span>}
           {statusFilter !== 'all' && <span className="filter-badge">Status: {statusFilter}</span>}
+          {sourceFilter !== 'all' && <span className="filter-badge">Source: {sourceFilter}</span>}
+          {gainFilter !== 'all' && <span className="filter-badge">Gain: {gainFilter}</span>}
+          {timestretchFilter !== 'all' && <span className="filter-badge">Timestretch: {timestretchFilter}</span>}
+          {loopFilter !== 'all' && <span className="filter-badge">Loop: {loopFilter}</span>}
         </div>
         <div className="table-wrapper" ref={dropdownRef}>
           <table className="samples-table">
@@ -334,17 +412,173 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
                     </div>
                   )}
                 </th>
-                <th onClick={() => handleSort('source')} className="sortable">
-                  Source {sortColumn === 'source' && (sortDirection === 'asc' ? '▲' : '▼')}
+                <th className="filterable-header">
+                  <div className="header-content">
+                    <span onClick={() => handleSort('source')} className="sortable-label">
+                      Source {sortColumn === 'source' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </span>
+                    <button
+                      className={`filter-icon ${openDropdown === 'source' || sourceFilter !== 'all' ? 'active' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenDropdown(openDropdown === 'source' ? null : 'source');
+                      }}
+                    >
+                      ⋮
+                    </button>
+                  </div>
+                  {openDropdown === 'source' && (
+                    <div className="filter-dropdown">
+                      <div className="dropdown-options">
+                        <label className="dropdown-option">
+                          <input
+                            type="radio"
+                            name="source"
+                            checked={sourceFilter === 'all'}
+                            onChange={() => setSourceFilter('all')}
+                          />
+                          <span>All</span>
+                        </label>
+                        {getUniqueSources().map((source) => (
+                          <label key={source} className="dropdown-option">
+                            <input
+                              type="radio"
+                              name="source"
+                              checked={sourceFilter === source}
+                              onChange={() => setSourceFilter(source)}
+                            />
+                            <span>{source}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </th>
-                <th onClick={() => handleSort('gain')} className="sortable">
-                  Gain {sortColumn === 'gain' && (sortDirection === 'asc' ? '▲' : '▼')}
+                <th className="filterable-header">
+                  <div className="header-content">
+                    <span onClick={() => handleSort('gain')} className="sortable-label">
+                      Gain {sortColumn === 'gain' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </span>
+                    <button
+                      className={`filter-icon ${openDropdown === 'gain' || gainFilter !== 'all' ? 'active' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenDropdown(openDropdown === 'gain' ? null : 'gain');
+                      }}
+                    >
+                      ⋮
+                    </button>
+                  </div>
+                  {openDropdown === 'gain' && (
+                    <div className="filter-dropdown">
+                      <div className="dropdown-options">
+                        <label className="dropdown-option">
+                          <input
+                            type="radio"
+                            name="gain"
+                            checked={gainFilter === 'all'}
+                            onChange={() => setGainFilter('all')}
+                          />
+                          <span>All</span>
+                        </label>
+                        {getUniqueGains().map((gain) => (
+                          <label key={gain} className="dropdown-option">
+                            <input
+                              type="radio"
+                              name="gain"
+                              checked={gainFilter === gain.toString()}
+                              onChange={() => setGainFilter(gain.toString())}
+                            />
+                            <span>{gain}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </th>
-                <th onClick={() => handleSort('timestretch')} className="sortable">
-                  Timestretch {sortColumn === 'timestretch' && (sortDirection === 'asc' ? '▲' : '▼')}
+                <th className="filterable-header">
+                  <div className="header-content">
+                    <span onClick={() => handleSort('timestretch')} className="sortable-label">
+                      Timestretch {sortColumn === 'timestretch' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </span>
+                    <button
+                      className={`filter-icon ${openDropdown === 'timestretch' || timestretchFilter !== 'all' ? 'active' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenDropdown(openDropdown === 'timestretch' ? null : 'timestretch');
+                      }}
+                    >
+                      ⋮
+                    </button>
+                  </div>
+                  {openDropdown === 'timestretch' && (
+                    <div className="filter-dropdown">
+                      <div className="dropdown-options">
+                        <label className="dropdown-option">
+                          <input
+                            type="radio"
+                            name="timestretch"
+                            checked={timestretchFilter === 'all'}
+                            onChange={() => setTimestretchFilter('all')}
+                          />
+                          <span>All</span>
+                        </label>
+                        {getUniqueTimestretches().map((mode) => (
+                          <label key={mode} className="dropdown-option">
+                            <input
+                              type="radio"
+                              name="timestretch"
+                              checked={timestretchFilter === mode}
+                              onChange={() => setTimestretchFilter(mode)}
+                            />
+                            <span>{mode}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </th>
-                <th onClick={() => handleSort('loop')} className="sortable">
-                  Loop {sortColumn === 'loop' && (sortDirection === 'asc' ? '▲' : '▼')}
+                <th className="filterable-header">
+                  <div className="header-content">
+                    <span onClick={() => handleSort('loop')} className="sortable-label">
+                      Loop {sortColumn === 'loop' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </span>
+                    <button
+                      className={`filter-icon ${openDropdown === 'loop' || loopFilter !== 'all' ? 'active' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenDropdown(openDropdown === 'loop' ? null : 'loop');
+                      }}
+                    >
+                      ⋮
+                    </button>
+                  </div>
+                  {openDropdown === 'loop' && (
+                    <div className="filter-dropdown">
+                      <div className="dropdown-options">
+                        <label className="dropdown-option">
+                          <input
+                            type="radio"
+                            name="loop"
+                            checked={loopFilter === 'all'}
+                            onChange={() => setLoopFilter('all')}
+                          />
+                          <span>All</span>
+                        </label>
+                        {getUniqueLoopModes().map((mode) => (
+                          <label key={mode} className="dropdown-option">
+                            <input
+                              type="radio"
+                              name="loop"
+                              checked={loopFilter === mode}
+                              onChange={() => setLoopFilter(mode)}
+                            />
+                            <span>{mode}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </th>
               </tr>
             </thead>
