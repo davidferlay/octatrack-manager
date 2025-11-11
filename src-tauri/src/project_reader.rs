@@ -669,7 +669,7 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                             }
                         }
 
-                        let total_trigs = trigger_count + trigless_count + plock_count + oneshot_count;
+                        let total_trigs = trigger_count + trigless_count + plock_count + oneshot_count + swing_count + slide_count;
                         let has_swing = swing_count > 0;
 
                         let trig_counts = TrigCounts {
@@ -893,7 +893,7 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                                     oneshot: track_oneshot_count,
                                     swing: track_swing_count,
                                     slide: track_slide_count,
-                                    total: track_trigger_count + track_trigless_count + track_plock_count + track_oneshot_count,
+                                    total: track_trigger_count + track_trigless_count + track_plock_count + track_oneshot_count + track_swing_count + track_slide_count,
                                 },
                                 steps,
                                 default_note: None,  // Audio tracks don't have default notes
@@ -1094,7 +1094,7 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                                     oneshot: 0,  // MIDI tracks don't have oneshot trigs
                                     swing: track_swing_count,
                                     slide: 0,    // MIDI tracks don't have slide trigs
-                                    total: track_trigger_count + track_trigless_count + track_plock_count,
+                                    total: track_trigger_count + track_trigless_count + track_plock_count + track_swing_count,
                                 },
                                 steps,
                                 default_note,  // Default NOTE value from Part file
