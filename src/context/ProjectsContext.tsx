@@ -168,6 +168,7 @@ interface TrackInfo {
   pattern_settings: TrackSettings;
   trig_counts: TrigCounts;
   steps: TrigStep[];
+  default_note: number | null;
 }
 
 interface Pattern {

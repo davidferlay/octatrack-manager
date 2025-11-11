@@ -1180,6 +1180,8 @@ h1 {
   display: flex;
   justify-content: center;
   margin-top: 2px;
+  gap: 2px;
+  flex-wrap: wrap;
 }
 
 .step-indicators span {
