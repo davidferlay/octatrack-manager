@@ -370,6 +370,32 @@ export function ProjectDetail() {
                     </div>
                   </div>
                 </section>
+
+                <section className="mixer-section">
+                  <h2>Memory Settings</h2>
+                  <div className="metadata-grid">
+                    <div className="metadata-item">
+                      <span className="metadata-label">24-bit Flex</span>
+                      <span className="metadata-value">{metadata.memory_settings.load_24bit_flex ? "Yes" : "No"}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">Dynamic Recorders</span>
+                      <span className="metadata-value">{metadata.memory_settings.dynamic_recorders ? "Yes" : "No"}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">24-bit Recording</span>
+                      <span className="metadata-value">{metadata.memory_settings.record_24bit ? "Yes" : "No"}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">Reserved Recorders</span>
+                      <span className="metadata-value">{metadata.memory_settings.reserved_recorder_count}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">Recorder Length</span>
+                      <span className="metadata-value">{metadata.memory_settings.reserved_recorder_length}</span>
+                    </div>
+                  </div>
+                </section>
               </div>
             )}
 
