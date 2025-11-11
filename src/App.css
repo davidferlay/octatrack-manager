@@ -947,9 +947,12 @@ h1 {
 }
 
 .overview-tab,
-.samples-tab,
 .settings-tab {
   padding: 2rem;
+}
+
+.samples-tab {
+  padding: 1rem 2rem;
 }
 
 .banks-tab,
@@ -968,14 +971,14 @@ h1 {
 
 /* Filter Results Info */
 .filter-results-info {
-  margin-bottom: 0.75rem;
-  padding: 0.5rem 0;
+  margin-bottom: 0.5rem;
+  padding: 0.25rem 0;
   display: flex;
   gap: 0.5rem;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  color: var(--elektron-muted-text);
+  color: var(--elektron-text-secondary);
   font-size: 0.85rem;
 }
 
