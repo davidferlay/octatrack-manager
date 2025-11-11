@@ -1137,7 +1137,7 @@ h1 {
 .filter-dropdown {
   position: absolute;
   top: 100%;
-  left: 0;
+  right: 0;
   width: max-content;
   min-width: 120px;
   max-width: 300px;
@@ -1363,14 +1363,19 @@ h1 {
   width: auto;
   min-width: 200px;
   max-width: 350px;
-  overflow: hidden;
-  white-space: nowrap;
 }
 
-/* Fade-out gradient for long sample names - applies to text only */
+/* Apply overflow and gradient only to table cells, not headers */
 .samples-table td.col-sample {
+  overflow: hidden;
+  white-space: nowrap;
   -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%);
   mask-image: linear-gradient(to right, black 90%, transparent 100%);
+}
+
+/* Ensure header cells can show dropdowns */
+.samples-table th.col-sample {
+  overflow: visible;
 }
 
 .col-compatibility {
