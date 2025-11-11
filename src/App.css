@@ -1084,21 +1084,27 @@ h1 {
 
 .samples-table th:nth-child(3),
 .samples-table td:nth-child(3) {
-  width: 120px; /* Source */
+  width: 70px; /* Status */
+  text-align: center;
 }
 
 .samples-table th:nth-child(4),
 .samples-table td:nth-child(4) {
-  width: 80px; /* Gain */
+  width: 120px; /* Source */
 }
 
 .samples-table th:nth-child(5),
 .samples-table td:nth-child(5) {
-  width: 140px; /* Timestretch */
+  width: 80px; /* Gain */
 }
 
 .samples-table th:nth-child(6),
 .samples-table td:nth-child(6) {
+  width: 140px; /* Timestretch */
+}
+
+.samples-table th:nth-child(7),
+.samples-table td:nth-child(7) {
   width: 120px; /* Loop */
 }
 
@@ -1134,6 +1140,34 @@ h1 {
 .samples-table td em {
   color: var(--elektron-text-dim);
   font-style: italic;
+}
+
+/* File Status Badge */
+.status-cell {
+  text-align: center;
+}
+
+.file-status-badge {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  line-height: 20px;
+  text-align: center;
+  border-radius: 3px;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+.file-status-badge.file-exists {
+  background-color: rgba(46, 204, 113, 0.15);
+  color: #2ecc71;
+  border: 1px solid rgba(46, 204, 113, 0.5);
+}
+
+.file-status-badge.file-missing {
+  background-color: rgba(128, 128, 128, 0.15);
+  color: #777;
+  border: 1px solid rgba(128, 128, 128, 0.5);
 }
 
 /* Current State Section */
