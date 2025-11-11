@@ -10,6 +10,7 @@ pub struct ProjectMetadata {
     pub pattern_length: u16,
     pub current_state: CurrentState,
     pub mixer_settings: MixerSettings,
+    pub memory_settings: MemorySettings,
     pub sample_slots: SampleSlots,
     pub os_version: String,
 }
@@ -39,6 +40,15 @@ pub struct MixerSettings {
     pub phones_mix: u8,
     pub main_level: u8,
     pub cue_level: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemorySettings {
+    pub load_24bit_flex: bool,
+    pub dynamic_recorders: bool,
+    pub record_24bit: bool,
+    pub reserved_recorder_count: u8,
+    pub reserved_recorder_length: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -288,6 +298,15 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                 cue_level: project.settings.mixer.cue_level,
             };
 
+            // Extract memory settings
+            let memory_settings = MemorySettings {
+                load_24bit_flex: project.settings.control.memory.load_24bit_flex,
+                dynamic_recorders: project.settings.control.memory.dynamic_recorders,
+                record_24bit: project.settings.control.memory.record_24bit,
+                reserved_recorder_count: project.settings.control.memory.reserved_recorder_count,
+                reserved_recorder_length: project.settings.control.memory.reserved_recorder_length,
+            };
+
             // Extract sample slots
             let mut static_slots = Vec::new();
             for slot_opt in project.slots.static_slots.iter() {
@@ -366,6 +385,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                 pattern_length,
                 current_state,
                 mixer_settings,
+                memory_settings,
                 sample_slots,
                 os_version,
             })
