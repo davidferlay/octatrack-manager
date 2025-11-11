@@ -31,6 +31,12 @@ A desktop application for managing Elektron Octatrack projects, built with Tauri
 - **Cross-Platform**: Works on Linux, macOS, and Windows
 - **Modern UI**: Clean, responsive interface built with React and TypeScript
 
+## Compatibility
+
+**Important**: This project is only compatible with projects that are created/saved on the latest OS (i.e. 1.40X).
+
+For projects saved from another version, re-open and re-save that project with the OS on the latest version.
+
 ## Installation
 
 ### Download Pre-built Binaries
