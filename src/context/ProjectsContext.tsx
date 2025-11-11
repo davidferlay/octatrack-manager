@@ -30,6 +30,11 @@ interface CurrentState {
   track: number;
   muted_tracks: number[];
   soloed_tracks: number[];
+  midi_mode: number;
+  track_othermode: number;
+  audio_muted_tracks: number[];
+  audio_cued_tracks: number[];
+  midi_muted_tracks: number[];
 }
 
 interface MixerSettings {
@@ -42,13 +47,27 @@ interface MixerSettings {
   cue_level: number;
 }
 
+interface MemorySettings {
+  load_24bit_flex: boolean;
+  dynamic_recorders: boolean;
+  record_24bit: boolean;
+  reserved_recorder_count: number;
+  reserved_recorder_length: number;
+}
+
 interface SampleSlot {
   slot_id: number;
   slot_type: string;
-  path: string;
-  gain: number;
-  loop_mode: string;
-  timestretch_mode: string;
+  path: string | null;
+  gain: number | null;
+  loop_mode: string | null;
+  timestretch_mode: string | null;
+  source_location: string | null;
+  file_exists: boolean;
+  compatibility: string | null;
+  file_format: string | null;
+  bit_depth: number | null;
+  sample_rate: number | null;
 }
 
 interface SampleSlots {
@@ -63,6 +82,7 @@ export interface ProjectMetadata {
   pattern_length: number;
   current_state: CurrentState;
   mixer_settings: MixerSettings;
+  memory_settings: MemorySettings;
   sample_slots: SampleSlots;
   os_version: string;
 }
