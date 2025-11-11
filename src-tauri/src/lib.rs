@@ -2,7 +2,7 @@ mod device_detection;
 mod project_reader;
 
 use device_detection::{discover_devices, scan_directory, ScanResult};
-use project_reader::{read_project_metadata, read_project_banks, ProjectMetadata, Bank};
+use project_reader::{read_project_metadata, read_project_banks, read_parts_data, ProjectMetadata, Bank, PartData};
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -36,6 +36,14 @@ async fn load_project_banks(path: String) -> Result<Vec<Bank>, String> {
     }).await.unwrap()
 }
 
+#[tauri::command]
+async fn load_parts_data(path: String, bank_id: String) -> Result<Vec<PartData>, String> {
+    // Run on a blocking thread pool to avoid blocking the main event loop
+    tauri::async_runtime::spawn_blocking(move || {
+        read_parts_data(&path, &bank_id)
+    }).await.unwrap()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -46,7 +54,8 @@ pub fn run() {
             scan_devices,
             scan_custom_directory,
             load_project_metadata,
-            load_project_banks
+            load_project_banks,
+            load_parts_data
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

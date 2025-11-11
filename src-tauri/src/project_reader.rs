@@ -219,6 +219,60 @@ pub struct Bank {
     pub parts: Vec<Part>,
 }
 
+// Parts machine parameter structures
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PartTrackMachine {
+    pub track_id: u8,              // 0-7 for audio tracks T1-T8
+    pub machine_type: String,      // "Static", "Flex", "Thru", "Neighbor", "Pickup"
+    pub machine_params: MachineParamValues,
+    pub machine_setup: MachineSetupValues,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MachineParamValues {
+    // FLEX/STATIC parameters
+    pub ptch: Option<u8>,
+    pub strt: Option<u8>,
+    pub len: Option<u8>,
+    pub rate: Option<u8>,
+    pub rtrg: Option<u8>,
+    pub rtim: Option<u8>,
+    // THRU parameters
+    pub in_ab: Option<u8>,
+    pub vol_ab: Option<u8>,
+    pub in_cd: Option<u8>,
+    pub vol_cd: Option<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MachineSetupValues {
+    // FLEX/STATIC setup parameters
+    pub xloop: Option<u8>,
+    pub slic: Option<u8>,
+    pub len: Option<u8>,
+    pub rate: Option<u8>,
+    pub tstr: Option<u8>,
+    pub tsns: Option<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PartTrackAmp {
+    pub track_id: u8,              // 0-7 for audio tracks T1-T8
+    pub atk: u8,
+    pub hold: u8,
+    pub rel: u8,
+    pub vol: u8,
+    pub bal: u8,
+    pub f: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PartData {
+    pub part_id: u8,               // 0-3 for Parts 1-4
+    pub machines: Vec<PartTrackMachine>,  // 8 audio tracks
+    pub amps: Vec<PartTrackAmp>,          // 8 audio tracks
+}
+
 /// Check audio file compatibility with Octatrack
 /// Returns: "compatible", "wrong_rate", "incompatible", or "unknown"
 struct AudioInfo {
@@ -1399,4 +1453,166 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
     }
 
     Ok(banks)
+}
+
+/// Read Parts machine and AMP parameters from a specific bank
+pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<Vec<PartData>, String> {
+    let path = Path::new(project_path);
+
+    // Convert bank letter (A-P) to bank number (1-16)
+    let bank_letters = [
+        "A", "B", "C", "D", "E", "F", "G", "H",
+        "I", "J", "K", "L", "M", "N", "O", "P"
+    ];
+
+    let bank_num = bank_letters.iter()
+        .position(|&letter| letter == bank_id)
+        .map(|idx| idx + 1)
+        .ok_or_else(|| format!("Invalid bank ID: {}", bank_id))?;
+
+    let bank_file_name = format!("bank{:02}.work", bank_num);
+    let mut bank_file_path = path.join(&bank_file_name);
+
+    if !bank_file_path.exists() {
+        // Try .strd extension
+        let bank_file_name = format!("bank{:02}.strd", bank_num);
+        bank_file_path = path.join(&bank_file_name);
+        if !bank_file_path.exists() {
+            return Err(format!("Bank file not found: {}", bank_id));
+        }
+    }
+
+    let bank_data = BankFile::from_data_file(&bank_file_path)
+        .map_err(|e| format!("Failed to read bank file: {:?}", e))?;
+
+    let mut parts_data = Vec::new();
+
+    // Each bank has 4 parts (0-3)
+    for part_id in 0..4 {
+        let part = &bank_data.parts.saved.0[part_id as usize];
+
+        let mut machines = Vec::new();
+        let mut amps = Vec::new();
+
+        // Process 8 audio tracks (tracks 0-7)
+        for track_id in 0..8 {
+            // Get machine type (0=Static, 1=Flex, 2=Thru, 3=Neighbor, 4=Pickup)
+            let machine_type_id = part.audio_track_machine_types[track_id as usize];
+            let machine_type = match machine_type_id {
+                0 => "Static",
+                1 => "Flex",
+                2 => "Thru",
+                3 => "Neighbor",
+                4 => "Pickup",
+                _ => "Unknown",
+            }.to_string();
+
+            // Get machine parameters (SRC page)
+            let machine_params_values = &part.audio_track_machine_params[track_id as usize];
+            let machine_params_setup = &part.audio_track_machine_setup[track_id as usize];
+
+            let machine_params = match machine_type_id {
+                0 | 1 => {
+                    // Static or Flex machine
+                    let params_std = &machine_params_values.static_machine;
+                    MachineParamValues {
+                        ptch: Some(params_std.ptch),
+                        strt: Some(params_std.strt),
+                        len: Some(params_std.len),
+                        rate: Some(params_std.rate),
+                        rtrg: Some(params_std.rtrg),
+                        rtim: Some(params_std.rtim),
+                        in_ab: None,
+                        vol_ab: None,
+                        in_cd: None,
+                        vol_cd: None,
+                    }
+                },
+                2 => {
+                    // Thru machine
+                    let params_thru = &machine_params_values.thru_machine;
+                    MachineParamValues {
+                        ptch: None,
+                        strt: None,
+                        len: None,
+                        rate: None,
+                        rtrg: None,
+                        rtim: None,
+                        in_ab: Some(params_thru.in_ab),
+                        vol_ab: Some(params_thru.vol_ab),
+                        in_cd: Some(params_thru.in_cd),
+                        vol_cd: Some(params_thru.vol_cd),
+                    }
+                },
+                _ => {
+                    // Neighbor or Pickup (not implemented yet)
+                    MachineParamValues {
+                        ptch: None,
+                        strt: None,
+                        len: None,
+                        rate: None,
+                        rtrg: None,
+                        rtim: None,
+                        in_ab: None,
+                        vol_ab: None,
+                        in_cd: None,
+                        vol_cd: None,
+                    }
+                }
+            };
+
+            let machine_setup = match machine_type_id {
+                0 | 1 => {
+                    // Static or Flex machine
+                    let setup_std = &machine_params_setup.static_machine;
+                    MachineSetupValues {
+                        xloop: Some(setup_std.xloop),
+                        slic: Some(setup_std.slic),
+                        len: Some(setup_std.len),
+                        rate: Some(setup_std.rate),
+                        tstr: Some(setup_std.tstr),
+                        tsns: Some(setup_std.tsns),
+                    }
+                },
+                _ => {
+                    // Thru, Neighbor, Pickup (no setup params)
+                    MachineSetupValues {
+                        xloop: None,
+                        slic: None,
+                        len: None,
+                        rate: None,
+                        tstr: None,
+                        tsns: None,
+                    }
+                }
+            };
+
+            machines.push(PartTrackMachine {
+                track_id,
+                machine_type,
+                machine_params,
+                machine_setup,
+            });
+
+            // Get AMP parameters
+            let amp_params = &part.audio_track_params_values[track_id as usize].amp;
+            amps.push(PartTrackAmp {
+                track_id,
+                atk: amp_params.atk,
+                hold: amp_params.hold,
+                rel: amp_params.rel,
+                vol: amp_params.vol,
+                bal: amp_params.bal,
+                f: amp_params.f,
+            });
+        }
+
+        parts_data.push(PartData {
+            part_id,
+            machines,
+            amps,
+        });
+    }
+
+    Ok(parts_data)
 }
