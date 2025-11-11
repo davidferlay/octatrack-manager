@@ -1116,6 +1116,7 @@ h1 {
   transition: all 0.15s ease;
   font-weight: bold;
   flex-shrink: 0;
+  transform: translateY(-1px);
 }
 
 .filter-icon:hover {
@@ -1406,6 +1407,24 @@ h1 {
 
 .col-samplerate {
   width: 70px;
+}
+
+/* Adjust filter icon positioning for narrow columns */
+.col-format .header-content,
+.col-bitdepth .header-content {
+  justify-content: space-between;
+  gap: 0rem;
+}
+
+.col-format .sortable-label,
+.col-bitdepth .sortable-label {
+  flex: 0 0 auto;
+}
+
+.col-format .filter-icon,
+.col-bitdepth .filter-icon {
+  margin-left: 0.8rem;
+  padding: 0.1rem 0.15rem;
 }
 
 .samples-table th.sortable {
