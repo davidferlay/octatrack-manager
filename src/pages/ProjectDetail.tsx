@@ -593,10 +593,16 @@ export function ProjectDetail() {
                                       return null; // Unknown chord
                                     };
 
-                                    const chordName = detectChord(step.notes);
-                                    const noteDisplay = step.notes.length > 1
-                                      ? (chordName || step.notes.map(noteName).join('+'))
-                                      : (step.notes.length === 1 ? noteName(step.notes[0]) : null);
+                                    // Build complete list of notes for MIDI tracks
+                                    // step.notes already contains all notes (NOTE, NOT2, NOT3, NOT4) from the Rust parser
+                                    let allNotes = [...step.notes];
+
+                                    // For MIDI tracks with triggers but no notes, use the default note
+                                    if (trackData.track_type === "MIDI" && allNotes.length === 0 && step.trigger && trackData.default_note !== null) {
+                                      allNotes.push(trackData.default_note);
+                                    }
+
+                                    const chordName = detectChord(allNotes);
 
                                     // Build comprehensive tooltip
                                     const tooltipParts = [`Step ${step.step + 1}`];
@@ -604,8 +610,8 @@ export function ProjectDetail() {
                                     if (step.trig_condition) tooltipParts.push(`Condition: ${step.trig_condition}`);
                                     if (step.trig_repeats > 0) tooltipParts.push(`Repeats: ${step.trig_repeats + 1}x`);
                                     if (step.micro_timing) tooltipParts.push(`Timing: ${step.micro_timing}`);
-                                    if (step.notes.length > 0) {
-                                      const notesStr = step.notes.map(noteName).join(', ');
+                                    if (allNotes.length > 0) {
+                                      const notesStr = allNotes.map(noteName).join(', ');
                                       tooltipParts.push(chordName ? `Chord: ${chordName} (${notesStr})` : `Notes: ${notesStr}`);
                                     }
                                     if (step.velocity !== null) tooltipParts.push(`Velocity: ${step.velocity}`);
@@ -624,8 +630,8 @@ export function ProjectDetail() {
                                         {hasTrig && (
                                           <div className="step-indicators">
                                             {/* Primary trig indicators */}
-                                            {/* Don't show trigger indicator on MIDI tracks if there are notes */}
-                                            {step.trigger && !(trackData.track_type === "MIDI" && step.notes.length > 0) && <span className="indicator-trigger">●</span>}
+                                            {/* Don't show trigger indicator on MIDI tracks if there are notes (including default note) */}
+                                            {step.trigger && !(trackData.track_type === "MIDI" && allNotes.length > 0) && <span className="indicator-trigger">●</span>}
                                             {step.trigless && <span className="indicator-trigless">○</span>}
                                             {step.plock && <span className="indicator-plock">P</span>}
                                             {step.oneshot && <span className="indicator-oneshot">1</span>}
@@ -640,11 +646,13 @@ export function ProjectDetail() {
                                             {step.velocity !== null && <span className="indicator-velocity">V{step.velocity}</span>}
                                             {step.plock_count > 1 && <span className="indicator-plock-count">{step.plock_count}p</span>}
                                             {step.sample_slot !== null && <span className="indicator-sample">S{step.sample_slot}</span>}
-                                            {noteDisplay && (
+                                            {allNotes.length > 0 && (
                                               <div className="note-indicator-wrapper">
-                                                <span className={`indicator-note ${chordName ? 'indicator-chord' : ''}`}>
-                                                  {noteDisplay}
-                                                </span>
+                                                {allNotes.map((note, idx) => (
+                                                  <span key={idx} className={`indicator-note ${chordName ? 'indicator-chord' : ''}`}>
+                                                    {noteName(note)}
+                                                  </span>
+                                                ))}
                                               </div>
                                             )}
                                           </div>

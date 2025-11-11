@@ -164,6 +164,7 @@ pub struct TrackInfo {
     pub pattern_settings: TrackSettings,
     pub trig_counts: TrigCounts,   // Per-track trig statistics
     pub steps: Vec<TrigStep>,      // Per-step trig information (64 steps)
+    pub default_note: Option<u8>,  // Default note for MIDI tracks (0-127)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -895,6 +896,7 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                                     total: track_trigger_count + track_trigless_count + track_plock_count + track_oneshot_count,
                                 },
                                 steps,
+                                default_note: None,  // Audio tracks don't have default notes
                             });
                         }
 
@@ -1034,6 +1036,12 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                                 });
                             }
 
+                            // Extract default note from BankFile's Part data for this MIDI track
+                            let default_note = {
+                                let midi_track_idx = idx; // idx is already 0-7 for MIDI tracks
+                                Some(bank_data.parts.unsaved[part_id as usize].midi_track_params_values[midi_track_idx].midi.note)
+                            };
+
                             tracks.push(TrackInfo {
                                 track_id: (idx + 8) as u8,
                                 track_type: "MIDI".to_string(),
@@ -1057,6 +1065,7 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                                     total: track_trigger_count + track_trigless_count + track_plock_count,
                                 },
                                 steps,
+                                default_note,  // Default NOTE value from Part file
                             });
                         }
 
