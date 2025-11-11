@@ -687,7 +687,7 @@ export function ProjectDetail() {
                                             {/* Don't show trigger indicator on MIDI tracks if there are notes (including default note) */}
                                             {step.trigger && !(trackData.track_type === "MIDI" && allNotes.length > 0) && <span className="indicator-trigger">●</span>}
                                             {step.trigless && <span className="indicator-trigless">○</span>}
-                                            {step.plock && <span className="indicator-plock">P</span>}
+                                            {(step.plock || (step.plock_count > 0 && step.plock_count <= 1)) && <span className="indicator-plock">P</span>}
                                             {step.oneshot && <span className="indicator-oneshot">1</span>}
                                             {step.swing && <span className="indicator-swing">∿</span>}
                                             {step.slide && <span className="indicator-slide">~</span>}
