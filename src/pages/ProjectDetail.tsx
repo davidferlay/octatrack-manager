@@ -241,13 +241,13 @@ export function ProjectDetail() {
               className={`tab ${activeTab === "flex-slots" ? "active" : ""}`}
               onClick={() => setActiveTab("flex-slots")}
             >
-              Flex Slots (128)
+              Flex Slots ({metadata.sample_slots.flex_slots.filter(slot => slot.path).length})
             </button>
             <button
               className={`tab ${activeTab === "static-slots" ? "active" : ""}`}
               onClick={() => setActiveTab("static-slots")}
             >
-              Static Slots (128)
+              Static Slots ({metadata.sample_slots.static_slots.filter(slot => slot.path).length})
             </button>
           </div>
 
