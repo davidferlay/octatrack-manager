@@ -174,13 +174,22 @@ export function ProjectDetail() {
     );
   }
 
+  const handleRefresh = () => {
+    loadProjectData();
+  };
+
   return (
     <main className="container">
       <div className="project-header">
-        <button onClick={() => navigate("/")} className="back-button">
-          ← Back
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: '0 1 auto' }}>
+          <button onClick={() => navigate("/")} className="back-button">
+            ← Back
+          </button>
+          <h1 style={{ margin: 0 }}>{projectName}</h1>
+        </div>
+        <button onClick={handleRefresh} className="back-button refresh-button" disabled={isLoading} title="Refresh project data" style={{ marginLeft: 'auto' }}>
+          ↻ Refresh
         </button>
-        <h1>{projectName}</h1>
       </div>
 
       <div className="project-path-info">

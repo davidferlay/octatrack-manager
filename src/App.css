@@ -473,6 +473,15 @@ h1 {
   gap: 1rem;
 }
 
+.refresh-button {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.refresh-button:hover {
+  opacity: 1;
+}
+
 .back-button {
   border: 1px solid var(--elektron-border-gray);
   background-color: var(--elektron-medium-gray);
