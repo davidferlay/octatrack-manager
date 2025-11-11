@@ -66,6 +66,7 @@ pub struct SampleSlot {
     pub loop_mode: Option<String>,
     pub timestretch_mode: Option<String>,
     pub source_location: Option<String>,
+    pub file_exists: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -313,14 +314,17 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
             for slot_id in 1..=128 {
                 let slot_opt = project.slots.static_slots.get((slot_id - 1) as usize);
                 if let Some(Some(slot)) = slot_opt {
-                    if let Some(path) = &slot.path {
-                        let path_str = path.to_string_lossy().to_string();
+                    if let Some(sample_path) = &slot.path {
+                        let path_str = sample_path.to_string_lossy().to_string();
                         let source_location = if path_str.contains("/AUDIO/") || path_str.contains("\\AUDIO\\") ||
                                                   path_str.starts_with("AUDIO/") || path_str.starts_with("AUDIO\\") {
                             Some("Audio Pool".to_string())
                         } else {
                             Some("Project".to_string())
                         };
+                        // Check if file exists by resolving the path relative to project directory
+                        let full_path = path.join(&path_str);
+                        let file_exists = full_path.exists();
                         static_slots.push(SampleSlot {
                             slot_id,
                             slot_type: "Static".to_string(),
@@ -329,6 +333,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             loop_mode: Some(format!("{:?}", slot.loop_mode)),
                             timestretch_mode: Some(format!("{:?}", slot.timestrech_mode)),
                             source_location,
+                            file_exists,
                         });
                     } else {
                         // Slot exists but has no sample
@@ -340,6 +345,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             loop_mode: None,
                             timestretch_mode: None,
                             source_location: None,
+                            file_exists: false,
                         });
                     }
                 } else {
@@ -352,6 +358,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                         loop_mode: None,
                         timestretch_mode: None,
                         source_location: None,
+                        file_exists: false,
                     });
                 }
             }
@@ -360,14 +367,17 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
             for slot_id in 1..=128 {
                 let slot_opt = project.slots.flex_slots.get((slot_id - 1) as usize);
                 if let Some(Some(slot)) = slot_opt {
-                    if let Some(path) = &slot.path {
-                        let path_str = path.to_string_lossy().to_string();
+                    if let Some(sample_path) = &slot.path {
+                        let path_str = sample_path.to_string_lossy().to_string();
                         let source_location = if path_str.contains("/AUDIO/") || path_str.contains("\\AUDIO\\") ||
                                                   path_str.starts_with("AUDIO/") || path_str.starts_with("AUDIO\\") {
                             Some("Audio Pool".to_string())
                         } else {
                             Some("Project".to_string())
                         };
+                        // Check if file exists by resolving the path relative to project directory
+                        let full_path = path.join(&path_str);
+                        let file_exists = full_path.exists();
                         flex_slots.push(SampleSlot {
                             slot_id,
                             slot_type: "Flex".to_string(),
@@ -376,6 +386,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             loop_mode: Some(format!("{:?}", slot.loop_mode)),
                             timestretch_mode: Some(format!("{:?}", slot.timestrech_mode)),
                             source_location,
+                            file_exists,
                         });
                     } else {
                         // Slot exists but has no sample
@@ -387,6 +398,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             loop_mode: None,
                             timestretch_mode: None,
                             source_location: None,
+                            file_exists: false,
                         });
                     }
                 } else {
@@ -399,6 +411,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                         loop_mode: None,
                         timestretch_mode: None,
                         source_location: None,
+                        file_exists: false,
                     });
                 }
             }
