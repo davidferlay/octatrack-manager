@@ -157,43 +157,76 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
 
     return (
       <div className="parts-tracks">
-        {tracksToShow.map((amp) => (
-          <div key={amp.track_id} className="parts-track">
-            <div className="parts-track-header">
-              <span className="track-label">T{amp.track_id + 1}</span>
-              <span className="machine-type">AMP</span>
-            </div>
+        {tracksToShow.map((amp) => {
+          // Get the machine type from the corresponding machine data
+          const machine = part.machines[amp.track_id];
+          const machineType = machine.machine_type;
 
-            <div className="parts-params-section">
-              <div className="params-grid">
-                <div className="param-item">
-                  <span className="param-label">ATK</span>
-                  <span className="param-value">{amp.atk}</span>
+          return (
+            <div key={amp.track_id} className="parts-track">
+              <div className="parts-track-header">
+                <span className="track-label">T{amp.track_id + 1}</span>
+                <span className="machine-type">{machineType}</span>
+              </div>
+
+              <div className="parts-params-section">
+                <div className="params-label">MAIN</div>
+                <div className="params-grid">
+                  <div className="param-item">
+                    <span className="param-label">ATK</span>
+                    <span className="param-value">{amp.atk}</span>
+                  </div>
+                  <div className="param-item">
+                    <span className="param-label">HOLD</span>
+                    <span className="param-value">{amp.hold}</span>
+                  </div>
+                  <div className="param-item">
+                    <span className="param-label">REL</span>
+                    <span className="param-value">{amp.rel}</span>
+                  </div>
+                  <div className="param-item">
+                    <span className="param-label">VOL</span>
+                    <span className="param-value">{amp.vol}</span>
+                  </div>
+                  <div className="param-item">
+                    <span className="param-label">BAL</span>
+                    <span className="param-value">{amp.bal}</span>
+                  </div>
+                  <div className="param-item">
+                    <span className="param-label">F</span>
+                    <span className="param-value">{amp.f}</span>
+                  </div>
                 </div>
-                <div className="param-item">
-                  <span className="param-label">HOLD</span>
-                  <span className="param-value">{amp.hold}</span>
-                </div>
-                <div className="param-item">
-                  <span className="param-label">REL</span>
-                  <span className="param-value">{amp.rel}</span>
-                </div>
-                <div className="param-item">
-                  <span className="param-label">VOL</span>
-                  <span className="param-value">{amp.vol}</span>
-                </div>
-                <div className="param-item">
-                  <span className="param-label">BAL</span>
-                  <span className="param-value">{amp.bal}</span>
-                </div>
-                <div className="param-item">
-                  <span className="param-label">F</span>
-                  <span className="param-value">{amp.f}</span>
+              </div>
+
+              <div className="parts-params-section">
+                <div className="params-label">SETUP</div>
+                <div className="params-grid">
+                  <div className="param-item">
+                    <span className="param-label">AMP</span>
+                    <span className="param-value">{amp.amp_setup_amp}</span>
+                  </div>
+                  <div className="param-item">
+                    <span className="param-label">SYNC</span>
+                    <span className="param-value">{amp.amp_setup_sync}</span>
+                  </div>
+                  <div className="param-item">
+                    <span className="param-label">ATCK</span>
+                    <span className="param-value">{amp.amp_setup_atck}</span>
+                  </div>
+                  <div className="param-item">
+                    <span className="param-label">FX1</span>
+                    <span className="param-value">{amp.amp_setup_fx1}</span>
+                  </div>
+                  <div className="param-item">
+                    <span className="param-label">FX2</span>
+                    <span className="param-value">{amp.amp_setup_fx2}</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   };
