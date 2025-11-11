@@ -61,10 +61,10 @@ pub struct SampleSlots {
 pub struct SampleSlot {
     pub slot_id: u8,
     pub slot_type: String,
-    pub path: String,
-    pub gain: u8,
-    pub loop_mode: String,
-    pub timestretch_mode: String,
+    pub path: Option<String>,
+    pub gain: Option<u8>,
+    pub loop_mode: Option<String>,
+    pub timestretch_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -307,36 +307,78 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                 reserved_recorder_length: project.settings.control.memory.reserved_recorder_length,
             };
 
-            // Extract sample slots
+            // Extract sample slots - include all 128 slots (empty and filled)
             let mut static_slots = Vec::new();
-            for slot_opt in project.slots.static_slots.iter() {
-                if let Some(slot) = slot_opt {
+            for slot_id in 1..=128 {
+                let slot_opt = project.slots.static_slots.get((slot_id - 1) as usize);
+                if let Some(Some(slot)) = slot_opt {
                     if let Some(path) = &slot.path {
                         static_slots.push(SampleSlot {
-                            slot_id: slot.slot_id,
+                            slot_id,
                             slot_type: "Static".to_string(),
-                            path: path.to_string_lossy().to_string(),
-                            gain: slot.gain,
-                            loop_mode: format!("{:?}", slot.loop_mode),
-                            timestretch_mode: format!("{:?}", slot.timestrech_mode),
+                            path: Some(path.to_string_lossy().to_string()),
+                            gain: Some(slot.gain),
+                            loop_mode: Some(format!("{:?}", slot.loop_mode)),
+                            timestretch_mode: Some(format!("{:?}", slot.timestrech_mode)),
+                        });
+                    } else {
+                        // Slot exists but has no sample
+                        static_slots.push(SampleSlot {
+                            slot_id,
+                            slot_type: "Static".to_string(),
+                            path: None,
+                            gain: None,
+                            loop_mode: None,
+                            timestretch_mode: None,
                         });
                     }
+                } else {
+                    // Slot doesn't exist or is None
+                    static_slots.push(SampleSlot {
+                        slot_id,
+                        slot_type: "Static".to_string(),
+                        path: None,
+                        gain: None,
+                        loop_mode: None,
+                        timestretch_mode: None,
+                    });
                 }
             }
 
             let mut flex_slots = Vec::new();
-            for slot_opt in project.slots.flex_slots.iter() {
-                if let Some(slot) = slot_opt {
+            for slot_id in 1..=128 {
+                let slot_opt = project.slots.flex_slots.get((slot_id - 1) as usize);
+                if let Some(Some(slot)) = slot_opt {
                     if let Some(path) = &slot.path {
                         flex_slots.push(SampleSlot {
-                            slot_id: slot.slot_id,
+                            slot_id,
                             slot_type: "Flex".to_string(),
-                            path: path.to_string_lossy().to_string(),
-                            gain: slot.gain,
-                            loop_mode: format!("{:?}", slot.loop_mode),
-                            timestretch_mode: format!("{:?}", slot.timestrech_mode),
+                            path: Some(path.to_string_lossy().to_string()),
+                            gain: Some(slot.gain),
+                            loop_mode: Some(format!("{:?}", slot.loop_mode)),
+                            timestretch_mode: Some(format!("{:?}", slot.timestrech_mode)),
+                        });
+                    } else {
+                        // Slot exists but has no sample
+                        flex_slots.push(SampleSlot {
+                            slot_id,
+                            slot_type: "Flex".to_string(),
+                            path: None,
+                            gain: None,
+                            loop_mode: None,
+                            timestretch_mode: None,
                         });
                     }
+                } else {
+                    // Slot doesn't exist or is None
+                    flex_slots.push(SampleSlot {
+                        slot_id,
+                        slot_type: "Flex".to_string(),
+                        path: None,
+                        gain: None,
+                        loop_mode: None,
+                        timestretch_mode: None,
+                    });
                 }
             }
 
