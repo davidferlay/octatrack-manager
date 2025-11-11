@@ -252,8 +252,11 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
                 </th>
                 <th className="filterable-header">
                   <div className="header-content">
+                    <span className="sort-indicator" onClick={() => handleSort('sample')}>
+                      {sortColumn === 'sample' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </span>
                     <span onClick={() => handleSort('sample')} className="sortable-label">
-                      Sample {sortColumn === 'sample' && (sortDirection === 'asc' ? '▲' : '▼')}
+                      Sample
                     </span>
                     <button
                       className={`filter-icon ${openDropdown === 'sample' || searchText || hideEmpty ? 'active' : ''}`}
@@ -298,8 +301,11 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
                 </th>
                 <th className="filterable-header">
                   <div className="header-content">
+                    <span className="sort-indicator" onClick={() => handleSort('compatibility')}>
+                      {sortColumn === 'compatibility' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </span>
                     <span onClick={() => handleSort('compatibility')} className="sortable-label">
-                      Compat {sortColumn === 'compatibility' && (sortDirection === 'asc' ? '▲' : '▼')}
+                      Compat
                     </span>
                     <button
                       className={`filter-icon ${openDropdown === 'compatibility' || compatibilityFilter !== 'all' ? 'active' : ''}`}
@@ -365,8 +371,11 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
                 </th>
                 <th className="filterable-header">
                   <div className="header-content">
+                    <span className="sort-indicator" onClick={() => handleSort('status')}>
+                      {sortColumn === 'status' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </span>
                     <span onClick={() => handleSort('status')} className="sortable-label">
-                      Status {sortColumn === 'status' && (sortDirection === 'asc' ? '▲' : '▼')}
+                      Status
                     </span>
                     <button
                       className={`filter-icon ${openDropdown === 'status' || statusFilter !== 'all' ? 'active' : ''}`}
@@ -414,8 +423,11 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
                 </th>
                 <th className="filterable-header">
                   <div className="header-content">
+                    <span className="sort-indicator" onClick={() => handleSort('source')}>
+                      {sortColumn === 'source' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </span>
                     <span onClick={() => handleSort('source')} className="sortable-label">
-                      Source {sortColumn === 'source' && (sortDirection === 'asc' ? '▲' : '▼')}
+                      Source
                     </span>
                     <button
                       className={`filter-icon ${openDropdown === 'source' || sourceFilter !== 'all' ? 'active' : ''}`}
@@ -456,8 +468,11 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
                 </th>
                 <th className="filterable-header">
                   <div className="header-content">
+                    <span className="sort-indicator" onClick={() => handleSort('gain')}>
+                      {sortColumn === 'gain' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </span>
                     <span onClick={() => handleSort('gain')} className="sortable-label">
-                      Gain {sortColumn === 'gain' && (sortDirection === 'asc' ? '▲' : '▼')}
+                      Gain
                     </span>
                     <button
                       className={`filter-icon ${openDropdown === 'gain' || gainFilter !== 'all' ? 'active' : ''}`}
@@ -498,8 +513,11 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
                 </th>
                 <th className="filterable-header">
                   <div className="header-content">
+                    <span className="sort-indicator" onClick={() => handleSort('timestretch')}>
+                      {sortColumn === 'timestretch' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </span>
                     <span onClick={() => handleSort('timestretch')} className="sortable-label">
-                      Timestretch {sortColumn === 'timestretch' && (sortDirection === 'asc' ? '▲' : '▼')}
+                      Timestretch
                     </span>
                     <button
                       className={`filter-icon ${openDropdown === 'timestretch' || timestretchFilter !== 'all' ? 'active' : ''}`}
@@ -540,8 +558,11 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
                 </th>
                 <th className="filterable-header">
                   <div className="header-content">
+                    <span className="sort-indicator" onClick={() => handleSort('loop')}>
+                      {sortColumn === 'loop' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </span>
                     <span onClick={() => handleSort('loop')} className="sortable-label">
-                      Loop {sortColumn === 'loop' && (sortDirection === 'asc' ? '▲' : '▼')}
+                      Loop
                     </span>
                     <button
                       className={`filter-icon ${openDropdown === 'loop' || loopFilter !== 'all' ? 'active' : ''}`}
