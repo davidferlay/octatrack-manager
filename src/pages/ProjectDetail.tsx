@@ -656,7 +656,7 @@ export function ProjectDetail() {
                                             {step.trigless && <span className="indicator-trigless">○</span>}
                                             {step.plock && <span className="indicator-plock">P</span>}
                                             {step.oneshot && <span className="indicator-oneshot">1</span>}
-                                            {step.swing && <span className="indicator-swing">♪</span>}
+                                            {step.swing && <span className="indicator-swing">∿</span>}
                                             {step.slide && <span className="indicator-slide">~</span>}
                                             {step.recorder && <span className="indicator-recorder">R</span>}
 
@@ -689,7 +689,7 @@ export function ProjectDetail() {
                                   <div className="legend-item"><span className="indicator-trigless">○</span> Trigless</div>
                                   <div className="legend-item"><span className="indicator-plock">P</span> P-Lock</div>
                                   <div className="legend-item"><span className="indicator-oneshot">1</span> One-Shot</div>
-                                  <div className="legend-item"><span className="indicator-swing">♪</span> Swing</div>
+                                  <div className="legend-item"><span className="indicator-swing">∿</span> Swing</div>
                                   <div className="legend-item"><span className="indicator-slide">~</span> Slide</div>
                                   <div className="legend-item"><span className="indicator-recorder">R</span> Recorder</div>
                                   <div className="legend-item"><span className="indicator-condition">Fill</span> Condition</div>
