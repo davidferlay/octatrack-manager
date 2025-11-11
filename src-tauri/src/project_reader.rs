@@ -65,6 +65,7 @@ pub struct SampleSlot {
     pub gain: Option<u8>,
     pub loop_mode: Option<String>,
     pub timestretch_mode: Option<String>,
+    pub source_location: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -313,13 +314,21 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                 let slot_opt = project.slots.static_slots.get((slot_id - 1) as usize);
                 if let Some(Some(slot)) = slot_opt {
                     if let Some(path) = &slot.path {
+                        let path_str = path.to_string_lossy().to_string();
+                        let source_location = if path_str.contains("/AUDIO/") || path_str.contains("\\AUDIO\\") ||
+                                                  path_str.starts_with("AUDIO/") || path_str.starts_with("AUDIO\\") {
+                            Some("Audio Pool".to_string())
+                        } else {
+                            Some("Project".to_string())
+                        };
                         static_slots.push(SampleSlot {
                             slot_id,
                             slot_type: "Static".to_string(),
-                            path: Some(path.to_string_lossy().to_string()),
+                            path: Some(path_str),
                             gain: Some(slot.gain),
                             loop_mode: Some(format!("{:?}", slot.loop_mode)),
                             timestretch_mode: Some(format!("{:?}", slot.timestrech_mode)),
+                            source_location,
                         });
                     } else {
                         // Slot exists but has no sample
@@ -330,6 +339,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             gain: None,
                             loop_mode: None,
                             timestretch_mode: None,
+                            source_location: None,
                         });
                     }
                 } else {
@@ -341,6 +351,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                         gain: None,
                         loop_mode: None,
                         timestretch_mode: None,
+                        source_location: None,
                     });
                 }
             }
@@ -350,13 +361,21 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                 let slot_opt = project.slots.flex_slots.get((slot_id - 1) as usize);
                 if let Some(Some(slot)) = slot_opt {
                     if let Some(path) = &slot.path {
+                        let path_str = path.to_string_lossy().to_string();
+                        let source_location = if path_str.contains("/AUDIO/") || path_str.contains("\\AUDIO\\") ||
+                                                  path_str.starts_with("AUDIO/") || path_str.starts_with("AUDIO\\") {
+                            Some("Audio Pool".to_string())
+                        } else {
+                            Some("Project".to_string())
+                        };
                         flex_slots.push(SampleSlot {
                             slot_id,
                             slot_type: "Flex".to_string(),
-                            path: Some(path.to_string_lossy().to_string()),
+                            path: Some(path_str),
                             gain: Some(slot.gain),
                             loop_mode: Some(format!("{:?}", slot.loop_mode)),
                             timestretch_mode: Some(format!("{:?}", slot.timestrech_mode)),
+                            source_location,
                         });
                     } else {
                         // Slot exists but has no sample
@@ -367,6 +386,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             gain: None,
                             loop_mode: None,
                             timestretch_mode: None,
+                            source_location: None,
                         });
                     }
                 } else {
@@ -378,6 +398,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                         gain: None,
                         loop_mode: None,
                         timestretch_mode: None,
+                        source_location: None,
                     });
                 }
             }
