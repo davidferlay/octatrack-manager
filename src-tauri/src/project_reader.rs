@@ -939,12 +939,18 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                         // Extract per-track mode settings if in per-track mode
                         let per_track_settings = if pattern.scale.scale_mode == 1 {
                             // Calculate master length in per-track mode
-                            let master_len = if pattern.scale.master_len_per_track == 255
-                                && pattern.scale.master_len_per_track_multiplier == 255 {
+                            // The multiplier is a range selector, not a multiplication factor:
+                            // mult=0: 2-255, mult=1: 256-511, mult=2: 512-767, mult=3: 768-1023, mult=4: 1024, mult=255: INF
+                            let master_len = if pattern.scale.master_len_per_track_multiplier == 255 {
                                 "INF".to_string()
+                            } else if pattern.scale.master_len_per_track_multiplier == 4 {
+                                "1024".to_string()
+                            } else if pattern.scale.master_len_per_track_multiplier == 0 {
+                                let len = pattern.scale.master_len_per_track as u16 + 1;
+                                format!("{}", len)
                             } else {
-                                let len = (pattern.scale.master_len_per_track as u16 + 1)
-                                    * (pattern.scale.master_len_per_track_multiplier as u16 + 1);
+                                let len = (256 * pattern.scale.master_len_per_track_multiplier as u16)
+                                    + pattern.scale.master_len_per_track as u16;
                                 format!("{}", len)
                             };
 
