@@ -717,21 +717,23 @@ export function ProjectDetail() {
                                 </div>
 
                                 {/* Legend - only show indicators that are actually used */}
-                                <div className="pattern-grid-legend">
-                                  {usedIndicators.has('trigger') && <div className="legend-item"><span className="indicator-trigger">●</span> Trigger</div>}
-                                  {usedIndicators.has('trigless') && <div className="legend-item"><span className="indicator-trigless">○</span> Trigless</div>}
-                                  {usedIndicators.has('plock') && <div className="legend-item"><span className="indicator-plock">P</span> P-Lock</div>}
-                                  {usedIndicators.has('oneshot') && <div className="legend-item"><span className="indicator-oneshot">1</span> One-Shot</div>}
-                                  {usedIndicators.has('swing') && <div className="legend-item"><span className="indicator-swing">∿</span> Swing</div>}
-                                  {usedIndicators.has('slide') && <div className="legend-item"><span className="indicator-slide">~</span> Slide</div>}
-                                  {usedIndicators.has('recorder') && <div className="legend-item"><span className="indicator-recorder">R</span> Recorder</div>}
-                                  {usedIndicators.has('condition') && <div className="legend-item"><span className="indicator-condition">Fill</span> Condition</div>}
-                                  {usedIndicators.has('repeats') && <div className="legend-item"><span className="indicator-repeats">2x</span> Repeats</div>}
-                                  {usedIndicators.has('timing') && <div className="legend-item"><span className="indicator-timing">μ</span> Micro-timing</div>}
-                                  {usedIndicators.has('note') && <div className="legend-item"><span className="indicator-note">C4</span> MIDI Note/Chord</div>}
-                                  {usedIndicators.has('velocity') && <div className="legend-item"><span className="indicator-velocity">V</span> Velocity</div>}
-                                  {usedIndicators.has('sample') && <div className="legend-item"><span className="indicator-sample">S</span> Sample</div>}
-                                </div>
+                                {usedIndicators.size > 0 && (
+                                  <div className="pattern-grid-legend">
+                                    {usedIndicators.has('trigger') && <div className="legend-item"><span className="indicator-trigger">●</span> Trigger</div>}
+                                    {usedIndicators.has('trigless') && <div className="legend-item"><span className="indicator-trigless">○</span> Trigless</div>}
+                                    {usedIndicators.has('plock') && <div className="legend-item"><span className="indicator-plock">P</span> P-Lock</div>}
+                                    {usedIndicators.has('oneshot') && <div className="legend-item"><span className="indicator-oneshot">1</span> One-Shot</div>}
+                                    {usedIndicators.has('swing') && <div className="legend-item"><span className="indicator-swing">∿</span> Swing</div>}
+                                    {usedIndicators.has('slide') && <div className="legend-item"><span className="indicator-slide">~</span> Slide</div>}
+                                    {usedIndicators.has('recorder') && <div className="legend-item"><span className="indicator-recorder">R</span> Recorder</div>}
+                                    {usedIndicators.has('condition') && <div className="legend-item"><span className="indicator-condition">Fill</span> Condition</div>}
+                                    {usedIndicators.has('repeats') && <div className="legend-item"><span className="indicator-repeats">2x</span> Repeats</div>}
+                                    {usedIndicators.has('timing') && <div className="legend-item"><span className="indicator-timing">μ</span> Micro-timing</div>}
+                                    {usedIndicators.has('note') && <div className="legend-item"><span className="indicator-note">C4</span> MIDI Note/Chord</div>}
+                                    {usedIndicators.has('velocity') && <div className="legend-item"><span className="indicator-velocity">V</span> Velocity</div>}
+                                    {usedIndicators.has('sample') && <div className="legend-item"><span className="indicator-sample">S</span> Sample</div>}
+                                  </div>
+                                )}
 
                                 {/* Parameter Details Panel */}
                                 {selectedStep && (
