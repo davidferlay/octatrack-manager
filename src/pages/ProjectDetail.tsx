@@ -305,7 +305,7 @@ export function ProjectDetail() {
                       <span className="metadata-label">Muted Tracks</span>
                       <span className="metadata-value">
                         {metadata.current_state.audio_muted_tracks.length > 0
-                          ? metadata.current_state.audio_muted_tracks.map(t => `T${t + 1}`).join(", ")
+                          ? metadata.current_state.audio_muted_tracks.map((t: number) => `T${t + 1}`).join(", ")
                           : "None"}
                       </span>
                     </div>
@@ -313,7 +313,7 @@ export function ProjectDetail() {
                       <span className="metadata-label">Cued Tracks</span>
                       <span className="metadata-value">
                         {metadata.current_state.audio_cued_tracks.length > 0
-                          ? metadata.current_state.audio_cued_tracks.map(t => `T${t + 1}`).join(", ")
+                          ? metadata.current_state.audio_cued_tracks.map((t: number) => `T${t + 1}`).join(", ")
                           : "None"}
                       </span>
                     </div>
@@ -331,7 +331,7 @@ export function ProjectDetail() {
                       <span className="metadata-label">Muted Tracks</span>
                       <span className="metadata-value">
                         {metadata.current_state.midi_muted_tracks.length > 0
-                          ? metadata.current_state.midi_muted_tracks.map(t => `T${t + 1 + 8}`).join(", ")
+                          ? metadata.current_state.midi_muted_tracks.map((t: number) => `T${t + 1 + 8}`).join(", ")
                           : "None"}
                       </span>
                     </div>
