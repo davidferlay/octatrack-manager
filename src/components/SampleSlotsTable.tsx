@@ -41,9 +41,23 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
   const [timestretchFilter, setTimestretchFilter] = useState<string>('all');
   const [loopFilter, setLoopFilter] = useState<string>('all');
 
+  // Column visibility state (all visible by default)
+  const [visibleColumns, setVisibleColumns] = useState({
+    slot: true,
+    sample: true,
+    compatibility: true,
+    status: true,
+    source: true,
+    gain: true,
+    timestretch: true,
+    loop: true,
+  });
+  const [showColumnMenu, setShowColumnMenu] = useState(false);
+
   // Dropdown state
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const columnMenuRef = useRef<HTMLDivElement>(null);
 
   // Click outside to close dropdown
   useEffect(() => {
@@ -51,10 +65,21 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setOpenDropdown(null);
       }
+      if (columnMenuRef.current && !columnMenuRef.current.contains(event.target as Node)) {
+        setShowColumnMenu(false);
+      }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Toggle column visibility
+  const toggleColumn = (column: keyof typeof visibleColumns) => {
+    setVisibleColumns(prev => ({
+      ...prev,
+      [column]: !prev[column]
+    }));
+  };
 
   // Helper functions to get unique values
   const getUniqueSources = () => {
@@ -233,24 +258,107 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
     <div className="samples-tab">
       <section className="samples-section">
         <div className="filter-results-info">
-          Showing {sortedSlots.length} of {slots.length} slots
-          {hideEmpty && <span className="filter-badge">Empty Hidden</span>}
-          {searchText && <span className="filter-badge">Filtered by: {searchText}</span>}
-          {compatibilityFilter !== 'all' && <span className="filter-badge">Compat: {compatibilityFilter}</span>}
-          {statusFilter !== 'all' && <span className="filter-badge">Status: {statusFilter}</span>}
-          {sourceFilter !== 'all' && <span className="filter-badge">Source: {sourceFilter}</span>}
-          {gainFilter !== 'all' && <span className="filter-badge">Gain: {gainFilter}</span>}
-          {timestretchFilter !== 'all' && <span className="filter-badge">Timestretch: {timestretchFilter}</span>}
-          {loopFilter !== 'all' && <span className="filter-badge">Loop: {loopFilter}</span>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <span>Showing {sortedSlots.length} of {slots.length} slots</span>
+            {hideEmpty && <span className="filter-badge">Empty Hidden</span>}
+            {searchText && <span className="filter-badge">Filtered by: {searchText}</span>}
+            {compatibilityFilter !== 'all' && <span className="filter-badge">Compat: {compatibilityFilter}</span>}
+            {statusFilter !== 'all' && <span className="filter-badge">Status: {statusFilter}</span>}
+            {sourceFilter !== 'all' && <span className="filter-badge">Source: {sourceFilter}</span>}
+            {gainFilter !== 'all' && <span className="filter-badge">Gain: {gainFilter}</span>}
+            {timestretchFilter !== 'all' && <span className="filter-badge">Timestretch: {timestretchFilter}</span>}
+            {loopFilter !== 'all' && <span className="filter-badge">Loop: {loopFilter}</span>}
+          </div>
+          <div className="column-visibility-control" ref={columnMenuRef}>
+            <button
+              className="column-visibility-btn"
+              onClick={() => setShowColumnMenu(!showColumnMenu)}
+              title="Show/Hide Columns"
+            >
+              ☰
+            </button>
+            {showColumnMenu && (
+              <div className="column-visibility-menu">
+                <div className="column-visibility-header">Show/Hide Columns</div>
+                <label className="column-visibility-option">
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.slot}
+                    onChange={() => toggleColumn('slot')}
+                  />
+                  <span>Slot</span>
+                </label>
+                <label className="column-visibility-option">
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.sample}
+                    onChange={() => toggleColumn('sample')}
+                  />
+                  <span>Sample</span>
+                </label>
+                <label className="column-visibility-option">
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.compatibility}
+                    onChange={() => toggleColumn('compatibility')}
+                  />
+                  <span>Compatibility</span>
+                </label>
+                <label className="column-visibility-option">
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.status}
+                    onChange={() => toggleColumn('status')}
+                  />
+                  <span>Status</span>
+                </label>
+                <label className="column-visibility-option">
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.source}
+                    onChange={() => toggleColumn('source')}
+                  />
+                  <span>Source</span>
+                </label>
+                <label className="column-visibility-option">
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.gain}
+                    onChange={() => toggleColumn('gain')}
+                  />
+                  <span>Gain</span>
+                </label>
+                <label className="column-visibility-option">
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.timestretch}
+                    onChange={() => toggleColumn('timestretch')}
+                  />
+                  <span>Timestretch</span>
+                </label>
+                <label className="column-visibility-option">
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.loop}
+                    onChange={() => toggleColumn('loop')}
+                  />
+                  <span>Loop</span>
+                </label>
+              </div>
+            )}
+          </div>
         </div>
         <div className="table-wrapper" ref={dropdownRef}>
           <table className="samples-table">
             <thead>
               <tr>
-                <th onClick={() => handleSort('slot')} className="sortable">
-                  Slot {sortColumn === 'slot' && (sortDirection === 'asc' ? '▲' : '▼')}
-                </th>
-                <th className="filterable-header">
+                {visibleColumns.slot && (
+                  <th onClick={() => handleSort('slot')} className="sortable col-slot">
+                    Slot {sortColumn === 'slot' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </th>
+                )}
+                {visibleColumns.sample && (
+                  <th className="filterable-header col-sample">
                   <div className="header-content">
                     <span className="sort-indicator" onClick={() => handleSort('sample')}>
                       {sortColumn === 'sample' && (sortDirection === 'asc' ? '▲' : '▼')}
@@ -299,7 +407,9 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
                     </div>
                   )}
                 </th>
-                <th className="filterable-header">
+                )}
+                {visibleColumns.compatibility && (
+                <th className="filterable-header col-compatibility">
                   <div className="header-content">
                     <span className="sort-indicator" onClick={() => handleSort('compatibility')}>
                       {sortColumn === 'compatibility' && (sortDirection === 'asc' ? '▲' : '▼')}
@@ -369,7 +479,9 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
                     </div>
                   )}
                 </th>
-                <th className="filterable-header">
+                )}
+                {visibleColumns.status && (
+                <th className="filterable-header col-status">
                   <div className="header-content">
                     <span className="sort-indicator" onClick={() => handleSort('status')}>
                       {sortColumn === 'status' && (sortDirection === 'asc' ? '▲' : '▼')}
@@ -421,7 +533,9 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
                     </div>
                   )}
                 </th>
-                <th className="filterable-header">
+                )}
+                {visibleColumns.source && (
+                <th className="filterable-header col-source">
                   <div className="header-content">
                     <span className="sort-indicator" onClick={() => handleSort('source')}>
                       {sortColumn === 'source' && (sortDirection === 'asc' ? '▲' : '▼')}
@@ -466,7 +580,9 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
                     </div>
                   )}
                 </th>
-                <th className="filterable-header">
+                )}
+                {visibleColumns.gain && (
+                <th className="filterable-header col-gain">
                   <div className="header-content">
                     <span className="sort-indicator" onClick={() => handleSort('gain')}>
                       {sortColumn === 'gain' && (sortDirection === 'asc' ? '▲' : '▼')}
@@ -511,7 +627,9 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
                     </div>
                   )}
                 </th>
-                <th className="filterable-header">
+                )}
+                {visibleColumns.timestretch && (
+                <th className="filterable-header col-timestretch">
                   <div className="header-content">
                     <span className="sort-indicator" onClick={() => handleSort('timestretch')}>
                       {sortColumn === 'timestretch' && (sortDirection === 'asc' ? '▲' : '▼')}
@@ -556,7 +674,9 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
                     </div>
                   )}
                 </th>
-                <th className="filterable-header">
+                )}
+                {visibleColumns.loop && (
+                <th className="filterable-header col-loop">
                   <div className="header-content">
                     <span className="sort-indicator" onClick={() => handleSort('loop')}>
                       {sortColumn === 'loop' && (sortDirection === 'asc' ? '▲' : '▼')}
@@ -601,32 +721,39 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
                     </div>
                   )}
                 </th>
+                )}
               </tr>
             </thead>
           <tbody>
             {sortedSlots.map((slot) => (
               <tr key={slot.slot_id}>
-                <td>{slotPrefix}{slot.slot_id}</td>
-                <td title={slot.path || undefined}>
-                  {slot.path ? getFilename(slot.path) : <em>Empty</em>}
-                </td>
-                <td className="compatibility-cell">
-                  {slot.compatibility === 'compatible' && <span className="compat-badge compat-compatible" title="Compatible (WAV/AIFF, 16/24-bit, 44.1kHz)">:)</span>}
-                  {slot.compatibility === 'wrong_rate' && <span className="compat-badge compat-wrong-rate" title="Wrong sample rate (plays at wrong speed)">:|</span>}
-                  {slot.compatibility === 'incompatible' && <span className="compat-badge compat-incompatible" title="Incompatible bit depth)">:(</span>}
-                  {slot.compatibility === 'unknown' && <span className="compat-badge compat-unknown" title="Unrecognized format (not WAV or AIFF)">??</span>}
-                </td>
-                <td className="status-cell">
-                  {slot.path && (
-                    <span className={`file-status-badge ${slot.file_exists ? 'file-exists' : 'file-missing'}`}>
-                      {slot.file_exists ? '✓' : '✗'}
-                    </span>
-                  )}
-                </td>
-                <td>{slot.source_location || '-'}</td>
-                <td>{slot.gain !== null && slot.gain !== undefined ? slot.gain : '-'}</td>
-                <td>{slot.timestretch_mode || '-'}</td>
-                <td>{slot.loop_mode || '-'}</td>
+                {visibleColumns.slot && <td className="col-slot">{slotPrefix}{slot.slot_id}</td>}
+                {visibleColumns.sample && (
+                  <td className="col-sample" title={slot.path || undefined}>
+                    {slot.path ? getFilename(slot.path) : <em>Empty</em>}
+                  </td>
+                )}
+                {visibleColumns.compatibility && (
+                  <td className="compatibility-cell col-compatibility">
+                    {slot.compatibility === 'compatible' && <span className="compat-badge compat-compatible" title="Compatible (WAV/AIFF, 16/24-bit, 44.1kHz)">:)</span>}
+                    {slot.compatibility === 'wrong_rate' && <span className="compat-badge compat-wrong-rate" title="Wrong sample rate (plays at wrong speed)">:|</span>}
+                    {slot.compatibility === 'incompatible' && <span className="compat-badge compat-incompatible" title="Incompatible bit depth)">:(</span>}
+                    {slot.compatibility === 'unknown' && <span className="compat-badge compat-unknown" title="Unrecognized format (not WAV or AIFF)">??</span>}
+                  </td>
+                )}
+                {visibleColumns.status && (
+                  <td className="status-cell col-status">
+                    {slot.path && (
+                      <span className={`file-status-badge ${slot.file_exists ? 'file-exists' : 'file-missing'}`}>
+                        {slot.file_exists ? '✓' : '✗'}
+                      </span>
+                    )}
+                  </td>
+                )}
+                {visibleColumns.source && <td className="col-source">{slot.source_location || '-'}</td>}
+                {visibleColumns.gain && <td className="col-gain">{slot.gain !== null && slot.gain !== undefined ? slot.gain : '-'}</td>}
+                {visibleColumns.timestretch && <td className="col-timestretch">{slot.timestretch_mode || '-'}</td>}
+                {visibleColumns.loop && <td className="col-loop">{slot.loop_mode || '-'}</td>}
               </tr>
             ))}
           </tbody>
