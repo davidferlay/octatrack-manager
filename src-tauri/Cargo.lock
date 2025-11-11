@@ -18,6 +18,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "aifc"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7b1af51651f1be2d81649056245113eadb360dae1786063a7d2c4f85b0d975f"
+dependencies = [
+ "audio-codec-algorithms",
+]
+
+[[package]]
 name = "alloc-no-stdlib"
 version = "2.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -227,6 +236,12 @@ name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
+
+[[package]]
+name = "audio-codec-algorithms"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33f15622964e2d1f08cec8eb6fc6df40dd987c47be617ba010de330d5d837c98"
 
 [[package]]
 name = "autocfg"
@@ -1489,6 +1504,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
+name = "hound"
+version = "3.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62adaabb884c94955b19907d60019f4e145d091c75345379e70d1ee696f7854f"
+
+[[package]]
 name = "html5ever"
 version = "0.29.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2471,7 +2492,9 @@ dependencies = [
 name = "octatrack-manager"
 version = "0.1.0"
 dependencies = [
+ "aifc",
  "dirs 5.0.1",
+ "hound",
  "ot-tools-io",
  "serde",
  "serde_json",

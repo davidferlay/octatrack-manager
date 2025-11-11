@@ -27,4 +27,6 @@ ot-tools-io = { git = "https://gitlab.com/ot-tools/ot-tools-io.git" }
 sysinfo = "0.32"
 walkdir = "2"
 dirs = "5"
+hound = "3.5"
+aifc = "0.6"
 

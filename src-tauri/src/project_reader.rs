@@ -67,6 +67,7 @@ pub struct SampleSlot {
     pub timestretch_mode: Option<String>,
     pub source_location: Option<String>,
     pub file_exists: bool,
+    pub compatibility: Option<String>, // "compatible", "wrong_rate", "incompatible", "unknown"
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -215,6 +216,58 @@ pub struct Bank {
     pub parts: Vec<Part>,
 }
 
+/// Check audio file compatibility with Octatrack
+/// Returns: "compatible", "wrong_rate", "incompatible", or "unknown"
+fn check_audio_compatibility(file_path: &Path) -> String {
+    // Try to open as WAV file first
+    if let Ok(reader) = hound::WavReader::open(file_path) {
+        let spec = reader.spec();
+        let sample_rate = spec.sample_rate;
+        let bits_per_sample = spec.bits_per_sample;
+
+        // Octatrack supports 16 or 24 bit / 44.1 kHz
+        let valid_bit_depth = bits_per_sample == 16 || bits_per_sample == 24;
+        let correct_sample_rate = sample_rate == 44100;
+
+        if valid_bit_depth && correct_sample_rate {
+            return "compatible".to_string();
+        } else if valid_bit_depth && !correct_sample_rate {
+            // Wrong sample rate but valid bit depth - plays at wrong speed
+            return "wrong_rate".to_string();
+        } else {
+            // Invalid bit depth - incompatible
+            return "incompatible".to_string();
+        }
+    }
+
+    // Try to open as AIFF file
+    if let Ok(file) = std::fs::File::open(file_path) {
+        let mut stream = std::io::BufReader::new(file);
+        if let Ok(reader) = aifc::AifcReader::new(&mut stream) {
+            let info = reader.info();
+            let sample_rate = info.sample_rate as u32;
+            let bits_per_sample = info.comm_sample_size;
+
+            // Octatrack supports 16 or 24 bit / 44.1 kHz
+            let valid_bit_depth = bits_per_sample == 16 || bits_per_sample == 24;
+            let correct_sample_rate = sample_rate == 44100;
+
+            if valid_bit_depth && correct_sample_rate {
+                return "compatible".to_string();
+            } else if valid_bit_depth && !correct_sample_rate {
+                // Wrong sample rate but valid bit depth - plays at wrong speed
+                return "wrong_rate".to_string();
+            } else {
+                // Invalid bit depth - incompatible
+                return "incompatible".to_string();
+            }
+        }
+    }
+
+    // Not WAV or AIFF, or failed to parse
+    "unknown".to_string()
+}
+
 pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, String> {
     let path = Path::new(project_path);
 
@@ -325,6 +378,14 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                         // Check if file exists by resolving the path relative to project directory
                         let full_path = path.join(&path_str);
                         let file_exists = full_path.exists();
+
+                        // Check audio compatibility if file exists
+                        let compatibility = if file_exists {
+                            Some(check_audio_compatibility(&full_path))
+                        } else {
+                            None
+                        };
+
                         static_slots.push(SampleSlot {
                             slot_id,
                             slot_type: "Static".to_string(),
@@ -334,6 +395,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             timestretch_mode: Some(format!("{:?}", slot.timestrech_mode)),
                             source_location,
                             file_exists,
+                            compatibility,
                         });
                     } else {
                         // Slot exists but has no sample
@@ -346,6 +408,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             timestretch_mode: None,
                             source_location: None,
                             file_exists: false,
+                            compatibility: None,
                         });
                     }
                 } else {
@@ -359,6 +422,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                         timestretch_mode: None,
                         source_location: None,
                         file_exists: false,
+                        compatibility: None,
                     });
                 }
             }
@@ -378,6 +442,14 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                         // Check if file exists by resolving the path relative to project directory
                         let full_path = path.join(&path_str);
                         let file_exists = full_path.exists();
+
+                        // Check audio compatibility if file exists
+                        let compatibility = if file_exists {
+                            Some(check_audio_compatibility(&full_path))
+                        } else {
+                            None
+                        };
+
                         flex_slots.push(SampleSlot {
                             slot_id,
                             slot_type: "Flex".to_string(),
@@ -387,6 +459,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             timestretch_mode: Some(format!("{:?}", slot.timestrech_mode)),
                             source_location,
                             file_exists,
+                            compatibility,
                         });
                     } else {
                         // Slot exists but has no sample
@@ -399,6 +472,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             timestretch_mode: None,
                             source_location: None,
                             file_exists: false,
+                            compatibility: None,
                         });
                     }
                 } else {
@@ -412,6 +486,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                         timestretch_mode: None,
                         source_location: None,
                         file_exists: false,
+                        compatibility: None,
                     });
                 }
             }
