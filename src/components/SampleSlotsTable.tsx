@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
 interface SampleSlot {
   slot_id: number;
@@ -31,6 +31,27 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
   const [sortColumn, setSortColumn] = useState<SortColumn>('slot');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
+  // Filter state
+  const [searchText, setSearchText] = useState('');
+  const [compatibilityFilter, setCompatibilityFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [hideEmpty, setHideEmpty] = useState(false);
+
+  // Dropdown state
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Click outside to close dropdown
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpenDropdown(null);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
       // Toggle direction if same column
@@ -40,6 +61,40 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
       setSortColumn(column);
       setSortDirection('asc');
     }
+  };
+
+  const filterSlots = (slotsToFilter: SampleSlot[]) => {
+    return slotsToFilter.filter((slot) => {
+      // Filter by empty slots
+      if (hideEmpty && !slot.path) {
+        return false;
+      }
+
+      // Filter by search text
+      if (searchText) {
+        const filename = getFilename(slot.path);
+        if (!filename.toLowerCase().includes(searchText.toLowerCase())) {
+          return false;
+        }
+      }
+
+      // Filter by compatibility
+      if (compatibilityFilter !== 'all') {
+        if (slot.compatibility !== compatibilityFilter) {
+          return false;
+        }
+      }
+
+      // Filter by status
+      if (statusFilter === 'exists' && !slot.file_exists) {
+        return false;
+      }
+      if (statusFilter === 'missing' && slot.file_exists) {
+        return false;
+      }
+
+      return true;
+    });
   };
 
   const sortSlots = (slotsToSort: SampleSlot[]) => {
@@ -97,40 +152,202 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
     });
   };
 
-  const sortedSlots = sortSlots(slots);
+  const filteredSlots = filterSlots(slots);
+  const sortedSlots = sortSlots(filteredSlots);
 
   return (
     <div className="samples-tab">
       <section className="samples-section">
-        <table className="samples-table">
-          <thead>
-            <tr>
-              <th onClick={() => handleSort('slot')} className="sortable">
-                Slot {sortColumn === 'slot' && (sortDirection === 'asc' ? '▲' : '▼')}
-              </th>
-              <th onClick={() => handleSort('sample')} className="sortable">
-                Sample {sortColumn === 'sample' && (sortDirection === 'asc' ? '▲' : '▼')}
-              </th>
-              <th onClick={() => handleSort('compatibility')} className="sortable">
-                Compat {sortColumn === 'compatibility' && (sortDirection === 'asc' ? '▲' : '▼')}
-              </th>
-              <th onClick={() => handleSort('status')} className="sortable">
-                Status {sortColumn === 'status' && (sortDirection === 'asc' ? '▲' : '▼')}
-              </th>
-              <th onClick={() => handleSort('source')} className="sortable">
-                Source {sortColumn === 'source' && (sortDirection === 'asc' ? '▲' : '▼')}
-              </th>
-              <th onClick={() => handleSort('gain')} className="sortable">
-                Gain {sortColumn === 'gain' && (sortDirection === 'asc' ? '▲' : '▼')}
-              </th>
-              <th onClick={() => handleSort('timestretch')} className="sortable">
-                Timestretch {sortColumn === 'timestretch' && (sortDirection === 'asc' ? '▲' : '▼')}
-              </th>
-              <th onClick={() => handleSort('loop')} className="sortable">
-                Loop {sortColumn === 'loop' && (sortDirection === 'asc' ? '▲' : '▼')}
-              </th>
-            </tr>
-          </thead>
+        <div className="filter-results-info">
+          Showing {sortedSlots.length} of {slots.length} slots
+          {hideEmpty && <span className="filter-badge">Empty Hidden</span>}
+          {searchText && <span className="filter-badge">Filtered by: {searchText}</span>}
+          {compatibilityFilter !== 'all' && <span className="filter-badge">Compat: {compatibilityFilter}</span>}
+          {statusFilter !== 'all' && <span className="filter-badge">Status: {statusFilter}</span>}
+        </div>
+        <div className="table-wrapper" ref={dropdownRef}>
+          <table className="samples-table">
+            <thead>
+              <tr>
+                <th onClick={() => handleSort('slot')} className="sortable">
+                  Slot {sortColumn === 'slot' && (sortDirection === 'asc' ? '▲' : '▼')}
+                </th>
+                <th className="filterable-header">
+                  <div className="header-content">
+                    <span onClick={() => handleSort('sample')} className="sortable-label">
+                      Sample {sortColumn === 'sample' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </span>
+                    <button
+                      className={`filter-icon ${openDropdown === 'sample' || searchText || hideEmpty ? 'active' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenDropdown(openDropdown === 'sample' ? null : 'sample');
+                      }}
+                    >
+                      ⋮
+                    </button>
+                  </div>
+                  {openDropdown === 'sample' && (
+                    <div className="filter-dropdown">
+                      <input
+                        type="text"
+                        placeholder="Search..."
+                        value={searchText}
+                        onChange={(e) => setSearchText(e.target.value)}
+                        className="dropdown-search"
+                      />
+                      <label className="dropdown-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={hideEmpty}
+                          onChange={(e) => setHideEmpty(e.target.checked)}
+                        />
+                        <span>Hide Empty</span>
+                      </label>
+                      {(searchText || hideEmpty) && (
+                        <button
+                          className="clear-filter-btn"
+                          onClick={() => {
+                            setSearchText('');
+                            setHideEmpty(false);
+                          }}
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </th>
+                <th className="filterable-header">
+                  <div className="header-content">
+                    <span onClick={() => handleSort('compatibility')} className="sortable-label">
+                      Compat {sortColumn === 'compatibility' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </span>
+                    <button
+                      className={`filter-icon ${openDropdown === 'compatibility' || compatibilityFilter !== 'all' ? 'active' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenDropdown(openDropdown === 'compatibility' ? null : 'compatibility');
+                      }}
+                    >
+                      ⋮
+                    </button>
+                  </div>
+                  {openDropdown === 'compatibility' && (
+                    <div className="filter-dropdown">
+                      <div className="dropdown-options">
+                        <label className="dropdown-option">
+                          <input
+                            type="radio"
+                            name="compatibility"
+                            checked={compatibilityFilter === 'all'}
+                            onChange={() => setCompatibilityFilter('all')}
+                          />
+                          <span>All</span>
+                        </label>
+                        <label className="dropdown-option">
+                          <input
+                            type="radio"
+                            name="compatibility"
+                            checked={compatibilityFilter === 'compatible'}
+                            onChange={() => setCompatibilityFilter('compatible')}
+                          />
+                          <span>Compatible :)</span>
+                        </label>
+                        <label className="dropdown-option">
+                          <input
+                            type="radio"
+                            name="compatibility"
+                            checked={compatibilityFilter === 'wrong_rate'}
+                            onChange={() => setCompatibilityFilter('wrong_rate')}
+                          />
+                          <span>Wrong Rate :|</span>
+                        </label>
+                        <label className="dropdown-option">
+                          <input
+                            type="radio"
+                            name="compatibility"
+                            checked={compatibilityFilter === 'incompatible'}
+                            onChange={() => setCompatibilityFilter('incompatible')}
+                          />
+                          <span>Incompatible :(</span>
+                        </label>
+                        <label className="dropdown-option">
+                          <input
+                            type="radio"
+                            name="compatibility"
+                            checked={compatibilityFilter === 'unknown'}
+                            onChange={() => setCompatibilityFilter('unknown')}
+                          />
+                          <span>Unknown ??</span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+                </th>
+                <th className="filterable-header">
+                  <div className="header-content">
+                    <span onClick={() => handleSort('status')} className="sortable-label">
+                      Status {sortColumn === 'status' && (sortDirection === 'asc' ? '▲' : '▼')}
+                    </span>
+                    <button
+                      className={`filter-icon ${openDropdown === 'status' || statusFilter !== 'all' ? 'active' : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenDropdown(openDropdown === 'status' ? null : 'status');
+                      }}
+                    >
+                      ⋮
+                    </button>
+                  </div>
+                  {openDropdown === 'status' && (
+                    <div className="filter-dropdown">
+                      <div className="dropdown-options">
+                        <label className="dropdown-option">
+                          <input
+                            type="radio"
+                            name="status"
+                            checked={statusFilter === 'all'}
+                            onChange={() => setStatusFilter('all')}
+                          />
+                          <span>All</span>
+                        </label>
+                        <label className="dropdown-option">
+                          <input
+                            type="radio"
+                            name="status"
+                            checked={statusFilter === 'exists'}
+                            onChange={() => setStatusFilter('exists')}
+                          />
+                          <span>File Exists</span>
+                        </label>
+                        <label className="dropdown-option">
+                          <input
+                            type="radio"
+                            name="status"
+                            checked={statusFilter === 'missing'}
+                            onChange={() => setStatusFilter('missing')}
+                          />
+                          <span>File Missing</span>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+                </th>
+                <th onClick={() => handleSort('source')} className="sortable">
+                  Source {sortColumn === 'source' && (sortDirection === 'asc' ? '▲' : '▼')}
+                </th>
+                <th onClick={() => handleSort('gain')} className="sortable">
+                  Gain {sortColumn === 'gain' && (sortDirection === 'asc' ? '▲' : '▼')}
+                </th>
+                <th onClick={() => handleSort('timestretch')} className="sortable">
+                  Timestretch {sortColumn === 'timestretch' && (sortDirection === 'asc' ? '▲' : '▼')}
+                </th>
+                <th onClick={() => handleSort('loop')} className="sortable">
+                  Loop {sortColumn === 'loop' && (sortDirection === 'asc' ? '▲' : '▼')}
+                </th>
+              </tr>
+            </thead>
           <tbody>
             {sortedSlots.map((slot) => (
               <tr key={slot.slot_id}>
@@ -159,6 +376,7 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
             ))}
           </tbody>
         </table>
+        </div>
       </section>
     </div>
   );
