@@ -1022,7 +1022,9 @@ h1 {
   top: 100%;
   right: 0;
   margin-top: 0.5rem;
-  min-width: 200px;
+  width: max-content;
+  min-width: 150px;
+  max-width: 300px;
   background-color: var(--elektron-medium-gray);
   border: 1px solid var(--elektron-orange);
   border-radius: 4px;
@@ -1136,8 +1138,9 @@ h1 {
   position: absolute;
   top: 100%;
   left: 0;
-  right: 0;
-  min-width: 200px;
+  width: max-content;
+  min-width: 120px;
+  max-width: 300px;
   background-color: var(--elektron-medium-gray);
   border: 1px solid var(--elektron-orange);
   border-radius: 4px;
