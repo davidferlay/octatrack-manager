@@ -541,8 +541,6 @@ export function ProjectDetail() {
                                       <span
                                         className="pattern-tempo-indicator"
                                         style={{
-                                          textDecoration: 'line-through',
-                                          opacity: 0.6,
                                           color: '#999999',
                                           backgroundColor: 'rgba(153, 153, 153, 0.15)',
                                           borderColor: 'rgba(153, 153, 153, 0.4)'
