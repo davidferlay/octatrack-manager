@@ -260,6 +260,12 @@ export interface PartTrackAmp {
   vol: number;
   bal: number;
   f: number;
+  // AMP SETUP parameters
+  amp_setup_amp: number;         // Envelope type
+  amp_setup_sync: number;        // Sync setting
+  amp_setup_atck: number;        // Attack curve
+  amp_setup_fx1: number;         // FX1 routing
+  amp_setup_fx2: number;         // FX2 routing
 }
 
 export interface PartData {

@@ -264,6 +264,12 @@ pub struct PartTrackAmp {
     pub vol: u8,
     pub bal: u8,
     pub f: u8,
+    // AMP SETUP parameters
+    pub amp_setup_amp: u8,         // Envelope type
+    pub amp_setup_sync: u8,        // Sync setting
+    pub amp_setup_atck: u8,        // Attack curve
+    pub amp_setup_fx1: u8,         // FX1 routing
+    pub amp_setup_fx2: u8,         // FX2 routing
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1596,6 +1602,7 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<Vec<PartData
 
             // Get AMP parameters
             let amp_params = &part.audio_track_params_values[track_id as usize].amp;
+            let amp_setup = &part.audio_track_params_setup[track_id as usize].amp;
             amps.push(PartTrackAmp {
                 track_id,
                 atk: amp_params.atk,
@@ -1604,6 +1611,11 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<Vec<PartData
                 vol: amp_params.vol,
                 bal: amp_params.bal,
                 f: amp_params.f,
+                amp_setup_amp: amp_setup.amp,
+                amp_setup_sync: amp_setup.sync,
+                amp_setup_atck: amp_setup.atck,
+                amp_setup_fx1: amp_setup.fx1,
+                amp_setup_fx2: amp_setup.fx2,
             });
         }
 

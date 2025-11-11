@@ -124,10 +124,14 @@
 
 .machine-type {
   font-size: 11px;
-  color: #888;
-  background: #2a2a2a;
-  padding: 2px 8px;
-  border-radius: 3px;
+  font-weight: 600;
+  color: #fff;
+  background: #4a90e2;
+  padding: 3px 10px;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(74, 144, 226, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .parts-params-section {
