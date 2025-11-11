@@ -9,6 +9,7 @@ interface SampleSlot {
   timestretch_mode: string | null;
   source_location: string | null;
   file_exists: boolean;
+  compatibility: string | null; // "compatible", "wrong_rate", "incompatible", "unknown"
 }
 
 interface SampleSlotsTableProps {
@@ -16,7 +17,7 @@ interface SampleSlotsTableProps {
   slotPrefix: string; // "F" for Flex, "S" for Static
 }
 
-type SortColumn = 'slot' | 'sample' | 'status' | 'source' | 'gain' | 'timestretch' | 'loop';
+type SortColumn = 'slot' | 'sample' | 'status' | 'source' | 'gain' | 'timestretch' | 'loop' | 'compatibility';
 type SortDirection = 'asc' | 'desc';
 
 // Helper function to extract filename from path
@@ -75,6 +76,17 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
           compareA = a.loop_mode || '';
           compareB = b.loop_mode || '';
           break;
+        case 'compatibility':
+          // Sort order: compatible > wrong_rate > unknown > incompatible > null
+          const compatOrder: Record<string, number> = {
+            'compatible': 4,
+            'wrong_rate': 3,
+            'unknown': 2,
+            'incompatible': 1
+          };
+          compareA = a.compatibility ? (compatOrder[a.compatibility] ?? 0) : 0;
+          compareB = b.compatibility ? (compatOrder[b.compatibility] ?? 0) : 0;
+          break;
         default:
           return 0;
       }
@@ -99,6 +111,9 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
               <th onClick={() => handleSort('sample')} className="sortable">
                 Sample {sortColumn === 'sample' && (sortDirection === 'asc' ? '▲' : '▼')}
               </th>
+              <th onClick={() => handleSort('compatibility')} className="sortable">
+                Compat {sortColumn === 'compatibility' && (sortDirection === 'asc' ? '▲' : '▼')}
+              </th>
               <th onClick={() => handleSort('status')} className="sortable">
                 Status {sortColumn === 'status' && (sortDirection === 'asc' ? '▲' : '▼')}
               </th>
@@ -122,6 +137,12 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
                 <td>{slotPrefix}{slot.slot_id}</td>
                 <td title={slot.path || undefined}>
                   {slot.path ? getFilename(slot.path) : <em>Empty</em>}
+                </td>
+                <td className="compatibility-cell">
+                  {slot.compatibility === 'compatible' && <span className="compat-badge compat-compatible" title="Compatible (WAV/AIFF, 16/24-bit, 44.1kHz)">:)</span>}
+                  {slot.compatibility === 'wrong_rate' && <span className="compat-badge compat-wrong-rate" title="Wrong sample rate (plays at wrong speed)">:|</span>}
+                  {slot.compatibility === 'incompatible' && <span className="compat-badge compat-incompatible" title="Incompatible bit depth)">:(</span>}
+                  {slot.compatibility === 'unknown' && <span className="compat-badge compat-unknown" title="Unrecognized format (not WAV or AIFF)">??</span>}
                 </td>
                 <td className="status-cell">
                   {slot.path && (
