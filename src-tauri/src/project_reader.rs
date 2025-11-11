@@ -68,6 +68,9 @@ pub struct SampleSlot {
     pub source_location: Option<String>,
     pub file_exists: bool,
     pub compatibility: Option<String>, // "compatible", "wrong_rate", "incompatible", "unknown"
+    pub file_format: Option<String>,   // "WAV", "AIFF", etc.
+    pub bit_depth: Option<u32>,        // 16, 24, etc.
+    pub sample_rate: Option<u32>,      // 44100, 48000, etc.
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -218,26 +221,40 @@ pub struct Bank {
 
 /// Check audio file compatibility with Octatrack
 /// Returns: "compatible", "wrong_rate", "incompatible", or "unknown"
-fn check_audio_compatibility(file_path: &Path) -> String {
+struct AudioInfo {
+    compatibility: String,
+    file_format: Option<String>,
+    bit_depth: Option<u32>,
+    sample_rate: Option<u32>,
+}
+
+fn check_audio_compatibility(file_path: &Path) -> AudioInfo {
     // Try to open as WAV file first
     if let Ok(reader) = hound::WavReader::open(file_path) {
         let spec = reader.spec();
         let sample_rate = spec.sample_rate;
-        let bits_per_sample = spec.bits_per_sample;
+        let bits_per_sample = spec.bits_per_sample as u32;
 
         // Octatrack supports 16 or 24 bit / 44.1 kHz
         let valid_bit_depth = bits_per_sample == 16 || bits_per_sample == 24;
         let correct_sample_rate = sample_rate == 44100;
 
-        if valid_bit_depth && correct_sample_rate {
-            return "compatible".to_string();
+        let compatibility = if valid_bit_depth && correct_sample_rate {
+            "compatible".to_string()
         } else if valid_bit_depth && !correct_sample_rate {
             // Wrong sample rate but valid bit depth - plays at wrong speed
-            return "wrong_rate".to_string();
+            "wrong_rate".to_string()
         } else {
             // Invalid bit depth - incompatible
-            return "incompatible".to_string();
-        }
+            "incompatible".to_string()
+        };
+
+        return AudioInfo {
+            compatibility,
+            file_format: Some("WAV".to_string()),
+            bit_depth: Some(bits_per_sample),
+            sample_rate: Some(sample_rate),
+        };
     }
 
     // Try to open as AIFF file
@@ -246,26 +263,38 @@ fn check_audio_compatibility(file_path: &Path) -> String {
         if let Ok(reader) = aifc::AifcReader::new(&mut stream) {
             let info = reader.info();
             let sample_rate = info.sample_rate as u32;
-            let bits_per_sample = info.comm_sample_size;
+            let bits_per_sample = info.comm_sample_size as u32;
 
             // Octatrack supports 16 or 24 bit / 44.1 kHz
             let valid_bit_depth = bits_per_sample == 16 || bits_per_sample == 24;
             let correct_sample_rate = sample_rate == 44100;
 
-            if valid_bit_depth && correct_sample_rate {
-                return "compatible".to_string();
+            let compatibility = if valid_bit_depth && correct_sample_rate {
+                "compatible".to_string()
             } else if valid_bit_depth && !correct_sample_rate {
                 // Wrong sample rate but valid bit depth - plays at wrong speed
-                return "wrong_rate".to_string();
+                "wrong_rate".to_string()
             } else {
                 // Invalid bit depth - incompatible
-                return "incompatible".to_string();
-            }
+                "incompatible".to_string()
+            };
+
+            return AudioInfo {
+                compatibility,
+                file_format: Some("AIFF".to_string()),
+                bit_depth: Some(bits_per_sample),
+                sample_rate: Some(sample_rate),
+            };
         }
     }
 
     // Not WAV or AIFF, or failed to parse
-    "unknown".to_string()
+    AudioInfo {
+        compatibility: "unknown".to_string(),
+        file_format: None,
+        bit_depth: None,
+        sample_rate: None,
+    }
 }
 
 pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, String> {
@@ -380,10 +409,15 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                         let file_exists = full_path.exists();
 
                         // Check audio compatibility if file exists
-                        let compatibility = if file_exists {
-                            Some(check_audio_compatibility(&full_path))
+                        let audio_info = if file_exists {
+                            check_audio_compatibility(&full_path)
                         } else {
-                            None
+                            AudioInfo {
+                                compatibility: "unknown".to_string(),
+                                file_format: None,
+                                bit_depth: None,
+                                sample_rate: None,
+                            }
                         };
 
                         static_slots.push(SampleSlot {
@@ -395,7 +429,10 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             timestretch_mode: Some(format!("{:?}", slot.timestrech_mode)),
                             source_location,
                             file_exists,
-                            compatibility,
+                            compatibility: Some(audio_info.compatibility),
+                            file_format: audio_info.file_format,
+                            bit_depth: audio_info.bit_depth,
+                            sample_rate: audio_info.sample_rate,
                         });
                     } else {
                         // Slot exists but has no sample
@@ -409,6 +446,9 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             source_location: None,
                             file_exists: false,
                             compatibility: None,
+                            file_format: None,
+                            bit_depth: None,
+                            sample_rate: None,
                         });
                     }
                 } else {
@@ -423,6 +463,9 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                         source_location: None,
                         file_exists: false,
                         compatibility: None,
+                        file_format: None,
+                        bit_depth: None,
+                        sample_rate: None,
                     });
                 }
             }
@@ -444,10 +487,15 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                         let file_exists = full_path.exists();
 
                         // Check audio compatibility if file exists
-                        let compatibility = if file_exists {
-                            Some(check_audio_compatibility(&full_path))
+                        let audio_info = if file_exists {
+                            check_audio_compatibility(&full_path)
                         } else {
-                            None
+                            AudioInfo {
+                                compatibility: "unknown".to_string(),
+                                file_format: None,
+                                bit_depth: None,
+                                sample_rate: None,
+                            }
                         };
 
                         flex_slots.push(SampleSlot {
@@ -459,7 +507,10 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             timestretch_mode: Some(format!("{:?}", slot.timestrech_mode)),
                             source_location,
                             file_exists,
-                            compatibility,
+                            compatibility: Some(audio_info.compatibility),
+                            file_format: audio_info.file_format,
+                            bit_depth: audio_info.bit_depth,
+                            sample_rate: audio_info.sample_rate,
                         });
                     } else {
                         // Slot exists but has no sample
@@ -473,6 +524,9 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             source_location: None,
                             file_exists: false,
                             compatibility: None,
+                            file_format: None,
+                            bit_depth: None,
+                            sample_rate: None,
                         });
                     }
                 } else {
@@ -487,6 +541,9 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                         source_location: None,
                         file_exists: false,
                         compatibility: None,
+                        file_format: None,
+                        bit_depth: None,
+                        sample_rate: None,
                     });
                 }
             }
