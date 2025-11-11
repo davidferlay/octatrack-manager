@@ -814,7 +814,7 @@ export function ProjectDetail() {
                                                                           selectedStep.midi_plocks?.midi?.not4 !== note;
                                                     return (
                                                       <div key={idx} className="param-item">
-                                                        <span>NOTE {idx + 1}:</span> {note}{isDefaultNote ? ' (default)' : ''}
+                                                        <span>NOTE {idx + 1}:</span> {noteName(note)}{isDefaultNote ? ' (default)' : ''}
                                                       </div>
                                                     );
                                                   })}
