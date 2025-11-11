@@ -538,29 +538,17 @@ export function ProjectDetail() {
                             {/* Pattern Grid Visualization */}
                             <div className="pattern-grid-section">
                               <div className="pattern-grid-container">
-                                {/* Grid */}
-                                <div className="pattern-grid">
-                                  {trackData.steps.slice(0, pattern.length).map((step) => {
-                                    const hasTrig = step.trigger || step.trigless;
-                                    const trigTypes = [];
-                                    if (step.trigger) trigTypes.push('trigger');
-                                    if (step.trigless) trigTypes.push('trigless');
-                                    if (step.plock) trigTypes.push('plock');
-                                    if (step.oneshot) trigTypes.push('oneshot');
-                                    if (step.swing) trigTypes.push('swing');
-                                    if (step.slide) trigTypes.push('slide');
-                                    if (step.recorder) trigTypes.push('recorder');
+                                {(() => {
+                                  // Helper to convert MIDI note to name
+                                  const noteName = (note: number) => {
+                                    const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+                                    const octave = Math.floor(note / 12) - 1;
+                                    return names[note % 12] + octave;
+                                  };
 
-                                    // Helper to convert MIDI note to name
-                                    const noteName = (note: number) => {
-                                      const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-                                      const octave = Math.floor(note / 12) - 1;
-                                      return names[note % 12] + octave;
-                                    };
-
-                                    // Helper to detect chord type
-                                    const detectChord = (notes: number[]) => {
-                                      if (notes.length < 2) return null;
+                                  // Helper to detect chord type
+                                  const detectChord = (notes: number[]) => {
+                                    if (notes.length < 2) return null;
 
                                       // Sort notes and get intervals from root
                                       const sortedNotes = [...notes].sort((a, b) => a - b);
@@ -593,15 +581,48 @@ export function ProjectDetail() {
                                       return null; // Unknown chord
                                     };
 
-                                    // Build complete list of notes for MIDI tracks
+                                  // Helper to get all notes for a step (including default note when needed)
+                                  const getStepNotes = (step: TrigStep, trackData: any): number[] => {
                                     // step.notes already contains all notes (NOTE, NOT2, NOT3, NOT4) from the Rust parser
                                     let allNotes = [...step.notes];
 
-                                    // For MIDI tracks with triggers but no notes, use the default note
-                                    if (trackData.track_type === "MIDI" && allNotes.length === 0 && step.trigger && trackData.default_note !== null) {
-                                      allNotes.push(trackData.default_note);
+                                    // For MIDI tracks, check if we need to add the default note
+                                    if (trackData.track_type === "MIDI" && trackData.default_note !== null) {
+                                      // Check if the primary NOTE is parameter-locked
+                                      const noteIsLocked = step.midi_plocks?.midi?.note !== null && step.midi_plocks?.midi?.note !== undefined;
+
+                                      // Check if additional notes are present
+                                      const hasAdditionalNotes = step.midi_plocks?.midi?.not2 !== null ||
+                                                                  step.midi_plocks?.midi?.not3 !== null ||
+                                                                  step.midi_plocks?.midi?.not4 !== null;
+
+                                      // Add default note if:
+                                      // 1. There's a trigger but no notes at all, OR
+                                      // 2. There are additional notes but the primary note is not locked
+                                      if ((allNotes.length === 0 && step.trigger) || (hasAdditionalNotes && !noteIsLocked)) {
+                                        allNotes.unshift(trackData.default_note); // Add at the beginning
+                                      }
                                     }
 
+                                    return allNotes;
+                                  };
+
+                                  return (
+                                    <>
+                                      {/* Grid */}
+                                      <div className="pattern-grid">
+                                        {trackData.steps.slice(0, pattern.length).map((step) => {
+                                          const hasTrig = step.trigger || step.trigless;
+                                          const trigTypes = [];
+                                          if (step.trigger) trigTypes.push('trigger');
+                                          if (step.trigless) trigTypes.push('trigless');
+                                          if (step.plock) trigTypes.push('plock');
+                                          if (step.oneshot) trigTypes.push('oneshot');
+                                          if (step.swing) trigTypes.push('swing');
+                                          if (step.slide) trigTypes.push('slide');
+                                          if (step.recorder) trigTypes.push('recorder');
+
+                                    const allNotes = getStepNotes(step, trackData);
                                     const chordName = detectChord(allNotes);
 
                                     // Build comprehensive tooltip
@@ -761,35 +782,50 @@ export function ProjectDetail() {
                                         </>
                                       )}
 
-                                      {selectedStep.midi_plocks && (
-                                        <>
-                                          {/* MIDI Parameters */}
-                                          {(selectedStep.midi_plocks.midi.note !== null ||
-                                            selectedStep.midi_plocks.midi.vel !== null ||
-                                            selectedStep.midi_plocks.midi.len !== null ||
-                                            selectedStep.midi_plocks.midi.not2 !== null ||
-                                            selectedStep.midi_plocks.midi.not3 !== null ||
-                                            selectedStep.midi_plocks.midi.not4 !== null) && (
-                                            <div className="param-section">
-                                              <h5>MIDI Parameters</h5>
-                                              <div className="param-grid">
-                                                {selectedStep.midi_plocks.midi.note !== null && <div className="param-item"><span>NOTE 1:</span> {selectedStep.midi_plocks.midi.note}</div>}
-                                                {selectedStep.midi_plocks.midi.not2 !== null && <div className="param-item"><span>NOTE 2:</span> {selectedStep.midi_plocks.midi.not2}</div>}
-                                                {selectedStep.midi_plocks.midi.not3 !== null && <div className="param-item"><span>NOTE 3:</span> {selectedStep.midi_plocks.midi.not3}</div>}
-                                                {selectedStep.midi_plocks.midi.not4 !== null && <div className="param-item"><span>NOTE 4:</span> {selectedStep.midi_plocks.midi.not4}</div>}
-                                                {selectedStep.midi_plocks.midi.vel !== null && <div className="param-item"><span>VEL (Velocity):</span> {selectedStep.midi_plocks.midi.vel}</div>}
-                                                {selectedStep.midi_plocks.midi.len !== null && <div className="param-item"><span>LEN (Length):</span> {selectedStep.midi_plocks.midi.len}</div>}
+                                      {/* MIDI track parameters - show even when no plocks if there are notes */}
+                                      {trackData.track_type === "MIDI" && (() => {
+                                        // Get all notes using the shared helper function
+                                        const allNotes = getStepNotes(selectedStep, trackData);
+                                        const hasMidiParams = allNotes.length > 0 ||
+                                                              selectedStep.midi_plocks?.midi?.vel != null ||
+                                                              selectedStep.midi_plocks?.midi?.len != null;
+                                        const hasLfoParams = selectedStep.midi_plocks?.lfo?.spd1 != null ||
+                                                             selectedStep.midi_plocks?.lfo?.spd2 != null ||
+                                                             selectedStep.midi_plocks?.lfo?.spd3 != null ||
+                                                             selectedStep.midi_plocks?.lfo?.dep1 != null ||
+                                                             selectedStep.midi_plocks?.lfo?.dep2 != null ||
+                                                             selectedStep.midi_plocks?.lfo?.dep3 != null;
+
+                                        if (!hasMidiParams && !hasLfoParams) return null;
+
+                                        return (
+                                          <>
+                                            {/* MIDI Parameters */}
+                                            {hasMidiParams && (
+                                              <div className="param-section">
+                                                <h5>MIDI Parameters</h5>
+                                                <div className="param-grid">
+                                                  {allNotes.map((note, idx) => {
+                                                    // Check if this note is the default note (not in midi_plocks)
+                                                    const isDefaultNote = trackData.default_note === note &&
+                                                                          selectedStep.midi_plocks?.midi?.note !== note &&
+                                                                          selectedStep.midi_plocks?.midi?.not2 !== note &&
+                                                                          selectedStep.midi_plocks?.midi?.not3 !== note &&
+                                                                          selectedStep.midi_plocks?.midi?.not4 !== note;
+                                                    return (
+                                                      <div key={idx} className="param-item">
+                                                        <span>NOTE {idx + 1}:</span> {note}{isDefaultNote ? ' (default)' : ''}
+                                                      </div>
+                                                    );
+                                                  })}
+                                                  {selectedStep.midi_plocks?.midi?.vel != null && <div className="param-item"><span>VEL (Velocity):</span> {selectedStep.midi_plocks?.midi?.vel}</div>}
+                                                  {selectedStep.midi_plocks?.midi?.len != null && <div className="param-item"><span>LEN (Length):</span> {selectedStep.midi_plocks?.midi?.len}</div>}
                                               </div>
                                             </div>
                                           )}
 
                                           {/* LFO Parameters */}
-                                          {(selectedStep.midi_plocks.lfo.spd1 !== null ||
-                                            selectedStep.midi_plocks.lfo.spd2 !== null ||
-                                            selectedStep.midi_plocks.lfo.spd3 !== null ||
-                                            selectedStep.midi_plocks.lfo.dep1 !== null ||
-                                            selectedStep.midi_plocks.lfo.dep2 !== null ||
-                                            selectedStep.midi_plocks.lfo.dep3 !== null) && (
+                                          {hasLfoParams && selectedStep.midi_plocks && (
                                             <div className="param-section">
                                               <h5>LFO Parameters</h5>
                                               <div className="param-grid">
@@ -803,14 +839,25 @@ export function ProjectDetail() {
                                             </div>
                                           )}
                                         </>
-                                      )}
+                                      );
+                                      })()}
 
-                                      {!selectedStep.audio_plocks && !selectedStep.midi_plocks && (
-                                        <p>No parameter locks on this step.</p>
-                                      )}
+                                      {(() => {
+                                        // Show "no parameter locks" message only when appropriate
+                                        if (selectedStep.audio_plocks || selectedStep.midi_plocks) return null;
+                                        // For MIDI tracks, also check if there are any notes (including default)
+                                        if (trackData.track_type === "MIDI") {
+                                          const allNotes = getStepNotes(selectedStep, trackData);
+                                          if (allNotes.length > 0) return null;
+                                        }
+                                        return <p>No parameter locks on this step.</p>;
+                                      })()}
                                     </div>
                                   </div>
                                 )}
+                                    </>
+                                  );
+                                })()}
                               </div>
                             </div>
                           </div>
