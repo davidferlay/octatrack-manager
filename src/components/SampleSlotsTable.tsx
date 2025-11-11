@@ -17,6 +17,13 @@ interface SampleSlotsTableProps {
 type SortColumn = 'slot' | 'sample' | 'gain' | 'timestretch' | 'loop';
 type SortDirection = 'asc' | 'desc';
 
+// Helper function to extract filename from path
+function getFilename(path: string | null): string {
+  if (!path) return '';
+  const parts = path.split(/[\\/]/); // Split by both forward and backward slashes
+  return parts[parts.length - 1] || '';
+}
+
 export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
   const [sortColumn, setSortColumn] = useState<SortColumn>('slot');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -43,8 +50,8 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
           compareB = b.slot_id;
           break;
         case 'sample':
-          compareA = a.path || '';
-          compareB = b.path || '';
+          compareA = getFilename(a.path);
+          compareB = getFilename(b.path);
           break;
         case 'gain':
           compareA = a.gain ?? -1;
@@ -97,7 +104,9 @@ export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
             {sortedSlots.map((slot) => (
               <tr key={slot.slot_id}>
                 <td>{slotPrefix}{slot.slot_id}</td>
-                <td>{slot.path || <em>Empty</em>}</td>
+                <td title={slot.path || undefined}>
+                  {slot.path ? getFilename(slot.path) : <em>Empty</em>}
+                </td>
                 <td>{slot.gain !== null && slot.gain !== undefined ? slot.gain : '-'}</td>
                 <td>{slot.timestretch_mode || '-'}</td>
                 <td>{slot.loop_mode || '-'}</td>
