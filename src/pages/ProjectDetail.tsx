@@ -287,18 +287,54 @@ export function ProjectDetail() {
                       <span className="metadata-value">{metadata.current_state.part + 1}</span>
                     </div>
                     <div className="metadata-item">
-                      <span className="metadata-label">Track</span>
-                      <span className="metadata-value">T{metadata.current_state.track + 1}</span>
+                      <span className="metadata-label">Mode</span>
+                      <span className="metadata-value">{metadata.current_state.midi_mode === 0 ? "Audio" : "MIDI"}</span>
                     </div>
                   </div>
-                  {metadata.current_state.muted_tracks.length > 0 && (
-                    <div className="track-states">
-                      <span className="state-label">Muted Tracks:</span>
-                      <span className="state-value">
-                        {metadata.current_state.muted_tracks.map(t => `T${t + 1}`).join(", ")}
+                </section>
+
+                <section className="current-state-section">
+                  <h2>Audio Mode State</h2>
+                  <div className="metadata-grid">
+                    <div className="metadata-item">
+                      <span className="metadata-label">Track</span>
+                      <span className="metadata-value">T{(metadata.current_state.midi_mode === 0 ? metadata.current_state.track : metadata.current_state.track_othermode) + 1}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">Muted Tracks</span>
+                      <span className="metadata-value">
+                        {metadata.current_state.audio_muted_tracks.length > 0
+                          ? metadata.current_state.audio_muted_tracks.map(t => `T${t + 1}`).join(", ")
+                          : "None"}
                       </span>
                     </div>
-                  )}
+                    <div className="metadata-item">
+                      <span className="metadata-label">Cued Tracks</span>
+                      <span className="metadata-value">
+                        {metadata.current_state.audio_cued_tracks.length > 0
+                          ? metadata.current_state.audio_cued_tracks.map(t => `T${t + 1}`).join(", ")
+                          : "None"}
+                      </span>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="current-state-section">
+                  <h2>MIDI Mode State</h2>
+                  <div className="metadata-grid">
+                    <div className="metadata-item">
+                      <span className="metadata-label">Track</span>
+                      <span className="metadata-value">T{(metadata.current_state.midi_mode === 1 ? metadata.current_state.track : metadata.current_state.track_othermode) + 1 + 8}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">Muted Tracks</span>
+                      <span className="metadata-value">
+                        {metadata.current_state.midi_muted_tracks.length > 0
+                          ? metadata.current_state.midi_muted_tracks.map(t => `T${t + 1 + 8}`).join(", ")
+                          : "None"}
+                      </span>
+                    </div>
+                  </div>
                 </section>
 
                 <section className="mixer-section">
