@@ -273,10 +273,37 @@ pub struct PartTrackAmp {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PartTrackLfo {
+    pub track_id: u8,              // 0-7 for audio tracks T1-T8
+    // MAIN LFO parameters
+    pub spd1: u8,                  // Speed of LFO 1
+    pub spd2: u8,                  // Speed of LFO 2
+    pub spd3: u8,                  // Speed of LFO 3
+    pub dep1: u8,                  // Depth of LFO 1
+    pub dep2: u8,                  // Depth of LFO 2
+    pub dep3: u8,                  // Depth of LFO 3
+    // SETUP LFO parameters (Setup 1: Parameter Target & Wave)
+    pub lfo1_pmtr: u8,             // LFO 1 Parameter Target
+    pub lfo2_pmtr: u8,             // LFO 2 Parameter Target
+    pub lfo3_pmtr: u8,             // LFO 3 Parameter Target
+    pub lfo1_wave: u8,             // LFO 1 Waveform
+    pub lfo2_wave: u8,             // LFO 2 Waveform
+    pub lfo3_wave: u8,             // LFO 3 Waveform
+    // SETUP LFO parameters (Setup 2: Multiplier & Trigger)
+    pub lfo1_mult: u8,             // LFO 1 Speed Multiplier
+    pub lfo2_mult: u8,             // LFO 2 Speed Multiplier
+    pub lfo3_mult: u8,             // LFO 3 Speed Multiplier
+    pub lfo1_trig: u8,             // LFO 1 Trigger Mode
+    pub lfo2_trig: u8,             // LFO 2 Trigger Mode
+    pub lfo3_trig: u8,             // LFO 3 Trigger Mode
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PartData {
     pub part_id: u8,               // 0-3 for Parts 1-4
     pub machines: Vec<PartTrackMachine>,  // 8 audio tracks
     pub amps: Vec<PartTrackAmp>,          // 8 audio tracks
+    pub lfos: Vec<PartTrackLfo>,          // 8 audio tracks
 }
 
 /// Check audio file compatibility with Octatrack
@@ -1499,6 +1526,7 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<Vec<PartData
 
         let mut machines = Vec::new();
         let mut amps = Vec::new();
+        let mut lfos = Vec::new();
 
         // Process 8 audio tracks (tracks 0-7)
         for track_id in 0..8 {
@@ -1617,12 +1645,42 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<Vec<PartData
                 amp_setup_fx1: amp_setup.fx1,
                 amp_setup_fx2: amp_setup.fx2,
             });
+
+            // Get LFO parameters
+            let lfo_params = &part.audio_track_params_values[track_id as usize].lfo;
+            let lfo_setup_1 = &part.audio_track_params_setup[track_id as usize].lfo_setup_1;
+            let lfo_setup_2 = &part.audio_track_params_setup[track_id as usize].lfo_setup_2;
+            lfos.push(PartTrackLfo {
+                track_id,
+                // MAIN LFO parameters
+                spd1: lfo_params.spd1,
+                spd2: lfo_params.spd2,
+                spd3: lfo_params.spd3,
+                dep1: lfo_params.dep1,
+                dep2: lfo_params.dep2,
+                dep3: lfo_params.dep3,
+                // SETUP LFO parameters (Setup 1)
+                lfo1_pmtr: lfo_setup_1.lfo1_pmtr,
+                lfo2_pmtr: lfo_setup_1.lfo2_pmtr,
+                lfo3_pmtr: lfo_setup_1.lfo3_pmtr,
+                lfo1_wave: lfo_setup_1.lfo1_wave,
+                lfo2_wave: lfo_setup_1.lfo2_wave,
+                lfo3_wave: lfo_setup_1.lfo3_wave,
+                // SETUP LFO parameters (Setup 2)
+                lfo1_mult: lfo_setup_2.lfo1_mult,
+                lfo2_mult: lfo_setup_2.lfo2_mult,
+                lfo3_mult: lfo_setup_2.lfo3_mult,
+                lfo1_trig: lfo_setup_2.lfo1_trig,
+                lfo2_trig: lfo_setup_2.lfo2_trig,
+                lfo3_trig: lfo_setup_2.lfo3_trig,
+            });
         }
 
         parts_data.push(PartData {
             part_id,
             machines,
             amps,
+            lfos,
         });
     }
 
