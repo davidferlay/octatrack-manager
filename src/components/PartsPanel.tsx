@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { PartData } from '../context/ProjectsContext';
+import { formatTrackName } from '../utils/trackUtils';
 import './PartsPanel.css';
 
 interface PartsPanelProps {
@@ -58,7 +59,7 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
         {tracksToShow.map((machine) => (
           <div key={machine.track_id} className="parts-track">
             <div className="parts-track-header">
-              <span className="track-label">T{machine.track_id + 1}</span>
+              <span className="track-label">{formatTrackName(machine.track_id)}</span>
               <span className="machine-type">{machine.machine_type}</span>
             </div>
 
@@ -167,7 +168,7 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
           return (
             <div key={amp.track_id} className="parts-track">
               <div className="parts-track-header">
-                <span className="track-label">T{amp.track_id + 1}</span>
+                <span className="track-label">{formatTrackName(amp.track_id)}</span>
                 <span className="machine-type">{machineType}</span>
               </div>
 
@@ -362,7 +363,7 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
             return (
               <div key={lfo.track_id} className="parts-track">
                 <div className="parts-track-header">
-                  <span className="track-label">T{lfo.track_id + 1}</span>
+                  <span className="track-label">{formatTrackName(lfo.track_id)}</span>
                   <span className="machine-type">{machineType}</span>
                 </div>
 

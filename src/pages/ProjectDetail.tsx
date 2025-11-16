@@ -8,6 +8,7 @@ import { TrackSelector, ALL_AUDIO_TRACKS, ALL_MIDI_TRACKS } from "../components/
 import { PatternSelector, ALL_PATTERNS } from "../components/PatternSelector";
 import { SampleSlotsTable } from "../components/SampleSlotsTable";
 import PartsPanel from "../components/PartsPanel";
+import { formatTrackName } from "../utils/trackUtils";
 import "../App.css";
 
 // Most type definitions are now imported from ProjectsContext via Bank and ProjectMetadata types
@@ -300,13 +301,13 @@ export function ProjectDetail() {
                   <div className="metadata-grid">
                     <div className="metadata-item">
                       <span className="metadata-label">Track</span>
-                      <span className="metadata-value">T{(metadata.current_state.midi_mode === 0 ? metadata.current_state.track : metadata.current_state.track_othermode) + 1}</span>
+                      <span className="metadata-value">{formatTrackName(metadata.current_state.midi_mode === 0 ? metadata.current_state.track : metadata.current_state.track_othermode)}</span>
                     </div>
                     <div className="metadata-item">
                       <span className="metadata-label">Muted Tracks</span>
                       <span className="metadata-value">
                         {metadata.current_state.audio_muted_tracks.length > 0
-                          ? metadata.current_state.audio_muted_tracks.map((t: number) => `T${t + 1}`).join(", ")
+                          ? metadata.current_state.audio_muted_tracks.map((t: number) => formatTrackName(t)).join(", ")
                           : "None"}
                       </span>
                     </div>
@@ -314,7 +315,7 @@ export function ProjectDetail() {
                       <span className="metadata-label">Cued Tracks</span>
                       <span className="metadata-value">
                         {metadata.current_state.audio_cued_tracks.length > 0
-                          ? metadata.current_state.audio_cued_tracks.map((t: number) => `T${t + 1}`).join(", ")
+                          ? metadata.current_state.audio_cued_tracks.map((t: number) => formatTrackName(t)).join(", ")
                           : "None"}
                       </span>
                     </div>
@@ -326,13 +327,13 @@ export function ProjectDetail() {
                   <div className="metadata-grid">
                     <div className="metadata-item">
                       <span className="metadata-label">Track</span>
-                      <span className="metadata-value">T{(metadata.current_state.midi_mode === 1 ? metadata.current_state.track : metadata.current_state.track_othermode) + 1 + 8}</span>
+                      <span className="metadata-value">{formatTrackName((metadata.current_state.midi_mode === 1 ? metadata.current_state.track : metadata.current_state.track_othermode) + 8)}</span>
                     </div>
                     <div className="metadata-item">
                       <span className="metadata-label">Muted Tracks</span>
                       <span className="metadata-value">
                         {metadata.current_state.midi_muted_tracks.length > 0
-                          ? metadata.current_state.midi_muted_tracks.map((t: number) => `T${t + 1 + 8}`).join(", ")
+                          ? metadata.current_state.midi_muted_tracks.map((t: number) => formatTrackName(t + 8)).join(", ")
                           : "None"}
                       </span>
                     </div>
@@ -534,7 +535,7 @@ export function ProjectDetail() {
                               <span className="pattern-name">{pattern.name}</span>
                               <span className="pattern-part">→ Part {pattern.part_assignment + 1}</span>
                               <span className={`pattern-track-indicator ${trackData.track_type.toLowerCase()}`}>
-                                T{trackData.track_id >= 8 ? trackData.track_id - 7 : trackData.track_id + 1}
+                                {formatTrackName(trackData.track_id)}
                               </span>
                               {pattern.tempo_info && <span className="pattern-tempo-indicator">{pattern.tempo_info}</span>}
                               <span className="pattern-tempo-indicator">Scale Mode: {pattern.scale_mode === "Normal" ? "Pattern" : pattern.scale_mode}</span>
@@ -1039,7 +1040,7 @@ export function ProjectDetail() {
 
                         return (
                         <div key={`bank-${bankIndex}-track-settings-${trackIndex}`} className="bank-card">
-                          <h3>{formatBankName(bank.name, bankIndex)} - T{trackData.track_id >= 8 ? trackData.track_id - 7 : trackData.track_id + 1} ({trackData.track_type})</h3>
+                          <h3>{formatBankName(bank.name, bankIndex)} - {formatTrackName(trackData.track_id)} ({trackData.track_type})</h3>
                           <div className="pattern-details">
                             <div className="pattern-detail-group track-settings-row">
                               <div className="pattern-detail-item">
