@@ -233,7 +233,7 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
     );
   };
 
-  const renderLfoEnvelope = (trackId: number) => {
+  const renderLfoEnvelope = () => {
     // TODO: Replace with actual LFO design data from backend
     // For now, using mock data - 16 values representing custom LFO envelope
     const mockEnvelopeData = [
@@ -243,7 +243,6 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
 
     const maxValue = 127;
     const stepCount = 16;
-    const stepWidth = 100 / stepCount;
 
     return (
       <div className="lfo-envelope-container">
@@ -397,7 +396,7 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
                     </div>
                   </div>
                 ) : (
-                  renderLfoEnvelope(lfo.track_id)
+                  renderLfoEnvelope()
                 )}
               </div>
             );
