@@ -792,7 +792,7 @@ export function ProjectDetail() {
                                   return (
                                   <div className="parameter-details-panel">
                                     <div className="parameter-panel-header">
-                                      <h4>Step {selectedStep.step + 1} - Step Details</h4>
+                                      <h4>Step {selectedStep.step + 1} details</h4>
                                       <button onClick={() => setSelectedStepNumber(null)} className="close-button">×</button>
                                     </div>
                                     <div className="parameter-panel-content">
