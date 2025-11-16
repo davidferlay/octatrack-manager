@@ -1,0 +1,8 @@
+/* Add spacing when multiple track badges are displayed together */
+.track-badge {
+  margin-right: 0px;
+}
+
+.track-badge:last-child {
+  margin-right: 0;
+}
