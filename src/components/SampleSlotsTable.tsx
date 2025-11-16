@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useTablePreferences } from "../context/TablePreferencesContext";
 
 interface SampleSlot {
   slot_id: number;
@@ -18,6 +19,7 @@ interface SampleSlot {
 interface SampleSlotsTableProps {
   slots: SampleSlot[];
   slotPrefix: string; // "F" for Flex, "S" for Static
+  tableType: 'flex' | 'static'; // Identify which table this is
 }
 
 type SortColumn = 'slot' | 'sample' | 'status' | 'source' | 'gain' | 'timestretch' | 'loop' | 'compatibility' | 'format' | 'bitdepth' | 'samplerate';
@@ -30,38 +32,68 @@ function getFilename(path: string | null): string {
   return parts[parts.length - 1] || '';
 }
 
-export function SampleSlotsTable({ slots, slotPrefix }: SampleSlotsTableProps) {
-  const [sortColumn, setSortColumn] = useState<SortColumn>('slot');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+export function SampleSlotsTable({ slots, slotPrefix, tableType }: SampleSlotsTableProps) {
+  const { flexPreferences, staticPreferences, setFlexPreferences, setStaticPreferences } = useTablePreferences();
+
+  // Get the preferences for this table type
+  const prefs = tableType === 'flex' ? flexPreferences : staticPreferences;
+  const setPrefs = tableType === 'flex' ? setFlexPreferences : setStaticPreferences;
+
+  const [sortColumn, setSortColumn] = useState<SortColumn>(prefs.sortColumn);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(prefs.sortDirection);
 
   // Filter state
-  const [searchText, setSearchText] = useState('');
-  const [compatibilityFilter, setCompatibilityFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [hideEmpty, setHideEmpty] = useState(false);
-  const [sourceFilter, setSourceFilter] = useState<string>('all');
-  const [gainFilter, setGainFilter] = useState<string>('all');
-  const [timestretchFilter, setTimestretchFilter] = useState<string>('all');
-  const [loopFilter, setLoopFilter] = useState<string>('all');
-  const [formatFilter, setFormatFilter] = useState<string>('all');
-  const [bitDepthFilter, setBitDepthFilter] = useState<string>('all');
-  const [sampleRateFilter, setSampleRateFilter] = useState<string>('all');
+  const [searchText, setSearchText] = useState(prefs.searchText);
+  const [compatibilityFilter, setCompatibilityFilter] = useState<string>(prefs.compatibilityFilter);
+  const [statusFilter, setStatusFilter] = useState<string>(prefs.statusFilter);
+  const [hideEmpty, setHideEmpty] = useState(prefs.hideEmpty);
+  const [sourceFilter, setSourceFilter] = useState<string>(prefs.sourceFilter);
+  const [gainFilter, setGainFilter] = useState<string>(prefs.gainFilter);
+  const [timestretchFilter, setTimestretchFilter] = useState<string>(prefs.timestretchFilter);
+  const [loopFilter, setLoopFilter] = useState<string>(prefs.loopFilter);
+  const [formatFilter, setFormatFilter] = useState<string>(prefs.formatFilter);
+  const [bitDepthFilter, setBitDepthFilter] = useState<string>(prefs.bitDepthFilter);
+  const [sampleRateFilter, setSampleRateFilter] = useState<string>(prefs.sampleRateFilter);
 
-  // Column visibility state (all visible by default except format, bitdepth, samplerate)
-  const [visibleColumns, setVisibleColumns] = useState({
-    slot: true,
-    sample: true,
-    compatibility: true,
-    status: true,
-    source: true,
-    gain: true,
-    timestretch: true,
-    loop: true,
-    format: false,
-    bitdepth: false,
-    samplerate: false,
-  });
+  // Column visibility state
+  const [visibleColumns, setVisibleColumns] = useState(prefs.visibleColumns);
   const [showColumnMenu, setShowColumnMenu] = useState(false);
+
+  // Save preferences whenever they change
+  useEffect(() => {
+    setPrefs({
+      sortColumn,
+      sortDirection,
+      searchText,
+      compatibilityFilter,
+      statusFilter,
+      hideEmpty,
+      sourceFilter,
+      gainFilter,
+      timestretchFilter,
+      loopFilter,
+      formatFilter,
+      bitDepthFilter,
+      sampleRateFilter,
+      visibleColumns,
+    });
+  }, [
+    sortColumn,
+    sortDirection,
+    searchText,
+    compatibilityFilter,
+    statusFilter,
+    hideEmpty,
+    sourceFilter,
+    gainFilter,
+    timestretchFilter,
+    loopFilter,
+    formatFilter,
+    bitDepthFilter,
+    sampleRateFilter,
+    visibleColumns,
+    setPrefs,
+  ]);
 
   // Dropdown state
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
