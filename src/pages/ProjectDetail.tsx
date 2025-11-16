@@ -1051,7 +1051,7 @@ export function ProjectDetail() {
                         return (
                         <div key={`bank-${bankIndex}-track-settings-${trackIndex}`} className="bank-card">
                           <h3>
-                            {formatBankName(bank.name, bankIndex)} - <TrackBadge trackId={trackData.track_id} /> ({trackData.track_type})
+                            {formatBankName(bank.name, bankIndex)} - <TrackBadge trackId={trackData.track_id} />
                           </h3>
                           <div className="pattern-details">
                             <div className="pattern-detail-group track-settings-row">
