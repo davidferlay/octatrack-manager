@@ -1031,7 +1031,9 @@ export function ProjectDetail() {
                       const bank = banks[bankIndex];
                       if (!bank) return null;
 
-                      const pattern = bank.parts[0]?.patterns[selectedPatternIndex];
+                      // For track settings, use pattern 0 if ALL_PATTERNS is selected
+                      const patternIndexToUse = selectedPatternIndex === ALL_PATTERNS ? 0 : selectedPatternIndex;
+                      const pattern = bank.parts[0]?.patterns[patternIndexToUse];
                       if (!pattern) return null;
 
                       // Determine which tracks to display
