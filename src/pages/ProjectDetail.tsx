@@ -9,6 +9,7 @@ import { PatternSelector, ALL_PATTERNS } from "../components/PatternSelector";
 import { SampleSlotsTable } from "../components/SampleSlotsTable";
 import PartsPanel from "../components/PartsPanel";
 import { TrackBadge } from "../components/TrackBadge";
+import { ScrollToTop } from "../components/ScrollToTop";
 import "../App.css";
 
 // Most type definitions are now imported from ProjectsContext via Bank and ProjectMetadata types
@@ -1066,6 +1067,7 @@ export function ProjectDetail() {
           </div>
         </div>
       )}
+      <ScrollToTop />
     </main>
   );
 }
