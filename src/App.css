@@ -1527,6 +1527,10 @@ h1 {
   opacity: 0.8;
 }
 
+.compat-unknown {
+  transform: scale(1.3) rotate(0deg);
+}
+
 /* Current State Section */
 .current-state-section {
   background-color: var(--elektron-dark-gray);

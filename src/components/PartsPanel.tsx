@@ -419,12 +419,18 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
     return <div className="parts-panel-empty">No Parts data available</div>;
   }
 
+  // Parts data only exists for Audio tracks (0-7), not MIDI tracks (8-15)
+  if (selectedTrack !== undefined && selectedTrack >= 8) {
+    return <div className="parts-panel-empty">Parts data is only available for Audio tracks (T1-T8), not MIDI tracks</div>;
+  }
+
   const activePart = partsData[activePartIndex];
 
   return (
     <div className="parts-panel">
       <div className="parts-panel-header">
         <h3>{bankName} - Parts</h3>
+        <span className="wip-badge">Work in Progress</span>
       </div>
 
       {/* Part Tabs */}

@@ -448,8 +448,10 @@ export function ProjectDetail() {
                         trackForParts = undefined; // Show all tracks
                       } else if (selectedTrackIndex >= 0 && selectedTrackIndex < 8) {
                         trackForParts = selectedTrackIndex; // Show specific audio track
+                      } else if (selectedTrackIndex >= 8 && selectedTrackIndex < 16) {
+                        trackForParts = selectedTrackIndex; // Show specific MIDI track
                       } else {
-                        trackForParts = undefined; // MIDI tracks - show all
+                        trackForParts = undefined; // Show all tracks
                       }
 
                       // Get part names from bank
