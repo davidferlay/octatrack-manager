@@ -190,10 +190,10 @@ export function ProjectDetail() {
             ← Back
           </button>
           <h1 style={{ margin: 0 }}>{projectName}</h1>
+          <button onClick={handleRefresh} className="back-button refresh-button" disabled={isLoading} title="Refresh project data">
+            ↻ Refresh
+          </button>
         </div>
-        <button onClick={handleRefresh} className="back-button refresh-button" disabled={isLoading} title="Refresh project data" style={{ marginLeft: 'auto' }}>
-          ↻ Refresh
-        </button>
       </div>
 
       <div className="project-path-info">
