@@ -1033,7 +1033,7 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
                             } else if pattern.scale.master_len_per_track_multiplier == 4 {
                                 "1024".to_string()
                             } else if pattern.scale.master_len_per_track_multiplier == 0 {
-                                let len = pattern.scale.master_len_per_track as u16 + 1;
+                                let len = pattern.scale.master_len_per_track as u16;
                                 format!("{}", len)
                             } else {
                                 let len = (256 * pattern.scale.master_len_per_track_multiplier as u16)
