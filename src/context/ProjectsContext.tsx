@@ -268,10 +268,36 @@ export interface PartTrackAmp {
   amp_setup_fx2: number;         // FX2 routing
 }
 
+export interface PartTrackLfo {
+  track_id: number;
+  // MAIN LFO parameters
+  spd1: number;                  // Speed of LFO 1
+  spd2: number;                  // Speed of LFO 2
+  spd3: number;                  // Speed of LFO 3
+  dep1: number;                  // Depth of LFO 1
+  dep2: number;                  // Depth of LFO 2
+  dep3: number;                  // Depth of LFO 3
+  // SETUP LFO parameters (Setup 1: Parameter Target & Wave)
+  lfo1_pmtr: number;             // LFO 1 Parameter Target
+  lfo2_pmtr: number;             // LFO 2 Parameter Target
+  lfo3_pmtr: number;             // LFO 3 Parameter Target
+  lfo1_wave: number;             // LFO 1 Waveform
+  lfo2_wave: number;             // LFO 2 Waveform
+  lfo3_wave: number;             // LFO 3 Waveform
+  // SETUP LFO parameters (Setup 2: Multiplier & Trigger)
+  lfo1_mult: number;             // LFO 1 Speed Multiplier
+  lfo2_mult: number;             // LFO 2 Speed Multiplier
+  lfo3_mult: number;             // LFO 3 Speed Multiplier
+  lfo1_trig: number;             // LFO 1 Trigger Mode
+  lfo2_trig: number;             // LFO 2 Trigger Mode
+  lfo3_trig: number;             // LFO 3 Trigger Mode
+}
+
 export interface PartData {
   part_id: number;
   machines: PartTrackMachine[];
   amps: PartTrackAmp[];
+  lfos: PartTrackLfo[];
 }
 
 interface CachedProjectData {
