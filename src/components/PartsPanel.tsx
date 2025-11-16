@@ -277,7 +277,6 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
 
     return (
       <div className="lfo-envelope-container">
-        <div className="lfo-envelope-title">LFO DESIGN</div>
         <svg className="lfo-envelope-svg" viewBox="0 0 100 60" preserveAspectRatio="none">
           <defs>
             <linearGradient id="lfoGradient" x1="0%" y1="0%" x2="100%" y2="0%">
