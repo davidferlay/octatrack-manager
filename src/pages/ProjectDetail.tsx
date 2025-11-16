@@ -592,43 +592,6 @@ export function ProjectDetail() {
                                 </>
                               )}
                             </div>
-                            <div className="pattern-details">
-                              <div className="pattern-detail-group trig-stats-row">
-                                <div className="pattern-detail-item">
-                                  <span className="pattern-detail-label">Total Trigs:</span>
-                                  <span className="pattern-detail-value">{trackData.trig_counts.total}</span>
-                                </div>
-                                <div className="pattern-detail-item">
-                                  <span className="pattern-detail-label">Trigger:</span>
-                                  <span className="pattern-detail-value">{trackData.trig_counts.trigger}</span>
-                                </div>
-                                <div className="pattern-detail-item">
-                                  <span className="pattern-detail-label">Trigless:</span>
-                                  <span className="pattern-detail-value">{trackData.trig_counts.trigless}</span>
-                                </div>
-                                <div className="pattern-detail-item">
-                                  <span className="pattern-detail-label">P-Locks:</span>
-                                  <span className="pattern-detail-value">{trackData.trig_counts.plock}</span>
-                                </div>
-                                <div className="pattern-detail-item">
-                                  <span className="pattern-detail-label">One-Shot:</span>
-                                  <span className="pattern-detail-value">{trackData.trig_counts.oneshot}</span>
-                                </div>
-                                <div className="pattern-detail-item">
-                                  <span className="pattern-detail-label">Recorder:</span>
-                                  <span className="pattern-detail-value">{trackData.steps.filter(step => step.recorder).length}</span>
-                                </div>
-                                <div className="pattern-detail-item">
-                                  <span className="pattern-detail-label">Slide:</span>
-                                  <span className="pattern-detail-value">{trackData.trig_counts.slide}</span>
-                                </div>
-                                <div className="pattern-detail-item">
-                                  <span className="pattern-detail-label">Swing:</span>
-                                  <span className="pattern-detail-value">{trackData.trig_counts.swing}</span>
-                                </div>
-                              </div>
-                            </div>
-
                             {/* Pattern Grid Visualization */}
                             <div className="pattern-grid-section">
                               <div className="pattern-grid-container">
