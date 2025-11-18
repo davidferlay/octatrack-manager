@@ -12,15 +12,16 @@ A desktop application for managing Elektron Octatrack projects, built with Tauri
 
 <p align="center">
   <a href="https://www.buymeacoffee.com/octatrackmanager" target="_blank">
-    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 145px !important;" >
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px; width: 145px;" >
   </a>
 </p>
 
 <p align="center">
   <a href="https://www.elektronauts.com/t/file-manager-for-octatrack" target="_blank">
-    <img src="public/contribute-on-elektraunauts-bg.png" alt="Contribute on Elektronauts" style="height: 40px !important;width: 145px !important;" >
+    <img src="public/contribute-on-elektraunauts-bg.png" alt="Contribute on Elektronauts" style="width: 230px;" >
   </a>
 </p>
+
 
 
 ## Features
