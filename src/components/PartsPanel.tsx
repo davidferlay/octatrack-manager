@@ -49,13 +49,14 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
     return value.toString();
   };
 
-  const formatFxRouting = (value: number): string => {
-    // FX routing values: 0=OFF, 1=TO FX1, 2=TO FX2, 3=TO FX1+2
+  const formatFxEnvTrig = (value: number): string => {
+    // AMP SETUP FX1/FX2 envelope trigger modes (affects FILTER and LO-FI effects)
+    // Manual page 59: Controls how envelope affects multi mode filter or amplitude modulator
     switch (value) {
-      case 0: return 'OFF';
-      case 1: return 'FX1';
-      case 2: return 'FX2';
-      case 3: return 'FX1+2';
+      case 0: return 'ANLG'; // Envelope starts from current level
+      case 1: return 'RTRG'; // Envelope starts from zero on sample trig
+      case 2: return 'R+T';  // Envelope starts from zero on sample/trigless trig
+      case 3: return 'TTRG'; // Envelope starts from current level on sample/trigless trig
       default: return value.toString();
     }
   };
@@ -315,11 +316,11 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
                   </div>
                   <div className="param-item">
                     <span className="param-label">FX1</span>
-                    <span className="param-value">{formatFxRouting(amp.amp_setup_fx1)}</span>
+                    <span className="param-value">{formatFxEnvTrig(amp.amp_setup_fx1)}</span>
                   </div>
                   <div className="param-item">
                     <span className="param-label">FX2</span>
-                    <span className="param-value">{formatFxRouting(amp.amp_setup_fx2)}</span>
+                    <span className="param-value">{formatFxEnvTrig(amp.amp_setup_fx2)}</span>
                   </div>
                 </div>
               </div>
@@ -540,7 +541,6 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
       <div className="parts-tracks">
         {tracksToShow.map((fx) => {
           const machine = part.machines[fx.track_id];
-          const amp = part.amps[fx.track_id];
           const machineType = machine.machine_type;
           const mainLabels = getFxMainLabels(fx.fx1_type);
           const setupLabels = getFxSetupLabels(fx.fx1_type);
@@ -557,10 +557,6 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
               <div className="parts-params-section">
                 <div className="params-label">FX1 - {formatFxType(fx.fx1_type)}</div>
                 <div className="params-grid">
-                  <div className="param-item">
-                    <span className="param-label">SEND</span>
-                    <span className="param-value">{formatFxRouting(amp.amp_setup_fx1)}</span>
-                  </div>
                   {mainLabels.map((label, index) => {
                     if (!label) return null; // Skip empty labels
                     return (
@@ -603,7 +599,6 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
       <div className="parts-tracks">
         {tracksToShow.map((fx) => {
           const machine = part.machines[fx.track_id];
-          const amp = part.amps[fx.track_id];
           const machineType = machine.machine_type;
           const mainLabels = getFxMainLabels(fx.fx2_type);
           const setupLabels = getFxSetupLabels(fx.fx2_type);
@@ -620,10 +615,6 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
               <div className="parts-params-section">
                 <div className="params-label">FX2 - {formatFxType(fx.fx2_type)}</div>
                 <div className="params-grid">
-                  <div className="param-item">
-                    <span className="param-label">SEND</span>
-                    <span className="param-value">{formatFxRouting(amp.amp_setup_fx2)}</span>
-                  </div>
                   {mainLabels.map((label, index) => {
                     if (!label) return null; // Skip empty labels
                     return (

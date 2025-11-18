@@ -1670,6 +1670,7 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<Vec<PartData
             // Get AMP parameters
             let amp_params = &part.audio_track_params_values[track_id as usize].amp;
             let amp_setup = &part.audio_track_params_setup[track_id as usize].amp;
+
             amps.push(PartTrackAmp {
                 track_id,
                 atk: amp_params.atk,
