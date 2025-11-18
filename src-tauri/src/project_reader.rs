@@ -339,13 +339,87 @@ pub struct PartTrackFx {
     pub fx2_setup6: u8,
 }
 
+// MIDI track parameter structures
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PartTrackMidiNote {
+    pub track_id: u8,              // 0-7 for MIDI tracks M1-M8
+    // NOTE MAIN parameters
+    pub note: u8,
+    pub vel: u8,
+    pub len: u8,
+    pub not2: u8,
+    pub not3: u8,
+    pub not4: u8,
+    // NOTE SETUP parameters
+    pub chan: u8,                  // MIDI channel
+    pub bank: u8,                  // Bank select
+    pub prog: u8,                  // Program change
+    pub sbnk: u8,                  // Sub bank
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PartTrackMidiArp {
+    pub track_id: u8,              // 0-7 for MIDI tracks M1-M8
+    // ARP MAIN parameters
+    pub tran: u8,                  // Transpose
+    pub leg: u8,                   // Legato
+    pub mode: u8,                  // Arpeggiator mode
+    pub spd: u8,                   // Speed
+    pub rnge: u8,                  // Range
+    pub nlen: u8,                  // Note length
+    // ARP SETUP parameters
+    pub len: u8,                   // Arp sequence length
+    pub key: u8,                   // Scale/key setting
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PartTrackMidiCtrl1 {
+    pub track_id: u8,              // 0-7 for MIDI tracks M1-M8
+    // CTRL1 MAIN parameters
+    pub pb: u8,                    // Pitch bend
+    pub at: u8,                    // Aftertouch
+    pub cc1: u8,                   // CC1 value
+    pub cc2: u8,                   // CC2 value
+    pub cc3: u8,                   // CC3 value
+    pub cc4: u8,                   // CC4 value
+    // CTRL1 SETUP parameters (CC numbers, not values)
+    pub cc1_num: u8,               // CC1 number
+    pub cc2_num: u8,               // CC2 number
+    pub cc3_num: u8,               // CC3 number
+    pub cc4_num: u8,               // CC4 number
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PartTrackMidiCtrl2 {
+    pub track_id: u8,              // 0-7 for MIDI tracks M1-M8
+    // CTRL2 MAIN parameters
+    pub cc5: u8,                   // CC5 value
+    pub cc6: u8,                   // CC6 value
+    pub cc7: u8,                   // CC7 value
+    pub cc8: u8,                   // CC8 value
+    pub cc9: u8,                   // CC9 value
+    pub cc10: u8,                  // CC10 value
+    // CTRL2 SETUP parameters (CC numbers, not values)
+    pub cc5_num: u8,               // CC5 number
+    pub cc6_num: u8,               // CC6 number
+    pub cc7_num: u8,               // CC7 number
+    pub cc8_num: u8,               // CC8 number
+    pub cc9_num: u8,               // CC9 number
+    pub cc10_num: u8,              // CC10 number
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PartData {
     pub part_id: u8,               // 0-3 for Parts 1-4
     pub machines: Vec<PartTrackMachine>,  // 8 audio tracks
     pub amps: Vec<PartTrackAmp>,          // 8 audio tracks
-    pub lfos: Vec<PartTrackLfo>,          // 8 audio tracks
+    pub lfos: Vec<PartTrackLfo>,          // 8 audio tracks (also used for MIDI LFOs)
     pub fxs: Vec<PartTrackFx>,            // 8 audio tracks
+    pub midi_notes: Vec<PartTrackMidiNote>,  // 8 MIDI tracks
+    pub midi_arps: Vec<PartTrackMidiArp>,    // 8 MIDI tracks
+    pub midi_lfos: Vec<PartTrackLfo>,        // 8 MIDI tracks (reuses audio LFO structure)
+    pub midi_ctrl1s: Vec<PartTrackMidiCtrl1>, // 8 MIDI tracks
+    pub midi_ctrl2s: Vec<PartTrackMidiCtrl2>, // 8 MIDI tracks
 }
 
 /// Check audio file compatibility with Octatrack
@@ -1816,12 +1890,141 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<Vec<PartData
             });
         }
 
+        // Process 8 MIDI tracks (tracks 0-7)
+        let mut midi_notes = Vec::new();
+        let mut midi_arps = Vec::new();
+        let mut midi_lfos = Vec::new();
+        let mut midi_ctrl1s = Vec::new();
+        let mut midi_ctrl2s = Vec::new();
+
+        for track_id in 0..8 {
+            // Get MIDI NOTE parameters
+            let midi_note_params = &part.midi_track_params_values[track_id as usize].midi;
+            let midi_note_setup = &part.midi_track_params_setup[track_id as usize].note;
+
+            midi_notes.push(PartTrackMidiNote {
+                track_id,
+                // NOTE MAIN parameters
+                note: midi_note_params.note,
+                vel: midi_note_params.vel,
+                len: midi_note_params.len,
+                not2: midi_note_params.not2,
+                not3: midi_note_params.not3,
+                not4: midi_note_params.not4,
+                // NOTE SETUP parameters
+                chan: midi_note_setup.chan,
+                bank: midi_note_setup.bank,
+                prog: midi_note_setup.prog,
+                sbnk: midi_note_setup.sbank,
+            });
+
+            // Get MIDI ARP parameters
+            let midi_arp_params = &part.midi_track_params_values[track_id as usize].arp;
+            let midi_arp_setup = &part.midi_track_params_setup[track_id as usize].arp;
+
+            midi_arps.push(PartTrackMidiArp {
+                track_id,
+                // ARP MAIN parameters
+                tran: midi_arp_params.tran,
+                leg: midi_arp_params.leg,
+                mode: midi_arp_params.mode,
+                spd: midi_arp_params.spd,
+                rnge: midi_arp_params.rnge,
+                nlen: midi_arp_params.nlen,
+                // ARP SETUP parameters
+                len: midi_arp_setup.len,
+                key: midi_arp_setup.key,
+            });
+
+            // Get MIDI LFO parameters (reuse audio LFO structure)
+            let midi_lfo_params = &part.midi_track_params_values[track_id as usize].lfo;
+            let midi_lfo_setup_1 = &part.midi_track_params_setup[track_id as usize].lfo1;
+            let midi_lfo_setup_2 = &part.midi_track_params_setup[track_id as usize].lfo2;
+
+            // Get custom LFO design for MIDI tracks
+            let midi_custom_lfo_design = part.midi_tracks_custom_lfos[track_id as usize].0.to_vec();
+
+            midi_lfos.push(PartTrackLfo {
+                track_id,
+                // MAIN LFO parameters
+                spd1: midi_lfo_params.spd1,
+                spd2: midi_lfo_params.spd2,
+                spd3: midi_lfo_params.spd3,
+                dep1: midi_lfo_params.dep1,
+                dep2: midi_lfo_params.dep2,
+                dep3: midi_lfo_params.dep3,
+                // SETUP LFO parameters (Setup 1)
+                lfo1_pmtr: midi_lfo_setup_1.lfo1_pmtr,
+                lfo2_pmtr: midi_lfo_setup_1.lfo2_pmtr,
+                lfo3_pmtr: midi_lfo_setup_1.lfo3_pmtr,
+                lfo1_wave: midi_lfo_setup_1.lfo1_wave,
+                lfo2_wave: midi_lfo_setup_1.lfo2_wave,
+                lfo3_wave: midi_lfo_setup_1.lfo3_wave,
+                // SETUP LFO parameters (Setup 2)
+                lfo1_mult: midi_lfo_setup_2.lfo1_mult,
+                lfo2_mult: midi_lfo_setup_2.lfo2_mult,
+                lfo3_mult: midi_lfo_setup_2.lfo3_mult,
+                lfo1_trig: midi_lfo_setup_2.lfo1_trig,
+                lfo2_trig: midi_lfo_setup_2.lfo2_trig,
+                lfo3_trig: midi_lfo_setup_2.lfo3_trig,
+                // CUSTOM LFO Design
+                custom_lfo_design: midi_custom_lfo_design,
+            });
+
+            // Get MIDI CTRL1 parameters
+            let midi_ctrl1_params = &part.midi_track_params_values[track_id as usize].ctrl1;
+            let midi_ctrl1_setup = &part.midi_track_params_setup[track_id as usize].ctrl1;
+
+            midi_ctrl1s.push(PartTrackMidiCtrl1 {
+                track_id,
+                // CTRL1 MAIN parameters
+                pb: midi_ctrl1_params.pb,
+                at: midi_ctrl1_params.at,
+                cc1: midi_ctrl1_params.cc1,
+                cc2: midi_ctrl1_params.cc2,
+                cc3: midi_ctrl1_params.cc3,
+                cc4: midi_ctrl1_params.cc4,
+                // CTRL1 SETUP parameters (CC numbers)
+                cc1_num: midi_ctrl1_setup.cc1,
+                cc2_num: midi_ctrl1_setup.cc2,
+                cc3_num: midi_ctrl1_setup.cc3,
+                cc4_num: midi_ctrl1_setup.cc4,
+            });
+
+            // Get MIDI CTRL2 parameters
+            let midi_ctrl2_params = &part.midi_track_params_values[track_id as usize].ctrl2;
+            let midi_ctrl2_setup = &part.midi_track_params_setup[track_id as usize].ctrl2;
+
+            midi_ctrl2s.push(PartTrackMidiCtrl2 {
+                track_id,
+                // CTRL2 MAIN parameters
+                cc5: midi_ctrl2_params.cc5,
+                cc6: midi_ctrl2_params.cc6,
+                cc7: midi_ctrl2_params.cc7,
+                cc8: midi_ctrl2_params.cc8,
+                cc9: midi_ctrl2_params.cc9,
+                cc10: midi_ctrl2_params.cc10,
+                // CTRL2 SETUP parameters (CC numbers)
+                cc5_num: midi_ctrl2_setup.cc5,
+                cc6_num: midi_ctrl2_setup.cc6,
+                cc7_num: midi_ctrl2_setup.cc7,
+                cc8_num: midi_ctrl2_setup.cc8,
+                cc9_num: midi_ctrl2_setup.cc9,
+                cc10_num: midi_ctrl2_setup.cc10,
+            });
+        }
+
         parts_data.push(PartData {
             part_id,
             machines,
             amps,
             lfos,
             fxs,
+            midi_notes,
+            midi_arps,
+            midi_lfos,
+            midi_ctrl1s,
+            midi_ctrl2s,
         });
     }
 

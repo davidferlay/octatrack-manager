@@ -12,16 +12,21 @@ interface PartsPanelProps {
   selectedTrack?: number;  // 0-7 for T1-T8, undefined = show all
 }
 
-type PageType = 'SRC' | 'AMP' | 'LFO' | 'FX1' | 'FX2';
+type AudioPageType = 'SRC' | 'AMP' | 'LFO' | 'FX1' | 'FX2';
+type MidiPageType = 'NOTE' | 'ARP' | 'LFO' | 'CTRL1' | 'CTRL2';
 type LfoTabType = 'LFO1' | 'LFO2' | 'LFO3' | 'DESIGN';
 
 export default function PartsPanel({ projectPath, bankId, bankName, partNames, selectedTrack }: PartsPanelProps) {
   const [partsData, setPartsData] = useState<PartData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activePage, setActivePage] = useState<PageType>('SRC');
+  const [activeAudioPage, setActiveAudioPage] = useState<AudioPageType>('SRC');
+  const [activeMidiPage, setActiveMidiPage] = useState<MidiPageType>('NOTE');
   const [activePartIndex, setActivePartIndex] = useState<number>(0);
   const [activeLfoTab, setActiveLfoTab] = useState<LfoTabType>('LFO1');
+
+  // Determine if selected track is MIDI (tracks 8-15) or Audio (tracks 0-7)
+  const isMidiTrack = selectedTrack !== undefined && selectedTrack >= 8;
 
   useEffect(() => {
     loadPartsData();
@@ -695,6 +700,444 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
     );
   };
 
+  // MIDI Track Rendering Functions
+  const renderNotePage = (part: PartData) => {
+    const tracksToShow = selectedTrack !== undefined
+      ? [part.midi_notes[selectedTrack - 8]]
+      : part.midi_notes;
+
+    return (
+      <div className="parts-tracks">
+        {tracksToShow.map((midi_note) => (
+          <div key={midi_note.track_id} className="parts-track">
+            <div className="parts-track-header">
+              <TrackBadge trackId={midi_note.track_id + 8} />
+              <span className="machine-type">MIDI</span>
+            </div>
+
+            <div className="parts-params-section">
+              <div className="params-label">NOTE MAIN</div>
+              <div className="params-grid">
+                <div className="param-item">
+                  <span className="param-label">NOTE</span>
+                  <span className="param-value">{midi_note.note}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">VEL</span>
+                  <span className="param-value">{midi_note.vel}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">LEN</span>
+                  <span className="param-value">{midi_note.len}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">NOT2</span>
+                  <span className="param-value">{midi_note.not2}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">NOT3</span>
+                  <span className="param-value">{midi_note.not3}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">NOT4</span>
+                  <span className="param-value">{midi_note.not4}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="parts-params-section">
+              <div className="params-label">NOTE SETUP</div>
+              <div className="params-grid">
+                <div className="param-item">
+                  <span className="param-label">CHAN</span>
+                  <span className="param-value">{midi_note.chan}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">BANK</span>
+                  <span className="param-value">{midi_note.bank}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">PROG</span>
+                  <span className="param-value">{midi_note.prog}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">SBNK</span>
+                  <span className="param-value">{midi_note.sbnk}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderArpPage = (part: PartData) => {
+    const tracksToShow = selectedTrack !== undefined
+      ? [part.midi_arps[selectedTrack - 8]]
+      : part.midi_arps;
+
+    return (
+      <div className="parts-tracks">
+        {tracksToShow.map((midi_arp) => (
+          <div key={midi_arp.track_id} className="parts-track">
+            <div className="parts-track-header">
+              <TrackBadge trackId={midi_arp.track_id + 8} />
+              <span className="machine-type">MIDI</span>
+            </div>
+
+            <div className="parts-params-section">
+              <div className="params-label">ARP MAIN</div>
+              <div className="params-grid">
+                <div className="param-item">
+                  <span className="param-label">TRAN</span>
+                  <span className="param-value">{midi_arp.tran}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">LEG</span>
+                  <span className="param-value">{midi_arp.leg}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">MODE</span>
+                  <span className="param-value">{midi_arp.mode}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">SPD</span>
+                  <span className="param-value">{midi_arp.spd}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">RNGE</span>
+                  <span className="param-value">{midi_arp.rnge}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">NLEN</span>
+                  <span className="param-value">{midi_arp.nlen}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="parts-params-section">
+              <div className="params-label">ARP SETUP</div>
+              <div className="params-grid">
+                <div className="param-item">
+                  <span className="param-label">LEN</span>
+                  <span className="param-value">{midi_arp.len}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">KEY</span>
+                  <span className="param-value">{midi_arp.key}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderMidiLfoPage = (part: PartData) => {
+    const tracksToShow = selectedTrack !== undefined
+      ? [part.midi_lfos[selectedTrack - 8]]
+      : part.midi_lfos;
+
+    return (
+      <div className="parts-tracks">
+        <div className="parts-lfo-container">
+          {/* LFO Vertical Sidebar */}
+          <div className="parts-lfo-sidebar">
+            <button
+              className={`parts-tab ${activeLfoTab === 'LFO1' ? 'active' : ''}`}
+              onClick={() => setActiveLfoTab('LFO1')}
+            >
+              LFO 1
+            </button>
+            <button
+              className={`parts-tab ${activeLfoTab === 'LFO2' ? 'active' : ''}`}
+              onClick={() => setActiveLfoTab('LFO2')}
+            >
+              LFO 2
+            </button>
+            <button
+              className={`parts-tab ${activeLfoTab === 'LFO3' ? 'active' : ''}`}
+              onClick={() => setActiveLfoTab('LFO3')}
+            >
+              LFO 3
+            </button>
+            <button
+              className={`parts-tab ${activeLfoTab === 'DESIGN' ? 'active' : ''}`}
+              onClick={() => setActiveLfoTab('DESIGN')}
+            >
+              DESIGN
+            </button>
+          </div>
+
+          {/* LFO Content */}
+          <div className="parts-lfo-content">
+            {tracksToShow.map((lfo) => {
+              // Determine which LFO's parameters to show
+              const lfoParams = activeLfoTab === 'LFO1' ? {
+                speed: lfo.spd1,
+                depth: lfo.dep1,
+                param: lfo.lfo1_pmtr,
+                wave: lfo.lfo1_wave,
+                mult: lfo.lfo1_mult,
+                trig: lfo.lfo1_trig,
+              } : activeLfoTab === 'LFO2' ? {
+                speed: lfo.spd2,
+                depth: lfo.dep2,
+                param: lfo.lfo2_pmtr,
+                wave: lfo.lfo2_wave,
+                mult: lfo.lfo2_mult,
+                trig: lfo.lfo2_trig,
+              } : activeLfoTab === 'LFO3' ? {
+                speed: lfo.spd3,
+                depth: lfo.dep3,
+                param: lfo.lfo3_pmtr,
+                wave: lfo.lfo3_wave,
+                mult: lfo.lfo3_mult,
+                trig: lfo.lfo3_trig,
+              } : null;
+
+              return (
+                <div key={lfo.track_id} className="parts-track">
+                  <div className="parts-track-header">
+                    <TrackBadge trackId={lfo.track_id + 8} />
+                    <span className="machine-type">MIDI</span>
+                  </div>
+
+                  {activeLfoTab === 'DESIGN' ? (
+                    <div className="parts-params-section">
+                      <div className="params-label">CUSTOM LFO DESIGN</div>
+                      {lfo.custom_lfo_design && lfo.custom_lfo_design.length === 16 ? (
+                        <div className="lfo-design-viz">
+                          {lfo.custom_lfo_design.map((value, index) => {
+                            const maxValue = 255;
+                            const heightPercent = (value / maxValue) * 100;
+                            return (
+                              <div key={index} className="lfo-bar-container">
+                                <div
+                                  className="lfo-bar"
+                                  style={{
+                                    height: `${heightPercent}%`,
+                                    minHeight: '2px'
+                                  }}
+                                  title={`Step ${index + 1}: ${value}`}
+                                />
+                                <div className="lfo-step-label">{index + 1}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="no-lfo-data">
+                          No custom LFO design data available
+                        </div>
+                      )}
+                    </div>
+                  ) : lfoParams && (
+                    <>
+                      <div className="parts-params-section">
+                        <div className="params-label">LFO MAIN</div>
+                        <div className="params-grid">
+                          <div className="param-item">
+                            <span className="param-label">SPD</span>
+                            <span className="param-value">{lfoParams.speed}</span>
+                          </div>
+                          <div className="param-item">
+                            <span className="param-label">DEP</span>
+                            <span className="param-value">{lfoParams.depth}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="parts-params-section">
+                        <div className="params-label">LFO SETUP 1</div>
+                        <div className="params-grid">
+                          <div className="param-item">
+                            <span className="param-label">PMTR</span>
+                            <span className="param-value">{lfoParams.param}</span>
+                          </div>
+                          <div className="param-item">
+                            <span className="param-label">WAVE</span>
+                            <span className="param-value">{lfoParams.wave}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="parts-params-section">
+                        <div className="params-label">LFO SETUP 2</div>
+                        <div className="params-grid">
+                          <div className="param-item">
+                            <span className="param-label">MULT</span>
+                            <span className="param-value">{lfoParams.mult}</span>
+                          </div>
+                          <div className="param-item">
+                            <span className="param-label">TRIG</span>
+                            <span className="param-value">{lfoParams.trig}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderCtrl1Page = (part: PartData) => {
+    const tracksToShow = selectedTrack !== undefined
+      ? [part.midi_ctrl1s[selectedTrack - 8]]
+      : part.midi_ctrl1s;
+
+    return (
+      <div className="parts-tracks">
+        {tracksToShow.map((midi_ctrl1) => (
+          <div key={midi_ctrl1.track_id} className="parts-track">
+            <div className="parts-track-header">
+              <TrackBadge trackId={midi_ctrl1.track_id + 8} />
+              <span className="machine-type">MIDI</span>
+            </div>
+
+            <div className="parts-params-section">
+              <div className="params-label">CTRL1 MAIN</div>
+              <div className="params-grid">
+                <div className="param-item">
+                  <span className="param-label">PB</span>
+                  <span className="param-value">{midi_ctrl1.pb}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">AT</span>
+                  <span className="param-value">{midi_ctrl1.at}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">CC1</span>
+                  <span className="param-value">{midi_ctrl1.cc1}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">CC2</span>
+                  <span className="param-value">{midi_ctrl1.cc2}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">CC3</span>
+                  <span className="param-value">{midi_ctrl1.cc3}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">CC4</span>
+                  <span className="param-value">{midi_ctrl1.cc4}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="parts-params-section">
+              <div className="params-label">CTRL1 SETUP</div>
+              <div className="params-grid">
+                <div className="param-item">
+                  <span className="param-label">CC1#</span>
+                  <span className="param-value">{midi_ctrl1.cc1_num}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">CC2#</span>
+                  <span className="param-value">{midi_ctrl1.cc2_num}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">CC3#</span>
+                  <span className="param-value">{midi_ctrl1.cc3_num}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">CC4#</span>
+                  <span className="param-value">{midi_ctrl1.cc4_num}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderCtrl2Page = (part: PartData) => {
+    const tracksToShow = selectedTrack !== undefined
+      ? [part.midi_ctrl2s[selectedTrack - 8]]
+      : part.midi_ctrl2s;
+
+    return (
+      <div className="parts-tracks">
+        {tracksToShow.map((midi_ctrl2) => (
+          <div key={midi_ctrl2.track_id} className="parts-track">
+            <div className="parts-track-header">
+              <TrackBadge trackId={midi_ctrl2.track_id + 8} />
+              <span className="machine-type">MIDI</span>
+            </div>
+
+            <div className="parts-params-section">
+              <div className="params-label">CTRL2 MAIN</div>
+              <div className="params-grid">
+                <div className="param-item">
+                  <span className="param-label">CC5</span>
+                  <span className="param-value">{midi_ctrl2.cc5}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">CC6</span>
+                  <span className="param-value">{midi_ctrl2.cc6}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">CC7</span>
+                  <span className="param-value">{midi_ctrl2.cc7}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">CC8</span>
+                  <span className="param-value">{midi_ctrl2.cc8}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">CC9</span>
+                  <span className="param-value">{midi_ctrl2.cc9}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">CC10</span>
+                  <span className="param-value">{midi_ctrl2.cc10}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="parts-params-section">
+              <div className="params-label">CTRL2 SETUP</div>
+              <div className="params-grid">
+                <div className="param-item">
+                  <span className="param-label">CC5#</span>
+                  <span className="param-value">{midi_ctrl2.cc5_num}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">CC6#</span>
+                  <span className="param-value">{midi_ctrl2.cc6_num}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">CC7#</span>
+                  <span className="param-value">{midi_ctrl2.cc7_num}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">CC8#</span>
+                  <span className="param-value">{midi_ctrl2.cc8_num}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">CC9#</span>
+                  <span className="param-value">{midi_ctrl2.cc9_num}</span>
+                </div>
+                <div className="param-item">
+                  <span className="param-label">CC10#</span>
+                  <span className="param-value">{midi_ctrl2.cc10_num}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   if (loading) {
     return <div className="parts-panel-loading">Loading Parts data...</div>;
   }
@@ -705,11 +1148,6 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
 
   if (partsData.length === 0) {
     return <div className="parts-panel-empty">No Parts data available</div>;
-  }
-
-  // Parts data only exists for Audio tracks (0-7), not MIDI tracks (8-15)
-  if (selectedTrack !== undefined && selectedTrack >= 8) {
-    return <div className="parts-panel-empty">Parts data is only available for Audio tracks (T1-T8), not MIDI tracks</div>;
   }
 
   const activePart = partsData[activePartIndex];
@@ -733,51 +1171,97 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
         ))}
       </div>
 
-      {/* Content for selected part */}
-      <div className="parts-content centered">
-        {activePart && (
+      {/* Page Tabs - Audio or MIDI based on selected track */}
+      <div className="parts-page-tabs">
+        {!isMidiTrack ? (
           <>
-            {activePage === 'SRC' && renderSrcPage(activePart)}
-            {activePage === 'AMP' && renderAmpPage(activePart)}
-            {activePage === 'LFO' && renderLfoPage(activePart)}
-            {activePage === 'FX1' && renderFx1Page(activePart)}
-            {activePage === 'FX2' && renderFx2Page(activePart)}
+            <button
+              className={`parts-tab ${activeAudioPage === 'SRC' ? 'active' : ''}`}
+              onClick={() => setActiveAudioPage('SRC')}
+            >
+              SRC
+            </button>
+            <button
+              className={`parts-tab ${activeAudioPage === 'AMP' ? 'active' : ''}`}
+              onClick={() => setActiveAudioPage('AMP')}
+            >
+              AMP
+            </button>
+            <button
+              className={`parts-tab ${activeAudioPage === 'LFO' ? 'active' : ''}`}
+              onClick={() => setActiveAudioPage('LFO')}
+            >
+              LFO
+            </button>
+            <button
+              className={`parts-tab ${activeAudioPage === 'FX1' ? 'active' : ''}`}
+              onClick={() => setActiveAudioPage('FX1')}
+            >
+              FX1
+            </button>
+            <button
+              className={`parts-tab ${activeAudioPage === 'FX2' ? 'active' : ''}`}
+              onClick={() => setActiveAudioPage('FX2')}
+            >
+              FX2
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              className={`parts-tab ${activeMidiPage === 'NOTE' ? 'active' : ''}`}
+              onClick={() => setActiveMidiPage('NOTE')}
+            >
+              NOTE
+            </button>
+            <button
+              className={`parts-tab ${activeMidiPage === 'ARP' ? 'active' : ''}`}
+              onClick={() => setActiveMidiPage('ARP')}
+            >
+              ARP
+            </button>
+            <button
+              className={`parts-tab ${activeMidiPage === 'LFO' ? 'active' : ''}`}
+              onClick={() => setActiveMidiPage('LFO')}
+            >
+              LFO
+            </button>
+            <button
+              className={`parts-tab ${activeMidiPage === 'CTRL1' ? 'active' : ''}`}
+              onClick={() => setActiveMidiPage('CTRL1')}
+            >
+              CTRL1
+            </button>
+            <button
+              className={`parts-tab ${activeMidiPage === 'CTRL2' ? 'active' : ''}`}
+              onClick={() => setActiveMidiPage('CTRL2')}
+            >
+              CTRL2
+            </button>
           </>
         )}
       </div>
 
-      {/* SRC/AMP/LFO Page Tabs */}
-      <div className="parts-page-tabs">
-        <button
-          className={`parts-tab ${activePage === 'SRC' ? 'active' : ''}`}
-          onClick={() => setActivePage('SRC')}
-        >
-          SRC
-        </button>
-        <button
-          className={`parts-tab ${activePage === 'AMP' ? 'active' : ''}`}
-          onClick={() => setActivePage('AMP')}
-        >
-          AMP
-        </button>
-        <button
-          className={`parts-tab ${activePage === 'LFO' ? 'active' : ''}`}
-          onClick={() => setActivePage('LFO')}
-        >
-          LFO
-        </button>
-        <button
-          className={`parts-tab ${activePage === 'FX1' ? 'active' : ''}`}
-          onClick={() => setActivePage('FX1')}
-        >
-          FX1
-        </button>
-        <button
-          className={`parts-tab ${activePage === 'FX2' ? 'active' : ''}`}
-          onClick={() => setActivePage('FX2')}
-        >
-          FX2
-        </button>
+      {/* Content for selected part */}
+      <div className="parts-content centered">
+        {activePart && !isMidiTrack && (
+          <>
+            {activeAudioPage === 'SRC' && renderSrcPage(activePart)}
+            {activeAudioPage === 'AMP' && renderAmpPage(activePart)}
+            {activeAudioPage === 'LFO' && renderLfoPage(activePart)}
+            {activeAudioPage === 'FX1' && renderFx1Page(activePart)}
+            {activeAudioPage === 'FX2' && renderFx2Page(activePart)}
+          </>
+        )}
+        {activePart && isMidiTrack && (
+          <>
+            {activeMidiPage === 'NOTE' && renderNotePage(activePart)}
+            {activeMidiPage === 'ARP' && renderArpPage(activePart)}
+            {activeMidiPage === 'LFO' && renderMidiLfoPage(activePart)}
+            {activeMidiPage === 'CTRL1' && renderCtrl1Page(activePart)}
+            {activeMidiPage === 'CTRL2' && renderCtrl2Page(activePart)}
+          </>
+        )}
       </div>
     </div>
   );
