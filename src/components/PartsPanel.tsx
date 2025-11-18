@@ -165,6 +165,7 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
               <div className="params-grid">
                 {machine.machine_type === 'Thru' ? (
                   <>
+                    {/* THRU MAIN parameters */}
                     <div className="param-item">
                       <span className="param-label">INAB</span>
                       <span className="param-value">{formatParamValue(machine.machine_params.in_ab)}</span>
@@ -182,8 +183,37 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
                       <span className="param-value">{formatParamValue(machine.machine_params.vol_cd)}</span>
                     </div>
                   </>
+                ) : machine.machine_type === 'Neighbor' ? (
+                  <>
+                    {/* NEIGHBOR has no MAIN parameters */}
+                  </>
+                ) : machine.machine_type === 'Pickup' ? (
+                  <>
+                    {/* PICKUP MAIN parameters */}
+                    <div className="param-item">
+                      <span className="param-label">PITCH</span>
+                      <span className="param-value">{formatParamValue(machine.machine_params.ptch)}</span>
+                    </div>
+                    <div className="param-item">
+                      <span className="param-label">DIR</span>
+                      <span className="param-value">{formatParamValue(machine.machine_params.dir)}</span>
+                    </div>
+                    <div className="param-item">
+                      <span className="param-label">LEN</span>
+                      <span className="param-value">{formatParamValue(machine.machine_params.len)}</span>
+                    </div>
+                    <div className="param-item">
+                      <span className="param-label">GAIN</span>
+                      <span className="param-value">{formatParamValue(machine.machine_params.gain)}</span>
+                    </div>
+                    <div className="param-item">
+                      <span className="param-label">OP</span>
+                      <span className="param-value">{formatParamValue(machine.machine_params.op)}</span>
+                    </div>
+                  </>
                 ) : (
                   <>
+                    {/* FLEX/STATIC MAIN parameters */}
                     <div className="param-item">
                       <span className="param-label">PTCH</span>
                       <span className="param-value">{formatParamValue(machine.machine_params.ptch)}</span>
@@ -213,34 +243,51 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
               </div>
             </div>
 
-            {machine.machine_type !== 'Thru' && (
+            {machine.machine_type !== 'Thru' && machine.machine_type !== 'Neighbor' && (
               <div className="parts-params-section">
                 <div className="params-label">SETUP</div>
                 <div className="params-grid">
-                  <div className="param-item">
-                    <span className="param-label">LOOP</span>
-                    <span className="param-value">{formatParamValue(machine.machine_setup.xloop)}</span>
-                  </div>
-                  <div className="param-item">
-                    <span className="param-label">SLIC</span>
-                    <span className="param-value">{formatParamValue(machine.machine_setup.slic)}</span>
-                  </div>
-                  <div className="param-item">
-                    <span className="param-label">LEN</span>
-                    <span className="param-value">{formatParamValue(machine.machine_setup.len)}</span>
-                  </div>
-                  <div className="param-item">
-                    <span className="param-label">RATE</span>
-                    <span className="param-value">{formatParamValue(machine.machine_setup.rate)}</span>
-                  </div>
-                  <div className="param-item">
-                    <span className="param-label">TSTR</span>
-                    <span className="param-value">{formatParamValue(machine.machine_setup.tstr)}</span>
-                  </div>
-                  <div className="param-item">
-                    <span className="param-label">TSNS</span>
-                    <span className="param-value">{formatParamValue(machine.machine_setup.tsns)}</span>
-                  </div>
+                  {machine.machine_type === 'Pickup' ? (
+                    <>
+                      {/* PICKUP SETUP parameters */}
+                      <div className="param-item">
+                        <span className="param-label">TSTR</span>
+                        <span className="param-value">{formatParamValue(machine.machine_setup.tstr)}</span>
+                      </div>
+                      <div className="param-item">
+                        <span className="param-label">TSNS</span>
+                        <span className="param-value">{formatParamValue(machine.machine_setup.tsns)}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* FLEX/STATIC SETUP parameters */}
+                      <div className="param-item">
+                        <span className="param-label">LOOP</span>
+                        <span className="param-value">{formatParamValue(machine.machine_setup.xloop)}</span>
+                      </div>
+                      <div className="param-item">
+                        <span className="param-label">SLIC</span>
+                        <span className="param-value">{formatParamValue(machine.machine_setup.slic)}</span>
+                      </div>
+                      <div className="param-item">
+                        <span className="param-label">LEN</span>
+                        <span className="param-value">{formatParamValue(machine.machine_setup.len)}</span>
+                      </div>
+                      <div className="param-item">
+                        <span className="param-label">RATE</span>
+                        <span className="param-value">{formatParamValue(machine.machine_setup.rate)}</span>
+                      </div>
+                      <div className="param-item">
+                        <span className="param-label">TSTR</span>
+                        <span className="param-value">{formatParamValue(machine.machine_setup.tstr)}</span>
+                      </div>
+                      <div className="param-item">
+                        <span className="param-label">TSNS</span>
+                        <span className="param-value">{formatParamValue(machine.machine_setup.tsns)}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             )}

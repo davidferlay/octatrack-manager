@@ -233,6 +233,10 @@ export interface MachineParamValues {
   vol_ab: number | null;
   in_cd: number | null;
   vol_cd: number | null;
+  // PICKUP parameters (ptch and len are shared with FLEX/STATIC above)
+  dir: number | null;
+  gain: number | null;
+  op: number | null;
 }
 
 export interface MachineSetupValues {
