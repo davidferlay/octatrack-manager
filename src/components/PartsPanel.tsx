@@ -21,13 +21,17 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
   const [partsData, setPartsData] = useState<PartData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeAudioPage, setActiveAudioPage] = useState<AudioPageType>('SRC');
-  const [activeMidiPage, setActiveMidiPage] = useState<MidiPageType>('NOTE');
+  // Unified page index: 0=SRC/NOTE, 1=AMP/ARP, 2=LFO, 3=FX1/CTRL1, 4=FX2/CTRL2
+  const [activePageIndex, setActivePageIndex] = useState<number>(0);
   const [activePartIndex, setActivePartIndex] = useState<number>(0);
   const [activeLfoTab, setActiveLfoTab] = useState<LfoTabType>('LFO1');
 
   // Determine if selected track is MIDI (tracks 8-15 or ALL_MIDI_TRACKS) or Audio (tracks 0-7 or ALL_AUDIO_TRACKS)
   const isMidiTrack = selectedTrack !== undefined && (selectedTrack >= 8 || selectedTrack === ALL_MIDI_TRACKS);
+
+  // Derive the actual page type based on whether we're viewing Audio or MIDI tracks
+  const activeAudioPage: AudioPageType = ['SRC', 'AMP', 'LFO', 'FX1', 'FX2'][activePageIndex] as AudioPageType;
+  const activeMidiPage: MidiPageType = ['NOTE', 'ARP', 'LFO', 'CTRL1', 'CTRL2'][activePageIndex] as MidiPageType;
 
   useEffect(() => {
     loadPartsData();
@@ -1132,32 +1136,32 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
         {!isMidiTrack ? (
           <>
             <button
-              className={`parts-tab ${activeAudioPage === 'SRC' ? 'active' : ''}`}
-              onClick={() => setActiveAudioPage('SRC')}
+              className={`parts-tab ${activePageIndex === 0 ? 'active' : ''}`}
+              onClick={() => setActivePageIndex(0)}
             >
               SRC
             </button>
             <button
-              className={`parts-tab ${activeAudioPage === 'AMP' ? 'active' : ''}`}
-              onClick={() => setActiveAudioPage('AMP')}
+              className={`parts-tab ${activePageIndex === 1 ? 'active' : ''}`}
+              onClick={() => setActivePageIndex(1)}
             >
               AMP
             </button>
             <button
-              className={`parts-tab ${activeAudioPage === 'LFO' ? 'active' : ''}`}
-              onClick={() => setActiveAudioPage('LFO')}
+              className={`parts-tab ${activePageIndex === 2 ? 'active' : ''}`}
+              onClick={() => setActivePageIndex(2)}
             >
               LFO
             </button>
             <button
-              className={`parts-tab ${activeAudioPage === 'FX1' ? 'active' : ''}`}
-              onClick={() => setActiveAudioPage('FX1')}
+              className={`parts-tab ${activePageIndex === 3 ? 'active' : ''}`}
+              onClick={() => setActivePageIndex(3)}
             >
               FX1
             </button>
             <button
-              className={`parts-tab ${activeAudioPage === 'FX2' ? 'active' : ''}`}
-              onClick={() => setActiveAudioPage('FX2')}
+              className={`parts-tab ${activePageIndex === 4 ? 'active' : ''}`}
+              onClick={() => setActivePageIndex(4)}
             >
               FX2
             </button>
@@ -1165,32 +1169,32 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
         ) : (
           <>
             <button
-              className={`parts-tab ${activeMidiPage === 'NOTE' ? 'active' : ''}`}
-              onClick={() => setActiveMidiPage('NOTE')}
+              className={`parts-tab ${activePageIndex === 0 ? 'active' : ''}`}
+              onClick={() => setActivePageIndex(0)}
             >
               NOTE
             </button>
             <button
-              className={`parts-tab ${activeMidiPage === 'ARP' ? 'active' : ''}`}
-              onClick={() => setActiveMidiPage('ARP')}
+              className={`parts-tab ${activePageIndex === 1 ? 'active' : ''}`}
+              onClick={() => setActivePageIndex(1)}
             >
               ARP
             </button>
             <button
-              className={`parts-tab ${activeMidiPage === 'LFO' ? 'active' : ''}`}
-              onClick={() => setActiveMidiPage('LFO')}
+              className={`parts-tab ${activePageIndex === 2 ? 'active' : ''}`}
+              onClick={() => setActivePageIndex(2)}
             >
               LFO
             </button>
             <button
-              className={`parts-tab ${activeMidiPage === 'CTRL1' ? 'active' : ''}`}
-              onClick={() => setActiveMidiPage('CTRL1')}
+              className={`parts-tab ${activePageIndex === 3 ? 'active' : ''}`}
+              onClick={() => setActivePageIndex(3)}
             >
               CTRL1
             </button>
             <button
-              className={`parts-tab ${activeMidiPage === 'CTRL2' ? 'active' : ''}`}
-              onClick={() => setActiveMidiPage('CTRL2')}
+              className={`parts-tab ${activePageIndex === 4 ? 'active' : ''}`}
+              onClick={() => setActivePageIndex(4)}
             >
               CTRL2
             </button>
