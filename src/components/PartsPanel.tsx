@@ -842,121 +842,103 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
       : part.midi_lfos;
 
     return (
-      <div className="parts-tracks">
-        <div className="parts-lfo-container">
-          {/* LFO Vertical Sidebar */}
-          <div className="parts-lfo-sidebar">
-            <button
-              className={`parts-tab ${activeLfoTab === 'LFO1' ? 'active' : ''}`}
-              onClick={() => setActiveLfoTab('LFO1')}
-            >
-              LFO 1
-            </button>
-            <button
-              className={`parts-tab ${activeLfoTab === 'LFO2' ? 'active' : ''}`}
-              onClick={() => setActiveLfoTab('LFO2')}
-            >
-              LFO 2
-            </button>
-            <button
-              className={`parts-tab ${activeLfoTab === 'LFO3' ? 'active' : ''}`}
-              onClick={() => setActiveLfoTab('LFO3')}
-            >
-              LFO 3
-            </button>
-            <button
-              className={`parts-tab ${activeLfoTab === 'DESIGN' ? 'active' : ''}`}
-              onClick={() => setActiveLfoTab('DESIGN')}
-            >
-              DESIGN
-            </button>
-          </div>
+      <div className="parts-lfo-layout">
+        {/* LFO Vertical Sidebar */}
+        <div className="parts-lfo-sidebar">
+          <button
+            className={`parts-tab ${activeLfoTab === 'LFO1' ? 'active' : ''}`}
+            onClick={() => setActiveLfoTab('LFO1')}
+          >
+            LFO 1
+          </button>
+          <button
+            className={`parts-tab ${activeLfoTab === 'LFO2' ? 'active' : ''}`}
+            onClick={() => setActiveLfoTab('LFO2')}
+          >
+            LFO 2
+          </button>
+          <button
+            className={`parts-tab ${activeLfoTab === 'LFO3' ? 'active' : ''}`}
+            onClick={() => setActiveLfoTab('LFO3')}
+          >
+            LFO 3
+          </button>
+          <button
+            className={`parts-tab ${activeLfoTab === 'DESIGN' ? 'active' : ''}`}
+            onClick={() => setActiveLfoTab('DESIGN')}
+          >
+            DESIGN
+          </button>
+        </div>
 
-          {/* LFO Content */}
-          <div className="parts-lfo-content">
-            {tracksToShow.map((lfo) => {
-              // Determine which LFO's parameters to show
-              const lfoParams = activeLfoTab === 'LFO1' ? {
-                speed: lfo.spd1,
-                depth: lfo.dep1,
-                param: lfo.lfo1_pmtr,
-                wave: lfo.lfo1_wave,
-                mult: lfo.lfo1_mult,
-                trig: lfo.lfo1_trig,
-              } : activeLfoTab === 'LFO2' ? {
-                speed: lfo.spd2,
-                depth: lfo.dep2,
-                param: lfo.lfo2_pmtr,
-                wave: lfo.lfo2_wave,
-                mult: lfo.lfo2_mult,
-                trig: lfo.lfo2_trig,
-              } : activeLfoTab === 'LFO3' ? {
-                speed: lfo.spd3,
-                depth: lfo.dep3,
-                param: lfo.lfo3_pmtr,
-                wave: lfo.lfo3_wave,
-                mult: lfo.lfo3_mult,
-                trig: lfo.lfo3_trig,
-              } : null;
+        <div className="parts-tracks" style={{ flex: 1 }}>
+          {tracksToShow.map((lfo) => {
+            // Determine which LFO's parameters to show
+            const lfoParams = activeLfoTab === 'LFO1' ? {
+              pmtr: lfo.lfo1_pmtr,
+              wave: lfo.lfo1_wave,
+              mult: lfo.lfo1_mult,
+              trig: lfo.lfo1_trig,
+              spd: lfo.spd1,
+              dep: lfo.dep1,
+            } : activeLfoTab === 'LFO2' ? {
+              pmtr: lfo.lfo2_pmtr,
+              wave: lfo.lfo2_wave,
+              mult: lfo.lfo2_mult,
+              trig: lfo.lfo2_trig,
+              spd: lfo.spd2,
+              dep: lfo.dep2,
+            } : activeLfoTab === 'LFO3' ? {
+              pmtr: lfo.lfo3_pmtr,
+              wave: lfo.lfo3_wave,
+              mult: lfo.lfo3_mult,
+              trig: lfo.lfo3_trig,
+              spd: lfo.spd3,
+              dep: lfo.dep3,
+            } : null;
 
-              return (
-                <div key={lfo.track_id} className="parts-track">
-                  <div className="parts-track-header">
-                    <TrackBadge trackId={lfo.track_id + 8} />
-                    <span className="machine-type">MIDI</span>
-                  </div>
-
-                  {activeLfoTab === 'DESIGN' ? (
-                    renderLfoEnvelope(lfo.custom_lfo_design)
-                  ) : lfoParams && (
-                    <>
-                      <div className="parts-params-section">
-                        <div className="params-label">LFO MAIN</div>
-                        <div className="params-grid">
-                          <div className="param-item">
-                            <span className="param-label">SPD</span>
-                            <span className="param-value">{lfoParams.speed}</span>
-                          </div>
-                          <div className="param-item">
-                            <span className="param-label">DEP</span>
-                            <span className="param-value">{lfoParams.depth}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="parts-params-section">
-                        <div className="params-label">LFO SETUP 1</div>
-                        <div className="params-grid">
-                          <div className="param-item">
-                            <span className="param-label">PMTR</span>
-                            <span className="param-value">{lfoParams.param}</span>
-                          </div>
-                          <div className="param-item">
-                            <span className="param-label">WAVE</span>
-                            <span className="param-value">{lfoParams.wave}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="parts-params-section">
-                        <div className="params-label">LFO SETUP 2</div>
-                        <div className="params-grid">
-                          <div className="param-item">
-                            <span className="param-label">MULT</span>
-                            <span className="param-value">{lfoParams.mult}</span>
-                          </div>
-                          <div className="param-item">
-                            <span className="param-label">TRIG</span>
-                            <span className="param-value">{lfoParams.trig}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  )}
+            return (
+              <div key={lfo.track_id} className="parts-track">
+                <div className="parts-track-header">
+                  <TrackBadge trackId={lfo.track_id + 8} />
+                  <span className="machine-type">MIDI</span>
                 </div>
-              );
-            })}
-          </div>
+
+                {activeLfoTab !== 'DESIGN' ? (
+                  <div className="parts-params-section">
+                    <div className="params-grid">
+                      <div className="param-item">
+                        <span className="param-label">PMTR</span>
+                        <span className="param-value">{lfoParams!.pmtr}</span>
+                      </div>
+                      <div className="param-item">
+                        <span className="param-label">WAVE</span>
+                        <span className="param-value">{formatLfoWave(lfoParams!.wave)}</span>
+                      </div>
+                      <div className="param-item">
+                        <span className="param-label">MULT</span>
+                        <span className="param-value">{formatLfoMult(lfoParams!.mult)}</span>
+                      </div>
+                      <div className="param-item">
+                        <span className="param-label">TRIG</span>
+                        <span className="param-value">{formatLfoTrig(lfoParams!.trig)}</span>
+                      </div>
+                      <div className="param-item">
+                        <span className="param-label">SPD</span>
+                        <span className="param-value">{lfoParams!.spd}</span>
+                      </div>
+                      <div className="param-item">
+                        <span className="param-label">DEP</span>
+                        <span className="param-value">{lfoParams!.dep}</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  renderLfoEnvelope(lfo.custom_lfo_design)
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     );
