@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { PartData } from '../context/ProjectsContext';
 import { TrackBadge } from './TrackBadge';
+import { ALL_MIDI_TRACKS } from './TrackSelector';
 import './PartsPanel.css';
 
 interface PartsPanelProps {
@@ -9,7 +10,7 @@ interface PartsPanelProps {
   bankId: string;
   bankName: string;
   partNames: string[];  // Array of 4 part names
-  selectedTrack?: number;  // 0-7 for T1-T8, undefined = show all
+  selectedTrack?: number;  // 0-7 for T1-T8, 8-15 for M1-M8, -1 for all audio, -2 for all MIDI, undefined = show all audio
 }
 
 type AudioPageType = 'SRC' | 'AMP' | 'LFO' | 'FX1' | 'FX2';
@@ -25,8 +26,8 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
   const [activePartIndex, setActivePartIndex] = useState<number>(0);
   const [activeLfoTab, setActiveLfoTab] = useState<LfoTabType>('LFO1');
 
-  // Determine if selected track is MIDI (tracks 8-15) or Audio (tracks 0-7)
-  const isMidiTrack = selectedTrack !== undefined && selectedTrack >= 8;
+  // Determine if selected track is MIDI (tracks 8-15 or ALL_MIDI_TRACKS) or Audio (tracks 0-7 or ALL_AUDIO_TRACKS)
+  const isMidiTrack = selectedTrack !== undefined && (selectedTrack >= 8 || selectedTrack === ALL_MIDI_TRACKS);
 
   useEffect(() => {
     loadPartsData();
@@ -152,7 +153,7 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
   };
 
   const renderSrcPage = (part: PartData) => {
-    const tracksToShow = selectedTrack !== undefined
+    const tracksToShow = selectedTrack !== undefined && selectedTrack >= 0 && selectedTrack <= 7
       ? [part.machines[selectedTrack]]
       : part.machines;
 
@@ -303,7 +304,7 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
   };
 
   const renderAmpPage = (part: PartData) => {
-    const tracksToShow = selectedTrack !== undefined
+    const tracksToShow = selectedTrack !== undefined && selectedTrack >= 0 && selectedTrack <= 7
       ? [part.amps[selectedTrack]]
       : part.amps;
 
@@ -473,7 +474,7 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
   };
 
   const renderLfoPage = (part: PartData) => {
-    const tracksToShow = selectedTrack !== undefined
+    const tracksToShow = selectedTrack !== undefined && selectedTrack >= 0 && selectedTrack <= 7
       ? [part.lfos[selectedTrack]]
       : part.lfos;
 
@@ -585,7 +586,7 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
   };
 
   const renderFx1Page = (part: PartData) => {
-    const tracksToShow = selectedTrack !== undefined
+    const tracksToShow = selectedTrack !== undefined && selectedTrack >= 0 && selectedTrack <= 7
       ? [part.fxs[selectedTrack]]
       : part.fxs;
 
@@ -643,7 +644,7 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
   };
 
   const renderFx2Page = (part: PartData) => {
-    const tracksToShow = selectedTrack !== undefined
+    const tracksToShow = selectedTrack !== undefined && selectedTrack >= 0 && selectedTrack <= 7
       ? [part.fxs[selectedTrack]]
       : part.fxs;
 
@@ -702,7 +703,7 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
 
   // MIDI Track Rendering Functions
   const renderNotePage = (part: PartData) => {
-    const tracksToShow = selectedTrack !== undefined
+    const tracksToShow = selectedTrack !== undefined && selectedTrack >= 8
       ? [part.midi_notes[selectedTrack - 8]]
       : part.midi_notes;
 
@@ -773,7 +774,7 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
   };
 
   const renderArpPage = (part: PartData) => {
-    const tracksToShow = selectedTrack !== undefined
+    const tracksToShow = selectedTrack !== undefined && selectedTrack >= 8
       ? [part.midi_arps[selectedTrack - 8]]
       : part.midi_arps;
 
@@ -836,7 +837,7 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
   };
 
   const renderMidiLfoPage = (part: PartData) => {
-    const tracksToShow = selectedTrack !== undefined
+    const tracksToShow = selectedTrack !== undefined && selectedTrack >= 8
       ? [part.midi_lfos[selectedTrack - 8]]
       : part.midi_lfos;
 
@@ -989,7 +990,7 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
   };
 
   const renderCtrl1Page = (part: PartData) => {
-    const tracksToShow = selectedTrack !== undefined
+    const tracksToShow = selectedTrack !== undefined && selectedTrack >= 8
       ? [part.midi_ctrl1s[selectedTrack - 8]]
       : part.midi_ctrl1s;
 
@@ -1060,7 +1061,7 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
   };
 
   const renderCtrl2Page = (part: PartData) => {
-    const tracksToShow = selectedTrack !== undefined
+    const tracksToShow = selectedTrack !== undefined && selectedTrack >= 8
       ? [part.midi_ctrl2s[selectedTrack - 8]]
       : part.midi_ctrl2s;
 
