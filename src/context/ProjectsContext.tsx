@@ -295,11 +295,46 @@ export interface PartTrackLfo {
   custom_lfo_design: number[];   // 16 values (0-255) representing custom waveform shape
 }
 
+export interface PartTrackFx {
+  track_id: number;
+  fx1_type: number;              // FX1 effect type (0-24+)
+  fx2_type: number;              // FX2 effect type (0-24+)
+  // FX1 main parameters (6 params)
+  fx1_param1: number;
+  fx1_param2: number;
+  fx1_param3: number;
+  fx1_param4: number;
+  fx1_param5: number;
+  fx1_param6: number;
+  // FX2 main parameters (6 params)
+  fx2_param1: number;
+  fx2_param2: number;
+  fx2_param3: number;
+  fx2_param4: number;
+  fx2_param5: number;
+  fx2_param6: number;
+  // FX1 setup parameters (6 params)
+  fx1_setup1: number;
+  fx1_setup2: number;
+  fx1_setup3: number;
+  fx1_setup4: number;
+  fx1_setup5: number;
+  fx1_setup6: number;
+  // FX2 setup parameters (6 params)
+  fx2_setup1: number;
+  fx2_setup2: number;
+  fx2_setup3: number;
+  fx2_setup4: number;
+  fx2_setup5: number;
+  fx2_setup6: number;
+}
+
 export interface PartData {
   part_id: number;
   machines: PartTrackMachine[];
   amps: PartTrackAmp[];
   lfos: PartTrackLfo[];
+  fxs: PartTrackFx[];
 }
 
 interface CachedProjectData {

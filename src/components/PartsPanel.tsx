@@ -12,7 +12,7 @@ interface PartsPanelProps {
   selectedTrack?: number;  // 0-7 for T1-T8, undefined = show all
 }
 
-type PageType = 'SRC' | 'AMP' | 'LFO';
+type PageType = 'SRC' | 'AMP' | 'LFO' | 'FX1' | 'FX2';
 type LfoTabType = 'LFO1' | 'LFO2' | 'LFO3' | 'DESIGN';
 
 export default function PartsPanel({ projectPath, bankId, bankName, partNames, selectedTrack }: PartsPanelProps) {
@@ -76,6 +76,72 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
     // LFO multiplier values
     const multipliers = ['2048', '1024', '512', '256', '128', '64', '32', '16', '8', '4', '2', '1', '1/2', '1/4', '1/8', '1/16'];
     return multipliers[value] || value.toString();
+  };
+
+  const formatFxType = (value: number): string => {
+    // FX effect types for Octatrack (from ot-tools-io documentation)
+    const fxTypes: { [key: number]: string } = {
+      0: 'OFF',
+      4: 'FILTER',
+      5: 'SPATIALIZER',
+      8: 'DELAY',
+      12: 'EQ',
+      13: 'DJ EQ',
+      16: 'PHASER',
+      17: 'FLANGER',
+      18: 'CHORUS',
+      19: 'COMB FILTER',
+      20: 'PLATE REVERB',
+      21: 'SPRING REVERB',
+      22: 'DARK REVERB',
+      24: 'COMPRESSOR',
+    };
+    return fxTypes[value] || `FX ${value}`;
+  };
+
+  const getFxMainLabels = (fxType: number): string[] => {
+    // Returns array of 6 MAIN parameter labels for given FX type
+    const mainMappings: { [key: number]: string[] } = {
+      0: ['', '', '', '', '', ''], // OFF - no params
+      4: ['BASE', 'WIDTH', 'Q', 'DEPTH', 'ATK', 'DEC'], // FILTER
+      5: ['INP', 'DPTH', 'WDTH', 'HP', 'LP', 'SEND'], // SPATIALIZER
+      8: ['TIME', 'FB', 'VOL', 'BASE', 'WDTH', 'SEND'], // DELAY
+      12: ['FRQ1', 'GN1', 'Q1', 'FRQ2', 'GN2', 'Q2'], // EQ
+      13: ['LS F', 'HS F', 'LOWG', 'MIDG', 'HI G', ''], // DJ EQ
+      16: ['CNTR', 'DEP', 'SPD', 'FB', 'WID', 'MIX'], // PHASER
+      17: ['DEL', 'DEP', 'SPD', 'FB', 'WID', 'MIX'], // FLANGER
+      18: ['DEL', 'DEP', 'SPD', 'FB', 'WID', 'MIX'], // CHORUS
+      19: ['PTCH', 'TUNE', 'LP', 'FB', 'MIX', ''], // COMB FILTER
+      20: ['TIME', 'DAMP', 'GATE', 'HP', 'LP', 'MIX'], // PLATE REVERB
+      21: ['TIME', 'HP', 'LP', 'MIX', '', ''], // SPRING REVERB
+      22: ['TIME', 'SHVG', 'SHVF', 'HP', 'LP', 'MIX'], // DARK REVERB
+      24: ['ATK', 'REL', 'THRS', 'RAT', 'GAIN', 'MIX'], // COMPRESSOR
+    };
+    return mainMappings[fxType] || ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'];
+  };
+
+  const getFxSetupLabels = (fxType: number): string[] => {
+    // Returns array of 6 SETUP parameter labels for given FX type
+    // Reference: Octatrack User Manual Appendix B (pages 122-136)
+    const setupMappings: { [key: number]: string[] } = {
+      0: ['', '', '', '', '', ''], // B.1 NONE - no setup params
+      4: ['HP', 'LP', 'ENV', 'HOLD', 'Q', 'DIST'], // B.2 12/24DB MULTI MODE FILTER
+      5: ['PHSE', 'M/S', 'MG', 'SG', '', ''], // B.8 SPATIALIZER
+      8: ['X', 'TAPE', 'DIR', 'SYNC', 'LOCK', 'PASS'], // B.12 ECHO FREEZE DELAY
+      12: ['TYP1', 'TYP2', '', '', '', ''], // B.3 2-BAND PARAMETRIC EQ
+      13: ['', '', '', '', '', ''], // B.4 DJ STYLE KILL EQ - no setup params
+      16: ['NUM', '', '', '', '', ''], // B.5 2-10 STAGE PHASER
+      17: ['', '', '', '', '', ''], // B.6 FLANGER - no setup params
+      18: ['TAPS', 'FBLP', '', '', '', ''], // B.7 2-10 TAP CHORUS
+      19: ['', '', '', '', '', ''], // B.9 COMB FILTER - no setup params
+      20: ['GVOL', 'BAL', 'MONO', 'MIXF', '', ''], // B.13 GATEBOX PLATE REVERB
+      21: ['TYPE', 'BAL', '', '', '', ''], // B.14 SPRING REVERB
+      22: ['PRE', 'BAL', 'MONO', 'MIXF', '', ''], // B.15 DARK REVERB
+      24: ['RMS', '', '', '', '', ''], // B.10 DYNAMIX COMPRESSOR
+      // TODO: B.11 LO-FI COLLECTION is missing - needs effect type number identification
+      // When found, setup param should be: ['AMPH', '', '', '', '', '']
+    };
+    return setupMappings[fxType] || ['S1', 'S2', 'S3', 'S4', 'S5', 'S6'];
   };
 
   const renderSrcPage = (part: PartData) => {
@@ -464,6 +530,132 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
     );
   };
 
+  const renderFx1Page = (part: PartData) => {
+    const tracksToShow = selectedTrack !== undefined
+      ? [part.fxs[selectedTrack]]
+      : part.fxs;
+
+    return (
+      <div className="parts-tracks">
+        {tracksToShow.map((fx) => {
+          const machine = part.machines[fx.track_id];
+          const amp = part.amps[fx.track_id];
+          const machineType = machine.machine_type;
+          const mainLabels = getFxMainLabels(fx.fx1_type);
+          const setupLabels = getFxSetupLabels(fx.fx1_type);
+          const mainValues = [fx.fx1_param1, fx.fx1_param2, fx.fx1_param3, fx.fx1_param4, fx.fx1_param5, fx.fx1_param6];
+          const setupValues = [fx.fx1_setup1, fx.fx1_setup2, fx.fx1_setup3, fx.fx1_setup4, fx.fx1_setup5, fx.fx1_setup6];
+
+          return (
+            <div key={fx.track_id} className="parts-track">
+              <div className="parts-track-header">
+                <TrackBadge trackId={fx.track_id} />
+                <span className="machine-type">{machineType}</span>
+              </div>
+
+              <div className="parts-params-section">
+                <div className="params-label">FX1 - {formatFxType(fx.fx1_type)}</div>
+                <div className="params-grid">
+                  <div className="param-item">
+                    <span className="param-label">SEND</span>
+                    <span className="param-value">{formatFxRouting(amp.amp_setup_fx1)}</span>
+                  </div>
+                  {mainLabels.map((label, index) => {
+                    if (!label) return null; // Skip empty labels
+                    return (
+                      <div key={index} className="param-item">
+                        <span className="param-label">{label}</span>
+                        <span className="param-value">{mainValues[index]}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="parts-params-section">
+                <div className="params-label">SETUP</div>
+                <div className="params-grid">
+                  {setupLabels.map((label, index) => {
+                    if (!label) return null; // Skip empty labels
+                    return (
+                      <div key={index} className="param-item">
+                        <span className="param-label">{label}</span>
+                        <span className="param-value">{setupValues[index]}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderFx2Page = (part: PartData) => {
+    const tracksToShow = selectedTrack !== undefined
+      ? [part.fxs[selectedTrack]]
+      : part.fxs;
+
+    return (
+      <div className="parts-tracks">
+        {tracksToShow.map((fx) => {
+          const machine = part.machines[fx.track_id];
+          const amp = part.amps[fx.track_id];
+          const machineType = machine.machine_type;
+          const mainLabels = getFxMainLabels(fx.fx2_type);
+          const setupLabels = getFxSetupLabels(fx.fx2_type);
+          const mainValues = [fx.fx2_param1, fx.fx2_param2, fx.fx2_param3, fx.fx2_param4, fx.fx2_param5, fx.fx2_param6];
+          const setupValues = [fx.fx2_setup1, fx.fx2_setup2, fx.fx2_setup3, fx.fx2_setup4, fx.fx2_setup5, fx.fx2_setup6];
+
+          return (
+            <div key={fx.track_id} className="parts-track">
+              <div className="parts-track-header">
+                <TrackBadge trackId={fx.track_id} />
+                <span className="machine-type">{machineType}</span>
+              </div>
+
+              <div className="parts-params-section">
+                <div className="params-label">FX2 - {formatFxType(fx.fx2_type)}</div>
+                <div className="params-grid">
+                  <div className="param-item">
+                    <span className="param-label">SEND</span>
+                    <span className="param-value">{formatFxRouting(amp.amp_setup_fx2)}</span>
+                  </div>
+                  {mainLabels.map((label, index) => {
+                    if (!label) return null; // Skip empty labels
+                    return (
+                      <div key={index} className="param-item">
+                        <span className="param-label">{label}</span>
+                        <span className="param-value">{mainValues[index]}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="parts-params-section">
+                <div className="params-label">SETUP</div>
+                <div className="params-grid">
+                  {setupLabels.map((label, index) => {
+                    if (!label) return null; // Skip empty labels
+                    return (
+                      <div key={index} className="param-item">
+                        <span className="param-label">{label}</span>
+                        <span className="param-value">{setupValues[index]}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   if (loading) {
     return <div className="parts-panel-loading">Loading Parts data...</div>;
   }
@@ -509,6 +701,8 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
             {activePage === 'SRC' && renderSrcPage(activePart)}
             {activePage === 'AMP' && renderAmpPage(activePart)}
             {activePage === 'LFO' && renderLfoPage(activePart)}
+            {activePage === 'FX1' && renderFx1Page(activePart)}
+            {activePage === 'FX2' && renderFx2Page(activePart)}
           </>
         )}
       </div>
@@ -532,6 +726,18 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
           onClick={() => setActivePage('LFO')}
         >
           LFO
+        </button>
+        <button
+          className={`parts-tab ${activePage === 'FX1' ? 'active' : ''}`}
+          onClick={() => setActivePage('FX1')}
+        >
+          FX1
+        </button>
+        <button
+          className={`parts-tab ${activePage === 'FX2' ? 'active' : ''}`}
+          onClick={() => setActivePage('FX2')}
+        >
+          FX2
         </button>
       </div>
     </div>

@@ -301,11 +301,47 @@ pub struct PartTrackLfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PartTrackFx {
+    pub track_id: u8,              // 0-7 for audio tracks T1-T8
+    pub fx1_type: u8,              // FX1 effect type (0-24+)
+    pub fx2_type: u8,              // FX2 effect type (0-24+)
+    // FX1 main parameters (6 params)
+    pub fx1_param1: u8,
+    pub fx1_param2: u8,
+    pub fx1_param3: u8,
+    pub fx1_param4: u8,
+    pub fx1_param5: u8,
+    pub fx1_param6: u8,
+    // FX2 main parameters (6 params)
+    pub fx2_param1: u8,
+    pub fx2_param2: u8,
+    pub fx2_param3: u8,
+    pub fx2_param4: u8,
+    pub fx2_param5: u8,
+    pub fx2_param6: u8,
+    // FX1 setup parameters (6 params)
+    pub fx1_setup1: u8,
+    pub fx1_setup2: u8,
+    pub fx1_setup3: u8,
+    pub fx1_setup4: u8,
+    pub fx1_setup5: u8,
+    pub fx1_setup6: u8,
+    // FX2 setup parameters (6 params)
+    pub fx2_setup1: u8,
+    pub fx2_setup2: u8,
+    pub fx2_setup3: u8,
+    pub fx2_setup4: u8,
+    pub fx2_setup5: u8,
+    pub fx2_setup6: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PartData {
     pub part_id: u8,               // 0-3 for Parts 1-4
     pub machines: Vec<PartTrackMachine>,  // 8 audio tracks
     pub amps: Vec<PartTrackAmp>,          // 8 audio tracks
     pub lfos: Vec<PartTrackLfo>,          // 8 audio tracks
+    pub fxs: Vec<PartTrackFx>,            // 8 audio tracks
 }
 
 /// Check audio file compatibility with Octatrack
@@ -1529,6 +1565,7 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<Vec<PartData
         let mut machines = Vec::new();
         let mut amps = Vec::new();
         let mut lfos = Vec::new();
+        let mut fxs = Vec::new();
 
         // Process 8 audio tracks (tracks 0-7)
         for track_id in 0..8 {
@@ -1682,6 +1719,56 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<Vec<PartData
                 // CUSTOM LFO Design
                 custom_lfo_design,
             });
+
+            // Get FX types and parameters
+            let fx1_type = part.audio_track_fx1[track_id as usize];
+            let fx2_type = part.audio_track_fx2[track_id as usize];
+
+            // Get FX1 main parameters
+            let fx1_params = &part.audio_track_params_values[track_id as usize].fx1;
+
+            // Get FX2 main parameters
+            let fx2_params = &part.audio_track_params_values[track_id as usize].fx2;
+
+            // Get FX1 setup parameters
+            let fx1_setup = &part.audio_track_params_setup[track_id as usize].fx1;
+
+            // Get FX2 setup parameters
+            let fx2_setup = &part.audio_track_params_setup[track_id as usize].fx2;
+
+            fxs.push(PartTrackFx {
+                track_id,
+                fx1_type,
+                fx2_type,
+                // FX1 main parameters
+                fx1_param1: fx1_params.param_1,
+                fx1_param2: fx1_params.param_2,
+                fx1_param3: fx1_params.param_3,
+                fx1_param4: fx1_params.param_4,
+                fx1_param5: fx1_params.param_5,
+                fx1_param6: fx1_params.param_6,
+                // FX2 main parameters
+                fx2_param1: fx2_params.param_1,
+                fx2_param2: fx2_params.param_2,
+                fx2_param3: fx2_params.param_3,
+                fx2_param4: fx2_params.param_4,
+                fx2_param5: fx2_params.param_5,
+                fx2_param6: fx2_params.param_6,
+                // FX1 setup parameters
+                fx1_setup1: fx1_setup.setting1,
+                fx1_setup2: fx1_setup.setting2,
+                fx1_setup3: fx1_setup.setting3,
+                fx1_setup4: fx1_setup.setting4,
+                fx1_setup5: fx1_setup.setting5,
+                fx1_setup6: fx1_setup.setting6,
+                // FX2 setup parameters
+                fx2_setup1: fx2_setup.setting1,
+                fx2_setup2: fx2_setup.setting2,
+                fx2_setup3: fx2_setup.setting3,
+                fx2_setup4: fx2_setup.setting4,
+                fx2_setup5: fx2_setup.setting5,
+                fx2_setup6: fx2_setup.setting6,
+            });
         }
 
         parts_data.push(PartData {
@@ -1689,6 +1776,7 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<Vec<PartData
             machines,
             amps,
             lfos,
+            fxs,
         });
     }
 

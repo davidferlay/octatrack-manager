@@ -188,11 +188,17 @@
 }
 
 .params-label {
-  font-size: 10px;
-  color: #666;
-  margin-bottom: 6px;
+  font-size: 13px;
+  color: #fff;
+  margin-bottom: 10px;
+  padding: 6px 10px;
   text-transform: uppercase;
-  font-weight: 500;
+  font-weight: 700;
+  background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+  border-left: 3px solid #4ac8ff;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .params-grid {
