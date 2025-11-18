@@ -401,14 +401,22 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
     }
 
     const envelopeData = customLfoDesign;
-    const maxValue = 255;  // Custom LFO design values range from 0-255
     const stepCount = 16;
 
     // Convert data points to coordinates
-    const points = envelopeData.map((value, index) => ({
-      x: (index / (stepCount - 1)) * 100,
-      y: 50 - ((value / maxValue) * 45)
-    }));
+    // Octatrack stores LFO values using a special encoding:
+    // - 0-127 (unsigned) → 0 to +127 (signed, above center line)
+    // - 128-255 (unsigned) → -128 to -1 (signed, below center line)
+    const centerY = 30;  // Center of viewBox (0-60)
+    const rangeY = 29;   // Use almost full height with 1px padding top/bottom
+
+    const points = envelopeData.map((value, index) => {
+      const signedValue = value <= 127 ? value : value - 256;  // Convert to signed: -128 to +127
+      return {
+        x: (index / (stepCount - 1)) * 100,
+        y: centerY - ((signedValue / 128) * rangeY)  // Map to y-coord: -128→y=59, 0→y=30, +127→y=1
+      };
+    });
 
     // Create smooth curve path using cardinal spline with softer interpolation
     const createSmoothPath = (points: { x: number; y: number }[]) => {
@@ -466,12 +474,16 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
 
         {/* Step indicators */}
         <div className="lfo-envelope-steps">
-          {envelopeData.map((value, index) => (
-            <div key={index} className="lfo-step-indicator">
-              <div className="lfo-step-dot"></div>
-              <div className="lfo-step-value">{value}</div>
-            </div>
-          ))}
+          {envelopeData.map((value, index) => {
+            // Convert unsigned byte to signed value for display
+            const signedValue = value <= 127 ? value : value - 256;
+            return (
+              <div key={index} className="lfo-step-indicator">
+                <div className="lfo-step-dot"></div>
+                <div className="lfo-step-value">{signedValue}</div>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
