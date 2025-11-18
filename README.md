@@ -16,6 +16,13 @@ A desktop application for managing Elektron Octatrack projects, built with Tauri
   </a>
 </p>
 
+<p align="center">
+  <a href="https://www.elektronauts.com/t/file-manager-for-octatrack" target="_blank">
+    <img src="public/contribute-on-elektraunauts-bg.png" alt="Contribute on Elektronauts" style="height: 40px !important;width: 145px !important;" >
+  </a>
+</p>
+
+
 ## Features
 
 - **Device Discovery**: Automatically scan for Octatrack CF cards and local backups
