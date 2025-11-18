@@ -445,14 +445,16 @@ export function ProjectDetail() {
 
                       // Determine selected track for PartsPanel
                       let trackForParts: number | undefined;
-                      if (selectedTrackIndex === ALL_AUDIO_TRACKS || selectedTrackIndex === ALL_MIDI_TRACKS) {
-                        trackForParts = undefined; // Show all tracks
+                      if (selectedTrackIndex === ALL_AUDIO_TRACKS) {
+                        trackForParts = ALL_AUDIO_TRACKS; // Show all audio tracks
+                      } else if (selectedTrackIndex === ALL_MIDI_TRACKS) {
+                        trackForParts = ALL_MIDI_TRACKS; // Show all MIDI tracks
                       } else if (selectedTrackIndex >= 0 && selectedTrackIndex < 8) {
                         trackForParts = selectedTrackIndex; // Show specific audio track
                       } else if (selectedTrackIndex >= 8 && selectedTrackIndex < 16) {
                         trackForParts = selectedTrackIndex; // Show specific MIDI track
                       } else {
-                        trackForParts = undefined; // Show all tracks
+                        trackForParts = undefined; // Default to all audio tracks
                       }
 
                       // Get part names from bank
