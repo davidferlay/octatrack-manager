@@ -907,34 +907,7 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
                   </div>
 
                   {activeLfoTab === 'DESIGN' ? (
-                    <div className="parts-params-section">
-                      <div className="params-label">CUSTOM LFO DESIGN</div>
-                      {lfo.custom_lfo_design && lfo.custom_lfo_design.length === 16 ? (
-                        <div className="lfo-design-viz">
-                          {lfo.custom_lfo_design.map((value, index) => {
-                            const maxValue = 255;
-                            const heightPercent = (value / maxValue) * 100;
-                            return (
-                              <div key={index} className="lfo-bar-container">
-                                <div
-                                  className="lfo-bar"
-                                  style={{
-                                    height: `${heightPercent}%`,
-                                    minHeight: '2px'
-                                  }}
-                                  title={`Step ${index + 1}: ${value}`}
-                                />
-                                <div className="lfo-step-label">{index + 1}</div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="no-lfo-data">
-                          No custom LFO design data available
-                        </div>
-                      )}
-                    </div>
+                    renderLfoEnvelope(lfo.custom_lfo_design)
                   ) : lfoParams && (
                     <>
                       <div className="parts-params-section">
