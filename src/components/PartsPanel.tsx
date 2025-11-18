@@ -49,6 +49,35 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
     return value.toString();
   };
 
+  const formatFxRouting = (value: number): string => {
+    // FX routing values: 0=OFF, 1=TO FX1, 2=TO FX2, 3=TO FX1+2
+    switch (value) {
+      case 0: return 'OFF';
+      case 1: return 'FX1';
+      case 2: return 'FX2';
+      case 3: return 'FX1+2';
+      default: return value.toString();
+    }
+  };
+
+  const formatLfoWave = (value: number): string => {
+    // LFO waveform types
+    const waveforms = ['TRI', 'SIN', 'SQR', 'SAW', 'EXP', 'RSU', 'RSD', 'CUST'];
+    return waveforms[value] || value.toString();
+  };
+
+  const formatLfoTrig = (value: number): string => {
+    // LFO trigger modes
+    const triggers = ['FREE', 'TRIG', 'HOLD', 'ONE', 'HALF', 'DOUBLE'];
+    return triggers[value] || value.toString();
+  };
+
+  const formatLfoMult = (value: number): string => {
+    // LFO multiplier values
+    const multipliers = ['2048', '1024', '512', '256', '128', '64', '32', '16', '8', '4', '2', '1', '1/2', '1/4', '1/8', '1/16'];
+    return multipliers[value] || value.toString();
+  };
+
   const renderSrcPage = (part: PartData) => {
     const tracksToShow = selectedTrack !== undefined
       ? [part.machines[selectedTrack]]
@@ -219,11 +248,11 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
                   </div>
                   <div className="param-item">
                     <span className="param-label">FX1</span>
-                    <span className="param-value">{amp.amp_setup_fx1}</span>
+                    <span className="param-value">{formatFxRouting(amp.amp_setup_fx1)}</span>
                   </div>
                   <div className="param-item">
                     <span className="param-label">FX2</span>
-                    <span className="param-value">{amp.amp_setup_fx2}</span>
+                    <span className="param-value">{formatFxRouting(amp.amp_setup_fx2)}</span>
                   </div>
                 </div>
               </div>
@@ -234,28 +263,33 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
     );
   };
 
-  const renderLfoEnvelope = () => {
-    // TODO: Replace with actual LFO design data from backend
-    // For now, using mock data - 16 values representing custom LFO envelope
-    const mockEnvelopeData = [
-      64, 80, 100, 120, 127, 120, 100, 80,
-      64, 40, 20, 10, 0, 10, 30, 50
-    ];
+  const renderLfoEnvelope = (customLfoDesign: number[]) => {
+    // Validate custom LFO design data
+    if (!customLfoDesign || customLfoDesign.length !== 16) {
+      return (
+        <div className="lfo-envelope-container">
+          <div className="param-value" style={{ textAlign: 'center', padding: '2rem', opacity: 0.5 }}>
+            No custom LFO design data available
+          </div>
+        </div>
+      );
+    }
 
-    const maxValue = 127;
+    const envelopeData = customLfoDesign;
+    const maxValue = 255;  // Custom LFO design values range from 0-255
     const stepCount = 16;
 
     // Convert data points to coordinates
-    const points = mockEnvelopeData.map((value, index) => ({
+    const points = envelopeData.map((value, index) => ({
       x: (index / (stepCount - 1)) * 100,
       y: 50 - ((value / maxValue) * 45)
     }));
 
-    // Create smooth curve path using cardinal spline
+    // Create smooth curve path using cardinal spline with softer interpolation
     const createSmoothPath = (points: { x: number; y: number }[]) => {
       if (points.length < 2) return '';
 
-      const tension = 0.6; // Controls curve smoothness (0-1, higher = smoother)
+      const tension = 0.25; // Reduced tension for softer knee, closer match to actual values
       let path = `M ${points[0].x} ${points[0].y}`;
 
       for (let i = 0; i < points.length - 1; i++) {
@@ -307,7 +341,7 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
 
         {/* Step indicators */}
         <div className="lfo-envelope-steps">
-          {mockEnvelopeData.map((value, index) => (
+          {envelopeData.map((value, index) => (
             <div key={index} className="lfo-step-indicator">
               <div className="lfo-step-dot"></div>
               <div className="lfo-step-value">{value}</div>
@@ -399,15 +433,15 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
                       </div>
                       <div className="param-item">
                         <span className="param-label">WAVE</span>
-                        <span className="param-value">{lfoParams!.wave}</span>
+                        <span className="param-value">{formatLfoWave(lfoParams!.wave)}</span>
                       </div>
                       <div className="param-item">
                         <span className="param-label">MULT</span>
-                        <span className="param-value">{lfoParams!.mult}</span>
+                        <span className="param-value">{formatLfoMult(lfoParams!.mult)}</span>
                       </div>
                       <div className="param-item">
                         <span className="param-label">TRIG</span>
-                        <span className="param-value">{lfoParams!.trig}</span>
+                        <span className="param-value">{formatLfoTrig(lfoParams!.trig)}</span>
                       </div>
                       <div className="param-item">
                         <span className="param-label">SPD</span>
@@ -420,7 +454,7 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
                     </div>
                   </div>
                 ) : (
-                  renderLfoEnvelope()
+                  renderLfoEnvelope(lfo.custom_lfo_design)
                 )}
               </div>
             );
@@ -453,7 +487,6 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
     <div className="parts-panel">
       <div className="parts-panel-header">
         <h3>{bankName} - Parts</h3>
-        <span className="wip-badge">Work in Progress</span>
       </div>
 
       {/* Part Tabs */}

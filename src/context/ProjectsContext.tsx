@@ -291,6 +291,8 @@ export interface PartTrackLfo {
   lfo1_trig: number;             // LFO 1 Trigger Mode
   lfo2_trig: number;             // LFO 2 Trigger Mode
   lfo3_trig: number;             // LFO 3 Trigger Mode
+  // CUSTOM LFO Design (16-step waveform)
+  custom_lfo_design: number[];   // 16 values (0-255) representing custom waveform shape
 }
 
 export interface PartData {
