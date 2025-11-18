@@ -242,6 +242,10 @@ pub struct MachineParamValues {
     pub vol_ab: Option<u8>,
     pub in_cd: Option<u8>,
     pub vol_cd: Option<u8>,
+    // PICKUP parameters (ptch and len are shared with FLEX/STATIC above)
+    pub dir: Option<u8>,
+    pub gain: Option<u8>,
+    pub op: Option<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1599,6 +1603,9 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<Vec<PartData
                         vol_ab: None,
                         in_cd: None,
                         vol_cd: None,
+                        dir: None,
+                        gain: None,
+                        op: None,
                     }
                 },
                 2 => {
@@ -1615,10 +1622,32 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<Vec<PartData
                         vol_ab: Some(params_thru.vol_ab),
                         in_cd: Some(params_thru.in_cd),
                         vol_cd: Some(params_thru.vol_cd),
+                        dir: None,
+                        gain: None,
+                        op: None,
+                    }
+                },
+                4 => {
+                    // Pickup machine
+                    let params_pickup = &machine_params_values.pickup_machine;
+                    MachineParamValues {
+                        ptch: Some(params_pickup.ptch),
+                        strt: None,
+                        len: Some(params_pickup.len),
+                        rate: None,
+                        rtrg: None,
+                        rtim: None,
+                        in_ab: None,
+                        vol_ab: None,
+                        in_cd: None,
+                        vol_cd: None,
+                        dir: Some(params_pickup.dir),
+                        gain: Some(params_pickup.gain),
+                        op: Some(params_pickup.op),
                     }
                 },
                 _ => {
-                    // Neighbor or Pickup (not implemented yet)
+                    // Neighbor (type 3) or unknown - no parameters
                     MachineParamValues {
                         ptch: None,
                         strt: None,
@@ -1630,6 +1659,9 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<Vec<PartData
                         vol_ab: None,
                         in_cd: None,
                         vol_cd: None,
+                        dir: None,
+                        gain: None,
+                        op: None,
                     }
                 }
             };
@@ -1647,8 +1679,20 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<Vec<PartData
                         tsns: Some(setup_std.tsns),
                     }
                 },
+                4 => {
+                    // Pickup machine
+                    let setup_pickup = &machine_params_setup.pickup_machine;
+                    MachineSetupValues {
+                        xloop: None,
+                        slic: None,
+                        len: None,
+                        rate: None,
+                        tstr: Some(setup_pickup.tstr),
+                        tsns: Some(setup_pickup.tsns),
+                    }
+                },
                 _ => {
-                    // Thru, Neighbor, Pickup (no setup params)
+                    // Thru (type 2), Neighbor (type 3), or unknown - no setup params
                     MachineSetupValues {
                         xloop: None,
                         slic: None,
