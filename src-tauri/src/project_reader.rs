@@ -296,6 +296,8 @@ pub struct PartTrackLfo {
     pub lfo1_trig: u8,             // LFO 1 Trigger Mode
     pub lfo2_trig: u8,             // LFO 2 Trigger Mode
     pub lfo3_trig: u8,             // LFO 3 Trigger Mode
+    // CUSTOM LFO Design (16-step waveform)
+    pub custom_lfo_design: Vec<u8>, // 16 values (0-255) representing custom waveform shape
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1650,6 +1652,10 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<Vec<PartData
             let lfo_params = &part.audio_track_params_values[track_id as usize].lfo;
             let lfo_setup_1 = &part.audio_track_params_setup[track_id as usize].lfo_setup_1;
             let lfo_setup_2 = &part.audio_track_params_setup[track_id as usize].lfo_setup_2;
+
+            // Get custom LFO design (16-step waveform)
+            let custom_lfo_design = part.audio_tracks_custom_lfo_designs[track_id as usize].0.to_vec();
+
             lfos.push(PartTrackLfo {
                 track_id,
                 // MAIN LFO parameters
@@ -1673,6 +1679,8 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<Vec<PartData
                 lfo1_trig: lfo_setup_2.lfo1_trig,
                 lfo2_trig: lfo_setup_2.lfo2_trig,
                 lfo3_trig: lfo_setup_2.lfo3_trig,
+                // CUSTOM LFO Design
+                custom_lfo_design,
             });
         }
 

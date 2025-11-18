@@ -277,15 +277,15 @@
 .lfo-envelope-line {
   fill: none;
   stroke: url(#lfoGradient);
-  stroke-width: 1.2;
+  stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;
+  vector-effect: non-scaling-stroke; /* Keeps stroke width constant regardless of scaling */
   filter: drop-shadow(0 0 3px rgba(74, 200, 255, 0.6)) drop-shadow(0 0 8px rgba(74, 200, 255, 0.4));
-  transition: all 0.3s ease;
+  transition: filter 0.3s ease;
 }
 
 .lfo-envelope-line:hover {
-  stroke-width: 1.5;
   filter: drop-shadow(0 0 5px rgba(74, 200, 255, 0.8)) drop-shadow(0 0 12px rgba(74, 200, 255, 0.6));
 }
 
