@@ -333,12 +333,82 @@ export interface PartTrackFx {
   fx2_setup6: number;
 }
 
+// MIDI track parameter interfaces
+export interface PartTrackMidiNote {
+  track_id: number;              // 0-7 for MIDI tracks M1-M8
+  // NOTE MAIN parameters
+  note: number;
+  vel: number;
+  len: number;
+  not2: number;
+  not3: number;
+  not4: number;
+  // NOTE SETUP parameters
+  chan: number;                  // MIDI channel
+  bank: number;                  // Bank select
+  prog: number;                  // Program change
+  sbnk: number;                  // Sub bank
+}
+
+export interface PartTrackMidiArp {
+  track_id: number;              // 0-7 for MIDI tracks M1-M8
+  // ARP MAIN parameters
+  tran: number;                  // Transpose
+  leg: number;                   // Legato
+  mode: number;                  // Arpeggiator mode
+  spd: number;                   // Speed
+  rnge: number;                  // Range
+  nlen: number;                  // Note length
+  // ARP SETUP parameters
+  len: number;                   // Arp sequence length
+  key: number;                   // Scale/key setting
+}
+
+export interface PartTrackMidiCtrl1 {
+  track_id: number;              // 0-7 for MIDI tracks M1-M8
+  // CTRL1 MAIN parameters
+  pb: number;                    // Pitch bend
+  at: number;                    // Aftertouch
+  cc1: number;                   // CC1 value
+  cc2: number;                   // CC2 value
+  cc3: number;                   // CC3 value
+  cc4: number;                   // CC4 value
+  // CTRL1 SETUP parameters (CC numbers, not values)
+  cc1_num: number;               // CC1 number
+  cc2_num: number;               // CC2 number
+  cc3_num: number;               // CC3 number
+  cc4_num: number;               // CC4 number
+}
+
+export interface PartTrackMidiCtrl2 {
+  track_id: number;              // 0-7 for MIDI tracks M1-M8
+  // CTRL2 MAIN parameters
+  cc5: number;                   // CC5 value
+  cc6: number;                   // CC6 value
+  cc7: number;                   // CC7 value
+  cc8: number;                   // CC8 value
+  cc9: number;                   // CC9 value
+  cc10: number;                  // CC10 value
+  // CTRL2 SETUP parameters (CC numbers, not values)
+  cc5_num: number;               // CC5 number
+  cc6_num: number;               // CC6 number
+  cc7_num: number;               // CC7 number
+  cc8_num: number;               // CC8 number
+  cc9_num: number;               // CC9 number
+  cc10_num: number;              // CC10 number
+}
+
 export interface PartData {
   part_id: number;
   machines: PartTrackMachine[];
   amps: PartTrackAmp[];
   lfos: PartTrackLfo[];
   fxs: PartTrackFx[];
+  midi_notes: PartTrackMidiNote[];
+  midi_arps: PartTrackMidiArp[];
+  midi_lfos: PartTrackLfo[];        // Reuses audio LFO structure
+  midi_ctrl1s: PartTrackMidiCtrl1[];
+  midi_ctrl2s: PartTrackMidiCtrl2[];
 }
 
 interface CachedProjectData {
