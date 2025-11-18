@@ -95,6 +95,7 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
       21: 'SPRING REVERB',
       22: 'DARK REVERB',
       24: 'COMPRESSOR',
+      28: 'LO-FI', // B.11 LO-FI COLLECTION
     };
     return fxTypes[value] || `FX ${value}`;
   };
@@ -116,6 +117,7 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
       21: ['TIME', 'HP', 'LP', 'MIX', '', ''], // SPRING REVERB
       22: ['TIME', 'SHVG', 'SHVF', 'HP', 'LP', 'MIX'], // DARK REVERB
       24: ['ATK', 'REL', 'THRS', 'RAT', 'GAIN', 'MIX'], // COMPRESSOR
+      28: ['DIST', 'AMF', 'SRR', 'BRR', 'AMD', ''], // LO-FI COLLECTION (B.11)
     };
     return mainMappings[fxType] || ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'];
   };
@@ -138,8 +140,7 @@ export default function PartsPanel({ projectPath, bankId, bankName, partNames, s
       21: ['TYPE', 'BAL', '', '', '', ''], // B.14 SPRING REVERB
       22: ['PRE', 'BAL', 'MONO', 'MIXF', '', ''], // B.15 DARK REVERB
       24: ['RMS', '', '', '', '', ''], // B.10 DYNAMIX COMPRESSOR
-      // TODO: B.11 LO-FI COLLECTION is missing - needs effect type number identification
-      // When found, setup param should be: ['AMPH', '', '', '', '', '']
+      28: ['AMPH', '', '', '', '', ''], // B.11 LO-FI COLLECTION
     };
     return setupMappings[fxType] || ['S1', 'S2', 'S3', 'S4', 'S5', 'S6'];
   };
