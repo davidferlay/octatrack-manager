@@ -33,6 +33,7 @@ export function Version({ fixed = false }: VersionProps) {
       }
     } catch (err) {
       console.error('Error checking for updates:', err);
+      console.error('Error details:', JSON.stringify(err, null, 2));
       setMessage('Check failed');
     } finally {
       setChecking(false);
