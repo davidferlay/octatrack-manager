@@ -16,7 +16,6 @@
 
 .app-version:hover {
   color: rgba(255, 255, 255, 0.8);
-  transform: scale(1.05);
 }
 
 .app-version.checking {
