@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useNavigate } from "react-router-dom";
 import { useProjects } from "../context/ProjectsContext";
 import { Version } from "../components/Version";
+import { ScrollToTop } from "../components/ScrollToTop";
 import "../App.css";
 
 interface OctatrackProject {
@@ -314,6 +315,7 @@ export function HomePage() {
           )}
         </div>
       )}
+      <ScrollToTop />
     </main>
   );
 }
