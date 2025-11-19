@@ -99,8 +99,10 @@ export function UpdateChecker() {
     <div className="update-checker">
       {checking && (
         <div className="update-message">
-          <span className="update-spinner"></span>
-          Checking for updates...
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span className="update-spinner"></span>
+            Checking for updates...
+          </div>
         </div>
       )}
 
