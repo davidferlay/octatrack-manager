@@ -31,5 +31,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": [
+        "https://github.com/dferlay/octatrack-manager/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

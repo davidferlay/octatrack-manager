@@ -11,6 +11,7 @@ import PartsPanel from "../components/PartsPanel";
 import { TrackBadge } from "../components/TrackBadge";
 import { ScrollToTop } from "../components/ScrollToTop";
 import { Version } from "../components/Version";
+import { UpdateChecker } from "../components/UpdateChecker";
 import "../App.css";
 
 // Most type definitions are now imported from ProjectsContext via Bank and ProjectMetadata types
@@ -281,6 +282,7 @@ export function ProjectDetail() {
 
   return (
     <main className="container">
+      <UpdateChecker />
       <div className="project-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: '1' }}>
           <button onClick={() => navigate("/")} className="back-button">
