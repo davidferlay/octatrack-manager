@@ -1,4 +1,5 @@
-import packageJson from '../../package.json';
+import { useState, useEffect } from 'react';
+import { getVersion } from '@tauri-apps/api/app';
 import './Version.css';
 
 interface VersionProps {
@@ -6,9 +7,15 @@ interface VersionProps {
 }
 
 export function Version({ fixed = false }: VersionProps) {
+  const [version, setVersion] = useState<string>('');
+
+  useEffect(() => {
+    getVersion().then(setVersion).catch(console.error);
+  }, []);
+
   return (
     <div className={`app-version ${fixed ? 'fixed' : ''}`}>
-      v{packageJson.version}
+      v{version}
     </div>
   );
 }
