@@ -148,32 +148,61 @@ export function ProjectDetail() {
           setSelectedBankIndex(cachedMetadata.current_state.bank);
           setSelectedTrackIndex(cachedMetadata.current_state.track);
           setSelectedPatternIndex(cachedMetadata.current_state.pattern);
-          setIsLoading(false);
 
-          // Load banks progressively
+          // OPTIMIZATION: Load active bank first for instant UI
           const bankIds = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'];
-          const loadedBanks: any[] = [];
+          const activeBankId = bankIds[cachedMetadata.current_state.bank];
 
-          for (const bankId of bankIds) {
-            await new Promise<void>(resolve => {
-              setTimeout(async () => {
-                const bank = await getCachedBank(projectPath, bankId);
-                if (bank) {
-                  loadedBanks.push(bank);
-                  setBanks([...loadedBanks]);
-                }
-                resolve();
-              }, 0);
-            });
+          // Load active bank first (priority)
+          const activeBankStart = performance.now();
+          const activeBank = await getCachedBank(projectPath, activeBankId);
+          const activeBankTime = performance.now() - activeBankStart;
+
+          if (activeBank) {
+            console.log(`[L2 Cache - Priority] Loaded active bank ${activeBankId} in ${activeBankTime.toFixed(2)}ms`);
+
+            // Create banks array with active bank in correct position
+            const banks: any[] = new Array(16).fill(null);
+            banks[cachedMetadata.current_state.bank] = activeBank;
+            setBanks(banks.filter(b => b !== null));
+
+            // UI is now ready!
+            setIsLoading(false);
+            const uiReadyTime = performance.now() - startTime;
+            console.log(`[L2 Cache] UI ready in ${uiReadyTime.toFixed(2)}ms ⚡`);
           }
 
-          const totalTime = performance.now() - startTime;
-          console.log(`[L2 Cache] Total load time: ${totalTime.toFixed(2)}ms`);
+          // Load remaining banks in background (lazy)
+          const loadRemainingBanks = async () => {
+            const remainingBankIds = bankIds.filter((_, idx) => idx !== cachedMetadata.current_state.bank);
+            const allBanks: any[] = activeBank ? [activeBank] : [];
 
-          // Save to in-memory cache for next time
-          if (loadedBanks.length > 0) {
-            setInMemoryProject(projectPath, cachedMetadata, loadedBanks);
-          }
+            for (const bankId of remainingBankIds) {
+              // Small delay to keep UI responsive
+              await new Promise<void>(resolve => {
+                setTimeout(async () => {
+                  const bank = await getCachedBank(projectPath, bankId);
+                  if (bank) {
+                    allBanks.push(bank);
+                    // Update banks state with all loaded so far
+                    setBanks([...allBanks]);
+                  }
+                  resolve();
+                }, 0);
+              });
+            }
+
+            const totalTime = performance.now() - startTime;
+            console.log(`[L2 Cache] All banks loaded in ${totalTime.toFixed(2)}ms (background)`);
+
+            // Save complete data to in-memory cache
+            if (allBanks.length > 0) {
+              setInMemoryProject(projectPath, cachedMetadata, allBanks);
+            }
+          };
+
+          // Load remaining banks in background without blocking
+          loadRemainingBanks();
         } else {
           console.log(`[L2 Cache MISS - IndexedDB] Loading from backend`);
           // Level 3: Load from backend
