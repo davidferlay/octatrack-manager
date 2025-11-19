@@ -45,21 +45,32 @@ export function UpdateChecker() {
 
       if (update?.available) {
         let downloadedBytes = 0;
+        let totalBytes = 0;
 
         await update.downloadAndInstall((event) => {
           switch (event.event) {
             case 'Started':
               setDownloadProgress(0);
               downloadedBytes = 0;
-              console.log('Download started');
+              totalBytes = event.data.contentLength || 0;
+              console.log('Download started', totalBytes > 0 ? `(${(totalBytes / (1024 * 1024)).toFixed(2)} MB)` : '(size unknown)');
               break;
             case 'Progress':
               downloadedBytes += event.data.chunkLength;
-              // Since we don't have total size, show indeterminate progress
-              // Use a percentage based on chunks received (approximate)
-              const progress = Math.min((downloadedBytes / (1024 * 1024)) * 10, 99);
+
+              // Calculate progress based on total size if available
+              let progress: number;
+              if (totalBytes > 0) {
+                // Accurate progress based on actual file size
+                progress = (downloadedBytes / totalBytes) * 100;
+              } else {
+                // Fallback: estimate based on typical installer size (~50MB)
+                // Cap at 95% since we don't know the actual size
+                progress = Math.min((downloadedBytes / (50 * 1024 * 1024)) * 100, 95);
+              }
+
               setDownloadProgress(progress);
-              console.log(`Download progress: ${downloadedBytes} bytes`);
+              console.log(`Download progress: ${(downloadedBytes / (1024 * 1024)).toFixed(2)} MB${totalBytes > 0 ? ` / ${(totalBytes / (1024 * 1024)).toFixed(2)} MB (${progress.toFixed(1)}%)` : ` (${progress.toFixed(1)}%)`}`);
               break;
             case 'Finished':
               setDownloadProgress(100);
@@ -69,7 +80,16 @@ export function UpdateChecker() {
         });
 
         // Relaunch the app to apply the update
-        await relaunch();
+        try {
+          console.log('Attempting to relaunch app...');
+          await relaunch();
+        } catch (relaunchError) {
+          console.error('Auto-relaunch failed:', relaunchError);
+          // Update downloaded successfully, but auto-relaunch failed
+          // User needs to manually restart to apply the update
+          setError('Update downloaded! Please restart the app to complete installation.');
+          setDownloading(false);
+        }
       }
     } catch (err) {
       console.error('Error downloading update:', err);
