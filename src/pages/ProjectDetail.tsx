@@ -98,7 +98,7 @@ function getLengthDenominator(length: number): number {
 export function ProjectDetail() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { getCachedProject, setCachedProject } = useProjects();
+  const { setCachedProject, getInMemoryProject, setInMemoryProject } = useProjects();
   const projectPath = searchParams.get("path");
   const projectName = searchParams.get("name");
 
@@ -114,27 +114,78 @@ export function ProjectDetail() {
 
   useEffect(() => {
     if (projectPath) {
-      // Check cache first
-      const cachedData = getCachedProject(projectPath);
-      if (cachedData) {
-        console.log("Loading project from cache:", projectPath);
-        setMetadata(cachedData.metadata);
-        setBanks(cachedData.banks);
-        // Set the selected bank to the currently active bank
-        setSelectedBankIndex(cachedData.metadata.current_state.bank);
-        // Set the selected track to the currently active track
-        setSelectedTrackIndex(cachedData.metadata.current_state.track);
-        // Set the selected pattern to the currently active pattern
-        setSelectedPatternIndex(cachedData.metadata.current_state.pattern);
-        setIsLoading(false);
-      } else {
-        // Use requestAnimationFrame to ensure loading UI is painted before data loading
-        requestAnimationFrame(() => {
-          setTimeout(() => {
-            loadProjectData();
-          }, 10);
-        });
-      }
+      // Multi-level caching: Memory → IndexedDB → Backend
+      const loadWithMultiLevelCache = async () => {
+        const startTime = performance.now();
+
+        // Level 1: Check in-memory cache (instant!)
+        const inMemory = getInMemoryProject(projectPath);
+        if (inMemory) {
+          const loadTime = performance.now() - startTime;
+          console.log(`[L1 Cache HIT - Memory] Loaded instantly in ${loadTime.toFixed(2)}ms:`, projectPath);
+
+          setMetadata(inMemory.metadata);
+          setBanks(inMemory.banks);
+          setSelectedBankIndex(inMemory.metadata.current_state.bank);
+          setSelectedTrackIndex(inMemory.metadata.current_state.track);
+          setSelectedPatternIndex(inMemory.metadata.current_state.pattern);
+          setIsLoading(false);
+          return;
+        }
+
+        console.log("[L1 Cache MISS - Memory] Checking IndexedDB...");
+
+        // Level 2: Check IndexedDB
+        const { getCachedMetadata, getCachedBank } = await import("../utils/projectDB");
+        const cachedMetadata = await getCachedMetadata(projectPath);
+        const l2Time = performance.now() - startTime;
+
+        if (cachedMetadata) {
+          console.log(`[L2 Cache HIT - IndexedDB] Loaded metadata in ${l2Time.toFixed(2)}ms`);
+
+          // Set metadata immediately
+          setMetadata(cachedMetadata);
+          setSelectedBankIndex(cachedMetadata.current_state.bank);
+          setSelectedTrackIndex(cachedMetadata.current_state.track);
+          setSelectedPatternIndex(cachedMetadata.current_state.pattern);
+          setIsLoading(false);
+
+          // Load banks progressively
+          const bankIds = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'];
+          const loadedBanks: any[] = [];
+
+          for (const bankId of bankIds) {
+            await new Promise<void>(resolve => {
+              setTimeout(async () => {
+                const bank = await getCachedBank(projectPath, bankId);
+                if (bank) {
+                  loadedBanks.push(bank);
+                  setBanks([...loadedBanks]);
+                }
+                resolve();
+              }, 0);
+            });
+          }
+
+          const totalTime = performance.now() - startTime;
+          console.log(`[L2 Cache] Total load time: ${totalTime.toFixed(2)}ms`);
+
+          // Save to in-memory cache for next time
+          if (loadedBanks.length > 0) {
+            setInMemoryProject(projectPath, cachedMetadata, loadedBanks);
+          }
+        } else {
+          console.log(`[L2 Cache MISS - IndexedDB] Loading from backend`);
+          // Level 3: Load from backend
+          requestAnimationFrame(() => {
+            setTimeout(() => {
+              loadProjectData();
+            }, 10);
+          });
+        }
+      };
+
+      loadWithMultiLevelCache();
     }
   }, [projectPath]);
 
@@ -142,15 +193,29 @@ export function ProjectDetail() {
     setIsLoading(true);
     setError(null);
     try {
-      console.log("Loading project from backend:", projectPath);
+      console.log("[L3 Backend] Loading project from backend:", projectPath);
+      const loadStart = performance.now();
       const projectMetadata = await invoke<ProjectMetadata>("load_project_metadata", { path: projectPath });
       const projectBanks = await invoke<Bank[]>("load_project_banks", { path: projectPath });
+      const loadTime = performance.now() - loadStart;
+      console.log(`[L3 Backend] Loaded from backend in ${loadTime.toFixed(2)}ms`);
+
       setMetadata(projectMetadata);
       setBanks(projectBanks);
-      // Cache the loaded data
+
+      // Cache the loaded data to all levels
       if (projectPath) {
-        setCachedProject(projectPath, projectMetadata, projectBanks);
+        // Save to IndexedDB (Level 2)
+        const cacheStart = performance.now();
+        await setCachedProject(projectPath, projectMetadata, projectBanks);
+        const cacheTime = performance.now() - cacheStart;
+        console.log(`[L2 Cache] Saved to IndexedDB in ${cacheTime.toFixed(2)}ms`);
+
+        // Save to in-memory cache (Level 1)
+        setInMemoryProject(projectPath, projectMetadata, projectBanks);
+        console.log(`[L1 Cache] Saved to memory`);
       }
+
       // Set the selected bank to the currently active bank
       setSelectedBankIndex(projectMetadata.current_state.bank);
       // Set the selected track to the currently active track
@@ -158,7 +223,7 @@ export function ProjectDetail() {
       // Set the selected pattern to the currently active pattern
       setSelectedPatternIndex(projectMetadata.current_state.pattern);
     } catch (err) {
-      console.error("Error loading project data:", err);
+      console.error("[L3 Backend] Error loading project data:", err);
       setError(String(err));
     } finally {
       setIsLoading(false);

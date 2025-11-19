@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import * as projectDB from "../utils/projectDB";
 
 interface OctatrackProject {
   name: string;
@@ -411,7 +412,8 @@ export interface PartData {
   midi_ctrl2s: PartTrackMidiCtrl2[];
 }
 
-interface CachedProjectData {
+interface InMemoryCachedProject {
+  path: string;
   metadata: ProjectMetadata;
   banks: Bank[];
   timestamp: number;
@@ -430,17 +432,20 @@ interface ProjectsContextType {
   setOpenLocations: (openLocs: Set<number> | ((prev: Set<number>) => Set<number>)) => void;
   setIsIndividualProjectsOpen: (open: boolean) => void;
   setIsLocationsOpen: (open: boolean) => void;
-  // Project detail cache methods
-  getCachedProject: (path: string) => CachedProjectData | null;
-  setCachedProject: (path: string, metadata: ProjectMetadata, banks: Bank[]) => void;
-  clearProjectCache: (path?: string) => void;
+  // Project detail cache methods (multi-level cache)
+  getCachedProject: (path: string) => Promise<projectDB.CachedProjectData | null>;
+  setCachedProject: (path: string, metadata: ProjectMetadata, banks: Bank[]) => Promise<void>;
+  clearProjectCache: (path?: string) => Promise<void>;
   clearAll: () => void;
+  // In-memory cache methods (instant access)
+  getInMemoryProject: (path: string) => InMemoryCachedProject | null;
+  setInMemoryProject: (path: string, metadata: ProjectMetadata, banks: Bank[]) => void;
 }
 
 const ProjectsContext = createContext<ProjectsContextType | undefined>(undefined);
 
 const SESSION_STORAGE_KEY = "octatrack_scanned_projects";
-const PROJECT_CACHE_KEY = "octatrack_project_cache";
+// Project cache now uses IndexedDB instead of sessionStorage
 
 interface ProjectsProviderProps {
   children: ReactNode;
@@ -526,23 +531,8 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     return true;
   });
 
-  // Project cache state
-  const [projectCache, setProjectCache] = useState<Map<string, CachedProjectData>>(() => {
-    try {
-      const stored = sessionStorage.getItem(PROJECT_CACHE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        const cache = new Map<string, CachedProjectData>();
-        Object.entries(parsed).forEach(([key, value]) => {
-          cache.set(key, value as CachedProjectData);
-        });
-        return cache;
-      }
-    } catch (error) {
-      console.error("Error loading project cache from sessionStorage:", error);
-    }
-    return new Map();
-  });
+  // In-memory cache for instant access (Level 1 cache)
+  const [inMemoryCache, setInMemoryCache] = useState<Map<string, InMemoryCachedProject>>(new Map());
 
   // Save projects list to sessionStorage whenever state changes
   useEffect(() => {
@@ -560,19 +550,6 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       console.error("Error saving to sessionStorage:", error);
     }
   }, [locations, standaloneProjects, hasScanned, openLocations, isIndividualProjectsOpen, isLocationsOpen]);
-
-  // Save project cache to sessionStorage whenever it changes
-  useEffect(() => {
-    try {
-      const cacheObject: Record<string, CachedProjectData> = {};
-      projectCache.forEach((value, key) => {
-        cacheObject[key] = value;
-      });
-      sessionStorage.setItem(PROJECT_CACHE_KEY, JSON.stringify(cacheObject));
-    } catch (error) {
-      console.error("Error saving project cache to sessionStorage:", error);
-    }
-  }, [projectCache]);
 
   const setLocations = (newLocations: OctatrackLocation[] | ((prev: OctatrackLocation[]) => OctatrackLocation[])) => {
     setLocationsState(newLocations);
@@ -598,43 +575,41 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     setIsLocationsOpenState(open);
   };
 
-  // Project cache methods
-  const getCachedProject = (path: string): CachedProjectData | null => {
-    const cached = projectCache.get(path);
-    if (cached) {
-      // Optional: Check if cache is stale (e.g., older than 1 hour)
-      // const cacheAge = Date.now() - cached.timestamp;
-      // if (cacheAge > 3600000) return null; // 1 hour in milliseconds
-      return cached;
-    }
-    return null;
+  // Project cache methods (now using IndexedDB)
+  const getCachedProject = async (path: string): Promise<projectDB.CachedProjectData | null> => {
+    return await projectDB.getCachedProject(path);
   };
 
-  const setCachedProject = (path: string, metadata: ProjectMetadata, banks: Bank[]) => {
-    setProjectCache(prev => {
+  const setCachedProject = async (path: string, metadata: ProjectMetadata, banks: Bank[]): Promise<void> => {
+    await projectDB.setCachedProject(path, metadata, banks);
+  };
+
+  const clearProjectCache = async (path?: string): Promise<void> => {
+    await projectDB.clearProjectCache(path);
+  };
+
+  // In-memory cache methods (Level 1 - instant access)
+  const getInMemoryProject = (path: string): InMemoryCachedProject | null => {
+    return inMemoryCache.get(path) || null;
+  };
+
+  const setInMemoryProject = (path: string, metadata: ProjectMetadata, banks: Bank[]) => {
+    setInMemoryCache(prev => {
       const newCache = new Map(prev);
       newCache.set(path, {
+        path,
         metadata,
         banks,
-        timestamp: Date.now(),
+        timestamp: Date.now()
       });
+      // Keep only the 3 most recent projects in memory to avoid memory bloat
+      if (newCache.size > 3) {
+        const oldest = Array.from(newCache.entries())
+          .sort((a, b) => a[1].timestamp - b[1].timestamp)[0];
+        newCache.delete(oldest[0]);
+      }
       return newCache;
     });
-  };
-
-  const clearProjectCache = (path?: string) => {
-    if (path) {
-      // Clear specific project cache
-      setProjectCache(prev => {
-        const newCache = new Map(prev);
-        newCache.delete(path);
-        return newCache;
-      });
-    } else {
-      // Clear all project cache
-      setProjectCache(new Map());
-      sessionStorage.removeItem(PROJECT_CACHE_KEY);
-    }
   };
 
   const clearAll = () => {
@@ -644,9 +619,12 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     setOpenLocationsState(new Set());
     setIsIndividualProjectsOpenState(true);
     setIsLocationsOpenState(true);
-    setProjectCache(new Map());
+    setInMemoryCache(new Map()); // Clear in-memory cache
     sessionStorage.removeItem(SESSION_STORAGE_KEY);
-    sessionStorage.removeItem(PROJECT_CACHE_KEY);
+    // Clear IndexedDB cache asynchronously
+    projectDB.clearProjectCache().catch(error => {
+      console.error("Error clearing IndexedDB cache:", error);
+    });
   };
 
   const value: ProjectsContextType = {
@@ -666,6 +644,8 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     setCachedProject,
     clearProjectCache,
     clearAll,
+    getInMemoryProject,
+    setInMemoryProject,
   };
 
   return <ProjectsContext.Provider value={value}>{children}</ProjectsContext.Provider>;
