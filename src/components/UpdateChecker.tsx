@@ -28,6 +28,7 @@ export function UpdateChecker() {
       }
     } catch (err) {
       console.error('Error checking for updates:', err);
+      console.error('Error details:', JSON.stringify(err, null, 2));
       // Don't show error to users - fail silently
       // This is expected if no releases are published yet
     } finally {
