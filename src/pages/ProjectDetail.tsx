@@ -10,6 +10,7 @@ import { SampleSlotsTable } from "../components/SampleSlotsTable";
 import PartsPanel from "../components/PartsPanel";
 import { TrackBadge } from "../components/TrackBadge";
 import { ScrollToTop } from "../components/ScrollToTop";
+import { Version } from "../components/Version";
 import "../App.css";
 
 // Most type definitions are now imported from ProjectsContext via Bank and ProjectMetadata types
@@ -281,7 +282,7 @@ export function ProjectDetail() {
   return (
     <main className="container">
       <div className="project-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: '0 1 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: '1' }}>
           <button onClick={() => navigate("/")} className="back-button">
             ← Back
           </button>
@@ -289,6 +290,7 @@ export function ProjectDetail() {
           <button onClick={handleRefresh} className="back-button refresh-button" disabled={isLoading} title="Refresh project data">
             ↻ Refresh
           </button>
+          <Version />
         </div>
       </div>
 
