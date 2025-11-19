@@ -28,7 +28,8 @@ export function UpdateChecker() {
       }
     } catch (err) {
       console.error('Error checking for updates:', err);
-      setError('Failed to check for updates');
+      // Don't show error to users - fail silently
+      // This is expected if no releases are published yet
     } finally {
       setChecking(false);
     }
@@ -76,9 +77,12 @@ export function UpdateChecker() {
     }
   };
 
-  // Check for updates on mount
+  // Check for updates on mount (only in production)
   useEffect(() => {
-    checkForUpdates();
+    // Only check for updates in production builds
+    if (import.meta.env.PROD) {
+      checkForUpdates();
+    }
   }, []);
 
   if (!updateAvailable && !checking && !error) {

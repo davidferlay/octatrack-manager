@@ -18,7 +18,23 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "capabilities": [
+        {
+          "identifier": "main-capability",
+          "description": "Main app capabilities",
+          "windows": ["main"],
+          "permissions": [
+            "core:default",
+            "dialog:default",
+            "opener:default",
+            "updater:default",
+            "updater:allow-check",
+            "updater:allow-download",
+            "updater:allow-install"
+          ]
+        }
+      ]
     }
   },
   "bundle": {
