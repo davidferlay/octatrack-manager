@@ -11,20 +11,42 @@ interface PartsPanelProps {
   bankName: string;
   partNames: string[];  // Array of 4 part names
   selectedTrack?: number;  // 0-7 for T1-T8, 8-15 for M1-M8, -1 for all audio, -2 for all MIDI, undefined = show all audio
+  sharedPageIndex?: number;  // Optional shared page index for unified tab selection across banks
+  onSharedPageChange?: (index: number) => void;  // Optional callback for shared page change
+  sharedLfoTab?: LfoTabType;  // Optional shared LFO tab for unified LFO tab selection across banks
+  onSharedLfoTabChange?: (tab: LfoTabType) => void;  // Optional callback for shared LFO tab change
 }
 
 type AudioPageType = 'SRC' | 'AMP' | 'LFO' | 'FX1' | 'FX2';
 type MidiPageType = 'NOTE' | 'ARP' | 'LFO' | 'CTRL1' | 'CTRL2';
 type LfoTabType = 'LFO1' | 'LFO2' | 'LFO3' | 'DESIGN';
 
-export default function PartsPanel({ projectPath, bankId, bankName, partNames, selectedTrack }: PartsPanelProps) {
+export default function PartsPanel({
+  projectPath,
+  bankId,
+  bankName,
+  partNames,
+  selectedTrack,
+  sharedPageIndex,
+  onSharedPageChange,
+  sharedLfoTab,
+  onSharedLfoTabChange
+}: PartsPanelProps) {
   const [partsData, setPartsData] = useState<PartData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // Unified page index: 0=SRC/NOTE, 1=AMP/ARP, 2=LFO, 3=FX1/CTRL1, 4=FX2/CTRL2
-  const [activePageIndex, setActivePageIndex] = useState<number>(0);
+  const [localPageIndex, setLocalPageIndex] = useState<number>(0);
   const [activePartIndex, setActivePartIndex] = useState<number>(0);
-  const [activeLfoTab, setActiveLfoTab] = useState<LfoTabType>('LFO1');
+  const [localLfoTab, setLocalLfoTab] = useState<LfoTabType>('LFO1');
+
+  // Use shared page index if provided (All banks mode), otherwise use local state
+  const activePageIndex = sharedPageIndex !== undefined ? sharedPageIndex : localPageIndex;
+  const setActivePageIndex = onSharedPageChange !== undefined ? onSharedPageChange : setLocalPageIndex;
+
+  // Use shared LFO tab if provided (All banks mode), otherwise use local state
+  const activeLfoTab = sharedLfoTab !== undefined ? sharedLfoTab : localLfoTab;
+  const setActiveLfoTab = onSharedLfoTabChange !== undefined ? onSharedLfoTabChange : setLocalLfoTab;
 
   // Determine if selected track is MIDI (tracks 8-15 or ALL_MIDI_TRACKS) or Audio (tracks 0-7 or ALL_AUDIO_TRACKS)
   const isMidiTrack = selectedTrack !== undefined && (selectedTrack >= 8 || selectedTrack === ALL_MIDI_TRACKS);
