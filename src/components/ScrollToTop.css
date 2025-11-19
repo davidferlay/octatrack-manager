@@ -6,8 +6,8 @@
   height: 36px;
   border-radius: 4px;
   background: transparent;
-  border: 1.5px solid rgba(255, 102, 0, 0.5);
-  color: rgba(255, 102, 0, 0.7);
+  border: 1.5px solid rgba(255, 102, 0, 0.3);
+  color: rgba(255, 102, 0, 0.4);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -24,8 +24,8 @@
 }
 
 .scroll-to-top:hover {
-  border-color: rgba(255, 102, 0, 0.9);
-  color: rgba(255, 102, 0, 1);
+  border-color: rgba(255, 102, 0, 0.8);
+  color: rgba(255, 102, 0, 0.9);
 }
 
 .scroll-to-top:active {
