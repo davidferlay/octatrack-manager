@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useNavigate } from "react-router-dom";
 import { useProjects } from "../context/ProjectsContext";
+import { Version } from "../components/Version";
 import "../App.css";
 
 interface OctatrackProject {
@@ -146,7 +147,13 @@ export function HomePage() {
 
   return (
     <main className="container">
-      <h1>Octatrack Manager</h1>
+      <div className="project-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: '1' }}>
+          <h1 style={{ margin: 0 }}>Octatrack Manager</h1>
+          <Version />
+        </div>
+      </div>
+
       <p className="subtitle">Discover and manage your Elektron Octatrack projects</p>
 
       <div className="scan-section">

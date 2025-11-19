@@ -1,0 +1,16 @@
+.app-version {
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 500;
+  user-select: none;
+  margin-left: auto;
+}
+
+/* Fixed position for HomePage */
+.app-version.fixed {
+  position: fixed;
+  top: 0.5rem;
+  right: 1rem;
+  z-index: 1000;
+  pointer-events: none;
+}

@@ -65,7 +65,7 @@ h1 {
 
 .subtitle {
   margin: 0;
-  padding: 0.5rem 2rem 1.5rem;
+  padding: 1rem 2rem;
   font-size: 0.875rem;
   color: var(--elektron-text-secondary);
   background-color: var(--elektron-dark-gray);
@@ -465,7 +465,7 @@ h1 {
 
 /* Project Detail Page */
 .project-header {
-  padding: 1.5rem 2rem;
+  padding: 0.75rem 2rem;
   background-color: var(--elektron-dark-gray);
   border-bottom: 2px solid var(--elektron-orange);
   display: flex;
