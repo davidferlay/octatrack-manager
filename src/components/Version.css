@@ -1,9 +1,15 @@
 .app-version {
   font-size: 1rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.3);
   font-weight: 500;
   user-select: none;
   margin-left: auto;
+  transition: color 0.2s ease;
+  cursor: default;
+}
+
+.app-version:hover {
+  color: rgba(255, 255, 255, 0.8);
 }
 
 /* Fixed position for HomePage */
