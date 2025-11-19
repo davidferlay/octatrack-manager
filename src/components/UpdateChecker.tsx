@@ -78,11 +78,16 @@ export function UpdateChecker() {
     }
   };
 
-  // Check for updates on mount (only in production)
+  // Check for updates on mount (only in production, and only once per session)
   useEffect(() => {
     // Only check for updates in production builds
     if (import.meta.env.PROD) {
-      checkForUpdates();
+      // Check if we've already checked in this session
+      const hasChecked = sessionStorage.getItem('update-checked');
+      if (!hasChecked) {
+        checkForUpdates();
+        sessionStorage.setItem('update-checked', 'true');
+      }
     }
   }, []);
 
