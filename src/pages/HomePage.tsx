@@ -5,7 +5,6 @@ import { useNavigate } from "react-router-dom";
 import { useProjects } from "../context/ProjectsContext";
 import { Version } from "../components/Version";
 import { ScrollToTop } from "../components/ScrollToTop";
-import { UpdateChecker } from "../components/UpdateChecker";
 import "../App.css";
 
 interface OctatrackProject {
@@ -149,7 +148,6 @@ export function HomePage() {
 
   return (
     <main className="container">
-      <UpdateChecker />
       <div className="project-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: '1' }}>
           <h1 style={{ margin: 0 }}>Octatrack Manager</h1>

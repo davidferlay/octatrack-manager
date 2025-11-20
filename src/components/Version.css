@@ -40,29 +40,48 @@
   z-index: 1000;
 }
 
-.version-message {
-  position: fixed;
-  top: 4rem;
-  right: 1rem;
-  max-width: 400px;
-  z-index: 1001;
-  font-size: 0.875rem;
-  color: var(--elektron-text-primary);
-  background-color: var(--elektron-dark-gray);
-  border: 2px solid var(--elektron-orange);
-  border-radius: 4px;
-  padding: 1rem;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-  animation: slideIn 0.3s ease-out;
+/* Update progress bar */
+.update-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 2px;
 }
 
-@keyframes slideIn {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
+.update-progress-bar {
+  width: 100px;
+  height: 4px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.update-progress-fill {
+  height: 100%;
+  background-color: var(--elektron-orange);
+  transition: width 0.3s ease;
+}
+
+.update-progress-text {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  min-width: 40px;
+  text-align: right;
+}
+
+/* Relaunch link */
+.relaunch-link {
+  font-size: 0.875rem;
+  color: var(--elektron-orange);
+  cursor: pointer;
+  text-decoration: none;
+  transition: opacity 0.2s ease;
+  display: flex;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.relaunch-link:hover {
+  opacity: 0.8;
+  text-decoration: underline;
 }
