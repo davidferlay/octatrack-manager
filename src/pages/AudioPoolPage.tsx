@@ -270,13 +270,10 @@ export function AudioPoolPage() {
 
   // Drag and drop handlers
   function handleDragStart(e: React.DragEvent) {
-    console.log("[DRAG] handleDragStart called");
     // Store the selected files in the drag data
     const filePaths = Array.from(selectedSourceFiles);
-    console.log("[DRAG] Selected files:", filePaths);
     e.dataTransfer.setData("application/json", JSON.stringify(filePaths));
     e.dataTransfer.effectAllowed = "copy";
-    console.log("[DRAG] Drag data set");
     // Note: Custom drag image removed as it was causing freezing in Tauri
   }
 
@@ -301,35 +298,28 @@ export function AudioPoolPage() {
   }
 
   async function handleDrop(e: React.DragEvent) {
-    console.log("[DROP] Starting handleDrop");
     e.preventDefault();
     e.stopPropagation();
     setIsOverDropZone(false);
 
     try {
       const filePathsJson = e.dataTransfer.getData("application/json");
-      console.log("[DROP] Got drag data:", filePathsJson);
       if (!filePathsJson) {
-        console.log("[DROP] No file paths, returning");
         return;
       }
 
       const sourcePaths = JSON.parse(filePathsJson) as string[];
-      console.log("[DROP] Parsed source paths:", sourcePaths);
       if (sourcePaths.length === 0) {
-        console.log("[DROP] No source paths, returning");
         return;
       }
 
       // Get file info for the selected files
       const filesToCopy = sourceFiles.filter(f => sourcePaths.includes(f.path));
-      console.log("[DROP] Files to copy:", filesToCopy.map(f => f.name));
 
       setSelectedSourceFiles(new Set());
 
       // Process each file
       for (const file of filesToCopy) {
-        console.log(`[DROP] Processing file: ${file.name}`);
         // Generate a unique transfer ID
         const transferId = `${Date.now()}-${file.name}`;
 
@@ -343,20 +333,13 @@ export function AudioPoolPage() {
           startTime: Date.now(),
         };
 
-        console.log(`[DROP] Adding transfer to queue:`, newTransfer);
         setTransfers(prev => [...prev, newTransfer]);
 
         try {
-          console.log(`[DROP] Invoking copy_audio_files for: ${file.name}`);
-          console.log(`[DROP] Source path: ${file.path}`);
-          console.log(`[DROP] Destination dir: ${destinationPath}`);
-
           await invoke("copy_audio_files", {
             sourcePaths: [file.path],
             destinationDir: destinationPath
           });
-
-          console.log(`[DROP] Copy completed for: ${file.name}`);
 
           // Mark as completed if not already marked by progress events
           setTransfers(prev => prev.map(t => {
@@ -366,7 +349,7 @@ export function AudioPoolPage() {
             return t;
           }));
         } catch (error) {
-          console.error(`[DROP] Error copying file ${file.name}:`, error);
+          console.error(`Error copying file ${file.name}:`, error);
           setTransfers(prev => prev.map(t => {
             if (t.fileName === file.name && t.id === transferId) {
               return { ...t, status: "failed" as const, error: String(error) };
@@ -376,12 +359,10 @@ export function AudioPoolPage() {
         }
       }
 
-      console.log("[DROP] Refreshing destination files");
       // Refresh destination
       await loadDestinationFiles(destinationPath);
-      console.log("[DROP] All done!");
     } catch (error) {
-      console.error("[DROP] Error during file operation:", error);
+      console.error("Error during file operation:", error);
       alert(`Error: ${error}`);
     }
   }
