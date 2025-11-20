@@ -29,6 +29,13 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 4px;
   overflow: hidden;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.audio-panel.drop-zone-active {
+  border-color: var(--elektron-orange);
+  border-width: 2px;
+  background-color: rgba(255, 90, 0, 0.05);
 }
 
 .source-panel-header {
@@ -210,6 +217,30 @@
   background-color: rgba(255, 90, 0, 0.25);
 }
 
+.file-list tbody tr[draggable="true"] {
+  cursor: grab;
+}
+
+.file-list tbody tr[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* Visual feedback during drag */
+.file-list tbody tr.selected[draggable="true"] {
+  position: relative;
+}
+
+.file-list tbody tr.selected[draggable="true"]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 2px solid var(--elektron-orange);
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
 .file-list tbody tr .folder-icon {
   color: #D97E3D;
   font-style: normal;
@@ -224,6 +255,7 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 4px;
   gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .preview-controls {
@@ -388,3 +420,4 @@
 .transfer-queue::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
 }
+

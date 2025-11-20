@@ -4,7 +4,7 @@ mod audio_pool;
 
 use device_detection::{discover_devices, scan_directory, ScanResult};
 use project_reader::{read_project_metadata, read_project_banks, read_parts_data, ProjectMetadata, Bank, PartData};
-use audio_pool::{list_directory, get_parent_directory, create_directory, AudioFileInfo};
+use audio_pool::{list_directory, get_parent_directory, create_directory, copy_files, move_files, delete_files, AudioFileInfo};
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -64,6 +64,30 @@ fn create_new_directory(path: String, name: String) -> Result<String, String> {
     create_directory(&path, &name)
 }
 
+#[tauri::command]
+async fn copy_audio_files(source_paths: Vec<String>, destination_dir: String) -> Result<Vec<String>, String> {
+    // Run on a blocking thread pool to avoid blocking the main event loop
+    tauri::async_runtime::spawn_blocking(move || {
+        copy_files(source_paths, &destination_dir)
+    }).await.unwrap()
+}
+
+#[tauri::command]
+async fn move_audio_files(source_paths: Vec<String>, destination_dir: String) -> Result<Vec<String>, String> {
+    // Run on a blocking thread pool to avoid blocking the main event loop
+    tauri::async_runtime::spawn_blocking(move || {
+        move_files(source_paths, &destination_dir)
+    }).await.unwrap()
+}
+
+#[tauri::command]
+async fn delete_audio_files(file_paths: Vec<String>) -> Result<usize, String> {
+    // Run on a blocking thread pool to avoid blocking the main event loop
+    tauri::async_runtime::spawn_blocking(move || {
+        delete_files(file_paths)
+    }).await.unwrap()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -79,7 +103,10 @@ pub fn run() {
             load_parts_data,
             list_audio_directory,
             navigate_to_parent,
-            create_new_directory
+            create_new_directory,
+            copy_audio_files,
+            move_audio_files,
+            delete_audio_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

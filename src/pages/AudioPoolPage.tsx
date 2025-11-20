@@ -44,6 +44,7 @@ export function AudioPoolPage() {
   const [isTransferQueueOpen, setIsTransferQueueOpen] = useState(false);
   const [activeTransfers, _setActiveTransfers] = useState<number>(0);
   const [isSourcePanelOpen, setIsSourcePanelOpen] = useState(false);
+  const [isOverDropZone, setIsOverDropZone] = useState(false);
 
   // Load destination files on mount
   useEffect(() => {
@@ -219,6 +220,62 @@ export function AudioPoolPage() {
     }
   }
 
+  // Drag and drop handlers
+  function handleDragStart(e: React.DragEvent) {
+    // Store the selected files in the drag data
+    const filePaths = Array.from(selectedSourceFiles);
+    e.dataTransfer.setData("application/json", JSON.stringify(filePaths));
+    e.dataTransfer.effectAllowed = "copy";
+
+    // Hide the default drag ghost image
+    const img = new Image();
+    img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+    e.dataTransfer.setDragImage(img, 0, 0);
+  }
+
+  function handleDragEnd() {
+    // Cleanup after drag ends
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsOverDropZone(true);
+    e.dataTransfer.dropEffect = "copy";
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only set to false if we're leaving the drop zone entirely
+    if (e.currentTarget === e.target) {
+      setIsOverDropZone(false);
+    }
+  }
+
+  async function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsOverDropZone(false);
+
+    try {
+      const filePathsJson = e.dataTransfer.getData("application/json");
+      if (!filePathsJson) return;
+
+      const sourcePaths = JSON.parse(filePathsJson) as string[];
+      if (sourcePaths.length === 0) return;
+
+      // Copy operation only
+      await invoke("copy_audio_files", { sourcePaths, destinationDir: destinationPath });
+      await loadDestinationFiles(destinationPath);
+      setSelectedSourceFiles(new Set());
+      alert(`Successfully copied ${sourcePaths.length} file(s)`);
+    } catch (error) {
+      console.error("Error during file operation:", error);
+      alert(`Error: ${error}`);
+    }
+  }
+
   return (
     <main className="container audio-pool-page">
       <div className="project-header">
@@ -294,7 +351,10 @@ export function AudioPoolPage() {
                     key={idx}
                     className={selectedSourceFiles.has(file.path) ? 'selected' : ''}
                     onClick={(e) => handleSourceFileClick(file, idx, e)}
-                    style={{ cursor: 'pointer' }}
+                    draggable={!file.is_directory && selectedSourceFiles.has(file.path)}
+                    onDragStart={handleDragStart}
+                    onDragEnd={handleDragEnd}
+                    style={{ cursor: file.is_directory ? 'pointer' : (selectedSourceFiles.has(file.path) ? 'grab' : 'pointer') }}
                   >
                     <td>{file.is_directory ? <span className="folder-icon">📂 </span> : ''}{file.name}</td>
                     <td>{file.size ? formatFileSize(file.size) : ''}</td>
@@ -310,7 +370,12 @@ export function AudioPoolPage() {
         </div>
 
         {/* Right Panel - Destination (Samples) */}
-        <div className="audio-panel dest-panel">
+        <div
+          className={`audio-panel dest-panel ${isOverDropZone ? 'drop-zone-active' : ''}`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
           <div className="panel-path">
             <input
               type="text"
@@ -397,7 +462,13 @@ export function AudioPoolPage() {
           <span>{volume}</span>
         </div>
         <div className="status-info">
-          No File Loaded
+          {selectedSourceFiles.size > 0 && (
+            <span>
+              {selectedSourceFiles.size} file(s) selected - Drag to audio pool to copy
+            </span>
+          )}
+          {selectedDestFiles.size > 0 && <span>{selectedDestFiles.size} file(s) selected in audio pool</span>}
+          {selectedSourceFiles.size === 0 && selectedDestFiles.size === 0 && <span>Select files to copy</span>}
         </div>
       </div>
 

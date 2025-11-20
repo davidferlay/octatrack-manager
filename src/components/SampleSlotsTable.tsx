@@ -1015,7 +1015,10 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType }: SampleSlotsTa
                 {visibleColumns.status && (
                   <td className="status-cell col-status">
                     {slot.path && (
-                      <span className={`file-status-badge ${slot.file_exists ? 'file-exists' : 'file-missing'}`}>
+                      <span
+                        className={`file-status-badge ${slot.file_exists ? 'file-exists' : 'file-missing'}`}
+                        title={slot.file_exists ? 'File exists on disk' : 'File is missing from disk'}
+                      >
                         {slot.file_exists ? '✓' : '✗'}
                       </span>
                     )}
