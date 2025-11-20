@@ -66,10 +66,21 @@ fn create_new_directory(path: String, name: String) -> Result<String, String> {
 
 #[tauri::command]
 async fn copy_audio_files(source_paths: Vec<String>, destination_dir: String) -> Result<Vec<String>, String> {
+    eprintln!("[COMMAND] copy_audio_files invoked");
+    eprintln!("[COMMAND] source_paths: {:?}", source_paths);
+    eprintln!("[COMMAND] destination_dir: {}", destination_dir);
+
     // Run on a blocking thread pool to avoid blocking the main event loop
-    tauri::async_runtime::spawn_blocking(move || {
-        copy_files(source_paths, &destination_dir)
-    }).await.unwrap()
+    eprintln!("[COMMAND] Spawning blocking task");
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        eprintln!("[COMMAND] Inside blocking task, calling copy_files");
+        let res = copy_files(source_paths, &destination_dir);
+        eprintln!("[COMMAND] copy_files returned: {:?}", res.is_ok());
+        res
+    }).await.unwrap();
+
+    eprintln!("[COMMAND] Blocking task completed, returning result");
+    result
 }
 
 #[tauri::command]
