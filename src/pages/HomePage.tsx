@@ -280,7 +280,9 @@ export function HomePage() {
                                       <div
                                         className={`audio-pool-card ${!set.has_audio_pool ? 'audio-pool-empty' : ''}`}
                                         onClick={() => {
-                                          console.log('Audio pool clicked:', set.path);
+                                          startTransition(() => {
+                                            navigate(`/audio-pool?path=${encodeURIComponent(set.path + '/AUDIO')}&name=${encodeURIComponent(set.name)}`);
+                                          });
                                         }}
                                         title={set.has_audio_pool ? "Audio Pool - Click to view samples" : "Audio Pool - No samples found"}
                                       >

@@ -1,0 +1,390 @@
+.audio-pool-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  height: 100vh;
+  padding: 1rem;
+}
+
+.audio-pool-container {
+  display: grid;
+  gap: 1rem;
+  flex: 1;
+  min-height: 0;
+  transition: grid-template-columns 0.3s ease;
+}
+
+.audio-pool-container.source-open {
+  grid-template-columns: 1fr 1fr;
+}
+
+.audio-pool-container.source-closed {
+  grid-template-columns: auto 1fr;
+}
+
+.audio-panel {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--elektron-black);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.source-panel-header {
+  display: flex;
+  background-color: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.source-panel-header.closed {
+  border-bottom: none;
+}
+
+.source-panel-toggle {
+  padding: 0.75rem;
+  background-color: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.source-panel-header.open .source-panel-toggle {
+  padding: 0.5rem 0.75rem;
+}
+
+.source-panel-header.closed .source-panel-toggle {
+  writing-mode: vertical-rl;
+  padding: 1rem 0.5rem;
+}
+
+.source-panel-toggle:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.source-panel-toggle .collapse-indicator {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+}
+
+.source-panel-header .panel-path {
+  flex: 1;
+  border-bottom: none;
+}
+
+.panel-header {
+  background-color: rgba(255, 255, 255, 0.05);
+  padding: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.panel-dropdown {
+  width: 100%;
+  background-color: var(--elektron-black);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 0.5rem;
+  border-radius: 2px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.panel-dropdown:focus {
+  outline: none;
+  border-color: var(--elektron-orange);
+}
+
+.panel-path {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background-color: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  align-items: center;
+}
+
+.path-input {
+  flex: 1;
+  background-color: var(--elektron-black);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 0.4rem 0.6rem;
+  border-radius: 2px;
+  font-size: 0.85rem;
+  font-family: monospace;
+}
+
+.path-input:focus {
+  outline: none;
+  border-color: var(--elektron-orange);
+}
+
+.path-controls {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.icon-button {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 0.4rem 0.6rem;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 1rem;
+}
+
+.icon-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: var(--elektron-orange);
+}
+
+.icon-button:active {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.icon-button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.icon-button:disabled:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.file-list-container {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.file-list {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.file-list thead {
+  position: sticky;
+  top: 0;
+  background-color: var(--elektron-black);
+  z-index: 10;
+}
+
+.file-list th {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  white-space: nowrap;
+}
+
+.file-list td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.file-list tbody tr {
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+}
+
+.file-list tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.file-list tbody tr.selected {
+  background-color: rgba(255, 90, 0, 0.2);
+}
+
+.file-list tbody tr.selected:hover {
+  background-color: rgba(255, 90, 0, 0.25);
+}
+
+.file-list tbody tr .folder-icon {
+  color: #D97E3D;
+  font-style: normal;
+}
+
+.audio-pool-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background-color: var(--elektron-black);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  gap: 1rem;
+}
+
+.preview-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.preview-controls label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.volume-slider {
+  width: 100px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  outline: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: var(--elektron-orange);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.volume-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: var(--elektron-orange);
+  border-radius: 50%;
+  cursor: pointer;
+  border: none;
+}
+
+.status-info {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.85rem;
+}
+
+.transfer-queue {
+  background-color: var(--elektron-black);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  transition: max-height 0.3s ease;
+}
+
+.transfer-queue.open {
+  max-height: 250px;
+}
+
+.transfer-queue.collapsed {
+  max-height: auto;
+}
+
+.transfer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.transfer-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.transfer-header .collapse-indicator {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.8rem;
+}
+
+.transfer-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.transfer-controls label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.85rem;
+}
+
+.transfer-button {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 0.35rem 0.75rem;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 0.85rem;
+}
+
+.transfer-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: var(--elektron-orange);
+}
+
+.transfer-list {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.transfer-list thead {
+  background-color: rgba(255, 255, 255, 0.03);
+  position: sticky;
+  top: 0;
+}
+
+.transfer-list th {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  white-space: nowrap;
+}
+
+.transfer-list td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* Scrollbar styling */
+.file-list-container::-webkit-scrollbar,
+.transfer-queue::-webkit-scrollbar {
+  width: 8px;
+}
+
+.file-list-container::-webkit-scrollbar-track,
+.transfer-queue::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.file-list-container::-webkit-scrollbar-thumb,
+.transfer-queue::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.file-list-container::-webkit-scrollbar-thumb:hover,
+.transfer-queue::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
