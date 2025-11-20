@@ -82,7 +82,8 @@ export function Version({ fixed = false }: VersionProps) {
     }
   };
 
-  const handleRelaunch = async () => {
+  const handleRelaunch = async (e: React.MouseEvent) => {
+    e.preventDefault();
     try {
       await relaunch();
     } catch (error) {
@@ -115,7 +116,7 @@ export function Version({ fixed = false }: VersionProps) {
         </div>
       )}
       {readyToRelaunch && (
-        <a className="relaunch-link" onClick={handleRelaunch}>
+        <a href="#" className="relaunch-link" onClick={handleRelaunch}>
           click to relaunch
         </a>
       )}
