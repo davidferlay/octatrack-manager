@@ -277,6 +277,18 @@ export function HomePage() {
 
                                   {set.projects.length > 0 && (
                                     <div className="projects-grid">
+                                      <div
+                                        className={`audio-pool-card ${!set.has_audio_pool ? 'audio-pool-empty' : ''}`}
+                                        onClick={() => {
+                                          console.log('Audio pool clicked:', set.path);
+                                        }}
+                                        title={set.has_audio_pool ? "Audio Pool - Click to view samples" : "Audio Pool - No samples found"}
+                                      >
+                                        <div className="audio-pool-name">Audio Pool</div>
+                                        <div className="audio-pool-info">
+                                          <span>{set.has_audio_pool ? "SAMPLES" : "NO SAMPLES"}</span>
+                                        </div>
+                                      </div>
                                       {set.projects.map((project, projIdx) => (
                                         <div
                                           key={projIdx}
