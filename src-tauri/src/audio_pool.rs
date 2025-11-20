@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use hound;
+use tauri::{Emitter, AppHandle};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AudioFileInfo {
@@ -12,6 +14,14 @@ pub struct AudioFileInfo {
     pub sample_rate: Option<u32>,
     pub is_directory: bool,
     pub path: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CopyProgress {
+    pub transfer_id: String,
+    pub file_name: String,
+    pub bytes_transferred: u64,
+    pub total_bytes: u64,
 }
 
 /// List files in a directory with audio metadata
@@ -165,41 +175,59 @@ pub fn create_directory(path: &str, name: &str) -> Result<String, String> {
 
 /// Copy files from source to destination
 pub fn copy_files(source_paths: Vec<String>, destination_dir: &str) -> Result<Vec<String>, String> {
+    eprintln!("[RUST] copy_files called with {} files", source_paths.len());
+    eprintln!("[RUST] destination_dir: {}", destination_dir);
+
     let dest_path = Path::new(destination_dir);
 
     if !dest_path.exists() {
+        eprintln!("[RUST] ERROR: Destination directory does not exist");
         return Err(format!("Destination directory does not exist: {}", destination_dir));
     }
 
     if !dest_path.is_dir() {
+        eprintln!("[RUST] ERROR: Destination is not a directory");
         return Err(format!("Destination is not a directory: {}", destination_dir));
     }
 
     let mut copied_files = Vec::new();
 
-    for source in source_paths {
+    for (idx, source) in source_paths.iter().enumerate() {
+        eprintln!("[RUST] Processing file {}/{}: {}", idx + 1, source_paths.len(), source);
         let source_path = Path::new(&source);
 
         if !source_path.exists() {
+            eprintln!("[RUST] ERROR: Source file does not exist");
             return Err(format!("Source file does not exist: {}", source));
         }
 
         let file_name = source_path.file_name()
-            .ok_or_else(|| format!("Invalid file name: {}", source))?;
+            .ok_or_else(|| {
+                eprintln!("[RUST] ERROR: Invalid file name");
+                format!("Invalid file name: {}", source)
+            })?;
 
         let dest_file = dest_path.join(file_name);
+        eprintln!("[RUST] Destination file: {:?}", dest_file);
 
         // Check if destination file already exists
         if dest_file.exists() {
+            eprintln!("[RUST] ERROR: File already exists");
             return Err(format!("File already exists: {}", dest_file.to_string_lossy()));
         }
 
+        eprintln!("[RUST] Starting fs::copy...");
         fs::copy(&source_path, &dest_file)
-            .map_err(|e| format!("Failed to copy file: {}", e))?;
+            .map_err(|e| {
+                eprintln!("[RUST] ERROR during fs::copy: {}", e);
+                format!("Failed to copy file: {}", e)
+            })?;
+        eprintln!("[RUST] fs::copy completed");
 
         copied_files.push(dest_file.to_string_lossy().to_string());
     }
 
+    eprintln!("[RUST] All files copied successfully");
     Ok(copied_files)
 }
 

@@ -15,12 +15,37 @@ interface AudioFile {
   path: string;
 }
 
+interface TransferItem {
+  id: string;
+  fileName: string;
+  fileSize: number;
+  bytesTransferred: number;
+  status: "pending" | "copying" | "completed" | "failed" | "cancelled";
+  error?: string;
+  startTime: number;
+  speed?: number;
+  timeLeft?: number;
+}
+
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B';
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function formatSpeed(bytesPerSecond: number): string {
+  if (bytesPerSecond < 1024) return `${bytesPerSecond.toFixed(0)} B/s`;
+  if (bytesPerSecond < 1024 * 1024) return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`;
+  return `${(bytesPerSecond / (1024 * 1024)).toFixed(1)} MB/s`;
+}
+
+function formatTime(seconds: number): string {
+  if (!isFinite(seconds) || seconds < 0) return '--';
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
+  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
 }
 
 export function AudioPoolPage() {
@@ -42,9 +67,9 @@ export function AudioPoolPage() {
   const [isLoadingSource, setIsLoadingSource] = useState(false);
   const [isLoadingDest, setIsLoadingDest] = useState(false);
   const [isTransferQueueOpen, setIsTransferQueueOpen] = useState(false);
-  const [activeTransfers, _setActiveTransfers] = useState<number>(0);
   const [isSourcePanelOpen, setIsSourcePanelOpen] = useState(false);
   const [isOverDropZone, setIsOverDropZone] = useState(false);
+  const [transfers, setTransfers] = useState<TransferItem[]>([]);
 
   // Load destination files on mount
   useEffect(() => {
@@ -62,10 +87,14 @@ export function AudioPoolPage() {
 
   // Auto-open transfer queue when transfers start
   useEffect(() => {
-    if (activeTransfers > 0) {
+    const activeCount = transfers.filter(t => t.status === "copying" || t.status === "pending").length;
+    if (activeCount > 0) {
       setIsTransferQueueOpen(true);
     }
-  }, [activeTransfers]);
+  }, [transfers]);
+
+  // Note: Real-time progress tracking removed for now due to technical limitations
+  // Progress is shown as indeterminate while copying
 
   async function loadSourceFiles(path: string) {
     if (!path) return;
@@ -220,17 +249,35 @@ export function AudioPoolPage() {
     }
   }
 
+  // Transfer queue management
+  function clearAllTransfers() {
+    setTransfers([]);
+  }
+
+  function clearFinishedTransfers() {
+    setTransfers(prev => prev.filter(t =>
+      t.status !== "completed" && t.status !== "failed" && t.status !== "cancelled"
+    ));
+  }
+
+  function cancelTransfer(transferId: string) {
+    setTransfers(prev => prev.map(t =>
+      t.id === transferId && (t.status === "copying" || t.status === "pending")
+        ? { ...t, status: "cancelled" as const }
+        : t
+    ));
+  }
+
   // Drag and drop handlers
   function handleDragStart(e: React.DragEvent) {
+    console.log("[DRAG] handleDragStart called");
     // Store the selected files in the drag data
     const filePaths = Array.from(selectedSourceFiles);
+    console.log("[DRAG] Selected files:", filePaths);
     e.dataTransfer.setData("application/json", JSON.stringify(filePaths));
     e.dataTransfer.effectAllowed = "copy";
-
-    // Hide the default drag ghost image
-    const img = new Image();
-    img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
-    e.dataTransfer.setDragImage(img, 0, 0);
+    console.log("[DRAG] Drag data set");
+    // Note: Custom drag image removed as it was causing freezing in Tauri
   }
 
   function handleDragEnd() {
@@ -254,24 +301,87 @@ export function AudioPoolPage() {
   }
 
   async function handleDrop(e: React.DragEvent) {
+    console.log("[DROP] Starting handleDrop");
     e.preventDefault();
     e.stopPropagation();
     setIsOverDropZone(false);
 
     try {
       const filePathsJson = e.dataTransfer.getData("application/json");
-      if (!filePathsJson) return;
+      console.log("[DROP] Got drag data:", filePathsJson);
+      if (!filePathsJson) {
+        console.log("[DROP] No file paths, returning");
+        return;
+      }
 
       const sourcePaths = JSON.parse(filePathsJson) as string[];
-      if (sourcePaths.length === 0) return;
+      console.log("[DROP] Parsed source paths:", sourcePaths);
+      if (sourcePaths.length === 0) {
+        console.log("[DROP] No source paths, returning");
+        return;
+      }
 
-      // Copy operation only
-      await invoke("copy_audio_files", { sourcePaths, destinationDir: destinationPath });
-      await loadDestinationFiles(destinationPath);
+      // Get file info for the selected files
+      const filesToCopy = sourceFiles.filter(f => sourcePaths.includes(f.path));
+      console.log("[DROP] Files to copy:", filesToCopy.map(f => f.name));
+
       setSelectedSourceFiles(new Set());
-      alert(`Successfully copied ${sourcePaths.length} file(s)`);
+
+      // Process each file
+      for (const file of filesToCopy) {
+        console.log(`[DROP] Processing file: ${file.name}`);
+        // Generate a unique transfer ID
+        const transferId = `${Date.now()}-${file.name}`;
+
+        // Add transfer to queue
+        const newTransfer: TransferItem = {
+          id: transferId,
+          fileName: file.name,
+          fileSize: file.size,
+          bytesTransferred: 0,
+          status: "copying" as const,
+          startTime: Date.now(),
+        };
+
+        console.log(`[DROP] Adding transfer to queue:`, newTransfer);
+        setTransfers(prev => [...prev, newTransfer]);
+
+        try {
+          console.log(`[DROP] Invoking copy_audio_files for: ${file.name}`);
+          console.log(`[DROP] Source path: ${file.path}`);
+          console.log(`[DROP] Destination dir: ${destinationPath}`);
+
+          await invoke("copy_audio_files", {
+            sourcePaths: [file.path],
+            destinationDir: destinationPath
+          });
+
+          console.log(`[DROP] Copy completed for: ${file.name}`);
+
+          // Mark as completed if not already marked by progress events
+          setTransfers(prev => prev.map(t => {
+            if (t.fileName === file.name && t.id === transferId) {
+              return { ...t, status: "completed" as const, bytesTransferred: t.fileSize };
+            }
+            return t;
+          }));
+        } catch (error) {
+          console.error(`[DROP] Error copying file ${file.name}:`, error);
+          setTransfers(prev => prev.map(t => {
+            if (t.fileName === file.name && t.id === transferId) {
+              return { ...t, status: "failed" as const, error: String(error) };
+            }
+            return t;
+          }));
+        }
+      }
+
+      console.log("[DROP] Refreshing destination files");
+      // Refresh destination
+      await loadDestinationFiles(destinationPath);
+      console.log("[DROP] All done!");
     } catch (error) {
-      console.error("Error during file operation:", error);
+      console.error("[DROP] Error during file operation:", error);
       alert(`Error: ${error}`);
     }
   }
@@ -484,8 +594,18 @@ export function AudioPoolPage() {
               <input type="checkbox" defaultChecked />
               <span style={{ marginLeft: '0.5rem' }}>Auto-Scroll</span>
             </label>
-            <button className="transfer-button">Clear all</button>
-            <button className="transfer-button">Clear finished</button>
+            <button
+              className="transfer-button"
+              onClick={(e) => { e.stopPropagation(); clearAllTransfers(); }}
+            >
+              Clear all
+            </button>
+            <button
+              className="transfer-button"
+              onClick={(e) => { e.stopPropagation(); clearFinishedTransfers(); }}
+            >
+              Clear finished
+            </button>
           </div>
         </div>
         {isTransferQueueOpen && (
@@ -501,14 +621,58 @@ export function AudioPoolPage() {
               <th>DIRECTION</th>
               <th>TIME LEFT</th>
               <th>INFO</th>
+              <th>ACTIONS</th>
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td colSpan={9} style={{ textAlign: 'center', opacity: 0.5, padding: '2rem' }}>
-                No transfers
-              </td>
-            </tr>
+            {transfers.length === 0 ? (
+              <tr>
+                <td colSpan={10} style={{ textAlign: 'center', opacity: 0.5, padding: '2rem' }}>
+                  No transfers
+                </td>
+              </tr>
+            ) : (
+              transfers.map((transfer, idx) => (
+                <tr key={transfer.id} className={`transfer-row transfer-${transfer.status}`}>
+                  <td>{idx + 1}</td>
+                  <td>
+                    <div className="progress-container">
+                      <div
+                        className="progress-bar"
+                        style={{
+                          width: `${(transfer.bytesTransferred / transfer.fileSize) * 100}%`
+                        }}
+                      />
+                      <span className="progress-text">
+                        {((transfer.bytesTransferred / transfer.fileSize) * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                  </td>
+                  <td title={transfer.fileName}>{transfer.fileName}</td>
+                  <td>{formatFileSize(transfer.fileSize)}</td>
+                  <td>
+                    <span className={`status-badge status-${transfer.status}`}>
+                      {transfer.status}
+                    </span>
+                  </td>
+                  <td>{transfer.speed ? formatSpeed(transfer.speed) : '--'}</td>
+                  <td>→</td>
+                  <td>{transfer.timeLeft ? formatTime(transfer.timeLeft) : '--'}</td>
+                  <td>{transfer.error || ''}</td>
+                  <td>
+                    {(transfer.status === "copying" || transfer.status === "pending") && (
+                      <button
+                        className="icon-button"
+                        onClick={() => cancelTransfer(transfer.id)}
+                        title="Cancel transfer"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
         )}
