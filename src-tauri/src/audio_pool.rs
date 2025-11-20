@@ -163,6 +163,111 @@ pub fn create_directory(path: &str, name: &str) -> Result<String, String> {
     Ok(new_dir.to_string_lossy().to_string())
 }
 
+/// Copy files from source to destination
+pub fn copy_files(source_paths: Vec<String>, destination_dir: &str) -> Result<Vec<String>, String> {
+    let dest_path = Path::new(destination_dir);
+
+    if !dest_path.exists() {
+        return Err(format!("Destination directory does not exist: {}", destination_dir));
+    }
+
+    if !dest_path.is_dir() {
+        return Err(format!("Destination is not a directory: {}", destination_dir));
+    }
+
+    let mut copied_files = Vec::new();
+
+    for source in source_paths {
+        let source_path = Path::new(&source);
+
+        if !source_path.exists() {
+            return Err(format!("Source file does not exist: {}", source));
+        }
+
+        let file_name = source_path.file_name()
+            .ok_or_else(|| format!("Invalid file name: {}", source))?;
+
+        let dest_file = dest_path.join(file_name);
+
+        // Check if destination file already exists
+        if dest_file.exists() {
+            return Err(format!("File already exists: {}", dest_file.to_string_lossy()));
+        }
+
+        fs::copy(&source_path, &dest_file)
+            .map_err(|e| format!("Failed to copy file: {}", e))?;
+
+        copied_files.push(dest_file.to_string_lossy().to_string());
+    }
+
+    Ok(copied_files)
+}
+
+/// Move files from source to destination
+pub fn move_files(source_paths: Vec<String>, destination_dir: &str) -> Result<Vec<String>, String> {
+    let dest_path = Path::new(destination_dir);
+
+    if !dest_path.exists() {
+        return Err(format!("Destination directory does not exist: {}", destination_dir));
+    }
+
+    if !dest_path.is_dir() {
+        return Err(format!("Destination is not a directory: {}", destination_dir));
+    }
+
+    let mut moved_files = Vec::new();
+
+    for source in source_paths {
+        let source_path = Path::new(&source);
+
+        if !source_path.exists() {
+            return Err(format!("Source file does not exist: {}", source));
+        }
+
+        let file_name = source_path.file_name()
+            .ok_or_else(|| format!("Invalid file name: {}", source))?;
+
+        let dest_file = dest_path.join(file_name);
+
+        // Check if destination file already exists
+        if dest_file.exists() {
+            return Err(format!("File already exists: {}", dest_file.to_string_lossy()));
+        }
+
+        fs::rename(&source_path, &dest_file)
+            .map_err(|e| format!("Failed to move file: {}", e))?;
+
+        moved_files.push(dest_file.to_string_lossy().to_string());
+    }
+
+    Ok(moved_files)
+}
+
+/// Delete files
+pub fn delete_files(file_paths: Vec<String>) -> Result<usize, String> {
+    let mut deleted_count = 0;
+
+    for path in file_paths {
+        let file_path = Path::new(&path);
+
+        if !file_path.exists() {
+            return Err(format!("File does not exist: {}", path));
+        }
+
+        if file_path.is_dir() {
+            fs::remove_dir_all(&file_path)
+                .map_err(|e| format!("Failed to delete directory: {}", e))?;
+        } else {
+            fs::remove_file(&file_path)
+                .map_err(|e| format!("Failed to delete file: {}", e))?;
+        }
+
+        deleted_count += 1;
+    }
+
+    Ok(deleted_count)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

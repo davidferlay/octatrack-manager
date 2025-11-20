@@ -288,7 +288,7 @@ export function HomePage() {
                                       >
                                         <div className="audio-pool-name">Audio Pool</div>
                                         <div className="audio-pool-info">
-                                          <span>{set.has_audio_pool ? "SAMPLES" : "NO SAMPLES"}</span>
+                                          <span>{set.has_audio_pool ? "SAMPLES" : "NO SAMPLE"}</span>
                                         </div>
                                       </div>
                                       {set.projects.map((project, projIdx) => (
