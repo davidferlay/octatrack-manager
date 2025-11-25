@@ -859,7 +859,7 @@ export function ProjectDetail() {
                                             {step.trig_repeats > 0 && <span className="indicator-repeats">{step.trig_repeats + 1}x</span>}
                                             {step.micro_timing && <span className="indicator-timing">µ</span>}
                                             {step.velocity !== null && <span className="indicator-velocity">V</span>}
-                                            {step.plock_count > 1 && <span className="indicator-plock-count">{step.plock_count}p</span>}
+                                            {step.plock_count > 1 && <span className="indicator-plock-count">{step.plock_count}P</span>}
                                             {step.sample_slot !== null && <span className="indicator-sample">S</span>}
                                             {allNotes.length > 0 && (
                                               <div className="note-indicator-wrapper">
