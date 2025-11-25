@@ -1778,9 +1778,6 @@ h1 {
   color: #cc99ff;
   font-size: 0.75rem;
   font-weight: 600;
-  background-color: rgba(204, 153, 255, 0.2);
-  padding: 1px 3px;
-  border-radius: 2px;
 }
 
 .indicator-repeats {
