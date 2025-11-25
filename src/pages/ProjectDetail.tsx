@@ -846,13 +846,21 @@ export function ProjectDetail() {
                                             {step.slide && <span className="indicator-slide">~</span>}
                                             {step.recorder && <span className="indicator-recorder">R</span>}
 
-                                            {/* Additional data indicators */}
-                                            {step.trig_condition && <span className="indicator-condition">{step.trig_condition}</span>}
+                                            {/* Additional data indicators - minimalist display */}
+                                            {step.trig_condition && <span className="indicator-condition">
+                                              {step.trig_condition.includes('%') ? '%' :
+                                               step.trig_condition === 'Fill' ? 'F' :
+                                               step.trig_condition === 'NotFill' ? 'NF' :
+                                               step.trig_condition === 'Pre' ? 'P' :
+                                               step.trig_condition === 'Nei' ? 'N' :
+                                               step.trig_condition === '1st' ? '1' :
+                                               step.trig_condition}
+                                            </span>}
                                             {step.trig_repeats > 0 && <span className="indicator-repeats">{step.trig_repeats + 1}x</span>}
-                                            {step.micro_timing && <span className="indicator-timing">{step.micro_timing}</span>}
-                                            {step.velocity !== null && <span className="indicator-velocity">V{step.velocity}</span>}
+                                            {step.micro_timing && <span className="indicator-timing">µ</span>}
+                                            {step.velocity !== null && <span className="indicator-velocity">V</span>}
                                             {step.plock_count > 1 && <span className="indicator-plock-count">{step.plock_count}p</span>}
-                                            {step.sample_slot !== null && <span className="indicator-sample">S{step.sample_slot}</span>}
+                                            {step.sample_slot !== null && <span className="indicator-sample">S</span>}
                                             {allNotes.length > 0 && (
                                               <div className="note-indicator-wrapper">
                                                 {allNotes.map((note, idx) => (
@@ -879,9 +887,9 @@ export function ProjectDetail() {
                                     {usedIndicators.has('swing') && <div className="legend-item"><span className="indicator-swing">∿</span> Swing</div>}
                                     {usedIndicators.has('slide') && <div className="legend-item"><span className="indicator-slide">~</span> Slide</div>}
                                     {usedIndicators.has('recorder') && <div className="legend-item"><span className="indicator-recorder">R</span> Recorder</div>}
-                                    {usedIndicators.has('condition') && <div className="legend-item"><span className="indicator-condition">Fill</span> Condition</div>}
+                                    {usedIndicators.has('condition') && <div className="legend-item"><span className="indicator-condition">F/%</span> Condition</div>}
                                     {usedIndicators.has('repeats') && <div className="legend-item"><span className="indicator-repeats">2x</span> Repeats</div>}
-                                    {usedIndicators.has('timing') && <div className="legend-item"><span className="indicator-timing">μ</span> Micro-timing</div>}
+                                    {usedIndicators.has('timing') && <div className="legend-item"><span className="indicator-timing">µ</span> Micro-timing</div>}
                                     {usedIndicators.has('note') && <div className="legend-item"><span className="indicator-note">C4</span> MIDI Note/Chord</div>}
                                     {usedIndicators.has('velocity') && <div className="legend-item"><span className="indicator-velocity">V</span> Velocity</div>}
                                     {usedIndicators.has('sample') && <div className="legend-item"><span className="indicator-sample">S</span> Sample</div>}
