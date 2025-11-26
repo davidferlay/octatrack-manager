@@ -529,6 +529,8 @@ export function AudioPoolPage() {
   const [isTransferQueueOpen, setIsTransferQueueOpen] = useState(false);
   const [isOverDropZone, setIsOverDropZone] = useState(false);
   const [transfers, setTransfers] = useState<TransferItem[]>([]);
+  const [transferSortColumn, setTransferSortColumn] = useState<'num' | 'progress' | 'file' | 'size' | 'status'>('num');
+  const [transferSortDirection, setTransferSortDirection] = useState<'asc' | 'desc'>('asc');
 
   // Overwrite modal state
   const [overwriteModal, setOverwriteModal] = useState<{
@@ -1139,6 +1141,51 @@ export function AudioPoolPage() {
     ));
   }
 
+  function handleTransferSort(column: 'num' | 'progress' | 'file' | 'size' | 'status') {
+    if (transferSortColumn === column) {
+      setTransferSortDirection(transferSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setTransferSortColumn(column);
+      setTransferSortDirection('asc');
+    }
+  }
+
+  // Sort transfers based on current sort column and direction
+  const sortedTransfers = [...transfers].map((t, idx) => ({ ...t, originalIndex: idx })).sort((a, b) => {
+    let compareA: string | number;
+    let compareB: string | number;
+
+    switch (transferSortColumn) {
+      case 'num':
+        compareA = a.originalIndex;
+        compareB = b.originalIndex;
+        break;
+      case 'progress':
+        compareA = a.status === 'completed' ? 100 : a.fileSize > 0 ? (a.bytesTransferred / a.fileSize) * 100 : 0;
+        compareB = b.status === 'completed' ? 100 : b.fileSize > 0 ? (b.bytesTransferred / b.fileSize) * 100 : 0;
+        break;
+      case 'file':
+        compareA = a.fileName.toLowerCase();
+        compareB = b.fileName.toLowerCase();
+        break;
+      case 'size':
+        compareA = a.fileSize;
+        compareB = b.fileSize;
+        break;
+      case 'status':
+        const statusOrder = { copying: 0, pending: 1, completed: 2, failed: 3, cancelled: 4 };
+        compareA = statusOrder[a.status];
+        compareB = statusOrder[b.status];
+        break;
+      default:
+        return 0;
+    }
+
+    if (compareA < compareB) return transferSortDirection === 'asc' ? -1 : 1;
+    if (compareA > compareB) return transferSortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
+
   // Keyboard navigation
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -1587,25 +1634,35 @@ export function AudioPoolPage() {
             <table className="transfer-list">
               <thead>
                 <tr>
-                  <th className="transfer-col-num">#</th>
-                  <th className="transfer-col-progress">Progress</th>
-                  <th className="transfer-col-file">File</th>
-                  <th className="transfer-col-size">Size</th>
-                  <th className="transfer-col-status">Status</th>
+                  <th className="transfer-col-num sortable" onClick={() => handleTransferSort('num')}>
+                    # {transferSortColumn === 'num' && <span className="sort-arrow">{transferSortDirection === 'asc' ? '▲' : '▼'}</span>}
+                  </th>
+                  <th className="transfer-col-progress sortable" onClick={() => handleTransferSort('progress')}>
+                    Progress {transferSortColumn === 'progress' && <span className="sort-arrow">{transferSortDirection === 'asc' ? '▲' : '▼'}</span>}
+                  </th>
+                  <th className="transfer-col-file sortable" onClick={() => handleTransferSort('file')}>
+                    File {transferSortColumn === 'file' && <span className="sort-arrow">{transferSortDirection === 'asc' ? '▲' : '▼'}</span>}
+                  </th>
+                  <th className="transfer-col-size sortable" onClick={() => handleTransferSort('size')}>
+                    Size {transferSortColumn === 'size' && <span className="sort-arrow">{transferSortDirection === 'asc' ? '▲' : '▼'}</span>}
+                  </th>
+                  <th className="transfer-col-status sortable" onClick={() => handleTransferSort('status')}>
+                    Status {transferSortColumn === 'status' && <span className="sort-arrow">{transferSortDirection === 'asc' ? '▲' : '▼'}</span>}
+                  </th>
                   <th className="transfer-col-actions">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {transfers.length === 0 ? (
+                {sortedTransfers.length === 0 ? (
                   <tr>
                     <td colSpan={6} style={{ textAlign: 'center', opacity: 0.5, padding: '2rem' }}>
                       No transfers
                     </td>
                   </tr>
                 ) : (
-                  transfers.map((transfer, idx) => (
+                  sortedTransfers.map((transfer) => (
                     <tr key={transfer.id} className={`transfer-row transfer-${transfer.status}`}>
-                      <td>{idx + 1}</td>
+                      <td>{transfer.originalIndex + 1}</td>
                       <td>
                         <div className="progress-container">
                           <div
