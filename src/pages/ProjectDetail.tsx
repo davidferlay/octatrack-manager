@@ -821,7 +821,7 @@ export function ProjectDetail() {
                                       const notesStr = allNotes.map(noteName).join(', ');
                                       tooltipParts.push(chordName ? `Chord: ${chordName} (${notesStr})` : `Notes: ${notesStr}`);
                                     }
-                                    if (step.velocity !== null) tooltipParts.push(`Velocity: ${step.velocity}`);
+                                    if (step.velocity !== null) tooltipParts.push(`${trackData.track_type === "MIDI" ? "Velocity" : "Volume"}: ${step.velocity}`);
                                     if (step.plock_count > 0) tooltipParts.push(`P-Locks: ${step.plock_count}`);
                                     if (step.sample_slot !== null) tooltipParts.push(`Sample: ${step.sample_slot}`);
 
@@ -892,7 +892,7 @@ export function ProjectDetail() {
                                     {usedIndicators.has('repeats') && <div className="legend-item"><span className="indicator-repeats">x</span> Repeats</div>}
                                     {usedIndicators.has('timing') && <div className="legend-item"><span className="indicator-timing">µ</span> Micro-timing</div>}
                                     {usedIndicators.has('note') && <div className="legend-item"><span className="indicator-note">C4</span> MIDI Note/Chord</div>}
-                                    {usedIndicators.has('velocity') && <div className="legend-item"><span className="indicator-velocity">V</span> Velocity</div>}
+                                    {usedIndicators.has('velocity') && <div className="legend-item"><span className="indicator-velocity">V</span> {trackData.track_type === "MIDI" ? "Velocity" : "Volume"}</div>}
                                     {usedIndicators.has('sample') && <div className="legend-item"><span className="indicator-sample">S</span> Sample</div>}
                                   </div>
                                 )}
@@ -922,7 +922,7 @@ export function ProjectDetail() {
                                           {selectedStep.trig_condition && <div className="param-item"><span>Condition:</span> {selectedStep.trig_condition}</div>}
                                           {selectedStep.trig_repeats > 0 && <div className="param-item"><span>Repeats:</span> {selectedStep.trig_repeats + 1}x</div>}
                                           {selectedStep.micro_timing && <div className="param-item"><span>Micro-timing:</span> {selectedStep.micro_timing}</div>}
-                                          {selectedStep.velocity !== null && <div className="param-item"><span>Velocity:</span> {selectedStep.velocity}</div>}
+                                          {selectedStep.velocity !== null && <div className="param-item"><span>{trackData.track_type === "MIDI" ? "Velocity" : "Volume"}:</span> {selectedStep.velocity}</div>}
                                           {selectedStep.sample_slot !== null && <div className="param-item"><span>Sample Slot:</span> {selectedStep.sample_slot}</div>}
                                           {selectedStep.plock_count > 0 && <div className="param-item"><span>P-Locks Count:</span> {selectedStep.plock_count}</div>}
                                         </div>
