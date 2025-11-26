@@ -11,6 +11,8 @@ pub struct ProjectMetadata {
     pub current_state: CurrentState,
     pub mixer_settings: MixerSettings,
     pub memory_settings: MemorySettings,
+    pub midi_settings: MidiSettings,
+    pub metronome_settings: MetronomeSettings,
     pub sample_slots: SampleSlots,
     pub os_version: String,
 }
@@ -49,6 +51,35 @@ pub struct MemorySettings {
     pub record_24bit: bool,
     pub reserved_recorder_count: u8,
     pub reserved_recorder_length: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MidiSettings {
+    // MIDI Channels
+    pub trig_channels: Vec<i8>,     // 8 MIDI track channels (1-16 or -1 for disabled)
+    pub auto_channel: i8,           // Auto channel (1-16 or -1 for disabled)
+    // MIDI Sync
+    pub clock_send: bool,
+    pub clock_receive: bool,
+    pub transport_send: bool,
+    pub transport_receive: bool,
+    // Program Change
+    pub prog_change_send: bool,
+    pub prog_change_send_channel: i8,  // 1-16 or -1 for disabled
+    pub prog_change_receive: bool,
+    pub prog_change_receive_channel: i8, // 1-16 or -1 for disabled
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetronomeSettings {
+    pub enabled: bool,
+    pub main_volume: u8,
+    pub cue_volume: u8,
+    pub pitch: u8,
+    pub tonal: bool,
+    pub preroll: u8,
+    pub time_signature_numerator: u8,
+    pub time_signature_denominator: u8,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -594,6 +625,44 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                 reserved_recorder_length: project.settings.control.memory.reserved_recorder_length,
             };
 
+            // Extract MIDI settings
+            let midi_channels = &project.settings.control.midi.channels;
+            let midi_sync = &project.settings.control.midi.sync;
+            let midi_settings = MidiSettings {
+                trig_channels: vec![
+                    midi_channels.midi_trig_ch1,
+                    midi_channels.midi_trig_ch2,
+                    midi_channels.midi_trig_ch3,
+                    midi_channels.midi_trig_ch4,
+                    midi_channels.midi_trig_ch5,
+                    midi_channels.midi_trig_ch6,
+                    midi_channels.midi_trig_ch7,
+                    midi_channels.midi_trig_ch8,
+                ],
+                auto_channel: midi_channels.midi_auto_channel,
+                clock_send: midi_sync.midi_clock_send,
+                clock_receive: midi_sync.midi_clock_receive,
+                transport_send: midi_sync.midi_transport_send,
+                transport_receive: midi_sync.midi_transport_receive,
+                prog_change_send: midi_sync.midi_progchange_send,
+                prog_change_send_channel: midi_sync.midi_progchange_send_channel.into(),
+                prog_change_receive: midi_sync.midi_progchange_receive,
+                prog_change_receive_channel: midi_sync.midi_progchange_receive_channel.into(),
+            };
+
+            // Extract metronome settings
+            let metronome = &project.settings.control.metronome;
+            let metronome_settings = MetronomeSettings {
+                enabled: metronome.metronome_enabled,
+                main_volume: metronome.metronome_main_volume,
+                cue_volume: metronome.metronome_cue_volume,
+                pitch: metronome.metronome_pitch,
+                tonal: metronome.metronome_tonal,
+                preroll: metronome.metronome_preroll,
+                time_signature_numerator: metronome.metronome_time_signature + 1,  // 0-indexed to 1-indexed
+                time_signature_denominator: 2u8.pow(metronome.metronome_time_signature_denominator as u32),
+            };
+
             // Extract sample slots - include all 128 slots (empty and filled)
             let mut static_slots = Vec::new();
             for slot_id in 1..=128 {
@@ -797,6 +866,8 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                 current_state,
                 mixer_settings,
                 memory_settings,
+                midi_settings,
+                metronome_settings,
                 sample_slots,
                 os_version,
             })
