@@ -513,6 +513,92 @@ export function ProjectDetail() {
                     </div>
                   </div>
                 </section>
+
+                {metadata.midi_settings && (
+                <section className="mixer-section">
+                  <h2>MIDI Configuration</h2>
+                  <div className="metadata-grid">
+                    {metadata.midi_settings.trig_channels.map((ch, idx) => (
+                      <div key={idx} className="metadata-item">
+                        <span className="metadata-label">Track {idx + 1} Channel</span>
+                        <span className="metadata-value">{ch === -1 ? 'Off' : ch}</span>
+                      </div>
+                    ))}
+                    <div className="metadata-item">
+                      <span className="metadata-label">Auto Channel</span>
+                      <span className="metadata-value">{metadata.midi_settings.auto_channel === -1 ? 'Off' : metadata.midi_settings.auto_channel}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">Clock Send</span>
+                      <span className="metadata-value">{metadata.midi_settings.clock_send ? "Yes" : "No"}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">Clock Receive</span>
+                      <span className="metadata-value">{metadata.midi_settings.clock_receive ? "Yes" : "No"}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">Transport Send</span>
+                      <span className="metadata-value">{metadata.midi_settings.transport_send ? "Yes" : "No"}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">Transport Receive</span>
+                      <span className="metadata-value">{metadata.midi_settings.transport_receive ? "Yes" : "No"}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">Program Change Send</span>
+                      <span className="metadata-value">
+                        {metadata.midi_settings.prog_change_send
+                          ? `Yes (Ch ${metadata.midi_settings.prog_change_send_channel === -1 ? 'Auto' : metadata.midi_settings.prog_change_send_channel})`
+                          : "No"}
+                      </span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">Program Change Receive</span>
+                      <span className="metadata-value">
+                        {metadata.midi_settings.prog_change_receive
+                          ? `Yes (Ch ${metadata.midi_settings.prog_change_receive_channel === -1 ? 'Auto' : metadata.midi_settings.prog_change_receive_channel})`
+                          : "No"}
+                      </span>
+                    </div>
+                  </div>
+                </section>
+                )}
+
+                {metadata.metronome_settings && (
+                <section className="mixer-section">
+                  <h2>Metronome Settings</h2>
+                  <div className="metadata-grid">
+                    <div className="metadata-item">
+                      <span className="metadata-label">Enabled</span>
+                      <span className="metadata-value">{metadata.metronome_settings.enabled ? "Yes" : "No"}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">Main Volume</span>
+                      <span className="metadata-value">{metadata.metronome_settings.main_volume}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">Cue Volume</span>
+                      <span className="metadata-value">{metadata.metronome_settings.cue_volume}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">Pitch</span>
+                      <span className="metadata-value">{metadata.metronome_settings.pitch}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">Tonal Mode</span>
+                      <span className="metadata-value">{metadata.metronome_settings.tonal ? "Yes" : "No"}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">Preroll Bars</span>
+                      <span className="metadata-value">{metadata.metronome_settings.preroll}</span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">Time Signature</span>
+                      <span className="metadata-value">{metadata.metronome_settings.time_signature_numerator}/{metadata.metronome_settings.time_signature_denominator}</span>
+                    </div>
+                  </div>
+                </section>
+                )}
               </div>
             )}
 

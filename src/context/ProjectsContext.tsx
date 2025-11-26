@@ -56,6 +56,30 @@ interface MemorySettings {
   reserved_recorder_length: number;
 }
 
+interface MidiSettings {
+  trig_channels: number[];     // 8 MIDI track channels (1-16 or -1 for disabled)
+  auto_channel: number;        // Auto channel (1-16 or -1 for disabled)
+  clock_send: boolean;
+  clock_receive: boolean;
+  transport_send: boolean;
+  transport_receive: boolean;
+  prog_change_send: boolean;
+  prog_change_send_channel: number;  // 1-16 or -1 for disabled
+  prog_change_receive: boolean;
+  prog_change_receive_channel: number; // 1-16 or -1 for disabled
+}
+
+interface MetronomeSettings {
+  enabled: boolean;
+  main_volume: number;
+  cue_volume: number;
+  pitch: number;
+  tonal: boolean;
+  preroll: number;
+  time_signature_numerator: number;
+  time_signature_denominator: number;
+}
+
 interface SampleSlot {
   slot_id: number;
   slot_type: string;
@@ -84,6 +108,8 @@ export interface ProjectMetadata {
   current_state: CurrentState;
   mixer_settings: MixerSettings;
   memory_settings: MemorySettings;
+  midi_settings: MidiSettings;
+  metronome_settings: MetronomeSettings;
   sample_slots: SampleSlots;
   os_version: string;
 }
