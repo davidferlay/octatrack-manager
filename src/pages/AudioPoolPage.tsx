@@ -1565,7 +1565,7 @@ export function AudioPoolPage() {
                 onClick={resetToAudioRoot}
                 disabled={destinationPath === audioPoolPath}
               >
-                <i className="fas fa-home"></i>
+                <i className="fas fa-undo"></i>
               </button>
               <button
                 className="icon-button"
