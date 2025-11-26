@@ -923,7 +923,6 @@ export function ProjectDetail() {
                                         {selectedStep.micro_timing && <div className="param-item"><span>Micro-timing:</span> {selectedStep.micro_timing}</div>}
                                         {selectedStep.velocity !== null && <div className="param-item"><span>{trackData.track_type === "MIDI" ? "Velocity" : "Volume"}:</span> {selectedStep.velocity}</div>}
                                         {selectedStep.sample_slot !== null && <div className="param-item"><span>Sample Slot:</span> {selectedStep.sample_slot}</div>}
-                                        {selectedStep.plock_count > 0 && <div className="param-item"><span>P-Locks Count:</span> {selectedStep.plock_count}</div>}
 
                                         {/* Audio P-Locks: Machine Parameters */}
                                         {selectedStep.audio_plocks?.machine?.param1 != null && <div className="param-item"><span>PTCH (Pitch):</span> {selectedStep.audio_plocks?.machine?.param1}</div>}
