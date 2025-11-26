@@ -849,14 +849,15 @@ export function ProjectDetail() {
                                             {/* Additional data indicators - minimalist display */}
                                             {step.trig_condition && <span className="indicator-condition">
                                               {step.trig_condition.includes('%') ? '%' :
-                                               step.trig_condition === 'Fill' ? 'F' :
-                                               step.trig_condition === 'NotFill' ? 'NF' :
+                                               step.trig_condition.includes(':') ? '%' :
+                                               step.trig_condition === 'Fill' ? '%' :
+                                               step.trig_condition === 'NotFill' ? '%' :
                                                step.trig_condition === 'Pre' ? 'P' :
                                                step.trig_condition === 'Nei' ? 'N' :
                                                step.trig_condition === '1st' ? '1' :
                                                step.trig_condition}
                                             </span>}
-                                            {step.trig_repeats > 0 && <span className="indicator-repeats">{step.trig_repeats + 1}x</span>}
+                                            {step.trig_repeats > 0 && <span className="indicator-repeats">x</span>}
                                             {step.micro_timing && <span className="indicator-timing">µ</span>}
                                             {step.velocity !== null && <span className="indicator-velocity">V</span>}
                                             {step.plock_count > 1 && <span className="indicator-plock-count">{step.plock_count}P</span>}
@@ -887,8 +888,8 @@ export function ProjectDetail() {
                                     {usedIndicators.has('swing') && <div className="legend-item"><span className="indicator-swing">∿</span> Swing</div>}
                                     {usedIndicators.has('slide') && <div className="legend-item"><span className="indicator-slide">~</span> Slide</div>}
                                     {usedIndicators.has('recorder') && <div className="legend-item"><span className="indicator-recorder">R</span> Recorder</div>}
-                                    {usedIndicators.has('condition') && <div className="legend-item"><span className="indicator-condition">F/%</span> Condition</div>}
-                                    {usedIndicators.has('repeats') && <div className="legend-item"><span className="indicator-repeats">2x</span> Repeats</div>}
+                                    {usedIndicators.has('condition') && <div className="legend-item"><span className="indicator-condition">%</span> Condition</div>}
+                                    {usedIndicators.has('repeats') && <div className="legend-item"><span className="indicator-repeats">x</span> Repeats</div>}
                                     {usedIndicators.has('timing') && <div className="legend-item"><span className="indicator-timing">µ</span> Micro-timing</div>}
                                     {usedIndicators.has('note') && <div className="legend-item"><span className="indicator-note">C4</span> MIDI Note/Chord</div>}
                                     {usedIndicators.has('velocity') && <div className="legend-item"><span className="indicator-velocity">V</span> Velocity</div>}
@@ -909,6 +910,24 @@ export function ProjectDetail() {
                                       <button onClick={() => setSelectedStepNumber(null)} className="close-button">×</button>
                                     </div>
                                     <div className="parameter-panel-content">
+                                      {/* Step Information - Trig types, conditions, repeats, etc. */}
+                                      <div className="param-section">
+                                        <h5>Trig Information</h5>
+                                        <div className="param-grid">
+                                          <div className="param-item"><span>Trig Type:</span> {selectedStep.trigger ? 'Trigger' : selectedStep.trigless ? 'Trigless' : 'None'}</div>
+                                          {selectedStep.oneshot && <div className="param-item"><span>One-Shot:</span> Yes</div>}
+                                          {selectedStep.swing && <div className="param-item"><span>Swing:</span> Yes</div>}
+                                          {selectedStep.slide && <div className="param-item"><span>Slide:</span> Yes</div>}
+                                          {selectedStep.recorder && <div className="param-item"><span>Recorder Trig:</span> Yes</div>}
+                                          {selectedStep.trig_condition && <div className="param-item"><span>Condition:</span> {selectedStep.trig_condition}</div>}
+                                          {selectedStep.trig_repeats > 0 && <div className="param-item"><span>Repeats:</span> {selectedStep.trig_repeats + 1}x</div>}
+                                          {selectedStep.micro_timing && <div className="param-item"><span>Micro-timing:</span> {selectedStep.micro_timing}</div>}
+                                          {selectedStep.velocity !== null && <div className="param-item"><span>Velocity:</span> {selectedStep.velocity}</div>}
+                                          {selectedStep.sample_slot !== null && <div className="param-item"><span>Sample Slot:</span> {selectedStep.sample_slot}</div>}
+                                          {selectedStep.plock_count > 0 && <div className="param-item"><span>P-Locks Count:</span> {selectedStep.plock_count}</div>}
+                                        </div>
+                                      </div>
+
                                       {selectedStep.audio_plocks && (
                                         <>
                                           {/* Machine Parameters */}
@@ -1044,17 +1063,7 @@ export function ProjectDetail() {
                                       );
                                       })()}
 
-                                      {(() => {
-                                        // Show "no parameter locks" message only when appropriate
-                                        if (selectedStep.audio_plocks || selectedStep.midi_plocks) return null;
-                                        // For MIDI tracks, also check if there are any notes (including default)
-                                        if (trackData.track_type === "MIDI") {
-                                          const allNotes = getStepNotes(selectedStep, trackData);
-                                          if (allNotes.length > 0) return null;
-                                        }
-                                        return <p>No parameter locks on this step.</p>;
-                                      })()}
-                                    </div>
+                                                                          </div>
                                   </div>
                                   );
                                 })()}
