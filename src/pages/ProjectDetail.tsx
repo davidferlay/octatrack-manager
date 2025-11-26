@@ -889,16 +889,7 @@ export function ProjectDetail() {
                                             {step.recorder && <span className="indicator-recorder">R</span>}
 
                                             {/* Additional data indicators - minimalist display */}
-                                            {step.trig_condition && <span className="indicator-condition">
-                                              {step.trig_condition.includes('%') ? '%' :
-                                               step.trig_condition.includes(':') ? '%' :
-                                               step.trig_condition === 'Fill' ? '%' :
-                                               step.trig_condition === 'NotFill' ? '%' :
-                                               step.trig_condition === 'Pre' ? 'P' :
-                                               step.trig_condition === 'Nei' ? 'N' :
-                                               step.trig_condition === '1st' ? '1' :
-                                               step.trig_condition}
-                                            </span>}
+                                            {step.trig_condition && <span className="indicator-condition">%</span>}
                                             {step.trig_repeats > 0 && <span className="indicator-repeats">x</span>}
                                             {step.micro_timing && <span className="indicator-timing">µ</span>}
                                             {step.velocity !== null && <span className="indicator-velocity">V</span>}
