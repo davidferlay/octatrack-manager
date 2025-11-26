@@ -103,6 +103,9 @@ interface AudioFileTableProps {
   onDragStart?: (e: React.DragEvent) => void;
   onDragEnd?: () => void;
   tableId: string;
+  cursorIndex?: number;
+  isActive?: boolean;
+  onPanelClick?: () => void;
 }
 
 function AudioFileTable({
@@ -116,6 +119,9 @@ function AudioFileTable({
   onDragStart,
   onDragEnd,
   tableId,
+  cursorIndex = -1,
+  isActive = false,
+  onPanelClick,
 }: AudioFileTableProps) {
   const [sortColumn, setSortColumn] = useState<SortColumn>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -217,8 +223,11 @@ function AudioFileTable({
 
   const hasActiveFilters = searchText || hideDirectories || channelsFilter !== 'all' || sampleRateFilter !== 'all';
 
+  // Find the file at cursorIndex in the original files array
+  const cursorFile = cursorIndex >= 0 && cursorIndex < files.length ? files[cursorIndex] : null;
+
   return (
-    <div className="audio-file-table-container" ref={dropdownRef}>
+    <div className="audio-file-table-container" ref={dropdownRef} onClick={onPanelClick}>
       <div className="filter-results-info">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           <span>Showing {sortedFiles.length} of {files.length} files</span>
@@ -411,11 +420,14 @@ function AudioFileTable({
                 </td>
               </tr>
             )}
-            {!isLoading && sortedFiles.map((file, idx) => (
+            {!isLoading && sortedFiles.map((file) => {
+              const isCursor = isActive && cursorFile?.path === file.path;
+              const originalIndex = files.findIndex(f => f.path === file.path);
+              return (
               <tr
                 key={file.path}
-                className={selectedFiles.has(file.path) ? 'selected' : ''}
-                onClick={(e) => onFileClick(file, idx, e)}
+                className={`${selectedFiles.has(file.path) ? 'selected' : ''} ${isCursor ? 'cursor' : ''}`}
+                onClick={(e) => onFileClick(file, originalIndex, e)}
                 draggable={draggable && !file.is_directory && selectedFiles.has(file.path)}
                 onDragStart={onDragStart}
                 onDragEnd={onDragEnd}
@@ -430,7 +442,8 @@ function AudioFileTable({
                 <td className="col-bitrate">{file.bit_rate || ''}</td>
                 <td className="col-samplerate">{file.sample_rate ? `${(file.sample_rate / 1000).toFixed(1)}` : ''}</td>
               </tr>
-            ))}
+            );
+            })}
           </tbody>
         </table>
       </div>
@@ -507,6 +520,9 @@ export function AudioPoolPage() {
   const [selectedDestFiles, setSelectedDestFiles] = useState<Set<string>>(new Set());
   const [lastClickedSourceIndex, setLastClickedSourceIndex] = useState<number>(-1);
   const [lastClickedDestIndex, setLastClickedDestIndex] = useState<number>(-1);
+  const [activePanel, setActivePanel] = useState<'source' | 'dest'>('dest');
+  const [cursorIndexSource, setCursorIndexSource] = useState<number>(0);
+  const [cursorIndexDest, setCursorIndexDest] = useState<number>(0);
   const [isLoadingSource, setIsLoadingSource] = useState(false);
   const [isLoadingDest, setIsLoadingDest] = useState(false);
   const [isSourcePanelOpen, setIsSourcePanelOpen] = useState(false);
@@ -1124,6 +1140,178 @@ export function AudioPoolPage() {
     ));
   }
 
+  // Keyboard navigation
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      // Don't handle if modal is open or user is typing in an input
+      if (overwriteModal.isOpen) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      const files = activePanel === 'source' ? sourceFiles : destinationFiles;
+      const cursorIndex = activePanel === 'source' ? cursorIndexSource : cursorIndexDest;
+      const setCursorIndex = activePanel === 'source' ? setCursorIndexSource : setCursorIndexDest;
+      const selectedFiles = activePanel === 'source' ? selectedSourceFiles : selectedDestFiles;
+      const setSelectedFiles = activePanel === 'source' ? setSelectedSourceFiles : setSelectedDestFiles;
+
+      switch (e.key) {
+        case 'ArrowUp': {
+          e.preventDefault();
+          const newIndex = Math.max(0, cursorIndex - 1);
+          setCursorIndex(newIndex);
+          if (files[newIndex]) {
+            if (e.shiftKey) {
+              // Extend selection
+              const newSelected = new Set(selectedFiles);
+              if (!files[newIndex].is_directory) {
+                newSelected.add(files[newIndex].path);
+              }
+              setSelectedFiles(newSelected);
+            } else {
+              // Single selection
+              const newSelected = new Set<string>();
+              if (!files[newIndex].is_directory) {
+                newSelected.add(files[newIndex].path);
+              }
+              setSelectedFiles(newSelected);
+            }
+          }
+          break;
+        }
+        case 'ArrowDown': {
+          e.preventDefault();
+          const newIndex = Math.min(files.length - 1, cursorIndex + 1);
+          setCursorIndex(newIndex);
+          if (files[newIndex]) {
+            if (e.shiftKey) {
+              // Extend selection
+              const newSelected = new Set(selectedFiles);
+              if (!files[newIndex].is_directory) {
+                newSelected.add(files[newIndex].path);
+              }
+              setSelectedFiles(newSelected);
+            } else {
+              // Single selection
+              const newSelected = new Set<string>();
+              if (!files[newIndex].is_directory) {
+                newSelected.add(files[newIndex].path);
+              }
+              setSelectedFiles(newSelected);
+            }
+          }
+          break;
+        }
+        case 'ArrowLeft': {
+          e.preventDefault();
+          if (e.ctrlKey || e.metaKey) {
+            // Navigate to parent directory
+            if (activePanel === 'source') {
+              navigateToParentSource();
+            } else {
+              navigateToParentDest();
+            }
+          } else {
+            // Switch to source panel
+            if (isSourcePanelOpen) {
+              setActivePanel('source');
+            }
+          }
+          break;
+        }
+        case 'ArrowRight': {
+          e.preventDefault();
+          if (e.ctrlKey || e.metaKey) {
+            // Enter directory if cursor is on a directory
+            const currentFile = files[cursorIndex];
+            if (currentFile?.is_directory) {
+              if (activePanel === 'source') {
+                setSourcePath(currentFile.path);
+                setCursorIndexSource(0);
+              } else {
+                setDestinationPath(currentFile.path);
+                setCursorIndexDest(0);
+              }
+            }
+          } else {
+            // Switch to dest panel
+            setActivePanel('dest');
+          }
+          break;
+        }
+        case 'Enter': {
+          e.preventDefault();
+          const currentFile = files[cursorIndex];
+          if (currentFile?.is_directory) {
+            // Enter directory
+            if (activePanel === 'source') {
+              setSourcePath(currentFile.path);
+              setCursorIndexSource(0);
+            } else {
+              setDestinationPath(currentFile.path);
+              setCursorIndexDest(0);
+            }
+          } else if (activePanel === 'source' && selectedSourceFiles.size > 0) {
+            // Copy selected files to pool
+            copySelectedToPool();
+          }
+          break;
+        }
+        case 'a': {
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            // Select all files (not directories)
+            const newSelected = new Set<string>();
+            files.forEach(f => {
+              if (!f.is_directory) {
+                newSelected.add(f.path);
+              }
+            });
+            setSelectedFiles(newSelected);
+          }
+          break;
+        }
+        case 'Escape': {
+          e.preventDefault();
+          // Clear selection
+          setSelectedFiles(new Set());
+          break;
+        }
+        case ' ': {
+          e.preventDefault();
+          // Enter directory if cursor is on a directory
+          const currentFile = files[cursorIndex];
+          if (currentFile?.is_directory) {
+            if (activePanel === 'source') {
+              setSourcePath(currentFile.path);
+              setCursorIndexSource(0);
+            } else {
+              setDestinationPath(currentFile.path);
+              setCursorIndexDest(0);
+            }
+          }
+          break;
+        }
+        case 'Backspace': {
+          e.preventDefault();
+          // Navigate to parent directory
+          if (activePanel === 'source') {
+            navigateToParentSource();
+          } else {
+            navigateToParentDest();
+          }
+          break;
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    activePanel, sourceFiles, destinationFiles,
+    cursorIndexSource, cursorIndexDest,
+    selectedSourceFiles, selectedDestFiles,
+    isSourcePanelOpen, overwriteModal.isOpen
+  ]);
+
   // Drag and drop handlers
   function handleDragStart(e: React.DragEvent) {
     const filePaths = Array.from(selectedSourceFiles);
@@ -1303,6 +1491,9 @@ export function AudioPoolPage() {
               onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}
               tableId="source"
+              cursorIndex={cursorIndexSource}
+              isActive={activePanel === 'source'}
+              onPanelClick={() => setActivePanel('source')}
             />
           </div>
         )}
@@ -1358,6 +1549,9 @@ export function AudioPoolPage() {
             isLoading={isLoadingDest}
             emptyMessage="No files in audio pool"
             tableId="dest"
+            cursorIndex={cursorIndexDest}
+            isActive={activePanel === 'dest'}
+            onPanelClick={() => setActivePanel('dest')}
           />
         </div>
       </div>
