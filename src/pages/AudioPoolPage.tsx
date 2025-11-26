@@ -106,6 +106,7 @@ interface AudioFileTableProps {
   cursorIndex?: number;
   isActive?: boolean;
   onPanelClick?: () => void;
+  onContextMenu?: (e: React.MouseEvent, file: AudioFile | null) => void;
 }
 
 function AudioFileTable({
@@ -122,6 +123,7 @@ function AudioFileTable({
   cursorIndex = -1,
   isActive = false,
   onPanelClick,
+  onContextMenu,
 }: AudioFileTableProps) {
   const [sortColumn, setSortColumn] = useState<SortColumn>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -227,7 +229,11 @@ function AudioFileTable({
   const cursorFile = cursorIndex >= 0 && cursorIndex < files.length ? files[cursorIndex] : null;
 
   return (
-    <div className="audio-file-table-container" ref={dropdownRef} onClick={onPanelClick}>
+    <div className="audio-file-table-container" ref={dropdownRef} onClick={onPanelClick} onContextMenu={(e) => {
+      // Only trigger if clicking on empty space (not on a file row)
+      if ((e.target as HTMLElement).closest('tr')) return;
+      onContextMenu?.(e, null);
+    }}>
       <div className="filter-results-info">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           <span>Showing {sortedFiles.length} of {files.length} files</span>
@@ -428,6 +434,7 @@ function AudioFileTable({
                 key={file.path}
                 className={`${selectedFiles.has(file.path) ? 'selected' : ''} ${isCursor ? 'cursor' : ''}`}
                 onClick={(e) => onFileClick(file, originalIndex, e)}
+                onContextMenu={(e) => onContextMenu?.(e, file)}
                 draggable={draggable && !file.is_directory && selectedFiles.has(file.path)}
                 onDragStart={onDragStart}
                 onDragEnd={onDragEnd}
@@ -531,6 +538,56 @@ export function AudioPoolPage() {
   const [transfers, setTransfers] = useState<TransferItem[]>([]);
   const [transferSortColumn, setTransferSortColumn] = useState<'num' | 'progress' | 'file' | 'size' | 'status'>('num');
   const [transferSortDirection, setTransferSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{
+    isOpen: boolean;
+    x: number;
+    y: number;
+    file: AudioFile | null;
+    panel: 'source' | 'dest';
+  }>({
+    isOpen: false,
+    x: 0,
+    y: 0,
+    file: null,
+    panel: 'dest',
+  });
+
+  // Rename modal state
+  const [renameModal, setRenameModal] = useState<{
+    isOpen: boolean;
+    file: AudioFile | null;
+    panel: 'source' | 'dest';
+    newName: string;
+  }>({
+    isOpen: false,
+    file: null,
+    panel: 'dest',
+    newName: '',
+  });
+
+  // Create folder modal state
+  const [createFolderModal, setCreateFolderModal] = useState<{
+    isOpen: boolean;
+    panel: 'source' | 'dest';
+    folderName: string;
+  }>({
+    isOpen: false,
+    panel: 'dest',
+    folderName: '',
+  });
+
+  // Delete confirmation modal state
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    file: AudioFile | null;
+    panel: 'source' | 'dest';
+  }>({
+    isOpen: false,
+    file: null,
+    panel: 'dest',
+  });
 
   // Overwrite modal state
   const [overwriteModal, setOverwriteModal] = useState<{
@@ -1150,6 +1207,138 @@ export function AudioPoolPage() {
     }
   }
 
+  // Context menu handlers
+  function handleContextMenu(e: React.MouseEvent, file: AudioFile | null, panel: 'source' | 'dest') {
+    e.preventDefault();
+    setContextMenu({
+      isOpen: true,
+      x: e.clientX,
+      y: e.clientY,
+      file,
+      panel,
+    });
+  }
+
+  function closeContextMenu() {
+    setContextMenu(prev => ({ ...prev, isOpen: false }));
+  }
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    function handleClick() {
+      if (contextMenu.isOpen) {
+        closeContextMenu();
+      }
+    }
+    window.addEventListener('click', handleClick);
+    return () => window.removeEventListener('click', handleClick);
+  }, [contextMenu.isOpen]);
+
+  // Rename handlers
+  function handleRenameClick() {
+    if (contextMenu.file) {
+      setRenameModal({
+        isOpen: true,
+        file: contextMenu.file,
+        panel: contextMenu.panel,
+        newName: contextMenu.file.name,
+      });
+    }
+    closeContextMenu();
+  }
+
+  async function handleRenameConfirm() {
+    if (!renameModal.file || !renameModal.newName.trim()) return;
+
+    try {
+      await invoke("rename_file", {
+        oldPath: renameModal.file.path,
+        newName: renameModal.newName.trim(),
+      });
+
+      // Refresh the appropriate panel
+      if (renameModal.panel === 'source') {
+        loadSourceFiles(sourcePath);
+      } else {
+        loadDestinationFiles(destinationPath);
+      }
+    } catch (error) {
+      console.error("Error renaming:", error);
+      alert(`Error renaming: ${error}`);
+    }
+
+    setRenameModal({ isOpen: false, file: null, panel: 'dest', newName: '' });
+  }
+
+  // Delete handlers
+  function handleDeleteClick() {
+    if (contextMenu.file) {
+      setDeleteModal({
+        isOpen: true,
+        file: contextMenu.file,
+        panel: contextMenu.panel,
+      });
+    }
+    closeContextMenu();
+  }
+
+  async function handleDeleteConfirm() {
+    if (!deleteModal.file) return;
+
+    try {
+      await invoke("delete_file", {
+        path: deleteModal.file.path,
+      });
+
+      // Refresh the appropriate panel
+      if (deleteModal.panel === 'source') {
+        loadSourceFiles(sourcePath);
+      } else {
+        loadDestinationFiles(destinationPath);
+      }
+    } catch (error) {
+      console.error("Error deleting:", error);
+      alert(`Error deleting: ${error}`);
+    }
+
+    setDeleteModal({ isOpen: false, file: null, panel: 'dest' });
+  }
+
+  // Create folder handlers
+  function handleCreateFolderClick() {
+    setCreateFolderModal({
+      isOpen: true,
+      panel: contextMenu.panel,
+      folderName: '',
+    });
+    closeContextMenu();
+  }
+
+  async function handleCreateFolderConfirm() {
+    if (!createFolderModal.folderName.trim()) return;
+
+    const basePath = createFolderModal.panel === 'source' ? sourcePath : destinationPath;
+
+    try {
+      await invoke("create_new_directory", {
+        path: basePath,
+        name: createFolderModal.folderName.trim(),
+      });
+
+      // Refresh the appropriate panel
+      if (createFolderModal.panel === 'source') {
+        loadSourceFiles(sourcePath);
+      } else {
+        loadDestinationFiles(destinationPath);
+      }
+    } catch (error) {
+      console.error("Error creating folder:", error);
+      alert(`Error creating folder: ${error}`);
+    }
+
+    setCreateFolderModal({ isOpen: false, panel: 'dest', folderName: '' });
+  }
+
   // Sort transfers based on current sort column and direction
   const sortedTransfers = [...transfers].map((t, idx) => ({ ...t, originalIndex: idx })).sort((a, b) => {
     let compareA: string | number;
@@ -1530,6 +1719,7 @@ export function AudioPoolPage() {
               cursorIndex={cursorIndexSource}
               isActive={activePanel === 'source'}
               onPanelClick={() => setActivePanel('source')}
+              onContextMenu={(e, file) => handleContextMenu(e, file, 'source')}
             />
           </div>
         )}
@@ -1588,6 +1778,7 @@ export function AudioPoolPage() {
             cursorIndex={cursorIndexDest}
             isActive={activePanel === 'dest'}
             onPanelClick={() => setActivePanel('dest')}
+            onContextMenu={(e, file) => handleContextMenu(e, file, 'dest')}
           />
         </div>
       </div>
@@ -1736,6 +1927,131 @@ export function AudioPoolPage() {
         onSkipAll={handleSkipAll}
         onCancel={handleCancelImport}
       />
+
+      {/* Context menu */}
+      {contextMenu.isOpen && (
+        <div
+          className="context-menu"
+          style={{
+            position: 'fixed',
+            top: contextMenu.y,
+            left: contextMenu.x,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {contextMenu.file && (
+            <>
+              <button className="context-menu-item" onClick={handleRenameClick}>
+                <i className="fas fa-edit"></i> Rename
+              </button>
+              <button className="context-menu-item danger" onClick={handleDeleteClick}>
+                <i className="fas fa-trash"></i> Delete
+              </button>
+              <div className="context-menu-separator"></div>
+            </>
+          )}
+          <button className="context-menu-item" onClick={handleCreateFolderClick}>
+            <i className="fas fa-folder-plus"></i> Create Folder
+          </button>
+        </div>
+      )}
+
+      {/* Rename modal */}
+      {renameModal.isOpen && (
+        <div className="modal-overlay" onClick={() => setRenameModal({ isOpen: false, file: null, panel: 'dest', newName: '' })}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3><i className="fas fa-edit" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>Rename</h3>
+            </div>
+            <div className="modal-body">
+              <p>Enter new name for <strong>"{renameModal.file?.name}"</strong>:</p>
+              <input
+                type="text"
+                className="modal-input"
+                value={renameModal.newName}
+                onChange={(e) => setRenameModal({ ...renameModal, newName: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleRenameConfirm();
+                  if (e.key === 'Escape') setRenameModal({ isOpen: false, file: null, panel: 'dest', newName: '' });
+                }}
+                autoFocus
+              />
+            </div>
+            <div className="modal-footer">
+              <div className="modal-buttons-row">
+                <button className="modal-button" onClick={() => setRenameModal({ isOpen: false, file: null, panel: 'dest', newName: '' })}>
+                  Cancel
+                </button>
+                <button className="modal-button primary" onClick={handleRenameConfirm} disabled={!renameModal.newName.trim()}>
+                  Rename
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation modal */}
+      {deleteModal.isOpen && (
+        <div className="modal-overlay" onClick={() => setDeleteModal({ isOpen: false, file: null, panel: 'dest' })}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3><i className="fas fa-trash" style={{ color: '#dc3545', marginRight: '0.5rem' }}></i>Delete</h3>
+            </div>
+            <div className="modal-body">
+              <p>Are you sure you want to delete <strong>"{deleteModal.file?.name}"</strong>?</p>
+              {deleteModal.file?.is_directory && (
+                <p style={{ color: '#dc3545' }}>This will delete the folder and all its contents!</p>
+              )}
+            </div>
+            <div className="modal-footer">
+              <div className="modal-buttons-row">
+                <button className="modal-button" onClick={() => setDeleteModal({ isOpen: false, file: null, panel: 'dest' })}>
+                  Cancel
+                </button>
+                <button className="modal-button danger" onClick={handleDeleteConfirm}>
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create folder modal */}
+      {createFolderModal.isOpen && (
+        <div className="modal-overlay" onClick={() => setCreateFolderModal({ isOpen: false, panel: 'dest', folderName: '' })}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3><i className="fas fa-folder-plus" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>Create Folder</h3>
+            </div>
+            <div className="modal-body">
+              <p>Enter name for the new folder:</p>
+              <input
+                type="text"
+                className="modal-input"
+                value={createFolderModal.folderName}
+                onChange={(e) => setCreateFolderModal({ ...createFolderModal, folderName: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleCreateFolderConfirm();
+                  if (e.key === 'Escape') setCreateFolderModal({ isOpen: false, panel: 'dest', folderName: '' });
+                }}
+                autoFocus
+              />
+            </div>
+            <div className="modal-footer">
+              <div className="modal-buttons-row">
+                <button className="modal-button" onClick={() => setCreateFolderModal({ isOpen: false, panel: 'dest', folderName: '' })}>
+                  Cancel
+                </button>
+                <button className="modal-button primary" onClick={handleCreateFolderConfirm} disabled={!createFolderModal.folderName.trim()}>
+                  Create
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
