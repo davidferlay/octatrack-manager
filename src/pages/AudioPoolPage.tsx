@@ -1502,7 +1502,7 @@ export function AudioPoolPage() {
                   <i className="fas fa-folder-open"></i>
                 </button>
                 <button className="icon-button" title="Go up" onClick={navigateToParentSource}>
-                  <i className="fas fa-level-up-alt"></i>
+                  <i className="fas fa-arrow-up"></i>
                 </button>
                 <div className="toolbar-separator"></div>
                 <button
@@ -1573,7 +1573,7 @@ export function AudioPoolPage() {
                 onClick={navigateToParentDest}
                 disabled={destinationPath === audioPoolPath}
               >
-                <i className="fas fa-level-up-alt"></i>
+                <i className="fas fa-arrow-up"></i>
               </button>
             </div>
           </div>
