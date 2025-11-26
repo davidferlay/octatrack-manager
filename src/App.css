@@ -1810,7 +1810,7 @@ h1 {
   cursor: default;
   transition: all 0.1s ease;
   min-height: 60px;
-  padding: 0px 4px 0px 4px;
+  padding: 0px 4px 3px 4px;
   overflow: hidden;
 }
 
@@ -1899,7 +1899,7 @@ h1 {
 
 .indicator-condition {
   color: #cc99ff;
-  font-size: 0.75rem;
+  font-size: 0.65rem;
   font-weight: 600;
 }
 
@@ -1911,8 +1911,10 @@ h1 {
 
 .indicator-timing {
   color: #99ccff;
-  font-size: 0.7rem;
+  font-size: 1.2rem !important;
   font-weight: 600;
+  position: relative;
+  top: -2px;
 }
 
 .indicator-note {

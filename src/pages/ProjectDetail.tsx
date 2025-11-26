@@ -890,7 +890,7 @@ export function ProjectDetail() {
 
                                             {/* Additional data indicators - minimalist display */}
                                             {step.trig_condition && <span className="indicator-condition">%</span>}
-                                            {step.trig_repeats > 0 && <span className="indicator-repeats">x</span>}
+                                            {step.trig_repeats > 0 && <span className="indicator-repeats">X</span>}
                                             {step.micro_timing && <span className="indicator-timing">µ</span>}
                                             {step.velocity !== null && <span className="indicator-velocity">V</span>}
                                             {step.plock_count > 1 && <span className="indicator-plock-count">{step.plock_count}P</span>}
@@ -923,7 +923,7 @@ export function ProjectDetail() {
                                     {usedIndicators.has('slide') && <div className="legend-item"><span className="indicator-slide">~</span> Slide</div>}
                                     {usedIndicators.has('recorder') && <div className="legend-item"><span className="indicator-recorder">R</span> Recorder</div>}
                                     {usedIndicators.has('condition') && <div className="legend-item"><span className="indicator-condition">%</span> Condition</div>}
-                                    {usedIndicators.has('repeats') && <div className="legend-item"><span className="indicator-repeats">x</span> Repeats</div>}
+                                    {usedIndicators.has('repeats') && <div className="legend-item"><span className="indicator-repeats">X</span> Repeats</div>}
                                     {usedIndicators.has('timing') && <div className="legend-item"><span className="indicator-timing">µ</span> Micro-timing</div>}
                                     {usedIndicators.has('note') && <div className="legend-item"><span className="indicator-note">C4</span> MIDI Note/Chord</div>}
                                     {usedIndicators.has('velocity') && <div className="legend-item"><span className="indicator-velocity">V</span> {trackData.track_type === "MIDI" ? "Velocity" : "Volume"}</div>}
