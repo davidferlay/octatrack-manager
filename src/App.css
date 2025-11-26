@@ -738,7 +738,10 @@ h1 {
   align-items: center;
   gap: 1rem;
   flex-wrap: wrap;
-  padding-bottom: 0.5rem;
+  padding-top: 0.25rem;
+  padding-bottom: 1.25rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--elektron-border-gray);
 }
 
 .pattern-name {
