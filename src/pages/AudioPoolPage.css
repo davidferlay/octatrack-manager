@@ -14,6 +14,8 @@
   background-color: var(--elektron-dark-gray);
   border-bottom: 1px solid var(--elektron-border-gray);
   flex-shrink: 0;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .audio-pool-page .project-header h1 {
@@ -213,6 +215,8 @@
   background-color: rgba(255, 255, 255, 0.03);
   border-bottom: 1px solid var(--elektron-border-gray);
   flex-shrink: 0;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .panel-title {
@@ -357,6 +361,8 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .audio-files-table thead {
