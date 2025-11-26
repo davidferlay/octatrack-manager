@@ -829,7 +829,8 @@ export function ProjectDetail() {
                                     // For MIDI tracks, only show notes if there's a trigger (otherwise it's just showing default note on empty steps)
                                     const hasData = hasTrig || step.plock_count > 0 || step.velocity !== null ||
                                                     step.sample_slot !== null || (allNotes.length > 0 && (hasTrig || trackData.track_type !== "MIDI")) ||
-                                                    step.trig_condition || step.trig_repeats > 0 || step.micro_timing;
+                                                    step.trig_condition || step.trig_repeats > 0 || step.micro_timing ||
+                                                    step.swing || step.slide || step.oneshot || step.recorder;
 
                                     return (
                                       <div
