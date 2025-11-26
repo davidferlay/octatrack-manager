@@ -721,11 +721,11 @@ h1 {
   background-color: var(--elektron-black);
   border: 1px solid var(--elektron-border-gray);
   border-left: 3px solid var(--elektron-orange);
-  padding: 2rem;
+  padding: 1rem;
   margin-bottom: 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: 0.5rem;
   transition: all 0.15s ease;
 }
 
@@ -738,8 +738,7 @@ h1 {
   align-items: center;
   gap: 1rem;
   flex-wrap: wrap;
-  padding-bottom: 1.5rem;
-  border-bottom: 1px solid var(--elektron-border-gray);
+  padding-bottom: 0.5rem;
 }
 
 .pattern-name {
@@ -1985,7 +1984,6 @@ h1 {
 
 /* Parameter Details Panel */
 .parameter-details-panel {
-  margin-top: 0.5rem;
   background-color: var(--elektron-darker-gray);
   border: 2px solid var(--elektron-dark-gray);
   border-radius: 8px;
