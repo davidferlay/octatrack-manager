@@ -826,8 +826,9 @@ export function ProjectDetail() {
                                     if (step.sample_slot !== null) tooltipParts.push(`Sample: ${step.sample_slot}`);
 
                                     // Check if step has any data to display (p-locks, velocity, sample, notes, etc.)
+                                    // For MIDI tracks, only show notes if there's a trigger (otherwise it's just showing default note on empty steps)
                                     const hasData = hasTrig || step.plock_count > 0 || step.velocity !== null ||
-                                                    step.sample_slot !== null || allNotes.length > 0 ||
+                                                    step.sample_slot !== null || (allNotes.length > 0 && (hasTrig || trackData.track_type !== "MIDI")) ||
                                                     step.trig_condition || step.trig_repeats > 0 || step.micro_timing;
 
                                     return (
@@ -867,7 +868,8 @@ export function ProjectDetail() {
                                             {step.velocity !== null && <span className="indicator-velocity">V</span>}
                                             {step.plock_count > 1 && <span className="indicator-plock-count">{step.plock_count}P</span>}
                                             {step.sample_slot !== null && <span className="indicator-sample">S</span>}
-                                            {allNotes.length > 0 && (
+                                            {/* For MIDI tracks, only show notes if there's a trigger */}
+                                            {allNotes.length > 0 && (hasTrig || trackData.track_type !== "MIDI") && (
                                               <div className="note-indicator-wrapper">
                                                 {allNotes.map((note, idx) => (
                                                   <span key={idx} className={`indicator-note ${chordName ? 'indicator-chord' : ''}`}>
