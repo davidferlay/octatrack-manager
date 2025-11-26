@@ -1136,7 +1136,7 @@ h1 {
 .overview-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 0.75rem 1.25rem;
+  gap: 0.25rem 1.25rem;
 }
 
 .overview-section {
@@ -1144,8 +1144,8 @@ h1 {
   border: 1px solid var(--elektron-border-gray);
   border-left: 4px solid var(--elektron-orange);
   border-radius: 6px;
-  padding: 1.25rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  padding: 0.75rem 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.03);
   transition: all 0.2s ease;
 }
 
