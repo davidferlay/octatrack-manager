@@ -442,6 +442,20 @@
 
 .folder-icon {
   margin-right: 0.25rem;
+  flex-shrink: 0;
+}
+
+.audio-files-table td.col-name {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Filterable header styling - matches samples-table */

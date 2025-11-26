@@ -433,9 +433,9 @@ function AudioFileTable({
                 onDragEnd={onDragEnd}
                 style={{ cursor: file.is_directory ? 'pointer' : (draggable && selectedFiles.has(file.path) ? 'grab' : 'pointer') }}
               >
-                <td className="col-name">
+                <td className="col-name" title={file.name}>
                   {file.is_directory ? <span className="folder-icon">📂 </span> : ''}
-                  {file.name}
+                  <span className="file-name-text">{file.name}</span>
                 </td>
                 <td className="col-size">{file.size ? formatFileSize(file.size) : ''}</td>
                 <td className="col-channels">{file.channels || ''}</td>
