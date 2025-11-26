@@ -604,14 +604,14 @@ export function AudioPoolPage() {
     folderName: '',
   });
 
-  // Delete confirmation modal state
+  // Delete confirmation modal state (supports multiple files)
   const [deleteModal, setDeleteModal] = useState<{
     isOpen: boolean;
-    file: AudioFile | null;
+    files: AudioFile[];
     panel: 'source' | 'dest';
   }>({
     isOpen: false,
-    file: null,
+    files: [],
     panel: 'dest',
   });
 
@@ -1298,28 +1298,47 @@ export function AudioPoolPage() {
 
   // Delete handlers
   function handleDeleteClick() {
-    if (contextMenu.file) {
+    const panel = contextMenu.panel;
+    const selectedFiles = panel === 'source' ? selectedSourceFiles : selectedDestFiles;
+    const allFiles = panel === 'source' ? sourceFiles : destinationFiles;
+
+    // Get files to delete - either selected files or the right-clicked file
+    let filesToDelete: AudioFile[] = [];
+
+    if (contextMenu.file && selectedFiles.has(contextMenu.file.path)) {
+      // Right-clicked on a selected file - delete all selected files
+      filesToDelete = allFiles.filter(f => selectedFiles.has(f.path));
+    } else if (contextMenu.file) {
+      // Right-clicked on an unselected file - delete just that file
+      filesToDelete = [contextMenu.file];
+    }
+
+    if (filesToDelete.length > 0) {
       setDeleteModal({
         isOpen: true,
-        file: contextMenu.file,
-        panel: contextMenu.panel,
+        files: filesToDelete,
+        panel,
       });
     }
     closeContextMenu();
   }
 
   async function handleDeleteConfirm() {
-    if (!deleteModal.file) return;
+    if (deleteModal.files.length === 0) return;
 
     try {
-      await invoke("delete_file", {
-        path: deleteModal.file.path,
+      // Delete all files using delete_audio_files (accepts array)
+      const paths = deleteModal.files.map(f => f.path);
+      await invoke("delete_audio_files", {
+        filePaths: paths,
       });
 
-      // Refresh the appropriate panel
+      // Clear selection for the panel
       if (deleteModal.panel === 'source') {
+        setSelectedSourceFiles(new Set());
         loadSourceFiles(sourcePath);
       } else {
+        setSelectedDestFiles(new Set());
         loadDestinationFiles(destinationPath);
       }
     } catch (error) {
@@ -1327,7 +1346,7 @@ export function AudioPoolPage() {
       alert(`Error deleting: ${error}`);
     }
 
-    setDeleteModal({ isOpen: false, file: null, panel: 'dest' });
+    setDeleteModal({ isOpen: false, files: [], panel: 'dest' });
   }
 
   // Create folder handlers
@@ -1955,32 +1974,42 @@ export function AudioPoolPage() {
       />
 
       {/* Context menu */}
-      {contextMenu.isOpen && (
-        <div
-          className="context-menu"
-          style={{
-            position: 'fixed',
-            top: contextMenu.y,
-            left: contextMenu.x,
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {contextMenu.file && (
-            <>
-              <button className="context-menu-item" onClick={handleRenameClick}>
-                <i className="fas fa-edit"></i> Rename
-              </button>
-              <button className="context-menu-item danger" onClick={handleDeleteClick}>
-                <i className="fas fa-trash"></i> Delete
-              </button>
-              <div className="context-menu-separator"></div>
-            </>
-          )}
-          <button className="context-menu-item" onClick={handleCreateFolderClick}>
-            <i className="fas fa-folder-plus"></i> Create Folder
-          </button>
-        </div>
-      )}
+      {contextMenu.isOpen && (() => {
+        const selectedFiles = contextMenu.panel === 'source' ? selectedSourceFiles : selectedDestFiles;
+        const isMultipleSelected = !!(contextMenu.file && selectedFiles.has(contextMenu.file.path) && selectedFiles.size > 1);
+        const selectedCount = isMultipleSelected ? selectedFiles.size : 1;
+
+        return (
+          <div
+            className="context-menu"
+            style={{
+              position: 'fixed',
+              top: contextMenu.y,
+              left: contextMenu.x,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {contextMenu.file && (
+              <>
+                <button
+                  className={`context-menu-item ${isMultipleSelected ? 'disabled' : ''}`}
+                  onClick={isMultipleSelected ? undefined : handleRenameClick}
+                  disabled={isMultipleSelected}
+                >
+                  <i className="fas fa-edit"></i> Rename
+                </button>
+                <button className="context-menu-item danger" onClick={handleDeleteClick}>
+                  <i className="fas fa-trash"></i> Delete{isMultipleSelected ? ` (${selectedCount})` : ''}
+                </button>
+                <div className="context-menu-separator"></div>
+              </>
+            )}
+            <button className="context-menu-item" onClick={handleCreateFolderClick}>
+              <i className="fas fa-folder-plus"></i> Create Folder
+            </button>
+          </div>
+        );
+      })()}
 
       {/* Rename modal */}
       {renameModal.isOpen && (
@@ -2019,24 +2048,40 @@ export function AudioPoolPage() {
 
       {/* Delete confirmation modal */}
       {deleteModal.isOpen && (
-        <div className="modal-overlay" onClick={() => setDeleteModal({ isOpen: false, file: null, panel: 'dest' })}>
+        <div className="modal-overlay" onClick={() => setDeleteModal({ isOpen: false, files: [], panel: 'dest' })}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3><i className="fas fa-trash" style={{ color: '#dc3545', marginRight: '0.5rem' }}></i>Delete</h3>
             </div>
             <div className="modal-body">
-              <p>Are you sure you want to delete <strong>"{deleteModal.file?.name}"</strong>?</p>
-              {deleteModal.file?.is_directory && (
-                <p style={{ color: '#dc3545' }}>This will delete the folder and all its contents!</p>
+              {deleteModal.files.length === 1 ? (
+                <>
+                  <p>Are you sure you want to delete <strong>"{deleteModal.files[0]?.name}"</strong>?</p>
+                  {deleteModal.files[0]?.is_directory && (
+                    <p style={{ color: '#dc3545' }}>This will delete the folder and all its contents!</p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p>Are you sure you want to delete <strong>{deleteModal.files.length} items</strong>?</p>
+                  <ul style={{ maxHeight: '150px', overflowY: 'auto', margin: '0.5rem 0', paddingLeft: '1.5rem', fontSize: '0.85rem', color: 'var(--elektron-text-secondary)' }}>
+                    {deleteModal.files.map((f, idx) => (
+                      <li key={idx}>{f.name}{f.is_directory ? ' (folder)' : ''}</li>
+                    ))}
+                  </ul>
+                  {deleteModal.files.some(f => f.is_directory) && (
+                    <p style={{ color: '#dc3545' }}>This will delete folders and all their contents!</p>
+                  )}
+                </>
               )}
             </div>
             <div className="modal-footer">
               <div className="modal-buttons-row">
-                <button className="modal-button" onClick={() => setDeleteModal({ isOpen: false, file: null, panel: 'dest' })}>
+                <button className="modal-button" onClick={() => setDeleteModal({ isOpen: false, files: [], panel: 'dest' })}>
                   Cancel
                 </button>
                 <button className="modal-button danger" onClick={handleDeleteConfirm}>
-                  Delete
+                  Delete{deleteModal.files.length > 1 ? ` (${deleteModal.files.length})` : ''}
                 </button>
               </div>
             </div>
