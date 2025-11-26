@@ -999,3 +999,83 @@
   background-color: rgba(220, 53, 69, 0.25);
   border-color: rgba(220, 53, 69, 0.7);
 }
+
+/* Modal input */
+.modal-input {
+  width: 100%;
+  background-color: var(--elektron-black);
+  color: var(--elektron-text-primary);
+  border: 1px solid var(--elektron-border-gray);
+  padding: 0.6rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+}
+
+.modal-input:focus {
+  outline: none;
+  border-color: var(--elektron-orange);
+}
+
+/* Context menu */
+.context-menu {
+  background-color: var(--elektron-dark-gray);
+  border: 1px solid var(--elektron-border-gray);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  min-width: 160px;
+  z-index: 3000;
+  overflow: hidden;
+  animation: contextMenuFadeIn 0.1s ease;
+}
+
+@keyframes contextMenuFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  background: none;
+  border: none;
+  color: var(--elektron-text-primary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.1s ease;
+}
+
+.context-menu-item:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.context-menu-item.danger {
+  color: #dc3545;
+}
+
+.context-menu-item.danger:hover {
+  background-color: rgba(220, 53, 69, 0.15);
+}
+
+.context-menu-item i {
+  width: 1rem;
+  text-align: center;
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+.context-menu-separator {
+  height: 1px;
+  background-color: var(--elektron-border-gray);
+  margin: 0.25rem 0;
+}

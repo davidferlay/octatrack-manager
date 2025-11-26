@@ -314,6 +314,29 @@ pub fn delete_files(file_paths: Vec<String>) -> Result<usize, String> {
     Ok(deleted_count)
 }
 
+/// Rename a file or directory
+pub fn rename_file(old_path: &str, new_name: &str) -> Result<String, String> {
+    let old_path = Path::new(old_path);
+
+    if !old_path.exists() {
+        return Err(format!("File does not exist: {}", old_path.display()));
+    }
+
+    let parent = old_path.parent()
+        .ok_or_else(|| "Cannot determine parent directory".to_string())?;
+
+    let new_path = parent.join(new_name);
+
+    if new_path.exists() {
+        return Err(format!("A file or folder with the name '{}' already exists", new_name));
+    }
+
+    fs::rename(&old_path, &new_path)
+        .map_err(|e| format!("Failed to rename: {}", e))?;
+
+    Ok(new_path.to_string_lossy().to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -4,7 +4,7 @@ mod audio_pool;
 
 use device_detection::{discover_devices, scan_directory, ScanResult};
 use project_reader::{read_project_metadata, read_project_banks, read_parts_data, ProjectMetadata, Bank, PartData};
-use audio_pool::{list_directory, get_parent_directory, create_directory, copy_files_with_overwrite, move_files, delete_files, AudioFileInfo};
+use audio_pool::{list_directory, get_parent_directory, create_directory, copy_files_with_overwrite, move_files, delete_files, rename_file as rename_file_impl, AudioFileInfo};
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -96,6 +96,16 @@ fn get_home_directory() -> Result<String, String> {
         .ok_or_else(|| "Could not determine home directory".to_string())
 }
 
+#[tauri::command]
+fn rename_file(old_path: String, new_name: String) -> Result<String, String> {
+    rename_file_impl(&old_path, &new_name)
+}
+
+#[tauri::command]
+fn delete_file(path: String) -> Result<usize, String> {
+    delete_files(vec![path])
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -116,7 +126,9 @@ pub fn run() {
             copy_audio_files,
             move_audio_files,
             delete_audio_files,
-            get_home_directory
+            get_home_directory,
+            rename_file,
+            delete_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
