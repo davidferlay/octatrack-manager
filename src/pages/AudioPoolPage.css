@@ -441,8 +441,10 @@
 .col-samplerate { width: 60px; text-align: center; }
 
 .folder-icon {
-  margin-right: 0.25rem;
+  margin-right: 0.5rem;
   flex-shrink: 0;
+  color: var(--elektron-orange);
+  opacity: 0.8;
 }
 
 .audio-files-table td.col-name {
