@@ -2085,24 +2085,21 @@ h1 {
   gap: 0.75rem;
 }
 
-.param-item {
+.parameter-panel-content .param-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 0.5rem 0.75rem;
   background-color: var(--elektron-dark-gray);
   border-radius: 4px;
-  font-size: 0.95rem;
+  font-size: 1.1rem;
+  color: #ffffff;
+  font-weight: 400;
 }
 
-.param-item span {
-  color: var(--elektron-text-secondary);
-  font-weight: 600;
-}
-
-.param-item {
-  color: var(--elektron-orange);
-  font-weight: 700;
+.parameter-panel-content .param-item span {
+  color: #ffffff;
+  font-weight: 500;
 }
 
 .parameter-panel-content p {
