@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -133,6 +133,32 @@ function AudioFileTable({
   const [sampleRateFilter, setSampleRateFilter] = useState<string>('all');
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const tableWrapperRef = useRef<HTMLDivElement>(null);
+  const scrollPositionRef = useRef<number>(0);
+  const prevFilesRef = useRef<AudioFile[]>(files);
+
+  // Save scroll position on scroll events
+  useEffect(() => {
+    const wrapper = tableWrapperRef.current;
+    if (!wrapper) return;
+
+    const handleScroll = () => {
+      scrollPositionRef.current = wrapper.scrollTop;
+    };
+
+    wrapper.addEventListener('scroll', handleScroll);
+    return () => wrapper.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Restore scroll position after files update using useLayoutEffect
+  // This runs synchronously before browser paint
+  useLayoutEffect(() => {
+    // Only restore if files actually changed (refresh happened)
+    if (prevFilesRef.current !== files && tableWrapperRef.current && scrollPositionRef.current > 0) {
+      tableWrapperRef.current.scrollTop = scrollPositionRef.current;
+    }
+    prevFilesRef.current = files;
+  }, [files]);
 
   // Click outside to close dropdown
   useEffect(() => {
@@ -256,7 +282,7 @@ function AudioFileTable({
           </button>
         )}
       </div>
-      <div className="table-wrapper">
+      <div className="table-wrapper" ref={tableWrapperRef}>
         <table className="audio-files-table">
           <thead>
             <tr>
