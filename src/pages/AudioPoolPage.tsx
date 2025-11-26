@@ -1446,7 +1446,7 @@ export function AudioPoolPage() {
           <button onClick={() => navigate("/")} className="back-button">
             ← Back
           </button>
-          <h1 style={{ margin: 0 }}>{setName} - Audio Pool</h1>
+          <h1 style={{ margin: 0 }}>{setName}</h1>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <button
