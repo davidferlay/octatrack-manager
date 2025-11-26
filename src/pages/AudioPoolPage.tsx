@@ -1511,7 +1511,7 @@ export function AudioPoolPage() {
                   onClick={copySelectedToPool}
                   disabled={selectedSourceFiles.size === 0}
                 >
-                  <i className="fas fa-arrow-right"></i> Copy to Pool
+                  <i className="fas fa-arrow-right"></i> Copy
                 </button>
               </div>
             </div>
