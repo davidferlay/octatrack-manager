@@ -921,7 +921,7 @@ export function ProjectDetail() {
                                         {selectedStep.trig_condition && <div className="param-item"><span>Condition:</span> {selectedStep.trig_condition}</div>}
                                         {selectedStep.trig_repeats > 0 && <div className="param-item"><span>Repeats:</span> {selectedStep.trig_repeats + 1}x</div>}
                                         {selectedStep.micro_timing && <div className="param-item"><span>Micro-timing:</span> {selectedStep.micro_timing}</div>}
-                                        {selectedStep.velocity !== null && <div className="param-item"><span>{trackData.track_type === "MIDI" ? "Velocity" : "Volume"}:</span> {selectedStep.velocity}</div>}
+                                        {selectedStep.velocity !== null && <div className="param-item"><span>{trackData.track_type === "MIDI" ? "VEL (Velocity)" : "VOL (Volume)"}:</span> {selectedStep.velocity}</div>}
                                         {selectedStep.sample_slot !== null && <div className="param-item"><span>Sample Slot:</span> {selectedStep.sample_slot}</div>}
 
                                         {/* Audio P-Locks: Machine Parameters */}
@@ -944,13 +944,9 @@ export function ProjectDetail() {
                                         {selectedStep.audio_plocks?.amp?.atk != null && <div className="param-item"><span>ATK (Attack):</span> {selectedStep.audio_plocks?.amp?.atk}</div>}
                                         {selectedStep.audio_plocks?.amp?.hold != null && <div className="param-item"><span>HOLD (Hold):</span> {selectedStep.audio_plocks?.amp?.hold}</div>}
                                         {selectedStep.audio_plocks?.amp?.rel != null && <div className="param-item"><span>REL (Release):</span> {selectedStep.audio_plocks?.amp?.rel}</div>}
-                                        {selectedStep.audio_plocks?.amp?.vol != null && <div className="param-item"><span>VOL (Volume):</span> {selectedStep.audio_plocks?.amp?.vol}</div>}
-                                        {selectedStep.audio_plocks?.amp?.bal != null && <div className="param-item"><span>BAL (Balance):</span> {selectedStep.audio_plocks?.amp?.bal}</div>}
+                                                                                {selectedStep.audio_plocks?.amp?.bal != null && <div className="param-item"><span>BAL (Balance):</span> {selectedStep.audio_plocks?.amp?.bal}</div>}
                                         {selectedStep.audio_plocks?.amp?.f != null && <div className="param-item"><span>FILT (Filter):</span> {selectedStep.audio_plocks?.amp?.f}</div>}
 
-                                        {/* Audio P-Locks: Sample Slots */}
-                                        {selectedStep.audio_plocks?.static_slot_id != null && <div className="param-item"><span>Static Slot:</span> {selectedStep.audio_plocks?.static_slot_id}</div>}
-                                        {selectedStep.audio_plocks?.flex_slot_id != null && <div className="param-item"><span>Flex Slot:</span> {selectedStep.audio_plocks?.flex_slot_id}</div>}
 
                                         {/* MIDI track parameters */}
                                         {trackData.track_type === "MIDI" && (() => {
@@ -972,8 +968,7 @@ export function ProjectDetail() {
                                             </>
                                           );
                                         })()}
-                                        {selectedStep.midi_plocks?.midi?.vel != null && <div className="param-item"><span>VEL (Velocity):</span> {selectedStep.midi_plocks?.midi?.vel}</div>}
-                                        {selectedStep.midi_plocks?.midi?.len != null && <div className="param-item"><span>LEN (Length):</span> {selectedStep.midi_plocks?.midi?.len}</div>}
+                                                                                {selectedStep.midi_plocks?.midi?.len != null && <div className="param-item"><span>LEN (Length):</span> {selectedStep.midi_plocks?.midi?.len}</div>}
 
                                         {/* MIDI P-Locks: LFO Parameters */}
                                         {selectedStep.midi_plocks?.lfo?.spd1 != null && <div className="param-item"><span>LFO1 Speed:</span> {selectedStep.midi_plocks?.lfo?.spd1}</div>}
