@@ -910,181 +910,102 @@ export function ProjectDetail() {
                                       <button onClick={() => setSelectedStepNumber(null)} className="close-button">×</button>
                                     </div>
                                     <div className="parameter-panel-content">
-                                      {/* Step Information - Trig types, conditions, repeats, etc. */}
-                                      <div className="param-section">
-                                        <h5>Trig Information</h5>
-                                        <div className="param-grid">
-                                          <div className="param-item"><span>Trig Type:</span> {selectedStep.trigger ? 'Trigger' : selectedStep.trigless ? 'Trigless' : 'None'}</div>
-                                          {selectedStep.oneshot && <div className="param-item"><span>One-Shot:</span> Yes</div>}
-                                          {selectedStep.swing && <div className="param-item"><span>Swing:</span> Yes</div>}
-                                          {selectedStep.slide && <div className="param-item"><span>Slide:</span> Yes</div>}
-                                          {selectedStep.recorder && <div className="param-item"><span>Recorder Trig:</span> Yes</div>}
-                                          {selectedStep.trig_condition && <div className="param-item"><span>Condition:</span> {selectedStep.trig_condition}</div>}
-                                          {selectedStep.trig_repeats > 0 && <div className="param-item"><span>Repeats:</span> {selectedStep.trig_repeats + 1}x</div>}
-                                          {selectedStep.micro_timing && <div className="param-item"><span>Micro-timing:</span> {selectedStep.micro_timing}</div>}
-                                          {selectedStep.velocity !== null && <div className="param-item"><span>{trackData.track_type === "MIDI" ? "Velocity" : "Volume"}:</span> {selectedStep.velocity}</div>}
-                                          {selectedStep.sample_slot !== null && <div className="param-item"><span>Sample Slot:</span> {selectedStep.sample_slot}</div>}
-                                          {selectedStep.plock_count > 0 && <div className="param-item"><span>P-Locks Count:</span> {selectedStep.plock_count}</div>}
-                                        </div>
+                                      <div className="param-grid">
+                                        {/* Trig Information - only show if there's a trig */}
+                                        {selectedStep.trigger && <div className="param-item"><span>Trig Type:</span> Trigger</div>}
+                                        {selectedStep.trigless && <div className="param-item"><span>Trig Type:</span> Trigless</div>}
+                                        {selectedStep.oneshot && <div className="param-item"><span>One-Shot:</span> Yes</div>}
+                                        {selectedStep.swing && <div className="param-item"><span>Swing:</span> Yes</div>}
+                                        {selectedStep.slide && <div className="param-item"><span>Slide:</span> Yes</div>}
+                                        {selectedStep.recorder && <div className="param-item"><span>Recorder Trig:</span> Yes</div>}
+                                        {selectedStep.trig_condition && <div className="param-item"><span>Condition:</span> {selectedStep.trig_condition}</div>}
+                                        {selectedStep.trig_repeats > 0 && <div className="param-item"><span>Repeats:</span> {selectedStep.trig_repeats + 1}x</div>}
+                                        {selectedStep.micro_timing && <div className="param-item"><span>Micro-timing:</span> {selectedStep.micro_timing}</div>}
+                                        {selectedStep.velocity !== null && <div className="param-item"><span>{trackData.track_type === "MIDI" ? "Velocity" : "Volume"}:</span> {selectedStep.velocity}</div>}
+                                        {selectedStep.sample_slot !== null && <div className="param-item"><span>Sample Slot:</span> {selectedStep.sample_slot}</div>}
+                                        {selectedStep.plock_count > 0 && <div className="param-item"><span>P-Locks Count:</span> {selectedStep.plock_count}</div>}
+
+                                        {/* Audio P-Locks: Machine Parameters */}
+                                        {selectedStep.audio_plocks?.machine?.param1 != null && <div className="param-item"><span>PTCH (Pitch):</span> {selectedStep.audio_plocks?.machine?.param1}</div>}
+                                        {selectedStep.audio_plocks?.machine?.param2 != null && <div className="param-item"><span>STRT (Start):</span> {selectedStep.audio_plocks?.machine?.param2}</div>}
+                                        {selectedStep.audio_plocks?.machine?.param3 != null && <div className="param-item"><span>LEN (Length):</span> {selectedStep.audio_plocks?.machine?.param3}</div>}
+                                        {selectedStep.audio_plocks?.machine?.param4 != null && <div className="param-item"><span>RATE (Rate):</span> {selectedStep.audio_plocks?.machine?.param4}</div>}
+                                        {selectedStep.audio_plocks?.machine?.param5 != null && <div className="param-item"><span>RTRG (Retrigs):</span> {selectedStep.audio_plocks?.machine?.param5}</div>}
+                                        {selectedStep.audio_plocks?.machine?.param6 != null && <div className="param-item"><span>RTIM (Retrig Time):</span> {selectedStep.audio_plocks?.machine?.param6}</div>}
+
+                                        {/* Audio P-Locks: LFO Parameters */}
+                                        {selectedStep.audio_plocks?.lfo?.spd1 != null && <div className="param-item"><span>LFO1 Speed:</span> {selectedStep.audio_plocks?.lfo?.spd1}</div>}
+                                        {selectedStep.audio_plocks?.lfo?.spd2 != null && <div className="param-item"><span>LFO2 Speed:</span> {selectedStep.audio_plocks?.lfo?.spd2}</div>}
+                                        {selectedStep.audio_plocks?.lfo?.spd3 != null && <div className="param-item"><span>LFO3 Speed:</span> {selectedStep.audio_plocks?.lfo?.spd3}</div>}
+                                        {selectedStep.audio_plocks?.lfo?.dep1 != null && <div className="param-item"><span>LFO1 Depth:</span> {selectedStep.audio_plocks?.lfo?.dep1}</div>}
+                                        {selectedStep.audio_plocks?.lfo?.dep2 != null && <div className="param-item"><span>LFO2 Depth:</span> {selectedStep.audio_plocks?.lfo?.dep2}</div>}
+                                        {selectedStep.audio_plocks?.lfo?.dep3 != null && <div className="param-item"><span>LFO3 Depth:</span> {selectedStep.audio_plocks?.lfo?.dep3}</div>}
+
+                                        {/* Audio P-Locks: Amp Parameters */}
+                                        {selectedStep.audio_plocks?.amp?.atk != null && <div className="param-item"><span>ATK (Attack):</span> {selectedStep.audio_plocks?.amp?.atk}</div>}
+                                        {selectedStep.audio_plocks?.amp?.hold != null && <div className="param-item"><span>HOLD (Hold):</span> {selectedStep.audio_plocks?.amp?.hold}</div>}
+                                        {selectedStep.audio_plocks?.amp?.rel != null && <div className="param-item"><span>REL (Release):</span> {selectedStep.audio_plocks?.amp?.rel}</div>}
+                                        {selectedStep.audio_plocks?.amp?.vol != null && <div className="param-item"><span>VOL (Volume):</span> {selectedStep.audio_plocks?.amp?.vol}</div>}
+                                        {selectedStep.audio_plocks?.amp?.bal != null && <div className="param-item"><span>BAL (Balance):</span> {selectedStep.audio_plocks?.amp?.bal}</div>}
+                                        {selectedStep.audio_plocks?.amp?.f != null && <div className="param-item"><span>FILT (Filter):</span> {selectedStep.audio_plocks?.amp?.f}</div>}
+
+                                        {/* Audio P-Locks: Sample Slots */}
+                                        {selectedStep.audio_plocks?.static_slot_id != null && <div className="param-item"><span>Static Slot:</span> {selectedStep.audio_plocks?.static_slot_id}</div>}
+                                        {selectedStep.audio_plocks?.flex_slot_id != null && <div className="param-item"><span>Flex Slot:</span> {selectedStep.audio_plocks?.flex_slot_id}</div>}
+
+                                        {/* MIDI track parameters */}
+                                        {trackData.track_type === "MIDI" && (() => {
+                                          const allNotes = getStepNotes(selectedStep, trackData);
+                                          return (
+                                            <>
+                                              {allNotes.map((note, idx) => {
+                                                const isDefaultNote = trackData.default_note === note &&
+                                                                      selectedStep.midi_plocks?.midi?.note !== note &&
+                                                                      selectedStep.midi_plocks?.midi?.not2 !== note &&
+                                                                      selectedStep.midi_plocks?.midi?.not3 !== note &&
+                                                                      selectedStep.midi_plocks?.midi?.not4 !== note;
+                                                return (
+                                                  <div key={idx} className="param-item">
+                                                    <span>NOTE {idx + 1}:</span> {noteName(note)}{isDefaultNote ? ' (default)' : ''}
+                                                  </div>
+                                                );
+                                              })}
+                                            </>
+                                          );
+                                        })()}
+                                        {selectedStep.midi_plocks?.midi?.vel != null && <div className="param-item"><span>VEL (Velocity):</span> {selectedStep.midi_plocks?.midi?.vel}</div>}
+                                        {selectedStep.midi_plocks?.midi?.len != null && <div className="param-item"><span>LEN (Length):</span> {selectedStep.midi_plocks?.midi?.len}</div>}
+
+                                        {/* MIDI P-Locks: LFO Parameters */}
+                                        {selectedStep.midi_plocks?.lfo?.spd1 != null && <div className="param-item"><span>LFO1 Speed:</span> {selectedStep.midi_plocks?.lfo?.spd1}</div>}
+                                        {selectedStep.midi_plocks?.lfo?.spd2 != null && <div className="param-item"><span>LFO2 Speed:</span> {selectedStep.midi_plocks?.lfo?.spd2}</div>}
+                                        {selectedStep.midi_plocks?.lfo?.spd3 != null && <div className="param-item"><span>LFO3 Speed:</span> {selectedStep.midi_plocks?.lfo?.spd3}</div>}
+                                        {selectedStep.midi_plocks?.lfo?.dep1 != null && <div className="param-item"><span>LFO1 Depth:</span> {selectedStep.midi_plocks?.lfo?.dep1}</div>}
+                                        {selectedStep.midi_plocks?.lfo?.dep2 != null && <div className="param-item"><span>LFO2 Depth:</span> {selectedStep.midi_plocks?.lfo?.dep2}</div>}
+                                        {selectedStep.midi_plocks?.lfo?.dep3 != null && <div className="param-item"><span>LFO3 Depth:</span> {selectedStep.midi_plocks?.lfo?.dep3}</div>}
                                       </div>
-
-                                      {selectedStep.audio_plocks && (
-                                        <>
-                                          {/* Machine Parameters */}
-                                          {(selectedStep.audio_plocks.machine.param1 !== null ||
-                                            selectedStep.audio_plocks.machine.param2 !== null ||
-                                            selectedStep.audio_plocks.machine.param3 !== null ||
-                                            selectedStep.audio_plocks.machine.param4 !== null ||
-                                            selectedStep.audio_plocks.machine.param5 !== null ||
-                                            selectedStep.audio_plocks.machine.param6 !== null) && (
-                                            <div className="param-section">
-                                              <h5>Machine Parameters</h5>
-                                              <div className="param-grid">
-                                                {selectedStep.audio_plocks.machine.param1 !== null && <div className="param-item"><span>PTCH (Pitch):</span> {selectedStep.audio_plocks.machine.param1}</div>}
-                                                {selectedStep.audio_plocks.machine.param2 !== null && <div className="param-item"><span>STRT (Start):</span> {selectedStep.audio_plocks.machine.param2}</div>}
-                                                {selectedStep.audio_plocks.machine.param3 !== null && <div className="param-item"><span>LEN (Length):</span> {selectedStep.audio_plocks.machine.param3}</div>}
-                                                {selectedStep.audio_plocks.machine.param4 !== null && <div className="param-item"><span>RATE (Rate):</span> {selectedStep.audio_plocks.machine.param4}</div>}
-                                                {selectedStep.audio_plocks.machine.param5 !== null && <div className="param-item"><span>RTRG (Retrigs):</span> {selectedStep.audio_plocks.machine.param5}</div>}
-                                                {selectedStep.audio_plocks.machine.param6 !== null && <div className="param-item"><span>RTIM (Retrig Time):</span> {selectedStep.audio_plocks.machine.param6}</div>}
-                                              </div>
-                                            </div>
-                                          )}
-
-                                          {/* LFO Parameters */}
-                                          {(selectedStep.audio_plocks.lfo.spd1 !== null ||
-                                            selectedStep.audio_plocks.lfo.spd2 !== null ||
-                                            selectedStep.audio_plocks.lfo.spd3 !== null ||
-                                            selectedStep.audio_plocks.lfo.dep1 !== null ||
-                                            selectedStep.audio_plocks.lfo.dep2 !== null ||
-                                            selectedStep.audio_plocks.lfo.dep3 !== null) && (
-                                            <div className="param-section">
-                                              <h5>LFO Parameters</h5>
-                                              <div className="param-grid">
-                                                {selectedStep.audio_plocks.lfo.spd1 !== null && <div className="param-item"><span>LFO1 Speed:</span> {selectedStep.audio_plocks.lfo.spd1}</div>}
-                                                {selectedStep.audio_plocks.lfo.spd2 !== null && <div className="param-item"><span>LFO2 Speed:</span> {selectedStep.audio_plocks.lfo.spd2}</div>}
-                                                {selectedStep.audio_plocks.lfo.spd3 !== null && <div className="param-item"><span>LFO3 Speed:</span> {selectedStep.audio_plocks.lfo.spd3}</div>}
-                                                {selectedStep.audio_plocks.lfo.dep1 !== null && <div className="param-item"><span>LFO1 Depth:</span> {selectedStep.audio_plocks.lfo.dep1}</div>}
-                                                {selectedStep.audio_plocks.lfo.dep2 !== null && <div className="param-item"><span>LFO2 Depth:</span> {selectedStep.audio_plocks.lfo.dep2}</div>}
-                                                {selectedStep.audio_plocks.lfo.dep3 !== null && <div className="param-item"><span>LFO3 Depth:</span> {selectedStep.audio_plocks.lfo.dep3}</div>}
-                                              </div>
-                                            </div>
-                                          )}
-
-                                          {/* Amp Parameters */}
-                                          {(selectedStep.audio_plocks.amp.atk !== null ||
-                                            selectedStep.audio_plocks.amp.hold !== null ||
-                                            selectedStep.audio_plocks.amp.rel !== null ||
-                                            selectedStep.audio_plocks.amp.vol !== null ||
-                                            selectedStep.audio_plocks.amp.bal !== null ||
-                                            selectedStep.audio_plocks.amp.f !== null) && (
-                                            <div className="param-section">
-                                              <h5>Amp Envelope</h5>
-                                              <div className="param-grid">
-                                                {selectedStep.audio_plocks.amp.atk !== null && <div className="param-item"><span>ATK (Attack):</span> {selectedStep.audio_plocks.amp.atk}</div>}
-                                                {selectedStep.audio_plocks.amp.hold !== null && <div className="param-item"><span>HOLD (Hold):</span> {selectedStep.audio_plocks.amp.hold}</div>}
-                                                {selectedStep.audio_plocks.amp.rel !== null && <div className="param-item"><span>REL (Release):</span> {selectedStep.audio_plocks.amp.rel}</div>}
-                                                {selectedStep.audio_plocks.amp.vol !== null && <div className="param-item"><span>VOL (Volume):</span> {selectedStep.audio_plocks.amp.vol}</div>}
-                                                {selectedStep.audio_plocks.amp.bal !== null && <div className="param-item"><span>BAL (Balance):</span> {selectedStep.audio_plocks.amp.bal}</div>}
-                                                {selectedStep.audio_plocks.amp.f !== null && <div className="param-item"><span>FILT (Filter):</span> {selectedStep.audio_plocks.amp.f}</div>}
-                                              </div>
-                                            </div>
-                                          )}
-
-                                          {/* Sample Slots */}
-                                          {(selectedStep.audio_plocks.static_slot_id !== null || selectedStep.audio_plocks.flex_slot_id !== null) && (
-                                            <div className="param-section">
-                                              <h5>Sample Slots</h5>
-                                              <div className="param-grid">
-                                                {selectedStep.audio_plocks.static_slot_id !== null && <div className="param-item"><span>Static Slot:</span> {selectedStep.audio_plocks.static_slot_id}</div>}
-                                                {selectedStep.audio_plocks.flex_slot_id !== null && <div className="param-item"><span>Flex Slot:</span> {selectedStep.audio_plocks.flex_slot_id}</div>}
-                                              </div>
-                                            </div>
-                                          )}
-                                        </>
-                                      )}
-
-                                      {/* MIDI track parameters - show even when no plocks if there are notes */}
-                                      {trackData.track_type === "MIDI" && (() => {
-                                        // Get all notes using the shared helper function
-                                        const allNotes = getStepNotes(selectedStep, trackData);
-                                        const hasMidiParams = allNotes.length > 0 ||
-                                                              selectedStep.midi_plocks?.midi?.vel != null ||
-                                                              selectedStep.midi_plocks?.midi?.len != null;
-                                        const hasLfoParams = selectedStep.midi_plocks?.lfo?.spd1 != null ||
-                                                             selectedStep.midi_plocks?.lfo?.spd2 != null ||
-                                                             selectedStep.midi_plocks?.lfo?.spd3 != null ||
-                                                             selectedStep.midi_plocks?.lfo?.dep1 != null ||
-                                                             selectedStep.midi_plocks?.lfo?.dep2 != null ||
-                                                             selectedStep.midi_plocks?.lfo?.dep3 != null;
-
-                                        if (!hasMidiParams && !hasLfoParams) return null;
-
-                                        return (
-                                          <>
-                                            {/* MIDI Parameters */}
-                                            {hasMidiParams && (
-                                              <div className="param-section">
-                                                <h5>MIDI Parameters</h5>
-                                                <div className="param-grid">
-                                                  {allNotes.map((note, idx) => {
-                                                    // Check if this note is the default note (not in midi_plocks)
-                                                    const isDefaultNote = trackData.default_note === note &&
-                                                                          selectedStep.midi_plocks?.midi?.note !== note &&
-                                                                          selectedStep.midi_plocks?.midi?.not2 !== note &&
-                                                                          selectedStep.midi_plocks?.midi?.not3 !== note &&
-                                                                          selectedStep.midi_plocks?.midi?.not4 !== note;
-                                                    return (
-                                                      <div key={idx} className="param-item">
-                                                        <span>NOTE {idx + 1}:</span> {noteName(note)}{isDefaultNote ? ' (default)' : ''}
-                                                      </div>
-                                                    );
-                                                  })}
-                                                  {selectedStep.midi_plocks?.midi?.vel != null && <div className="param-item"><span>VEL (Velocity):</span> {selectedStep.midi_plocks?.midi?.vel}</div>}
-                                                  {selectedStep.midi_plocks?.midi?.len != null && <div className="param-item"><span>LEN (Length):</span> {selectedStep.midi_plocks?.midi?.len}</div>}
-                                              </div>
-                                            </div>
-                                          )}
-
-                                          {/* LFO Parameters */}
-                                          {hasLfoParams && selectedStep.midi_plocks && (
-                                            <div className="param-section">
-                                              <h5>LFO Parameters</h5>
-                                              <div className="param-grid">
-                                                {selectedStep.midi_plocks.lfo.spd1 !== null && <div className="param-item"><span>LFO1 Speed:</span> {selectedStep.midi_plocks.lfo.spd1}</div>}
-                                                {selectedStep.midi_plocks.lfo.spd2 !== null && <div className="param-item"><span>LFO2 Speed:</span> {selectedStep.midi_plocks.lfo.spd2}</div>}
-                                                {selectedStep.midi_plocks.lfo.spd3 !== null && <div className="param-item"><span>LFO3 Speed:</span> {selectedStep.midi_plocks.lfo.spd3}</div>}
-                                                {selectedStep.midi_plocks.lfo.dep1 !== null && <div className="param-item"><span>LFO1 Depth:</span> {selectedStep.midi_plocks.lfo.dep1}</div>}
-                                                {selectedStep.midi_plocks.lfo.dep2 !== null && <div className="param-item"><span>LFO2 Depth:</span> {selectedStep.midi_plocks.lfo.dep2}</div>}
-                                                {selectedStep.midi_plocks.lfo.dep3 !== null && <div className="param-item"><span>LFO3 Depth:</span> {selectedStep.midi_plocks.lfo.dep3}</div>}
-                                              </div>
-                                            </div>
-                                          )}
-                                        </>
-                                      );
-                                      })()}
-
-                                                                          </div>
+                                    </div>
                                   </div>
                                   );
                                 })()}
-                                    </>
-                                  );
-                                })()}
-                              </div>
-                            </div>
-                          </div>
-                                  );
-                                });
-                              });
+                                </>
+                              );
                             })()}
                           </div>
                         </div>
+                      </div>
                       );
                     });
-                  })()}
-                </section>
+                  });
+                })()}
               </div>
-            )}
+            </div>
+            );
+          });
+        })()}
+      </section>
+    </div>
+  )}
 
             {activeTab === "tracks" && (
               <div className="tracks-tab">
