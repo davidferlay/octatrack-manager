@@ -878,24 +878,11 @@ export function ProjectDetail() {
                                         <div className="step-number">{step.step + 1}</div>
                                         {hasData && (
                                           <div className="step-indicators">
-                                            {/* Primary trig indicators */}
-                                            {/* Don't show trigger indicator on MIDI tracks if there are notes (including default note) */}
+                                            {/* 1. Trig indicators first */}
                                             {step.trigger && !(trackData.track_type === "MIDI" && allNotes.length > 0) && <span className="indicator-trigger">●</span>}
                                             {step.trigless && <span className="indicator-trigless">○</span>}
-                                            {(step.plock || (step.plock_count > 0 && step.plock_count <= 1)) && <span className="indicator-plock">P</span>}
-                                            {step.oneshot && <span className="indicator-oneshot">1</span>}
-                                            {step.swing && <span className="indicator-swing">∿</span>}
-                                            {step.slide && <span className="indicator-slide">~</span>}
-                                            {step.recorder && <span className="indicator-recorder">R</span>}
 
-                                            {/* Additional data indicators - minimalist display */}
-                                            {step.trig_condition && <span className="indicator-condition">%</span>}
-                                            {step.trig_repeats > 0 && <span className="indicator-repeats">X</span>}
-                                            {step.micro_timing && <span className="indicator-timing">µ</span>}
-                                            {step.velocity !== null && <span className="indicator-velocity">V</span>}
-                                            {step.plock_count > 1 && <span className="indicator-plock-count">{step.plock_count}P</span>}
-                                            {step.sample_slot !== null && <span className="indicator-sample">S</span>}
-                                            {/* For MIDI tracks, only show notes if there's a trigger */}
+                                            {/* 2. MIDI Notes */}
                                             {allNotes.length > 0 && (hasTrig || trackData.track_type !== "MIDI") && (
                                               <div className="note-indicator-wrapper">
                                                 {allNotes.map((note, idx) => (
@@ -905,6 +892,23 @@ export function ProjectDetail() {
                                                 ))}
                                               </div>
                                             )}
+
+                                            {/* 3. P-lock count */}
+                                            {(step.plock || (step.plock_count > 0 && step.plock_count <= 1)) && <span className="indicator-plock">P</span>}
+                                            {step.plock_count > 1 && <span className="indicator-plock-count">{step.plock_count}P</span>}
+
+                                            {/* 4. Other indicators */}
+                                            {step.oneshot && <span className="indicator-oneshot">1</span>}
+                                            {step.slide && <span className="indicator-slide">~</span>}
+                                            {step.recorder && <span className="indicator-recorder">R</span>}
+                                            {step.trig_condition && <span className="indicator-condition">%</span>}
+                                            {step.trig_repeats > 0 && <span className="indicator-repeats">X</span>}
+                                            {step.micro_timing && <span className="indicator-timing">µ</span>}
+                                            {step.velocity !== null && <span className="indicator-velocity">V</span>}
+                                            {step.sample_slot !== null && <span className="indicator-sample">S</span>}
+
+                                            {/* 5. Swing last */}
+                                            {step.swing && <span className="indicator-swing">∿</span>}
                                           </div>
                                         )}
                                       </div>
