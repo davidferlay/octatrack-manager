@@ -31,4 +31,5 @@ walkdir = "2"
 dirs = "5"
 hound = "3.5"
 aifc = "0.6"
+open = "5"
 

@@ -2573,6 +2573,7 @@ dependencies = [
  "aifc",
  "dirs 5.0.1",
  "hound",
+ "open",
  "ot-tools-io",
  "serde",
  "serde_json",

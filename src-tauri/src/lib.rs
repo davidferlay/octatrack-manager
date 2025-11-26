@@ -106,6 +106,11 @@ fn delete_file(path: String) -> Result<usize, String> {
     delete_files(vec![path])
 }
 
+#[tauri::command]
+fn open_in_file_manager(path: String) -> Result<(), String> {
+    open::that(&path).map_err(|e| format!("Failed to open file manager: {}", e))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -128,7 +133,8 @@ pub fn run() {
             delete_audio_files,
             get_home_directory,
             rename_file,
-            delete_file
+            delete_file,
+            open_in_file_manager
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

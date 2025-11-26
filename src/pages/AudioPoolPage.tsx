@@ -1260,6 +1260,24 @@ export function AudioPoolPage() {
     return () => window.removeEventListener('click', handleClick);
   }, [contextMenu.isOpen]);
 
+  // Reveal in explorer handler
+  async function handleRevealInExplorer() {
+    try {
+      const currentPath = contextMenu.panel === 'source' ? sourcePath : destinationPath;
+
+      if (contextMenu.file && contextMenu.file.is_directory) {
+        // If it's a directory, open that directory in file manager
+        await invoke("open_in_file_manager", { path: contextMenu.file.path });
+      } else {
+        // If it's a file or no selection, open the current directory in file manager
+        await invoke("open_in_file_manager", { path: currentPath });
+      }
+    } catch (error) {
+      console.error("Error revealing in explorer:", error);
+    }
+    closeContextMenu();
+  }
+
   // Rename handlers
   function handleRenameClick() {
     if (contextMenu.file) {
@@ -1993,6 +2011,14 @@ export function AudioPoolPage() {
               <>
                 <button
                   className={`context-menu-item ${isMultipleSelected ? 'disabled' : ''}`}
+                  onClick={isMultipleSelected ? undefined : handleRevealInExplorer}
+                  disabled={isMultipleSelected}
+                >
+                  <i className="fas fa-folder-open"></i> Reveal in Explorer
+                </button>
+                <div className="context-menu-separator"></div>
+                <button
+                  className={`context-menu-item ${isMultipleSelected ? 'disabled' : ''}`}
                   onClick={isMultipleSelected ? undefined : handleRenameClick}
                   disabled={isMultipleSelected}
                 >
@@ -2000,6 +2026,14 @@ export function AudioPoolPage() {
                 </button>
                 <button className="context-menu-item danger" onClick={handleDeleteClick}>
                   <i className="fas fa-trash"></i> Delete{isMultipleSelected ? ` (${selectedCount})` : ''}
+                </button>
+                <div className="context-menu-separator"></div>
+              </>
+            )}
+            {!contextMenu.file && (
+              <>
+                <button className="context-menu-item" onClick={handleRevealInExplorer}>
+                  <i className="fas fa-folder-open"></i> Reveal in Explorer
                 </button>
                 <div className="context-menu-separator"></div>
               </>
