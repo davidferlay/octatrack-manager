@@ -879,8 +879,8 @@ export function ProjectDetail() {
                                         {hasData && (
                                           <div className="step-indicators">
                                             {/* 1. Trig indicators first */}
-                                            {step.trigger && !(trackData.track_type === "MIDI" && allNotes.length > 0) && <span className="indicator-trigger">●</span>}
-                                            {step.trigless && <span className="indicator-trigless">○</span>}
+                                            {step.trigger && !(trackData.track_type === "MIDI" && allNotes.length > 0) && <span className="indicator-trigger"><i className="fas fa-circle"></i></span>}
+                                            {step.trigless && <span className="indicator-trigless"><i className="far fa-circle"></i></span>}
 
                                             {/* 2. MIDI Notes */}
                                             {allNotes.length > 0 && (hasTrig || trackData.track_type !== "MIDI") && (
@@ -908,7 +908,7 @@ export function ProjectDetail() {
                                             {step.sample_slot !== null && <span className="indicator-sample">S</span>}
 
                                             {/* 5. Swing last */}
-                                            {step.swing && <span className="indicator-swing">∿</span>}
+                                            {step.swing && <span className="indicator-swing"><svg viewBox="0 0 20 14" width="13" height="11"><path d="M1 7 C4 1 7 1 10 7 C13 13 16 13 19 7" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round"/></svg></span>}
                                           </div>
                                         )}
                                       </div>
@@ -919,11 +919,11 @@ export function ProjectDetail() {
                                 {/* Legend - only show indicators that are actually used */}
                                 {usedIndicators.size > 0 && (
                                   <div className="pattern-grid-legend">
-                                    {usedIndicators.has('trigger') && <div className="legend-item"><span className="indicator-trigger">●</span> Trigger</div>}
-                                    {usedIndicators.has('trigless') && <div className="legend-item"><span className="indicator-trigless">○</span> Trigless</div>}
+                                    {usedIndicators.has('trigger') && <div className="legend-item"><span className="indicator-trigger"><i className="fas fa-circle"></i></span> Trigger</div>}
+                                    {usedIndicators.has('trigless') && <div className="legend-item"><span className="indicator-trigless"><i className="far fa-circle"></i></span> Trigless</div>}
                                     {usedIndicators.has('plock') && <div className="legend-item"><span className="indicator-plock">P</span> P-Lock</div>}
                                     {usedIndicators.has('oneshot') && <div className="legend-item"><span className="indicator-oneshot">1</span> One-Shot</div>}
-                                    {usedIndicators.has('swing') && <div className="legend-item"><span className="indicator-swing">∿</span> Swing</div>}
+                                    {usedIndicators.has('swing') && <div className="legend-item"><span className="indicator-swing"><svg viewBox="0 0 20 14" width="14" height="11"><path d="M1 7 C4 1 7 1 10 7 C13 13 16 13 19 7" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round"/></svg></span> Swing</div>}
                                     {usedIndicators.has('slide') && <div className="legend-item"><span className="indicator-slide">~</span> Slide</div>}
                                     {usedIndicators.has('recorder') && <div className="legend-item"><span className="indicator-recorder">R</span> Recorder</div>}
                                     {usedIndicators.has('condition') && <div className="legend-item"><span className="indicator-condition">%</span> Condition</div>}

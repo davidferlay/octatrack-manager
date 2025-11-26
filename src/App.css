@@ -1870,8 +1870,20 @@ h1 {
   color: var(--elektron-orange);
 }
 
+.indicator-trigger i {
+  font-size: 0.65rem;
+  position: relative;
+  top: -1.30px;
+}
+
 .indicator-trigless {
   color: #66cc66;
+}
+
+.indicator-trigless i {
+  font-size: 0.65rem;
+  position: relative;
+  top: -1.3px;
 }
 
 .indicator-plock {
@@ -1886,7 +1898,8 @@ h1 {
 
 .indicator-swing {
   color: #ffcc00;
-  font-size: 1.05rem;
+  display: inline-flex;
+  align-items: center;
 }
 
 .indicator-slide {
