@@ -825,6 +825,11 @@ export function ProjectDetail() {
                                     if (step.plock_count > 0) tooltipParts.push(`P-Locks: ${step.plock_count}`);
                                     if (step.sample_slot !== null) tooltipParts.push(`Sample: ${step.sample_slot}`);
 
+                                    // Check if step has any data to display (p-locks, velocity, sample, notes, etc.)
+                                    const hasData = hasTrig || step.plock_count > 0 || step.velocity !== null ||
+                                                    step.sample_slot !== null || allNotes.length > 0 ||
+                                                    step.trig_condition || step.trig_repeats > 0 || step.micro_timing;
+
                                     return (
                                       <div
                                         key={step.step}
@@ -834,7 +839,7 @@ export function ProjectDetail() {
                                         style={{ cursor: 'pointer' }}
                                       >
                                         <div className="step-number">{step.step + 1}</div>
-                                        {hasTrig && (
+                                        {hasData && (
                                           <div className="step-indicators">
                                             {/* Primary trig indicators */}
                                             {/* Don't show trigger indicator on MIDI tracks if there are notes (including default note) */}
