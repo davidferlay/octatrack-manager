@@ -691,6 +691,24 @@
   text-transform: uppercase;
   border-bottom: 1px solid var(--elektron-border-gray);
   white-space: nowrap;
+  user-select: none;
+}
+
+.transfer-list th.sortable {
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.transfer-list th.sortable:hover {
+  color: var(--elektron-text-primary);
+}
+
+.transfer-list th .sort-arrow {
+  display: inline-block;
+  margin-left: 0.4rem;
+  font-size: 0.6rem;
+  position: relative;
+  top: -0.5px;
 }
 
 .transfer-list td {
