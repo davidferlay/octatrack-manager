@@ -1056,7 +1056,8 @@ export function AudioPoolPage() {
   }
 
   function handleSourceFileClick(file: AudioFile, index: number, event: React.MouseEvent) {
-    if (file.is_directory) {
+    // Double-click or single click without modifier on directory navigates into it
+    if (file.is_directory && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
       setSourcePath(file.path);
       return;
     }
@@ -1067,9 +1068,7 @@ export function AudioPoolPage() {
       const start = Math.min(lastClickedSourceIndex, index);
       const end = Math.max(lastClickedSourceIndex, index);
       for (let i = start; i <= end; i++) {
-        if (!sourceFiles[i].is_directory) {
-          newSelected.add(sourceFiles[i].path);
-        }
+        newSelected.add(sourceFiles[i].path);
       }
       setSelectedSourceFiles(newSelected);
     } else if (event.ctrlKey || event.metaKey) {
@@ -1160,18 +1159,14 @@ export function AudioPoolPage() {
           setCursorIndex(newIndex);
           if (files[newIndex]) {
             if (e.shiftKey) {
-              // Extend selection
+              // Extend selection (include directories)
               const newSelected = new Set(selectedFiles);
-              if (!files[newIndex].is_directory) {
-                newSelected.add(files[newIndex].path);
-              }
+              newSelected.add(files[newIndex].path);
               setSelectedFiles(newSelected);
             } else {
-              // Single selection
+              // Single selection (include directories)
               const newSelected = new Set<string>();
-              if (!files[newIndex].is_directory) {
-                newSelected.add(files[newIndex].path);
-              }
+              newSelected.add(files[newIndex].path);
               setSelectedFiles(newSelected);
             }
           }
@@ -1183,18 +1178,14 @@ export function AudioPoolPage() {
           setCursorIndex(newIndex);
           if (files[newIndex]) {
             if (e.shiftKey) {
-              // Extend selection
+              // Extend selection (include directories)
               const newSelected = new Set(selectedFiles);
-              if (!files[newIndex].is_directory) {
-                newSelected.add(files[newIndex].path);
-              }
+              newSelected.add(files[newIndex].path);
               setSelectedFiles(newSelected);
             } else {
-              // Single selection
+              // Single selection (include directories)
               const newSelected = new Set<string>();
-              if (!files[newIndex].is_directory) {
-                newSelected.add(files[newIndex].path);
-              }
+              newSelected.add(files[newIndex].path);
               setSelectedFiles(newSelected);
             }
           }
@@ -1258,12 +1249,10 @@ export function AudioPoolPage() {
         case 'a': {
           if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
-            // Select all files (not directories)
+            // Select all files and directories
             const newSelected = new Set<string>();
             files.forEach(f => {
-              if (!f.is_directory) {
-                newSelected.add(f.path);
-              }
+              newSelected.add(f.path);
             });
             setSelectedFiles(newSelected);
           }
