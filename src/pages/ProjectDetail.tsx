@@ -360,245 +360,264 @@ export function ProjectDetail() {
           <div className="tab-content">
             {activeTab === "overview" && (
               <div className="overview-tab">
-                <section className="metadata-section">
-                  <h2>Project Info</h2>
-                  <div className="metadata-grid">
-                    <div className="metadata-item">
-                      <span className="metadata-label">Master Tempo</span>
-                      <span className="metadata-value">{metadata.tempo} BPM</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Metronome Time Signature</span>
-                      <span className="metadata-value">{metadata.time_signature}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">OS Version</span>
-                      <span className="metadata-value">{metadata.os_version}</span>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="current-state-section">
-                  <h2>Current State</h2>
-                  <div className="metadata-grid">
-                    <div className="metadata-item">
-                      <span className="metadata-label">Bank</span>
-                      <span className="metadata-value">{metadata.current_state.bank_name}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Pattern</span>
-                      <span className="metadata-value">{metadata.current_state.pattern + 1}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Part</span>
-                      <span className="metadata-value">{metadata.current_state.part + 1}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Mode</span>
-                      <span className="metadata-value">{metadata.current_state.midi_mode === 0 ? "Audio" : "MIDI"}</span>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="current-state-section">
-                  <h2>Audio Mode State</h2>
-                  <div className="metadata-grid">
-                    <div className="metadata-item">
-                      <span className="metadata-label">Track</span>
-                      <span className="metadata-value">
-                        <TrackBadge trackId={metadata.current_state.midi_mode === 0 ? metadata.current_state.track : metadata.current_state.track_othermode} />
-                      </span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Muted Tracks</span>
-                      <span className="metadata-value">
-                        {metadata.current_state.audio_muted_tracks.length > 0
-                          ? metadata.current_state.audio_muted_tracks.map((t: number, idx: number) => (
-                              <TrackBadge key={`audio-muted-${idx}`} trackId={t} />
-                            ))
-                          : "None"}
-                      </span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Cued Tracks</span>
-                      <span className="metadata-value">
-                        {metadata.current_state.audio_cued_tracks.length > 0
-                          ? metadata.current_state.audio_cued_tracks.map((t: number, idx: number) => (
-                              <TrackBadge key={`audio-cued-${idx}`} trackId={t} />
-                            ))
-                          : "None"}
-                      </span>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="current-state-section">
-                  <h2>MIDI Mode State</h2>
-                  <div className="metadata-grid">
-                    <div className="metadata-item">
-                      <span className="metadata-label">Track</span>
-                      <span className="metadata-value">
-                        <TrackBadge trackId={(metadata.current_state.midi_mode === 1 ? metadata.current_state.track : metadata.current_state.track_othermode) + 8} />
-                      </span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Muted Tracks</span>
-                      <span className="metadata-value">
-                        {metadata.current_state.midi_muted_tracks.length > 0
-                          ? metadata.current_state.midi_muted_tracks.map((t: number, idx: number) => (
-                              <TrackBadge key={`midi-muted-${idx}`} trackId={t + 8} />
-                            ))
-                          : "None"}
-                      </span>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="mixer-section">
-                  <h2>Mixer Settings</h2>
-                  <div className="metadata-grid">
-                    <div className="metadata-item">
-                      <span className="metadata-label">Gain AB</span>
-                      <span className="metadata-value">{metadata.mixer_settings.gain_ab}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Gain CD</span>
-                      <span className="metadata-value">{metadata.mixer_settings.gain_cd}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Direct Out AB</span>
-                      <span className="metadata-value">{metadata.mixer_settings.dir_ab}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Direct Out CD</span>
-                      <span className="metadata-value">{metadata.mixer_settings.dir_cd}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Phones Mix</span>
-                      <span className="metadata-value">{metadata.mixer_settings.phones_mix}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Main Level</span>
-                      <span className="metadata-value">{metadata.mixer_settings.main_level}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Cue Level</span>
-                      <span className="metadata-value">{metadata.mixer_settings.cue_level}</span>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="mixer-section">
-                  <h2>Memory Settings</h2>
-                  <div className="metadata-grid">
-                    <div className="metadata-item">
-                      <span className="metadata-label">24-bit Flex</span>
-                      <span className="metadata-value">{metadata.memory_settings.load_24bit_flex ? "Yes" : "No"}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Dynamic Recorders</span>
-                      <span className="metadata-value">{metadata.memory_settings.dynamic_recorders ? "Yes" : "No"}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">24-bit Recording</span>
-                      <span className="metadata-value">{metadata.memory_settings.record_24bit ? "Yes" : "No"}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Reserved Recorders</span>
-                      <span className="metadata-value">{metadata.memory_settings.reserved_recorder_count}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Recorder Length</span>
-                      <span className="metadata-value">{metadata.memory_settings.reserved_recorder_length}</span>
-                    </div>
-                  </div>
-                </section>
-
-                {metadata.midi_settings && (
-                <section className="mixer-section">
-                  <h2>MIDI Configuration</h2>
-                  <div className="metadata-grid">
-                    {metadata.midi_settings.trig_channels.map((ch, idx) => (
-                      <div key={idx} className="metadata-item">
-                        <span className="metadata-label">Track {idx + 1} Channel</span>
-                        <span className="metadata-value">{ch === -1 ? 'Off' : ch}</span>
+                <div className="overview-grid">
+                  {/* Project Info */}
+                  <section className="overview-section">
+                    <h2>Project Info</h2>
+                    <div className="compact-grid">
+                      <div className="compact-item">
+                        <span className="compact-label">Tempo</span>
+                        <span className="compact-value">{metadata.tempo} BPM</span>
                       </div>
-                    ))}
-                    <div className="metadata-item">
-                      <span className="metadata-label">Auto Channel</span>
-                      <span className="metadata-value">{metadata.midi_settings.auto_channel === -1 ? 'Off' : metadata.midi_settings.auto_channel}</span>
+                      <div className="compact-item">
+                        <span className="compact-label">Time Sig</span>
+                        <span className="compact-value">{metadata.time_signature}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">OS</span>
+                        <span className="compact-value">{metadata.os_version}</span>
+                      </div>
                     </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Clock Send</span>
-                      <span className="metadata-value">{metadata.midi_settings.clock_send ? "Yes" : "No"}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Clock Receive</span>
-                      <span className="metadata-value">{metadata.midi_settings.clock_receive ? "Yes" : "No"}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Transport Send</span>
-                      <span className="metadata-value">{metadata.midi_settings.transport_send ? "Yes" : "No"}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Transport Receive</span>
-                      <span className="metadata-value">{metadata.midi_settings.transport_receive ? "Yes" : "No"}</span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Program Change Send</span>
-                      <span className="metadata-value">
-                        {metadata.midi_settings.prog_change_send
-                          ? `Yes (Ch ${metadata.midi_settings.prog_change_send_channel === -1 ? 'Auto' : metadata.midi_settings.prog_change_send_channel})`
-                          : "No"}
-                      </span>
-                    </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Program Change Receive</span>
-                      <span className="metadata-value">
-                        {metadata.midi_settings.prog_change_receive
-                          ? `Yes (Ch ${metadata.midi_settings.prog_change_receive_channel === -1 ? 'Auto' : metadata.midi_settings.prog_change_receive_channel})`
-                          : "No"}
-                      </span>
-                    </div>
-                  </div>
-                </section>
-                )}
+                  </section>
 
-                {metadata.metronome_settings && (
-                <section className="mixer-section">
-                  <h2>Metronome Settings</h2>
-                  <div className="metadata-grid">
-                    <div className="metadata-item">
-                      <span className="metadata-label">Enabled</span>
-                      <span className="metadata-value">{metadata.metronome_settings.enabled ? "Yes" : "No"}</span>
+                  {/* Current State */}
+                  <section className="overview-section">
+                    <h2>Current State</h2>
+                    <div className="compact-grid">
+                      <div className="compact-item">
+                        <span className="compact-label">Bank</span>
+                        <span className="compact-value">{metadata.current_state.bank_name}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Pattern</span>
+                        <span className="compact-value">{metadata.current_state.pattern + 1}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Part</span>
+                        <span className="compact-value">{metadata.current_state.part + 1}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Mode</span>
+                        <span className="compact-value">{metadata.current_state.midi_mode === 0 ? "Audio" : "MIDI"}</span>
+                      </div>
                     </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Main Volume</span>
-                      <span className="metadata-value">{metadata.metronome_settings.main_volume}</span>
+                  </section>
+
+                  {/* Audio Mode State */}
+                  <section className="overview-section">
+                    <h2>Audio Mode</h2>
+                    <div className="compact-grid">
+                      <div className="compact-item">
+                        <span className="compact-label">Track</span>
+                        <span className="compact-value">
+                          <TrackBadge trackId={metadata.current_state.midi_mode === 0 ? metadata.current_state.track : metadata.current_state.track_othermode} />
+                        </span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Muted</span>
+                        <span className="compact-value">
+                          {metadata.current_state.audio_muted_tracks.length > 0
+                            ? metadata.current_state.audio_muted_tracks.map((t: number, idx: number) => (
+                                <TrackBadge key={`audio-muted-${idx}`} trackId={t} />
+                              ))
+                            : "—"}
+                        </span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Cued</span>
+                        <span className="compact-value">
+                          {metadata.current_state.audio_cued_tracks.length > 0
+                            ? metadata.current_state.audio_cued_tracks.map((t: number, idx: number) => (
+                                <TrackBadge key={`audio-cued-${idx}`} trackId={t} />
+                              ))
+                            : "—"}
+                        </span>
+                      </div>
                     </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Cue Volume</span>
-                      <span className="metadata-value">{metadata.metronome_settings.cue_volume}</span>
+                  </section>
+
+                  {/* MIDI Mode State */}
+                  <section className="overview-section">
+                    <h2>MIDI Mode</h2>
+                    <div className="compact-grid">
+                      <div className="compact-item">
+                        <span className="compact-label">Track</span>
+                        <span className="compact-value">
+                          <TrackBadge trackId={(metadata.current_state.midi_mode === 1 ? metadata.current_state.track : metadata.current_state.track_othermode) + 8} />
+                        </span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Muted</span>
+                        <span className="compact-value">
+                          {metadata.current_state.midi_muted_tracks.length > 0
+                            ? metadata.current_state.midi_muted_tracks.map((t: number, idx: number) => (
+                                <TrackBadge key={`midi-muted-${idx}`} trackId={t + 8} />
+                              ))
+                            : "—"}
+                        </span>
+                      </div>
                     </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Pitch</span>
-                      <span className="metadata-value">{metadata.metronome_settings.pitch}</span>
+                  </section>
+
+                  {/* Mixer Settings */}
+                  <section className="overview-section">
+                    <h2>Mixer</h2>
+                    <div className="compact-grid">
+                      <div className="compact-item">
+                        <span className="compact-label">Gain AB</span>
+                        <span className="compact-value">{metadata.mixer_settings.gain_ab}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Gain CD</span>
+                        <span className="compact-value">{metadata.mixer_settings.gain_cd}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Dir AB</span>
+                        <span className="compact-value">{metadata.mixer_settings.dir_ab}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Dir CD</span>
+                        <span className="compact-value">{metadata.mixer_settings.dir_cd}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Phones</span>
+                        <span className="compact-value">{metadata.mixer_settings.phones_mix}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Main</span>
+                        <span className="compact-value">{metadata.mixer_settings.main_level}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Cue</span>
+                        <span className="compact-value">{metadata.mixer_settings.cue_level}</span>
+                      </div>
                     </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Tonal Mode</span>
-                      <span className="metadata-value">{metadata.metronome_settings.tonal ? "Yes" : "No"}</span>
+                  </section>
+
+                  {/* Memory Settings */}
+                  <section className="overview-section">
+                    <h2>Memory</h2>
+                    <div className="compact-grid">
+                      <div className="compact-item">
+                        <span className="compact-label">24-bit Flex</span>
+                        <span className="compact-value">{metadata.memory_settings.load_24bit_flex ? "Yes" : "No"}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Dyn Rec</span>
+                        <span className="compact-value">{metadata.memory_settings.dynamic_recorders ? "Yes" : "No"}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">24-bit Rec</span>
+                        <span className="compact-value">{metadata.memory_settings.record_24bit ? "Yes" : "No"}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Res Rec #</span>
+                        <span className="compact-value">{metadata.memory_settings.reserved_recorder_count}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Rec Len</span>
+                        <span className="compact-value">{metadata.memory_settings.reserved_recorder_length}</span>
+                      </div>
                     </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Preroll Bars</span>
-                      <span className="metadata-value">{metadata.metronome_settings.preroll}</span>
+                  </section>
+
+                  {/* MIDI Channels */}
+                  {metadata.midi_settings && (
+                  <section className="overview-section">
+                    <h2>MIDI Channels</h2>
+                    <div className="compact-grid">
+                      {metadata.midi_settings.trig_channels.map((ch, idx) => (
+                        <div key={idx} className="compact-item">
+                          <span className="compact-label">T{idx + 1}</span>
+                          <span className="compact-value">{ch === -1 ? 'Off' : ch}</span>
+                        </div>
+                      ))}
+                      <div className="compact-item">
+                        <span className="compact-label">Auto</span>
+                        <span className="compact-value">{metadata.midi_settings.auto_channel === -1 ? 'Off' : metadata.midi_settings.auto_channel}</span>
+                      </div>
                     </div>
-                    <div className="metadata-item">
-                      <span className="metadata-label">Time Signature</span>
-                      <span className="metadata-value">{metadata.metronome_settings.time_signature_numerator}/{metadata.metronome_settings.time_signature_denominator}</span>
+                  </section>
+                  )}
+
+                  {/* MIDI Sync */}
+                  {metadata.midi_settings && (
+                  <section className="overview-section">
+                    <h2>MIDI Sync</h2>
+                    <div className="compact-grid">
+                      <div className="compact-item">
+                        <span className="compact-label">Clock TX</span>
+                        <span className="compact-value">{metadata.midi_settings.clock_send ? "Yes" : "No"}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Clock RX</span>
+                        <span className="compact-value">{metadata.midi_settings.clock_receive ? "Yes" : "No"}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Trans TX</span>
+                        <span className="compact-value">{metadata.midi_settings.transport_send ? "Yes" : "No"}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Trans RX</span>
+                        <span className="compact-value">{metadata.midi_settings.transport_receive ? "Yes" : "No"}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">PC TX</span>
+                        <span className="compact-value">
+                          {metadata.midi_settings.prog_change_send
+                            ? (metadata.midi_settings.prog_change_send_channel === -1 ? 'Auto' : `Ch ${metadata.midi_settings.prog_change_send_channel}`)
+                            : "Off"}
+                        </span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">PC RX</span>
+                        <span className="compact-value">
+                          {metadata.midi_settings.prog_change_receive
+                            ? (metadata.midi_settings.prog_change_receive_channel === -1 ? 'Auto' : `Ch ${metadata.midi_settings.prog_change_receive_channel}`)
+                            : "Off"}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                </section>
-                )}
+                  </section>
+                  )}
+
+                  {/* Metronome Settings */}
+                  {metadata.metronome_settings && (
+                  <section className="overview-section">
+                    <h2>Metronome</h2>
+                    <div className="compact-grid">
+                      <div className="compact-item">
+                        <span className="compact-label">Enabled</span>
+                        <span className="compact-value">{metadata.metronome_settings.enabled ? "Yes" : "No"}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Main Vol</span>
+                        <span className="compact-value">{metadata.metronome_settings.main_volume}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Cue Vol</span>
+                        <span className="compact-value">{metadata.metronome_settings.cue_volume}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Pitch</span>
+                        <span className="compact-value">{metadata.metronome_settings.pitch}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Tonal</span>
+                        <span className="compact-value">{metadata.metronome_settings.tonal ? "Yes" : "No"}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Preroll</span>
+                        <span className="compact-value">{metadata.metronome_settings.preroll}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Time Sig</span>
+                        <span className="compact-value">{metadata.metronome_settings.time_signature_numerator}/{metadata.metronome_settings.time_signature_denominator}</span>
+                      </div>
+                    </div>
+                  </section>
+                  )}
+                </div>
               </div>
             )}
 
