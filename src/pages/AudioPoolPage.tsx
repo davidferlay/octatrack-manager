@@ -522,6 +522,7 @@ export function AudioPoolPage() {
     transferId: string;
     pendingFiles: string[];
     currentIndex: number;
+    fileSizes?: Map<string, number>;
   }>({
     isOpen: false,
     fileName: '',
@@ -801,24 +802,25 @@ export function AudioPoolPage() {
   }
 
   // Shared function to copy files to pool with overwrite handling
-  async function copyFilesToPool(sourcePaths: string[]) {
+  async function copyFilesToPool(sourcePaths: string[], fileSizes?: Map<string, number>) {
     setIsTransferQueueOpen(true);
     setOverwriteAllMode('none'); // Reset overwrite mode for new batch
 
-    await processCopyQueue(sourcePaths, 0);
+    await processCopyQueue(sourcePaths, 0, false, fileSizes);
   }
 
   // Process copy queue with overwrite handling
-  async function processCopyQueue(sourcePaths: string[], startIndex: number, forceOverwrite: boolean = false) {
+  async function processCopyQueue(sourcePaths: string[], startIndex: number, forceOverwrite: boolean = false, fileSizes?: Map<string, number>) {
     for (let i = startIndex; i < sourcePaths.length; i++) {
       const sourcePath = sourcePaths[i];
       const fileName = sourcePath.split('/').pop() || sourcePath.split('\\').pop() || sourcePath;
       const transferId = `${Date.now()}-${fileName}`;
+      const fileSize = fileSizes?.get(sourcePath) || 0;
 
       const newTransfer: TransferItem = {
         id: transferId,
         fileName: fileName,
-        fileSize: 0,
+        fileSize: fileSize,
         bytesTransferred: 0,
         status: "copying" as const,
         startTime: Date.now(),
@@ -889,6 +891,7 @@ export function AudioPoolPage() {
               transferId: transferId,
               pendingFiles: sourcePaths,
               currentIndex: i,
+              fileSizes: fileSizes,
             });
             return; // Pause processing until user decides
           }
@@ -910,7 +913,7 @@ export function AudioPoolPage() {
 
   // Handle overwrite modal actions
   async function handleOverwrite() {
-    const { sourcePath, transferId, pendingFiles, currentIndex } = overwriteModal;
+    const { sourcePath, transferId, pendingFiles, currentIndex, fileSizes } = overwriteModal;
     setOverwriteModal(prev => ({ ...prev, isOpen: false }));
 
     // Retry with overwrite
@@ -936,7 +939,7 @@ export function AudioPoolPage() {
     }
 
     // Continue with remaining files
-    await processCopyQueue(pendingFiles, currentIndex + 1);
+    await processCopyQueue(pendingFiles, currentIndex + 1, false, fileSizes);
   }
 
   async function handleOverwriteAll() {
@@ -945,7 +948,7 @@ export function AudioPoolPage() {
   }
 
   function handleSkip() {
-    const { transferId, pendingFiles, currentIndex } = overwriteModal;
+    const { transferId, pendingFiles, currentIndex, fileSizes } = overwriteModal;
     setOverwriteModal(prev => ({ ...prev, isOpen: false }));
 
     // Mark as skipped
@@ -957,7 +960,7 @@ export function AudioPoolPage() {
     }));
 
     // Continue with remaining files
-    processCopyQueue(pendingFiles, currentIndex + 1);
+    processCopyQueue(pendingFiles, currentIndex + 1, false, fileSizes);
   }
 
   function handleSkipAll() {
@@ -992,9 +995,13 @@ export function AudioPoolPage() {
     // Reset overwrite mode for new batch
     setOverwriteAllMode('none');
 
+    // Build file sizes map
+    const fileSizes = new Map<string, number>();
+    filesToCopy.forEach(f => fileSizes.set(f.path, f.size));
+
     // Use the same queue processing as drag-and-drop to handle file conflicts
     const sourcePaths = filesToCopy.map(f => f.path);
-    await processCopyQueue(sourcePaths, 0);
+    await processCopyQueue(sourcePaths, 0, false, fileSizes);
   }
 
   async function navigateToParentSource() {
