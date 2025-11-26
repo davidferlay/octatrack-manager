@@ -1587,12 +1587,12 @@ export function AudioPoolPage() {
             <table className="transfer-list">
               <thead>
                 <tr>
-                  <th>#</th>
-                  <th>Progress</th>
-                  <th>File</th>
-                  <th>Size</th>
-                  <th>Status</th>
-                  <th>Actions</th>
+                  <th className="transfer-col-num">#</th>
+                  <th className="transfer-col-progress">Progress</th>
+                  <th className="transfer-col-file">File</th>
+                  <th className="transfer-col-size">Size</th>
+                  <th className="transfer-col-status">Status</th>
+                  <th className="transfer-col-actions">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -1609,7 +1609,7 @@ export function AudioPoolPage() {
                       <td>
                         <div className="progress-container">
                           <div
-                            className="progress-bar"
+                            className={`progress-bar ${transfer.status === 'completed' ? 'completed' : ''}`}
                             style={{
                               width: transfer.status === 'completed' ? '100%' :
                                      transfer.status === 'failed' || transfer.status === 'cancelled' ? '0%' :
