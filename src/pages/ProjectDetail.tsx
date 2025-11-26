@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useProjects } from "../context/ProjectsContext";
@@ -114,6 +114,11 @@ export function ProjectDetail() {
   const [selectedStepNumber, setSelectedStepNumber] = useState<number | null>(null); // Selected step number (synchronized across all patterns)
   const [sharedPartsPageIndex, setSharedPartsPageIndex] = useState<number>(0); // Shared page index for Parts panels when "All banks" is selected
   const [sharedPartsLfoTab, setSharedPartsLfoTab] = useState<'LFO1' | 'LFO2' | 'LFO3' | 'DESIGN'>('LFO1'); // Shared LFO tab for Parts panels when "All banks" is selected
+
+  // Pattern display settings
+  const [hideEmptyPatterns, setHideEmptyPatterns] = useState<boolean>(false); // Hide patterns with no trigs
+  const [hideEmptyPatternsVisual, setHideEmptyPatternsVisual] = useState<boolean>(false); // Immediate visual state for toggle
+  const [isPending, startTransition] = useTransition(); // For smooth UI updates
 
   useEffect(() => {
     if (projectPath) {
@@ -590,6 +595,26 @@ export function ProjectDetail() {
                     currentBank={metadata?.current_state.bank}
                   />
 
+                  <label className={`toggle-switch ${isPending ? 'pending' : ''}`}>
+                    <span className="toggle-label">Hide empty</span>
+                    <div className="toggle-slider-container">
+                      <input
+                        type="checkbox"
+                        checked={hideEmptyPatternsVisual}
+                        onChange={(e) => {
+                          const newValue = e.target.checked;
+                          // Update visual state immediately for smooth toggle animation
+                          setHideEmptyPatternsVisual(newValue);
+                          // Update actual filter state in a transition for smooth UI
+                          startTransition(() => {
+                            setHideEmptyPatterns(newValue);
+                          });
+                        }}
+                      />
+                      <span className="toggle-slider"></span>
+                    </div>
+                  </label>
+
                   <TrackSelector
                     id="patterns-track-select"
                     value={selectedTrackIndex}
@@ -645,6 +670,16 @@ export function ProjectDetail() {
                                 // Render pattern card for each track
                                 return tracksToDisplay.map((trackIndex) => {
                                   const trackData = pattern.tracks[trackIndex];
+
+                                  // Check if pattern/track has any trigs
+                                  const hasAnyTrigs = trackData.steps.slice(0, pattern.length).some(
+                                    (step: TrigStep) => step.trigger || step.trigless
+                                  );
+
+                                  // Skip empty patterns if hideEmptyPatterns is enabled
+                                  if (hideEmptyPatterns && !hasAnyTrigs) {
+                                    return null;
+                                  }
 
                                   return (
                                 <div key={`pattern-${patternIndex}-track-${trackIndex}`} className="pattern-card">
