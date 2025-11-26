@@ -1067,6 +1067,17 @@
   background-color: rgba(220, 53, 69, 0.15);
 }
 
+.context-menu-item.disabled,
+.context-menu-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.context-menu-item.disabled:hover,
+.context-menu-item:disabled:hover {
+  background-color: transparent;
+}
+
 .context-menu-item i {
   width: 1rem;
   text-align: center;
