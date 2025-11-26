@@ -165,6 +165,36 @@ pub fn create_directory(path: &str, name: &str) -> Result<String, String> {
 
 /// Copy files from source to destination
 pub fn copy_files(source_paths: Vec<String>, destination_dir: &str) -> Result<Vec<String>, String> {
+    copy_files_with_overwrite(source_paths, destination_dir, false)
+}
+
+/// Recursively copy a directory
+fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
+    if !dst.exists() {
+        fs::create_dir(dst)
+            .map_err(|e| format!("Failed to create directory {}: {}", dst.display(), e))?;
+    }
+
+    for entry in fs::read_dir(src)
+        .map_err(|e| format!("Failed to read directory {}: {}", src.display(), e))?
+    {
+        let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+
+        if src_path.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else {
+            fs::copy(&src_path, &dst_path)
+                .map_err(|e| format!("Failed to copy file {}: {}", src_path.display(), e))?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Copy files from source to destination with optional overwrite
+pub fn copy_files_with_overwrite(source_paths: Vec<String>, destination_dir: &str, overwrite: bool) -> Result<Vec<String>, String> {
     let dest_path = Path::new(destination_dir);
 
     if !dest_path.exists() {
@@ -190,12 +220,28 @@ pub fn copy_files(source_paths: Vec<String>, destination_dir: &str) -> Result<Ve
         let dest_file = dest_path.join(file_name);
 
         // Check if destination file already exists
-        if dest_file.exists() {
+        if dest_file.exists() && !overwrite {
             return Err(format!("File already exists: {}", dest_file.to_string_lossy()));
         }
 
-        fs::copy(&source_path, &dest_file)
-            .map_err(|e| format!("Failed to copy file: {}", e))?;
+        // If overwriting, remove existing file/directory first
+        if dest_file.exists() && overwrite {
+            if dest_file.is_dir() {
+                fs::remove_dir_all(&dest_file)
+                    .map_err(|e| format!("Failed to remove existing directory: {}", e))?;
+            } else {
+                fs::remove_file(&dest_file)
+                    .map_err(|e| format!("Failed to remove existing file: {}", e))?;
+            }
+        }
+
+        // Handle directory vs file copy
+        if source_path.is_dir() {
+            copy_dir_recursive(source_path, &dest_file)?;
+        } else {
+            fs::copy(&source_path, &dest_file)
+                .map_err(|e| format!("Failed to copy file: {}", e))?;
+        }
 
         copied_files.push(dest_file.to_string_lossy().to_string());
     }
