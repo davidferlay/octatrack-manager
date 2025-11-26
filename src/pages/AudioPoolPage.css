@@ -443,8 +443,7 @@
 .folder-icon {
   margin-right: 0.5rem;
   flex-shrink: 0;
-  color: var(--elektron-orange);
-  opacity: 0.8;
+  color: #64b5f6;
 }
 
 .audio-files-table td.col-name {
