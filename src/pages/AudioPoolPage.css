@@ -65,7 +65,12 @@
 }
 
 .toolbar-button.refreshing .fa-sync-alt {
-  animation: spin 0.8s linear infinite;
+  animation: spin 0.6s linear infinite;
+  color: var(--elektron-orange);
+}
+
+.toolbar-button.refreshing {
+  border-color: var(--elektron-orange);
 }
 
 @keyframes spin {
@@ -150,18 +155,18 @@
 /* Panel divider for resizing */
 .panel-divider {
   width: 4px;
-  background-color: var(--elektron-border-gray);
+  background-color: rgba(255, 255, 255, 0.08);
   cursor: ew-resize;
   flex-shrink: 0;
   transition: background-color 0.2s ease;
 }
 
 .panel-divider:hover {
-  background-color: rgba(255, 255, 255, 0.2);
+  background-color: rgba(255, 255, 255, 0.25);
 }
 
 .panel-divider:active {
-  background-color: rgba(255, 255, 255, 0.3);
+  background-color: rgba(255, 255, 255, 0.35);
 }
 
 /* Panels */

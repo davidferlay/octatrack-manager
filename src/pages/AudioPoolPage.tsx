@@ -845,6 +845,7 @@ export function AudioPoolPage() {
         }));
       } catch (error) {
         const errorStr = String(error);
+        console.log('Copy error:', errorStr, 'overwriteAllMode:', overwriteAllMode);
 
         // Check if it's a "file already exists" error
         if (errorStr.includes('already exists')) {
@@ -988,44 +989,12 @@ export function AudioPoolPage() {
     setSelectedSourceFiles(new Set());
     setIsTransferQueueOpen(true);
 
-    for (const file of filesToCopy) {
-      const transferId = `${Date.now()}-${file.name}`;
+    // Reset overwrite mode for new batch
+    setOverwriteAllMode('none');
 
-      const newTransfer: TransferItem = {
-        id: transferId,
-        fileName: file.name,
-        fileSize: file.size,
-        bytesTransferred: 0,
-        status: "copying" as const,
-        startTime: Date.now(),
-      };
-
-      setTransfers(prev => [...prev, newTransfer]);
-
-      try {
-        await invoke("copy_audio_files", {
-          sourcePaths: [file.path],
-          destinationDir: destinationPath
-        });
-
-        setTransfers(prev => prev.map(t => {
-          if (t.id === transferId) {
-            return { ...t, status: "completed" as const, bytesTransferred: t.fileSize };
-          }
-          return t;
-        }));
-      } catch (error) {
-        console.error(`Error copying file ${file.name}:`, error);
-        setTransfers(prev => prev.map(t => {
-          if (t.id === transferId) {
-            return { ...t, status: "failed" as const, error: String(error) };
-          }
-          return t;
-        }));
-      }
-    }
-
-    await loadDestinationFiles(destinationPath);
+    // Use the same queue processing as drag-and-drop to handle file conflicts
+    const sourcePaths = filesToCopy.map(f => f.path);
+    await processCopyQueue(sourcePaths, 0);
   }
 
   async function navigateToParentSource() {
