@@ -6,6 +6,7 @@ import { ProjectDetail } from "./pages/ProjectDetail";
 import { AudioPoolPage } from "./pages/AudioPoolPage";
 import { ProjectsProvider } from "./context/ProjectsContext";
 import { TablePreferencesProvider } from "./context/TablePreferencesContext";
+import '@fortawesome/fontawesome-free/css/all.min.css';
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
