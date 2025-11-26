@@ -767,7 +767,7 @@
 }
 
 .progress-bar.completed {
-  background: linear-gradient(90deg, #28a745, #34c759);
+  background: linear-gradient(90deg, rgba(60, 180, 60, 0.8), rgba(100, 200, 100, 0.9));
 }
 
 .progress-text {
