@@ -184,6 +184,31 @@
   flex-shrink: 0;
 }
 
+/* Ensure source panel header aligns with dest panel header */
+.source-panel .panel-header-bar {
+  height: 46px;
+  box-sizing: border-box;
+}
+
+.dest-panel .panel-header-bar {
+  height: 46px;
+  box-sizing: border-box;
+}
+
+/* Ensure filter info bars align between panels */
+.source-panel .filter-results-info,
+.dest-panel .filter-results-info {
+  height: 34px;
+  box-sizing: border-box;
+}
+
+/* Ensure table headers align */
+.source-panel .audio-files-table th,
+.dest-panel .audio-files-table th {
+  height: 32px;
+  box-sizing: border-box;
+}
+
 .audio-panel.dest-panel {
   flex: 1;
   min-width: 0;
