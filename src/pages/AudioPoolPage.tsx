@@ -274,6 +274,7 @@ function AudioFileTable({
   const [searchText, setSearchText] = useState('');
   const [hideDirectories, setHideDirectories] = useState(false);
   const [formatFilter, setFormatFilter] = useState<string>('all');
+  const [bitDepthFilter, setBitDepthFilter] = useState<string>('all');
   const [sampleRateFilter, setSampleRateFilter] = useState<string>('all');
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -348,11 +349,22 @@ function AudioFileTable({
     return Array.from(rates).sort((a, b) => a - b);
   };
 
+  const getUniqueBitDepths = () => {
+    const depths = new Set<number>();
+    files.forEach(file => {
+      if (file.bit_rate !== null) {
+        depths.add(file.bit_rate);
+      }
+    });
+    return Array.from(depths).sort((a, b) => a - b);
+  };
+
   // Filter files
   const filteredFiles = files.filter(file => {
     if (hideDirectories && file.is_directory) return false;
     if (searchText && !file.name.toLowerCase().includes(searchText.toLowerCase())) return false;
     if (formatFilter !== 'all' && getFileFormat(file.name) !== formatFilter) return false;
+    if (bitDepthFilter !== 'all' && file.bit_rate?.toString() !== bitDepthFilter) return false;
     if (sampleRateFilter !== 'all' && file.sample_rate?.toString() !== sampleRateFilter) return false;
     return true;
   });
@@ -396,7 +408,7 @@ function AudioFileTable({
     return 0;
   });
 
-  const hasActiveFilters = searchText || hideDirectories || formatFilter !== 'all' || sampleRateFilter !== 'all';
+  const hasActiveFilters = searchText || hideDirectories || formatFilter !== 'all' || bitDepthFilter !== 'all' || sampleRateFilter !== 'all';
 
   // Find the file at cursorIndex in the original files array
   const cursorFile = cursorIndex >= 0 && cursorIndex < files.length ? files[cursorIndex] : null;
@@ -413,6 +425,7 @@ function AudioFileTable({
           {hideDirectories && <span className="filter-badge">Folders Hidden</span>}
           {searchText && <span className="filter-badge">Search: {searchText}</span>}
           {formatFilter !== 'all' && <span className="filter-badge">Format: {formatFilter}</span>}
+          {bitDepthFilter !== 'all' && <span className="filter-badge">Bit: {bitDepthFilter}</span>}
           {sampleRateFilter !== 'all' && <span className="filter-badge">Rate: {(parseInt(sampleRateFilter) / 1000).toFixed(1)}kHz</span>}
         </div>
         {hasActiveFilters && (
@@ -422,6 +435,7 @@ function AudioFileTable({
               setSearchText('');
               setHideDirectories(false);
               setFormatFilter('all');
+              setBitDepthFilter('all');
               setSampleRateFilter('all');
             }}
           >
@@ -530,8 +544,50 @@ function AudioFileTable({
                   </div>
                 )}
               </th>
-              <th onClick={() => handleSort('bitrate')} className="sortable col-bitrate">
-                Bit {sortColumn === 'bitrate' && (sortDirection === 'asc' ? '▲' : '▼')}
+              <th className="filterable-header col-bitrate">
+                <div className="header-content">
+                  <span className="sort-indicator" onClick={() => handleSort('bitrate')}>
+                    {sortColumn === 'bitrate' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </span>
+                  <span onClick={() => handleSort('bitrate')} className="sortable-label">
+                    Bit
+                  </span>
+                  <button
+                    className={`filter-icon ${openDropdown === `${tableId}-bitrate` || bitDepthFilter !== 'all' ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setOpenDropdown(openDropdown === `${tableId}-bitrate` ? null : `${tableId}-bitrate`);
+                    }}
+                  >
+                    ⋮
+                  </button>
+                </div>
+                {openDropdown === `${tableId}-bitrate` && (
+                  <div className="filter-dropdown">
+                    <div className="dropdown-options">
+                      <label className="dropdown-option">
+                        <input
+                          type="radio"
+                          name={`${tableId}-bitrate`}
+                          checked={bitDepthFilter === 'all'}
+                          onChange={() => setBitDepthFilter('all')}
+                        />
+                        <span>All</span>
+                      </label>
+                      {getUniqueBitDepths().map((depth) => (
+                        <label key={depth} className="dropdown-option">
+                          <input
+                            type="radio"
+                            name={`${tableId}-bitrate`}
+                            checked={bitDepthFilter === depth.toString()}
+                            onChange={() => setBitDepthFilter(depth.toString())}
+                          />
+                          <span>{depth}-bit</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </th>
               <th className="filterable-header col-samplerate">
                 <div className="header-content">
