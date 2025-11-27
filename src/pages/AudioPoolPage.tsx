@@ -3,8 +3,15 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { Version } from "../components/Version";
 import "./AudioPoolPage.css";
+
+interface CopyProgressEvent {
+  file_path: string;
+  stage: string;  // "converting", "resampling", "writing", "copying", "complete"
+  progress: number;  // 0.0 to 1.0
+}
 
 interface AudioFile {
   name: string;
@@ -27,6 +34,8 @@ interface TransferItem {
   speed?: number;
   timeLeft?: number;
   sourcePath?: string;
+  stage?: string;  // "converting", "resampling", "writing", "copying", "complete"
+  progress?: number;  // 0.0 to 1.0
 }
 
 interface OverwriteModalProps {
@@ -895,19 +904,20 @@ export function AudioPoolPage() {
                 bytesTransferred: 0,
                 status: "copying" as const,
                 startTime: Date.now(),
+                sourcePath: sourcePath,
               };
 
               setTransfers(prev => [...prev, newTransfer]);
 
               try {
-                await invoke("copy_audio_files", {
-                  sourcePaths: [sourcePath],
+                await invoke("copy_audio_file_with_progress", {
+                  sourcePath: sourcePath,
                   destinationDir: destinationPathRef.current
                 });
 
                 setTransfers(prev => prev.map(t => {
                   if (t.id === transferId) {
-                    return { ...t, status: "completed" as const, bytesTransferred: 1 };
+                    return { ...t, status: "completed" as const, bytesTransferred: 1, progress: 1.0, stage: "complete" };
                   }
                   return t;
                 }));
@@ -959,6 +969,38 @@ export function AudioPoolPage() {
       }
     }
   }, [transfers, activeTransfersCount]);
+
+  // Listen for copy progress events from Rust backend
+  useEffect(() => {
+    let unlisten: UnlistenFn | null = null;
+
+    const setupListener = async () => {
+      unlisten = await listen<CopyProgressEvent>("copy-progress", (event) => {
+        const { file_path, stage, progress } = event.payload;
+
+        setTransfers(prev => prev.map(t => {
+          // Match by sourcePath
+          if (t.sourcePath === file_path && t.status === "copying") {
+            return {
+              ...t,
+              stage,
+              progress,
+              bytesTransferred: progress * (t.fileSize || 1),
+            };
+          }
+          return t;
+        }));
+      });
+    };
+
+    setupListener();
+
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, []);
 
   // Keyboard handler for delete modal
   useEffect(() => {
@@ -1111,15 +1153,16 @@ export function AudioPoolPage() {
       const shouldSkip = forceSkip;
 
       try {
-        await invoke("copy_audio_files", {
-          sourcePaths: [sourcePath],
+        // Use the progress-enabled command for single file copy with conversion
+        await invoke("copy_audio_file_with_progress", {
+          sourcePath: sourcePath,
           destinationDir: destinationPath,
           overwrite: shouldOverwrite,
         });
 
         setTransfers(prev => prev.map(t => {
           if (t.id === transferId) {
-            return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1 };
+            return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1, progress: 1.0, stage: "complete" };
           }
           return t;
         }));
@@ -1133,14 +1176,14 @@ export function AudioPoolPage() {
           if (shouldOverwrite) {
             // Retry with overwrite
             try {
-              await invoke("copy_audio_files", {
-                sourcePaths: [sourcePath],
+              await invoke("copy_audio_file_with_progress", {
+                sourcePath: sourcePath,
                 destinationDir: destinationPath,
                 overwrite: true,
               });
               setTransfers(prev => prev.map(t => {
                 if (t.id === transferId) {
-                  return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1 };
+                  return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1, progress: 1.0, stage: "complete" };
                 }
                 return t;
               }));
@@ -1196,14 +1239,14 @@ export function AudioPoolPage() {
 
     // Retry with overwrite
     try {
-      await invoke("copy_audio_files", {
-        sourcePaths: [sourcePath],
+      await invoke("copy_audio_file_with_progress", {
+        sourcePath: sourcePath,
         destinationDir: destinationPath,
         overwrite: true,
       });
       setTransfers(prev => prev.map(t => {
         if (t.id === transferId) {
-          return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1 };
+          return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1, progress: 1.0, stage: "complete" };
         }
         return t;
       }));
@@ -1227,14 +1270,14 @@ export function AudioPoolPage() {
 
     // Overwrite current file
     try {
-      await invoke("copy_audio_files", {
-        sourcePaths: [sourcePath],
+      await invoke("copy_audio_file_with_progress", {
+        sourcePath: sourcePath,
         destinationDir: destinationPath,
         overwrite: true,
       });
       setTransfers(prev => prev.map(t => {
         if (t.id === transferId) {
-          return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1 };
+          return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1, progress: 1.0, stage: "complete" };
         }
         return t;
       }));
@@ -1364,15 +1407,15 @@ export function AudioPoolPage() {
       setTransfers(prev => [...prev, newTransfer]);
 
       try {
-        await invoke("copy_audio_files", {
-          sourcePaths: [file.path],
+        await invoke("copy_audio_file_with_progress", {
+          sourcePath: file.path,
           destinationDir: sourcePath,
           overwrite: false,
         });
 
         setTransfers(prev => prev.map(t => {
           if (t.id === transferId) {
-            return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1 };
+            return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1, progress: 1.0, stage: "complete" };
           }
           return t;
         }));
@@ -2015,19 +2058,20 @@ export function AudioPoolPage() {
           bytesTransferred: 0,
           status: "copying" as const,
           startTime: Date.now(),
+          sourcePath: file.path,
         };
 
         setTransfers(prev => [...prev, newTransfer]);
 
         try {
-          await invoke("copy_audio_files", {
-            sourcePaths: [file.path],
+          await invoke("copy_audio_file_with_progress", {
+            sourcePath: file.path,
             destinationDir: destinationPath
           });
 
           setTransfers(prev => prev.map(t => {
             if (t.fileName === file.name && t.id === transferId) {
-              return { ...t, status: "completed" as const, bytesTransferred: t.fileSize };
+              return { ...t, status: "completed" as const, bytesTransferred: t.fileSize, progress: 1.0, stage: "complete" };
             }
             return t;
           }));
@@ -2288,12 +2332,14 @@ export function AudioPoolPage() {
                             style={{
                               width: transfer.status === 'completed' ? '100%' :
                                      transfer.status === 'failed' || transfer.status === 'cancelled' ? '0%' :
+                                     transfer.progress !== undefined ? `${Math.min(transfer.progress * 100, 100)}%` :
                                      transfer.fileSize > 0 ? `${Math.min((transfer.bytesTransferred / transfer.fileSize) * 100, 100)}%` : '0%'
                             }}
                           />
                           <span className="progress-text">
                             {transfer.status === 'completed' ? '100%' :
                              transfer.status === 'failed' || transfer.status === 'cancelled' ? '-' :
+                             transfer.progress !== undefined ? `${Math.min(Math.round(transfer.progress * 100), 100)}%` :
                              transfer.fileSize > 0 ? `${Math.min(Math.round((transfer.bytesTransferred / transfer.fileSize) * 100), 100)}%` : '-'}
                           </span>
                         </div>
@@ -2303,9 +2349,9 @@ export function AudioPoolPage() {
                       <td>
                         <span
                           className={`status-badge status-${transfer.status}`}
-                          title={transfer.error ? (transfer.error.includes('already exists') ? 'File already exists' : transfer.error) : ''}
+                          title={transfer.error ? (transfer.error.includes('already exists') ? 'File already exists' : transfer.error) : (transfer.stage || '')}
                         >
-                          {transfer.status}
+                          {transfer.status === 'copying' && transfer.stage ? transfer.stage : transfer.status}
                         </span>
                       </td>
                       <td>
