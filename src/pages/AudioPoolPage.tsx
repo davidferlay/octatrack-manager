@@ -159,6 +159,7 @@ interface AudioFileTableProps {
   isActive?: boolean;
   onPanelClick?: () => void;
   onContextMenu?: (e: React.MouseEvent, file: AudioFile | null) => void;
+  rowRefs?: React.MutableRefObject<Map<number, HTMLTableRowElement>>;
 }
 
 function AudioFileTable({
@@ -176,6 +177,7 @@ function AudioFileTable({
   isActive = false,
   onPanelClick,
   onContextMenu,
+  rowRefs,
 }: AudioFileTableProps) {
   const [sortColumn, setSortColumn] = useState<SortColumn>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -510,6 +512,11 @@ function AudioFileTable({
               return (
               <tr
                 key={file.path}
+                ref={(el) => {
+                  if (rowRefs && el) {
+                    rowRefs.current.set(originalIndex, el);
+                  }
+                }}
                 className={`${selectedFiles.has(file.path) ? 'selected' : ''} ${isCursor ? 'cursor' : ''}`}
                 onClick={(e) => onFileClick(file, originalIndex, e)}
                 onContextMenu={(e) => onContextMenu?.(e, file)}
@@ -608,6 +615,8 @@ export function AudioPoolPage() {
   const [activePanel, setActivePanel] = useState<'source' | 'dest'>('dest');
   const [cursorIndexSource, setCursorIndexSource] = useState<number>(0);
   const [cursorIndexDest, setCursorIndexDest] = useState<number>(0);
+  const sourceRowRefs = useRef<Map<number, HTMLTableRowElement>>(new Map());
+  const destRowRefs = useRef<Map<number, HTMLTableRowElement>>(new Map());
   const [isLoadingSource, setIsLoadingSource] = useState(false);
   const [isLoadingDest, setIsLoadingDest] = useState(false);
   const [isSourcePanelOpen, setIsSourcePanelOpen] = useState(false);
@@ -1629,12 +1638,37 @@ export function AudioPoolPage() {
       const setCursorIndex = activePanel === 'source' ? setCursorIndexSource : setCursorIndexDest;
       const selectedFiles = activePanel === 'source' ? selectedSourceFiles : selectedDestFiles;
       const setSelectedFiles = activePanel === 'source' ? setSelectedSourceFiles : setSelectedDestFiles;
+      const rowRefs = activePanel === 'source' ? sourceRowRefs : destRowRefs;
+
+      // Helper to scroll row into view, accounting for sticky header
+      const scrollToRow = (index: number) => {
+        const row = rowRefs.current.get(index);
+        if (row) {
+          const tableWrapper = row.closest('.table-wrapper');
+          const thead = row.closest('table')?.querySelector('thead');
+          if (tableWrapper) {
+            const headerHeight = thead?.getBoundingClientRect().height || 0;
+            const rowRect = row.getBoundingClientRect();
+            const wrapperRect = tableWrapper.getBoundingClientRect();
+            const visibleTop = wrapperRect.top + headerHeight;
+
+            if (rowRect.top < visibleTop) {
+              // Row is above visible area (under header), scroll up
+              tableWrapper.scrollTop -= (visibleTop - rowRect.top);
+            } else if (rowRect.bottom > wrapperRect.bottom) {
+              // Row is below visible area, scroll down
+              tableWrapper.scrollTop += (rowRect.bottom - wrapperRect.bottom);
+            }
+          }
+        }
+      };
 
       switch (e.key) {
         case 'ArrowUp': {
           e.preventDefault();
           const newIndex = Math.max(0, cursorIndex - 1);
           setCursorIndex(newIndex);
+          scrollToRow(newIndex);
           if (files[newIndex]) {
             if (e.shiftKey) {
               // Extend selection (include directories)
@@ -1654,6 +1688,7 @@ export function AudioPoolPage() {
           e.preventDefault();
           const newIndex = Math.min(files.length - 1, cursorIndex + 1);
           setCursorIndex(newIndex);
+          scrollToRow(newIndex);
           if (files[newIndex]) {
             if (e.shiftKey) {
               // Extend selection (include directories)
@@ -1976,6 +2011,7 @@ export function AudioPoolPage() {
               isActive={activePanel === 'source'}
               onPanelClick={() => setActivePanel('source')}
               onContextMenu={(e, file) => handleContextMenu(e, file, 'source')}
+              rowRefs={sourceRowRefs}
             />
           </div>
         )}
@@ -2035,6 +2071,7 @@ export function AudioPoolPage() {
             isActive={activePanel === 'dest'}
             onPanelClick={() => setActivePanel('dest')}
             onContextMenu={(e, file) => handleContextMenu(e, file, 'dest')}
+            rowRefs={destRowRefs}
           />
         </div>
       </div>
