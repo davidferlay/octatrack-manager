@@ -655,8 +655,10 @@
   justify-content: space-between;
   align-items: center;
   padding: 0.4rem 1rem;
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--elektron-dark-gray);
   border-bottom: 1px solid var(--elektron-border-gray);
+  position: relative;
+  z-index: 10;
 }
 
 .transfer-header h3 {
@@ -711,12 +713,6 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 0.8rem;
-}
-
-.transfer-list thead {
-  background-color: rgba(255, 255, 255, 0.02);
-  position: sticky;
-  top: 0;
 }
 
 .transfer-list th {

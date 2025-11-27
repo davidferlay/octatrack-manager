@@ -812,6 +812,7 @@ export function AudioPoolPage() {
   const [sourcePanelWidth, setSourcePanelWidth] = useState(50); // percentage
   const [isResizingPanels, setIsResizingPanels] = useState(false);
   const panelContainerRef = useRef<HTMLDivElement>(null);
+  const transferListRef = useRef<HTMLDivElement>(null);
 
   // Handle panel divider resize
   useEffect(() => {
@@ -1001,6 +1002,14 @@ export function AudioPoolPage() {
       }
     };
   }, []);
+
+  // Auto-scroll transfer list to show the latest item
+  useEffect(() => {
+    if (transferListRef.current && transfers.length > 0) {
+      // Scroll to bottom to show the most recent transfer
+      transferListRef.current.scrollTop = transferListRef.current.scrollHeight;
+    }
+  }, [transfers.length]);
 
   // Keyboard handler for delete modal
   useEffect(() => {
@@ -2292,7 +2301,7 @@ export function AudioPoolPage() {
               </button>
             </div>
           </div>
-          <div className="transfer-list-container">
+          <div className="transfer-list-container" ref={transferListRef}>
             <table className="transfer-list">
               <thead>
                 <tr>
