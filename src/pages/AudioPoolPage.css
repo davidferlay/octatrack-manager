@@ -161,10 +161,6 @@
   overflow: hidden;
 }
 
-.audio-pool-container.source-closed {
-  display: flex;
-}
-
 /* Panel divider for resizing */
 .panel-divider {
   width: 4px;

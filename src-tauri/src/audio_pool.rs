@@ -195,13 +195,6 @@ fn needs_conversion(path: &Path) -> bool {
     }
 }
 
-/// Convert an audio file to Octatrack-compatible WAV format
-/// - WAV 16 or 24-bit
-/// - 44.1kHz sample rate
-fn convert_to_octatrack_format(source_path: &Path, dest_path: &Path) -> Result<(), String> {
-    convert_to_octatrack_format_with_progress(source_path, dest_path, &|_, _| {})
-}
-
 /// Convert an audio file to Octatrack-compatible WAV format with progress reporting
 /// Progress is dynamically computed based on required steps:
 /// - If resampling needed: decoding (0-50%), resampling (50-80%), writing (80-100%)
@@ -398,11 +391,6 @@ where
     Ok(())
 }
 
-/// Resample audio from source rate to target rate using rubato
-fn resample_audio(samples: &[Vec<f32>], source_rate: u32, target_rate: u32) -> Result<Vec<Vec<f32>>, String> {
-    resample_audio_with_progress(samples, source_rate, target_rate, |_| {})
-}
-
 /// Resample audio with progress reporting
 fn resample_audio_with_progress<F>(
     samples: &[Vec<f32>],
@@ -475,11 +463,6 @@ where
 
     progress_callback(1.0);
     Ok(output)
-}
-
-/// Write samples to a WAV file
-fn write_wav_file(path: &Path, samples: &[Vec<f32>], sample_rate: u32, bits_per_sample: u16) -> Result<(), String> {
-    write_wav_file_with_progress(path, samples, sample_rate, bits_per_sample, |_| {})
 }
 
 /// Write samples to a WAV file with progress reporting
@@ -681,36 +664,6 @@ pub fn create_directory(path: &str, name: &str) -> Result<String, String> {
         .map_err(|e| format!("Failed to create directory: {}", e))?;
 
     Ok(new_dir.to_string_lossy().to_string())
-}
-
-/// Copy files from source to destination
-pub fn copy_files(source_paths: Vec<String>, destination_dir: &str) -> Result<Vec<String>, String> {
-    copy_files_with_overwrite(source_paths, destination_dir, false)
-}
-
-/// Recursively copy a directory (without audio conversion, for internal use)
-fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
-    if !dst.exists() {
-        fs::create_dir(dst)
-            .map_err(|e| format!("Failed to create directory {}: {}", dst.display(), e))?;
-    }
-
-    for entry in fs::read_dir(src)
-        .map_err(|e| format!("Failed to read directory {}: {}", src.display(), e))?
-    {
-        let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
-        let src_path = entry.path();
-        let dst_path = dst.join(entry.file_name());
-
-        if src_path.is_dir() {
-            copy_dir_recursive(&src_path, &dst_path)?;
-        } else {
-            fs::copy(&src_path, &dst_path)
-                .map_err(|e| format!("Failed to copy file {}: {}", src_path.display(), e))?;
-        }
-    }
-
-    Ok(())
 }
 
 /// Recursively copy a directory with audio conversion for Octatrack compatibility

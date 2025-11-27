@@ -32,14 +32,6 @@
   }
 }
 
-/* Fixed position for HomePage */
-.app-version.fixed {
-  position: fixed;
-  top: 0.5rem;
-  right: 1rem;
-  z-index: 1000;
-}
-
 /* Update progress bar */
 .update-progress {
   display: flex;
