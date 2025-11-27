@@ -2118,15 +2118,10 @@ export function AudioPoolPage() {
                       <td>
                         <span
                           className={`status-badge status-${transfer.status}`}
-                          title={transfer.error || ''}
+                          title={transfer.error ? (transfer.error.includes('already exists') ? 'File already exists' : transfer.error) : ''}
                         >
                           {transfer.status}
                         </span>
-                        {transfer.error && (
-                          <div className="transfer-error-message" title={transfer.error}>
-                            {transfer.error.includes('already exists') ? 'File already exists' : transfer.error}
-                          </div>
-                        )}
                       </td>
                       <td>
                         {(transfer.status === "copying" || transfer.status === "pending") && (
