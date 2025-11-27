@@ -117,7 +117,7 @@ export function Version({ fixed = false }: VersionProps) {
       )}
       {readyToRelaunch && (
         <a href="#" className="relaunch-link" onClick={handleRelaunch}>
-          click to relaunch
+          restart for latest version
         </a>
       )}
       <div
