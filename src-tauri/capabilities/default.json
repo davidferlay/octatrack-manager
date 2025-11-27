@@ -7,6 +7,7 @@
     "core:default",
     "dialog:allow-open",
     "process:allow-restart",
+    "process:allow-exit",
     "opener:allow-open-path",
     "opener:allow-reveal-item-in-dir"
   ]

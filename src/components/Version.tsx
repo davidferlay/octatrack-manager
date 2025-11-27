@@ -85,9 +85,12 @@ export function Version({ fixed = false }: VersionProps) {
   const handleRelaunch = async (e: React.MouseEvent) => {
     e.preventDefault();
     try {
+      console.log('Attempting manual relaunch...');
       await relaunch();
     } catch (error) {
       console.error('Relaunch failed:', error);
+      // If relaunch fails, show an alert to inform user
+      alert('Unable to restart automatically. Please close and reopen the application manually.');
     }
   };
 
