@@ -1207,13 +1207,16 @@ export function AudioPoolPage() {
   }
 
   // Copy selected dest files back to source directory
-  async function copyBackToSource() {
+  async function copyBackToSource(fromKeyboard: boolean = false) {
     if (!sourcePath) return;
 
     // Get files to copy - either selected files or the right-clicked file
     let filesToCopy: AudioFile[] = [];
 
-    if (contextMenu.file && selectedDestFiles.has(contextMenu.file.path)) {
+    if (fromKeyboard) {
+      // Called from keyboard shortcut - use selected files
+      filesToCopy = destinationFiles.filter(f => selectedDestFiles.has(f.path));
+    } else if (contextMenu.file && selectedDestFiles.has(contextMenu.file.path)) {
       // Right-clicked on a selected file - copy all selected files
       filesToCopy = destinationFiles.filter(f => selectedDestFiles.has(f.path));
     } else if (contextMenu.file) {
@@ -1702,6 +1705,11 @@ export function AudioPoolPage() {
           // Ctrl+Enter: Copy selected files from source to audio pool
           if ((e.ctrlKey || e.metaKey) && activePanel === 'source' && selectedSourceFiles.size > 0) {
             copySelectedToPool();
+            break;
+          }
+          // Ctrl+Enter: Copy selected files from audio pool to source
+          if ((e.ctrlKey || e.metaKey) && activePanel === 'dest' && selectedDestFiles.size > 0 && sourcePath) {
+            copyBackToSource(true);
             break;
           }
           const currentFile = files[cursorIndex];
