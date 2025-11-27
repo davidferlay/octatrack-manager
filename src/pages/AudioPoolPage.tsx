@@ -40,6 +40,58 @@ interface OverwriteModalProps {
 }
 
 function OverwriteModal({ isOpen, fileName, onOverwrite, onOverwriteAll, onSkip, onSkipAll, onCancel }: OverwriteModalProps) {
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const buttons = [
+    { action: onOverwrite, label: 'Overwrite' },
+    { action: onOverwriteAll, label: 'Overwrite All' },
+    { action: onSkip, label: 'Skip' },
+    { action: onSkipAll, label: 'Skip All' },
+    { action: onCancel, label: 'Cancel Import' },
+  ];
+
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedIndex(0);
+      return;
+    }
+
+    function handleKeyDown(e: KeyboardEvent) {
+      switch (e.key) {
+        case 'ArrowUp':
+          e.preventDefault();
+          setSelectedIndex(prev => Math.max(0, prev - 1));
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          setSelectedIndex(prev => Math.min(buttons.length - 1, prev + 1));
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          // Move between buttons in same row
+          if (selectedIndex === 1) setSelectedIndex(0);
+          else if (selectedIndex === 3) setSelectedIndex(2);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          // Move between buttons in same row
+          if (selectedIndex === 0) setSelectedIndex(1);
+          else if (selectedIndex === 2) setSelectedIndex(3);
+          break;
+        case 'Enter':
+          e.preventDefault();
+          buttons[selectedIndex].action();
+          break;
+        case 'Escape':
+          e.preventDefault();
+          onCancel();
+          break;
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, selectedIndex, buttons, onCancel]);
+
   if (!isOpen) return null;
 
   return (
@@ -54,23 +106,23 @@ function OverwriteModal({ isOpen, fileName, onOverwrite, onOverwriteAll, onSkip,
         </div>
         <div className="modal-footer">
           <div className="modal-buttons-row">
-            <button className="modal-button primary" onClick={onOverwrite}>
+            <button className={`modal-button primary ${selectedIndex === 0 ? 'focused' : ''}`} onClick={onOverwrite}>
               Overwrite
             </button>
-            <button className="modal-button" onClick={onOverwriteAll}>
+            <button className={`modal-button ${selectedIndex === 1 ? 'focused' : ''}`} onClick={onOverwriteAll}>
               Overwrite All
             </button>
           </div>
           <div className="modal-buttons-row">
-            <button className="modal-button" onClick={onSkip}>
+            <button className={`modal-button ${selectedIndex === 2 ? 'focused' : ''}`} onClick={onSkip}>
               Skip
             </button>
-            <button className="modal-button" onClick={onSkipAll}>
+            <button className={`modal-button ${selectedIndex === 3 ? 'focused' : ''}`} onClick={onSkipAll}>
               Skip All
             </button>
           </div>
           <div className="modal-buttons-row">
-            <button className="modal-button danger" onClick={onCancel}>
+            <button className={`modal-button danger ${selectedIndex === 4 ? 'focused' : ''}`} onClick={onCancel}>
               Cancel Import
             </button>
           </div>
@@ -609,10 +661,12 @@ export function AudioPoolPage() {
     isOpen: boolean;
     files: AudioFile[];
     panel: 'source' | 'dest';
+    selectedButton: number;
   }>({
     isOpen: false,
     files: [],
     panel: 'dest',
+    selectedButton: 0,
   });
 
   // Overwrite modal state
@@ -830,6 +884,36 @@ export function AudioPoolPage() {
       }
     }
   }, [transfers, activeTransfersCount]);
+
+  // Keyboard handler for delete modal
+  useEffect(() => {
+    if (!deleteModal.isOpen) return;
+
+    function handleKeyDown(e: KeyboardEvent) {
+      switch (e.key) {
+        case 'ArrowLeft':
+        case 'ArrowRight':
+          e.preventDefault();
+          setDeleteModal(prev => ({ ...prev, selectedButton: prev.selectedButton === 0 ? 1 : 0 }));
+          break;
+        case 'Enter':
+          e.preventDefault();
+          if (deleteModal.selectedButton === 0) {
+            setDeleteModal({ isOpen: false, files: [], panel: 'dest', selectedButton: 0 });
+          } else {
+            handleDeleteConfirm();
+          }
+          break;
+        case 'Escape':
+          e.preventDefault();
+          setDeleteModal({ isOpen: false, files: [], panel: 'dest', selectedButton: 0 });
+          break;
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [deleteModal.isOpen, deleteModal.selectedButton]);
 
   async function loadSourceFiles(path: string) {
     if (!path) return;
@@ -1421,6 +1505,7 @@ export function AudioPoolPage() {
         isOpen: true,
         files: filesToDelete,
         panel,
+        selectedButton: 0,
       });
     }
     closeContextMenu();
@@ -1449,7 +1534,7 @@ export function AudioPoolPage() {
       alert(`Error deleting: ${error}`);
     }
 
-    setDeleteModal({ isOpen: false, files: [], panel: 'dest' });
+    setDeleteModal({ isOpen: false, files: [], panel: 'dest', selectedButton: 0 });
   }
 
   // Create folder handlers
@@ -2184,7 +2269,7 @@ export function AudioPoolPage() {
 
       {/* Delete confirmation modal */}
       {deleteModal.isOpen && (
-        <div className="modal-overlay" onClick={() => setDeleteModal({ isOpen: false, files: [], panel: 'dest' })}>
+        <div className="modal-overlay" onClick={() => setDeleteModal({ isOpen: false, files: [], panel: 'dest', selectedButton: 0 })}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3><i className="fas fa-trash" style={{ color: '#dc3545', marginRight: '0.5rem' }}></i>Delete</h3>
@@ -2213,10 +2298,10 @@ export function AudioPoolPage() {
             </div>
             <div className="modal-footer">
               <div className="modal-buttons-row">
-                <button className="modal-button" onClick={() => setDeleteModal({ isOpen: false, files: [], panel: 'dest' })}>
+                <button className={`modal-button ${deleteModal.selectedButton === 0 ? 'focused' : ''}`} onClick={() => setDeleteModal({ isOpen: false, files: [], panel: 'dest', selectedButton: 0 })}>
                   Cancel
                 </button>
-                <button className="modal-button danger" onClick={handleDeleteConfirm}>
+                <button className={`modal-button danger ${deleteModal.selectedButton === 1 ? 'focused' : ''}`} onClick={handleDeleteConfirm}>
                   Delete{deleteModal.files.length > 1 ? ` (${deleteModal.files.length})` : ''}
                 </button>
               </div>

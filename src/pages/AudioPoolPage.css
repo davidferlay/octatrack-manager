@@ -1036,6 +1036,20 @@
   border-color: rgba(220, 53, 69, 0.7);
 }
 
+/* Focused button state for keyboard navigation */
+.modal-button.focused {
+  outline: 2px solid var(--elektron-orange);
+  outline-offset: 2px;
+}
+
+.modal-button.primary.focused {
+  outline-color: white;
+}
+
+.modal-button.danger.focused {
+  outline-color: #dc3545;
+}
+
 /* Modal input */
 .modal-input {
   width: 100%;
