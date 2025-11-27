@@ -1328,6 +1328,7 @@ export function AudioPoolPage() {
         newSelected.add(sourceFiles[i].path);
       }
       setSelectedSourceFiles(newSelected);
+      setCursorIndexSource(index);
     } else if (event.ctrlKey || event.metaKey) {
       if (newSelected.has(file.path)) {
         newSelected.delete(file.path);
@@ -1336,11 +1337,13 @@ export function AudioPoolPage() {
       }
       setSelectedSourceFiles(newSelected);
       setLastClickedSourceIndex(index);
+      setCursorIndexSource(index);
     } else {
       newSelected.clear();
       newSelected.add(file.path);
       setSelectedSourceFiles(newSelected);
       setLastClickedSourceIndex(index);
+      setCursorIndexSource(index);
     }
   }
 
@@ -1361,6 +1364,7 @@ export function AudioPoolPage() {
         }
       }
       setSelectedDestFiles(newSelected);
+      setCursorIndexDest(index);
     } else if (event.ctrlKey || event.metaKey) {
       if (newSelected.has(file.path)) {
         newSelected.delete(file.path);
@@ -1369,11 +1373,13 @@ export function AudioPoolPage() {
       }
       setSelectedDestFiles(newSelected);
       setLastClickedDestIndex(index);
+      setCursorIndexDest(index);
     } else {
       newSelected.clear();
       newSelected.add(file.path);
       setSelectedDestFiles(newSelected);
       setLastClickedDestIndex(index);
+      setCursorIndexDest(index);
     }
   }
 
