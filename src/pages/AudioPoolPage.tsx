@@ -1105,6 +1105,74 @@ export function AudioPoolPage() {
     await processCopyQueue(sourcePaths, 0, false, fileSizes);
   }
 
+  // Copy selected dest files back to source directory
+  async function copyBackToSource() {
+    if (!sourcePath) return;
+
+    // Get files to copy - either selected files or the right-clicked file
+    let filesToCopy: AudioFile[] = [];
+
+    if (contextMenu.file && selectedDestFiles.has(contextMenu.file.path)) {
+      // Right-clicked on a selected file - copy all selected files
+      filesToCopy = destinationFiles.filter(f => selectedDestFiles.has(f.path));
+    } else if (contextMenu.file) {
+      // Right-clicked on an unselected file - copy just that file
+      filesToCopy = [contextMenu.file];
+    }
+
+    if (filesToCopy.length === 0) return;
+
+    setSelectedDestFiles(new Set());
+    setIsTransferQueueOpen(true);
+
+    // Build file sizes map
+    const fileSizes = new Map<string, number>();
+    filesToCopy.forEach(f => fileSizes.set(f.path, f.size));
+
+    // Copy files to source directory
+    for (const file of filesToCopy) {
+      const transferId = `${Date.now()}-${file.name}`;
+
+      const newTransfer: TransferItem = {
+        id: transferId,
+        fileName: file.name,
+        fileSize: file.size,
+        bytesTransferred: 0,
+        status: "copying" as const,
+        startTime: Date.now(),
+        sourcePath: file.path,
+      };
+
+      setTransfers(prev => [...prev, newTransfer]);
+
+      try {
+        await invoke("copy_audio_files", {
+          sourcePaths: [file.path],
+          destinationDir: sourcePath,
+          overwrite: false,
+        });
+
+        setTransfers(prev => prev.map(t => {
+          if (t.id === transferId) {
+            return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1 };
+          }
+          return t;
+        }));
+      } catch (error) {
+        console.error(`Error copying ${file.name}:`, error);
+        setTransfers(prev => prev.map(t => {
+          if (t.id === transferId) {
+            return { ...t, status: "failed" as const, error: String(error) };
+          }
+          return t;
+        }));
+      }
+    }
+
+    // Refresh source files
+    await loadSourceFiles(sourcePath);
+  }
+
   async function navigateToParentSource() {
     if (!sourcePath) return;
 
@@ -2021,6 +2089,14 @@ export function AudioPoolPage() {
                 >
                   <i className="fas fa-folder-open"></i> Reveal in Explorer
                 </button>
+                {contextMenu.panel === 'dest' && sourcePath && (
+                  <button
+                    className="context-menu-item"
+                    onClick={() => { copyBackToSource(); closeContextMenu(); }}
+                  >
+                    <i className="fas fa-arrow-left"></i> Copy to Source{isMultipleSelected ? ` (${selectedCount})` : ''}
+                  </button>
+                )}
                 <div className="context-menu-separator"></div>
                 <button
                   className={`context-menu-item ${isMultipleSelected ? 'disabled' : ''}`}
