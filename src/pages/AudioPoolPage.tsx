@@ -32,6 +32,7 @@ interface TransferItem {
 interface OverwriteModalProps {
   isOpen: boolean;
   fileName: string;
+  remainingFiles: string[];
   onOverwrite: () => void;
   onOverwriteAll: () => void;
   onSkip: () => void;
@@ -39,58 +40,89 @@ interface OverwriteModalProps {
   onCancel: () => void;
 }
 
-function OverwriteModal({ isOpen, fileName, onOverwrite, onOverwriteAll, onSkip, onSkipAll, onCancel }: OverwriteModalProps) {
+function OverwriteModal({ isOpen, fileName, remainingFiles, onOverwrite, onOverwriteAll, onSkip, onSkipAll, onCancel }: OverwriteModalProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const buttons = [
-    { action: onOverwrite, label: 'Overwrite' },
-    { action: onOverwriteAll, label: 'Overwrite All' },
-    { action: onSkip, label: 'Skip' },
-    { action: onSkipAll, label: 'Skip All' },
-    { action: onCancel, label: 'Cancel Import' },
-  ];
+  const hasMultipleRemaining = remainingFiles.length > 1;
+
+  // Reset selection when modal opens/closes or when switching between single/multiple mode
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedIndex(0);
+    }
+  }, [isOpen, hasMultipleRemaining]);
 
   useEffect(() => {
-    if (!isOpen) {
-      setSelectedIndex(0);
-      return;
-    }
+    if (!isOpen) return;
 
     function handleKeyDown(e: KeyboardEvent) {
-      switch (e.key) {
-        case 'ArrowUp':
-          e.preventDefault();
-          setSelectedIndex(prev => Math.max(0, prev - 1));
-          break;
-        case 'ArrowDown':
-          e.preventDefault();
-          setSelectedIndex(prev => Math.min(buttons.length - 1, prev + 1));
-          break;
-        case 'ArrowLeft':
-          e.preventDefault();
-          // Move between buttons in same row
-          if (selectedIndex === 1) setSelectedIndex(0);
-          else if (selectedIndex === 3) setSelectedIndex(2);
-          break;
-        case 'ArrowRight':
-          e.preventDefault();
-          // Move between buttons in same row
-          if (selectedIndex === 0) setSelectedIndex(1);
-          else if (selectedIndex === 2) setSelectedIndex(3);
-          break;
-        case 'Enter':
-          e.preventDefault();
-          buttons[selectedIndex].action();
-          break;
-        case 'Escape':
-          e.preventDefault();
-          onCancel();
-          break;
+      if (hasMultipleRemaining) {
+        // 5 buttons in grid: [Overwrite, Overwrite All], [Skip, Skip All], [Cancel]
+        // Indices: 0=Overwrite, 1=Overwrite All, 2=Skip, 3=Skip All, 4=Cancel
+        switch (e.key) {
+          case 'ArrowUp':
+            e.preventDefault();
+            if (selectedIndex === 4) setSelectedIndex(2);
+            else if (selectedIndex === 2 || selectedIndex === 3) setSelectedIndex(selectedIndex - 2);
+            break;
+          case 'ArrowDown':
+            e.preventDefault();
+            if (selectedIndex === 0 || selectedIndex === 1) setSelectedIndex(selectedIndex + 2);
+            else if (selectedIndex === 2 || selectedIndex === 3) setSelectedIndex(4);
+            break;
+          case 'ArrowLeft':
+            e.preventDefault();
+            if (selectedIndex === 1) setSelectedIndex(0);
+            else if (selectedIndex === 3) setSelectedIndex(2);
+            break;
+          case 'ArrowRight':
+            e.preventDefault();
+            if (selectedIndex === 0) setSelectedIndex(1);
+            else if (selectedIndex === 2) setSelectedIndex(3);
+            break;
+          case 'Enter':
+            e.preventDefault();
+            [onOverwrite, onOverwriteAll, onSkip, onSkipAll, onCancel][selectedIndex]();
+            break;
+          case 'Escape':
+            e.preventDefault();
+            onCancel();
+            break;
+        }
+      } else {
+        // 3 buttons: [Overwrite, Skip], [Cancel]
+        // Indices: 0=Overwrite, 1=Skip, 2=Cancel
+        switch (e.key) {
+          case 'ArrowUp':
+            e.preventDefault();
+            if (selectedIndex === 2) setSelectedIndex(0);
+            break;
+          case 'ArrowDown':
+            e.preventDefault();
+            if (selectedIndex === 0 || selectedIndex === 1) setSelectedIndex(2);
+            break;
+          case 'ArrowLeft':
+            e.preventDefault();
+            if (selectedIndex === 1) setSelectedIndex(0);
+            break;
+          case 'ArrowRight':
+            e.preventDefault();
+            if (selectedIndex === 0) setSelectedIndex(1);
+            break;
+          case 'Enter':
+            e.preventDefault();
+            [onOverwrite, onSkip, onCancel][selectedIndex]();
+            break;
+          case 'Escape':
+            e.preventDefault();
+            onCancel();
+            break;
+        }
       }
     }
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, selectedIndex, buttons, onCancel]);
+  }, [isOpen, selectedIndex, hasMultipleRemaining, onOverwrite, onOverwriteAll, onSkip, onSkipAll, onCancel]);
 
   if (!isOpen) return null;
 
@@ -98,34 +130,67 @@ function OverwriteModal({ isOpen, fileName, onOverwrite, onOverwriteAll, onSkip,
     <div className="modal-overlay">
       <div className="modal-content">
         <div className="modal-header">
-          <h3><i className="fas fa-exclamation-triangle" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>File Already Exists</h3>
+          <h3><i className="fas fa-exclamation-triangle" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>File{hasMultipleRemaining ? 's' : ''} Already Exist{hasMultipleRemaining ? '' : 's'}</h3>
         </div>
         <div className="modal-body">
-          <p>The file <strong>"{fileName}"</strong> already exists in the destination folder.</p>
+          {hasMultipleRemaining ? (
+            <>
+              <p>The following <strong>{remainingFiles.length} files</strong> already exist in the destination folder:</p>
+              <ul style={{ maxHeight: '150px', overflowY: 'auto', margin: '0.5rem 0', paddingLeft: '1.5rem', fontSize: '0.85rem', color: 'var(--elektron-text-secondary)' }}>
+                {remainingFiles.slice(0, 15).map((path, idx) => {
+                  const name = path.split('/').pop() || path.split('\\').pop() || path;
+                  return <li key={idx}>{name}</li>;
+                })}
+                {remainingFiles.length > 15 && <li style={{ fontStyle: 'italic' }}>...and {remainingFiles.length - 15} more</li>}
+              </ul>
+            </>
+          ) : (
+            <p>The file <strong>"{fileName}"</strong> already exists in the destination folder.</p>
+          )}
           <p>What would you like to do?</p>
         </div>
         <div className="modal-footer">
-          <div className="modal-buttons-row">
-            <button className={`modal-button primary ${selectedIndex === 0 ? 'focused' : ''}`} onClick={onOverwrite}>
-              Overwrite
-            </button>
-            <button className={`modal-button ${selectedIndex === 1 ? 'focused' : ''}`} onClick={onOverwriteAll}>
-              Overwrite All
-            </button>
-          </div>
-          <div className="modal-buttons-row">
-            <button className={`modal-button ${selectedIndex === 2 ? 'focused' : ''}`} onClick={onSkip}>
-              Skip
-            </button>
-            <button className={`modal-button ${selectedIndex === 3 ? 'focused' : ''}`} onClick={onSkipAll}>
-              Skip All
-            </button>
-          </div>
-          <div className="modal-buttons-row">
-            <button className={`modal-button danger ${selectedIndex === 4 ? 'focused' : ''}`} onClick={onCancel}>
-              Cancel Import
-            </button>
-          </div>
+          {hasMultipleRemaining ? (
+            <>
+              <div className="modal-buttons-row">
+                <button className={`modal-button primary ${selectedIndex === 0 ? 'focused' : ''}`} onClick={onOverwrite}>
+                  Overwrite
+                </button>
+                <button className={`modal-button ${selectedIndex === 1 ? 'focused' : ''}`} onClick={onOverwriteAll}>
+                  Overwrite All ({remainingFiles.length})
+                </button>
+              </div>
+              <div className="modal-buttons-row">
+                <button className={`modal-button ${selectedIndex === 2 ? 'focused' : ''}`} onClick={onSkip}>
+                  Skip
+                </button>
+                <button className={`modal-button ${selectedIndex === 3 ? 'focused' : ''}`} onClick={onSkipAll}>
+                  Skip All ({remainingFiles.length})
+                </button>
+              </div>
+              <div className="modal-buttons-row">
+                <button className={`modal-button danger ${selectedIndex === 4 ? 'focused' : ''}`} onClick={onCancel}>
+                  Cancel Import
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="modal-buttons-row">
+                <button className={`modal-button primary ${selectedIndex === 0 ? 'focused' : ''}`} onClick={onOverwrite}>
+                  Overwrite
+                </button>
+                <button className={`modal-button ${selectedIndex === 1 ? 'focused' : ''}`} onClick={onSkip}>
+                  Skip
+                </button>
+              </div>
+              <div className="modal-buttons-row">
+                <button className={`modal-button danger ${selectedIndex === 2 ? 'focused' : ''}`} onClick={onCancel}>
+                  Cancel Import
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -1017,11 +1082,11 @@ export function AudioPoolPage() {
     setIsTransferQueueOpen(true);
     setOverwriteAllMode('none'); // Reset overwrite mode for new batch
 
-    await processCopyQueue(sourcePaths, 0, false, fileSizes);
+    await processCopyQueue(sourcePaths, 0, false, fileSizes, false);
   }
 
   // Process copy queue with overwrite handling
-  async function processCopyQueue(sourcePaths: string[], startIndex: number, forceOverwrite: boolean = false, fileSizes?: Map<string, number>) {
+  async function processCopyQueue(sourcePaths: string[], startIndex: number, forceOverwrite: boolean = false, fileSizes?: Map<string, number>, forceSkip: boolean = false) {
     for (let i = startIndex; i < sourcePaths.length; i++) {
       const sourcePath = sourcePaths[i];
       const fileName = sourcePath.split('/').pop() || sourcePath.split('\\').pop() || sourcePath;
@@ -1040,10 +1105,11 @@ export function AudioPoolPage() {
 
       setTransfers(prev => [...prev, newTransfer]);
 
-      try {
-        // Check current overwrite mode
-        const shouldOverwrite = forceOverwrite || overwriteAllMode === 'overwrite';
+      // Use force flags directly (don't rely on state which may be stale due to async updates)
+      const shouldOverwrite = forceOverwrite;
+      const shouldSkip = forceSkip;
 
+      try {
         await invoke("copy_audio_files", {
           sourcePaths: [sourcePath],
           destinationDir: destinationPath,
@@ -1062,8 +1128,8 @@ export function AudioPoolPage() {
 
         // Check if it's a "file already exists" error
         if (errorStr.includes('already exists')) {
-          // Check overwrite mode
-          if (overwriteAllMode === 'overwrite') {
+          // Check overwrite mode (use computed values that include force flags)
+          if (shouldOverwrite) {
             // Retry with overwrite
             try {
               await invoke("copy_audio_files", {
@@ -1085,7 +1151,7 @@ export function AudioPoolPage() {
                 return t;
               }));
             }
-          } else if (overwriteAllMode === 'skip') {
+          } else if (shouldSkip) {
             // Mark as skipped
             setTransfers(prev => prev.map(t => {
               if (t.id === transferId) {
@@ -1150,12 +1216,38 @@ export function AudioPoolPage() {
     }
 
     // Continue with remaining files
-    await processCopyQueue(pendingFiles, currentIndex + 1, false, fileSizes);
+    await processCopyQueue(pendingFiles, currentIndex + 1, false, fileSizes, false);
   }
 
   async function handleOverwriteAll() {
+    const { sourcePath, transferId, pendingFiles, currentIndex, fileSizes } = overwriteModal;
+    setOverwriteModal(prev => ({ ...prev, isOpen: false }));
     setOverwriteAllMode('overwrite');
-    await handleOverwrite();
+
+    // Overwrite current file
+    try {
+      await invoke("copy_audio_files", {
+        sourcePaths: [sourcePath],
+        destinationDir: destinationPath,
+        overwrite: true,
+      });
+      setTransfers(prev => prev.map(t => {
+        if (t.id === transferId) {
+          return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1 };
+        }
+        return t;
+      }));
+    } catch (error) {
+      setTransfers(prev => prev.map(t => {
+        if (t.id === transferId) {
+          return { ...t, status: "failed" as const, error: String(error) };
+        }
+        return t;
+      }));
+    }
+
+    // Continue with remaining files, passing forceOverwrite=true
+    await processCopyQueue(pendingFiles, currentIndex + 1, true, fileSizes, false);
   }
 
   function handleSkip() {
@@ -1171,12 +1263,24 @@ export function AudioPoolPage() {
     }));
 
     // Continue with remaining files
-    processCopyQueue(pendingFiles, currentIndex + 1, false, fileSizes);
+    processCopyQueue(pendingFiles, currentIndex + 1, false, fileSizes, false);
   }
 
-  function handleSkipAll() {
+  async function handleSkipAll() {
+    const { transferId, pendingFiles, currentIndex, fileSizes } = overwriteModal;
+    setOverwriteModal(prev => ({ ...prev, isOpen: false }));
     setOverwriteAllMode('skip');
-    handleSkip();
+
+    // Mark current as skipped
+    setTransfers(prev => prev.map(t => {
+      if (t.id === transferId) {
+        return { ...t, status: "cancelled" as const, error: 'Skipped (file exists)' };
+      }
+      return t;
+    }));
+
+    // Continue with remaining files, passing forceSkip=true
+    await processCopyQueue(pendingFiles, currentIndex + 1, false, fileSizes, true);
   }
 
   function handleCancelImport() {
@@ -1212,7 +1316,7 @@ export function AudioPoolPage() {
 
     // Use the same queue processing as drag-and-drop to handle file conflicts
     const sourcePaths = filesToCopy.map(f => f.path);
-    await processCopyQueue(sourcePaths, 0, false, fileSizes);
+    await processCopyQueue(sourcePaths, 0, false, fileSizes, false);
   }
 
   // Copy selected dest files back to source directory
@@ -2209,6 +2313,7 @@ export function AudioPoolPage() {
       <OverwriteModal
         isOpen={overwriteModal.isOpen}
         fileName={overwriteModal.fileName}
+        remainingFiles={overwriteModal.pendingFiles.slice(overwriteModal.currentIndex)}
         onOverwrite={handleOverwrite}
         onOverwriteAll={handleOverwriteAll}
         onSkip={handleSkip}
