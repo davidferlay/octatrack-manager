@@ -705,6 +705,7 @@ export function AudioPoolPage() {
     file: null,
     panel: 'dest',
   });
+  const contextMenuRef = useRef<HTMLDivElement>(null);
 
   // Rename modal state
   const [renameModal, setRenameModal] = useState<{
@@ -1551,6 +1552,35 @@ export function AudioPoolPage() {
     return () => window.removeEventListener('click', handleClick);
   }, [contextMenu.isOpen]);
 
+  // Adjust context menu position to stay within viewport
+  useLayoutEffect(() => {
+    if (contextMenu.isOpen && contextMenuRef.current) {
+      const menu = contextMenuRef.current;
+      const rect = menu.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      let newX = contextMenu.x;
+      let newY = contextMenu.y;
+
+      // Adjust if menu extends beyond right edge
+      if (rect.right > viewportWidth) {
+        newX = viewportWidth - rect.width - 10;
+      }
+
+      // Adjust if menu extends beyond bottom edge
+      if (rect.bottom > viewportHeight) {
+        newY = viewportHeight - rect.height - 10;
+      }
+
+      // Apply adjusted position if needed
+      if (newX !== contextMenu.x || newY !== contextMenu.y) {
+        menu.style.left = `${Math.max(10, newX)}px`;
+        menu.style.top = `${Math.max(10, newY)}px`;
+      }
+    }
+  }, [contextMenu.isOpen, contextMenu.x, contextMenu.y]);
+
   // Reveal in explorer handler
   async function handleRevealInExplorer() {
     try {
@@ -2329,6 +2359,7 @@ export function AudioPoolPage() {
 
         return (
           <div
+            ref={contextMenuRef}
             className="context-menu"
             style={{
               position: 'fixed',
