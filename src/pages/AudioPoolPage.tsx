@@ -2150,7 +2150,7 @@ export function AudioPoolPage() {
 
       <div
         ref={panelContainerRef}
-        className={`audio-pool-container ${isSourcePanelOpen ? 'source-open' : 'source-closed'}`}
+        className="audio-pool-container"
       >
         {/* Left Panel - Source (My Computer) */}
         {isSourcePanelOpen && (

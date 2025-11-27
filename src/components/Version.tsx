@@ -4,11 +4,7 @@ import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import './Version.css';
 
-interface VersionProps {
-  fixed?: boolean;
-}
-
-export function Version({ fixed = false }: VersionProps) {
+export function Version() {
   const [version, setVersion] = useState<string>('');
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
@@ -124,7 +120,7 @@ export function Version({ fixed = false }: VersionProps) {
         </a>
       )}
       <div
-        className={`app-version ${fixed ? 'fixed' : ''} ${checking ? 'checking' : ''}`}
+        className={`app-version ${checking ? 'checking' : ''}`}
         onClick={checkAndDownloadUpdate}
         title="Click to check for updates"
       >
