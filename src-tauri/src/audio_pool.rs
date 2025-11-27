@@ -264,8 +264,8 @@ where
     // Dynamic progress ranges based on required steps
     // Weights approximate relative processing time for each step
     let (decode_weight, resample_weight, write_weight) = if needs_resampling {
-        // Decoding: ~20%, Resampling: ~60%, Writing: ~20% (resampling is the slowest)
-        (0.20, 0.60, 0.20)
+        // Decoding: ~10%, Resampling: ~80%, Writing: ~10% (resampling is by far the slowest)
+        (0.10, 0.80, 0.10)
     } else {
         // Decoding: ~60%, Writing: ~40% (no resampling)
         (0.60, 0.0, 0.40)
