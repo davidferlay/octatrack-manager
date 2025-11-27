@@ -1353,10 +1353,26 @@ export function AudioPoolPage() {
   }
 
   // Copy selected source files to pool
-  async function copySelectedToPool() {
-    if (selectedSourceFiles.size === 0) return;
+  async function copySelectedToPool(fromKeyboard: boolean = false) {
+    // Get files to copy - either selected files or the right-clicked file
+    let filesToCopy: AudioFile[] = [];
 
-    const filesToCopy = sourceFiles.filter(f => selectedSourceFiles.has(f.path));
+    if (fromKeyboard) {
+      // Called from keyboard shortcut or button - use selected files
+      filesToCopy = sourceFiles.filter(f => selectedSourceFiles.has(f.path));
+    } else if (contextMenu.file && selectedSourceFiles.has(contextMenu.file.path)) {
+      // Right-clicked on a selected file - copy all selected files
+      filesToCopy = sourceFiles.filter(f => selectedSourceFiles.has(f.path));
+    } else if (contextMenu.file) {
+      // Right-clicked on an unselected file - copy just that file
+      filesToCopy = [contextMenu.file];
+    } else {
+      // Fallback to selected files
+      filesToCopy = sourceFiles.filter(f => selectedSourceFiles.has(f.path));
+    }
+
+    if (filesToCopy.length === 0) return;
+
     setSelectedSourceFiles(new Set());
     setIsTransferQueueOpen(true);
 
@@ -1931,7 +1947,7 @@ export function AudioPoolPage() {
           e.preventDefault();
           // Ctrl+Enter: Copy selected files from source to audio pool
           if ((e.ctrlKey || e.metaKey) && activePanel === 'source' && selectedSourceFiles.size > 0) {
-            copySelectedToPool();
+            copySelectedToPool(true);
             break;
           }
           // Ctrl+Enter: Copy selected files from audio pool to source
@@ -1951,7 +1967,7 @@ export function AudioPoolPage() {
             }
           } else if (activePanel === 'source' && selectedSourceFiles.size > 0) {
             // Copy selected files to pool
-            copySelectedToPool();
+            copySelectedToPool(true);
           }
           break;
         }
@@ -2175,7 +2191,7 @@ export function AudioPoolPage() {
                 <button
                   className="icon-button copy-to-pool-btn"
                   title="Copy selected to Audio Pool"
-                  onClick={copySelectedToPool}
+                  onClick={() => copySelectedToPool(true)}
                   disabled={selectedSourceFiles.size === 0}
                 >
                   <i className="fas fa-arrow-right"></i> Copy
@@ -2437,6 +2453,14 @@ export function AudioPoolPage() {
                     onClick={() => { copyBackToSource(); closeContextMenu(); }}
                   >
                     <i className="fas fa-arrow-left"></i> Copy to Source{isMultipleSelected ? ` (${selectedCount})` : ''}
+                  </button>
+                )}
+                {contextMenu.panel === 'source' && (
+                  <button
+                    className="context-menu-item"
+                    onClick={() => { copySelectedToPool(); closeContextMenu(); }}
+                  >
+                    <i className="fas fa-arrow-right"></i> Copy to Audio Pool{isMultipleSelected ? ` (${selectedCount})` : ''}
                   </button>
                 )}
                 <div className="context-menu-separator"></div>
