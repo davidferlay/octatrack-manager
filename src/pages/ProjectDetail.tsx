@@ -403,6 +403,33 @@ export function ProjectDetail() {
                     </div>
                   </section>
 
+                  {/* Memory Settings */}
+                  <section className="overview-section">
+                    <h2>Memory</h2>
+                    <div className="compact-grid">
+                      <div className="compact-item">
+                        <span className="compact-label">24-bit Flex</span>
+                        <span className="compact-value">{metadata.memory_settings.load_24bit_flex ? "Yes" : "No"}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Dyn Rec</span>
+                        <span className="compact-value">{metadata.memory_settings.dynamic_recorders ? "Yes" : "No"}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">24-bit Rec</span>
+                        <span className="compact-value">{metadata.memory_settings.record_24bit ? "Yes" : "No"}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Res Rec #</span>
+                        <span className="compact-value">{metadata.memory_settings.reserved_recorder_count}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Rec Len</span>
+                        <span className="compact-value">{metadata.memory_settings.reserved_recorder_length}</span>
+                      </div>
+                    </div>
+                  </section>
+
                   {/* Audio Mode State */}
                   <section className="overview-section">
                     <h2>Audio Mode</h2>
@@ -490,33 +517,6 @@ export function ProjectDetail() {
                       <div className="compact-item">
                         <span className="compact-label">Cue</span>
                         <span className="compact-value">{metadata.mixer_settings.cue_level}</span>
-                      </div>
-                    </div>
-                  </section>
-
-                  {/* Memory Settings */}
-                  <section className="overview-section">
-                    <h2>Memory</h2>
-                    <div className="compact-grid">
-                      <div className="compact-item">
-                        <span className="compact-label">24-bit Flex</span>
-                        <span className="compact-value">{metadata.memory_settings.load_24bit_flex ? "Yes" : "No"}</span>
-                      </div>
-                      <div className="compact-item">
-                        <span className="compact-label">Dyn Rec</span>
-                        <span className="compact-value">{metadata.memory_settings.dynamic_recorders ? "Yes" : "No"}</span>
-                      </div>
-                      <div className="compact-item">
-                        <span className="compact-label">24-bit Rec</span>
-                        <span className="compact-value">{metadata.memory_settings.record_24bit ? "Yes" : "No"}</span>
-                      </div>
-                      <div className="compact-item">
-                        <span className="compact-label">Res Rec #</span>
-                        <span className="compact-value">{metadata.memory_settings.reserved_recorder_count}</span>
-                      </div>
-                      <div className="compact-item">
-                        <span className="compact-label">Rec Len</span>
-                        <span className="compact-value">{metadata.memory_settings.reserved_recorder_length}</span>
                       </div>
                     </div>
                   </section>
