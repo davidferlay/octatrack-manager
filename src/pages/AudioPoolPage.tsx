@@ -206,7 +206,23 @@ function OverwriteModal({ isOpen, fileName, remainingFiles, onOverwrite, onOverw
   );
 }
 
-type SortColumn = 'name' | 'size' | 'channels' | 'bitrate' | 'samplerate';
+type SortColumn = 'name' | 'size' | 'format' | 'bitrate' | 'samplerate';
+
+// Extract file format from filename (only for audio files)
+function getFileFormat(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  if (!ext) return '';
+  switch (ext) {
+    case 'wav': return 'WAV';
+    case 'aif':
+    case 'aiff': return 'AIF';
+    case 'mp3': return 'MP3';
+    case 'flac': return 'FLAC';
+    case 'ogg': return 'OGG';
+    case 'm4a': return 'M4A';
+    default: return '';
+  }
+}
 type SortDirection = 'asc' | 'desc';
 
 function formatFileSize(bytes: number): string {
@@ -257,7 +273,7 @@ function AudioFileTable({
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [searchText, setSearchText] = useState('');
   const [hideDirectories, setHideDirectories] = useState(false);
-  const [channelsFilter, setChannelsFilter] = useState<string>('all');
+  const [formatFilter, setFormatFilter] = useState<string>('all');
   const [sampleRateFilter, setSampleRateFilter] = useState<string>('all');
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -309,14 +325,17 @@ function AudioFileTable({
   };
 
   // Get unique values for filters
-  const getUniqueChannels = () => {
-    const channels = new Set<number>();
+  const getUniqueFormats = () => {
+    const formats = new Set<string>();
     files.forEach(file => {
-      if (file.channels !== null) {
-        channels.add(file.channels);
+      if (!file.is_directory) {
+        const format = getFileFormat(file.name);
+        if (format) {
+          formats.add(format);
+        }
       }
     });
-    return Array.from(channels).sort((a, b) => a - b);
+    return Array.from(formats).sort();
   };
 
   const getUniqueSampleRates = () => {
@@ -333,7 +352,7 @@ function AudioFileTable({
   const filteredFiles = files.filter(file => {
     if (hideDirectories && file.is_directory) return false;
     if (searchText && !file.name.toLowerCase().includes(searchText.toLowerCase())) return false;
-    if (channelsFilter !== 'all' && file.channels?.toString() !== channelsFilter) return false;
+    if (formatFilter !== 'all' && getFileFormat(file.name) !== formatFilter) return false;
     if (sampleRateFilter !== 'all' && file.sample_rate?.toString() !== sampleRateFilter) return false;
     return true;
   });
@@ -356,9 +375,9 @@ function AudioFileTable({
         compareA = a.size || 0;
         compareB = b.size || 0;
         break;
-      case 'channels':
-        compareA = a.channels ?? -1;
-        compareB = b.channels ?? -1;
+      case 'format':
+        compareA = getFileFormat(a.name);
+        compareB = getFileFormat(b.name);
         break;
       case 'bitrate':
         compareA = a.bit_rate ?? -1;
@@ -377,7 +396,7 @@ function AudioFileTable({
     return 0;
   });
 
-  const hasActiveFilters = searchText || hideDirectories || channelsFilter !== 'all' || sampleRateFilter !== 'all';
+  const hasActiveFilters = searchText || hideDirectories || formatFilter !== 'all' || sampleRateFilter !== 'all';
 
   // Find the file at cursorIndex in the original files array
   const cursorFile = cursorIndex >= 0 && cursorIndex < files.length ? files[cursorIndex] : null;
@@ -393,7 +412,7 @@ function AudioFileTable({
           <span>Showing {sortedFiles.length} of {files.length} files</span>
           {hideDirectories && <span className="filter-badge">Folders Hidden</span>}
           {searchText && <span className="filter-badge">Search: {searchText}</span>}
-          {channelsFilter !== 'all' && <span className="filter-badge">Ch: {channelsFilter}</span>}
+          {formatFilter !== 'all' && <span className="filter-badge">Format: {formatFilter}</span>}
           {sampleRateFilter !== 'all' && <span className="filter-badge">Rate: {(parseInt(sampleRateFilter) / 1000).toFixed(1)}kHz</span>}
         </div>
         {hasActiveFilters && (
@@ -402,7 +421,7 @@ function AudioFileTable({
             onClick={() => {
               setSearchText('');
               setHideDirectories(false);
-              setChannelsFilter('all');
+              setFormatFilter('all');
               setSampleRateFilter('all');
             }}
           >
@@ -466,45 +485,45 @@ function AudioFileTable({
               <th onClick={() => handleSort('size')} className="sortable col-size">
                 Size {sortColumn === 'size' && (sortDirection === 'asc' ? '▲' : '▼')}
               </th>
-              <th className="filterable-header col-channels">
+              <th className="filterable-header col-format">
                 <div className="header-content">
-                  <span className="sort-indicator" onClick={() => handleSort('channels')}>
-                    {sortColumn === 'channels' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  <span className="sort-indicator" onClick={() => handleSort('format')}>
+                    {sortColumn === 'format' && (sortDirection === 'asc' ? '▲' : '▼')}
                   </span>
-                  <span onClick={() => handleSort('channels')} className="sortable-label">
-                    Ch
+                  <span onClick={() => handleSort('format')} className="sortable-label">
+                    Format
                   </span>
                   <button
-                    className={`filter-icon ${openDropdown === `${tableId}-channels` || channelsFilter !== 'all' ? 'active' : ''}`}
+                    className={`filter-icon ${openDropdown === `${tableId}-format` || formatFilter !== 'all' ? 'active' : ''}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      setOpenDropdown(openDropdown === `${tableId}-channels` ? null : `${tableId}-channels`);
+                      setOpenDropdown(openDropdown === `${tableId}-format` ? null : `${tableId}-format`);
                     }}
                   >
                     ⋮
                   </button>
                 </div>
-                {openDropdown === `${tableId}-channels` && (
+                {openDropdown === `${tableId}-format` && (
                   <div className="filter-dropdown">
                     <div className="dropdown-options">
                       <label className="dropdown-option">
                         <input
                           type="radio"
-                          name={`${tableId}-channels`}
-                          checked={channelsFilter === 'all'}
-                          onChange={() => setChannelsFilter('all')}
+                          name={`${tableId}-format`}
+                          checked={formatFilter === 'all'}
+                          onChange={() => setFormatFilter('all')}
                         />
                         <span>All</span>
                       </label>
-                      {getUniqueChannels().map((ch) => (
-                        <label key={ch} className="dropdown-option">
+                      {getUniqueFormats().map((fmt) => (
+                        <label key={fmt} className="dropdown-option">
                           <input
                             type="radio"
-                            name={`${tableId}-channels`}
-                            checked={channelsFilter === ch.toString()}
-                            onChange={() => setChannelsFilter(ch.toString())}
+                            name={`${tableId}-format`}
+                            checked={formatFilter === fmt}
+                            onChange={() => setFormatFilter(fmt)}
                           />
-                          <span>{ch === 1 ? 'Mono' : ch === 2 ? 'Stereo' : ch}</span>
+                          <span>{fmt}</span>
                         </label>
                       ))}
                     </div>
@@ -604,7 +623,7 @@ function AudioFileTable({
                   <span className="file-name-text">{file.name}</span>
                 </td>
                 <td className="col-size">{file.size ? formatFileSize(file.size) : ''}</td>
-                <td className="col-channels">{file.channels || ''}</td>
+                <td className="col-format">{file.is_directory ? '' : getFileFormat(file.name)}</td>
                 <td className="col-bitrate">{file.bit_rate || ''}</td>
                 <td className="col-samplerate">{file.sample_rate ? `${(file.sample_rate / 1000).toFixed(1)}` : ''}</td>
               </tr>

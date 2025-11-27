@@ -468,7 +468,7 @@
 /* Column widths */
 .col-name { min-width: 200px; }
 .col-size { width: 80px; text-align: right; }
-.col-channels { width: 50px; text-align: center; }
+.col-format { width: 60px; text-align: center; }
 .col-bitrate { width: 50px; text-align: center; }
 .col-samplerate { width: 60px; text-align: center; }
 
