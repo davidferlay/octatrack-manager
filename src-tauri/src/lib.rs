@@ -4,7 +4,16 @@ mod audio_pool;
 
 use device_detection::{discover_devices, scan_directory, ScanResult};
 use project_reader::{read_project_metadata, read_project_banks, read_parts_data, ProjectMetadata, Bank, PartData};
-use audio_pool::{list_directory, get_parent_directory, create_directory, copy_files_with_overwrite, move_files, delete_files, rename_file as rename_file_impl, AudioFileInfo};
+use audio_pool::{list_directory, get_parent_directory, create_directory, copy_files_with_overwrite, copy_single_file_with_progress, move_files, delete_files, rename_file as rename_file_impl, AudioFileInfo};
+use tauri::{AppHandle, Emitter};
+use serde::Serialize;
+
+#[derive(Clone, Serialize)]
+struct CopyProgressEvent {
+    file_path: String,
+    stage: String,  // "converting", "writing", "copying", "complete"
+    progress: f32,  // 0.0 to 1.0
+}
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -74,6 +83,31 @@ async fn copy_audio_files(source_paths: Vec<String>, destination_dir: String, ov
 }
 
 #[tauri::command]
+async fn copy_audio_file_with_progress(
+    app: AppHandle,
+    source_path: String,
+    destination_dir: String,
+    overwrite: Option<bool>
+) -> Result<String, String> {
+    let should_overwrite = overwrite.unwrap_or(false);
+    let source_path_clone = source_path.clone();
+
+    // Create progress callback
+    let progress_callback = move |stage: &str, progress: f32| {
+        let _ = app.emit("copy-progress", CopyProgressEvent {
+            file_path: source_path_clone.clone(),
+            stage: stage.to_string(),
+            progress,
+        });
+    };
+
+    // Run on a blocking thread pool
+    tauri::async_runtime::spawn_blocking(move || {
+        copy_single_file_with_progress(&source_path, &destination_dir, should_overwrite, progress_callback)
+    }).await.unwrap()
+}
+
+#[tauri::command]
 async fn move_audio_files(source_paths: Vec<String>, destination_dir: String) -> Result<Vec<String>, String> {
     // Run on a blocking thread pool to avoid blocking the main event loop
     tauri::async_runtime::spawn_blocking(move || {
@@ -129,6 +163,7 @@ pub fn run() {
             navigate_to_parent,
             create_new_directory,
             copy_audio_files,
+            copy_audio_file_with_progress,
             move_audio_files,
             delete_audio_files,
             get_home_directory,

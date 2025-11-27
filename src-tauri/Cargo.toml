@@ -32,4 +32,6 @@ dirs = "5"
 hound = "3.5"
 aifc = "0.6"
 open = "5"
+symphonia = { version = "0.5", features = ["mp3", "flac", "ogg", "aac", "wav", "aiff"] }
+rubato = "0.15"
 

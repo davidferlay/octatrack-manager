@@ -1,7 +1,15 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use hound;
+use symphonia::core::audio::{AudioBufferRef, Signal};
+use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_NULL};
+use symphonia::core::formats::FormatOptions;
+use symphonia::core::io::MediaSourceStream;
+use symphonia::core::meta::MetadataOptions;
+use symphonia::core::probe::Hint;
+use rubato::{Resampler, SincFixedIn, SincInterpolationType, SincInterpolationParameters, WindowFunction};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AudioFileInfo {
@@ -137,6 +145,421 @@ fn extract_aiff_metadata(path: &PathBuf) -> (Option<u32>, Option<u32>, Option<u3
     (None, None, None)
 }
 
+/// Target sample rate for Octatrack compatibility
+const OCTATRACK_SAMPLE_RATE: u32 = 44100;
+
+/// Check if audio file needs conversion for Octatrack compatibility
+fn needs_conversion(path: &Path) -> bool {
+    let ext = path.extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_lowercase());
+
+    match ext.as_deref() {
+        // WAV and AIFF are potentially compatible, but may need sample rate/bit depth conversion
+        Some("wav") => {
+            if let Ok(reader) = hound::WavReader::open(path) {
+                let spec = reader.spec();
+                // Needs conversion if sample rate isn't 44.1kHz or bit depth is not 16/24
+                spec.sample_rate != OCTATRACK_SAMPLE_RATE ||
+                    spec.bits_per_sample < 16 ||
+                    spec.bits_per_sample > 24
+            } else {
+                true // Can't read, try to convert anyway
+            }
+        }
+        Some("aif") | Some("aiff") => {
+            if let Ok(file) = fs::File::open(path) {
+                let mut stream = BufReader::new(file);
+                if let Ok(reader) = aifc::AifcReader::new(&mut stream) {
+                    let info = reader.info();
+                    let bit_depth = match info.sample_format {
+                        aifc::SampleFormat::I16 => 16,
+                        aifc::SampleFormat::I24 => 24,
+                        aifc::SampleFormat::I32 => 32,
+                        _ => 0,
+                    };
+                    // Needs conversion if sample rate isn't 44.1kHz or bit depth is not 16/24
+                    (info.sample_rate as u32) != OCTATRACK_SAMPLE_RATE ||
+                        bit_depth < 16 ||
+                        bit_depth > 24
+                } else {
+                    true
+                }
+            } else {
+                true
+            }
+        }
+        // All other formats definitely need conversion
+        Some("mp3") | Some("flac") | Some("ogg") | Some("m4a") | Some("aac") => true,
+        _ => false, // Not an audio file we handle
+    }
+}
+
+/// Convert an audio file to Octatrack-compatible WAV format
+/// - WAV 16 or 24-bit
+/// - 44.1kHz sample rate
+fn convert_to_octatrack_format(source_path: &Path, dest_path: &Path) -> Result<(), String> {
+    convert_to_octatrack_format_with_progress(source_path, dest_path, &|_, _| {})
+}
+
+/// Convert an audio file to Octatrack-compatible WAV format with progress reporting
+/// Progress stages: "decoding" (0-50%), "resampling" (50-75%), "writing" (75-100%)
+fn convert_to_octatrack_format_with_progress<F>(
+    source_path: &Path,
+    dest_path: &Path,
+    progress_callback: &F,
+) -> Result<(), String>
+where
+    F: Fn(&str, f32),
+{
+    // Open the source file
+    let file = fs::File::open(source_path)
+        .map_err(|e| format!("Failed to open source file: {}", e))?;
+
+    // Get file size for progress estimation
+    let file_size = file.metadata().map(|m| m.len()).unwrap_or(0);
+
+    let mss = MediaSourceStream::new(Box::new(file), Default::default());
+
+    // Create a hint to help the format probe
+    let mut hint = Hint::new();
+    if let Some(ext) = source_path.extension().and_then(|e| e.to_str()) {
+        hint.with_extension(ext);
+    }
+
+    progress_callback("converting", 0.05);
+
+    // Probe the format
+    let probed = symphonia::default::get_probe()
+        .format(&hint, mss, &FormatOptions::default(), &MetadataOptions::default())
+        .map_err(|e| format!("Failed to probe audio format: {}", e))?;
+
+    let mut format = probed.format;
+
+    // Find the first audio track
+    let track = format.tracks()
+        .iter()
+        .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
+        .ok_or_else(|| "No audio track found".to_string())?;
+
+    let track_id = track.id;
+    let codec_params = track.codec_params.clone();
+
+    let source_sample_rate = codec_params.sample_rate
+        .ok_or_else(|| "Could not determine sample rate".to_string())?;
+    let channels = codec_params.channels
+        .ok_or_else(|| "Could not determine channel count".to_string())?
+        .count();
+
+    // Determine source bit depth (default to 16 if unknown)
+    let source_bits = codec_params.bits_per_sample.unwrap_or(16);
+
+    // Determine target bit depth
+    let target_bits: u16 = if source_bits < 16 {
+        16
+    } else if source_bits > 24 {
+        24
+    } else {
+        source_bits as u16
+    };
+
+    // Create decoder
+    let mut decoder = symphonia::default::get_codecs()
+        .make(&codec_params, &DecoderOptions::default())
+        .map_err(|e| format!("Failed to create decoder: {}", e))?;
+
+    // Collect all samples
+    let mut all_samples: Vec<Vec<f32>> = vec![Vec::new(); channels];
+    let mut bytes_read: u64 = 0;
+
+    loop {
+        let packet = match format.next_packet() {
+            Ok(p) => p,
+            Err(symphonia::core::errors::Error::IoError(ref e))
+                if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+            Err(e) => return Err(format!("Error reading packet: {}", e)),
+        };
+
+        if packet.track_id() != track_id {
+            continue;
+        }
+
+        // Update progress based on bytes read (decoding is 0-50%)
+        bytes_read += packet.data.len() as u64;
+        if file_size > 0 {
+            let decode_progress = (bytes_read as f32 / file_size as f32).min(1.0) * 0.5;
+            progress_callback("converting", decode_progress);
+        }
+
+        let decoded = decoder.decode(&packet)
+            .map_err(|e| format!("Decode error: {}", e))?;
+
+        // Convert to f32 samples per channel
+        match decoded {
+            AudioBufferRef::F32(buf) => {
+                for ch in 0..channels {
+                    all_samples[ch].extend(buf.chan(ch).iter().cloned());
+                }
+            }
+            AudioBufferRef::S32(buf) => {
+                for ch in 0..channels {
+                    all_samples[ch].extend(buf.chan(ch).iter().map(|&s| s as f32 / i32::MAX as f32));
+                }
+            }
+            AudioBufferRef::S16(buf) => {
+                for ch in 0..channels {
+                    all_samples[ch].extend(buf.chan(ch).iter().map(|&s| s as f32 / i16::MAX as f32));
+                }
+            }
+            AudioBufferRef::U8(buf) => {
+                for ch in 0..channels {
+                    all_samples[ch].extend(buf.chan(ch).iter().map(|&s| (s as f32 - 128.0) / 128.0));
+                }
+            }
+            AudioBufferRef::S24(buf) => {
+                for ch in 0..channels {
+                    all_samples[ch].extend(buf.chan(ch).iter().map(|s| s.0 as f32 / 8388607.0));
+                }
+            }
+            AudioBufferRef::F64(buf) => {
+                for ch in 0..channels {
+                    all_samples[ch].extend(buf.chan(ch).iter().map(|&s| s as f32));
+                }
+            }
+            AudioBufferRef::U16(buf) => {
+                for ch in 0..channels {
+                    all_samples[ch].extend(buf.chan(ch).iter().map(|&s| (s as f32 - 32768.0) / 32768.0));
+                }
+            }
+            AudioBufferRef::U24(buf) => {
+                for ch in 0..channels {
+                    all_samples[ch].extend(buf.chan(ch).iter().map(|s| (s.0 as f32 - 8388608.0) / 8388608.0));
+                }
+            }
+            AudioBufferRef::U32(buf) => {
+                for ch in 0..channels {
+                    all_samples[ch].extend(buf.chan(ch).iter().map(|&s| (s as f32 - 2147483648.0) / 2147483648.0));
+                }
+            }
+            AudioBufferRef::S8(buf) => {
+                for ch in 0..channels {
+                    all_samples[ch].extend(buf.chan(ch).iter().map(|&s| s as f32 / i8::MAX as f32));
+                }
+            }
+        }
+    }
+
+    // Check if we got any samples
+    if all_samples[0].is_empty() {
+        return Err("No audio samples decoded".to_string());
+    }
+
+    progress_callback("converting", 0.5);
+
+    // Resample if necessary (50-75%)
+    let resampled: Vec<Vec<f32>> = if source_sample_rate != OCTATRACK_SAMPLE_RATE {
+        progress_callback("resampling", 0.5);
+        let result = resample_audio(&all_samples, source_sample_rate, OCTATRACK_SAMPLE_RATE)?;
+        progress_callback("resampling", 0.75);
+        result
+    } else {
+        progress_callback("converting", 0.75);
+        all_samples
+    };
+
+    // Write to WAV file (75-100%)
+    progress_callback("writing", 0.75);
+    write_wav_file(dest_path, &resampled, OCTATRACK_SAMPLE_RATE, target_bits)?;
+    progress_callback("complete", 1.0);
+
+    Ok(())
+}
+
+/// Resample audio from source rate to target rate using rubato
+fn resample_audio(samples: &[Vec<f32>], source_rate: u32, target_rate: u32) -> Result<Vec<Vec<f32>>, String> {
+    let channels = samples.len();
+
+    // Configure the resampler
+    let params = SincInterpolationParameters {
+        sinc_len: 256,
+        f_cutoff: 0.95,
+        interpolation: SincInterpolationType::Linear,
+        oversampling_factor: 256,
+        window: WindowFunction::BlackmanHarris2,
+    };
+
+    let mut resampler = SincFixedIn::<f32>::new(
+        target_rate as f64 / source_rate as f64,
+        2.0, // max relative ratio (for slight variations)
+        params,
+        samples[0].len(),
+        channels,
+    ).map_err(|e| format!("Failed to create resampler: {}", e))?;
+
+    // Prepare input as Vec<Vec<f32>>
+    let input: Vec<Vec<f32>> = samples.to_vec();
+
+    // Resample
+    let output = resampler.process(&input, None)
+        .map_err(|e| format!("Resampling failed: {}", e))?;
+
+    Ok(output)
+}
+
+/// Write samples to a WAV file
+fn write_wav_file(path: &Path, samples: &[Vec<f32>], sample_rate: u32, bits_per_sample: u16) -> Result<(), String> {
+    let channels = samples.len() as u16;
+
+    let spec = hound::WavSpec {
+        channels,
+        sample_rate,
+        bits_per_sample,
+        sample_format: hound::SampleFormat::Int,
+    };
+
+    let mut writer = hound::WavWriter::create(path, spec)
+        .map_err(|e| format!("Failed to create WAV file: {}", e))?;
+
+    let num_samples = samples[0].len();
+
+    // Interleave samples and write
+    for i in 0..num_samples {
+        for ch in 0..channels as usize {
+            let sample = samples[ch].get(i).copied().unwrap_or(0.0);
+            // Clamp to prevent overflow
+            let clamped = sample.clamp(-1.0, 1.0);
+
+            match bits_per_sample {
+                16 => {
+                    let s = (clamped * i16::MAX as f32) as i16;
+                    writer.write_sample(s).map_err(|e| format!("Write error: {}", e))?;
+                }
+                24 => {
+                    let s = (clamped * 8388607.0) as i32;
+                    writer.write_sample(s).map_err(|e| format!("Write error: {}", e))?;
+                }
+                _ => {
+                    let s = (clamped * i16::MAX as f32) as i16;
+                    writer.write_sample(s).map_err(|e| format!("Write error: {}", e))?;
+                }
+            }
+        }
+    }
+
+    writer.finalize().map_err(|e| format!("Failed to finalize WAV: {}", e))?;
+
+    Ok(())
+}
+
+/// Copy and convert audio file to Octatrack-compatible format if needed
+fn copy_and_convert_audio(source_path: &Path, dest_dir: &Path, overwrite: bool) -> Result<PathBuf, String> {
+    copy_and_convert_audio_with_progress(source_path, dest_dir, overwrite, |_, _| {})
+}
+
+/// Copy and convert audio file with progress reporting
+fn copy_and_convert_audio_with_progress<F>(
+    source_path: &Path,
+    dest_dir: &Path,
+    overwrite: bool,
+    progress_callback: F,
+) -> Result<PathBuf, String>
+where
+    F: Fn(&str, f32),
+{
+    let file_name = source_path.file_name()
+        .ok_or_else(|| format!("Invalid file name: {}", source_path.display()))?;
+
+    let file_name_str = file_name.to_string_lossy();
+
+    // Determine if this is an audio file that needs processing
+    let is_audio = is_audio_file(&file_name_str);
+
+    if !is_audio {
+        // Not an audio file, just copy it directly
+        progress_callback("copying", 0.0);
+        let dest_file = dest_dir.join(file_name);
+        if dest_file.exists() && !overwrite {
+            return Err(format!("File already exists: {}", dest_file.to_string_lossy()));
+        }
+        if dest_file.exists() && overwrite {
+            fs::remove_file(&dest_file)
+                .map_err(|e| format!("Failed to remove existing file: {}", e))?;
+        }
+        fs::copy(source_path, &dest_file)
+            .map_err(|e| format!("Failed to copy file: {}", e))?;
+        progress_callback("complete", 1.0);
+        return Ok(dest_file);
+    }
+
+    // Determine destination file name (always .wav for converted files)
+    let needs_conv = needs_conversion(source_path);
+    let dest_file_name = if needs_conv {
+        // Change extension to .wav for converted files
+        let stem = source_path.file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("audio");
+        format!("{}.wav", stem)
+    } else {
+        file_name_str.to_string()
+    };
+
+    let dest_file = dest_dir.join(&dest_file_name);
+
+    // Check if destination exists
+    if dest_file.exists() && !overwrite {
+        return Err(format!("File already exists: {}", dest_file.to_string_lossy()));
+    }
+
+    // Remove existing file if overwriting
+    if dest_file.exists() && overwrite {
+        fs::remove_file(&dest_file)
+            .map_err(|e| format!("Failed to remove existing file: {}", e))?;
+    }
+
+    // Convert or copy based on needs_conversion
+    if needs_conv {
+        progress_callback("converting", 0.0);
+        convert_to_octatrack_format_with_progress(source_path, &dest_file, &progress_callback)?;
+    } else {
+        // File is already compatible, just copy
+        progress_callback("copying", 0.0);
+        fs::copy(source_path, &dest_file)
+            .map_err(|e| format!("Failed to copy file: {}", e))?;
+        progress_callback("complete", 1.0);
+    }
+
+    Ok(dest_file)
+}
+
+/// Public function to copy a single file with progress callback
+pub fn copy_single_file_with_progress<F>(
+    source_path: &str,
+    destination_dir: &str,
+    overwrite: bool,
+    progress_callback: F,
+) -> Result<String, String>
+where
+    F: Fn(&str, f32) + Send + 'static,
+{
+    let source = Path::new(source_path);
+    let dest_dir = Path::new(destination_dir);
+
+    if !source.exists() {
+        return Err(format!("Source file does not exist: {}", source_path));
+    }
+
+    if !dest_dir.exists() {
+        return Err(format!("Destination directory does not exist: {}", destination_dir));
+    }
+
+    if source.is_dir() {
+        return Err("Use copy_files_with_overwrite for directories".to_string());
+    }
+
+    let result = copy_and_convert_audio_with_progress(source, dest_dir, overwrite, progress_callback)?;
+    Ok(result.to_string_lossy().to_string())
+}
+
 /// Navigate to parent directory
 pub fn get_parent_directory(path: &str) -> Result<String, String> {
     let current_path = Path::new(path);
@@ -168,7 +591,7 @@ pub fn copy_files(source_paths: Vec<String>, destination_dir: &str) -> Result<Ve
     copy_files_with_overwrite(source_paths, destination_dir, false)
 }
 
-/// Recursively copy a directory
+/// Recursively copy a directory (without audio conversion, for internal use)
 fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
     if !dst.exists() {
         fs::create_dir(dst)
@@ -193,7 +616,33 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Recursively copy a directory with audio conversion for Octatrack compatibility
+fn copy_dir_recursive_with_conversion(src: &Path, dst: &Path) -> Result<(), String> {
+    if !dst.exists() {
+        fs::create_dir(dst)
+            .map_err(|e| format!("Failed to create directory {}: {}", dst.display(), e))?;
+    }
+
+    for entry in fs::read_dir(src)
+        .map_err(|e| format!("Failed to read directory {}: {}", src.display(), e))?
+    {
+        let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+        let src_path = entry.path();
+
+        if src_path.is_dir() {
+            let dst_path = dst.join(entry.file_name());
+            copy_dir_recursive_with_conversion(&src_path, &dst_path)?;
+        } else {
+            // Use audio conversion for files (overwrite = true since we already handled removal at top level)
+            copy_and_convert_audio(&src_path, dst, true)?;
+        }
+    }
+
+    Ok(())
+}
+
 /// Copy files from source to destination with optional overwrite
+/// Audio files are automatically converted to Octatrack-compatible format
 pub fn copy_files_with_overwrite(source_paths: Vec<String>, destination_dir: &str, overwrite: bool) -> Result<Vec<String>, String> {
     let dest_path = Path::new(destination_dir);
 
@@ -214,36 +663,30 @@ pub fn copy_files_with_overwrite(source_paths: Vec<String>, destination_dir: &st
             return Err(format!("Source file does not exist: {}", source));
         }
 
-        let file_name = source_path.file_name()
-            .ok_or_else(|| format!("Invalid file name: {}", source))?;
-
-        let dest_file = dest_path.join(file_name);
-
-        // Check if destination file already exists
-        if dest_file.exists() && !overwrite {
-            return Err(format!("File already exists: {}", dest_file.to_string_lossy()));
-        }
-
-        // If overwriting, remove existing file/directory first
-        if dest_file.exists() && overwrite {
-            if dest_file.is_dir() {
-                fs::remove_dir_all(&dest_file)
-                    .map_err(|e| format!("Failed to remove existing directory: {}", e))?;
-            } else {
-                fs::remove_file(&dest_file)
-                    .map_err(|e| format!("Failed to remove existing file: {}", e))?;
-            }
-        }
-
         // Handle directory vs file copy
         if source_path.is_dir() {
-            copy_dir_recursive(source_path, &dest_file)?;
-        } else {
-            fs::copy(&source_path, &dest_file)
-                .map_err(|e| format!("Failed to copy file: {}", e))?;
-        }
+            let file_name = source_path.file_name()
+                .ok_or_else(|| format!("Invalid file name: {}", source))?;
+            let dest_file = dest_path.join(file_name);
 
-        copied_files.push(dest_file.to_string_lossy().to_string());
+            // Check if destination directory already exists
+            if dest_file.exists() && !overwrite {
+                return Err(format!("Directory already exists: {}", dest_file.to_string_lossy()));
+            }
+
+            // If overwriting, remove existing directory first
+            if dest_file.exists() && overwrite {
+                fs::remove_dir_all(&dest_file)
+                    .map_err(|e| format!("Failed to remove existing directory: {}", e))?;
+            }
+
+            copy_dir_recursive_with_conversion(source_path, &dest_file)?;
+            copied_files.push(dest_file.to_string_lossy().to_string());
+        } else {
+            // Use audio conversion for files
+            let result_path = copy_and_convert_audio(source_path, dest_path, overwrite)?;
+            copied_files.push(result_path.to_string_lossy().to_string());
+        }
     }
 
     Ok(copied_files)
