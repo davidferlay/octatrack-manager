@@ -89,6 +89,17 @@
   border-radius: 10px;
   min-width: 1.2rem;
   text-align: center;
+  transition: background-color 0.3s ease;
+}
+
+.toolbar-button .badge.badge-success {
+  background-color: #4caf50;
+  color: white;
+}
+
+.toolbar-button .badge.badge-error {
+  background-color: #f44336;
+  color: white;
 }
 
 .toolbar-separator {

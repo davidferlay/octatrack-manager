@@ -813,6 +813,23 @@ export function AudioPoolPage() {
   // Count active transfers
   const activeTransfersCount = transfers.filter(t => t.status === "copying" || t.status === "pending").length;
   const hasTransfers = transfers.length > 0;
+  const allTransfersSucceeded = hasTransfers && activeTransfersCount === 0 && transfers.every(t => t.status === "completed");
+  const hasFailedTransfers = transfers.some(t => t.status === "failed" || t.status === "cancelled");
+
+  // Auto-close transfers pane when all transfers complete successfully
+  useEffect(() => {
+    if (transfers.length > 0 && activeTransfersCount === 0) {
+      // All transfers finished - check if all succeeded
+      const allSucceeded = transfers.every(t => t.status === "completed");
+      if (allSucceeded) {
+        // Close the pane after a brief delay to show completion
+        const timer = setTimeout(() => {
+          setIsTransferQueueOpen(false);
+        }, 1500);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [transfers, activeTransfersCount]);
 
   async function loadSourceFiles(path: string) {
     if (!path) return;
@@ -1792,7 +1809,11 @@ export function AudioPoolPage() {
             title={isTransferQueueOpen ? 'Hide transfers' : 'Show transfers'}
           >
             <i className="fas fa-exchange-alt"></i>
-            {hasTransfers && <span className="badge">{transfers.length}</span>}
+            {hasTransfers && (
+              <span className={`badge ${allTransfersSucceeded ? 'badge-success' : ''} ${hasFailedTransfers ? 'badge-error' : ''}`}>
+                {transfers.length}
+              </span>
+            )}
           </button>
           <button
             onClick={() => { loadSourceFiles(sourcePath); loadDestinationFiles(destinationPath); }}
