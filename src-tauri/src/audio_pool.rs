@@ -106,6 +106,7 @@ fn extract_audio_metadata(path: &PathBuf) -> (Option<u32>, Option<u32>, Option<u
     match ext.as_deref() {
         Some("wav") => extract_wav_metadata(path),
         Some("aif") | Some("aiff") => extract_aiff_metadata(path),
+        Some("mp3") | Some("flac") | Some("ogg") | Some("m4a") => extract_symphonia_metadata(path),
         _ => (None, None, None),
     }
 }
@@ -132,17 +133,86 @@ fn extract_aiff_metadata(path: &PathBuf) -> (Option<u32>, Option<u32>, Option<u3
             let info = reader.info();
             let channels = Some(info.channels as u32);
             let sample_rate = Some(info.sample_rate as u32);
-            // Extract bit depth from sample_format
-            let bit_rate = match info.sample_format {
-                aifc::SampleFormat::I16 => Some(16),
-                aifc::SampleFormat::I24 => Some(24),
-                aifc::SampleFormat::I32 => Some(32),
-                _ => None,
+            // Use comm_sample_size which contains the actual bits per sample
+            let bit_depth = if info.comm_sample_size > 0 {
+                Some(info.comm_sample_size as u32)
+            } else {
+                None
             };
-            return (channels, bit_rate, sample_rate);
+            return (channels, bit_depth, sample_rate);
         }
     }
     (None, None, None)
+}
+
+/// Extract metadata from MP3, FLAC, OGG, M4A files using symphonia
+fn extract_symphonia_metadata(path: &PathBuf) -> (Option<u32>, Option<u32>, Option<u32>) {
+    let file = match fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return (None, None, None),
+    };
+
+    let mss = MediaSourceStream::new(Box::new(file), Default::default());
+
+    let mut hint = Hint::new();
+    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+        hint.with_extension(ext);
+    }
+
+    let format_opts = FormatOptions::default();
+    let metadata_opts = MetadataOptions::default();
+
+    let probed = match symphonia::default::get_probe().format(&hint, mss, &format_opts, &metadata_opts) {
+        Ok(p) => p,
+        Err(_) => return (None, None, None),
+    };
+
+    let mut format = probed.format;
+
+    // Find the first audio track
+    let track = match format.tracks().iter().find(|t| t.codec_params.codec != CODEC_TYPE_NULL) {
+        Some(t) => t.clone(),
+        None => return (None, None, None),
+    };
+
+    let codec_params = &track.codec_params;
+
+    let channels = codec_params.channels.map(|c| c.count() as u32);
+    let sample_rate = codec_params.sample_rate;
+
+    // For formats like FLAC, bits_per_sample is available directly
+    // For lossy formats like MP3/OGG/M4A, we need to decode a frame to get the output bit depth
+    let bit_depth = if let Some(bps) = codec_params.bits_per_sample {
+        Some(bps)
+    } else {
+        // Try to decode a frame to determine the output sample format
+        let decoder_opts = DecoderOptions::default();
+        if let Ok(mut decoder) = symphonia::default::get_codecs().make(&codec_params, &decoder_opts) {
+            // Try to decode the first packet to get sample format
+            let mut detected_bits: Option<u32> = None;
+            while let Ok(packet) = format.next_packet() {
+                if packet.track_id() == track.id {
+                    if let Ok(decoded) = decoder.decode(&packet) {
+                        detected_bits = match decoded {
+                            AudioBufferRef::U8(_) => Some(8),
+                            AudioBufferRef::S16(_) => Some(16),
+                            AudioBufferRef::S24(_) => Some(24),
+                            AudioBufferRef::S32(_) => Some(32),
+                            AudioBufferRef::F32(_) => Some(32),
+                            AudioBufferRef::F64(_) => Some(64),
+                            _ => None,
+                        };
+                        break;
+                    }
+                }
+            }
+            detected_bits
+        } else {
+            None
+        }
+    };
+
+    (channels, bit_depth, sample_rate)
 }
 
 /// Target sample rate for Octatrack compatibility
