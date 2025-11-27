@@ -693,7 +693,7 @@ export function AudioPoolPage() {
   const destRowRefs = useRef<Map<number, HTMLTableRowElement>>(new Map());
   const [isLoadingSource, setIsLoadingSource] = useState(false);
   const [isLoadingDest, setIsLoadingDest] = useState(false);
-  const [isSourcePanelOpen, setIsSourcePanelOpen] = useState(false);
+  const [isSourcePanelOpen, setIsSourcePanelOpen] = useState(true);
   const [isTransferQueueOpen, setIsTransferQueueOpen] = useState(false);
   const [isOverDropZone, setIsOverDropZone] = useState(false);
   const [transfers, setTransfers] = useState<TransferItem[]>([]);
