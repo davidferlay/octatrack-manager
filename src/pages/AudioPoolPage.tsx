@@ -1529,6 +1529,11 @@ export function AudioPoolPage() {
         }
         case 'Enter': {
           e.preventDefault();
+          // Ctrl+Enter: Copy selected files from source to audio pool
+          if ((e.ctrlKey || e.metaKey) && activePanel === 'source' && selectedSourceFiles.size > 0) {
+            copySelectedToPool();
+            break;
+          }
           const currentFile = files[cursorIndex];
           if (currentFile?.is_directory) {
             // Enter directory
