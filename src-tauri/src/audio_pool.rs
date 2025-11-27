@@ -359,8 +359,10 @@ where
     // Resample if necessary (50-75%)
     let resampled: Vec<Vec<f32>> = if source_sample_rate != OCTATRACK_SAMPLE_RATE {
         progress_callback("resampling", 0.5);
-        let result = resample_audio(&all_samples, source_sample_rate, OCTATRACK_SAMPLE_RATE)?;
-        progress_callback("resampling", 0.75);
+        let result = resample_audio_with_progress(&all_samples, source_sample_rate, OCTATRACK_SAMPLE_RATE, |p| {
+            // Map resampling progress (0-1) to overall progress (0.5-0.75)
+            progress_callback("resampling", 0.5 + p * 0.25);
+        })?;
         result
     } else {
         progress_callback("converting", 0.75);
@@ -369,7 +371,10 @@ where
 
     // Write to WAV file (75-100%)
     progress_callback("writing", 0.75);
-    write_wav_file(dest_path, &resampled, OCTATRACK_SAMPLE_RATE, target_bits)?;
+    write_wav_file_with_progress(dest_path, &resampled, OCTATRACK_SAMPLE_RATE, target_bits, |p| {
+        // Map writing progress (0-1) to overall progress (0.75-1.0)
+        progress_callback("writing", 0.75 + p * 0.25);
+    })?;
     progress_callback("complete", 1.0);
 
     Ok(())
@@ -377,7 +382,28 @@ where
 
 /// Resample audio from source rate to target rate using rubato
 fn resample_audio(samples: &[Vec<f32>], source_rate: u32, target_rate: u32) -> Result<Vec<Vec<f32>>, String> {
+    resample_audio_with_progress(samples, source_rate, target_rate, |_| {})
+}
+
+/// Resample audio with progress reporting
+fn resample_audio_with_progress<F>(
+    samples: &[Vec<f32>],
+    source_rate: u32,
+    target_rate: u32,
+    progress_callback: F,
+) -> Result<Vec<Vec<f32>>, String>
+where
+    F: Fn(f32),
+{
     let channels = samples.len();
+    let total_samples = samples[0].len();
+
+    if total_samples == 0 {
+        return Ok(vec![Vec::new(); channels]);
+    }
+
+    // Use a reasonable chunk size for processing
+    let chunk_size = 1024;
 
     // Configure the resampler
     let params = SincInterpolationParameters {
@@ -392,22 +418,63 @@ fn resample_audio(samples: &[Vec<f32>], source_rate: u32, target_rate: u32) -> R
         target_rate as f64 / source_rate as f64,
         2.0, // max relative ratio (for slight variations)
         params,
-        samples[0].len(),
+        chunk_size,
         channels,
     ).map_err(|e| format!("Failed to create resampler: {}", e))?;
 
-    // Prepare input as Vec<Vec<f32>>
-    let input: Vec<Vec<f32>> = samples.to_vec();
+    // Output buffers
+    let mut output: Vec<Vec<f32>> = vec![Vec::new(); channels];
 
-    // Resample
-    let output = resampler.process(&input, None)
-        .map_err(|e| format!("Resampling failed: {}", e))?;
+    // Process in chunks
+    let mut pos = 0;
+    while pos < total_samples {
+        let end = (pos + chunk_size).min(total_samples);
+        let actual_chunk_size = end - pos;
 
+        // Report progress
+        let progress = pos as f32 / total_samples as f32;
+        progress_callback(progress);
+
+        // Prepare chunk (pad with zeros if needed for the last chunk)
+        let mut chunk: Vec<Vec<f32>> = vec![vec![0.0; chunk_size]; channels];
+        for ch in 0..channels {
+            for i in 0..actual_chunk_size {
+                chunk[ch][i] = samples[ch][pos + i];
+            }
+        }
+
+        // Process chunk - None means all samples are valid
+        let resampled = resampler.process(&chunk, None)
+            .map_err(|e| format!("Resampling failed at position {}: {}", pos, e))?;
+
+        // Append to output
+        for ch in 0..channels {
+            output[ch].extend(&resampled[ch]);
+        }
+
+        pos = end;
+    }
+
+    progress_callback(1.0);
     Ok(output)
 }
 
 /// Write samples to a WAV file
 fn write_wav_file(path: &Path, samples: &[Vec<f32>], sample_rate: u32, bits_per_sample: u16) -> Result<(), String> {
+    write_wav_file_with_progress(path, samples, sample_rate, bits_per_sample, |_| {})
+}
+
+/// Write samples to a WAV file with progress reporting
+fn write_wav_file_with_progress<F>(
+    path: &Path,
+    samples: &[Vec<f32>],
+    sample_rate: u32,
+    bits_per_sample: u16,
+    progress_callback: F,
+) -> Result<(), String>
+where
+    F: Fn(f32),
+{
     let channels = samples.len() as u16;
 
     let spec = hound::WavSpec {
@@ -422,8 +489,19 @@ fn write_wav_file(path: &Path, samples: &[Vec<f32>], sample_rate: u32, bits_per_
 
     let num_samples = samples[0].len();
 
+    // Report progress every N samples to avoid excessive callbacks
+    let progress_interval = (num_samples / 100).max(1000);
+    let mut last_progress_report = 0;
+
     // Interleave samples and write
     for i in 0..num_samples {
+        // Report progress periodically
+        if i - last_progress_report >= progress_interval {
+            let progress = i as f32 / num_samples as f32;
+            progress_callback(progress);
+            last_progress_report = i;
+        }
+
         for ch in 0..channels as usize {
             let sample = samples[ch].get(i).copied().unwrap_or(0.0);
             // Clamp to prevent overflow
@@ -447,6 +525,7 @@ fn write_wav_file(path: &Path, samples: &[Vec<f32>], sample_rate: u32, bits_per_
     }
 
     writer.finalize().map_err(|e| format!("Failed to finalize WAV: {}", e))?;
+    progress_callback(1.0);
 
     Ok(())
 }
