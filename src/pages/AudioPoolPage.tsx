@@ -942,7 +942,7 @@ export function AudioPoolPage() {
   const activeTransfersCount = transfers.filter(t => t.status === "copying" || t.status === "pending").length;
   const hasTransfers = transfers.length > 0;
   const allTransfersSucceeded = hasTransfers && activeTransfersCount === 0 && transfers.every(t => t.status === "completed");
-  const hasFailedTransfers = transfers.some(t => t.status === "failed" || t.status === "cancelled");
+  const hasFailedTransfers = transfers.some(t => t.status === "failed");
 
   // Auto-close transfers pane when all transfers complete successfully
   useEffect(() => {
