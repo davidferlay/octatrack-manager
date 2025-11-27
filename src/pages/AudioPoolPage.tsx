@@ -2322,25 +2322,23 @@ export function AudioPoolPage() {
                     </td>
                   </tr>
                 ) : (
-                  sortedTransfers.map((transfer) => (
+                  sortedTransfers.map((transfer) => {
+                    // Compute progress percentage once to ensure bar and text are synchronized
+                    const progressPercent = transfer.status === 'completed' ? 100 :
+                                           transfer.status === 'failed' || transfer.status === 'cancelled' ? 0 :
+                                           transfer.progress !== undefined ? Math.min(transfer.progress * 100, 100) :
+                                           0;
+                    return (
                     <tr key={transfer.id} className={`transfer-row transfer-${transfer.status}`}>
                       <td>{transfer.originalIndex + 1}</td>
                       <td>
                         <div className="progress-container">
                           <div
                             className={`progress-bar ${transfer.status === 'completed' ? 'completed' : ''}`}
-                            style={{
-                              width: transfer.status === 'completed' ? '100%' :
-                                     transfer.status === 'failed' || transfer.status === 'cancelled' ? '0%' :
-                                     transfer.progress !== undefined ? `${Math.min(transfer.progress * 100, 100)}%` :
-                                     transfer.fileSize > 0 ? `${Math.min((transfer.bytesTransferred / transfer.fileSize) * 100, 100)}%` : '0%'
-                            }}
+                            style={{ width: `${progressPercent}%` }}
                           />
                           <span className="progress-text">
-                            {transfer.status === 'completed' ? '100%' :
-                             transfer.status === 'failed' || transfer.status === 'cancelled' ? '-' :
-                             transfer.progress !== undefined ? `${Math.min(Math.round(transfer.progress * 100), 100)}%` :
-                             transfer.fileSize > 0 ? `${Math.min(Math.round((transfer.bytesTransferred / transfer.fileSize) * 100), 100)}%` : '-'}
+                            {transfer.status === 'failed' || transfer.status === 'cancelled' ? '-' : `${Math.round(progressPercent)}%`}
                           </span>
                         </div>
                       </td>
@@ -2366,7 +2364,8 @@ export function AudioPoolPage() {
                         )}
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>

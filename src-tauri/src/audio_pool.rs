@@ -203,7 +203,9 @@ fn convert_to_octatrack_format(source_path: &Path, dest_path: &Path) -> Result<(
 }
 
 /// Convert an audio file to Octatrack-compatible WAV format with progress reporting
-/// Progress stages: "decoding" (0-50%), "resampling" (50-75%), "writing" (75-100%)
+/// Progress is dynamically computed based on required steps:
+/// - If resampling needed: decoding (0-50%), resampling (50-80%), writing (80-100%)
+/// - If no resampling: decoding (0-60%), writing (60-100%)
 fn convert_to_octatrack_format_with_progress<F>(
     source_path: &Path,
     dest_path: &Path,
@@ -227,7 +229,7 @@ where
         hint.with_extension(ext);
     }
 
-    progress_callback("converting", 0.05);
+    progress_callback("decoding", 0.01);
 
     // Probe the format
     let probed = symphonia::default::get_probe()
@@ -263,6 +265,23 @@ where
         source_bits as u16
     };
 
+    // Determine if resampling is needed to compute progress ranges dynamically
+    let needs_resampling = source_sample_rate != OCTATRACK_SAMPLE_RATE;
+
+    // Dynamic progress ranges based on required steps
+    // Weights approximate relative processing time for each step
+    let (decode_weight, resample_weight, write_weight) = if needs_resampling {
+        // Decoding: ~20%, Resampling: ~60%, Writing: ~20% (resampling is the slowest)
+        (0.20, 0.60, 0.20)
+    } else {
+        // Decoding: ~60%, Writing: ~40% (no resampling)
+        (0.60, 0.0, 0.40)
+    };
+
+    let decode_end = decode_weight;
+    let resample_end = decode_end + resample_weight;
+    // write_end is always 1.0
+
     // Create decoder
     let mut decoder = symphonia::default::get_codecs()
         .make(&codec_params, &DecoderOptions::default())
@@ -284,11 +303,11 @@ where
             continue;
         }
 
-        // Update progress based on bytes read (decoding is 0-50%)
+        // Update progress based on bytes read (decoding is 0 to decode_end)
         bytes_read += packet.data.len() as u64;
         if file_size > 0 {
-            let decode_progress = (bytes_read as f32 / file_size as f32).min(1.0) * 0.5;
-            progress_callback("converting", decode_progress);
+            let decode_progress = (bytes_read as f32 / file_size as f32).min(1.0) * decode_end;
+            progress_callback("decoding", decode_progress);
         }
 
         let decoded = decoder.decode(&packet)
@@ -354,26 +373,25 @@ where
         return Err("No audio samples decoded".to_string());
     }
 
-    progress_callback("converting", 0.5);
+    progress_callback("decoding", decode_end);
 
-    // Resample if necessary (50-75%)
-    let resampled: Vec<Vec<f32>> = if source_sample_rate != OCTATRACK_SAMPLE_RATE {
-        progress_callback("resampling", 0.5);
+    // Resample if necessary
+    let resampled: Vec<Vec<f32>> = if needs_resampling {
+        progress_callback("resampling", decode_end);
         let result = resample_audio_with_progress(&all_samples, source_sample_rate, OCTATRACK_SAMPLE_RATE, |p| {
-            // Map resampling progress (0-1) to overall progress (0.5-0.75)
-            progress_callback("resampling", 0.5 + p * 0.25);
+            // Map resampling progress (0-1) to overall progress (decode_end to resample_end)
+            progress_callback("resampling", decode_end + p * resample_weight);
         })?;
         result
     } else {
-        progress_callback("converting", 0.75);
         all_samples
     };
 
-    // Write to WAV file (75-100%)
-    progress_callback("writing", 0.75);
+    // Write to WAV file (resample_end to 1.0)
+    progress_callback("writing", resample_end);
     write_wav_file_with_progress(dest_path, &resampled, OCTATRACK_SAMPLE_RATE, target_bits, |p| {
-        // Map writing progress (0-1) to overall progress (0.75-1.0)
-        progress_callback("writing", 0.75 + p * 0.25);
+        // Map writing progress (0-1) to overall progress (resample_end to 1.0)
+        progress_callback("writing", resample_end + p * write_weight);
     })?;
     progress_callback("complete", 1.0);
 
