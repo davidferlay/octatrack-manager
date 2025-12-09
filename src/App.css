@@ -693,7 +693,7 @@ h1 {
 }
 
 .project-content {
-  padding: 2rem;
+  padding: 0;
 }
 
 .project-content section {
@@ -749,12 +749,16 @@ h1 {
   margin-top: 0;
 }
 
+.bank-cards {
+  padding: 1rem 2rem;
+}
+
 .bank-card {
   background-color: var(--elektron-dark-gray);
   border: 1px solid var(--elektron-border-gray);
   border-left: 3px solid var(--elektron-orange);
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
 }
 
 .bank-card:last-child {
@@ -773,8 +777,8 @@ h1 {
 .bank-card-header {
   display: flex;
   align-items: center;
-  margin-bottom: 1rem;
-  padding-bottom: 1rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
   border-bottom: 1px solid var(--elektron-border-gray);
   width: 100%;
 }
@@ -784,6 +788,7 @@ h1 {
   padding: 0;
   border-bottom: none;
   flex: 0 0 auto;
+  font-size: 1rem;
 }
 
 .bank-card-header .selector-group {
@@ -958,11 +963,9 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1.5rem;
+  padding: 0.75rem 2rem;
   background-color: var(--elektron-dark-gray);
-  border: 1px solid var(--elektron-border-gray);
-  border-left: 3px solid var(--elektron-orange);
-  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--elektron-border-gray);
   flex-wrap: wrap;
   gap: 1rem;
 }
@@ -1230,7 +1233,7 @@ h1 {
 
 .overview-tab,
 .settings-tab {
-  padding: 1.5rem;
+  padding: 1rem 2rem;
 }
 
 /* Compact Overview Grid Layout */

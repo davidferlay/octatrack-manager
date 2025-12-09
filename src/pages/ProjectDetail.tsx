@@ -648,7 +648,7 @@ export function ProjectDetail() {
                   />
                 </div>
 
-                <section className="banks-section">
+                <div className="bank-cards">
                   {(() => {
                     // Determine which banks to display
                     const banksToDisplay = selectedBankIndex === ALL_BANKS
@@ -677,7 +677,7 @@ export function ProjectDetail() {
                       const partNames = bank.parts.map(part => part.name);
 
                       return (
-                        <div key={`bank-parts-${bankIndex}`}>
+                        <div key={`bank-parts-${bankIndex}`} className="bank-card">
                           <PartsPanel
                             projectPath={projectPath || ''}
                             bankId={bank.id}
@@ -693,7 +693,7 @@ export function ProjectDetail() {
                       );
                     });
                   })()}
-                </section>
+                </div>
               </div>
             )}
 
