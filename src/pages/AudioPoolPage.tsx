@@ -1529,6 +1529,11 @@ export function AudioPoolPage() {
     const { sourcePath, transferId, pendingFiles, currentIndex, fileSizes, transferIds } = overwriteModal;
     setOverwriteModal(prev => ({ ...prev, isOpen: false }));
 
+    // Ensure status is "copying" so progress events are applied
+    setTransfers(prev => prev.map(t =>
+      t.id === transferId ? { ...t, status: "copying" as const, startTime: Date.now() } : t
+    ));
+
     // Retry with overwrite
     try {
       await invoke("copy_audio_file_with_progress", {
