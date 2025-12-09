@@ -10,12 +10,14 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem 2rem;
+  height: 52px;
+  padding: 0 2rem;
   background-color: var(--elektron-dark-gray);
   border-bottom: 1px solid var(--elektron-border-gray);
   flex-shrink: 0;
   user-select: none;
   -webkit-user-select: none;
+  box-sizing: border-box;
 }
 
 .audio-pool-page .project-header h1 {
@@ -23,6 +25,10 @@
   padding: 0;
   background: none;
   font-size: 1.25rem;
+}
+
+.audio-pool-page .project-header .toolbar-button {
+  padding: 0.4rem 0.65rem;
 }
 
 /* Toolbar buttons */

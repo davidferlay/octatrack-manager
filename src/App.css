@@ -521,12 +521,14 @@ h1 {
 
 /* Project Detail Page */
 .project-header {
-  padding: 0.75rem 2rem;
+  height: 52px;
+  padding: 0 2rem;
   background-color: var(--elektron-dark-gray);
-  border-bottom: 2px solid var(--elektron-orange);
+  border-bottom: 1px solid var(--elektron-border-gray);
   display: flex;
   align-items: center;
   gap: 1rem;
+  box-sizing: border-box;
 }
 
 .refresh-button {
