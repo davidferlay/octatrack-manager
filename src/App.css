@@ -556,13 +556,80 @@ h1 {
   border-color: var(--elektron-orange);
 }
 
+/* Toolbar button (used in project headers for refresh, etc.) */
+.toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--elektron-text-primary);
+  border: 1px solid var(--elektron-border-gray);
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 0.875rem;
+}
+
+.toolbar-button:hover:not(:disabled) {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: var(--elektron-orange);
+}
+
+.toolbar-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.toolbar-button.refreshing .fa-sync-alt {
+  animation: spin-decelerate 0.8s cubic-bezier(0, 0.7, 0.3, 1);
+  color: var(--elektron-orange);
+}
+
+.toolbar-button.refreshing {
+  border-color: var(--elektron-orange);
+}
+
+@keyframes spin-decelerate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
 .project-header h1 {
   margin: 0;
   padding: 0;
   border: none;
   background: none;
+  white-space: nowrap;
 }
 
+/* Path info displayed inline in header, to the right of h1 */
+.project-header .header-path-info {
+  color: var(--elektron-text-secondary);
+  font-size: 0.75rem;
+  font-family: 'Courier New', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 50%;
+  flex-shrink: 1;
+  align-self: flex-end;
+  padding-bottom: 0.15rem;
+}
+
+.project-header .header-path-info strong {
+  color: var(--elektron-text-dim);
+  font-weight: normal;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-right: 0.5rem;
+}
+
+/* Keep old class for backwards compatibility if needed */
 .project-path-info {
   padding: 1rem 2rem;
   background-color: var(--elektron-dark-gray);
