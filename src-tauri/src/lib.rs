@@ -15,6 +15,13 @@ struct CopyProgressEvent {
     progress: f32,  // 0.0 to 1.0
 }
 
+#[derive(Clone, Serialize)]
+struct SystemResources {
+    cpu_cores: usize,
+    available_memory_mb: u64,
+    recommended_concurrency: usize,
+}
+
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -145,6 +152,34 @@ fn open_in_file_manager(path: String) -> Result<(), String> {
     open::that(&path).map_err(|e| format!("Failed to open file manager: {}", e))
 }
 
+#[tauri::command]
+fn get_system_resources() -> SystemResources {
+    use sysinfo::System;
+    let mut sys = System::new_all();
+    sys.refresh_all();
+
+    let cpu_cores = sys.cpus().len();
+    let available_memory_mb = sys.available_memory() / (1024 * 1024);
+
+    // Calculate recommended concurrency based on:
+    // - CPU cores (primary factor)
+    // - Available memory (each conversion can use ~200-500MB)
+    // Leave at least 1 core for the system and UI
+    let cpu_based = (cpu_cores as f64 * 0.75).ceil() as usize;
+
+    // Memory-based limit: assume ~300MB per conversion task
+    let memory_based = (available_memory_mb / 300) as usize;
+
+    // Take the minimum of both constraints, with bounds [1, 8]
+    let recommended = cpu_based.min(memory_based).max(1).min(8);
+
+    SystemResources {
+        cpu_cores,
+        available_memory_mb,
+        recommended_concurrency: recommended,
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -169,7 +204,8 @@ pub fn run() {
             get_home_directory,
             rename_file,
             delete_file,
-            open_in_file_manager
+            open_in_file_manager,
+            get_system_resources
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
