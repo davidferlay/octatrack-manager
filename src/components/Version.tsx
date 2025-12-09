@@ -147,7 +147,7 @@ export function Version() {
       )}
       {readyToRelaunch && (
         <a href="#" className="relaunch-link" onClick={handleRelaunch}>
-          {canRelaunch() ? 'restart for latest version' : 'close to update'}
+          {canRelaunch() ? 'Restart for latest version' : 'Close to update'}
         </a>
       )}
       <div
