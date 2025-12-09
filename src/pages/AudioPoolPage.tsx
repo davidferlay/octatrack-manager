@@ -967,66 +967,8 @@ export function AudioPoolPage() {
           setIsOverDropZone(false);
           const paths = event.payload.paths;
           if (paths && paths.length > 0 && destinationPathRef.current) {
-            // Import dropped files/folders to Audio Pool
-            setIsTransferQueueOpen(true);
-
-            // First, add all files to the transfer queue with "pending" status
-            const baseTimestamp = Date.now();
-            const transferIds: string[] = [];
-            const newTransfers: TransferItem[] = paths.map((sourcePath, index) => {
-              const fileName = sourcePath.split('/').pop() || sourcePath.split('\\').pop() || sourcePath;
-              const transferId = `${baseTimestamp}-${index}-${fileName}`;
-              transferIds.push(transferId);
-              return {
-                id: transferId,
-                fileName: fileName,
-                fileSize: 0,
-                bytesTransferred: 0,
-                status: "pending" as const,
-                startTime: baseTimestamp,
-                sourcePath: sourcePath,
-              };
-            });
-
-            setTransfers(prev => [...prev, ...newTransfers]);
-
-            // Then process files one by one
-            for (let i = 0; i < paths.length; i++) {
-              const sourcePath = paths[i];
-              const transferId = transferIds[i];
-              const fileName = sourcePath.split('/').pop() || sourcePath.split('\\').pop() || sourcePath;
-
-              // Update status to "copying"
-              setTransfers(prev => prev.map(t =>
-                t.id === transferId ? { ...t, status: "copying" as const, startTime: Date.now() } : t
-              ));
-
-              try {
-                await invoke("copy_audio_file_with_progress", {
-                  sourcePath: sourcePath,
-                  destinationDir: destinationPathRef.current
-                });
-
-                setTransfers(prev => prev.map(t => {
-                  if (t.id === transferId) {
-                    return { ...t, status: "completed" as const, bytesTransferred: 1, progress: 1.0, stage: "complete" };
-                  }
-                  return t;
-                }));
-              } catch (error) {
-                console.error(`Error copying ${fileName}:`, error);
-                setTransfers(prev => prev.map(t => {
-                  if (t.id === transferId) {
-                    return { ...t, status: "failed" as const, error: String(error) };
-                  }
-                  return t;
-                }));
-              }
-            }
-
-            // Refresh destination files
-            const files = await invoke<AudioFile[]>("list_audio_directory", { path: destinationPathRef.current });
-            setDestinationFiles(files);
+            // Use copyFilesToPool which handles parallel processing
+            await copyFilesToPool(paths);
           }
         }
       });
@@ -1220,7 +1162,7 @@ export function AudioPoolPage() {
     }
   }
 
-  // Shared function to copy files to pool with overwrite handling
+  // Shared function to copy files to pool with parallel processing
   async function copyFilesToPool(sourcePaths: string[], fileSizes?: Map<string, number>) {
     setIsTransferQueueOpen(true);
     setOverwriteAllMode('none'); // Reset overwrite mode for new batch
@@ -1245,8 +1187,185 @@ export function AudioPoolPage() {
 
     setTransfers(prev => [...prev, ...newTransfers]);
 
-    // Then process the queue
-    await processCopyQueue(sourcePaths, 0, false, fileSizes, false, transferIds);
+    // Get system resources for dynamic concurrency
+    let concurrency = 2; // Default fallback
+    try {
+      const resources = await invoke<{ cpu_cores: number; available_memory_mb: number; recommended_concurrency: number }>("get_system_resources");
+      concurrency = resources.recommended_concurrency;
+      console.log(`Parallel processing with concurrency: ${concurrency} (${resources.cpu_cores} cores, ${resources.available_memory_mb}MB available)`);
+    } catch (e) {
+      console.warn('Could not get system resources, using default concurrency:', e);
+    }
+
+    // Check for existing files BEFORE starting - this allows us to ask user once and then process all in parallel
+    let existingFiles: string[] = [];
+    try {
+      const destFiles = await invoke<AudioFile[]>("list_audio_directory", { path: destinationPath });
+      const destFileNames = new Set(destFiles.map(f => f.name.toLowerCase()));
+
+      for (const sourcePath of sourcePaths) {
+        const fileName = sourcePath.split('/').pop() || sourcePath.split('\\').pop() || sourcePath;
+        // Get destination filename (will be .wav after conversion)
+        const destFileName = fileName.replace(/\.(aif|aiff|mp3|flac|ogg|m4a)$/i, '.wav');
+        if (destFileNames.has(destFileName.toLowerCase())) {
+          existingFiles.push(sourcePath);
+        }
+      }
+    } catch {
+      // Ignore errors - continue without pre-check
+    }
+
+    if (existingFiles.length > 0) {
+      console.log(`[Parallel] Found ${existingFiles.length} existing files, showing modal for batch decision`);
+      // Show modal for batch overwrite decision
+      setOverwriteModal({
+        isOpen: true,
+        fileName: existingFiles[0].split('/').pop() || existingFiles[0].split('\\').pop() || existingFiles[0],
+        sourcePath: existingFiles[0],
+        transferId: transferIds[sourcePaths.indexOf(existingFiles[0])],
+        pendingFiles: sourcePaths,
+        currentIndex: 0,
+        fileSizes: fileSizes,
+        transferIds: transferIds,
+      });
+      return; // Wait for user decision - modal handlers will call processFilesInParallel with the right flags
+    }
+
+    // No conflicts - process all files in parallel
+    await processFilesInParallel(sourcePaths, transferIds, fileSizes, concurrency, false);
+  }
+
+  // Process files in parallel with a concurrency limit
+  // When a file conflict is detected, switches to sequential mode for proper modal handling
+  async function processFilesInParallel(
+    sourcePaths: string[],
+    transferIds: string[],
+    fileSizes?: Map<string, number>,
+    concurrency: number = 2,
+    forceOverwrite: boolean = false
+  ) {
+    console.log(`[Parallel] Starting parallel processing of ${sourcePaths.length} files with concurrency ${concurrency}, forceOverwrite=${forceOverwrite}`);
+
+    let conflictDetected = false;
+    let conflictIndex = -1;
+    const completedIndices = new Set<number>();
+    const activePromises: Map<number, Promise<void>> = new Map();
+    let queueIndex = 0;
+
+    // Helper to process a single file - returns true if conflict detected
+    const processFile = async (sourcePath: string, index: number): Promise<boolean> => {
+      const transferId = transferIds[index];
+      const fileName = sourcePath.split('/').pop() || sourcePath.split('\\').pop() || sourcePath;
+      console.log(`[Parallel] Starting file ${index}: ${fileName}`);
+
+      // Update status to "copying"
+      setTransfers(prev => prev.map(t =>
+        t.id === transferId ? { ...t, status: "copying" as const, startTime: Date.now() } : t
+      ));
+
+      try {
+        await invoke("copy_audio_file_with_progress", {
+          sourcePath: sourcePath,
+          destinationDir: destinationPath,
+          overwrite: forceOverwrite,
+        });
+
+        console.log(`[Parallel] Completed file ${index}: ${fileName}`);
+        setTransfers(prev => prev.map(t => {
+          if (t.id === transferId) {
+            return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1, progress: 1.0, stage: "complete" };
+          }
+          return t;
+        }));
+        completedIndices.add(index);
+        return false; // No conflict
+      } catch (error) {
+        const errorStr = String(error);
+
+        if (errorStr.includes('already exists') && !forceOverwrite) {
+          console.log(`[Parallel] Conflict detected for file ${index}: ${fileName}`);
+          // Mark as pending conflict - will be handled by modal
+          setTransfers(prev => prev.map(t => {
+            if (t.id === transferId) {
+              return { ...t, status: "pending" as const }; // Reset to pending for modal handling
+            }
+            return t;
+          }));
+          return true; // Conflict detected
+        } else {
+          console.error(`[Parallel] Error copying ${fileName}:`, error);
+          setTransfers(prev => prev.map(t => {
+            if (t.id === transferId) {
+              return { ...t, status: "failed" as const, error: errorStr };
+            }
+            return t;
+          }));
+          completedIndices.add(index);
+          return false; // Not a conflict, just an error
+        }
+      }
+    };
+
+    // Process files in parallel until a conflict is detected
+    while (queueIndex < sourcePaths.length && !conflictDetected) {
+      // Start new tasks to fill available slots
+      const startedThisRound: number[] = [];
+      while (queueIndex < sourcePaths.length && activePromises.size < concurrency && !conflictDetected) {
+        const currentIndex = queueIndex++;
+        const sourcePath = sourcePaths[currentIndex];
+        startedThisRound.push(currentIndex);
+
+        const promise = processFile(sourcePath, currentIndex).then((hasConflict) => {
+          activePromises.delete(currentIndex);
+          if (hasConflict && !conflictDetected) {
+            conflictDetected = true;
+            conflictIndex = currentIndex;
+          }
+        });
+        activePromises.set(currentIndex, promise);
+      }
+
+      console.log(`[Parallel] Started ${startedThisRound.length} tasks this round (indices: ${startedThisRound.join(', ')}), active: ${activePromises.size}`);
+
+      // Wait for at least one to complete
+      if (activePromises.size > 0 && !conflictDetected) {
+        console.log(`[Parallel] Waiting for one of ${activePromises.size} active tasks to complete...`);
+        await Promise.race(Array.from(activePromises.values()));
+        console.log(`[Parallel] A task completed, active now: ${activePromises.size}`);
+      }
+    }
+
+    // Wait for all active promises to complete before handling conflict
+    if (activePromises.size > 0) {
+      console.log(`[Parallel] Waiting for ${activePromises.size} remaining tasks to complete...`);
+      await Promise.all(Array.from(activePromises.values()));
+    }
+
+    console.log(`[Parallel] All tasks done. Conflict: ${conflictDetected}, conflictIndex: ${conflictIndex}`);
+
+    // If a conflict was detected, switch to sequential processing with modal
+    if (conflictDetected && conflictIndex >= 0) {
+      // Find remaining files (not completed and not the conflict)
+      const remainingPaths: string[] = [];
+      const remainingIds: string[] = [];
+
+      for (let i = conflictIndex; i < sourcePaths.length; i++) {
+        if (!completedIndices.has(i)) {
+          remainingPaths.push(sourcePaths[i]);
+          remainingIds.push(transferIds[i]);
+        }
+      }
+
+      if (remainingPaths.length > 0) {
+        console.log(`[Parallel] Switching to sequential mode for ${remainingPaths.length} remaining files`);
+        // Use processCopyQueue for sequential processing with modal support
+        await processCopyQueue(remainingPaths, 0, false, fileSizes, false, remainingIds);
+        return; // processCopyQueue will handle refreshing
+      }
+    }
+
+    // Refresh destination files after all complete
+    await loadDestinationFiles(destinationPath);
   }
 
   // Process copy queue with overwrite handling
@@ -1394,34 +1513,23 @@ export function AudioPoolPage() {
   }
 
   async function handleOverwriteAll() {
-    const { sourcePath, transferId, pendingFiles, currentIndex, fileSizes, transferIds } = overwriteModal;
+    const { pendingFiles, fileSizes, transferIds } = overwriteModal;
     setOverwriteModal(prev => ({ ...prev, isOpen: false }));
     setOverwriteAllMode('overwrite');
 
-    // Overwrite current file
+    // Get concurrency for parallel processing
+    let concurrency = 2;
     try {
-      await invoke("copy_audio_file_with_progress", {
-        sourcePath: sourcePath,
-        destinationDir: destinationPath,
-        overwrite: true,
-      });
-      setTransfers(prev => prev.map(t => {
-        if (t.id === transferId) {
-          return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1, progress: 1.0, stage: "complete" };
-        }
-        return t;
-      }));
-    } catch (error) {
-      setTransfers(prev => prev.map(t => {
-        if (t.id === transferId) {
-          return { ...t, status: "failed" as const, error: String(error) };
-        }
-        return t;
-      }));
+      const resources = await invoke<{ cpu_cores: number; available_memory_mb: number; recommended_concurrency: number }>("get_system_resources");
+      concurrency = resources.recommended_concurrency;
+    } catch (e) {
+      console.warn('Could not get system resources:', e);
     }
 
-    // Continue with remaining files, passing forceOverwrite=true
-    await processCopyQueue(pendingFiles, currentIndex + 1, true, fileSizes, false, transferIds);
+    // Process ALL files in parallel with forceOverwrite=true
+    // Since user clicked "Overwrite All", process from the beginning
+    console.log(`[Parallel] Overwrite All selected - processing ${pendingFiles.length} files in parallel with forceOverwrite=true`);
+    await processFilesInParallel(pendingFiles, transferIds!, fileSizes, concurrency, true);
   }
 
   function handleSkip() {
@@ -1548,20 +1656,46 @@ export function AudioPoolPage() {
 
     setTransfers(prev => [...prev, ...newTransfers]);
 
-    // Then process files one by one
-    for (let i = 0; i < filesToCopy.length; i++) {
-      const file = filesToCopy[i];
-      const transferId = transferIds[i];
+    // Get system resources for dynamic concurrency
+    let concurrency = 2;
+    try {
+      const resources = await invoke<{ cpu_cores: number; available_memory_mb: number; recommended_concurrency: number }>("get_system_resources");
+      concurrency = resources.recommended_concurrency;
+    } catch (e) {
+      console.warn('Could not get system resources, using default concurrency:', e);
+    }
 
-      // Update status to "copying"
+    // Process files in parallel
+    const sourcePaths = filesToCopy.map(f => f.path);
+    await processFilesInParallelToSource(sourcePaths, transferIds, sourcePath, concurrency);
+
+    // Refresh source files
+    await loadSourceFiles(sourcePath);
+  }
+
+  // Process files in parallel to source directory
+  async function processFilesInParallelToSource(
+    sourcePaths: string[],
+    transferIds: string[],
+    targetDir: string,
+    concurrency: number = 2
+  ) {
+    const queue = sourcePaths.map((path, index) => ({ path, index }));
+    const activePromises: Promise<void>[] = [];
+    let queueIndex = 0;
+
+    const processFile = async (filePath: string, index: number): Promise<void> => {
+      const transferId = transferIds[index];
+      const fileName = filePath.split('/').pop() || filePath.split('\\').pop() || filePath;
+
       setTransfers(prev => prev.map(t =>
         t.id === transferId ? { ...t, status: "copying" as const, startTime: Date.now() } : t
       ));
 
       try {
         await invoke("copy_audio_file_with_progress", {
-          sourcePath: file.path,
-          destinationDir: sourcePath,
+          sourcePath: filePath,
+          destinationDir: targetDir,
           overwrite: false,
         });
 
@@ -1572,7 +1706,7 @@ export function AudioPoolPage() {
           return t;
         }));
       } catch (error) {
-        console.error(`Error copying ${file.name}:`, error);
+        console.error(`Error copying ${fileName}:`, error);
         setTransfers(prev => prev.map(t => {
           if (t.id === transferId) {
             return { ...t, status: "failed" as const, error: String(error) };
@@ -1580,10 +1714,32 @@ export function AudioPoolPage() {
           return t;
         }));
       }
+    };
+
+    // Start initial batch
+    while (queueIndex < queue.length && activePromises.length < concurrency) {
+      const item = queue[queueIndex++];
+      const promise = processFile(item.path, item.index).then(() => {
+        const promiseIndex = activePromises.indexOf(promise);
+        if (promiseIndex > -1) activePromises.splice(promiseIndex, 1);
+      });
+      activePromises.push(promise);
     }
 
-    // Refresh source files
-    await loadSourceFiles(sourcePath);
+    // Continue processing
+    while (queueIndex < queue.length || activePromises.length > 0) {
+      if (activePromises.length > 0) {
+        await Promise.race(activePromises);
+      }
+      while (queueIndex < queue.length && activePromises.length < concurrency) {
+        const item = queue[queueIndex++];
+        const promise = processFile(item.path, item.index).then(() => {
+          const promiseIndex = activePromises.indexOf(promise);
+          if (promiseIndex > -1) activePromises.splice(promiseIndex, 1);
+        });
+        activePromises.push(promise);
+      }
+    }
   }
 
   async function navigateToParentSource() {
