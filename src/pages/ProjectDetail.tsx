@@ -295,12 +295,49 @@ export function ProjectDetail() {
           <button onClick={() => navigate("/")} className="back-button">
             ← Back
           </button>
-          <h1>{projectName}</h1>
-          <span className="header-path-info" title={projectPath || ''}>
-            <strong>Path:</strong>{projectPath}
-          </span>
+          <h1 title={projectPath || ''}>{projectName}</h1>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {!isLoading && !error && metadata && (
+            <div className="header-tabs">
+              <button
+                className={`header-tab ${activeTab === "overview" ? "active" : ""}`}
+                onClick={() => setActiveTab("overview")}
+              >
+                Overview
+              </button>
+              <button
+                className={`header-tab ${activeTab === "parts" ? "active" : ""}`}
+                onClick={() => setActiveTab("parts")}
+              >
+                Parts
+              </button>
+              <button
+                className={`header-tab ${activeTab === "patterns" ? "active" : ""}`}
+                onClick={() => setActiveTab("patterns")}
+              >
+                Patterns
+              </button>
+              <button
+                className={`header-tab ${activeTab === "tracks" ? "active" : ""}`}
+                onClick={() => setActiveTab("tracks")}
+              >
+                Tracks
+              </button>
+              <button
+                className={`header-tab ${activeTab === "flex-slots" ? "active" : ""}`}
+                onClick={() => setActiveTab("flex-slots")}
+              >
+                Flex ({metadata.sample_slots.flex_slots.filter(slot => slot.path).length})
+              </button>
+              <button
+                className={`header-tab ${activeTab === "static-slots" ? "active" : ""}`}
+                onClick={() => setActiveTab("static-slots")}
+              >
+                Static ({metadata.sample_slots.static_slots.filter(slot => slot.path).length})
+              </button>
+            </div>
+          )}
           <button
             onClick={handleRefresh}
             className={`toolbar-button ${isSpinning ? 'refreshing' : ''}`}
@@ -328,45 +365,6 @@ export function ProjectDetail() {
 
       {!isLoading && !error && metadata && (
         <div className="project-content">
-          <div className="tabs">
-            <button
-              className={`tab ${activeTab === "overview" ? "active" : ""}`}
-              onClick={() => setActiveTab("overview")}
-            >
-              Overview
-            </button>
-            <button
-              className={`tab ${activeTab === "parts" ? "active" : ""}`}
-              onClick={() => setActiveTab("parts")}
-            >
-              Parts
-            </button>
-            <button
-              className={`tab ${activeTab === "patterns" ? "active" : ""}`}
-              onClick={() => setActiveTab("patterns")}
-            >
-              Patterns
-            </button>
-            <button
-              className={`tab ${activeTab === "tracks" ? "active" : ""}`}
-              onClick={() => setActiveTab("tracks")}
-            >
-              Track Settings
-            </button>
-            <button
-              className={`tab ${activeTab === "flex-slots" ? "active" : ""}`}
-              onClick={() => setActiveTab("flex-slots")}
-            >
-              Flex Slots ({metadata.sample_slots.flex_slots.filter(slot => slot.path).length})
-            </button>
-            <button
-              className={`tab ${activeTab === "static-slots" ? "active" : ""}`}
-              onClick={() => setActiveTab("static-slots")}
-            >
-              Static Slots ({metadata.sample_slots.static_slots.filter(slot => slot.path).length})
-            </button>
-          </div>
-
           <div className="tab-content">
             {activeTab === "overview" && (
               <div className="overview-tab">

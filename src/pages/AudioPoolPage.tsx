@@ -2499,10 +2499,7 @@ export function AudioPoolPage() {
           <button onClick={() => navigate("/")} className="back-button">
             ← Back
           </button>
-          <h1>{setName}</h1>
-          <span className="header-path-info" title={destinationPath}>
-            <strong>Path:</strong>{destinationPath}
-          </span>
+          <h1 title={destinationPath}>{setName}</h1>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <button
