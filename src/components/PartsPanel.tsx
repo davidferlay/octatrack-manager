@@ -1147,22 +1147,20 @@ export default function PartsPanel({
   const activePart = partsData[activePartIndex];
 
   return (
-    <div className="parts-panel">
-      <div className="parts-panel-header">
+    <div className="bank-card">
+      <div className="bank-card-header">
         <h3>{bankName} - Parts</h3>
-      </div>
-
-      {/* Part Tabs */}
-      <div className="parts-part-tabs">
-        {partNames.map((partName, index) => (
-          <button
-            key={index}
-            className={`parts-part-tab ${activePartIndex === index ? 'active' : ''}`}
-            onClick={() => setActivePartIndex(index)}
-          >
-            {partName} ({index + 1})
-          </button>
-        ))}
+        <div className="parts-part-tabs">
+          {partNames.map((partName, index) => (
+            <button
+              key={index}
+              className={`parts-part-tab ${activePartIndex === index ? 'active' : ''}`}
+              onClick={() => setActivePartIndex(index)}
+            >
+              {partName} ({index + 1})
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Page Tabs - Audio or MIDI based on selected track */}

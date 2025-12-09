@@ -677,19 +677,18 @@ export function ProjectDetail() {
                       const partNames = bank.parts.map(part => part.name);
 
                       return (
-                        <div key={`bank-parts-${bankIndex}`} className="bank-card">
-                          <PartsPanel
-                            projectPath={projectPath || ''}
-                            bankId={bank.id}
-                            bankName={formatBankName(bank.name, bankIndex)}
-                            partNames={partNames}
-                            selectedTrack={trackForParts}
-                            sharedPageIndex={selectedBankIndex === ALL_BANKS ? sharedPartsPageIndex : undefined}
-                            onSharedPageChange={selectedBankIndex === ALL_BANKS ? setSharedPartsPageIndex : undefined}
-                            sharedLfoTab={selectedBankIndex === ALL_BANKS ? sharedPartsLfoTab : undefined}
-                            onSharedLfoTabChange={selectedBankIndex === ALL_BANKS ? setSharedPartsLfoTab : undefined}
-                          />
-                        </div>
+                        <PartsPanel
+                          key={`bank-parts-${bankIndex}`}
+                          projectPath={projectPath || ''}
+                          bankId={bank.id}
+                          bankName={formatBankName(bank.name, bankIndex)}
+                          partNames={partNames}
+                          selectedTrack={trackForParts}
+                          sharedPageIndex={selectedBankIndex === ALL_BANKS ? sharedPartsPageIndex : undefined}
+                          onSharedPageChange={selectedBankIndex === ALL_BANKS ? setSharedPartsPageIndex : undefined}
+                          sharedLfoTab={selectedBankIndex === ALL_BANKS ? sharedPartsLfoTab : undefined}
+                          onSharedLfoTabChange={selectedBankIndex === ALL_BANKS ? setSharedPartsLfoTab : undefined}
+                        />
                       );
                     });
                   })()}
@@ -736,7 +735,7 @@ export function ProjectDetail() {
                   />
                 </div>
 
-                <section className="banks-section">
+                <div className="bank-cards">
                   {(() => {
                     // Determine which banks to display
                     const banksToDisplay = selectedBankIndex === ALL_BANKS
@@ -1148,7 +1147,7 @@ export function ProjectDetail() {
             );
           });
         })()}
-      </section>
+      </div>
     </div>
   )}
 
