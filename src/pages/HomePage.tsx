@@ -150,12 +150,11 @@ export function HomePage() {
     <main className="container">
       <div className="project-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: '1' }}>
-          <h1 style={{ margin: 0 }}>Octatrack Manager</h1>
-          <Version />
+          <h1>Octatrack Manager</h1>
+          <span className="header-path-info">Discover and manage your Elektron Octatrack projects</span>
         </div>
+        <Version />
       </div>
-
-      <p className="subtitle">Discover and manage your Elektron Octatrack projects</p>
 
       <div className="scan-section">
         <button

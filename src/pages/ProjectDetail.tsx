@@ -119,6 +119,7 @@ export function ProjectDetail() {
   const [hideEmptyPatterns, setHideEmptyPatterns] = useState<boolean>(false); // Hide patterns with no trigs
   const [hideEmptyPatternsVisual, setHideEmptyPatternsVisual] = useState<boolean>(false); // Immediate visual state for toggle
   const [isPending, startTransition] = useTransition(); // For smooth UI updates
+  const [isSpinning, setIsSpinning] = useState<boolean>(false); // For refresh button animation
 
   useEffect(() => {
     if (projectPath) {
@@ -281,6 +282,9 @@ export function ProjectDetail() {
   }
 
   const handleRefresh = () => {
+    // Trigger spin animation
+    setIsSpinning(true);
+    setTimeout(() => setIsSpinning(false), 600);
     loadProjectData();
   };
 
@@ -291,16 +295,22 @@ export function ProjectDetail() {
           <button onClick={() => navigate("/")} className="back-button">
             ← Back
           </button>
-          <h1 style={{ margin: 0 }}>{projectName}</h1>
-          <button onClick={handleRefresh} className="back-button refresh-button" disabled={isLoading} title="Refresh project data">
-            ↻ Refresh
+          <h1>{projectName}</h1>
+          <span className="header-path-info" title={projectPath || ''}>
+            <strong>Path:</strong>{projectPath}
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <button
+            onClick={handleRefresh}
+            className={`toolbar-button ${isSpinning ? 'refreshing' : ''}`}
+            disabled={isLoading}
+            title="Refresh project data"
+          >
+            <i className="fas fa-sync-alt"></i>
           </button>
           <Version />
         </div>
-      </div>
-
-      <div className="project-path-info">
-        <strong>Path:</strong> {projectPath}
       </div>
 
       {isLoading && (

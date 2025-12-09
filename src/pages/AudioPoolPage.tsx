@@ -769,6 +769,7 @@ export function AudioPoolPage() {
   const destRowRefs = useRef<Map<number, HTMLTableRowElement>>(new Map());
   const [isLoadingSource, setIsLoadingSource] = useState(false);
   const [isLoadingDest, setIsLoadingDest] = useState(false);
+  const [isSpinning, setIsSpinning] = useState(false);
   const [isSourcePanelOpen, setIsSourcePanelOpen] = useState(true);
   const [isTransferQueueOpen, setIsTransferQueueOpen] = useState(false);
   const [isOverDropZone, setIsOverDropZone] = useState(false);
@@ -2498,7 +2499,10 @@ export function AudioPoolPage() {
           <button onClick={() => navigate("/")} className="back-button">
             ← Back
           </button>
-          <h1 style={{ margin: 0 }}>{setName}</h1>
+          <h1>{setName}</h1>
+          <span className="header-path-info" title={destinationPath}>
+            <strong>Path:</strong>{destinationPath}
+          </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <button
@@ -2526,8 +2530,13 @@ export function AudioPoolPage() {
             )}
           </button>
           <button
-            onClick={() => { loadSourceFiles(sourcePath); loadDestinationFiles(destinationPath); }}
-            className={`toolbar-button ${isLoadingSource || isLoadingDest ? 'refreshing' : ''}`}
+            onClick={() => {
+              setIsSpinning(true);
+              setTimeout(() => setIsSpinning(false), 600);
+              loadSourceFiles(sourcePath);
+              loadDestinationFiles(destinationPath);
+            }}
+            className={`toolbar-button ${isSpinning ? 'refreshing' : ''}`}
             disabled={isLoadingSource || isLoadingDest}
             title="Refresh file lists"
           >
