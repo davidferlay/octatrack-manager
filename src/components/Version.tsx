@@ -4,11 +4,19 @@ import { check } from '@tauri-apps/plugin-updater';
 import { relaunch, exit } from '@tauri-apps/plugin-process';
 import './Version.css';
 
-// Detect if we're running on Linux (used to handle AppImage restart limitations)
-const isLinux = () => {
+// Detect platform - relaunch() has known issues on Linux AppImage and macOS in Tauri v2
+// See: https://github.com/tauri-apps/tauri/issues/13923 (macOS)
+// See: https://github.com/electron-userland/electron-builder/issues/4650 (Linux AppImage)
+const getPlatform = () => {
   const userAgent = navigator.userAgent.toLowerCase();
-  return userAgent.includes('linux') && !userAgent.includes('android');
+  if (userAgent.includes('mac')) return 'macos';
+  if (userAgent.includes('linux') && !userAgent.includes('android')) return 'linux';
+  if (userAgent.includes('win')) return 'windows';
+  return 'unknown';
 };
+
+// relaunch() fails on Linux (AppImage file replaced) and macOS (Tauri v2 bug)
+const canRelaunch = () => getPlatform() === 'windows';
 
 export function Version() {
   const [version, setVersion] = useState<string>('');
@@ -64,14 +72,9 @@ export function Version() {
           }
         });
 
-        // Try to relaunch (or exit on Linux where relaunch doesn't work reliably with AppImage)
+        // Try to relaunch (only works reliably on Windows in Tauri v2)
         setDownloading(false);
-        if (isLinux()) {
-          // On Linux AppImage, relaunch() fails because the AppImage file has been replaced.
-          // Show the restart link so user knows the update is ready.
-          console.log('Linux detected - showing restart link');
-          setReadyToRelaunch(true);
-        } else {
+        if (canRelaunch()) {
           try {
             console.log('Attempting to relaunch app...');
             await relaunch();
@@ -79,6 +82,10 @@ export function Version() {
             console.error('Auto-relaunch failed:', relaunchError);
             setReadyToRelaunch(true);
           }
+        } else {
+          // On Linux/macOS, relaunch() fails - show the close link instead
+          console.log(`${getPlatform()} detected - showing close link`);
+          setReadyToRelaunch(true);
         }
       } else {
         console.log('No updates available');
@@ -95,14 +102,12 @@ export function Version() {
     e.preventDefault();
     try {
       console.log('Attempting manual relaunch...');
-      if (isLinux()) {
-        // On Linux AppImage, relaunch() fails after update because the AppImage file
-        // has been replaced while the current process still holds references to the old one.
-        // The safest approach is to exit and let the user manually restart.
-        console.log('Linux detected - exiting for manual restart');
-        await exit(0);
-      } else {
+      if (canRelaunch()) {
         await relaunch();
+      } else {
+        // On Linux/macOS, relaunch() fails - exit cleanly so user can manually restart
+        console.log(`${getPlatform()} detected - exiting for manual restart`);
+        await exit(0);
       }
     } catch (error) {
       console.error('Relaunch failed:', error);
@@ -142,7 +147,7 @@ export function Version() {
       )}
       {readyToRelaunch && (
         <a href="#" className="relaunch-link" onClick={handleRelaunch}>
-          {isLinux() ? 'close to update' : 'restart for latest version'}
+          {canRelaunch() ? 'restart for latest version' : 'close to update'}
         </a>
       )}
       <div
