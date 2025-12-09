@@ -4,14 +4,15 @@ mod audio_pool;
 
 use device_detection::{discover_devices, scan_directory, ScanResult};
 use project_reader::{read_project_metadata, read_project_banks, read_parts_data, ProjectMetadata, Bank, PartData};
-use audio_pool::{list_directory, get_parent_directory, create_directory, copy_files_with_overwrite, copy_single_file_with_progress, move_files, delete_files, rename_file as rename_file_impl, AudioFileInfo};
+use audio_pool::{list_directory, get_parent_directory, create_directory, copy_files_with_overwrite, copy_single_file_with_progress, move_files, delete_files, rename_file as rename_file_impl, AudioFileInfo, register_cancellation_token, cancel_transfer, remove_cancellation_token};
 use tauri::{AppHandle, Emitter};
 use serde::Serialize;
 
 #[derive(Clone, Serialize)]
 struct CopyProgressEvent {
     file_path: String,
-    stage: String,  // "converting", "writing", "copying", "complete"
+    transfer_id: String,
+    stage: String,  // "converting", "writing", "copying", "complete", "cancelled"
     progress: f32,  // 0.0 to 1.0
 }
 
@@ -94,24 +95,41 @@ async fn copy_audio_file_with_progress(
     app: AppHandle,
     source_path: String,
     destination_dir: String,
+    transfer_id: String,
     overwrite: Option<bool>
 ) -> Result<String, String> {
     let should_overwrite = overwrite.unwrap_or(false);
     let source_path_clone = source_path.clone();
+    let transfer_id_for_callback = transfer_id.clone();
+    let transfer_id_for_cleanup = transfer_id.clone();
 
-    // Create progress callback
+    // Register cancellation token for this transfer
+    let cancel_token = register_cancellation_token(&transfer_id);
+
+    // Create progress callback that also checks for cancellation
     let progress_callback = move |stage: &str, progress: f32| {
         let _ = app.emit("copy-progress", CopyProgressEvent {
             file_path: source_path_clone.clone(),
+            transfer_id: transfer_id_for_callback.clone(),
             stage: stage.to_string(),
             progress,
         });
     };
 
     // Run on a blocking thread pool
-    tauri::async_runtime::spawn_blocking(move || {
-        copy_single_file_with_progress(&source_path, &destination_dir, should_overwrite, progress_callback)
-    }).await.unwrap()
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        copy_single_file_with_progress(&source_path, &destination_dir, should_overwrite, progress_callback, Some(cancel_token))
+    }).await.unwrap();
+
+    // Clean up cancellation token
+    remove_cancellation_token(&transfer_id_for_cleanup);
+
+    result
+}
+
+#[tauri::command]
+fn cancel_audio_transfer(transfer_id: String) -> bool {
+    cancel_transfer(&transfer_id)
 }
 
 #[tauri::command]
@@ -199,6 +217,7 @@ pub fn run() {
             create_new_directory,
             copy_audio_files,
             copy_audio_file_with_progress,
+            cancel_audio_transfer,
             move_audio_files,
             delete_audio_files,
             get_home_directory,

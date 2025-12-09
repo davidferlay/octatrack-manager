@@ -34,4 +34,5 @@ aifc = "0.6"
 open = "5"
 symphonia = { version = "0.5", features = ["mp3", "flac", "ogg", "aac", "wav", "aiff"] }
 rubato = "0.15"
+once_cell = "1.19"
 

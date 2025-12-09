@@ -2,6 +2,11 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::collections::HashMap;
+use once_cell::sync::Lazy;
+use std::sync::Mutex;
 use hound;
 use symphonia::core::audio::{AudioBufferRef, Signal};
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_NULL};
@@ -10,6 +15,41 @@ use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 use rubato::{Resampler, SincFixedIn, SincInterpolationType, SincInterpolationParameters, WindowFunction};
+
+// Global cancellation token registry
+static CANCELLATION_TOKENS: Lazy<Mutex<HashMap<String, Arc<AtomicBool>>>> = Lazy::new(|| {
+    Mutex::new(HashMap::new())
+});
+
+/// Register a cancellation token for a transfer
+pub fn register_cancellation_token(transfer_id: &str) -> Arc<AtomicBool> {
+    let token = Arc::new(AtomicBool::new(false));
+    let mut tokens = CANCELLATION_TOKENS.lock().unwrap();
+    tokens.insert(transfer_id.to_string(), Arc::clone(&token));
+    token
+}
+
+/// Cancel a transfer by its ID
+pub fn cancel_transfer(transfer_id: &str) -> bool {
+    let tokens = CANCELLATION_TOKENS.lock().unwrap();
+    if let Some(token) = tokens.get(transfer_id) {
+        token.store(true, Ordering::SeqCst);
+        true
+    } else {
+        false
+    }
+}
+
+/// Remove a cancellation token (cleanup after transfer completes)
+pub fn remove_cancellation_token(transfer_id: &str) {
+    let mut tokens = CANCELLATION_TOKENS.lock().unwrap();
+    tokens.remove(transfer_id);
+}
+
+/// Check if a transfer has been cancelled
+pub fn is_cancelled(token: &Arc<AtomicBool>) -> bool {
+    token.load(Ordering::SeqCst)
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AudioFileInfo {
@@ -273,10 +313,22 @@ fn convert_to_octatrack_format_with_progress<F>(
     source_path: &Path,
     dest_path: &Path,
     progress_callback: &F,
+    cancel_token: &Option<Arc<AtomicBool>>,
 ) -> Result<(), String>
 where
     F: Fn(&str, f32),
 {
+    // Helper to check cancellation
+    let check_cancelled = || -> Result<(), String> {
+        if let Some(ref token) = cancel_token {
+            if is_cancelled(token) {
+                return Err("Transfer cancelled".to_string());
+            }
+        }
+        Ok(())
+    };
+
+    check_cancelled()?;
     // Open the source file
     let file = fs::File::open(source_path)
         .map_err(|e| format!("Failed to open source file: {}", e))?;
@@ -355,6 +407,9 @@ where
     let mut bytes_read: u64 = 0;
 
     loop {
+        // Check for cancellation periodically during decoding
+        check_cancelled()?;
+
         let packet = match format.next_packet() {
             Ok(p) => p,
             Err(symphonia::core::errors::Error::IoError(ref e))
@@ -438,10 +493,13 @@ where
 
     progress_callback("decoding", decode_end);
 
+    // Check cancellation before resampling
+    check_cancelled()?;
+
     // Resample if necessary
     let resampled: Vec<Vec<f32>> = if needs_resampling {
         progress_callback("resampling", decode_end);
-        let result = resample_audio_with_progress(&all_samples, source_sample_rate, OCTATRACK_SAMPLE_RATE, |p| {
+        let result = resample_audio_with_progress(&all_samples, source_sample_rate, OCTATRACK_SAMPLE_RATE, cancel_token, |p| {
             // Map resampling progress (0-1) to overall progress (decode_end to resample_end)
             progress_callback("resampling", decode_end + p * resample_weight);
         })?;
@@ -450,9 +508,12 @@ where
         all_samples
     };
 
+    // Check cancellation before writing
+    check_cancelled()?;
+
     // Write to WAV file (resample_end to 1.0)
     progress_callback("writing", resample_end);
-    write_wav_file_with_progress(dest_path, &resampled, OCTATRACK_SAMPLE_RATE, target_bits, |p| {
+    write_wav_file_with_progress(dest_path, &resampled, OCTATRACK_SAMPLE_RATE, target_bits, cancel_token, |p| {
         // Map writing progress (0-1) to overall progress (resample_end to 1.0)
         progress_callback("writing", resample_end + p * write_weight);
     })?;
@@ -461,11 +522,12 @@ where
     Ok(())
 }
 
-/// Resample audio with progress reporting
+/// Resample audio with progress reporting and cancellation support
 fn resample_audio_with_progress<F>(
     samples: &[Vec<f32>],
     source_rate: u32,
     target_rate: u32,
+    cancel_token: &Option<Arc<AtomicBool>>,
     progress_callback: F,
 ) -> Result<Vec<Vec<f32>>, String>
 where
@@ -504,6 +566,13 @@ where
     // Process in chunks
     let mut pos = 0;
     while pos < total_samples {
+        // Check for cancellation periodically during resampling
+        if let Some(ref token) = cancel_token {
+            if is_cancelled(token) {
+                return Err("Transfer cancelled".to_string());
+            }
+        }
+
         let end = (pos + chunk_size).min(total_samples);
         let actual_chunk_size = end - pos;
 
@@ -535,12 +604,13 @@ where
     Ok(output)
 }
 
-/// Write samples to a WAV file with progress reporting
+/// Write samples to a WAV file with progress reporting and cancellation support
 fn write_wav_file_with_progress<F>(
     path: &Path,
     samples: &[Vec<f32>],
     sample_rate: u32,
     bits_per_sample: u16,
+    cancel_token: &Option<Arc<AtomicBool>>,
     progress_callback: F,
 ) -> Result<(), String>
 where
@@ -566,8 +636,17 @@ where
 
     // Interleave samples and write
     for i in 0..num_samples {
-        // Report progress periodically
+        // Check for cancellation periodically during writing
         if i - last_progress_report >= progress_interval {
+            // Check cancellation
+            if let Some(ref token) = cancel_token {
+                if is_cancelled(token) {
+                    // Drop writer to release file handle before returning error
+                    drop(writer);
+                    return Err("Transfer cancelled".to_string());
+                }
+            }
+
             let progress = i as f32 / num_samples as f32;
             progress_callback(progress);
             last_progress_report = i;
@@ -603,19 +682,32 @@ where
 
 /// Copy and convert audio file to Octatrack-compatible format if needed
 fn copy_and_convert_audio(source_path: &Path, dest_dir: &Path, overwrite: bool) -> Result<PathBuf, String> {
-    copy_and_convert_audio_with_progress(source_path, dest_dir, overwrite, |_, _| {})
+    copy_and_convert_audio_with_progress(source_path, dest_dir, overwrite, |_, _| {}, None)
 }
 
-/// Copy and convert audio file with progress reporting
+/// Copy and convert audio file with progress reporting and optional cancellation
 fn copy_and_convert_audio_with_progress<F>(
     source_path: &Path,
     dest_dir: &Path,
     overwrite: bool,
     progress_callback: F,
+    cancel_token: Option<Arc<AtomicBool>>,
 ) -> Result<PathBuf, String>
 where
     F: Fn(&str, f32),
 {
+    // Helper to check cancellation
+    let check_cancelled = || -> Result<(), String> {
+        if let Some(ref token) = cancel_token {
+            if is_cancelled(token) {
+                return Err("Transfer cancelled".to_string());
+            }
+        }
+        Ok(())
+    };
+
+    check_cancelled()?;
+
     let file_name = source_path.file_name()
         .ok_or_else(|| format!("Invalid file name: {}", source_path.display()))?;
 
@@ -626,6 +718,7 @@ where
 
     if !is_audio {
         // Not an audio file, just copy it directly
+        check_cancelled()?;
         progress_callback("copying", 0.0);
         let dest_file = dest_dir.join(file_name);
         if dest_file.exists() && !overwrite {
@@ -635,6 +728,7 @@ where
             fs::remove_file(&dest_file)
                 .map_err(|e| format!("Failed to remove existing file: {}", e))?;
         }
+        check_cancelled()?;
         fs::copy(source_path, &dest_file)
             .map_err(|e| format!("Failed to copy file: {}", e))?;
         progress_callback("complete", 1.0);
@@ -666,13 +760,24 @@ where
             .map_err(|e| format!("Failed to remove existing file: {}", e))?;
     }
 
+    check_cancelled()?;
+
     // Convert or copy based on needs_conversion
     if needs_conv {
         progress_callback("converting", 0.0);
-        convert_to_octatrack_format_with_progress(source_path, &dest_file, &progress_callback)?;
+        let result = convert_to_octatrack_format_with_progress(source_path, &dest_file, &progress_callback, &cancel_token);
+
+        // If cancelled or errored, clean up partial file
+        if result.is_err() {
+            if dest_file.exists() {
+                let _ = fs::remove_file(&dest_file);
+            }
+        }
+        result?;
     } else {
         // File is already compatible, just copy
         progress_callback("copying", 0.0);
+        check_cancelled()?;
         fs::copy(source_path, &dest_file)
             .map_err(|e| format!("Failed to copy file: {}", e))?;
         progress_callback("complete", 1.0);
@@ -681,12 +786,13 @@ where
     Ok(dest_file)
 }
 
-/// Public function to copy a single file with progress callback
+/// Public function to copy a single file with progress callback and optional cancellation token
 pub fn copy_single_file_with_progress<F>(
     source_path: &str,
     destination_dir: &str,
     overwrite: bool,
     progress_callback: F,
+    cancel_token: Option<Arc<AtomicBool>>,
 ) -> Result<String, String>
 where
     F: Fn(&str, f32) + Send + 'static,
@@ -706,7 +812,7 @@ where
         return Err("Use copy_files_with_overwrite for directories".to_string());
     }
 
-    let result = copy_and_convert_audio_with_progress(source, dest_dir, overwrite, progress_callback)?;
+    let result = copy_and_convert_audio_with_progress(source, dest_dir, overwrite, progress_callback, cancel_token)?;
     Ok(result.to_string_lossy().to_string())
 }
 
