@@ -1,8 +1,14 @@
 import { useState, useEffect } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
 import { check } from '@tauri-apps/plugin-updater';
-import { relaunch } from '@tauri-apps/plugin-process';
+import { relaunch, exit } from '@tauri-apps/plugin-process';
 import './Version.css';
+
+// Detect if we're running on Linux (used to handle AppImage restart limitations)
+const isLinux = () => {
+  const userAgent = navigator.userAgent.toLowerCase();
+  return userAgent.includes('linux') && !userAgent.includes('android');
+};
 
 export function Version() {
   const [version, setVersion] = useState<string>('');
@@ -58,14 +64,21 @@ export function Version() {
           }
         });
 
-        // Try to relaunch
-        try {
-          console.log('Attempting to relaunch app...');
-          await relaunch();
-        } catch (relaunchError) {
-          console.error('Auto-relaunch failed:', relaunchError);
-          setDownloading(false);
+        // Try to relaunch (or exit on Linux where relaunch doesn't work reliably with AppImage)
+        setDownloading(false);
+        if (isLinux()) {
+          // On Linux AppImage, relaunch() fails because the AppImage file has been replaced.
+          // Show the restart link so user knows the update is ready.
+          console.log('Linux detected - showing restart link');
           setReadyToRelaunch(true);
+        } else {
+          try {
+            console.log('Attempting to relaunch app...');
+            await relaunch();
+          } catch (relaunchError) {
+            console.error('Auto-relaunch failed:', relaunchError);
+            setReadyToRelaunch(true);
+          }
         }
       } else {
         console.log('No updates available');
@@ -82,11 +95,24 @@ export function Version() {
     e.preventDefault();
     try {
       console.log('Attempting manual relaunch...');
-      await relaunch();
+      if (isLinux()) {
+        // On Linux AppImage, relaunch() fails after update because the AppImage file
+        // has been replaced while the current process still holds references to the old one.
+        // The safest approach is to exit and let the user manually restart.
+        console.log('Linux detected - exiting for manual restart');
+        await exit(0);
+      } else {
+        await relaunch();
+      }
     } catch (error) {
       console.error('Relaunch failed:', error);
-      // If relaunch fails, show an alert to inform user
-      alert('Unable to restart automatically. Please close and reopen the application manually.');
+      // If relaunch fails, exit the app so user can manually restart
+      try {
+        await exit(0);
+      } catch {
+        // Last resort: show alert
+        alert('Unable to restart automatically. Please close and reopen the application manually.');
+      }
     }
   };
 
@@ -116,7 +142,7 @@ export function Version() {
       )}
       {readyToRelaunch && (
         <a href="#" className="relaunch-link" onClick={handleRelaunch}>
-          restart for latest version
+          {isLinux() ? 'close to update' : 'restart for latest version'}
         </a>
       )}
       <div
