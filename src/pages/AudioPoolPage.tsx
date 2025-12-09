@@ -1534,14 +1534,14 @@ export function AudioPoolPage() {
       t.id === transferId ? { ...t, status: "copying" as const, startTime: Date.now() } : t
     ));
 
-    // Retry with overwrite
-    try {
-      await invoke("copy_audio_file_with_progress", {
-        sourcePath: sourcePath,
-        destinationDir: destinationPath,
-        transferId: transferId,
-        overwrite: true,
-      });
+    // Start the overwrite copy in the background (don't await)
+    // This allows the queue to continue processing while this file copies
+    const copyPromise = invoke("copy_audio_file_with_progress", {
+      sourcePath: sourcePath,
+      destinationDir: destinationPath,
+      transferId: transferId,
+      overwrite: true,
+    }).then(() => {
       setTransfers(prev => prev.map(t => {
         if (t.id === transferId) {
           // Don't overwrite cancelled status
@@ -1550,7 +1550,7 @@ export function AudioPoolPage() {
         }
         return t;
       }));
-    } catch (error) {
+    }).catch((error) => {
       const errorStr = String(error);
       if (errorStr.includes("cancelled")) {
         setTransfers(prev => prev.map(t =>
@@ -1566,10 +1566,13 @@ export function AudioPoolPage() {
         }
         return t;
       }));
-    }
+    });
 
-    // Continue with remaining files
+    // Continue with remaining files immediately (don't wait for current file)
     await processCopyQueue(pendingFiles, currentIndex + 1, false, fileSizes, false, transferIds);
+
+    // Wait for the overwrite copy to finish before refreshing
+    await copyPromise;
   }
 
   async function handleOverwriteAll() {
