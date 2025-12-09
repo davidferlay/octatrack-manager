@@ -2612,6 +2612,7 @@ dependencies = [
  "aifc",
  "dirs 5.0.1",
  "hound",
+ "once_cell",
  "open",
  "ot-tools-io",
  "rubato",

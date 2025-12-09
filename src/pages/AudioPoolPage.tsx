@@ -9,7 +9,8 @@ import "./AudioPoolPage.css";
 
 interface CopyProgressEvent {
   file_path: string;
-  stage: string;  // "converting", "resampling", "writing", "copying", "complete"
+  transfer_id: string;
+  stage: string;  // "converting", "resampling", "writing", "copying", "complete", "cancelled"
   progress: number;  // 0.0 to 1.0
 }
 
@@ -1010,11 +1011,13 @@ export function AudioPoolPage() {
 
     const setupListener = async () => {
       unlisten = await listen<CopyProgressEvent>("copy-progress", (event) => {
-        const { file_path, stage, progress } = event.payload;
+        const { file_path, transfer_id, stage, progress } = event.payload;
 
         setTransfers(prev => prev.map(t => {
-          // Match by sourcePath
-          if (t.sourcePath === file_path && t.status === "copying") {
+          // Match by transfer_id if available, otherwise fall back to sourcePath
+          // Only update if still in copying status (not cancelled)
+          const matches = transfer_id ? t.id === transfer_id : t.sourcePath === file_path;
+          if (matches && t.status === "copying") {
             return {
               ...t,
               stage,
@@ -1267,12 +1270,17 @@ export function AudioPoolPage() {
         await invoke("copy_audio_file_with_progress", {
           sourcePath: sourcePath,
           destinationDir: destinationPath,
+          transferId: transferId,
           overwrite: forceOverwrite,
         });
 
         console.log(`[Parallel] Completed file ${index}: ${fileName}`);
         setTransfers(prev => prev.map(t => {
           if (t.id === transferId) {
+            // Don't overwrite cancelled status - user already cancelled this transfer
+            if (t.status === "cancelled") {
+              return t;
+            }
             return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1, progress: 1.0, stage: "complete" };
           }
           return t;
@@ -1281,6 +1289,15 @@ export function AudioPoolPage() {
         return false; // No conflict
       } catch (error) {
         const errorStr = String(error);
+
+        // Handle cancellation specifically
+        if (errorStr.includes("cancelled")) {
+          console.log(`[Parallel] Transfer cancelled: ${fileName}`);
+          setTransfers(prev => prev.map(t =>
+            t.id === transferId ? { ...t, status: "cancelled" as const } : t
+          ));
+          return false; // No conflict
+        }
 
         if (errorStr.includes('already exists') && !forceOverwrite) {
           console.log(`[Parallel] Conflict detected for file ${index}: ${fileName}`);
@@ -1405,11 +1422,14 @@ export function AudioPoolPage() {
         await invoke("copy_audio_file_with_progress", {
           sourcePath: sourcePath,
           destinationDir: destinationPath,
+          transferId: transferId,
           overwrite: shouldOverwrite,
         });
 
         setTransfers(prev => prev.map(t => {
           if (t.id === transferId) {
+            // Don't overwrite cancelled status
+            if (t.status === "cancelled") return t;
             return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1, progress: 1.0, stage: "complete" };
           }
           return t;
@@ -1417,6 +1437,15 @@ export function AudioPoolPage() {
       } catch (error) {
         const errorStr = String(error);
         console.log('Copy error:', errorStr, 'overwriteAllMode:', overwriteAllMode);
+
+        // Handle cancellation specifically
+        if (errorStr.includes("cancelled")) {
+          console.log(`Transfer cancelled: ${fileName}`);
+          setTransfers(prev => prev.map(t =>
+            t.id === transferId ? { ...t, status: "cancelled" as const } : t
+          ));
+          return; // Stop processing
+        }
 
         // Check if it's a "file already exists" error
         if (errorStr.includes('already exists')) {
@@ -1427,17 +1456,29 @@ export function AudioPoolPage() {
               await invoke("copy_audio_file_with_progress", {
                 sourcePath: sourcePath,
                 destinationDir: destinationPath,
+                transferId: transferId,
                 overwrite: true,
               });
               setTransfers(prev => prev.map(t => {
                 if (t.id === transferId) {
+                  // Don't overwrite cancelled status
+                  if (t.status === "cancelled") return t;
                   return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1, progress: 1.0, stage: "complete" };
                 }
                 return t;
               }));
             } catch (retryError) {
+              const retryErrorStr = String(retryError);
+              if (retryErrorStr.includes("cancelled")) {
+                setTransfers(prev => prev.map(t =>
+                  t.id === transferId ? { ...t, status: "cancelled" as const } : t
+                ));
+                return;
+              }
               setTransfers(prev => prev.map(t => {
                 if (t.id === transferId) {
+                  // Don't overwrite cancelled status
+                  if (t.status === "cancelled") return t;
                   return { ...t, status: "failed" as const, error: String(retryError) };
                 }
                 return t;
@@ -1470,6 +1511,8 @@ export function AudioPoolPage() {
           console.error(`Error copying ${fileName}:`, error);
           setTransfers(prev => prev.map(t => {
             if (t.id === transferId) {
+              // Don't overwrite cancelled status
+              if (t.status === "cancelled") return t;
               return { ...t, status: "failed" as const, error: errorStr };
             }
             return t;
@@ -1491,17 +1534,29 @@ export function AudioPoolPage() {
       await invoke("copy_audio_file_with_progress", {
         sourcePath: sourcePath,
         destinationDir: destinationPath,
+        transferId: transferId,
         overwrite: true,
       });
       setTransfers(prev => prev.map(t => {
         if (t.id === transferId) {
+          // Don't overwrite cancelled status
+          if (t.status === "cancelled") return t;
           return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1, progress: 1.0, stage: "complete" };
         }
         return t;
       }));
     } catch (error) {
+      const errorStr = String(error);
+      if (errorStr.includes("cancelled")) {
+        setTransfers(prev => prev.map(t =>
+          t.id === transferId ? { ...t, status: "cancelled" as const } : t
+        ));
+        return;
+      }
       setTransfers(prev => prev.map(t => {
         if (t.id === transferId) {
+          // Don't overwrite cancelled status
+          if (t.status === "cancelled") return t;
           return { ...t, status: "failed" as const, error: String(error) };
         }
         return t;
@@ -1696,19 +1751,29 @@ export function AudioPoolPage() {
         await invoke("copy_audio_file_with_progress", {
           sourcePath: filePath,
           destinationDir: targetDir,
+          transferId: transferId,
           overwrite: false,
         });
 
         setTransfers(prev => prev.map(t => {
           if (t.id === transferId) {
+            if (t.status === "cancelled") return t;
             return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1, progress: 1.0, stage: "complete" };
           }
           return t;
         }));
       } catch (error) {
+        const errorStr = String(error);
+        if (errorStr.includes("cancelled")) {
+          setTransfers(prev => prev.map(t =>
+            t.id === transferId ? { ...t, status: "cancelled" as const } : t
+          ));
+          return;
+        }
         console.error(`Error copying ${fileName}:`, error);
         setTransfers(prev => prev.map(t => {
           if (t.id === transferId) {
+            if (t.status === "cancelled") return t;
             return { ...t, status: "failed" as const, error: String(error) };
           }
           return t;
@@ -1859,7 +1924,14 @@ export function AudioPoolPage() {
     ));
   }
 
-  function cancelTransfer(transferId: string) {
+  async function cancelTransfer(transferId: string) {
+    // Call Rust backend to signal cancellation
+    try {
+      await invoke("cancel_audio_transfer", { transferId });
+    } catch (e) {
+      console.error("Failed to cancel transfer:", e);
+    }
+    // Update UI immediately
     setTransfers(prev => prev.map(t =>
       t.id === transferId && (t.status === "copying" || t.status === "pending")
         ? { ...t, status: "cancelled" as const }
@@ -2374,19 +2446,29 @@ export function AudioPoolPage() {
         try {
           await invoke("copy_audio_file_with_progress", {
             sourcePath: file.path,
-            destinationDir: destinationPath
+            destinationDir: destinationPath,
+            transferId: transferId
           });
 
           setTransfers(prev => prev.map(t => {
             if (t.fileName === file.name && t.id === transferId) {
+              if (t.status === "cancelled") return t;
               return { ...t, status: "completed" as const, bytesTransferred: t.fileSize, progress: 1.0, stage: "complete" };
             }
             return t;
           }));
         } catch (error) {
+          const errorStr = String(error);
+          if (errorStr.includes("cancelled")) {
+            setTransfers(prev => prev.map(t =>
+              t.id === transferId ? { ...t, status: "cancelled" as const } : t
+            ));
+            continue;
+          }
           console.error(`Error copying file ${file.name}:`, error);
           setTransfers(prev => prev.map(t => {
             if (t.fileName === file.name && t.id === transferId) {
+              if (t.status === "cancelled") return t;
               return { ...t, status: "failed" as const, error: String(error) };
             }
             return t;
