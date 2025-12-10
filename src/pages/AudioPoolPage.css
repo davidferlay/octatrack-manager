@@ -478,10 +478,20 @@
 
 /* Column widths */
 .col-name { min-width: 200px; }
-.col-size { width: 80px; text-align: right; }
+.col-size { width: 80px; }
 .col-format { width: 60px; text-align: center; }
 .col-bitrate { width: 50px; text-align: center; }
 .col-samplerate { width: 60px; text-align: center; }
+
+/* Size column header content alignment */
+.col-size .header-content {
+  justify-content: flex-end;
+}
+
+/* Keep size data cells right-aligned */
+td.col-size {
+  text-align: right;
+}
 
 .folder-icon {
   margin-right: 0.5rem;
@@ -510,40 +520,71 @@
 .filterable-header .header-content {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.15rem;
+  width: 100%;
+  position: relative;
 }
 
 .filterable-header .sort-indicator {
-  cursor: pointer;
-  opacity: 0.5;
+  position: absolute;
+  left: -14px;
+  top: 50%;
+  transform: translateY(-65%);
+  width: 12px;
+  text-align: center;
   font-size: 0.7rem;
-  min-width: 0.8rem;
+  cursor: pointer;
+}
+
+.filterable-header .sort-indicator.sort-indicator-right {
+  left: auto;
+  right: auto;
+  position: relative;
+  top: 0;
+  transform: translateY(-15%);
+  margin-left: 2px;
 }
 
 .filterable-header .sortable-label {
   cursor: pointer;
-  flex: 1;
+  user-select: none;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .filterable-header .sortable-label:hover {
   color: var(--elektron-text-primary);
 }
 
-.filter-icon {
-  background: none;
-  border: none;
-  color: var(--elektron-text-secondary);
-  cursor: pointer;
-  padding: 0.2rem;
-  font-size: 0.8rem;
-  opacity: 0.5;
-  transition: all 0.15s ease;
+.col-name .sortable-label {
+  flex: 0 0 auto;
 }
 
-.filter-icon:hover,
+.filter-icon {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--elektron-text-secondary);
+  cursor: pointer;
+  padding: 0.15rem 0.25rem;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  line-height: 1;
+  transition: all 0.15s ease;
+  font-weight: bold;
+  flex-shrink: 0;
+  transform: translateY(-1px);
+}
+
+.filter-icon:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: var(--elektron-border-gray);
+  color: var(--elektron-text-primary);
+}
+
 .filter-icon.active {
-  opacity: 1;
-  color: var(--elektron-orange);
+  background-color: var(--elektron-orange);
+  border-color: var(--elektron-orange);
+  color: var(--elektron-black);
 }
 
 /* Filter dropdown */
