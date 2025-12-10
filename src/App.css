@@ -1082,6 +1082,51 @@ h1 {
   pointer-events: none;
 }
 
+/* Header Search Input */
+.header-search-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.header-search-input {
+  width: 150px;
+  padding: 0.4rem 1.8rem 0.4rem 0.6rem;
+  background-color: var(--elektron-dark-gray);
+  border: 1px solid var(--elektron-border-gray);
+  border-radius: 4px;
+  color: var(--elektron-text);
+  font-size: 0.85rem;
+  transition: border-color 0.2s ease, width 0.2s ease;
+}
+
+.header-search-input:focus {
+  outline: none;
+  border-color: var(--elektron-orange);
+  width: 200px;
+}
+
+.header-search-input::placeholder {
+  color: var(--elektron-text-secondary);
+}
+
+.header-search-clear {
+  position: absolute;
+  right: 0.4rem;
+  background: none;
+  border: none;
+  color: var(--elektron-text-secondary);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: color 0.2s ease;
+}
+
+.header-search-clear:hover {
+  color: var(--elektron-orange);
+}
+
 .toggle-switch.pending .toggle-slider {
   animation: pulse 0.6s ease-in-out infinite;
 }
