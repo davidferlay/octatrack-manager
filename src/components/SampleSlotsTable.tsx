@@ -83,6 +83,9 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
   const [visibleColumns, setVisibleColumns] = useState(prefs.visibleColumns);
   const [showColumnMenu, setShowColumnMenu] = useState(false);
 
+  // Copy to clipboard state
+  const [copyFeedback, setCopyFeedback] = useState<'idle' | 'copied'>('idle');
+
   // Save preferences whenever they change
   useEffect(() => {
     setPrefs({
@@ -144,6 +147,48 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
       ...prev,
       [column]: !prev[column]
     }));
+  };
+
+  // Copy table data to clipboard in TSV format (for Excel/Google Sheets)
+  const copyTableToClipboard = async (slotsData: SampleSlot[]) => {
+    const headers: string[] = [];
+    if (visibleColumns.slot) headers.push('Slot');
+    if (visibleColumns.sample) headers.push('Sample');
+    if (visibleColumns.compatibility) headers.push('Compatibility');
+    if (visibleColumns.status) headers.push('Status');
+    if (visibleColumns.source) headers.push('Source');
+    if (visibleColumns.gain) headers.push('Gain');
+    if (visibleColumns.timestretch) headers.push('Timestretch');
+    if (visibleColumns.loop) headers.push('Loop');
+    if (visibleColumns.format) headers.push('Format');
+    if (visibleColumns.bitdepth) headers.push('Bit Depth');
+    if (visibleColumns.samplerate) headers.push('Sample Rate');
+
+    const rows = slotsData.map(slot => {
+      const row: string[] = [];
+      if (visibleColumns.slot) row.push(`${slotPrefix}${slot.slot_id}`);
+      if (visibleColumns.sample) row.push(slot.path ? getFilename(slot.path) : '');
+      if (visibleColumns.compatibility) row.push(slot.file_exists ? (slot.compatibility || '') : '');
+      if (visibleColumns.status) row.push(slot.path ? (slot.file_exists ? 'Exists' : 'Missing') : '');
+      if (visibleColumns.source) row.push(slot.source_location || '');
+      if (visibleColumns.gain) row.push(slot.gain !== null && slot.gain !== undefined ? String(slot.gain) : '');
+      if (visibleColumns.timestretch) row.push(slot.timestretch_mode || '');
+      if (visibleColumns.loop) row.push(slot.loop_mode || '');
+      if (visibleColumns.format) row.push(slot.file_format || '');
+      if (visibleColumns.bitdepth) row.push(slot.bit_depth !== null && slot.bit_depth !== undefined ? String(slot.bit_depth) : '');
+      if (visibleColumns.samplerate) row.push(slot.sample_rate !== null && slot.sample_rate !== undefined ? String(slot.sample_rate / 1000) : '');
+      return row.join('\t');
+    });
+
+    const tsv = [headers.join('\t'), ...rows].join('\n');
+
+    try {
+      await navigator.clipboard.writeText(tsv);
+      setCopyFeedback('copied');
+      setTimeout(() => setCopyFeedback('idle'), 2000);
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err);
+    }
   };
 
   // Helper functions to get unique values
@@ -435,6 +480,13 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
                 <span className="toggle-slider"></span>
               </div>
             </label>
+            <button
+              className={`copy-table-btn ${copyFeedback === 'copied' ? 'copied' : ''}`}
+              onClick={() => copyTableToClipboard(sortedSlots)}
+              title="Copy table to clipboard (for Excel/Google Sheets)"
+            >
+              {copyFeedback === 'copied' ? '✓' : '⧉'}
+            </button>
             <div className="column-visibility-control" ref={columnMenuRef}>
             <button
               className="column-visibility-btn"
