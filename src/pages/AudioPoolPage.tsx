@@ -497,9 +497,6 @@ function AudioFileTable({
                   </div>
                 )}
               </th>
-              <th onClick={() => handleSort('size')} className="sortable col-size">
-                Size {sortColumn === 'size' && (sortDirection === 'asc' ? '▲' : '▼')}
-              </th>
               <th className="filterable-header col-format">
                 <div className="header-content">
                   <span className="sort-indicator" onClick={() => handleSort('format')}>
@@ -635,6 +632,9 @@ function AudioFileTable({
                   </div>
                 )}
               </th>
+              <th onClick={() => handleSort('size')} className="sortable col-size">
+                Size {sortColumn === 'size' && (sortDirection === 'asc' ? '▲' : '▼')}
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -679,10 +679,10 @@ function AudioFileTable({
                   {file.is_directory ? <i className="fas fa-folder folder-icon"></i> : ''}
                   <span className="file-name-text">{file.name}</span>
                 </td>
-                <td className="col-size">{file.size ? formatFileSize(file.size) : ''}</td>
                 <td className="col-format">{file.is_directory ? '' : getFileFormat(file.name)}</td>
                 <td className="col-bitrate">{file.bit_rate || ''}</td>
                 <td className="col-samplerate">{file.sample_rate ? `${(file.sample_rate / 1000).toFixed(1)}` : ''}</td>
+                <td className="col-size">{file.size ? formatFileSize(file.size) : ''}</td>
               </tr>
             );
             })}
