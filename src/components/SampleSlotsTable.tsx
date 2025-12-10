@@ -20,6 +20,7 @@ interface SampleSlotsTableProps {
   slots: SampleSlot[];
   slotPrefix: string; // "F" for Flex, "S" for Static
   tableType: 'flex' | 'static'; // Identify which table this is
+  projectPath?: string | null; // Project path for tooltip display
 }
 
 type SortColumn = 'slot' | 'sample' | 'status' | 'source' | 'gain' | 'timestretch' | 'loop' | 'compatibility' | 'format' | 'bitdepth' | 'samplerate';
@@ -32,7 +33,28 @@ function getFilename(path: string | null): string {
   return parts[parts.length - 1] || '';
 }
 
-export function SampleSlotsTable({ slots, slotPrefix, tableType }: SampleSlotsTableProps) {
+// Helper function to extract directory path (without filename)
+function getDirectoryPath(path: string | null): string {
+  if (!path) return '';
+  const parts = path.split(/[\\/]/); // Split by both forward and backward slashes
+  parts.pop(); // Remove filename
+  return parts.join('/') + '/';
+}
+
+// Helper function to extract Set-relative path (SetName/ProjectName/)
+function getSetRelativePath(projectPath: string | null): string {
+  if (!projectPath) return '';
+  const parts = projectPath.split(/[\\/]/).filter(p => p); // Split and remove empty parts
+  // Get last two parts: SetName/ProjectName
+  if (parts.length >= 2) {
+    return parts.slice(-2).join('/') + '/';
+  } else if (parts.length === 1) {
+    return parts[0] + '/';
+  }
+  return projectPath;
+}
+
+export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: SampleSlotsTableProps) {
   const { flexPreferences, staticPreferences, setFlexPreferences, setStaticPreferences } = useTablePreferences();
 
   // Get the preferences for this table type
@@ -993,7 +1015,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType }: SampleSlotsTa
               <tr key={slot.slot_id}>
                 {visibleColumns.slot && <td className="col-slot">{slotPrefix}{slot.slot_id}</td>}
                 {visibleColumns.sample && (
-                  <td className="col-sample" title={slot.path || undefined}>
+                  <td className="col-sample" title={slot.path ? getFilename(slot.path) : undefined}>
                     {slot.path ? getFilename(slot.path) : <em>Empty</em>}
                   </td>
                 )}
@@ -1017,7 +1039,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType }: SampleSlotsTa
                     )}
                   </td>
                 )}
-                {visibleColumns.source && <td className="col-source">{slot.source_location || '-'}</td>}
+                {visibleColumns.source && <td className="col-source" title={slot.source_location === 'Project' ? getSetRelativePath(projectPath ?? null) : getDirectoryPath(slot.path)}>{slot.source_location || '-'}</td>}
                 {visibleColumns.gain && <td className="col-gain">{slot.gain !== null && slot.gain !== undefined ? slot.gain : '-'}</td>}
                 {visibleColumns.timestretch && <td className="col-timestretch">{slot.timestretch_mode || '-'}</td>}
                 {visibleColumns.loop && <td className="col-loop">{slot.loop_mode || '-'}</td>}

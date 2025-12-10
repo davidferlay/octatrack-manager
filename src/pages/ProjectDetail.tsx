@@ -1243,11 +1243,11 @@ export function ProjectDetail() {
             )}
 
             {activeTab === "flex-slots" && (
-              <SampleSlotsTable slots={metadata.sample_slots.flex_slots} slotPrefix="F" tableType="flex" />
+              <SampleSlotsTable slots={metadata.sample_slots.flex_slots} slotPrefix="F" tableType="flex" projectPath={projectPath} />
             )}
 
             {activeTab === "static-slots" && (
-              <SampleSlotsTable slots={metadata.sample_slots.static_slots} slotPrefix="S" tableType="static" />
+              <SampleSlotsTable slots={metadata.sample_slots.static_slots} slotPrefix="S" tableType="static" projectPath={projectPath} />
             )}
 
           </div>
