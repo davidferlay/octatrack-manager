@@ -469,8 +469,15 @@ function AudioFileTable({
         <table className="audio-files-table">
           <thead>
             <tr>
-              <th onClick={() => handleSort('name')} className="sortable col-name">
-                Name {sortColumn === 'name' && (sortDirection === 'asc' ? '▲' : '▼')}
+              <th className="filterable-header col-name">
+                <div className="header-content">
+                  <span onClick={() => handleSort('name')} className="sortable-label">
+                    Name
+                  </span>
+                  <span className="sort-indicator sort-indicator-right" onClick={() => handleSort('name')}>
+                    {sortColumn === 'name' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </span>
+                </div>
               </th>
               <th className="filterable-header col-format">
                 <div className="header-content">
@@ -607,8 +614,15 @@ function AudioFileTable({
                   </div>
                 )}
               </th>
-              <th onClick={() => handleSort('size')} className="sortable col-size">
-                Size {sortColumn === 'size' && (sortDirection === 'asc' ? '▲' : '▼')}
+              <th className="filterable-header col-size">
+                <div className="header-content">
+                  <span className="sort-indicator" onClick={() => handleSort('size')}>
+                    {sortColumn === 'size' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </span>
+                  <span onClick={() => handleSort('size')} className="sortable-label">
+                    Size
+                  </span>
+                </div>
               </th>
             </tr>
           </thead>
