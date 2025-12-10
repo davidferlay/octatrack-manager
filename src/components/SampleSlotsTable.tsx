@@ -368,7 +368,6 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType }: SampleSlotsTa
         <div className="filter-results-info">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
             <span>Showing {sortedSlots.length} of {slots.length} slots</span>
-            {searchText && <span className="filter-badge">Filtered by: {searchText}</span>}
             {compatibilityFilter !== 'all' && <span className="filter-badge">Compat: {compatibilityFilter}</span>}
             {statusFilter !== 'all' && <span className="filter-badge">Status: {statusFilter}</span>}
             {sourceFilter !== 'all' && <span className="filter-badge">Source: {sourceFilter}</span>}
@@ -377,6 +376,24 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType }: SampleSlotsTa
             {loopFilter !== 'all' && <span className="filter-badge">Loop: {loopFilter}</span>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div className="header-search-container">
+              <input
+                type="text"
+                placeholder="Search..."
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                className="header-search-input"
+              />
+              {searchText && (
+                <button
+                  className="header-search-clear"
+                  onClick={() => setSearchText('')}
+                  title="Clear search"
+                >
+                  ×
+                </button>
+              )}
+            </div>
             <label className={`toggle-switch ${isPending ? 'pending' : ''}`}>
               <span className="toggle-label">Hide empty</span>
               <div className="toggle-slider-container">
@@ -510,46 +527,9 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType }: SampleSlotsTa
                   </th>
                 )}
                 {visibleColumns.sample && (
-                  <th className="filterable-header col-sample">
-                  <div className="header-content">
-                    <span className="sort-indicator" onClick={() => handleSort('sample')}>
-                      {sortColumn === 'sample' && (sortDirection === 'asc' ? '▲' : '▼')}
-                    </span>
-                    <span onClick={() => handleSort('sample')} className="sortable-label">
-                      Sample
-                    </span>
-                    <button
-                      className={`filter-icon ${openDropdown === 'sample' || searchText ? 'active' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenDropdown(openDropdown === 'sample' ? null : 'sample');
-                      }}
-                    >
-                      ⋮
-                    </button>
-                  </div>
-                  {openDropdown === 'sample' && (
-                    <div className="filter-dropdown">
-                      <input
-                        type="text"
-                        placeholder="Search..."
-                        value={searchText}
-                        onChange={(e) => setSearchText(e.target.value)}
-                        className="dropdown-search"
-                      />
-                      {searchText && (
-                        <button
-                          className="clear-filter-btn"
-                          onClick={() => {
-                            setSearchText('');
-                          }}
-                        >
-                          Clear
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </th>
+                  <th onClick={() => handleSort('sample')} className="sortable col-sample">
+                    Sample {sortColumn === 'sample' && (sortDirection === 'asc' ? '▲' : '▼')}
+                  </th>
                 )}
                 {visibleColumns.compatibility && (
                 <th className="filterable-header col-compatibility">
