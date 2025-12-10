@@ -1917,7 +1917,8 @@ h1 {
 
 /* File Status Badge */
 .status-cell {
-  text-align: center;
+  text-align: left;
+  padding-left: 2rem !important;
 }
 
 .file-status-badge {
@@ -1945,7 +1946,8 @@ h1 {
 
 /* Compatibility Badge */
 .compatibility-cell {
-  text-align: center;
+  text-align: left;
+  padding-left: 2rem !important;
 }
 
 .compat-badge {
