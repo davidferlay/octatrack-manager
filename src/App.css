@@ -752,7 +752,7 @@ h1 {
 }
 
 .bank-cards {
-  padding: 1rem 2rem;
+  padding: 0;
 }
 
 .bank-card {
@@ -830,7 +830,7 @@ h1 {
   border: 1px solid var(--elektron-border-gray);
   border-left: 3px solid var(--elektron-orange);
   padding: 1rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
