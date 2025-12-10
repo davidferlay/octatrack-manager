@@ -1397,6 +1397,36 @@ h1 {
   color: var(--elektron-orange);
 }
 
+/* Copy Table Button */
+.copy-table-btn {
+  background: none;
+  border: 1px solid var(--elektron-border-gray);
+  color: var(--elektron-muted-text);
+  cursor: pointer;
+  padding: 0.3rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.9rem;
+  line-height: 1;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+}
+
+.copy-table-btn:hover {
+  background-color: var(--elektron-medium-gray);
+  border-color: var(--elektron-orange);
+  color: var(--elektron-orange);
+}
+
+.copy-table-btn.copied {
+  background-color: rgba(76, 175, 80, 0.2);
+  border-color: #4caf50;
+  color: #4caf50;
+}
+
 /* Column Visibility Controls */
 .column-visibility-control {
   position: relative;
