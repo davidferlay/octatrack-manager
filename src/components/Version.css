@@ -3,6 +3,8 @@
   align-items: center;
   gap: 0.75rem;
   margin-left: auto;
+  padding-left: 0.5rem;
+  margin-right: -1.0rem;
 }
 
 .app-version {
