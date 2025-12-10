@@ -477,6 +477,25 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
   const filteredSlots = filterSlots(slots);
   const sortedSlots = sortSlots(filteredSlots);
 
+  // Check if any filter is active
+  const hasActiveFilters = compatibilityFilter !== 'all' || statusFilter !== 'all' ||
+    sourceFilter !== 'all' || gainFilter !== 'all' || timestretchFilter !== 'all' ||
+    loopFilter !== 'all' || formatFilter !== 'all' || bitDepthFilter !== 'all' ||
+    sampleRateFilter !== 'all';
+
+  // Reset all filters
+  const resetAllFilters = () => {
+    setCompatibilityFilter('all');
+    setStatusFilter('all');
+    setSourceFilter('all');
+    setGainFilter('all');
+    setTimestretchFilter('all');
+    setLoopFilter('all');
+    setFormatFilter('all');
+    setBitDepthFilter('all');
+    setSampleRateFilter('all');
+  };
+
   return (
     <div className="samples-tab">
       <section className="samples-section">
@@ -489,6 +508,18 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
             {gainFilter !== 'all' && <span className="filter-badge">Gain: {gainFilter}</span>}
             {timestretchFilter !== 'all' && <span className="filter-badge">Timestretch: {timestretchFilter}</span>}
             {loopFilter !== 'all' && <span className="filter-badge">Loop: {loopFilter}</span>}
+            {formatFilter !== 'all' && <span className="filter-badge">Format: {formatFilter}</span>}
+            {bitDepthFilter !== 'all' && <span className="filter-badge">Bit: {bitDepthFilter}</span>}
+            {sampleRateFilter !== 'all' && <span className="filter-badge">kHz: {Number(sampleRateFilter) / 1000}</span>}
+            {hasActiveFilters && (
+              <button
+                className="reset-filters-btn"
+                onClick={resetAllFilters}
+                title="Reset all filters"
+              >
+                ✕ Reset
+              </button>
+            )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <div className="header-search-container">
