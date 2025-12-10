@@ -332,10 +332,85 @@
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
+/* Wide track card for All view */
+.parts-track-wide {
+  width: 100%;
+  max-width: 900px;
+}
+
+/* Dual column layout for MAIN | SETUP */
+.params-dual-layout {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.params-dual-layout > .params-column:not(:last-child) {
+  border-right: 1px solid #444;
+  padding-right: 16px;
+}
+
+/* 2x2 grid layout for LFO (LFO1|LFO2 top, LFO3|DESIGN bottom) */
+.params-grid-2x2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.params-column {
+  flex: 1;
+  min-width: 200px;
+}
+
+.params-column-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #4ac8ff;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #333;
+}
+
+/* Empty params message */
+.params-empty-message {
+  color: #666;
+  font-size: 13px;
+  font-style: italic;
+  padding: 12px 0;
+  text-align: center;
+  grid-column: 1 / -1;
+}
+
 /* Responsive adjustments */
 @media (max-width: 850px) {
   .parts-track {
     width: 100%;
     max-width: 400px;
+  }
+
+  .parts-track-wide {
+    max-width: 100%;
+  }
+
+  .params-dual-layout {
+    flex-direction: column;
+  }
+
+  .params-dual-layout > .params-column:not(:last-child) {
+    border-right: none;
+    padding-right: 0;
+    border-bottom: 1px solid #444;
+    padding-bottom: 12px;
+    margin-bottom: 4px;
+  }
+
+  .params-grid-2x2 {
+    grid-template-columns: 1fr;
+  }
+
+  .params-column {
+    min-width: 100%;
   }
 }
