@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useLayoutEffect } from "react";
+import { useState, useEffect, useRef, useLayoutEffect, useTransition } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -274,6 +274,8 @@ function AudioFileTable({
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [searchText, setSearchText] = useState('');
   const [hideDirectories, setHideDirectories] = useState(false);
+  const [hideDirectoriesVisual, setHideDirectoriesVisual] = useState(false);
+  const [isPending, startTransition] = useTransition();
   const [formatFilter, setFormatFilter] = useState<string>('all');
   const [bitDepthFilter, setBitDepthFilter] = useState<string>('all');
   const [sampleRateFilter, setSampleRateFilter] = useState<string>('all');
@@ -409,8 +411,6 @@ function AudioFileTable({
     return 0;
   });
 
-  const hasActiveFilters = searchText || hideDirectories || formatFilter !== 'all' || bitDepthFilter !== 'all' || sampleRateFilter !== 'all';
-
   // Find the file at cursorIndex in the original files array
   const cursorFile = cursorIndex >= 0 && cursorIndex < files.length ? files[cursorIndex] : null;
 
@@ -423,79 +423,54 @@ function AudioFileTable({
       <div className="filter-results-info">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           <span>Showing {sortedFiles.length} of {files.length} files</span>
-          {hideDirectories && <span className="filter-badge">Folders Hidden</span>}
-          {searchText && <span className="filter-badge">Search: {searchText}</span>}
           {formatFilter !== 'all' && <span className="filter-badge">Format: {formatFilter}</span>}
           {bitDepthFilter !== 'all' && <span className="filter-badge">Bit: {bitDepthFilter}</span>}
           {sampleRateFilter !== 'all' && <span className="filter-badge">Rate: {(parseInt(sampleRateFilter) / 1000).toFixed(1)}kHz</span>}
         </div>
-        {hasActiveFilters && (
-          <button
-            className="clear-all-filters-btn"
-            onClick={() => {
-              setSearchText('');
-              setHideDirectories(false);
-              setFormatFilter('all');
-              setBitDepthFilter('all');
-              setSampleRateFilter('all');
-            }}
-          >
-            Clear All
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div className="header-search-container">
+            <input
+              type="text"
+              placeholder="Search..."
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              className="header-search-input"
+            />
+            {searchText && (
+              <button
+                className="header-search-clear"
+                onClick={() => setSearchText('')}
+                title="Clear search"
+              >
+                ×
+              </button>
+            )}
+          </div>
+          <label className={`toggle-switch ${isPending ? 'pending' : ''}`}>
+            <span className="toggle-label">Hide folders</span>
+            <div className="toggle-slider-container">
+              <input
+                type="checkbox"
+                checked={hideDirectoriesVisual}
+                onChange={(e) => {
+                  const newValue = e.target.checked;
+                  setHideDirectoriesVisual(newValue);
+                  startTransition(() => {
+                    setHideDirectories(newValue);
+                  });
+                }}
+              />
+              <span className="toggle-slider"></span>
+            </div>
+          </label>
+        </div>
       </div>
       <div className="table-wrapper" ref={tableWrapperRef}>
         <table className="audio-files-table">
           <thead>
             <tr>
-              <th className="filterable-header col-name">
-                <div className="header-content">
-                  <span className="sort-indicator" onClick={() => handleSort('name')}>
-                    {sortColumn === 'name' && (sortDirection === 'asc' ? '▲' : '▼')}
-                  </span>
-                  <span onClick={() => handleSort('name')} className="sortable-label">
-                    Name
-                  </span>
-                  <button
-                    className={`filter-icon ${openDropdown === `${tableId}-name` || searchText || hideDirectories ? 'active' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setOpenDropdown(openDropdown === `${tableId}-name` ? null : `${tableId}-name`);
-                    }}
-                  >
-                    ⋮
-                  </button>
-                </div>
-                {openDropdown === `${tableId}-name` && (
-                  <div className="filter-dropdown">
-                    <input
-                      type="text"
-                      placeholder="Search..."
-                      value={searchText}
-                      onChange={(e) => setSearchText(e.target.value)}
-                      className="dropdown-search"
-                    />
-                    <label className="dropdown-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={hideDirectories}
-                        onChange={(e) => setHideDirectories(e.target.checked)}
-                      />
-                      <span>Hide Folders</span>
-                    </label>
-                    {(searchText || hideDirectories) && (
-                      <button
-                        className="clear-filter-btn"
-                        onClick={() => {
-                          setSearchText('');
-                          setHideDirectories(false);
-                        }}
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
-                )}
+              <th onClick={() => handleSort('name')} className="sortable col-name">
+                Name {sortColumn === 'name' && (sortDirection === 'asc' ? '▲' : '▼')}
               </th>
               <th className="filterable-header col-format">
                 <div className="header-content">
