@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useTablePreferences } from "../context/TablePreferencesContext";
 
 interface SampleSlot {
@@ -124,21 +125,68 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
 
   // Dropdown state
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const columnMenuRef = useRef<HTMLDivElement>(null);
 
+  // Handle dropdown toggle with position calculation
+  const handleDropdownToggle = (dropdownName: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (openDropdown === dropdownName) {
+      setOpenDropdown(null);
+      setDropdownPosition(null);
+    } else {
+      const button = event.currentTarget as HTMLElement;
+      const rect = button.getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom + 4,
+        left: rect.right - 120, // Align right edge of dropdown with button
+      });
+      setOpenDropdown(dropdownName);
+    }
+  };
+
+  // Close dropdown helper
+  const closeDropdown = () => {
+    setOpenDropdown(null);
+    setDropdownPosition(null);
+  };
+
   // Click outside to close dropdown
   useEffect(() => {
+    if (!openDropdown) return;
+
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      const target = event.target as HTMLElement;
+      // Check if click is inside a filter dropdown (rendered via portal)
+      const isInsideDropdown = target.closest('.filter-dropdown');
+      // Check if click is inside a filter button
+      const isInsideFilterButton = target.closest('.filter-icon');
+
+      if (!isInsideDropdown && !isInsideFilterButton) {
         setOpenDropdown(null);
+        setDropdownPosition(null);
       }
+    }
+    // Use setTimeout to avoid closing immediately on the same click that opened it
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('click', handleClickOutside);
+    }, 0);
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, [openDropdown]);
+
+  // Close column menu when clicking outside
+  useEffect(() => {
+    function handleColumnMenuClickOutside(event: MouseEvent) {
       if (columnMenuRef.current && !columnMenuRef.current.contains(event.target as Node)) {
         setShowColumnMenu(false);
       }
     }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('mousedown', handleColumnMenuClickOutside);
+    return () => document.removeEventListener('mousedown', handleColumnMenuClickOutside);
   }, []);
 
   // Toggle column visibility
@@ -616,23 +664,20 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
                     </span>
                     <button
                       className={`filter-icon ${openDropdown === 'compatibility' || compatibilityFilter !== 'all' ? 'active' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenDropdown(openDropdown === 'compatibility' ? null : 'compatibility');
-                      }}
+                      onClick={(e) => handleDropdownToggle('compatibility', e)}
                     >
                       ⋮
                     </button>
                   </div>
-                  {openDropdown === 'compatibility' && (
-                    <div className="filter-dropdown">
+                  {openDropdown === 'compatibility' && dropdownPosition && createPortal(
+                    <div className="filter-dropdown" style={{ top: dropdownPosition.top, left: dropdownPosition.left }}>
                       <div className="dropdown-options">
                         <label className="dropdown-option">
                           <input
                             type="radio"
                             name="compatibility"
                             checked={compatibilityFilter === 'all'}
-                            onChange={() => setCompatibilityFilter('all')}
+                            onChange={() => { setCompatibilityFilter('all'); closeDropdown(); }}
                           />
                           <span>All</span>
                         </label>
@@ -641,7 +686,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
                             type="radio"
                             name="compatibility"
                             checked={compatibilityFilter === 'compatible'}
-                            onChange={() => setCompatibilityFilter('compatible')}
+                            onChange={() => { setCompatibilityFilter('compatible'); closeDropdown(); }}
                           />
                           <span>Compatible :)</span>
                         </label>
@@ -650,7 +695,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
                             type="radio"
                             name="compatibility"
                             checked={compatibilityFilter === 'wrong_rate'}
-                            onChange={() => setCompatibilityFilter('wrong_rate')}
+                            onChange={() => { setCompatibilityFilter('wrong_rate'); closeDropdown(); }}
                           />
                           <span>Wrong Rate :|</span>
                         </label>
@@ -659,7 +704,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
                             type="radio"
                             name="compatibility"
                             checked={compatibilityFilter === 'incompatible'}
-                            onChange={() => setCompatibilityFilter('incompatible')}
+                            onChange={() => { setCompatibilityFilter('incompatible'); closeDropdown(); }}
                           />
                           <span>Incompatible :(</span>
                         </label>
@@ -668,12 +713,13 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
                             type="radio"
                             name="compatibility"
                             checked={compatibilityFilter === 'unknown'}
-                            onChange={() => setCompatibilityFilter('unknown')}
+                            onChange={() => { setCompatibilityFilter('unknown'); closeDropdown(); }}
                           />
                           <span>Unknown ??</span>
                         </label>
                       </div>
-                    </div>
+                    </div>,
+                    document.body
                   )}
                 </th>
                 )}
@@ -688,23 +734,20 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
                     </span>
                     <button
                       className={`filter-icon ${openDropdown === 'status' || statusFilter !== 'all' ? 'active' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenDropdown(openDropdown === 'status' ? null : 'status');
-                      }}
+                      onClick={(e) => handleDropdownToggle('status', e)}
                     >
                       ⋮
                     </button>
                   </div>
-                  {openDropdown === 'status' && (
-                    <div className="filter-dropdown">
+                  {openDropdown === 'status' && dropdownPosition && createPortal(
+                    <div className="filter-dropdown" style={{ top: dropdownPosition.top, left: dropdownPosition.left }}>
                       <div className="dropdown-options">
                         <label className="dropdown-option">
                           <input
                             type="radio"
                             name="status"
                             checked={statusFilter === 'all'}
-                            onChange={() => setStatusFilter('all')}
+                            onChange={() => { setStatusFilter('all'); closeDropdown(); }}
                           />
                           <span>All</span>
                         </label>
@@ -713,7 +756,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
                             type="radio"
                             name="status"
                             checked={statusFilter === 'exists'}
-                            onChange={() => setStatusFilter('exists')}
+                            onChange={() => { setStatusFilter('exists'); closeDropdown(); }}
                           />
                           <span>File Exists</span>
                         </label>
@@ -722,12 +765,13 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
                             type="radio"
                             name="status"
                             checked={statusFilter === 'missing'}
-                            onChange={() => setStatusFilter('missing')}
+                            onChange={() => { setStatusFilter('missing'); closeDropdown(); }}
                           />
                           <span>File Missing</span>
                         </label>
                       </div>
-                    </div>
+                    </div>,
+                    document.body
                   )}
                 </th>
                 )}
@@ -742,23 +786,20 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
                     </span>
                     <button
                       className={`filter-icon ${openDropdown === 'source' || sourceFilter !== 'all' ? 'active' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenDropdown(openDropdown === 'source' ? null : 'source');
-                      }}
+                      onClick={(e) => handleDropdownToggle('source', e)}
                     >
                       ⋮
                     </button>
                   </div>
-                  {openDropdown === 'source' && (
-                    <div className="filter-dropdown">
+                  {openDropdown === 'source' && dropdownPosition && createPortal(
+                    <div className="filter-dropdown" style={{ top: dropdownPosition.top, left: dropdownPosition.left }}>
                       <div className="dropdown-options">
                         <label className="dropdown-option">
                           <input
                             type="radio"
                             name="source"
                             checked={sourceFilter === 'all'}
-                            onChange={() => setSourceFilter('all')}
+                            onChange={() => { setSourceFilter('all'); closeDropdown(); }}
                           />
                           <span>All</span>
                         </label>
@@ -768,13 +809,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
                               type="radio"
                               name="source"
                               checked={sourceFilter === source}
-                              onChange={() => setSourceFilter(source)}
+                              onChange={() => { setSourceFilter(source); closeDropdown(); }}
                             />
                             <span>{source}</span>
                           </label>
                         ))}
                       </div>
-                    </div>
+                    </div>,
+                    document.body
                   )}
                 </th>
                 )}
@@ -789,23 +831,20 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
                     </span>
                     <button
                       className={`filter-icon ${openDropdown === 'gain' || gainFilter !== 'all' ? 'active' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenDropdown(openDropdown === 'gain' ? null : 'gain');
-                      }}
+                      onClick={(e) => handleDropdownToggle('gain', e)}
                     >
                       ⋮
                     </button>
                   </div>
-                  {openDropdown === 'gain' && (
-                    <div className="filter-dropdown">
+                  {openDropdown === 'gain' && dropdownPosition && createPortal(
+                    <div className="filter-dropdown" style={{ top: dropdownPosition.top, left: dropdownPosition.left }}>
                       <div className="dropdown-options">
                         <label className="dropdown-option">
                           <input
                             type="radio"
                             name="gain"
                             checked={gainFilter === 'all'}
-                            onChange={() => setGainFilter('all')}
+                            onChange={() => { setGainFilter('all'); closeDropdown(); }}
                           />
                           <span>All</span>
                         </label>
@@ -815,13 +854,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
                               type="radio"
                               name="gain"
                               checked={gainFilter === gain.toString()}
-                              onChange={() => setGainFilter(gain.toString())}
+                              onChange={() => { setGainFilter(gain.toString()); closeDropdown(); }}
                             />
                             <span>{gain}</span>
                           </label>
                         ))}
                       </div>
-                    </div>
+                    </div>,
+                    document.body
                   )}
                 </th>
                 )}
@@ -836,23 +876,20 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
                     </span>
                     <button
                       className={`filter-icon ${openDropdown === 'timestretch' || timestretchFilter !== 'all' ? 'active' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenDropdown(openDropdown === 'timestretch' ? null : 'timestretch');
-                      }}
+                      onClick={(e) => handleDropdownToggle('timestretch', e)}
                     >
                       ⋮
                     </button>
                   </div>
-                  {openDropdown === 'timestretch' && (
-                    <div className="filter-dropdown">
+                  {openDropdown === 'timestretch' && dropdownPosition && createPortal(
+                    <div className="filter-dropdown" style={{ top: dropdownPosition.top, left: dropdownPosition.left }}>
                       <div className="dropdown-options">
                         <label className="dropdown-option">
                           <input
                             type="radio"
                             name="timestretch"
                             checked={timestretchFilter === 'all'}
-                            onChange={() => setTimestretchFilter('all')}
+                            onChange={() => { setTimestretchFilter('all'); closeDropdown(); }}
                           />
                           <span>All</span>
                         </label>
@@ -862,13 +899,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
                               type="radio"
                               name="timestretch"
                               checked={timestretchFilter === mode}
-                              onChange={() => setTimestretchFilter(mode)}
+                              onChange={() => { setTimestretchFilter(mode); closeDropdown(); }}
                             />
                             <span>{mode}</span>
                           </label>
                         ))}
                       </div>
-                    </div>
+                    </div>,
+                    document.body
                   )}
                 </th>
                 )}
@@ -883,23 +921,20 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
                     </span>
                     <button
                       className={`filter-icon ${openDropdown === 'loop' || loopFilter !== 'all' ? 'active' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenDropdown(openDropdown === 'loop' ? null : 'loop');
-                      }}
+                      onClick={(e) => handleDropdownToggle('loop', e)}
                     >
                       ⋮
                     </button>
                   </div>
-                  {openDropdown === 'loop' && (
-                    <div className="filter-dropdown">
+                  {openDropdown === 'loop' && dropdownPosition && createPortal(
+                    <div className="filter-dropdown" style={{ top: dropdownPosition.top, left: dropdownPosition.left }}>
                       <div className="dropdown-options">
                         <label className="dropdown-option">
                           <input
                             type="radio"
                             name="loop"
                             checked={loopFilter === 'all'}
-                            onChange={() => setLoopFilter('all')}
+                            onChange={() => { setLoopFilter('all'); closeDropdown(); }}
                           />
                           <span>All</span>
                         </label>
@@ -909,13 +944,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
                               type="radio"
                               name="loop"
                               checked={loopFilter === mode}
-                              onChange={() => setLoopFilter(mode)}
+                              onChange={() => { setLoopFilter(mode); closeDropdown(); }}
                             />
                             <span>{mode}</span>
                           </label>
                         ))}
                       </div>
-                    </div>
+                    </div>,
+                    document.body
                   )}
                 </th>
                 )}
@@ -930,23 +966,20 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
                     </span>
                     <button
                       className={`filter-icon ${openDropdown === 'format' || formatFilter !== 'all' ? 'active' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenDropdown(openDropdown === 'format' ? null : 'format');
-                      }}
+                      onClick={(e) => handleDropdownToggle('format', e)}
                     >
                       ⋮
                     </button>
                   </div>
-                  {openDropdown === 'format' && (
-                    <div className="filter-dropdown">
+                  {openDropdown === 'format' && dropdownPosition && createPortal(
+                    <div className="filter-dropdown" style={{ top: dropdownPosition.top, left: dropdownPosition.left }}>
                       <div className="dropdown-options">
                         <label className="dropdown-option">
                           <input
                             type="radio"
                             name="format"
                             checked={formatFilter === 'all'}
-                            onChange={() => setFormatFilter('all')}
+                            onChange={() => { setFormatFilter('all'); closeDropdown(); }}
                           />
                           <span>All</span>
                         </label>
@@ -956,13 +989,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
                               type="radio"
                               name="format"
                               checked={formatFilter === format}
-                              onChange={() => setFormatFilter(format)}
+                              onChange={() => { setFormatFilter(format); closeDropdown(); }}
                             />
                             <span>{format}</span>
                           </label>
                         ))}
                       </div>
-                    </div>
+                    </div>,
+                    document.body
                   )}
                 </th>
                 )}
@@ -977,23 +1011,20 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
                     </span>
                     <button
                       className={`filter-icon ${openDropdown === 'bitdepth' || bitDepthFilter !== 'all' ? 'active' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenDropdown(openDropdown === 'bitdepth' ? null : 'bitdepth');
-                      }}
+                      onClick={(e) => handleDropdownToggle('bitdepth', e)}
                     >
                       ⋮
                     </button>
                   </div>
-                  {openDropdown === 'bitdepth' && (
-                    <div className="filter-dropdown">
+                  {openDropdown === 'bitdepth' && dropdownPosition && createPortal(
+                    <div className="filter-dropdown" style={{ top: dropdownPosition.top, left: dropdownPosition.left }}>
                       <div className="dropdown-options">
                         <label className="dropdown-option">
                           <input
                             type="radio"
                             name="bitdepth"
                             checked={bitDepthFilter === 'all'}
-                            onChange={() => setBitDepthFilter('all')}
+                            onChange={() => { setBitDepthFilter('all'); closeDropdown(); }}
                           />
                           <span>All</span>
                         </label>
@@ -1003,13 +1034,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
                               type="radio"
                               name="bitdepth"
                               checked={bitDepthFilter === bitDepth.toString()}
-                              onChange={() => setBitDepthFilter(bitDepth.toString())}
+                              onChange={() => { setBitDepthFilter(bitDepth.toString()); closeDropdown(); }}
                             />
                             <span>{bitDepth}</span>
                           </label>
                         ))}
                       </div>
-                    </div>
+                    </div>,
+                    document.body
                   )}
                 </th>
                 )}
@@ -1024,23 +1056,20 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
                     </span>
                     <button
                       className={`filter-icon ${openDropdown === 'samplerate' || sampleRateFilter !== 'all' ? 'active' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenDropdown(openDropdown === 'samplerate' ? null : 'samplerate');
-                      }}
+                      onClick={(e) => handleDropdownToggle('samplerate', e)}
                     >
                       ⋮
                     </button>
                   </div>
-                  {openDropdown === 'samplerate' && (
-                    <div className="filter-dropdown">
+                  {openDropdown === 'samplerate' && dropdownPosition && createPortal(
+                    <div className="filter-dropdown" style={{ top: dropdownPosition.top, left: dropdownPosition.left }}>
                       <div className="dropdown-options">
                         <label className="dropdown-option">
                           <input
                             type="radio"
                             name="samplerate"
                             checked={sampleRateFilter === 'all'}
-                            onChange={() => setSampleRateFilter('all')}
+                            onChange={() => { setSampleRateFilter('all'); closeDropdown(); }}
                           />
                           <span>All</span>
                         </label>
@@ -1050,13 +1079,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
                               type="radio"
                               name="samplerate"
                               checked={sampleRateFilter === sampleRate.toString()}
-                              onChange={() => setSampleRateFilter(sampleRate.toString())}
+                              onChange={() => { setSampleRateFilter(sampleRate.toString()); closeDropdown(); }}
                             />
                             <span>{(sampleRate / 1000).toFixed(1)} kHz</span>
                           </label>
                         ))}
                       </div>
-                    </div>
+                    </div>,
+                    document.body
                   )}
                 </th>
                 )}
