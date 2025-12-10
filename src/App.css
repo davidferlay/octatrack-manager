@@ -972,6 +972,14 @@ h1 {
   gap: 1rem;
 }
 
+.bank-selector-section > .selector-group:first-child {
+  margin-left: -0.73rem;
+}
+
+.bank-selector-section > .selector-group:last-child {
+  margin-right: -1rem;
+}
+
 /* Toggle Switch */
 .toggle-switch {
   display: flex;
@@ -1168,8 +1176,10 @@ h1 {
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ff6600' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 0.75rem center;
+  background-position: right 12px center;
+  background-origin: padding-box;
   padding-right: 2.5rem;
+  box-sizing: border-box;
 }
 
 .bank-selector:hover {
