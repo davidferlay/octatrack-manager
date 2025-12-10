@@ -1287,6 +1287,7 @@ h1 {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 0.25rem 1.25rem;
+  margin-top: 0.5rem;
 }
 
 .overview-section {
@@ -1301,8 +1302,6 @@ h1 {
 
 .overview-section:hover {
   border-left-color: var(--elektron-orange-hover);
-  box-shadow: 0 6px 20px rgba(255, 102, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  transform: translateY(-2px);
 }
 
 .overview-section h2 {
