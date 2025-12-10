@@ -695,6 +695,7 @@ h1 {
 
 .project-content {
   padding: 0;
+  overflow: visible;
 }
 
 .project-content section {
@@ -1275,6 +1276,7 @@ h1 {
 /* Tab Content */
 .tab-content {
   padding: 0;
+  overflow: visible;
 }
 
 .overview-tab,
@@ -1359,6 +1361,7 @@ h1 {
 
 .samples-tab {
   padding: 1rem 2rem;
+  overflow: visible;
 }
 
 .banks-tab,
@@ -1369,6 +1372,7 @@ h1 {
 /* Samples Tab */
 .samples-section {
   margin-bottom: 3rem;
+  overflow: visible;
 }
 
 .samples-section:last-child {
@@ -1510,11 +1514,17 @@ h1 {
 /* Table Wrapper for Dropdown Positioning */
 .table-wrapper {
   position: relative;
+  overflow: visible;
 }
 
 /* Filterable Header Styles */
 .filterable-header {
   position: relative;
+  overflow: visible;
+}
+
+.samples-table th.filterable-header {
+  overflow: visible;
 }
 
 .header-content {
@@ -1571,9 +1581,7 @@ h1 {
 
 /* Filter Dropdown */
 .filter-dropdown {
-  position: absolute;
-  top: 100%;
-  right: 0;
+  position: fixed;
   width: max-content;
   min-width: 120px;
   max-width: 300px;
@@ -1581,9 +1589,9 @@ h1 {
   border: 1px solid var(--elektron-orange);
   border-radius: 4px;
   padding: 0.75rem;
-  margin-top: 0.25rem;
-  z-index: 1000;
+  z-index: 9999;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  pointer-events: auto;
 }
 
 /* Dropdown Search Input */
@@ -1778,6 +1786,7 @@ h1 {
 .samples-table thead {
   background-color: var(--elektron-black);
   border-bottom: 2px solid var(--elektron-orange);
+  overflow: visible;
 }
 
 .samples-table th {
