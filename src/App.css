@@ -550,6 +550,7 @@ h1 {
   font-family: inherit;
   cursor: pointer;
   transition: all 0.15s ease;
+  margin-left: -1.3rem;
 }
 
 .back-button:hover {
