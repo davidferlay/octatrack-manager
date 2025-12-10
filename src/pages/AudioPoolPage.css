@@ -215,8 +215,9 @@
 /* Ensure filter info bars align between panels */
 .source-panel .filter-results-info,
 .dest-panel .filter-results-info {
-  height: 34px;
+  min-height: 40px;
   box-sizing: border-box;
+  padding: 0.5rem 0.75rem;
 }
 
 /* Ensure table headers align */
