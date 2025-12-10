@@ -50,6 +50,39 @@ export class ProjectDatabase extends Dexie {
 export const db = new ProjectDatabase();
 
 /**
+ * Check if an error is a QuotaExceededError
+ */
+function isQuotaError(error: unknown): boolean {
+  if (error instanceof Error) {
+    return error.name === 'QuotaExceededError' ||
+           error.message.includes('QuotaExceeded') ||
+           error.message.includes('not enough space');
+  }
+  return false;
+}
+
+/**
+ * Clear old entries to free up space (keeps most recent 5 projects)
+ */
+async function clearOldEntries(): Promise<void> {
+  try {
+    const metadata = await db.projectMetadata.orderBy('timestamp').toArray();
+
+    // Keep only the 5 most recent projects
+    if (metadata.length > 5) {
+      const toDelete = metadata.slice(0, metadata.length - 5);
+      for (const entry of toDelete) {
+        await db.projectMetadata.delete(entry.path);
+        await db.projectBanks.where('path').equals(entry.path).delete();
+      }
+      console.log(`Cleared ${toDelete.length} old project(s) from cache to free space`);
+    }
+  } catch (error) {
+    console.error('Error clearing old entries:', error);
+  }
+}
+
+/**
  * Get cached project metadata only (fast!)
  */
 export async function getCachedMetadata(path: string): Promise<ProjectMetadata | null> {
@@ -163,13 +196,14 @@ export async function setCachedBank(
 
 /**
  * Save a project to cache (metadata + all banks)
+ * Handles QuotaExceededError by clearing old entries and retrying
  */
 export async function setCachedProject(
   path: string,
   metadata: ProjectMetadata,
   banks: Bank[]
 ): Promise<void> {
-  try {
+  const saveProject = async () => {
     // Save metadata
     await setCachedMetadata(path, metadata);
 
@@ -178,9 +212,27 @@ export async function setCachedProject(
       setCachedBank(path, bank.id, bank)
     );
     await Promise.all(bankPromises);
+  };
+
+  try {
+    await saveProject();
   } catch (error) {
-    console.error('Error saving project to IndexedDB:', error);
-    throw error;
+    if (isQuotaError(error)) {
+      console.warn('Storage quota exceeded, clearing old cache entries...');
+      await clearOldEntries();
+
+      // Retry once after clearing
+      try {
+        await saveProject();
+        console.log('Successfully saved project after clearing old cache');
+      } catch (retryError) {
+        // If it still fails, log but don't throw - caching is optional
+        console.warn('Could not cache project after clearing old entries. Project will still load but without caching.');
+      }
+    } else {
+      console.error('Error saving project to IndexedDB:', error);
+      // Don't throw - caching failure shouldn't break the app
+    }
   }
 }
 
