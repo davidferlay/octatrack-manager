@@ -1401,6 +1401,23 @@ h1 {
   color: var(--elektron-orange);
 }
 
+/* Reset Filters Button */
+.reset-filters-btn {
+  background: none;
+  border: 1px solid var(--elektron-border-gray);
+  color: var(--elektron-orange);
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.reset-filters-btn:hover {
+  background-color: var(--elektron-orange);
+  color: var(--elektron-black);
+}
+
 /* Copy Table Button */
 .copy-table-btn {
   background: none;
