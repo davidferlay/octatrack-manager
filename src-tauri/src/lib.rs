@@ -3,7 +3,7 @@ mod project_reader;
 mod audio_pool;
 
 use device_detection::{discover_devices, scan_directory, ScanResult};
-use project_reader::{read_project_metadata, read_project_banks, read_parts_data, ProjectMetadata, Bank, PartData};
+use project_reader::{read_project_metadata, read_project_banks, read_parts_data, save_parts_data, ProjectMetadata, Bank, PartData};
 use audio_pool::{list_directory, get_parent_directory, create_directory, copy_files_with_overwrite, copy_single_file_with_progress, move_files, delete_files, rename_file as rename_file_impl, AudioFileInfo, register_cancellation_token, cancel_transfer, remove_cancellation_token};
 use tauri::{AppHandle, Emitter};
 use serde::Serialize;
@@ -60,6 +60,14 @@ async fn load_parts_data(path: String, bank_id: String) -> Result<Vec<PartData>,
     // Run on a blocking thread pool to avoid blocking the main event loop
     tauri::async_runtime::spawn_blocking(move || {
         read_parts_data(&path, &bank_id)
+    }).await.unwrap()
+}
+
+#[tauri::command]
+async fn save_parts(path: String, bank_id: String, parts_data: Vec<PartData>) -> Result<(), String> {
+    // Run on a blocking thread pool to avoid blocking the main event loop
+    tauri::async_runtime::spawn_blocking(move || {
+        save_parts_data(&path, &bank_id, parts_data)
     }).await.unwrap()
 }
 
@@ -212,6 +220,7 @@ pub fn run() {
             load_project_metadata,
             load_project_banks,
             load_parts_data,
+            save_parts,
             list_audio_directory,
             navigate_to_parent,
             create_new_directory,

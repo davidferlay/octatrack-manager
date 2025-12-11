@@ -25,7 +25,7 @@ tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-ot-tools-io = { git = "https://gitlab.com/ot-tools/ot-tools-io.git" }
+ot-tools-io = { git = "https://gitlab.com/davidferlay/ot-tools-io-dij.git", branch = "banks-additional-tests-from-migrated-os-project" }
 sysinfo = "0.32"
 walkdir = "2"
 dirs = "5"

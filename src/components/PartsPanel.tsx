@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { PartData } from '../context/ProjectsContext';
 import { TrackBadge } from './TrackBadge';
@@ -15,6 +15,7 @@ interface PartsPanelProps {
   onSharedPageChange?: (index: number) => void;  // Optional callback for shared page change
   sharedLfoTab?: LfoTabType;  // Optional shared LFO tab for unified LFO tab selection across banks
   onSharedLfoTabChange?: (tab: LfoTabType) => void;  // Optional callback for shared LFO tab change
+  onPartsChanged?: () => void;  // Optional callback when parts are saved (to invalidate cache)
 }
 
 type AudioPageType = 'ALL' | 'SRC' | 'AMP' | 'LFO' | 'FX1' | 'FX2';
@@ -30,7 +31,8 @@ export default function PartsPanel({
   sharedPageIndex,
   onSharedPageChange,
   sharedLfoTab,
-  onSharedLfoTabChange
+  onSharedLfoTabChange,
+  onPartsChanged
 }: PartsPanelProps) {
   const [partsData, setPartsData] = useState<PartData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,6 +41,13 @@ export default function PartsPanel({
   const [localPageIndex, setLocalPageIndex] = useState<number>(-1);
   const [activePartIndex, setActivePartIndex] = useState<number>(0);
   const [localLfoTab, setLocalLfoTab] = useState<LfoTabType>('LFO1');
+
+  // Edit mode state
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editedPartsData, setEditedPartsData] = useState<PartData[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [modifiedPartIds, setModifiedPartIds] = useState<Set<number>>(new Set());
 
   // Use shared page index if provided (All banks mode), otherwise use local state
   const activePageIndex = sharedPageIndex !== undefined ? sharedPageIndex : localPageIndex;
@@ -55,6 +64,9 @@ export default function PartsPanel({
   const activeAudioPage: AudioPageType = activePageIndex === -1 ? 'ALL' : (['SRC', 'AMP', 'LFO', 'FX1', 'FX2'][activePageIndex] as AudioPageType);
   const activeMidiPage: MidiPageType = activePageIndex === -1 ? 'ALL' : (['NOTE', 'ARP', 'LFO', 'CTRL1', 'CTRL2'][activePageIndex] as MidiPageType);
 
+  // Get the active parts data (edited or original)
+  const activePartsData = isEditMode ? editedPartsData : partsData;
+
   useEffect(() => {
     loadPartsData();
   }, [projectPath, bankId]);
@@ -68,12 +80,130 @@ export default function PartsPanel({
         bankId: bankId
       });
       setPartsData(data);
+      // Reset edit state when loading new data
+      setIsEditMode(false);
+      setEditedPartsData([]);
+      setHasUnsavedChanges(false);
     } catch (err) {
       console.error('Failed to load parts data:', err);
       setError(err as string);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Enter edit mode
+  const enterEditMode = useCallback(() => {
+    // Deep clone the parts data for editing
+    setEditedPartsData(JSON.parse(JSON.stringify(partsData)));
+    setIsEditMode(true);
+    setHasUnsavedChanges(false);
+    setModifiedPartIds(new Set());
+  }, [partsData]);
+
+  // Cancel edit mode
+  const cancelEditMode = useCallback(() => {
+    setIsEditMode(false);
+    setEditedPartsData([]);
+    setHasUnsavedChanges(false);
+    setModifiedPartIds(new Set());
+  }, []);
+
+  // Save changes
+  const saveChanges = useCallback(async () => {
+    if (!hasUnsavedChanges) return;
+
+    try {
+      setIsSaving(true);
+      // Only send parts that were actually modified to avoid marking all parts as edited
+      const modifiedParts = editedPartsData.filter(p => modifiedPartIds.has(p.part_id));
+      console.log('[PartsPanel] Saving modified parts:', modifiedPartIds, 'count:', modifiedParts.length);
+      await invoke('save_parts', {
+        path: projectPath,
+        bankId: bankId,
+        partsData: modifiedParts
+      });
+      // Update original data with saved changes
+      setPartsData(editedPartsData);
+      setIsEditMode(false);
+      setEditedPartsData([]);
+      setHasUnsavedChanges(false);
+      setModifiedPartIds(new Set());
+      // Notify parent to invalidate cache so next load gets fresh data
+      if (onPartsChanged) {
+        onPartsChanged();
+      }
+    } catch (err) {
+      console.error('Failed to save parts data:', err);
+      setError(`Failed to save: ${err}`);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [projectPath, bankId, editedPartsData, hasUnsavedChanges, modifiedPartIds, onPartsChanged]);
+
+  // Generic function to update a parameter value
+  const updatePartParam = useCallback(<T extends keyof PartData>(
+    partId: number,
+    section: T,
+    trackId: number,
+    field: string,
+    value: number
+  ) => {
+    setEditedPartsData(prev => {
+      const newData = [...prev];
+      const partIndex = newData.findIndex(p => p.part_id === partId);
+      if (partIndex === -1) return prev;
+
+      const part = { ...newData[partIndex] };
+      const sectionArray = [...(part[section] as unknown[])];
+      const existingTrack = sectionArray[trackId] as Record<string, unknown> | undefined;
+      if (!existingTrack) return prev;
+      const track = { ...existingTrack };
+      track[field] = value;
+      sectionArray[trackId] = track;
+      (part[section] as unknown) = sectionArray;
+      newData[partIndex] = part;
+      return newData;
+    });
+    // Track which part was modified
+    setModifiedPartIds(prev => new Set([...prev, partId]));
+    setHasUnsavedChanges(true);
+  }, []);
+
+  // Editable parameter value component
+  const renderParamValue = (
+    partId: number,
+    section: keyof PartData,
+    trackId: number,
+    field: string,
+    value: number,
+    formatter?: (val: number) => string
+  ) => {
+    if (!isEditMode) {
+      // Read-only display
+      return (
+        <span className="param-value">
+          {formatter ? formatter(value) : value}
+        </span>
+      );
+    }
+
+    // Editable input
+    return (
+      <input
+        type="number"
+        className="param-value param-value-editable"
+        value={value}
+        onChange={(e) => {
+          const newValue = parseInt(e.target.value, 10);
+          if (!isNaN(newValue)) {
+            updatePartParam(partId, section, trackId, field, newValue);
+          }
+        }}
+        min={0}
+        max={127}
+      />
+    );
   };
 
   const formatParamValue = (value: number | null): string => {
@@ -330,15 +460,19 @@ export default function PartsPanel({
   };
 
   const renderAmpPage = (part: PartData) => {
+    // Use activePartsData in edit mode to show current edits
+    const activePart = isEditMode
+      ? activePartsData.find(p => p.part_id === part.part_id) || part
+      : part;
     const tracksToShow = selectedTrack !== undefined && selectedTrack >= 0 && selectedTrack <= 7
-      ? [part.amps[selectedTrack]]
-      : part.amps;
+      ? [activePart.amps[selectedTrack]]
+      : activePart.amps;
 
     return (
       <div className="parts-tracks">
         {tracksToShow.map((amp) => {
           // Get the machine type from the corresponding machine data
-          const machine = part.machines[amp.track_id];
+          const machine = activePart.machines[amp.track_id];
           const machineType = machine.machine_type;
 
           return (
@@ -353,27 +487,27 @@ export default function PartsPanel({
                 <div className="params-grid">
                   <div className="param-item">
                     <span className="param-label">ATK</span>
-                    <span className="param-value">{amp.atk}</span>
+                    {renderParamValue(activePart.part_id, 'amps', amp.track_id, 'atk', amp.atk)}
                   </div>
                   <div className="param-item">
                     <span className="param-label">HOLD</span>
-                    <span className="param-value">{amp.hold}</span>
+                    {renderParamValue(activePart.part_id, 'amps', amp.track_id, 'hold', amp.hold)}
                   </div>
                   <div className="param-item">
                     <span className="param-label">REL</span>
-                    <span className="param-value">{amp.rel}</span>
+                    {renderParamValue(activePart.part_id, 'amps', amp.track_id, 'rel', amp.rel)}
                   </div>
                   <div className="param-item">
                     <span className="param-label">VOL</span>
-                    <span className="param-value">{amp.vol}</span>
+                    {renderParamValue(activePart.part_id, 'amps', amp.track_id, 'vol', amp.vol)}
                   </div>
                   <div className="param-item">
                     <span className="param-label">BAL</span>
-                    <span className="param-value">{amp.bal}</span>
+                    {renderParamValue(activePart.part_id, 'amps', amp.track_id, 'bal', amp.bal)}
                   </div>
                   <div className="param-item">
                     <span className="param-label">F</span>
-                    <span className="param-value">{amp.f}</span>
+                    {renderParamValue(activePart.part_id, 'amps', amp.track_id, 'f', amp.f)}
                   </div>
                 </div>
               </div>
@@ -383,23 +517,23 @@ export default function PartsPanel({
                 <div className="params-grid">
                   <div className="param-item">
                     <span className="param-label">AMP</span>
-                    <span className="param-value">{amp.amp_setup_amp}</span>
+                    {renderParamValue(activePart.part_id, 'amps', amp.track_id, 'amp_setup_amp', amp.amp_setup_amp)}
                   </div>
                   <div className="param-item">
                     <span className="param-label">SYNC</span>
-                    <span className="param-value">{amp.amp_setup_sync}</span>
+                    {renderParamValue(activePart.part_id, 'amps', amp.track_id, 'amp_setup_sync', amp.amp_setup_sync)}
                   </div>
                   <div className="param-item">
                     <span className="param-label">ATCK</span>
-                    <span className="param-value">{amp.amp_setup_atck}</span>
+                    {renderParamValue(activePart.part_id, 'amps', amp.track_id, 'amp_setup_atck', amp.amp_setup_atck)}
                   </div>
                   <div className="param-item">
                     <span className="param-label">FX1</span>
-                    <span className="param-value">{formatFxEnvTrig(amp.amp_setup_fx1)}</span>
+                    {renderParamValue(activePart.part_id, 'amps', amp.track_id, 'amp_setup_fx1', amp.amp_setup_fx1, formatFxEnvTrig)}
                   </div>
                   <div className="param-item">
                     <span className="param-label">FX2</span>
-                    <span className="param-value">{formatFxEnvTrig(amp.amp_setup_fx2)}</span>
+                    {renderParamValue(activePart.part_id, 'amps', amp.track_id, 'amp_setup_fx2', amp.amp_setup_fx2, formatFxEnvTrig)}
                   </div>
                 </div>
               </div>
@@ -1916,9 +2050,40 @@ export default function PartsPanel({
   const activePart = partsData[activePartIndex];
 
   return (
-    <div className="bank-card">
+    <div className={`bank-card ${isEditMode ? 'edit-mode' : ''}`}>
       <div className="bank-card-header">
-        <h3>{bankName} - Parts</h3>
+        <div className="bank-card-header-left">
+          <h3>{bankName} - Parts</h3>
+          {hasUnsavedChanges && <span className="unsaved-indicator">*</span>}
+        </div>
+        <div className="parts-edit-controls">
+          {!isEditMode ? (
+            <button
+              className="edit-button"
+              onClick={enterEditMode}
+              title="Edit part parameters"
+            >
+              Edit
+            </button>
+          ) : (
+            <>
+              <button
+                className="cancel-button"
+                onClick={cancelEditMode}
+                disabled={isSaving}
+              >
+                Cancel
+              </button>
+              <button
+                className="save-button"
+                onClick={saveChanges}
+                disabled={isSaving || !hasUnsavedChanges}
+              >
+                {isSaving ? 'Saving...' : 'Save'}
+              </button>
+            </>
+          )}
+        </div>
         <div className="parts-part-tabs">
           {partNames.map((partName, index) => (
             <button

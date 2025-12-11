@@ -1,10 +1,11 @@
-import { useState, useTransition } from "react";
+import { useState, useTransition, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useNavigate } from "react-router-dom";
 import { useProjects } from "../context/ProjectsContext";
 import { Version } from "../components/Version";
 import { ScrollToTop } from "../components/ScrollToTop";
+import { clearProjectCache } from "../utils/projectDB";
 import "../App.css";
 
 interface OctatrackProject {
@@ -47,10 +48,28 @@ export function HomePage() {
     setOpenLocations,
     setIsIndividualProjectsOpen,
     setIsLocationsOpen,
+    clearAll,
   } = useProjects();
   const [isScanning, setIsScanning] = useState(false);
   const navigate = useNavigate();
   const [, startTransition] = useTransition();
+
+  // Hidden cache clear function - clears all caches (IndexedDB, sessionStorage, in-memory)
+  const handleClearAllCaches = useCallback(async () => {
+    try {
+      // Clear IndexedDB project cache
+      await clearProjectCache();
+      // Clear all context state and sessionStorage
+      clearAll();
+      // Clear update-checked flag from sessionStorage
+      sessionStorage.removeItem('update-checked');
+      console.log('All caches cleared successfully');
+      alert('All caches cleared successfully!');
+    } catch (error) {
+      console.error('Error clearing caches:', error);
+      alert('Error clearing caches. Check console for details.');
+    }
+  }, [clearAll]);
 
   async function scanDevices() {
     setIsScanning(true);
@@ -153,6 +172,24 @@ export function HomePage() {
           <h1>Octatrack Manager</h1>
           <span className="header-path-info">Discover and manage your Elektron Octatrack projects</span>
         </div>
+        <button
+          onClick={handleClearAllCaches}
+          title="Clear all caches"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            opacity: 0.1,
+            padding: '4px 8px',
+            fontSize: '12px',
+            color: '#888',
+            marginRight: '8px',
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.5'}
+          onMouseLeave={(e) => e.currentTarget.style.opacity = '0.1'}
+        >
+          ⟳
+        </button>
         <Version />
       </div>
 

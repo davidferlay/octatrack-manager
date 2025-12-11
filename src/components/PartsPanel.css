@@ -414,3 +414,109 @@
     min-width: 100%;
   }
 }
+
+/* Edit Mode Styles */
+.bank-card.edit-mode {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+}
+
+.bank-card-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bank-card-header-left h3 {
+  margin: 0;
+}
+
+.unsaved-indicator {
+  color: #f59e0b;
+  font-size: 1.5rem;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.parts-edit-controls {
+  display: flex;
+  gap: 8px;
+  margin-left: 16px;
+}
+
+.edit-button,
+.save-button,
+.cancel-button {
+  padding: 6px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.edit-button {
+  background: #3b82f6;
+  color: white;
+}
+
+.edit-button:hover {
+  background: #2563eb;
+}
+
+.save-button {
+  background: #10b981;
+  color: white;
+}
+
+.save-button:hover:not(:disabled) {
+  background: #059669;
+}
+
+.save-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cancel-button {
+  background: #6b7280;
+  color: white;
+}
+
+.cancel-button:hover:not(:disabled) {
+  background: #4b5563;
+}
+
+.cancel-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Editable input field */
+.param-value-editable {
+  background: #1a1a1a;
+  border: 1px solid #f59e0b;
+  color: #ffffff;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 6px;
+  border-radius: 3px;
+  width: 60px;
+  text-align: right;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+  outline: none;
+  -moz-appearance: textfield;
+}
+
+.param-value-editable::-webkit-outer-spin-button,
+.param-value-editable::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.param-value-editable:focus {
+  border-color: #fbbf24;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.3);
+}
