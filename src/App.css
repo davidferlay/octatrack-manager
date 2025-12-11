@@ -372,6 +372,18 @@ h1 {
   border-color: var(--elektron-orange);
 }
 
+.status-audio-pool {
+  background-color: transparent;
+  color: #4a9eff;
+  border-color: rgba(74, 158, 255, 0.7);
+}
+
+.status-audio-pool-empty {
+  background-color: transparent;
+  color: rgba(74, 158, 255, 0.5);
+  border-color: rgba(74, 158, 255, 0.4);
+}
+
 .status-no {
   background-color: transparent;
   color: var(--elektron-text-dim);
