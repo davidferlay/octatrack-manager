@@ -425,7 +425,7 @@ h1 {
 /* Audio Pool Card */
 .audio-pool-card {
   background-color: var(--elektron-black);
-  border: 1px solid rgba(0, 170, 200, 0.3);
+  border: 1px solid rgba(74, 158, 255, 0.7);
   padding: 0.75rem;
   transition: all 0.15s ease;
   cursor: pointer;
@@ -439,14 +439,14 @@ h1 {
   top: 0.5rem;
   right: 0.75rem;
   font-size: 1.4rem;
-  color: rgba(0, 170, 200, 0.6);
+  color: #4a9eff;
 }
 
 .audio-pool-card:hover {
-  border-color: rgba(0, 170, 200, 0.8);
+  border-color: #6bb3ff;
   background-color: #151515;
   transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 170, 200, 0.2);
+  box-shadow: 0 4px 8px rgba(74, 158, 255, 0.35);
 }
 
 .audio-pool-card:active {
@@ -458,7 +458,7 @@ h1 {
   font-weight: 600;
   font-size: 0.875rem;
   margin-bottom: 0.5rem;
-  color: rgba(0, 170, 200, 0.9);
+  color: #4a9eff;
   font-family: 'Courier New', monospace;
 }
 
@@ -474,8 +474,8 @@ h1 {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  border: 1px solid rgba(0, 170, 200, 0.4);
-  color: rgba(0, 170, 200, 0.8);
+  border: 1px solid rgba(74, 158, 255, 0.7);
+  color: #4a9eff;
 }
 
 .project-name {
