@@ -478,6 +478,10 @@ h1 {
   color: #4a9eff;
 }
 
+.audio-pool-card.audio-pool-empty .audio-pool-info span {
+  border-color: rgba(74, 158, 255, 0.4);
+}
+
 .project-name {
   font-weight: 600;
   font-size: 0.875rem;
