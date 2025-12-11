@@ -2680,7 +2680,7 @@ dependencies = [
 [[package]]
 name = "ot-tools-io"
 version = "0.5.0"
-source = "git+https://gitlab.com/ot-tools/ot-tools-io.git#8ad81b100098cc71a0043a0196a2b40f5583d7bf"
+source = "git+https://gitlab.com/davidferlay/ot-tools-io-dij.git?branch=banks-additional-tests-from-migrated-os-project#13f0d9004d3b9bffd4161149a5f8132d469a8bcb"
 dependencies = [
  "bincode",
  "itertools",
@@ -2695,7 +2695,7 @@ dependencies = [
 [[package]]
 name = "ot-tools-io-derive"
 version = "0.5.0"
-source = "git+https://gitlab.com/ot-tools/ot-tools-io.git#8ad81b100098cc71a0043a0196a2b40f5583d7bf"
+source = "git+https://gitlab.com/davidferlay/ot-tools-io-dij.git?branch=banks-additional-tests-from-migrated-os-project#13f0d9004d3b9bffd4161149a5f8132d469a8bcb"
 dependencies = [
  "quote",
  "syn 2.0.108",

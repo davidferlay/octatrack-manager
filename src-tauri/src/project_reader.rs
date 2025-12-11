@@ -1,4 +1,4 @@
-use ot_tools_io::{BankFile, OctatrackFileIO, ProjectFile};
+use ot_tools_io::{BankFile, HasChecksumField, OctatrackFileIO, ProjectFile};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -1708,8 +1708,10 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<Vec<PartData
     let mut parts_data = Vec::new();
 
     // Each bank has 4 parts (0-3)
+    // Use parts.unsaved which is the working state loaded by the Octatrack
+    // (parts.saved is only used when explicitly saving a Part via the Part menu)
     for part_id in 0..4 {
-        let part = &bank_data.parts.saved.0[part_id as usize];
+        let part = &bank_data.parts.unsaved.0[part_id as usize];
 
         let mut machines = Vec::new();
         let mut amps = Vec::new();
@@ -2100,4 +2102,387 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<Vec<PartData
     }
 
     Ok(parts_data)
+}
+
+/// Save modified Parts data back to a bank file
+pub fn save_parts_data(project_path: &str, bank_id: &str, parts_data: Vec<PartData>) -> Result<(), String> {
+    let path = Path::new(project_path);
+
+    // Convert bank letter (A-P) to bank number (1-16)
+    let bank_letters = [
+        "A", "B", "C", "D", "E", "F", "G", "H",
+        "I", "J", "K", "L", "M", "N", "O", "P"
+    ];
+
+    let bank_num = bank_letters.iter()
+        .position(|&letter| letter == bank_id)
+        .map(|idx| idx + 1)
+        .ok_or_else(|| format!("Invalid bank ID: {}", bank_id))?;
+
+    let bank_file_name = format!("bank{:02}.work", bank_num);
+    let mut bank_file_path = path.join(&bank_file_name);
+
+    if !bank_file_path.exists() {
+        // Try .strd extension
+        let bank_file_name = format!("bank{:02}.strd", bank_num);
+        bank_file_path = path.join(&bank_file_name);
+        if !bank_file_path.exists() {
+            return Err(format!("Bank file not found: {}", bank_id));
+        }
+    }
+
+    // Read the existing bank file
+    let mut bank_data = BankFile::from_data_file(&bank_file_path)
+        .map_err(|e| format!("Failed to read bank file: {:?}", e))?;
+
+    // Update the parts with the provided data
+    // We ONLY write to parts.unsaved (the working copy), NOT parts.saved (the backup)
+    // - parts.unsaved = working state that gets loaded; this is what we modify
+    // - parts.saved = backup state used by "Reload Part" function on Octatrack
+    // By keeping parts.saved unchanged, the user can use "Reload Part" on the Octatrack
+    // to restore the original values before our edits.
+    for part_data in &parts_data {
+        let part_id = part_data.part_id as usize;
+        if part_id >= 4 {
+            continue; // Skip invalid part IDs
+        }
+
+        // Get mutable reference to the unsaved (working) copy only
+        let part_unsaved = &mut bank_data.parts.unsaved.0[part_id];
+
+        // Update audio track parameters for each track
+        for track_id in 0..8 {
+            // Update AMP parameters
+            if let Some(amp) = part_data.amps.get(track_id) {
+                println!("[DEBUG] Writing to parts.unsaved ONLY - Part {}, Track {}: ATK before={}, ATK after={}",
+                         part_id, track_id,
+                         part_unsaved.audio_track_params_values[track_id].amp.atk,
+                         amp.atk);
+
+                part_unsaved.audio_track_params_values[track_id].amp.atk = amp.atk;
+                part_unsaved.audio_track_params_values[track_id].amp.hold = amp.hold;
+                part_unsaved.audio_track_params_values[track_id].amp.rel = amp.rel;
+                part_unsaved.audio_track_params_values[track_id].amp.vol = amp.vol;
+                part_unsaved.audio_track_params_values[track_id].amp.bal = amp.bal;
+                part_unsaved.audio_track_params_values[track_id].amp.f = amp.f;
+
+                // AMP Setup parameters
+                part_unsaved.audio_track_params_setup[track_id].amp.amp = amp.amp_setup_amp;
+                part_unsaved.audio_track_params_setup[track_id].amp.sync = amp.amp_setup_sync;
+                part_unsaved.audio_track_params_setup[track_id].amp.atck = amp.amp_setup_atck;
+                part_unsaved.audio_track_params_setup[track_id].amp.fx1 = amp.amp_setup_fx1;
+                part_unsaved.audio_track_params_setup[track_id].amp.fx2 = amp.amp_setup_fx2;
+            }
+
+            // Update LFO parameters
+            if let Some(lfo) = part_data.lfos.get(track_id) {
+                // Main LFO values
+                part_unsaved.audio_track_params_values[track_id].lfo.spd1 = lfo.spd1;
+                part_unsaved.audio_track_params_values[track_id].lfo.spd2 = lfo.spd2;
+                part_unsaved.audio_track_params_values[track_id].lfo.spd3 = lfo.spd3;
+                part_unsaved.audio_track_params_values[track_id].lfo.dep1 = lfo.dep1;
+                part_unsaved.audio_track_params_values[track_id].lfo.dep2 = lfo.dep2;
+                part_unsaved.audio_track_params_values[track_id].lfo.dep3 = lfo.dep3;
+
+                // LFO Setup 1 (Parameter Target & Wave)
+                part_unsaved.audio_track_params_setup[track_id].lfo_setup_1.lfo1_pmtr = lfo.lfo1_pmtr;
+                part_unsaved.audio_track_params_setup[track_id].lfo_setup_1.lfo2_pmtr = lfo.lfo2_pmtr;
+                part_unsaved.audio_track_params_setup[track_id].lfo_setup_1.lfo3_pmtr = lfo.lfo3_pmtr;
+                part_unsaved.audio_track_params_setup[track_id].lfo_setup_1.lfo1_wave = lfo.lfo1_wave;
+                part_unsaved.audio_track_params_setup[track_id].lfo_setup_1.lfo2_wave = lfo.lfo2_wave;
+                part_unsaved.audio_track_params_setup[track_id].lfo_setup_1.lfo3_wave = lfo.lfo3_wave;
+
+                // LFO Setup 2 (Multiplier & Trigger)
+                part_unsaved.audio_track_params_setup[track_id].lfo_setup_2.lfo1_mult = lfo.lfo1_mult;
+                part_unsaved.audio_track_params_setup[track_id].lfo_setup_2.lfo2_mult = lfo.lfo2_mult;
+                part_unsaved.audio_track_params_setup[track_id].lfo_setup_2.lfo3_mult = lfo.lfo3_mult;
+                part_unsaved.audio_track_params_setup[track_id].lfo_setup_2.lfo1_trig = lfo.lfo1_trig;
+                part_unsaved.audio_track_params_setup[track_id].lfo_setup_2.lfo2_trig = lfo.lfo2_trig;
+                part_unsaved.audio_track_params_setup[track_id].lfo_setup_2.lfo3_trig = lfo.lfo3_trig;
+
+                // Custom LFO design
+                if lfo.custom_lfo_design.len() == 16 {
+                    for (i, &val) in lfo.custom_lfo_design.iter().enumerate() {
+                        part_unsaved.audio_tracks_custom_lfo_designs[track_id].0[i] = val;
+                    }
+                }
+            }
+
+            // Update FX parameters
+            if let Some(fx) = part_data.fxs.get(track_id) {
+                // FX types
+                part_unsaved.audio_track_fx1[track_id] = fx.fx1_type;
+                part_unsaved.audio_track_fx2[track_id] = fx.fx2_type;
+
+                // FX1 main parameters
+                part_unsaved.audio_track_params_values[track_id].fx1.param_1 = fx.fx1_param1;
+                part_unsaved.audio_track_params_values[track_id].fx1.param_2 = fx.fx1_param2;
+                part_unsaved.audio_track_params_values[track_id].fx1.param_3 = fx.fx1_param3;
+                part_unsaved.audio_track_params_values[track_id].fx1.param_4 = fx.fx1_param4;
+                part_unsaved.audio_track_params_values[track_id].fx1.param_5 = fx.fx1_param5;
+                part_unsaved.audio_track_params_values[track_id].fx1.param_6 = fx.fx1_param6;
+
+                // FX2 main parameters
+                part_unsaved.audio_track_params_values[track_id].fx2.param_1 = fx.fx2_param1;
+                part_unsaved.audio_track_params_values[track_id].fx2.param_2 = fx.fx2_param2;
+                part_unsaved.audio_track_params_values[track_id].fx2.param_3 = fx.fx2_param3;
+                part_unsaved.audio_track_params_values[track_id].fx2.param_4 = fx.fx2_param4;
+                part_unsaved.audio_track_params_values[track_id].fx2.param_5 = fx.fx2_param5;
+                part_unsaved.audio_track_params_values[track_id].fx2.param_6 = fx.fx2_param6;
+
+                // FX1 setup parameters
+                part_unsaved.audio_track_params_setup[track_id].fx1.setting1 = fx.fx1_setup1;
+                part_unsaved.audio_track_params_setup[track_id].fx1.setting2 = fx.fx1_setup2;
+                part_unsaved.audio_track_params_setup[track_id].fx1.setting3 = fx.fx1_setup3;
+                part_unsaved.audio_track_params_setup[track_id].fx1.setting4 = fx.fx1_setup4;
+                part_unsaved.audio_track_params_setup[track_id].fx1.setting5 = fx.fx1_setup5;
+                part_unsaved.audio_track_params_setup[track_id].fx1.setting6 = fx.fx1_setup6;
+
+                // FX2 setup parameters
+                part_unsaved.audio_track_params_setup[track_id].fx2.setting1 = fx.fx2_setup1;
+                part_unsaved.audio_track_params_setup[track_id].fx2.setting2 = fx.fx2_setup2;
+                part_unsaved.audio_track_params_setup[track_id].fx2.setting3 = fx.fx2_setup3;
+                part_unsaved.audio_track_params_setup[track_id].fx2.setting4 = fx.fx2_setup4;
+                part_unsaved.audio_track_params_setup[track_id].fx2.setting5 = fx.fx2_setup5;
+                part_unsaved.audio_track_params_setup[track_id].fx2.setting6 = fx.fx2_setup6;
+            }
+
+            // Update Machine parameters (SRC page)
+            if let Some(machine) = part_data.machines.get(track_id) {
+                let machine_type = part_unsaved.audio_track_machine_types[track_id];
+
+                match machine_type {
+                    0 | 1 => {
+                        // Static or Flex machine
+                        if let Some(ptch) = machine.machine_params.ptch {
+                            part_unsaved.audio_track_machine_params[track_id].static_machine.ptch = ptch;
+                        }
+                        if let Some(strt) = machine.machine_params.strt {
+                            part_unsaved.audio_track_machine_params[track_id].static_machine.strt = strt;
+                        }
+                        if let Some(len) = machine.machine_params.len {
+                            part_unsaved.audio_track_machine_params[track_id].static_machine.len = len;
+                        }
+                        if let Some(rate) = machine.machine_params.rate {
+                            part_unsaved.audio_track_machine_params[track_id].static_machine.rate = rate;
+                        }
+                        if let Some(rtrg) = machine.machine_params.rtrg {
+                            part_unsaved.audio_track_machine_params[track_id].static_machine.rtrg = rtrg;
+                        }
+                        if let Some(rtim) = machine.machine_params.rtim {
+                            part_unsaved.audio_track_machine_params[track_id].static_machine.rtim = rtim;
+                        }
+
+                        // Machine setup
+                        if let Some(xloop) = machine.machine_setup.xloop {
+                            part_unsaved.audio_track_machine_setup[track_id].static_machine.xloop = xloop;
+                        }
+                        if let Some(slic) = machine.machine_setup.slic {
+                            part_unsaved.audio_track_machine_setup[track_id].static_machine.slic = slic;
+                        }
+                        if let Some(len) = machine.machine_setup.len {
+                            part_unsaved.audio_track_machine_setup[track_id].static_machine.len = len;
+                        }
+                        if let Some(rate) = machine.machine_setup.rate {
+                            part_unsaved.audio_track_machine_setup[track_id].static_machine.rate = rate;
+                        }
+                        if let Some(tstr) = machine.machine_setup.tstr {
+                            part_unsaved.audio_track_machine_setup[track_id].static_machine.tstr = tstr;
+                        }
+                        if let Some(tsns) = machine.machine_setup.tsns {
+                            part_unsaved.audio_track_machine_setup[track_id].static_machine.tsns = tsns;
+                        }
+                    },
+                    2 => {
+                        // Thru machine
+                        if let Some(in_ab) = machine.machine_params.in_ab {
+                            part_unsaved.audio_track_machine_params[track_id].thru_machine.in_ab = in_ab;
+                        }
+                        if let Some(vol_ab) = machine.machine_params.vol_ab {
+                            part_unsaved.audio_track_machine_params[track_id].thru_machine.vol_ab = vol_ab;
+                        }
+                        if let Some(in_cd) = machine.machine_params.in_cd {
+                            part_unsaved.audio_track_machine_params[track_id].thru_machine.in_cd = in_cd;
+                        }
+                        if let Some(vol_cd) = machine.machine_params.vol_cd {
+                            part_unsaved.audio_track_machine_params[track_id].thru_machine.vol_cd = vol_cd;
+                        }
+                    },
+                    4 => {
+                        // Pickup machine
+                        if let Some(ptch) = machine.machine_params.ptch {
+                            part_unsaved.audio_track_machine_params[track_id].pickup_machine.ptch = ptch;
+                        }
+                        if let Some(len) = machine.machine_params.len {
+                            part_unsaved.audio_track_machine_params[track_id].pickup_machine.len = len;
+                        }
+                        if let Some(dir) = machine.machine_params.dir {
+                            part_unsaved.audio_track_machine_params[track_id].pickup_machine.dir = dir;
+                        }
+                        if let Some(gain) = machine.machine_params.gain {
+                            part_unsaved.audio_track_machine_params[track_id].pickup_machine.gain = gain;
+                        }
+                        if let Some(op) = machine.machine_params.op {
+                            part_unsaved.audio_track_machine_params[track_id].pickup_machine.op = op;
+                        }
+                    },
+                    _ => {
+                        // Neighbor (type 3) or unknown - no parameters to update
+                    }
+                }
+            }
+        }
+
+        // Update MIDI track parameters
+        for track_id in 0..8 {
+            // Update MIDI NOTE parameters
+            if let Some(midi_note) = part_data.midi_notes.get(track_id) {
+                part_unsaved.midi_track_params_values[track_id].midi.note = midi_note.note;
+                part_unsaved.midi_track_params_values[track_id].midi.vel = midi_note.vel;
+                part_unsaved.midi_track_params_values[track_id].midi.len = midi_note.len;
+                part_unsaved.midi_track_params_values[track_id].midi.not2 = midi_note.not2;
+                part_unsaved.midi_track_params_values[track_id].midi.not3 = midi_note.not3;
+                part_unsaved.midi_track_params_values[track_id].midi.not4 = midi_note.not4;
+
+                // NOTE Setup parameters
+                part_unsaved.midi_track_params_setup[track_id].note.chan = midi_note.chan;
+                part_unsaved.midi_track_params_setup[track_id].note.bank = midi_note.bank;
+                part_unsaved.midi_track_params_setup[track_id].note.prog = midi_note.prog;
+                part_unsaved.midi_track_params_setup[track_id].note.sbank = midi_note.sbnk;
+            }
+
+            // Update MIDI ARP parameters
+            if let Some(midi_arp) = part_data.midi_arps.get(track_id) {
+                part_unsaved.midi_track_params_values[track_id].arp.tran = midi_arp.tran;
+                part_unsaved.midi_track_params_values[track_id].arp.leg = midi_arp.leg;
+                part_unsaved.midi_track_params_values[track_id].arp.mode = midi_arp.mode;
+                part_unsaved.midi_track_params_values[track_id].arp.spd = midi_arp.spd;
+                part_unsaved.midi_track_params_values[track_id].arp.rnge = midi_arp.rnge;
+                part_unsaved.midi_track_params_values[track_id].arp.nlen = midi_arp.nlen;
+
+                // ARP Setup parameters
+                part_unsaved.midi_track_params_setup[track_id].arp.len = midi_arp.len;
+                part_unsaved.midi_track_params_setup[track_id].arp.key = midi_arp.key;
+            }
+
+            // Update MIDI LFO parameters
+            if let Some(midi_lfo) = part_data.midi_lfos.get(track_id) {
+                // Main LFO values
+                part_unsaved.midi_track_params_values[track_id].lfo.spd1 = midi_lfo.spd1;
+                part_unsaved.midi_track_params_values[track_id].lfo.spd2 = midi_lfo.spd2;
+                part_unsaved.midi_track_params_values[track_id].lfo.spd3 = midi_lfo.spd3;
+                part_unsaved.midi_track_params_values[track_id].lfo.dep1 = midi_lfo.dep1;
+                part_unsaved.midi_track_params_values[track_id].lfo.dep2 = midi_lfo.dep2;
+                part_unsaved.midi_track_params_values[track_id].lfo.dep3 = midi_lfo.dep3;
+
+                // LFO Setup 1 (Parameter Target & Wave)
+                part_unsaved.midi_track_params_setup[track_id].lfo1.lfo1_pmtr = midi_lfo.lfo1_pmtr;
+                part_unsaved.midi_track_params_setup[track_id].lfo1.lfo2_pmtr = midi_lfo.lfo2_pmtr;
+                part_unsaved.midi_track_params_setup[track_id].lfo1.lfo3_pmtr = midi_lfo.lfo3_pmtr;
+                part_unsaved.midi_track_params_setup[track_id].lfo1.lfo1_wave = midi_lfo.lfo1_wave;
+                part_unsaved.midi_track_params_setup[track_id].lfo1.lfo2_wave = midi_lfo.lfo2_wave;
+                part_unsaved.midi_track_params_setup[track_id].lfo1.lfo3_wave = midi_lfo.lfo3_wave;
+
+                // LFO Setup 2 (Multiplier & Trigger)
+                part_unsaved.midi_track_params_setup[track_id].lfo2.lfo1_mult = midi_lfo.lfo1_mult;
+                part_unsaved.midi_track_params_setup[track_id].lfo2.lfo2_mult = midi_lfo.lfo2_mult;
+                part_unsaved.midi_track_params_setup[track_id].lfo2.lfo3_mult = midi_lfo.lfo3_mult;
+                part_unsaved.midi_track_params_setup[track_id].lfo2.lfo1_trig = midi_lfo.lfo1_trig;
+                part_unsaved.midi_track_params_setup[track_id].lfo2.lfo2_trig = midi_lfo.lfo2_trig;
+                part_unsaved.midi_track_params_setup[track_id].lfo2.lfo3_trig = midi_lfo.lfo3_trig;
+
+                // Custom LFO design
+                if midi_lfo.custom_lfo_design.len() == 16 {
+                    for (i, &val) in midi_lfo.custom_lfo_design.iter().enumerate() {
+                        part_unsaved.midi_tracks_custom_lfos[track_id].0[i] = val;
+                    }
+                }
+            }
+
+            // Update MIDI CTRL1 parameters
+            if let Some(midi_ctrl1) = part_data.midi_ctrl1s.get(track_id) {
+                part_unsaved.midi_track_params_values[track_id].ctrl1.pb = midi_ctrl1.pb;
+                part_unsaved.midi_track_params_values[track_id].ctrl1.at = midi_ctrl1.at;
+                part_unsaved.midi_track_params_values[track_id].ctrl1.cc1 = midi_ctrl1.cc1;
+                part_unsaved.midi_track_params_values[track_id].ctrl1.cc2 = midi_ctrl1.cc2;
+                part_unsaved.midi_track_params_values[track_id].ctrl1.cc3 = midi_ctrl1.cc3;
+                part_unsaved.midi_track_params_values[track_id].ctrl1.cc4 = midi_ctrl1.cc4;
+
+                // CTRL1 Setup parameters (CC numbers)
+                part_unsaved.midi_track_params_setup[track_id].ctrl1.cc1 = midi_ctrl1.cc1_num;
+                part_unsaved.midi_track_params_setup[track_id].ctrl1.cc2 = midi_ctrl1.cc2_num;
+                part_unsaved.midi_track_params_setup[track_id].ctrl1.cc3 = midi_ctrl1.cc3_num;
+                part_unsaved.midi_track_params_setup[track_id].ctrl1.cc4 = midi_ctrl1.cc4_num;
+            }
+
+            // Update MIDI CTRL2 parameters
+            if let Some(midi_ctrl2) = part_data.midi_ctrl2s.get(track_id) {
+                part_unsaved.midi_track_params_values[track_id].ctrl2.cc5 = midi_ctrl2.cc5;
+                part_unsaved.midi_track_params_values[track_id].ctrl2.cc6 = midi_ctrl2.cc6;
+                part_unsaved.midi_track_params_values[track_id].ctrl2.cc7 = midi_ctrl2.cc7;
+                part_unsaved.midi_track_params_values[track_id].ctrl2.cc8 = midi_ctrl2.cc8;
+                part_unsaved.midi_track_params_values[track_id].ctrl2.cc9 = midi_ctrl2.cc9;
+                part_unsaved.midi_track_params_values[track_id].ctrl2.cc10 = midi_ctrl2.cc10;
+
+                // CTRL2 Setup parameters (CC numbers)
+                part_unsaved.midi_track_params_setup[track_id].ctrl2.cc5 = midi_ctrl2.cc5_num;
+                part_unsaved.midi_track_params_setup[track_id].ctrl2.cc6 = midi_ctrl2.cc6_num;
+                part_unsaved.midi_track_params_setup[track_id].ctrl2.cc7 = midi_ctrl2.cc7_num;
+                part_unsaved.midi_track_params_setup[track_id].ctrl2.cc8 = midi_ctrl2.cc8_num;
+                part_unsaved.midi_track_params_setup[track_id].ctrl2.cc9 = midi_ctrl2.cc9_num;
+                part_unsaved.midi_track_params_setup[track_id].ctrl2.cc10 = midi_ctrl2.cc10_num;
+            }
+        }
+    }
+
+    // Update parts_edited_bitmask to indicate which parts have been modified
+    // Bitmask: Part 1 = bit 0 (1), Part 2 = bit 1 (2), Part 3 = bit 2 (4), Part 4 = bit 3 (8)
+    // NOTE: We do NOT set parts_saved_state here because we're only editing parts.unsaved,
+    // not committing changes to parts.saved. This allows "Reload Part" to work on the Octatrack.
+    for part_data in &parts_data {
+        let part_id = part_data.part_id as usize;
+        if part_id < 4 {
+            bank_data.parts_edited_bitmask |= 1 << part_id;
+            // Don't touch parts_saved_state - we're editing, not saving/committing
+        }
+    }
+    println!("[DEBUG] parts_edited_bitmask after update: {}", bank_data.parts_edited_bitmask);
+    println!("[DEBUG] parts_saved_state unchanged: {:?}", bank_data.parts_saved_state);
+
+    // Debug: Verify part headers and part_id values in both saved and unsaved
+    for i in 0..4 {
+        let unsaved = &bank_data.parts.unsaved.0[i];
+        let saved = &bank_data.parts.saved.0[i];
+        println!("[DEBUG] Part {} - unsaved header: {:02X?}, part_id: {}", i, unsaved.header, unsaved.part_id);
+        println!("[DEBUG] Part {} - saved header: {:02X?}, part_id: {}", i, saved.header, saved.part_id);
+        // Log ATK value for Track 0 as our test parameter
+        println!("[DEBUG] Part {} - unsaved ATK[0]: {}, saved ATK[0]: {}",
+            i,
+            unsaved.audio_track_params_values[0].amp.atk,
+            saved.audio_track_params_values[0].amp.atk);
+    }
+
+    // Recalculate checksum before saving
+    let old_checksum = bank_data.checksum;
+    bank_data.checksum = bank_data.calculate_checksum()
+        .map_err(|e| format!("Failed to calculate checksum: {:?}", e))?;
+    println!("[DEBUG] Checksum: old={}, new={}", old_checksum, bank_data.checksum);
+
+    // Write the modified bank file back
+    bank_data.to_data_file(&bank_file_path)
+        .map_err(|e| format!("Failed to write bank file: {:?}", e))?;
+    println!("[DEBUG] Bank file written successfully");
+
+    // VERIFICATION: Read the file back and verify the data persisted correctly
+    let verify_bank = BankFile::from_data_file(&bank_file_path)
+        .map_err(|e| format!("Failed to verify bank file: {:?}", e))?;
+    println!("[DEBUG VERIFY] parts_saved_state after re-read: {:?}", verify_bank.parts_saved_state);
+    println!("[DEBUG VERIFY] parts_edited_bitmask after re-read: {}", verify_bank.parts_edited_bitmask);
+    println!("[DEBUG VERIFY] checksum after re-read: {}", verify_bank.checksum);
+    for i in 0..4 {
+        let saved = &verify_bank.parts.saved.0[i];
+        println!("[DEBUG VERIFY] Part {} saved ATK[0]: {}", i, saved.audio_track_params_values[0].amp.atk);
+    }
+
+    Ok(())
 }

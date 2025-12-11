@@ -1,4 +1,4 @@
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useTransition, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { useProjects } from "../context/ProjectsContext";
@@ -99,7 +99,7 @@ function getLengthDenominator(length: number): number {
 export function ProjectDetail() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { setCachedProject, getInMemoryProject, setInMemoryProject } = useProjects();
+  const { setCachedProject, getInMemoryProject, setInMemoryProject, clearProjectCache } = useProjects();
   const projectPath = searchParams.get("path");
   const projectName = searchParams.get("name");
 
@@ -120,6 +120,14 @@ export function ProjectDetail() {
   const [hideEmptyPatternsVisual, setHideEmptyPatternsVisual] = useState<boolean>(false); // Immediate visual state for toggle
   const [isPending, startTransition] = useTransition(); // For smooth UI updates
   const [isSpinning, setIsSpinning] = useState<boolean>(false); // For refresh button animation
+
+  // Callback to invalidate cache when Parts are saved
+  const handlePartsChanged = useCallback(async () => {
+    if (projectPath) {
+      console.log('[Cache] Invalidating cache after Parts save for:', projectPath);
+      await clearProjectCache(projectPath);
+    }
+  }, [projectPath, clearProjectCache]);
 
   useEffect(() => {
     if (projectPath) {
@@ -688,6 +696,7 @@ export function ProjectDetail() {
                           onSharedPageChange={selectedBankIndex === ALL_BANKS ? setSharedPartsPageIndex : undefined}
                           sharedLfoTab={selectedBankIndex === ALL_BANKS ? sharedPartsLfoTab : undefined}
                           onSharedLfoTabChange={selectedBankIndex === ALL_BANKS ? setSharedPartsLfoTab : undefined}
+                          onPartsChanged={handlePartsChanged}
                         />
                       );
                     });
