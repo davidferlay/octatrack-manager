@@ -650,8 +650,8 @@ h1 {
 }
 
 .save-status-indicator.success {
-  color: #10b981;
-  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.15);
 }
 
 .save-status-indicator.error {
@@ -661,8 +661,8 @@ h1 {
 
 .save-status-indicator.idle {
   opacity: 0;
-  color: #10b981;
-  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.15);
   transition: opacity 1.2s ease-out;
 }
 
