@@ -2464,3 +2464,9 @@ h1 {
   color: var(--elektron-text-secondary);
   margin: 0;
 }
+
+.loading-section .loading-status {
+  font-size: 0.9rem;
+  color: var(--elektron-text-muted, #888);
+  font-style: italic;
+}
