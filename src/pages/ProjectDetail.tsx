@@ -8,6 +8,7 @@ import { TrackSelector, ALL_AUDIO_TRACKS, ALL_MIDI_TRACKS } from "../components/
 import { PatternSelector, ALL_PATTERNS } from "../components/PatternSelector";
 import { SampleSlotsTable } from "../components/SampleSlotsTable";
 import PartsPanel from "../components/PartsPanel";
+import { WriteStatus, IDLE_STATUS } from "../types/writeStatus";
 import { TrackBadge } from "../components/TrackBadge";
 import { ScrollToTop } from "../components/ScrollToTop";
 import { Version } from "../components/Version";
@@ -121,6 +122,21 @@ export function ProjectDetail() {
   const [hideEmptyPatternsVisual, setHideEmptyPatternsVisual] = useState<boolean>(false); // Immediate visual state for toggle
   const [isPending, startTransition] = useTransition(); // For smooth UI updates
   const [isSpinning, setIsSpinning] = useState<boolean>(false); // For refresh button animation
+  const [partsWriteStatus, setPartsWriteStatus] = useState<WriteStatus>(IDLE_STATUS); // Parts write status
+  const [lastStatusMessage, setLastStatusMessage] = useState<string>(''); // Keep last message for fade-out
+
+  // Wrapper to capture last message before going idle (for fade-out effect)
+  const handleWriteStatusChange = useCallback((status: WriteStatus) => {
+    if (status.state !== 'idle' && status.message) {
+      setLastStatusMessage(status.message);
+    } else if (status.state !== 'idle') {
+      // Set default messages
+      if (status.state === 'writing') setLastStatusMessage('Saving...');
+      else if (status.state === 'success') setLastStatusMessage('Saved');
+      else if (status.state === 'error') setLastStatusMessage('Error');
+    }
+    setPartsWriteStatus(status);
+  }, []);
 
   // Callback to invalidate cache when Parts are saved
   const handlePartsChanged = useCallback(async () => {
@@ -315,6 +331,13 @@ export function ProjectDetail() {
             ← Back
           </button>
           <h1 title={projectPath || ''}>{projectName}</h1>
+          {/* Parts write status indicator */}
+          <span className={`save-status-indicator ${partsWriteStatus.state}`}>
+            {partsWriteStatus.state === 'writing' && (partsWriteStatus.message || 'Saving...')}
+            {partsWriteStatus.state === 'success' && (partsWriteStatus.message || 'Saved')}
+            {partsWriteStatus.state === 'error' && (partsWriteStatus.message || 'Error')}
+            {partsWriteStatus.state === 'idle' && lastStatusMessage}
+          </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           {!isLoading && !error && metadata && (
@@ -709,6 +732,7 @@ export function ProjectDetail() {
                           sharedLfoTab={selectedBankIndex === ALL_BANKS ? sharedPartsLfoTab : undefined}
                           onSharedLfoTabChange={selectedBankIndex === ALL_BANKS ? setSharedPartsLfoTab : undefined}
                           onPartsChanged={handlePartsChanged}
+                          onWriteStatusChange={handleWriteStatusChange}
                         />
                       );
                     });

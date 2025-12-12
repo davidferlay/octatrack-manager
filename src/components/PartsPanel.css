@@ -445,6 +445,31 @@
   margin: 0;
 }
 
+/* Auto-save status indicator */
+.save-status-indicator {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.save-status-indicator.saving {
+  opacity: 1;
+  color: #888;
+}
+
+.save-status-indicator.saved {
+  opacity: 1;
+  color: #10b981;
+}
+
+.save-status-indicator.error {
+  opacity: 1;
+  color: #ef4444;
+}
+
 .unsaved-indicator {
   color: #f59e0b;
   font-size: 1.5rem;
