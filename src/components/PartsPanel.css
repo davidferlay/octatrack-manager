@@ -55,6 +55,20 @@
   font-weight: 600;
 }
 
+.parts-part-tab.modified {
+  border-color: #f59e0b;
+}
+
+.parts-part-tab.modified.active {
+  border-color: #f59e0b;
+}
+
+.parts-part-tab .unsaved-indicator {
+  color: #f59e0b;
+  font-size: 1rem;
+  margin-left: 2px;
+}
+
 /* SRC/AMP Page Tabs */
 .parts-page-tabs {
   display: flex;

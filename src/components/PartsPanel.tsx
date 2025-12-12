@@ -46,7 +46,6 @@ export default function PartsPanel({
   const [isEditMode, setIsEditMode] = useState(false);
   const [editedPartsData, setEditedPartsData] = useState<PartData[]>([]);
   const [isSaving, setIsSaving] = useState(false);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [modifiedPartIds, setModifiedPartIds] = useState<Set<number>>(new Set());
 
   // Use shared page index if provided (All banks mode), otherwise use local state
@@ -83,7 +82,7 @@ export default function PartsPanel({
       // Reset edit state when loading new data
       setIsEditMode(false);
       setEditedPartsData([]);
-      setHasUnsavedChanges(false);
+      setModifiedPartIds(new Set());
     } catch (err) {
       console.error('Failed to load parts data:', err);
       setError(err as string);
@@ -97,49 +96,62 @@ export default function PartsPanel({
     // Deep clone the parts data for editing
     setEditedPartsData(JSON.parse(JSON.stringify(partsData)));
     setIsEditMode(true);
-    setHasUnsavedChanges(false);
     setModifiedPartIds(new Set());
   }, [partsData]);
 
-  // Cancel edit mode
+  // Cancel all changes and exit edit mode
   const cancelEditMode = useCallback(() => {
     setIsEditMode(false);
     setEditedPartsData([]);
-    setHasUnsavedChanges(false);
     setModifiedPartIds(new Set());
   }, []);
 
-  // Save changes
-  const saveChanges = useCallback(async () => {
-    if (!hasUnsavedChanges) return;
+  // Save changes for the active part only
+  const savePartChanges = useCallback(async () => {
+    if (!modifiedPartIds.has(activePartIndex)) return;
 
     try {
       setIsSaving(true);
-      // Only send parts that were actually modified to avoid marking all parts as edited
-      const modifiedParts = editedPartsData.filter(p => modifiedPartIds.has(p.part_id));
-      console.log('[PartsPanel] Saving modified parts:', modifiedPartIds, 'count:', modifiedParts.length);
+      // Only send the active part
+      const partToSave = editedPartsData[activePartIndex];
+      console.log('[PartsPanel] Saving part:', activePartIndex);
       await invoke('save_parts', {
         path: projectPath,
         bankId: bankId,
-        partsData: modifiedParts
+        partsData: [partToSave]
       });
-      // Update original data with saved changes
-      setPartsData(editedPartsData);
-      setIsEditMode(false);
-      setEditedPartsData([]);
-      setHasUnsavedChanges(false);
-      setModifiedPartIds(new Set());
-      // Notify parent to invalidate cache so next load gets fresh data
+
+      // Update original data with saved changes for this part
+      setPartsData(prev => {
+        const newData = [...prev];
+        newData[activePartIndex] = JSON.parse(JSON.stringify(partToSave));
+        return newData;
+      });
+
+      // Remove the active part from modified set
+      setModifiedPartIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(activePartIndex);
+        // If no more modified parts, exit edit mode
+        if (newSet.size === 0) {
+          setIsEditMode(false);
+          setEditedPartsData([]);
+        }
+        return newSet;
+      });
+
+      // Notify parent to invalidate cache
       if (onPartsChanged) {
         onPartsChanged();
       }
     } catch (err) {
-      console.error('Failed to save parts data:', err);
+      console.error('Failed to save part data:', err);
       setError(`Failed to save: ${err}`);
     } finally {
       setIsSaving(false);
     }
-  }, [projectPath, bankId, editedPartsData, hasUnsavedChanges, modifiedPartIds, onPartsChanged]);
+  }, [projectPath, bankId, editedPartsData, activePartIndex, modifiedPartIds, onPartsChanged]);
+
 
   // Generic function to update a parameter value
   const updatePartParam = useCallback(<T extends keyof PartData>(
@@ -167,7 +179,6 @@ export default function PartsPanel({
     });
     // Track which part was modified
     setModifiedPartIds(prev => new Set([...prev, partId]));
-    setHasUnsavedChanges(true);
   }, []);
 
   // Editable parameter value component
@@ -2054,7 +2065,6 @@ export default function PartsPanel({
       <div className="bank-card-header">
         <div className="bank-card-header-left">
           <h3>{bankName} - Parts</h3>
-          {hasUnsavedChanges && <span className="unsaved-indicator">*</span>}
         </div>
         <div className="parts-edit-controls">
           {!isEditMode ? (
@@ -2071,13 +2081,15 @@ export default function PartsPanel({
                 className="cancel-button"
                 onClick={cancelEditMode}
                 disabled={isSaving}
+                title="Exit edit mode"
               >
                 Cancel
               </button>
               <button
                 className="save-button"
-                onClick={saveChanges}
-                disabled={isSaving || !hasUnsavedChanges}
+                onClick={savePartChanges}
+                disabled={isSaving || !modifiedPartIds.has(activePartIndex)}
+                title={modifiedPartIds.has(activePartIndex) ? `Save ${partNames[activePartIndex]}` : 'No changes to save'}
               >
                 {isSaving ? 'Saving...' : 'Save'}
               </button>
@@ -2088,10 +2100,10 @@ export default function PartsPanel({
           {partNames.map((partName, index) => (
             <button
               key={index}
-              className={`parts-part-tab ${activePartIndex === index ? 'active' : ''}`}
+              className={`parts-part-tab ${activePartIndex === index ? 'active' : ''} ${modifiedPartIds.has(index) ? 'modified' : ''}`}
               onClick={() => setActivePartIndex(index)}
             >
-              {partName} ({index + 1})
+              {partName} ({index + 1}){modifiedPartIds.has(index) && <span className="unsaved-indicator">*</span>}
             </button>
           ))}
         </div>
