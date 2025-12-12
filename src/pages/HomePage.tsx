@@ -71,16 +71,35 @@ export function HomePage() {
     }
   }, [clearAll]);
 
+  // Helper to sort projects within a location's sets
+  function sortProjectsInLocations(locations: OctatrackLocation[]): OctatrackLocation[] {
+    return locations.map(loc => ({
+      ...loc,
+      sets: loc.sets.map(set => ({
+        ...set,
+        projects: [...set.projects].sort((a, b) =>
+          a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+        )
+      }))
+    }));
+  }
+
   async function scanDevices() {
     setIsScanning(true);
     try {
       const result = await invoke<ScanResult>("scan_devices");
-      // Sort locations alphabetically by name
-      const sortedLocations = [...result.locations].sort((a, b) =>
+      // Sort locations alphabetically by name and projects within each set
+      const sortedLocations = sortProjectsInLocations(
+        [...result.locations].sort((a, b) =>
+          a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+        )
+      );
+      // Sort standalone projects alphabetically
+      const sortedStandaloneProjects = [...result.standalone_projects].sort((a, b) =>
         a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
       );
       setLocations(sortedLocations);
-      setStandaloneProjects(result.standalone_projects);
+      setStandaloneProjects(sortedStandaloneProjects);
       setHasScanned(true);
       // Open all locations by default
       setOpenLocations(new Set(sortedLocations.map((_, idx) => idx)));
@@ -122,9 +141,11 @@ export function HomePage() {
             const newLocations = result.locations.filter(loc => !existingPaths.has(loc.path));
             const merged = [...prev, ...newLocations];
 
-            // Sort locations alphabetically by name
-            const sortedMerged = merged.sort((a, b) =>
-              a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+            // Sort locations alphabetically by name and projects within each set
+            const sortedMerged = sortProjectsInLocations(
+              merged.sort((a, b) =>
+                a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+              )
             );
 
             // Update open locations to include new ones
@@ -133,11 +154,13 @@ export function HomePage() {
             return sortedMerged;
           });
 
-          // Merge standalone projects, avoiding duplicates
+          // Merge standalone projects, avoiding duplicates, then sort
           setStandaloneProjects(prev => {
             const existingPaths = new Set(prev.map(proj => proj.path));
             const newProjects = result.standalone_projects.filter(proj => !existingPaths.has(proj.path));
-            return [...prev, ...newProjects];
+            return [...prev, ...newProjects].sort((a, b) =>
+              a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+            );
           });
 
           setHasScanned(true);
