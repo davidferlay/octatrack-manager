@@ -540,13 +540,16 @@
   font-family: 'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
   font-size: 12px;
   font-weight: 700;
-  padding: 4px 6px;
+  padding: 0 8px;
   border-radius: 3px;
   width: 60px;
   text-align: right;
   box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
   outline: none;
   -moz-appearance: textfield;
+  box-sizing: border-box;
+  height: 26px;
+  line-height: 26px;
 }
 
 .param-value-editable::-webkit-outer-spin-button,
