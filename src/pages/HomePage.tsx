@@ -51,11 +51,13 @@ export function HomePage() {
     clearAll,
   } = useProjects();
   const [isScanning, setIsScanning] = useState(false);
+  const [isClearingCaches, setIsClearingCaches] = useState(false);
   const navigate = useNavigate();
   const [, startTransition] = useTransition();
 
   // Hidden cache clear function - clears all caches (IndexedDB, sessionStorage, in-memory)
   const handleClearAllCaches = useCallback(async () => {
+    setIsClearingCaches(true);
     try {
       // Clear IndexedDB project cache
       await clearProjectCache();
@@ -64,10 +66,10 @@ export function HomePage() {
       // Clear update-checked flag from sessionStorage
       sessionStorage.removeItem('update-checked');
       console.log('All caches cleared successfully');
-      alert('All caches cleared successfully!');
     } catch (error) {
       console.error('Error clearing caches:', error);
-      alert('Error clearing caches. Check console for details.');
+    } finally {
+      setTimeout(() => setIsClearingCaches(false), 600);
     }
   }, [clearAll]);
 
@@ -197,21 +199,10 @@ export function HomePage() {
         </div>
         <button
           onClick={handleClearAllCaches}
+          className={`toolbar-button ${isClearingCaches ? 'refreshing' : ''}`}
           title="Clear all caches"
-          style={{
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            opacity: 0.1,
-            padding: '4px 8px',
-            fontSize: '12px',
-            color: '#888',
-            marginRight: '8px',
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.5'}
-          onMouseLeave={(e) => e.currentTarget.style.opacity = '0.1'}
         >
-          ⟳
+          <i className="fas fa-sync-alt"></i>
         </button>
         <Version />
       </div>
