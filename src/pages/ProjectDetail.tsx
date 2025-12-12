@@ -106,6 +106,7 @@ export function ProjectDetail() {
   const [metadata, setMetadata] = useState<ProjectMetadata | null>(null);
   const [banks, setBanks] = useState<Bank[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadingStatus, setLoadingStatus] = useState<string>("Initializing...");
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [selectedBankIndex, setSelectedBankIndex] = useState<number>(0);
@@ -136,6 +137,7 @@ export function ProjectDetail() {
         const startTime = performance.now();
 
         // Level 1: Check in-memory cache (instant!)
+        setLoadingStatus("Checking memory cache...");
         const inMemory = getInMemoryProject(projectPath);
         if (inMemory) {
           const loadTime = performance.now() - startTime;
@@ -151,6 +153,7 @@ export function ProjectDetail() {
         }
 
         console.log("[L1 Cache MISS - Memory] Checking IndexedDB...");
+        setLoadingStatus("Checking local cache...");
 
         // Level 2: Check IndexedDB
         const { getCachedMetadata, getCachedBank } = await import("../utils/projectDB");
@@ -159,6 +162,7 @@ export function ProjectDetail() {
 
         if (cachedMetadata) {
           console.log(`[L2 Cache HIT - IndexedDB] Loaded metadata in ${l2Time.toFixed(2)}ms`);
+          setLoadingStatus("Loading cached banks...");
 
           // Set metadata immediately
           setMetadata(cachedMetadata);
@@ -222,6 +226,7 @@ export function ProjectDetail() {
           loadRemainingBanks();
         } else {
           console.log(`[L2 Cache MISS - IndexedDB] Loading from backend`);
+          setLoadingStatus("Loading from project files...");
           // Level 3: Load from backend
           requestAnimationFrame(() => {
             setTimeout(() => {
@@ -241,8 +246,13 @@ export function ProjectDetail() {
     try {
       console.log("[L3 Backend] Loading project from backend:", projectPath);
       const loadStart = performance.now();
+
+      setLoadingStatus("Reading project metadata...");
       const projectMetadata = await invoke<ProjectMetadata>("load_project_metadata", { path: projectPath });
+
+      setLoadingStatus("Reading banks (this may take a moment)...");
       const projectBanks = await invoke<Bank[]>("load_project_banks", { path: projectPath });
+
       const loadTime = performance.now() - loadStart;
       console.log(`[L3 Backend] Loaded from backend in ${loadTime.toFixed(2)}ms`);
 
@@ -251,6 +261,7 @@ export function ProjectDetail() {
 
       // Cache the loaded data to all levels
       if (projectPath) {
+        setLoadingStatus("Caching for faster access...");
         // Save to IndexedDB (Level 2)
         const cacheStart = performance.now();
         await setCachedProject(projectPath, projectMetadata, projectBanks);
@@ -362,6 +373,7 @@ export function ProjectDetail() {
         <div className="loading-section">
           <div className="loading-spinner"></div>
           <p>Loading project data...</p>
+          <p className="loading-status">{loadingStatus}</p>
         </div>
       )}
 
