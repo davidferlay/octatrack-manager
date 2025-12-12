@@ -234,7 +234,7 @@ export function HomePage() {
               <div className={`sets-section ${isIndividualProjectsOpen ? 'open' : 'closed'}`}>
                 <div className="sets-section-content">
                   <div className="projects-grid">
-                    {standaloneProjects.map((project, projIdx) => (
+                    {[...standaloneProjects].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })).map((project, projIdx) => (
                     <div
                       key={projIdx}
                       className="project-card clickable-project"
@@ -327,7 +327,7 @@ export function HomePage() {
                                           <span>{set.has_audio_pool ? "SAMPLES" : "NO SAMPLE"}</span>
                                         </div>
                                       </div>
-                                      {set.projects.map((project, projIdx) => (
+                                      {[...set.projects].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })).map((project, projIdx) => (
                                         <div
                                           key={projIdx}
                                           className="project-card clickable-project"
