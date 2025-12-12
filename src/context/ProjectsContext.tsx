@@ -438,6 +438,13 @@ export interface PartData {
   midi_ctrl2s: PartTrackMidiCtrl2[];
 }
 
+// Response from load_parts_data including bank-level state flags
+export interface PartsDataResponse {
+  parts: PartData[];
+  parts_edited_bitmask: number;  // Bitmask: bit 0 = Part 1, etc.
+  parts_saved_state: number[];   // Array of 4: 1 = has valid saved state, 0 = no
+}
+
 interface InMemoryCachedProject {
   path: string;
   metadata: ProjectMetadata;

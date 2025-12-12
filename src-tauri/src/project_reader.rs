@@ -453,6 +453,16 @@ pub struct PartData {
     pub midi_ctrl2s: Vec<PartTrackMidiCtrl2>, // 8 MIDI tracks
 }
 
+/// Response from read_parts_data that includes bank-level state flags
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PartsDataResponse {
+    pub parts: Vec<PartData>,
+    /// Bitmask indicating which parts have unsaved changes (bit 0 = Part 1, etc.)
+    pub parts_edited_bitmask: u8,
+    /// Array of 4 values indicating if each part has valid saved state for reload (1 = yes, 0 = no)
+    pub parts_saved_state: [u8; 4],
+}
+
 /// Check audio file compatibility with Octatrack
 /// Returns: "compatible", "wrong_rate", "incompatible", or "unknown"
 struct AudioInfo {
@@ -1676,7 +1686,7 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
 }
 
 /// Read Parts machine and AMP parameters from a specific bank
-pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<Vec<PartData>, String> {
+pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataResponse, String> {
     let path = Path::new(project_path);
 
     // Convert bank letter (A-P) to bank number (1-16)
@@ -2101,7 +2111,11 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<Vec<PartData
         });
     }
 
-    Ok(parts_data)
+    Ok(PartsDataResponse {
+        parts: parts_data,
+        parts_edited_bitmask: bank_data.parts_edited_bitmask,
+        parts_saved_state: bank_data.parts_saved_state,
+    })
 }
 
 /// Save modified Parts data back to a bank file
@@ -2485,4 +2499,185 @@ pub fn save_parts_data(project_path: &str, bank_id: &str, parts_data: Vec<PartDa
     }
 
     Ok(())
+}
+
+/// Commit a single part: copy parts.unsaved to parts.saved (like Octatrack's "SAVE" command)
+/// This makes the current working state become the "saved" state that can be reloaded to later.
+pub fn commit_part_data(project_path: &str, bank_id: &str, part_id: u8) -> Result<(), String> {
+    let path = Path::new(project_path);
+
+    // Convert bank letter (A-P) to bank number (1-16)
+    let bank_letters = [
+        "A", "B", "C", "D", "E", "F", "G", "H",
+        "I", "J", "K", "L", "M", "N", "O", "P"
+    ];
+
+    let bank_num = bank_letters.iter()
+        .position(|&letter| letter == bank_id)
+        .map(|idx| idx + 1)
+        .ok_or_else(|| format!("Invalid bank ID: {}", bank_id))?;
+
+    let bank_file_name = format!("bank{:02}.work", bank_num);
+    let mut bank_file_path = path.join(&bank_file_name);
+
+    if !bank_file_path.exists() {
+        let bank_file_name = format!("bank{:02}.strd", bank_num);
+        bank_file_path = path.join(&bank_file_name);
+        if !bank_file_path.exists() {
+            return Err(format!("Bank file not found: {}", bank_id));
+        }
+    }
+
+    // Read the existing bank file
+    let mut bank_data = BankFile::from_data_file(&bank_file_path)
+        .map_err(|e| format!("Failed to read bank file: {:?}", e))?;
+
+    let part_idx = part_id as usize;
+    if part_idx >= 4 {
+        return Err(format!("Invalid part ID: {} (must be 0-3)", part_id));
+    }
+
+    println!("[DEBUG] Committing part {} (copying unsaved to saved)", part_idx);
+
+    // Copy the unsaved part to saved part (deep copy)
+    // This is what the Octatrack's "SAVE" command does
+    bank_data.parts.saved.0[part_idx] = bank_data.parts.unsaved.0[part_idx].clone();
+
+    // Set parts_saved_state to indicate this part now has valid saved data
+    bank_data.parts_saved_state[part_idx] = 1;
+
+    // Clear the edited bit for this part since we just committed its changes
+    bank_data.parts_edited_bitmask &= !(1 << part_idx);
+
+    println!("[DEBUG] parts_edited_bitmask after commit: {}", bank_data.parts_edited_bitmask);
+    println!("[DEBUG] parts_saved_state after commit: {:?}", bank_data.parts_saved_state);
+
+    // Recalculate checksum
+    bank_data.checksum = bank_data.calculate_checksum()
+        .map_err(|e| format!("Failed to calculate checksum: {:?}", e))?;
+
+    // Write the modified bank file back
+    bank_data.to_data_file(&bank_file_path)
+        .map_err(|e| format!("Failed to write bank file: {:?}", e))?;
+
+    println!("[DEBUG] Part {} committed successfully", part_idx);
+
+    Ok(())
+}
+
+/// Commit all parts: copy all parts.unsaved to parts.saved (like Octatrack's "SAVE ALL" command)
+pub fn commit_all_parts_data(project_path: &str, bank_id: &str) -> Result<(), String> {
+    let path = Path::new(project_path);
+
+    let bank_letters = [
+        "A", "B", "C", "D", "E", "F", "G", "H",
+        "I", "J", "K", "L", "M", "N", "O", "P"
+    ];
+
+    let bank_num = bank_letters.iter()
+        .position(|&letter| letter == bank_id)
+        .map(|idx| idx + 1)
+        .ok_or_else(|| format!("Invalid bank ID: {}", bank_id))?;
+
+    let bank_file_name = format!("bank{:02}.work", bank_num);
+    let mut bank_file_path = path.join(&bank_file_name);
+
+    if !bank_file_path.exists() {
+        let bank_file_name = format!("bank{:02}.strd", bank_num);
+        bank_file_path = path.join(&bank_file_name);
+        if !bank_file_path.exists() {
+            return Err(format!("Bank file not found: {}", bank_id));
+        }
+    }
+
+    let mut bank_data = BankFile::from_data_file(&bank_file_path)
+        .map_err(|e| format!("Failed to read bank file: {:?}", e))?;
+
+    println!("[DEBUG] Committing all parts (copying unsaved to saved)");
+
+    // Copy all unsaved parts to saved parts
+    for part_idx in 0..4 {
+        bank_data.parts.saved.0[part_idx] = bank_data.parts.unsaved.0[part_idx].clone();
+        bank_data.parts_saved_state[part_idx] = 1;
+    }
+
+    // Clear all edited bits
+    bank_data.parts_edited_bitmask = 0;
+
+    println!("[DEBUG] parts_edited_bitmask after commit all: {}", bank_data.parts_edited_bitmask);
+    println!("[DEBUG] parts_saved_state after commit all: {:?}", bank_data.parts_saved_state);
+
+    bank_data.checksum = bank_data.calculate_checksum()
+        .map_err(|e| format!("Failed to calculate checksum: {:?}", e))?;
+
+    bank_data.to_data_file(&bank_file_path)
+        .map_err(|e| format!("Failed to write bank file: {:?}", e))?;
+
+    println!("[DEBUG] All parts committed successfully");
+
+    Ok(())
+}
+
+/// Reload a single part: copy parts.saved back to parts.unsaved (like Octatrack's "RELOAD" command)
+/// Returns the reloaded part data so the frontend can update its state.
+pub fn reload_part_data(project_path: &str, bank_id: &str, part_id: u8) -> Result<PartData, String> {
+    let path = Path::new(project_path);
+
+    let bank_letters = [
+        "A", "B", "C", "D", "E", "F", "G", "H",
+        "I", "J", "K", "L", "M", "N", "O", "P"
+    ];
+
+    let bank_num = bank_letters.iter()
+        .position(|&letter| letter == bank_id)
+        .map(|idx| idx + 1)
+        .ok_or_else(|| format!("Invalid bank ID: {}", bank_id))?;
+
+    let bank_file_name = format!("bank{:02}.work", bank_num);
+    let mut bank_file_path = path.join(&bank_file_name);
+
+    if !bank_file_path.exists() {
+        let bank_file_name = format!("bank{:02}.strd", bank_num);
+        bank_file_path = path.join(&bank_file_name);
+        if !bank_file_path.exists() {
+            return Err(format!("Bank file not found: {}", bank_id));
+        }
+    }
+
+    let mut bank_data = BankFile::from_data_file(&bank_file_path)
+        .map_err(|e| format!("Failed to read bank file: {:?}", e))?;
+
+    let part_idx = part_id as usize;
+    if part_idx >= 4 {
+        return Err(format!("Invalid part ID: {} (must be 0-3)", part_id));
+    }
+
+    // Check if this part has valid saved data to reload from
+    if bank_data.parts_saved_state[part_idx] != 1 {
+        return Err("SAVE PART FIRST".to_string());
+    }
+
+    println!("[DEBUG] Reloading part {} (copying saved to unsaved)", part_idx);
+
+    // Copy the saved part back to unsaved part
+    bank_data.parts.unsaved.0[part_idx] = bank_data.parts.saved.0[part_idx].clone();
+
+    // Clear the edited bit for this part since we just reloaded it
+    bank_data.parts_edited_bitmask &= !(1 << part_idx);
+
+    println!("[DEBUG] parts_edited_bitmask after reload: {}", bank_data.parts_edited_bitmask);
+
+    bank_data.checksum = bank_data.calculate_checksum()
+        .map_err(|e| format!("Failed to calculate checksum: {:?}", e))?;
+
+    bank_data.to_data_file(&bank_file_path)
+        .map_err(|e| format!("Failed to write bank file: {:?}", e))?;
+
+    println!("[DEBUG] Part {} reloaded successfully", part_idx);
+
+    // Read all parts data and return the specific part
+    let response = read_parts_data(project_path, bank_id)?;
+    response.parts.into_iter()
+        .find(|p| p.part_id == part_id)
+        .ok_or_else(|| format!("Failed to find reloaded part {}", part_id))
 }

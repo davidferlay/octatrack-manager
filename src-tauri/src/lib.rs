@@ -3,7 +3,7 @@ mod project_reader;
 mod audio_pool;
 
 use device_detection::{discover_devices, scan_directory, ScanResult};
-use project_reader::{read_project_metadata, read_project_banks, read_parts_data, save_parts_data, ProjectMetadata, Bank, PartData};
+use project_reader::{read_project_metadata, read_project_banks, read_parts_data, save_parts_data, commit_part_data, commit_all_parts_data, reload_part_data, ProjectMetadata, Bank, PartData, PartsDataResponse};
 use audio_pool::{list_directory, get_parent_directory, create_directory, copy_files_with_overwrite, copy_single_file_with_progress, move_files, delete_files, rename_file as rename_file_impl, AudioFileInfo, register_cancellation_token, cancel_transfer, remove_cancellation_token};
 use tauri::{AppHandle, Emitter};
 use serde::Serialize;
@@ -56,7 +56,7 @@ async fn load_project_banks(path: String) -> Result<Vec<Bank>, String> {
 }
 
 #[tauri::command]
-async fn load_parts_data(path: String, bank_id: String) -> Result<Vec<PartData>, String> {
+async fn load_parts_data(path: String, bank_id: String) -> Result<PartsDataResponse, String> {
     // Run on a blocking thread pool to avoid blocking the main event loop
     tauri::async_runtime::spawn_blocking(move || {
         read_parts_data(&path, &bank_id)
@@ -68,6 +68,30 @@ async fn save_parts(path: String, bank_id: String, parts_data: Vec<PartData>) ->
     // Run on a blocking thread pool to avoid blocking the main event loop
     tauri::async_runtime::spawn_blocking(move || {
         save_parts_data(&path, &bank_id, parts_data)
+    }).await.unwrap()
+}
+
+#[tauri::command]
+async fn commit_part(path: String, bank_id: String, part_id: u8) -> Result<(), String> {
+    // Commit a part: copy parts.unsaved to parts.saved (like Octatrack's "SAVE" command)
+    tauri::async_runtime::spawn_blocking(move || {
+        commit_part_data(&path, &bank_id, part_id)
+    }).await.unwrap()
+}
+
+#[tauri::command]
+async fn commit_all_parts(path: String, bank_id: String) -> Result<(), String> {
+    // Commit all parts: copy all parts.unsaved to parts.saved (like Octatrack's "SAVE ALL" command)
+    tauri::async_runtime::spawn_blocking(move || {
+        commit_all_parts_data(&path, &bank_id)
+    }).await.unwrap()
+}
+
+#[tauri::command]
+async fn reload_part(path: String, bank_id: String, part_id: u8) -> Result<PartData, String> {
+    // Reload a part: copy parts.saved back to parts.unsaved (like Octatrack's "RELOAD" command)
+    tauri::async_runtime::spawn_blocking(move || {
+        reload_part_data(&path, &bank_id, part_id)
     }).await.unwrap()
 }
 
@@ -221,6 +245,9 @@ pub fn run() {
             load_project_banks,
             load_parts_data,
             save_parts,
+            commit_part,
+            commit_all_parts,
+            reload_part,
             list_audio_directory,
             navigate_to_parent,
             create_new_directory,

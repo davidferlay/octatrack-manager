@@ -626,6 +626,46 @@ h1 {
   white-space: nowrap;
 }
 
+/* Write status indicator in project header */
+.save-status-indicator {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 3px 10px;
+  border-radius: 10px;
+  opacity: 0;
+  transition: opacity 1.2s ease-out;
+}
+
+.save-status-indicator.writing,
+.save-status-indicator.success,
+.save-status-indicator.error {
+  opacity: 1;
+  transition: opacity 0.1s ease-in;
+}
+
+.save-status-indicator.writing {
+  color: #a0a0a0;
+  background: rgba(160, 160, 160, 0.12);
+}
+
+.save-status-indicator.success {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.save-status-indicator.error {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.save-status-indicator.idle {
+  opacity: 0;
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+  transition: opacity 1.2s ease-out;
+}
+
 /* Header tabs for Project Details page */
 .header-tabs {
   display: flex;
