@@ -294,7 +294,7 @@ export default function PartsPanel({
     });
   }, [projectPath, bankId, partsData, onWriteStatusChange]);
 
-  // Parameter value component - editable in edit mode, static in view mode
+  // Parameter value component - editable in edit mode, read-only in view mode
   const renderParamValue = (
     partId: number,
     section: keyof PartData,
@@ -303,26 +303,25 @@ export default function PartsPanel({
     value: number,
     _formatter?: (val: number) => string  // Unused now, kept for API compatibility
   ) => {
-    if (isEditMode) {
-      // Edit mode: show editable input - changes are auto-saved to parts.unsaved
-      return (
-        <input
-          type="number"
-          className="param-value param-value-editable"
-          value={value}
-          onChange={(e) => {
-            const newValue = parseInt(e.target.value, 10);
-            if (!isNaN(newValue)) {
-              updatePartParam(partId, section, trackId, field, newValue);
-            }
-          }}
-          min={0}
-          max={127}
-        />
-      );
-    }
-    // View mode: show static value
-    return <span className="param-value">{value}</span>;
+    // Always render input, but style and behavior changes based on edit mode
+    return (
+      <input
+        type="number"
+        className={`param-value ${isEditMode ? 'editable' : ''}`}
+        value={value}
+        onChange={(e) => {
+          if (!isEditMode) return;
+          const newValue = parseInt(e.target.value, 10);
+          if (!isNaN(newValue)) {
+            updatePartParam(partId, section, trackId, field, newValue);
+          }
+        }}
+        readOnly={!isEditMode}
+        tabIndex={isEditMode ? 0 : -1}
+        min={0}
+        max={127}
+      />
+    );
   };
 
   const formatParamValue = (value: number | null): string => {
