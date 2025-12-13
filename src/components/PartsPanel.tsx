@@ -1389,7 +1389,7 @@ export default function PartsPanel({
       : [0, 1, 2, 3, 4, 5, 6, 7];
 
     return (
-      <div className="parts-tracks">
+      <div className="parts-tracks full-width">
         {tracksToShow.map((trackIdx) => {
           const machine = part.machines[trackIdx];
           const amp = part.amps[trackIdx];
@@ -1412,380 +1412,252 @@ export default function PartsPanel({
                 <span className="machine-type">{machineType}</span>
               </div>
 
-              {/* SRC Section - MAIN | SETUP */}
-              <div className="parts-params-section">
-                <div className="params-label">SRC</div>
-                <div className="params-dual-layout">
-                  <div className="params-column">
-                    <div className="params-column-label">MAIN</div>
-                    <div className="params-grid">
-                      {machineType === 'Thru' ? (
-                        <>
-                          <div className="param-item">
-                            <span className="param-label">INAB</span>
-                            <span className="param-value">{formatParamValue(machine.machine_params.in_ab)}</span>
-                          </div>
-                          <div className="param-item">
-                            <span className="param-label">VOL</span>
-                            <span className="param-value">{formatParamValue(machine.machine_params.vol_ab)}</span>
-                          </div>
-                          <div className="param-item">
-                            <span className="param-label">INCD</span>
-                            <span className="param-value">{formatParamValue(machine.machine_params.in_cd)}</span>
-                          </div>
-                          <div className="param-item">
-                            <span className="param-label">VOL</span>
-                            <span className="param-value">{formatParamValue(machine.machine_params.vol_cd)}</span>
-                          </div>
-                        </>
-                      ) : machineType === 'Neighbor' ? (
-                        <div className="params-empty-message">
-                          Neighbor machine uses audio from adjacent track
-                        </div>
-                      ) : machineType === 'Pickup' ? (
-                        <>
-                          <div className="param-item">
-                            <span className="param-label">PITCH</span>
-                            <span className="param-value">{formatParamValue(machine.machine_params.ptch)}</span>
-                          </div>
-                          <div className="param-item">
-                            <span className="param-label">DIR</span>
-                            <span className="param-value">{formatParamValue(machine.machine_params.dir)}</span>
-                          </div>
-                          <div className="param-item">
-                            <span className="param-label">LEN</span>
-                            <span className="param-value">{formatParamValue(machine.machine_params.len)}</span>
-                          </div>
-                          <div className="param-item">
-                            <span className="param-label">GAIN</span>
-                            <span className="param-value">{formatParamValue(machine.machine_params.gain)}</span>
-                          </div>
-                          <div className="param-item">
-                            <span className="param-label">OP</span>
-                            <span className="param-value">{formatParamValue(machine.machine_params.op)}</span>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="param-item">
-                            <span className="param-label">PTCH</span>
-                            <span className="param-value">{formatParamValue(machine.machine_params.ptch)}</span>
-                          </div>
-                          <div className="param-item">
-                            <span className="param-label">STRT</span>
-                            <span className="param-value">{formatParamValue(machine.machine_params.strt)}</span>
-                          </div>
-                          <div className="param-item">
-                            <span className="param-label">LEN</span>
-                            <span className="param-value">{formatParamValue(machine.machine_params.len)}</span>
-                          </div>
-                          <div className="param-item">
-                            <span className="param-label">RATE</span>
-                            <span className="param-value">{formatParamValue(machine.machine_params.rate)}</span>
-                          </div>
-                          <div className="param-item">
-                            <span className="param-label">RTRG</span>
-                            <span className="param-value">{formatParamValue(machine.machine_params.rtrg)}</span>
-                          </div>
-                          <div className="param-item">
-                            <span className="param-label">RTIM</span>
-                            <span className="param-value">{formatParamValue(machine.machine_params.rtim)}</span>
-                          </div>
-                        </>
-                      )}
+              {/* Row 1: SRC, AMP, LFO1, LFO2 */}
+              <div className="parts-all-row">
+                {/* SRC Section */}
+                <div className="parts-all-section">
+                  <div className="params-label">SRC</div>
+                  <div className="params-vertical-layout">
+                    <div className="params-subsection">
+                      <div className="params-column-label">MAIN</div>
+                      <div className="params-grid">
+                        {machineType === 'Thru' ? (
+                          <>
+                            <div className="param-item"><span className="param-label">INAB</span><span className="param-value">{formatParamValue(machine.machine_params.in_ab)}</span></div>
+                            <div className="param-item"><span className="param-label">VOL</span><span className="param-value">{formatParamValue(machine.machine_params.vol_ab)}</span></div>
+                            <div className="param-item"><span className="param-label">INCD</span><span className="param-value">{formatParamValue(machine.machine_params.in_cd)}</span></div>
+                            <div className="param-item"><span className="param-label">VOL</span><span className="param-value">{formatParamValue(machine.machine_params.vol_cd)}</span></div>
+                          </>
+                        ) : machineType === 'Neighbor' ? (
+                          <div className="params-empty-message">-</div>
+                        ) : machineType === 'Pickup' ? (
+                          <>
+                            <div className="param-item"><span className="param-label">PITCH</span><span className="param-value">{formatParamValue(machine.machine_params.ptch)}</span></div>
+                            <div className="param-item"><span className="param-label">DIR</span><span className="param-value">{formatParamValue(machine.machine_params.dir)}</span></div>
+                            <div className="param-item"><span className="param-label">LEN</span><span className="param-value">{formatParamValue(machine.machine_params.len)}</span></div>
+                            <div className="param-item"><span className="param-label">GAIN</span><span className="param-value">{formatParamValue(machine.machine_params.gain)}</span></div>
+                            <div className="param-item"><span className="param-label">OP</span><span className="param-value">{formatParamValue(machine.machine_params.op)}</span></div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="param-item"><span className="param-label">PTCH</span><span className="param-value">{formatParamValue(machine.machine_params.ptch)}</span></div>
+                            <div className="param-item"><span className="param-label">STRT</span><span className="param-value">{formatParamValue(machine.machine_params.strt)}</span></div>
+                            <div className="param-item"><span className="param-label">LEN</span><span className="param-value">{formatParamValue(machine.machine_params.len)}</span></div>
+                            <div className="param-item"><span className="param-label">RATE</span><span className="param-value">{formatParamValue(machine.machine_params.rate)}</span></div>
+                            <div className="param-item"><span className="param-label">RTRG</span><span className="param-value">{formatParamValue(machine.machine_params.rtrg)}</span></div>
+                            <div className="param-item"><span className="param-label">RTIM</span><span className="param-value">{formatParamValue(machine.machine_params.rtim)}</span></div>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <div className="params-column">
-                    <div className="params-column-label">SETUP</div>
-                    <div className="params-grid">
-                      {machineType === 'Thru' ? (
-                        <div className="params-empty-message">Thru machine has no setup parameters</div>
-                      ) : machineType === 'Neighbor' ? (
-                        <div className="params-empty-message">Neighbor machine has no setup parameters</div>
-                      ) : machineType === 'Pickup' ? (
-                        <>
-                          <div className="param-item">
-                            <span className="param-label">TSTR</span>
-                            <span className="param-value">{formatParamValue(machine.machine_setup.tstr)}</span>
-                          </div>
-                          <div className="param-item">
-                            <span className="param-label">TSNS</span>
-                            <span className="param-value">{formatParamValue(machine.machine_setup.tsns)}</span>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="param-item">
-                            <span className="param-label">LOOP</span>
-                            <span className="param-value">{formatParamValue(machine.machine_setup.xloop)}</span>
-                          </div>
-                          <div className="param-item">
-                            <span className="param-label">SLIC</span>
-                            <span className="param-value">{formatParamValue(machine.machine_setup.slic)}</span>
-                          </div>
-                          <div className="param-item">
-                            <span className="param-label">LEN</span>
-                            <span className="param-value">{formatParamValue(machine.machine_setup.len)}</span>
-                          </div>
-                          <div className="param-item">
-                            <span className="param-label">RATE</span>
-                            <span className="param-value">{formatParamValue(machine.machine_setup.rate)}</span>
-                          </div>
-                          <div className="param-item">
-                            <span className="param-label">TSTR</span>
-                            <span className="param-value">{formatParamValue(machine.machine_setup.tstr)}</span>
-                          </div>
-                          <div className="param-item">
-                            <span className="param-label">TSNS</span>
-                            <span className="param-value">{formatParamValue(machine.machine_setup.tsns)}</span>
-                          </div>
-                        </>
-                      )}
+                    <div className="params-subsection">
+                      <div className="params-column-label">SETUP</div>
+                      <div className="params-grid">
+                        {machineType === 'Thru' || machineType === 'Neighbor' ? (
+                          <div className="params-empty-message">-</div>
+                        ) : machineType === 'Pickup' ? (
+                          <>
+                            <div className="param-item"><span className="param-label">TSTR</span><span className="param-value">{formatParamValue(machine.machine_setup.tstr)}</span></div>
+                            <div className="param-item"><span className="param-label">TSNS</span><span className="param-value">{formatParamValue(machine.machine_setup.tsns)}</span></div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="param-item"><span className="param-label">LOOP</span><span className="param-value">{formatParamValue(machine.machine_setup.xloop)}</span></div>
+                            <div className="param-item"><span className="param-label">SLIC</span><span className="param-value">{formatParamValue(machine.machine_setup.slic)}</span></div>
+                            <div className="param-item"><span className="param-label">LEN</span><span className="param-value">{formatParamValue(machine.machine_setup.len)}</span></div>
+                            <div className="param-item"><span className="param-label">RATE</span><span className="param-value">{formatParamValue(machine.machine_setup.rate)}</span></div>
+                            <div className="param-item"><span className="param-label">TSTR</span><span className="param-value">{formatParamValue(machine.machine_setup.tstr)}</span></div>
+                            <div className="param-item"><span className="param-label">TSNS</span><span className="param-value">{formatParamValue(machine.machine_setup.tsns)}</span></div>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* AMP Section - MAIN | SETUP */}
-              <div className="parts-params-section">
-                <div className="params-label">AMP</div>
-                <div className="params-dual-layout">
-                  <div className="params-column">
-                    <div className="params-column-label">MAIN</div>
-                    <div className="params-grid">
-                      <div className="param-item">
-                        <span className="param-label">ATK</span>
-                        <span className="param-value">{amp.atk}</span>
+                {/* AMP Section */}
+                <div className="parts-all-section">
+                  <div className="params-label">AMP</div>
+                  <div className="params-vertical-layout">
+                    <div className="params-subsection">
+                      <div className="params-column-label">MAIN</div>
+                      <div className="params-grid">
+                        <div className="param-item"><span className="param-label">ATK</span><span className="param-value">{amp.atk}</span></div>
+                        <div className="param-item"><span className="param-label">HOLD</span><span className="param-value">{amp.hold}</span></div>
+                        <div className="param-item"><span className="param-label">REL</span><span className="param-value">{amp.rel}</span></div>
+                        <div className="param-item"><span className="param-label">VOL</span><span className="param-value">{amp.vol}</span></div>
+                        <div className="param-item"><span className="param-label">BAL</span><span className="param-value">{amp.bal}</span></div>
+                        <div className="param-item"><span className="param-label">F</span><span className="param-value">{amp.f}</span></div>
                       </div>
-                      <div className="param-item">
-                        <span className="param-label">HOLD</span>
-                        <span className="param-value">{amp.hold}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">REL</span>
-                        <span className="param-value">{amp.rel}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">VOL</span>
-                        <span className="param-value">{amp.vol}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">BAL</span>
-                        <span className="param-value">{amp.bal}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">F</span>
-                        <span className="param-value">{amp.f}</span>
+                    </div>
+                    <div className="params-subsection">
+                      <div className="params-column-label">SETUP</div>
+                      <div className="params-grid">
+                        <div className="param-item"><span className="param-label">AMP</span><span className="param-value">{amp.amp_setup_amp}</span></div>
+                        <div className="param-item"><span className="param-label">SYNC</span><span className="param-value">{amp.amp_setup_sync}</span></div>
+                        <div className="param-item"><span className="param-label">ATCK</span><span className="param-value">{amp.amp_setup_atck}</span></div>
+                        <div className="param-item"><span className="param-label">FX1</span><span className="param-value">{formatFxEnvTrig(amp.amp_setup_fx1)}</span></div>
+                        <div className="param-item"><span className="param-label">FX2</span><span className="param-value">{formatFxEnvTrig(amp.amp_setup_fx2)}</span></div>
                       </div>
                     </div>
                   </div>
-                  <div className="params-column">
-                    <div className="params-column-label">SETUP</div>
-                    <div className="params-grid">
-                      <div className="param-item">
-                        <span className="param-label">AMP</span>
-                        <span className="param-value">{amp.amp_setup_amp}</span>
+                </div>
+
+                {/* LFO1 Section */}
+                <div className="parts-all-section">
+                  <div className="params-label">LFO1</div>
+                  <div className="params-vertical-layout">
+                    <div className="params-subsection">
+                      <div className="params-column-label">MAIN</div>
+                      <div className="params-grid">
+                        <div className="param-item"><span className="param-label">PMTR</span><span className="param-value">{lfo.lfo1_pmtr}</span></div>
+                        <div className="param-item"><span className="param-label">WAVE</span><span className="param-value">{formatLfoWave(lfo.lfo1_wave)}</span></div>
+                        <div className="param-item"><span className="param-label">MULT</span><span className="param-value">{formatLfoMult(lfo.lfo1_mult)}</span></div>
+                        <div className="param-item"><span className="param-label">TRIG</span><span className="param-value">{formatLfoTrig(lfo.lfo1_trig)}</span></div>
+                        <div className="param-item"><span className="param-label">SPD</span><span className="param-value">{lfo.spd1}</span></div>
+                        <div className="param-item"><span className="param-label">DEP</span><span className="param-value">{lfo.dep1}</span></div>
                       </div>
-                      <div className="param-item">
-                        <span className="param-label">SYNC</span>
-                        <span className="param-value">{amp.amp_setup_sync}</span>
+                    </div>
+                    <div className="params-subsection">
+                      <div className="params-column-label">SETUP</div>
+                      <div className="params-grid">
+                        <div className="params-empty-message">-</div>
                       </div>
-                      <div className="param-item">
-                        <span className="param-label">ATCK</span>
-                        <span className="param-value">{amp.amp_setup_atck}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* LFO2 Section */}
+                <div className="parts-all-section">
+                  <div className="params-label">LFO2</div>
+                  <div className="params-vertical-layout">
+                    <div className="params-subsection">
+                      <div className="params-column-label">MAIN</div>
+                      <div className="params-grid">
+                        <div className="param-item"><span className="param-label">PMTR</span><span className="param-value">{lfo.lfo2_pmtr}</span></div>
+                        <div className="param-item"><span className="param-label">WAVE</span><span className="param-value">{formatLfoWave(lfo.lfo2_wave)}</span></div>
+                        <div className="param-item"><span className="param-label">MULT</span><span className="param-value">{formatLfoMult(lfo.lfo2_mult)}</span></div>
+                        <div className="param-item"><span className="param-label">TRIG</span><span className="param-value">{formatLfoTrig(lfo.lfo2_trig)}</span></div>
+                        <div className="param-item"><span className="param-label">SPD</span><span className="param-value">{lfo.spd2}</span></div>
+                        <div className="param-item"><span className="param-label">DEP</span><span className="param-value">{lfo.dep2}</span></div>
                       </div>
-                      <div className="param-item">
-                        <span className="param-label">FX1</span>
-                        <span className="param-value">{formatFxEnvTrig(amp.amp_setup_fx1)}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">FX2</span>
-                        <span className="param-value">{formatFxEnvTrig(amp.amp_setup_fx2)}</span>
+                    </div>
+                    <div className="params-subsection">
+                      <div className="params-column-label">SETUP</div>
+                      <div className="params-grid">
+                        <div className="params-empty-message">-</div>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* LFO Section - 2x2 grid: LFO1|LFO2 top, LFO3|DESIGN bottom */}
-              <div className="parts-params-section">
-                <div className="params-label">LFO</div>
-                <div className="params-grid-2x2">
-                  <div className="params-column">
-                    <div className="params-column-label">LFO1</div>
-                    <div className="params-grid">
-                      <div className="param-item">
-                        <span className="param-label">PMTR</span>
-                        <span className="param-value">{lfo.lfo1_pmtr}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">WAVE</span>
-                        <span className="param-value">{formatLfoWave(lfo.lfo1_wave)}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">MULT</span>
-                        <span className="param-value">{formatLfoMult(lfo.lfo1_mult)}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">TRIG</span>
-                        <span className="param-value">{formatLfoTrig(lfo.lfo1_trig)}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">SPD</span>
-                        <span className="param-value">{lfo.spd1}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">DEP</span>
-                        <span className="param-value">{lfo.dep1}</span>
+              {/* Row 2: LFO3, DESIGN, FX1, FX2 */}
+              <div className="parts-all-row">
+                {/* LFO3 Section */}
+                <div className="parts-all-section">
+                  <div className="params-label">LFO3</div>
+                  <div className="params-vertical-layout">
+                    <div className="params-subsection">
+                      <div className="params-column-label">MAIN</div>
+                      <div className="params-grid">
+                        <div className="param-item"><span className="param-label">PMTR</span><span className="param-value">{lfo.lfo3_pmtr}</span></div>
+                        <div className="param-item"><span className="param-label">WAVE</span><span className="param-value">{formatLfoWave(lfo.lfo3_wave)}</span></div>
+                        <div className="param-item"><span className="param-label">MULT</span><span className="param-value">{formatLfoMult(lfo.lfo3_mult)}</span></div>
+                        <div className="param-item"><span className="param-label">TRIG</span><span className="param-value">{formatLfoTrig(lfo.lfo3_trig)}</span></div>
+                        <div className="param-item"><span className="param-label">SPD</span><span className="param-value">{lfo.spd3}</span></div>
+                        <div className="param-item"><span className="param-label">DEP</span><span className="param-value">{lfo.dep3}</span></div>
                       </div>
                     </div>
-                  </div>
-                  <div className="params-column">
-                    <div className="params-column-label">LFO2</div>
-                    <div className="params-grid">
-                      <div className="param-item">
-                        <span className="param-label">PMTR</span>
-                        <span className="param-value">{lfo.lfo2_pmtr}</span>
+                    <div className="params-subsection">
+                      <div className="params-column-label">SETUP</div>
+                      <div className="params-grid">
+                        <div className="params-empty-message">-</div>
                       </div>
-                      <div className="param-item">
-                        <span className="param-label">WAVE</span>
-                        <span className="param-value">{formatLfoWave(lfo.lfo2_wave)}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">MULT</span>
-                        <span className="param-value">{formatLfoMult(lfo.lfo2_mult)}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">TRIG</span>
-                        <span className="param-value">{formatLfoTrig(lfo.lfo2_trig)}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">SPD</span>
-                        <span className="param-value">{lfo.spd2}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">DEP</span>
-                        <span className="param-value">{lfo.dep2}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="params-column">
-                    <div className="params-column-label">LFO3</div>
-                    <div className="params-grid">
-                      <div className="param-item">
-                        <span className="param-label">PMTR</span>
-                        <span className="param-value">{lfo.lfo3_pmtr}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">WAVE</span>
-                        <span className="param-value">{formatLfoWave(lfo.lfo3_wave)}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">MULT</span>
-                        <span className="param-value">{formatLfoMult(lfo.lfo3_mult)}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">TRIG</span>
-                        <span className="param-value">{formatLfoTrig(lfo.lfo3_trig)}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">SPD</span>
-                        <span className="param-value">{lfo.spd3}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">DEP</span>
-                        <span className="param-value">{lfo.dep3}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="params-column">
-                    <div className="params-column-label">DESIGN</div>
-                    {renderLfoEnvelope(lfo.custom_lfo_design)}
-                  </div>
-                </div>
-              </div>
-
-              {/* FX1 Section - MAIN | SETUP */}
-              <div className="parts-params-section">
-                <div className="params-label">FX1 - {formatFxType(fx.fx1_type)}</div>
-                <div className="params-dual-layout">
-                  <div className="params-column">
-                    <div className="params-column-label">MAIN</div>
-                    <div className="params-grid">
-                      {fx1MainLabels.some(label => label) ? (
-                        fx1MainLabels.map((label, index) => {
-                          if (!label) return null;
-                          return (
-                            <div key={index} className="param-item">
-                              <span className="param-label">{label}</span>
-                              <span className="param-value">{fx1MainValues[index]}</span>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <div className="params-empty-message">No effect assigned to FX1 slot</div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="params-column">
-                    <div className="params-column-label">SETUP</div>
-                    <div className="params-grid">
-                      {fx1SetupLabels.some(label => label) ? (
-                        fx1SetupLabels.map((label, index) => {
-                          if (!label) return null;
-                          return (
-                            <div key={index} className="param-item">
-                              <span className="param-label">{label}</span>
-                              <span className="param-value">{fx1SetupValues[index]}</span>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <div className="params-empty-message">No setup parameters for this effect</div>
-                      )}
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* FX2 Section - MAIN | SETUP */}
-              <div className="parts-params-section">
-                <div className="params-label">FX2 - {formatFxType(fx.fx2_type)}</div>
-                <div className="params-dual-layout">
-                  <div className="params-column">
-                    <div className="params-column-label">MAIN</div>
-                    <div className="params-grid">
-                      {fx2MainLabels.some(label => label) ? (
-                        fx2MainLabels.map((label, index) => {
-                          if (!label) return null;
-                          return (
-                            <div key={index} className="param-item">
-                              <span className="param-label">{label}</span>
-                              <span className="param-value">{fx2MainValues[index]}</span>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <div className="params-empty-message">No effect assigned to FX2 slot</div>
-                      )}
+                {/* DESIGN Section */}
+                <div className="parts-all-section">
+                  <div className="params-label">DESIGN</div>
+                  <div className="params-vertical-layout">
+                    <div className="params-subsection">
+                      {renderLfoEnvelope(lfo.custom_lfo_design)}
                     </div>
                   </div>
-                  <div className="params-column">
-                    <div className="params-column-label">SETUP</div>
-                    <div className="params-grid">
-                      {fx2SetupLabels.some(label => label) ? (
-                        fx2SetupLabels.map((label, index) => {
-                          if (!label) return null;
-                          return (
-                            <div key={index} className="param-item">
-                              <span className="param-label">{label}</span>
-                              <span className="param-value">{fx2SetupValues[index]}</span>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <div className="params-empty-message">No setup parameters for this effect</div>
-                      )}
+                </div>
+
+                {/* FX1 Section */}
+                <div className="parts-all-section">
+                  <div className="params-label">FX1 - {formatFxType(fx.fx1_type)}</div>
+                  <div className="params-vertical-layout">
+                    <div className="params-subsection">
+                      <div className="params-column-label">MAIN</div>
+                      <div className="params-grid">
+                        {fx1MainLabels.some(label => label) ? (
+                          fx1MainLabels.map((label, index) => {
+                            if (!label) return null;
+                            return (
+                              <div key={index} className="param-item"><span className="param-label">{label}</span><span className="param-value">{fx1MainValues[index]}</span></div>
+                            );
+                          })
+                        ) : (
+                          <div className="params-empty-message">-</div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="params-subsection">
+                      <div className="params-column-label">SETUP</div>
+                      <div className="params-grid">
+                        {fx1SetupLabels.some(label => label) ? (
+                          fx1SetupLabels.map((label, index) => {
+                            if (!label) return null;
+                            return (
+                              <div key={index} className="param-item"><span className="param-label">{label}</span><span className="param-value">{fx1SetupValues[index]}</span></div>
+                            );
+                          })
+                        ) : (
+                          <div className="params-empty-message">-</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* FX2 Section */}
+                <div className="parts-all-section">
+                  <div className="params-label">FX2 - {formatFxType(fx.fx2_type)}</div>
+                  <div className="params-vertical-layout">
+                    <div className="params-subsection">
+                      <div className="params-column-label">MAIN</div>
+                      <div className="params-grid">
+                        {fx2MainLabels.some(label => label) ? (
+                          fx2MainLabels.map((label, index) => {
+                            if (!label) return null;
+                            return (
+                              <div key={index} className="param-item"><span className="param-label">{label}</span><span className="param-value">{fx2MainValues[index]}</span></div>
+                            );
+                          })
+                        ) : (
+                          <div className="params-empty-message">-</div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="params-subsection">
+                      <div className="params-column-label">SETUP</div>
+                      <div className="params-grid">
+                        {fx2SetupLabels.some(label => label) ? (
+                          fx2SetupLabels.map((label, index) => {
+                            if (!label) return null;
+                            return (
+                              <div key={index} className="param-item"><span className="param-label">{label}</span><span className="param-value">{fx2SetupValues[index]}</span></div>
+                            );
+                          })
+                        ) : (
+                          <div className="params-empty-message">-</div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1797,14 +1669,14 @@ export default function PartsPanel({
     );
   };
 
-  // Render all MIDI pages - same style as individual tabs with MAIN/SETUP side by side
+  // Render all MIDI pages - 2-row layout matching Audio tracks
   const renderAllMidiPages = (part: PartData) => {
     const tracksToShow = selectedTrack !== undefined && selectedTrack >= 8
       ? [selectedTrack - 8]
       : [0, 1, 2, 3, 4, 5, 6, 7];
 
     return (
-      <div className="parts-tracks">
+      <div className="parts-tracks full-width">
         {tracksToShow.map((trackIdx) => {
           const midi_note = part.midi_notes[trackIdx];
           const midi_arp = part.midi_arps[trackIdx];
@@ -1819,326 +1691,196 @@ export default function PartsPanel({
                 <span className="machine-type">MIDI</span>
               </div>
 
-              {/* NOTE Section - MAIN | SETUP */}
-              <div className="parts-params-section">
-                <div className="params-label">NOTE</div>
-                <div className="params-dual-layout">
-                  <div className="params-column">
-                    <div className="params-column-label">MAIN</div>
-                    <div className="params-grid">
-                      <div className="param-item">
-                        <span className="param-label">NOTE</span>
-                        <span className="param-value">{midi_note.note}</span>
+              {/* Row 1: NOTE, ARP, LFO1, LFO2 */}
+              <div className="parts-all-row">
+                {/* NOTE Section */}
+                <div className="parts-all-section">
+                  <div className="params-label">NOTE</div>
+                  <div className="params-vertical-layout">
+                    <div className="params-subsection">
+                      <div className="params-column-label">MAIN</div>
+                      <div className="params-grid">
+                        <div className="param-item"><span className="param-label">NOTE</span><span className="param-value">{midi_note.note}</span></div>
+                        <div className="param-item"><span className="param-label">VEL</span><span className="param-value">{midi_note.vel}</span></div>
+                        <div className="param-item"><span className="param-label">LEN</span><span className="param-value">{midi_note.len}</span></div>
+                        <div className="param-item"><span className="param-label">NOT2</span><span className="param-value">{midi_note.not2}</span></div>
+                        <div className="param-item"><span className="param-label">NOT3</span><span className="param-value">{midi_note.not3}</span></div>
+                        <div className="param-item"><span className="param-label">NOT4</span><span className="param-value">{midi_note.not4}</span></div>
                       </div>
-                      <div className="param-item">
-                        <span className="param-label">VEL</span>
-                        <span className="param-value">{midi_note.vel}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">LEN</span>
-                        <span className="param-value">{midi_note.len}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">NOT2</span>
-                        <span className="param-value">{midi_note.not2}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">NOT3</span>
-                        <span className="param-value">{midi_note.not3}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">NOT4</span>
-                        <span className="param-value">{midi_note.not4}</span>
+                    </div>
+                    <div className="params-subsection">
+                      <div className="params-column-label">SETUP</div>
+                      <div className="params-grid">
+                        <div className="param-item"><span className="param-label">CHAN</span><span className="param-value">{midi_note.chan}</span></div>
+                        <div className="param-item"><span className="param-label">BANK</span><span className="param-value">{midi_note.bank}</span></div>
+                        <div className="param-item"><span className="param-label">PROG</span><span className="param-value">{midi_note.prog}</span></div>
+                        <div className="param-item"><span className="param-label">SBNK</span><span className="param-value">{midi_note.sbnk}</span></div>
                       </div>
                     </div>
                   </div>
-                  <div className="params-column">
-                    <div className="params-column-label">SETUP</div>
-                    <div className="params-grid">
-                      <div className="param-item">
-                        <span className="param-label">CHAN</span>
-                        <span className="param-value">{midi_note.chan}</span>
+                </div>
+
+                {/* ARP Section */}
+                <div className="parts-all-section">
+                  <div className="params-label">ARP</div>
+                  <div className="params-vertical-layout">
+                    <div className="params-subsection">
+                      <div className="params-column-label">MAIN</div>
+                      <div className="params-grid">
+                        <div className="param-item"><span className="param-label">TRAN</span><span className="param-value">{midi_arp.tran}</span></div>
+                        <div className="param-item"><span className="param-label">LEG</span><span className="param-value">{midi_arp.leg}</span></div>
+                        <div className="param-item"><span className="param-label">MODE</span><span className="param-value">{midi_arp.mode}</span></div>
+                        <div className="param-item"><span className="param-label">SPD</span><span className="param-value">{midi_arp.spd}</span></div>
+                        <div className="param-item"><span className="param-label">RNGE</span><span className="param-value">{midi_arp.rnge}</span></div>
+                        <div className="param-item"><span className="param-label">NLEN</span><span className="param-value">{midi_arp.nlen}</span></div>
                       </div>
-                      <div className="param-item">
-                        <span className="param-label">BANK</span>
-                        <span className="param-value">{midi_note.bank}</span>
+                    </div>
+                    <div className="params-subsection">
+                      <div className="params-column-label">SETUP</div>
+                      <div className="params-grid">
+                        <div className="param-item"><span className="param-label">LEN</span><span className="param-value">{midi_arp.len}</span></div>
+                        <div className="param-item"><span className="param-label">KEY</span><span className="param-value">{midi_arp.key}</span></div>
                       </div>
-                      <div className="param-item">
-                        <span className="param-label">PROG</span>
-                        <span className="param-value">{midi_note.prog}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* LFO1 Section */}
+                <div className="parts-all-section">
+                  <div className="params-label">LFO1</div>
+                  <div className="params-vertical-layout">
+                    <div className="params-subsection">
+                      <div className="params-column-label">MAIN</div>
+                      <div className="params-grid">
+                        <div className="param-item"><span className="param-label">PMTR</span><span className="param-value">{midi_lfo.lfo1_pmtr}</span></div>
+                        <div className="param-item"><span className="param-label">WAVE</span><span className="param-value">{formatLfoWave(midi_lfo.lfo1_wave)}</span></div>
+                        <div className="param-item"><span className="param-label">MULT</span><span className="param-value">{formatLfoMult(midi_lfo.lfo1_mult)}</span></div>
+                        <div className="param-item"><span className="param-label">TRIG</span><span className="param-value">{formatLfoTrig(midi_lfo.lfo1_trig)}</span></div>
+                        <div className="param-item"><span className="param-label">SPD</span><span className="param-value">{midi_lfo.spd1}</span></div>
+                        <div className="param-item"><span className="param-label">DEP</span><span className="param-value">{midi_lfo.dep1}</span></div>
                       </div>
-                      <div className="param-item">
-                        <span className="param-label">SBNK</span>
-                        <span className="param-value">{midi_note.sbnk}</span>
+                    </div>
+                    <div className="params-subsection">
+                      <div className="params-column-label">SETUP</div>
+                      <div className="params-grid">
+                        <div className="params-empty-message">-</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* LFO2 Section */}
+                <div className="parts-all-section">
+                  <div className="params-label">LFO2</div>
+                  <div className="params-vertical-layout">
+                    <div className="params-subsection">
+                      <div className="params-column-label">MAIN</div>
+                      <div className="params-grid">
+                        <div className="param-item"><span className="param-label">PMTR</span><span className="param-value">{midi_lfo.lfo2_pmtr}</span></div>
+                        <div className="param-item"><span className="param-label">WAVE</span><span className="param-value">{formatLfoWave(midi_lfo.lfo2_wave)}</span></div>
+                        <div className="param-item"><span className="param-label">MULT</span><span className="param-value">{formatLfoMult(midi_lfo.lfo2_mult)}</span></div>
+                        <div className="param-item"><span className="param-label">TRIG</span><span className="param-value">{formatLfoTrig(midi_lfo.lfo2_trig)}</span></div>
+                        <div className="param-item"><span className="param-label">SPD</span><span className="param-value">{midi_lfo.spd2}</span></div>
+                        <div className="param-item"><span className="param-label">DEP</span><span className="param-value">{midi_lfo.dep2}</span></div>
+                      </div>
+                    </div>
+                    <div className="params-subsection">
+                      <div className="params-column-label">SETUP</div>
+                      <div className="params-grid">
+                        <div className="params-empty-message">-</div>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* ARP Section - MAIN | SETUP */}
-              <div className="parts-params-section">
-                <div className="params-label">ARP</div>
-                <div className="params-dual-layout">
-                  <div className="params-column">
-                    <div className="params-column-label">MAIN</div>
-                    <div className="params-grid">
-                      <div className="param-item">
-                        <span className="param-label">TRAN</span>
-                        <span className="param-value">{midi_arp.tran}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">LEG</span>
-                        <span className="param-value">{midi_arp.leg}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">MODE</span>
-                        <span className="param-value">{midi_arp.mode}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">SPD</span>
-                        <span className="param-value">{midi_arp.spd}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">RNGE</span>
-                        <span className="param-value">{midi_arp.rnge}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">NLEN</span>
-                        <span className="param-value">{midi_arp.nlen}</span>
+              {/* Row 2: LFO3, DESIGN, CTRL1, CTRL2 */}
+              <div className="parts-all-row">
+                {/* LFO3 Section */}
+                <div className="parts-all-section">
+                  <div className="params-label">LFO3</div>
+                  <div className="params-vertical-layout">
+                    <div className="params-subsection">
+                      <div className="params-column-label">MAIN</div>
+                      <div className="params-grid">
+                        <div className="param-item"><span className="param-label">PMTR</span><span className="param-value">{midi_lfo.lfo3_pmtr}</span></div>
+                        <div className="param-item"><span className="param-label">WAVE</span><span className="param-value">{formatLfoWave(midi_lfo.lfo3_wave)}</span></div>
+                        <div className="param-item"><span className="param-label">MULT</span><span className="param-value">{formatLfoMult(midi_lfo.lfo3_mult)}</span></div>
+                        <div className="param-item"><span className="param-label">TRIG</span><span className="param-value">{formatLfoTrig(midi_lfo.lfo3_trig)}</span></div>
+                        <div className="param-item"><span className="param-label">SPD</span><span className="param-value">{midi_lfo.spd3}</span></div>
+                        <div className="param-item"><span className="param-label">DEP</span><span className="param-value">{midi_lfo.dep3}</span></div>
                       </div>
                     </div>
-                  </div>
-                  <div className="params-column">
-                    <div className="params-column-label">SETUP</div>
-                    <div className="params-grid">
-                      <div className="param-item">
-                        <span className="param-label">LEN</span>
-                        <span className="param-value">{midi_arp.len}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">KEY</span>
-                        <span className="param-value">{midi_arp.key}</span>
+                    <div className="params-subsection">
+                      <div className="params-column-label">SETUP</div>
+                      <div className="params-grid">
+                        <div className="params-empty-message">-</div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* LFO Section - 2x2 grid: LFO1|LFO2 top, LFO3|DESIGN bottom */}
-              <div className="parts-params-section">
-                <div className="params-label">LFO</div>
-                <div className="params-grid-2x2">
-                  <div className="params-column">
-                    <div className="params-column-label">LFO1</div>
-                    <div className="params-grid">
-                      <div className="param-item">
-                        <span className="param-label">PMTR</span>
-                        <span className="param-value">{midi_lfo.lfo1_pmtr}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">WAVE</span>
-                        <span className="param-value">{formatLfoWave(midi_lfo.lfo1_wave)}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">MULT</span>
-                        <span className="param-value">{formatLfoMult(midi_lfo.lfo1_mult)}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">TRIG</span>
-                        <span className="param-value">{formatLfoTrig(midi_lfo.lfo1_trig)}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">SPD</span>
-                        <span className="param-value">{midi_lfo.spd1}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">DEP</span>
-                        <span className="param-value">{midi_lfo.dep1}</span>
-                      </div>
+                {/* DESIGN Section */}
+                <div className="parts-all-section">
+                  <div className="params-label">DESIGN</div>
+                  <div className="params-vertical-layout">
+                    <div className="params-subsection">
+                      {renderLfoEnvelope(midi_lfo.custom_lfo_design)}
                     </div>
-                  </div>
-                  <div className="params-column">
-                    <div className="params-column-label">LFO2</div>
-                    <div className="params-grid">
-                      <div className="param-item">
-                        <span className="param-label">PMTR</span>
-                        <span className="param-value">{midi_lfo.lfo2_pmtr}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">WAVE</span>
-                        <span className="param-value">{formatLfoWave(midi_lfo.lfo2_wave)}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">MULT</span>
-                        <span className="param-value">{formatLfoMult(midi_lfo.lfo2_mult)}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">TRIG</span>
-                        <span className="param-value">{formatLfoTrig(midi_lfo.lfo2_trig)}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">SPD</span>
-                        <span className="param-value">{midi_lfo.spd2}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">DEP</span>
-                        <span className="param-value">{midi_lfo.dep2}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="params-column">
-                    <div className="params-column-label">LFO3</div>
-                    <div className="params-grid">
-                      <div className="param-item">
-                        <span className="param-label">PMTR</span>
-                        <span className="param-value">{midi_lfo.lfo3_pmtr}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">WAVE</span>
-                        <span className="param-value">{formatLfoWave(midi_lfo.lfo3_wave)}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">MULT</span>
-                        <span className="param-value">{formatLfoMult(midi_lfo.lfo3_mult)}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">TRIG</span>
-                        <span className="param-value">{formatLfoTrig(midi_lfo.lfo3_trig)}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">SPD</span>
-                        <span className="param-value">{midi_lfo.spd3}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">DEP</span>
-                        <span className="param-value">{midi_lfo.dep3}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="params-column">
-                    <div className="params-column-label">DESIGN</div>
-                    {renderLfoEnvelope(midi_lfo.custom_lfo_design)}
                   </div>
                 </div>
-              </div>
 
-              {/* CTRL1 Section - MAIN | SETUP */}
-              <div className="parts-params-section">
-                <div className="params-label">CTRL1</div>
-                <div className="params-dual-layout">
-                  <div className="params-column">
-                    <div className="params-column-label">MAIN</div>
-                    <div className="params-grid">
-                      <div className="param-item">
-                        <span className="param-label">PB</span>
-                        <span className="param-value">{midi_ctrl1.pb}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">AT</span>
-                        <span className="param-value">{midi_ctrl1.at}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">CC1</span>
-                        <span className="param-value">{midi_ctrl1.cc1}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">CC2</span>
-                        <span className="param-value">{midi_ctrl1.cc2}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">CC3</span>
-                        <span className="param-value">{midi_ctrl1.cc3}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">CC4</span>
-                        <span className="param-value">{midi_ctrl1.cc4}</span>
+                {/* CTRL1 Section */}
+                <div className="parts-all-section">
+                  <div className="params-label">CTRL1</div>
+                  <div className="params-vertical-layout">
+                    <div className="params-subsection">
+                      <div className="params-column-label">MAIN</div>
+                      <div className="params-grid">
+                        <div className="param-item"><span className="param-label">PB</span><span className="param-value">{midi_ctrl1.pb}</span></div>
+                        <div className="param-item"><span className="param-label">AT</span><span className="param-value">{midi_ctrl1.at}</span></div>
+                        <div className="param-item"><span className="param-label">CC1</span><span className="param-value">{midi_ctrl1.cc1}</span></div>
+                        <div className="param-item"><span className="param-label">CC2</span><span className="param-value">{midi_ctrl1.cc2}</span></div>
+                        <div className="param-item"><span className="param-label">CC3</span><span className="param-value">{midi_ctrl1.cc3}</span></div>
+                        <div className="param-item"><span className="param-label">CC4</span><span className="param-value">{midi_ctrl1.cc4}</span></div>
                       </div>
                     </div>
-                  </div>
-                  <div className="params-column">
-                    <div className="params-column-label">SETUP</div>
-                    <div className="params-grid">
-                      <div className="param-item">
-                        <span className="param-label">CC1#</span>
-                        <span className="param-value">{midi_ctrl1.cc1_num}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">CC2#</span>
-                        <span className="param-value">{midi_ctrl1.cc2_num}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">CC3#</span>
-                        <span className="param-value">{midi_ctrl1.cc3_num}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">CC4#</span>
-                        <span className="param-value">{midi_ctrl1.cc4_num}</span>
+                    <div className="params-subsection">
+                      <div className="params-column-label">SETUP</div>
+                      <div className="params-grid">
+                        <div className="param-item"><span className="param-label">CC1#</span><span className="param-value">{midi_ctrl1.cc1_num}</span></div>
+                        <div className="param-item"><span className="param-label">CC2#</span><span className="param-value">{midi_ctrl1.cc2_num}</span></div>
+                        <div className="param-item"><span className="param-label">CC3#</span><span className="param-value">{midi_ctrl1.cc3_num}</span></div>
+                        <div className="param-item"><span className="param-label">CC4#</span><span className="param-value">{midi_ctrl1.cc4_num}</span></div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* CTRL2 Section - MAIN | SETUP */}
-              <div className="parts-params-section">
-                <div className="params-label">CTRL2</div>
-                <div className="params-dual-layout">
-                  <div className="params-column">
-                    <div className="params-column-label">MAIN</div>
-                    <div className="params-grid">
-                      <div className="param-item">
-                        <span className="param-label">CC5</span>
-                        <span className="param-value">{midi_ctrl2.cc5}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">CC6</span>
-                        <span className="param-value">{midi_ctrl2.cc6}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">CC7</span>
-                        <span className="param-value">{midi_ctrl2.cc7}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">CC8</span>
-                        <span className="param-value">{midi_ctrl2.cc8}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">CC9</span>
-                        <span className="param-value">{midi_ctrl2.cc9}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">CC10</span>
-                        <span className="param-value">{midi_ctrl2.cc10}</span>
+                {/* CTRL2 Section */}
+                <div className="parts-all-section">
+                  <div className="params-label">CTRL2</div>
+                  <div className="params-vertical-layout">
+                    <div className="params-subsection">
+                      <div className="params-column-label">MAIN</div>
+                      <div className="params-grid">
+                        <div className="param-item"><span className="param-label">CC5</span><span className="param-value">{midi_ctrl2.cc5}</span></div>
+                        <div className="param-item"><span className="param-label">CC6</span><span className="param-value">{midi_ctrl2.cc6}</span></div>
+                        <div className="param-item"><span className="param-label">CC7</span><span className="param-value">{midi_ctrl2.cc7}</span></div>
+                        <div className="param-item"><span className="param-label">CC8</span><span className="param-value">{midi_ctrl2.cc8}</span></div>
+                        <div className="param-item"><span className="param-label">CC9</span><span className="param-value">{midi_ctrl2.cc9}</span></div>
+                        <div className="param-item"><span className="param-label">CC10</span><span className="param-value">{midi_ctrl2.cc10}</span></div>
                       </div>
                     </div>
-                  </div>
-                  <div className="params-column">
-                    <div className="params-column-label">SETUP</div>
-                    <div className="params-grid">
-                      <div className="param-item">
-                        <span className="param-label">CC5#</span>
-                        <span className="param-value">{midi_ctrl2.cc5_num}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">CC6#</span>
-                        <span className="param-value">{midi_ctrl2.cc6_num}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">CC7#</span>
-                        <span className="param-value">{midi_ctrl2.cc7_num}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">CC8#</span>
-                        <span className="param-value">{midi_ctrl2.cc8_num}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">CC9#</span>
-                        <span className="param-value">{midi_ctrl2.cc9_num}</span>
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">CC10#</span>
-                        <span className="param-value">{midi_ctrl2.cc10_num}</span>
+                    <div className="params-subsection">
+                      <div className="params-column-label">SETUP</div>
+                      <div className="params-grid">
+                        <div className="param-item"><span className="param-label">CC5#</span><span className="param-value">{midi_ctrl2.cc5_num}</span></div>
+                        <div className="param-item"><span className="param-label">CC6#</span><span className="param-value">{midi_ctrl2.cc6_num}</span></div>
+                        <div className="param-item"><span className="param-label">CC7#</span><span className="param-value">{midi_ctrl2.cc7_num}</span></div>
+                        <div className="param-item"><span className="param-label">CC8#</span><span className="param-value">{midi_ctrl2.cc8_num}</span></div>
+                        <div className="param-item"><span className="param-label">CC9#</span><span className="param-value">{midi_ctrl2.cc9_num}</span></div>
+                        <div className="param-item"><span className="param-label">CC10#</span><span className="param-value">{midi_ctrl2.cc10_num}</span></div>
                       </div>
                     </div>
                   </div>
