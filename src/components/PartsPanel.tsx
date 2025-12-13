@@ -113,7 +113,7 @@ export default function PartsPanel({
     const partName = partNames[partIndex] || `Part ${partIndex + 1}`;
     try {
       setIsCommitting(true);
-      onWriteStatusChange?.(writeStatus.writing(`Saving ${partName}...`));
+      onWriteStatusChange?.(writeStatus.writing(`Saving part ${partName}...`));
       console.log('[PartsPanel] Committing part:', partIndex);
       await invoke('commit_part', {
         path: projectPath,
@@ -146,7 +146,7 @@ export default function PartsPanel({
     } catch (err) {
       console.error('Failed to commit part:', err);
       setError(`Failed to save: ${err}`);
-      onWriteStatusChange?.(writeStatus.error(`Failed to save ${partName}`));
+      onWriteStatusChange?.(writeStatus.error(`Failed to save part ${partName}`));
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
     } finally {
       setIsCommitting(false);
@@ -196,7 +196,7 @@ export default function PartsPanel({
     const partName = partNames[partIndex] || `Part ${partIndex + 1}`;
     try {
       setIsReloading(true);
-      onWriteStatusChange?.(writeStatus.writing(`Reloading ${partName}...`));
+      onWriteStatusChange?.(writeStatus.writing(`Reloading part ${partName}...`));
       console.log('[PartsPanel] Reloading part:', partIndex);
       const reloadedPart = await invoke<PartData>('reload_part', {
         path: projectPath,
@@ -221,7 +221,7 @@ export default function PartsPanel({
       // Update local state: edited flag is cleared for this part
       setPartsEditedBitmask(prev => prev & ~(1 << partIndex));
 
-      onWriteStatusChange?.(writeStatus.success(`${partName} reloaded`));
+      onWriteStatusChange?.(writeStatus.success(`Part ${partName} reloaded`));
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
 
       // Notify parent to invalidate cache
@@ -231,7 +231,7 @@ export default function PartsPanel({
     } catch (err) {
       console.error('Failed to reload part:', err);
       setError(`Failed to reload: ${err}`);
-      onWriteStatusChange?.(writeStatus.error(`Failed to reload ${partName}`));
+      onWriteStatusChange?.(writeStatus.error(`Failed to reload part ${partName}`));
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
     } finally {
       setIsReloading(false);
