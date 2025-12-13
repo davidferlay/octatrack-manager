@@ -223,7 +223,7 @@
 .params-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  gap: 8px 16px;
 }
 
 .param-item {
@@ -232,6 +232,7 @@
   align-items: center;
   gap: 8px;
   font-size: 11px;
+  padding-right: 8px;
 }
 
 .param-label {
