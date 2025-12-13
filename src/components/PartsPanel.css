@@ -132,6 +132,8 @@
 
 .parts-content {
   padding: 16px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .parts-content.centered {
@@ -139,11 +141,25 @@
   justify-content: center;
 }
 
+/* When full-width tracks are inside centered content, let them stretch */
+.parts-content.centered:has(.parts-tracks.full-width) {
+  display: block;
+  padding: 16px 0;
+  margin: 0 -1rem;
+  width: calc(100% + 2rem);
+}
+
 .parts-tracks {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   justify-content: center;
+}
+
+.parts-tracks.full-width {
+  flex-direction: column;
+  justify-content: flex-start;
+  width: 100%;
 }
 
 .parts-track {
@@ -237,7 +253,7 @@
   padding: 0 8px;
   border-radius: 3px;
   border: 1px solid #666;
-  width: 60px;
+  width: 48px;
   height: 26px;
   line-height: 26px;
   text-align: right;
@@ -374,9 +390,18 @@
 }
 
 /* Wide track card for All view */
-.parts-track-wide {
+.parts-track.parts-track-wide {
   width: 100%;
-  max-width: 900px;
+  flex-shrink: 1;
+}
+
+.parts-track.parts-track-wide .parts-all-row {
+  min-height: 250px;
+  max-height: 250px;
+}
+
+.parts-track.parts-track-wide .parts-all-row .parts-all-section {
+  align-items: stretch;
 }
 
 /* Dual column layout for MAIN | SETUP */
@@ -431,9 +456,6 @@
     max-width: 400px;
   }
 
-  .parts-track-wide {
-    max-width: 100%;
-  }
 
   .params-dual-layout {
     flex-direction: column;
@@ -564,5 +586,107 @@
 .cancel-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* All tab 2-row layout */
+.parts-all-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+  width: 100%;
+}
+
+.parts-all-row:last-child {
+  margin-bottom: 0;
+}
+
+.parts-all-section {
+  background: #252525;
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 10px;
+  flex: 1;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+}
+
+.parts-all-section .params-vertical-layout {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.parts-all-section .params-vertical-layout .params-subsection:only-child {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.parts-all-section .params-vertical-layout .params-subsection:only-child .lfo-envelope-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.parts-track-wide .parts-all-section .lfo-envelope-container .lfo-envelope-svg {
+  flex: 1 1 auto;
+}
+
+.parts-track-wide .parts-all-section .lfo-envelope-container .lfo-envelope-steps {
+  flex: 0 0 auto;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.parts-all-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4a90e2;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #333;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.params-vertical-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.params-subsection {
+  /* Individual MAIN or SETUP subsection */
+}
+
+.params-subsection .params-label {
+  font-size: 11px;
+  margin-bottom: 8px;
+  padding: 4px 8px;
+}
+
+.params-subsection .params-grid {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+/* Responsive adjustments for All tab */
+@media (max-width: 1200px) {
+  .parts-all-row {
+    flex-wrap: wrap;
+  }
+
+  .parts-all-section {
+    flex: 1 1 calc(50% - 6px);
+    max-width: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .parts-all-section {
+    flex: 1 1 100%;
+  }
 }
 
