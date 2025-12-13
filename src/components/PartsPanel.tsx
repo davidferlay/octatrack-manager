@@ -2172,43 +2172,41 @@ export default function PartsPanel({
         <div className="bank-card-header-left">
           <h3>{bankName} - Parts</h3>
         </div>
-        {isEditMode && (
-          <div className="parts-edit-controls">
-            {/* Reload: restore active part from parts.saved (requires valid saved state AND unsaved changes) */}
-            <button
-              className="cancel-button"
-              onClick={() => reloadPart(activePartIndex)}
-              disabled={isReloading || isCommitting || !modifiedPartIds.has(activePartIndex) || partsSavedState[activePartIndex] !== 1}
-              title={
-                partsSavedState[activePartIndex] !== 1
-                  ? 'No saved backup available for this part'
-                  : modifiedPartIds.has(activePartIndex)
-                    ? `Reload part ${partNames[activePartIndex]} from saved state`
-                    : 'No changes to reload'
-              }
-            >
-              Reload
-            </button>
-            {/* Save: commit active part from parts.unsaved to parts.saved */}
-            <button
-              className="save-button"
-              onClick={() => commitPart(activePartIndex)}
-              disabled={isCommitting || isReloading || !modifiedPartIds.has(activePartIndex)}
-              title={modifiedPartIds.has(activePartIndex) ? `Save ${partNames[activePartIndex]}` : 'No changes to save'}
-            >
-              {isCommitting ? 'Saving...' : 'Save'}
-            </button>
-            {/* Save All: commit all modified parts */}
-            <button
-              className="save-button"
-              onClick={commitAllParts}
-              disabled={isCommitting || isReloading || modifiedPartIds.size === 0}
-              title={modifiedPartIds.size > 0 ? `Save all ${modifiedPartIds.size} modified parts` : 'No changes to save'}
-            >
-              Save All
-            </button>
-          </div>
-        )}
+        <div className={`parts-edit-controls ${isEditMode ? 'visible' : 'hidden'}`}>
+          {/* Reload: restore active part from parts.saved (requires valid saved state AND unsaved changes) */}
+          <button
+            className="cancel-button"
+            onClick={() => reloadPart(activePartIndex)}
+            disabled={isReloading || isCommitting || !modifiedPartIds.has(activePartIndex) || partsSavedState[activePartIndex] !== 1}
+            title={
+              partsSavedState[activePartIndex] !== 1
+                ? 'No saved backup available for this part'
+                : modifiedPartIds.has(activePartIndex)
+                  ? `Reload part ${partNames[activePartIndex]} from saved state`
+                  : 'No changes to reload'
+            }
+          >
+            Reload
+          </button>
+          {/* Save: commit active part from parts.unsaved to parts.saved */}
+          <button
+            className="save-button"
+            onClick={() => commitPart(activePartIndex)}
+            disabled={isCommitting || isReloading || !modifiedPartIds.has(activePartIndex)}
+            title={modifiedPartIds.has(activePartIndex) ? `Save ${partNames[activePartIndex]}` : 'No changes to save'}
+          >
+            {isCommitting ? 'Saving...' : 'Save'}
+          </button>
+          {/* Save All: commit all modified parts */}
+          <button
+            className="save-button"
+            onClick={commitAllParts}
+            disabled={isCommitting || isReloading || modifiedPartIds.size === 0}
+            title={modifiedPartIds.size > 0 ? `Save all ${modifiedPartIds.size} modified parts` : 'No changes to save'}
+          >
+            Save All
+          </button>
+        </div>
         <div className="parts-part-tabs">
           {partNames.map((partName, index) => (
             <button
