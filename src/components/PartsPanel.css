@@ -656,8 +656,8 @@
 /* All tab 2-row layout */
 .parts-all-row {
   display: flex;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 16px;
+  margin-bottom: 16px;
   width: 100%;
 }
 
@@ -669,11 +669,17 @@
   background: #252525;
   border: 1px solid #333;
   border-radius: 4px;
-  padding: 10px;
+  padding: 12px;
   flex: 1;
   min-width: 180px;
   display: flex;
   flex-direction: column;
+}
+
+.parts-all-section > .params-label {
+  font-size: 12px;
+  margin-bottom: 10px;
+  padding: 5px 10px;
 }
 
 .parts-all-section .params-vertical-layout {
@@ -719,22 +725,51 @@
 .params-vertical-layout {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .params-subsection {
   /* Individual MAIN or SETUP subsection */
 }
 
-.params-subsection .params-label {
+.params-subsection .params-column-label {
   font-size: 11px;
+  font-weight: 700;
+  color: #4ac8ff;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
   margin-bottom: 8px;
-  padding: 4px 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #333;
 }
 
 .params-subsection .params-grid {
   grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
+  gap: 6px 8px;
+}
+
+.params-subsection .param-item {
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.params-subsection .param-label {
+  font-size: 11px;
+  flex: 0 0 auto;
+  width: 32px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.params-subsection .param-value {
+  font-size: 11px;
+  width: 40px;
+  height: 24px;
+  line-height: 24px;
+  padding: 0 6px;
+  flex-shrink: 0;
 }
 
 /* Responsive adjustments for All tab */
