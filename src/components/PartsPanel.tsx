@@ -393,11 +393,6 @@ export default function PartsPanel({
     );
   };
 
-  const formatParamValue = (value: number | null): string => {
-    if (value === null) return '-';
-    return value.toString();
-  };
-
   const formatFxEnvTrig = (value: number): string => {
     // AMP SETUP FX1/FX2 envelope trigger modes (affects FILTER and LO-FI effects)
     // Manual page 59: Controls how envelope affects multi mode filter or amplitude modulator
@@ -408,24 +403,6 @@ export default function PartsPanel({
       case 3: return 'TTRG'; // Envelope starts from current level on sample/trigless trig
       default: return value.toString();
     }
-  };
-
-  const formatLfoWave = (value: number): string => {
-    // LFO waveform types
-    const waveforms = ['TRI', 'SIN', 'SQR', 'SAW', 'EXP', 'RSU', 'RSD', 'CUST'];
-    return waveforms[value] || value.toString();
-  };
-
-  const formatLfoTrig = (value: number): string => {
-    // LFO trigger modes
-    const triggers = ['FREE', 'TRIG', 'HOLD', 'ONE', 'HALF', 'DOUBLE'];
-    return triggers[value] || value.toString();
-  };
-
-  const formatLfoMult = (value: number): string => {
-    // LFO multiplier values
-    const multipliers = ['2048', '1024', '512', '256', '128', '64', '32', '16', '8', '4', '2', '1', '1/2', '1/4', '1/8', '1/16'];
-    return multipliers[value] || value.toString();
   };
 
   const formatFxType = (value: number): string => {
@@ -1187,9 +1164,11 @@ export default function PartsPanel({
 
   // MIDI Track Rendering Functions
   const renderNotePage = (part: PartData) => {
+    // Always use activePartsData to show current state
+    const activePart = activePartsData.find(p => p.part_id === part.part_id) || part;
     const tracksToShow = selectedTrack !== undefined && selectedTrack >= 8
-      ? [part.midi_notes[selectedTrack - 8]]
-      : part.midi_notes;
+      ? [activePart.midi_notes[selectedTrack - 8]]
+      : activePart.midi_notes;
 
     return (
       <div className="parts-tracks">
@@ -1205,27 +1184,27 @@ export default function PartsPanel({
               <div className="params-grid">
                 <div className="param-item">
                   <span className="param-label">NOTE</span>
-                  <span className="param-value">{midi_note.note}</span>
+                  {renderParamValue(activePart.part_id, 'midi_notes', midi_note.track_id, 'note', midi_note.note)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">VEL</span>
-                  <span className="param-value">{midi_note.vel}</span>
+                  {renderParamValue(activePart.part_id, 'midi_notes', midi_note.track_id, 'vel', midi_note.vel)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">LEN</span>
-                  <span className="param-value">{midi_note.len}</span>
+                  {renderParamValue(activePart.part_id, 'midi_notes', midi_note.track_id, 'len', midi_note.len)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">NOT2</span>
-                  <span className="param-value">{midi_note.not2}</span>
+                  {renderParamValue(activePart.part_id, 'midi_notes', midi_note.track_id, 'not2', midi_note.not2)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">NOT3</span>
-                  <span className="param-value">{midi_note.not3}</span>
+                  {renderParamValue(activePart.part_id, 'midi_notes', midi_note.track_id, 'not3', midi_note.not3)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">NOT4</span>
-                  <span className="param-value">{midi_note.not4}</span>
+                  {renderParamValue(activePart.part_id, 'midi_notes', midi_note.track_id, 'not4', midi_note.not4)}
                 </div>
               </div>
             </div>
@@ -1235,19 +1214,19 @@ export default function PartsPanel({
               <div className="params-grid">
                 <div className="param-item">
                   <span className="param-label">CHAN</span>
-                  <span className="param-value">{midi_note.chan}</span>
+                  {renderParamValue(activePart.part_id, 'midi_notes', midi_note.track_id, 'chan', midi_note.chan)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">BANK</span>
-                  <span className="param-value">{midi_note.bank}</span>
+                  {renderParamValue(activePart.part_id, 'midi_notes', midi_note.track_id, 'bank', midi_note.bank)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">PROG</span>
-                  <span className="param-value">{midi_note.prog}</span>
+                  {renderParamValue(activePart.part_id, 'midi_notes', midi_note.track_id, 'prog', midi_note.prog)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">SBNK</span>
-                  <span className="param-value">{midi_note.sbnk}</span>
+                  {renderParamValue(activePart.part_id, 'midi_notes', midi_note.track_id, 'sbnk', midi_note.sbnk)}
                 </div>
               </div>
             </div>
@@ -1258,9 +1237,11 @@ export default function PartsPanel({
   };
 
   const renderArpPage = (part: PartData) => {
+    // Always use activePartsData to show current state
+    const activePart = activePartsData.find(p => p.part_id === part.part_id) || part;
     const tracksToShow = selectedTrack !== undefined && selectedTrack >= 8
-      ? [part.midi_arps[selectedTrack - 8]]
-      : part.midi_arps;
+      ? [activePart.midi_arps[selectedTrack - 8]]
+      : activePart.midi_arps;
 
     return (
       <div className="parts-tracks">
@@ -1276,27 +1257,27 @@ export default function PartsPanel({
               <div className="params-grid">
                 <div className="param-item">
                   <span className="param-label">TRAN</span>
-                  <span className="param-value">{midi_arp.tran}</span>
+                  {renderParamValue(activePart.part_id, 'midi_arps', midi_arp.track_id, 'tran', midi_arp.tran)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">LEG</span>
-                  <span className="param-value">{midi_arp.leg}</span>
+                  {renderParamValue(activePart.part_id, 'midi_arps', midi_arp.track_id, 'leg', midi_arp.leg)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">MODE</span>
-                  <span className="param-value">{midi_arp.mode}</span>
+                  {renderParamValue(activePart.part_id, 'midi_arps', midi_arp.track_id, 'mode', midi_arp.mode)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">SPD</span>
-                  <span className="param-value">{midi_arp.spd}</span>
+                  {renderParamValue(activePart.part_id, 'midi_arps', midi_arp.track_id, 'spd', midi_arp.spd)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">RNGE</span>
-                  <span className="param-value">{midi_arp.rnge}</span>
+                  {renderParamValue(activePart.part_id, 'midi_arps', midi_arp.track_id, 'rnge', midi_arp.rnge)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">NLEN</span>
-                  <span className="param-value">{midi_arp.nlen}</span>
+                  {renderParamValue(activePart.part_id, 'midi_arps', midi_arp.track_id, 'nlen', midi_arp.nlen)}
                 </div>
               </div>
             </div>
@@ -1306,11 +1287,11 @@ export default function PartsPanel({
               <div className="params-grid">
                 <div className="param-item">
                   <span className="param-label">LEN</span>
-                  <span className="param-value">{midi_arp.len}</span>
+                  {renderParamValue(activePart.part_id, 'midi_arps', midi_arp.track_id, 'len', midi_arp.len)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">KEY</span>
-                  <span className="param-value">{midi_arp.key}</span>
+                  {renderParamValue(activePart.part_id, 'midi_arps', midi_arp.track_id, 'key', midi_arp.key)}
                 </div>
               </div>
             </div>
@@ -1359,28 +1340,28 @@ export default function PartsPanel({
 
         <div className="parts-tracks" style={{ flex: 1 }}>
           {tracksToShow.map((lfo) => {
-            // Determine which LFO's parameters to show
-            const lfoParams = activeLfoTab === 'LFO1' ? {
-              pmtr: lfo.lfo1_pmtr,
-              wave: lfo.lfo1_wave,
-              mult: lfo.lfo1_mult,
-              trig: lfo.lfo1_trig,
-              spd: lfo.spd1,
-              dep: lfo.dep1,
+            // Determine which LFO's parameters and field names to show
+            const lfoData = activeLfoTab === 'LFO1' ? {
+              pmtr: lfo.lfo1_pmtr, pmtrField: 'lfo1_pmtr',
+              wave: lfo.lfo1_wave, waveField: 'lfo1_wave',
+              mult: lfo.lfo1_mult, multField: 'lfo1_mult',
+              trig: lfo.lfo1_trig, trigField: 'lfo1_trig',
+              spd: lfo.spd1, spdField: 'spd1',
+              dep: lfo.dep1, depField: 'dep1',
             } : activeLfoTab === 'LFO2' ? {
-              pmtr: lfo.lfo2_pmtr,
-              wave: lfo.lfo2_wave,
-              mult: lfo.lfo2_mult,
-              trig: lfo.lfo2_trig,
-              spd: lfo.spd2,
-              dep: lfo.dep2,
+              pmtr: lfo.lfo2_pmtr, pmtrField: 'lfo2_pmtr',
+              wave: lfo.lfo2_wave, waveField: 'lfo2_wave',
+              mult: lfo.lfo2_mult, multField: 'lfo2_mult',
+              trig: lfo.lfo2_trig, trigField: 'lfo2_trig',
+              spd: lfo.spd2, spdField: 'spd2',
+              dep: lfo.dep2, depField: 'dep2',
             } : activeLfoTab === 'LFO3' ? {
-              pmtr: lfo.lfo3_pmtr,
-              wave: lfo.lfo3_wave,
-              mult: lfo.lfo3_mult,
-              trig: lfo.lfo3_trig,
-              spd: lfo.spd3,
-              dep: lfo.dep3,
+              pmtr: lfo.lfo3_pmtr, pmtrField: 'lfo3_pmtr',
+              wave: lfo.lfo3_wave, waveField: 'lfo3_wave',
+              mult: lfo.lfo3_mult, multField: 'lfo3_mult',
+              trig: lfo.lfo3_trig, trigField: 'lfo3_trig',
+              spd: lfo.spd3, spdField: 'spd3',
+              dep: lfo.dep3, depField: 'dep3',
             } : null;
 
             return (
@@ -1395,27 +1376,27 @@ export default function PartsPanel({
                     <div className="params-grid">
                       <div className="param-item">
                         <span className="param-label">PMTR</span>
-                        <span className="param-value">{lfoParams!.pmtr}</span>
+                        {renderParamValue(activePart.part_id, 'midi_lfos', lfo.track_id, lfoData!.pmtrField, lfoData!.pmtr)}
                       </div>
                       <div className="param-item">
                         <span className="param-label">WAVE</span>
-                        <span className="param-value">{formatLfoWave(lfoParams!.wave)}</span>
+                        {renderParamValue(activePart.part_id, 'midi_lfos', lfo.track_id, lfoData!.waveField, lfoData!.wave)}
                       </div>
                       <div className="param-item">
                         <span className="param-label">MULT</span>
-                        <span className="param-value">{formatLfoMult(lfoParams!.mult)}</span>
+                        {renderParamValue(activePart.part_id, 'midi_lfos', lfo.track_id, lfoData!.multField, lfoData!.mult)}
                       </div>
                       <div className="param-item">
                         <span className="param-label">TRIG</span>
-                        <span className="param-value">{formatLfoTrig(lfoParams!.trig)}</span>
+                        {renderParamValue(activePart.part_id, 'midi_lfos', lfo.track_id, lfoData!.trigField, lfoData!.trig)}
                       </div>
                       <div className="param-item">
                         <span className="param-label">SPD</span>
-                        <span className="param-value">{lfoParams!.spd}</span>
+                        {renderParamValue(activePart.part_id, 'midi_lfos', lfo.track_id, lfoData!.spdField, lfoData!.spd)}
                       </div>
                       <div className="param-item">
                         <span className="param-label">DEP</span>
-                        <span className="param-value">{lfoParams!.dep}</span>
+                        {renderParamValue(activePart.part_id, 'midi_lfos', lfo.track_id, lfoData!.depField, lfoData!.dep)}
                       </div>
                     </div>
                   </div>
@@ -1431,9 +1412,11 @@ export default function PartsPanel({
   };
 
   const renderCtrl1Page = (part: PartData) => {
+    // Always use activePartsData to show current state
+    const activePart = activePartsData.find(p => p.part_id === part.part_id) || part;
     const tracksToShow = selectedTrack !== undefined && selectedTrack >= 8
-      ? [part.midi_ctrl1s[selectedTrack - 8]]
-      : part.midi_ctrl1s;
+      ? [activePart.midi_ctrl1s[selectedTrack - 8]]
+      : activePart.midi_ctrl1s;
 
     return (
       <div className="parts-tracks">
@@ -1449,27 +1432,27 @@ export default function PartsPanel({
               <div className="params-grid">
                 <div className="param-item">
                   <span className="param-label">PB</span>
-                  <span className="param-value">{midi_ctrl1.pb}</span>
+                  {renderParamValue(activePart.part_id, 'midi_ctrl1s', midi_ctrl1.track_id, 'pb', midi_ctrl1.pb)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">AT</span>
-                  <span className="param-value">{midi_ctrl1.at}</span>
+                  {renderParamValue(activePart.part_id, 'midi_ctrl1s', midi_ctrl1.track_id, 'at', midi_ctrl1.at)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">CC1</span>
-                  <span className="param-value">{midi_ctrl1.cc1}</span>
+                  {renderParamValue(activePart.part_id, 'midi_ctrl1s', midi_ctrl1.track_id, 'cc1', midi_ctrl1.cc1)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">CC2</span>
-                  <span className="param-value">{midi_ctrl1.cc2}</span>
+                  {renderParamValue(activePart.part_id, 'midi_ctrl1s', midi_ctrl1.track_id, 'cc2', midi_ctrl1.cc2)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">CC3</span>
-                  <span className="param-value">{midi_ctrl1.cc3}</span>
+                  {renderParamValue(activePart.part_id, 'midi_ctrl1s', midi_ctrl1.track_id, 'cc3', midi_ctrl1.cc3)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">CC4</span>
-                  <span className="param-value">{midi_ctrl1.cc4}</span>
+                  {renderParamValue(activePart.part_id, 'midi_ctrl1s', midi_ctrl1.track_id, 'cc4', midi_ctrl1.cc4)}
                 </div>
               </div>
             </div>
@@ -1479,19 +1462,19 @@ export default function PartsPanel({
               <div className="params-grid">
                 <div className="param-item">
                   <span className="param-label">CC1#</span>
-                  <span className="param-value">{midi_ctrl1.cc1_num}</span>
+                  {renderParamValue(activePart.part_id, 'midi_ctrl1s', midi_ctrl1.track_id, 'cc1_num', midi_ctrl1.cc1_num)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">CC2#</span>
-                  <span className="param-value">{midi_ctrl1.cc2_num}</span>
+                  {renderParamValue(activePart.part_id, 'midi_ctrl1s', midi_ctrl1.track_id, 'cc2_num', midi_ctrl1.cc2_num)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">CC3#</span>
-                  <span className="param-value">{midi_ctrl1.cc3_num}</span>
+                  {renderParamValue(activePart.part_id, 'midi_ctrl1s', midi_ctrl1.track_id, 'cc3_num', midi_ctrl1.cc3_num)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">CC4#</span>
-                  <span className="param-value">{midi_ctrl1.cc4_num}</span>
+                  {renderParamValue(activePart.part_id, 'midi_ctrl1s', midi_ctrl1.track_id, 'cc4_num', midi_ctrl1.cc4_num)}
                 </div>
               </div>
             </div>
@@ -1502,9 +1485,11 @@ export default function PartsPanel({
   };
 
   const renderCtrl2Page = (part: PartData) => {
+    // Always use activePartsData to show current state
+    const activePart = activePartsData.find(p => p.part_id === part.part_id) || part;
     const tracksToShow = selectedTrack !== undefined && selectedTrack >= 8
-      ? [part.midi_ctrl2s[selectedTrack - 8]]
-      : part.midi_ctrl2s;
+      ? [activePart.midi_ctrl2s[selectedTrack - 8]]
+      : activePart.midi_ctrl2s;
 
     return (
       <div className="parts-tracks">
@@ -1520,27 +1505,27 @@ export default function PartsPanel({
               <div className="params-grid">
                 <div className="param-item">
                   <span className="param-label">CC5</span>
-                  <span className="param-value">{midi_ctrl2.cc5}</span>
+                  {renderParamValue(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc5', midi_ctrl2.cc5)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">CC6</span>
-                  <span className="param-value">{midi_ctrl2.cc6}</span>
+                  {renderParamValue(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc6', midi_ctrl2.cc6)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">CC7</span>
-                  <span className="param-value">{midi_ctrl2.cc7}</span>
+                  {renderParamValue(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc7', midi_ctrl2.cc7)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">CC8</span>
-                  <span className="param-value">{midi_ctrl2.cc8}</span>
+                  {renderParamValue(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc8', midi_ctrl2.cc8)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">CC9</span>
-                  <span className="param-value">{midi_ctrl2.cc9}</span>
+                  {renderParamValue(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc9', midi_ctrl2.cc9)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">CC10</span>
-                  <span className="param-value">{midi_ctrl2.cc10}</span>
+                  {renderParamValue(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc10', midi_ctrl2.cc10)}
                 </div>
               </div>
             </div>
@@ -1550,27 +1535,27 @@ export default function PartsPanel({
               <div className="params-grid">
                 <div className="param-item">
                   <span className="param-label">CC5#</span>
-                  <span className="param-value">{midi_ctrl2.cc5_num}</span>
+                  {renderParamValue(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc5_num', midi_ctrl2.cc5_num)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">CC6#</span>
-                  <span className="param-value">{midi_ctrl2.cc6_num}</span>
+                  {renderParamValue(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc6_num', midi_ctrl2.cc6_num)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">CC7#</span>
-                  <span className="param-value">{midi_ctrl2.cc7_num}</span>
+                  {renderParamValue(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc7_num', midi_ctrl2.cc7_num)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">CC8#</span>
-                  <span className="param-value">{midi_ctrl2.cc8_num}</span>
+                  {renderParamValue(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc8_num', midi_ctrl2.cc8_num)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">CC9#</span>
-                  <span className="param-value">{midi_ctrl2.cc9_num}</span>
+                  {renderParamValue(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc9_num', midi_ctrl2.cc9_num)}
                 </div>
                 <div className="param-item">
                   <span className="param-label">CC10#</span>
-                  <span className="param-value">{midi_ctrl2.cc10_num}</span>
+                  {renderParamValue(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc10_num', midi_ctrl2.cc10_num)}
                 </div>
               </div>
             </div>
@@ -1623,29 +1608,29 @@ export default function PartsPanel({
                       <div className="params-grid">
                         {machineType === 'Thru' ? (
                           <>
-                            <div className="param-item"><span className="param-label">INAB</span><span className="param-value">{formatParamValue(machine.machine_params.in_ab)}</span></div>
-                            <div className="param-item"><span className="param-label">VOL</span><span className="param-value">{formatParamValue(machine.machine_params.vol_ab)}</span></div>
-                            <div className="param-item"><span className="param-label">INCD</span><span className="param-value">{formatParamValue(machine.machine_params.in_cd)}</span></div>
-                            <div className="param-item"><span className="param-label">VOL</span><span className="param-value">{formatParamValue(machine.machine_params.vol_cd)}</span></div>
+                            <div className="param-item"><span className="param-label">INAB</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.in_ab', machine.machine_params.in_ab)}</div>
+                            <div className="param-item"><span className="param-label">VOL</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.vol_ab', machine.machine_params.vol_ab)}</div>
+                            <div className="param-item"><span className="param-label">INCD</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.in_cd', machine.machine_params.in_cd)}</div>
+                            <div className="param-item"><span className="param-label">VOL</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.vol_cd', machine.machine_params.vol_cd)}</div>
                           </>
                         ) : machineType === 'Neighbor' ? (
                           <div className="params-empty-message">-</div>
                         ) : machineType === 'Pickup' ? (
                           <>
-                            <div className="param-item"><span className="param-label">PITCH</span><span className="param-value">{formatParamValue(machine.machine_params.ptch)}</span></div>
-                            <div className="param-item"><span className="param-label">DIR</span><span className="param-value">{formatParamValue(machine.machine_params.dir)}</span></div>
-                            <div className="param-item"><span className="param-label">LEN</span><span className="param-value">{formatParamValue(machine.machine_params.len)}</span></div>
-                            <div className="param-item"><span className="param-label">GAIN</span><span className="param-value">{formatParamValue(machine.machine_params.gain)}</span></div>
-                            <div className="param-item"><span className="param-label">OP</span><span className="param-value">{formatParamValue(machine.machine_params.op)}</span></div>
+                            <div className="param-item"><span className="param-label">PITCH</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.ptch', machine.machine_params.ptch)}</div>
+                            <div className="param-item"><span className="param-label">DIR</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.dir', machine.machine_params.dir)}</div>
+                            <div className="param-item"><span className="param-label">LEN</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.len', machine.machine_params.len)}</div>
+                            <div className="param-item"><span className="param-label">GAIN</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.gain', machine.machine_params.gain)}</div>
+                            <div className="param-item"><span className="param-label">OP</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.op', machine.machine_params.op)}</div>
                           </>
                         ) : (
                           <>
-                            <div className="param-item"><span className="param-label">PTCH</span><span className="param-value">{formatParamValue(machine.machine_params.ptch)}</span></div>
-                            <div className="param-item"><span className="param-label">STRT</span><span className="param-value">{formatParamValue(machine.machine_params.strt)}</span></div>
-                            <div className="param-item"><span className="param-label">LEN</span><span className="param-value">{formatParamValue(machine.machine_params.len)}</span></div>
-                            <div className="param-item"><span className="param-label">RATE</span><span className="param-value">{formatParamValue(machine.machine_params.rate)}</span></div>
-                            <div className="param-item"><span className="param-label">RTRG</span><span className="param-value">{formatParamValue(machine.machine_params.rtrg)}</span></div>
-                            <div className="param-item"><span className="param-label">RTIM</span><span className="param-value">{formatParamValue(machine.machine_params.rtim)}</span></div>
+                            <div className="param-item"><span className="param-label">PTCH</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.ptch', machine.machine_params.ptch)}</div>
+                            <div className="param-item"><span className="param-label">STRT</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.strt', machine.machine_params.strt)}</div>
+                            <div className="param-item"><span className="param-label">LEN</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.len', machine.machine_params.len)}</div>
+                            <div className="param-item"><span className="param-label">RATE</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.rate', machine.machine_params.rate)}</div>
+                            <div className="param-item"><span className="param-label">RTRG</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.rtrg', machine.machine_params.rtrg)}</div>
+                            <div className="param-item"><span className="param-label">RTIM</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.rtim', machine.machine_params.rtim)}</div>
                           </>
                         )}
                       </div>
@@ -1657,17 +1642,17 @@ export default function PartsPanel({
                           <div className="params-empty-message">-</div>
                         ) : machineType === 'Pickup' ? (
                           <>
-                            <div className="param-item"><span className="param-label">TSTR</span><span className="param-value">{formatParamValue(machine.machine_setup.tstr)}</span></div>
-                            <div className="param-item"><span className="param-label">TSNS</span><span className="param-value">{formatParamValue(machine.machine_setup.tsns)}</span></div>
+                            <div className="param-item"><span className="param-label">TSTR</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_setup.tstr', machine.machine_setup.tstr)}</div>
+                            <div className="param-item"><span className="param-label">TSNS</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_setup.tsns', machine.machine_setup.tsns)}</div>
                           </>
                         ) : (
                           <>
-                            <div className="param-item"><span className="param-label">LOOP</span><span className="param-value">{formatParamValue(machine.machine_setup.xloop)}</span></div>
-                            <div className="param-item"><span className="param-label">SLIC</span><span className="param-value">{formatParamValue(machine.machine_setup.slic)}</span></div>
-                            <div className="param-item"><span className="param-label">LEN</span><span className="param-value">{formatParamValue(machine.machine_setup.len)}</span></div>
-                            <div className="param-item"><span className="param-label">RATE</span><span className="param-value">{formatParamValue(machine.machine_setup.rate)}</span></div>
-                            <div className="param-item"><span className="param-label">TSTR</span><span className="param-value">{formatParamValue(machine.machine_setup.tstr)}</span></div>
-                            <div className="param-item"><span className="param-label">TSNS</span><span className="param-value">{formatParamValue(machine.machine_setup.tsns)}</span></div>
+                            <div className="param-item"><span className="param-label">LOOP</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_setup.xloop', machine.machine_setup.xloop)}</div>
+                            <div className="param-item"><span className="param-label">SLIC</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_setup.slic', machine.machine_setup.slic)}</div>
+                            <div className="param-item"><span className="param-label">LEN</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_setup.len', machine.machine_setup.len)}</div>
+                            <div className="param-item"><span className="param-label">RATE</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_setup.rate', machine.machine_setup.rate)}</div>
+                            <div className="param-item"><span className="param-label">TSTR</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_setup.tstr', machine.machine_setup.tstr)}</div>
+                            <div className="param-item"><span className="param-label">TSNS</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_setup.tsns', machine.machine_setup.tsns)}</div>
                           </>
                         )}
                       </div>
@@ -1682,22 +1667,22 @@ export default function PartsPanel({
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
                       <div className="params-grid">
-                        <div className="param-item"><span className="param-label">ATK</span><span className="param-value">{amp.atk}</span></div>
-                        <div className="param-item"><span className="param-label">HOLD</span><span className="param-value">{amp.hold}</span></div>
-                        <div className="param-item"><span className="param-label">REL</span><span className="param-value">{amp.rel}</span></div>
-                        <div className="param-item"><span className="param-label">VOL</span><span className="param-value">{amp.vol}</span></div>
-                        <div className="param-item"><span className="param-label">BAL</span><span className="param-value">{amp.bal}</span></div>
-                        <div className="param-item"><span className="param-label">F</span><span className="param-value">{amp.f}</span></div>
+                        <div className="param-item"><span className="param-label">ATK</span>{renderParamValue(activePart.part_id, 'amps', trackIdx, 'atk', amp.atk)}</div>
+                        <div className="param-item"><span className="param-label">HOLD</span>{renderParamValue(activePart.part_id, 'amps', trackIdx, 'hold', amp.hold)}</div>
+                        <div className="param-item"><span className="param-label">REL</span>{renderParamValue(activePart.part_id, 'amps', trackIdx, 'rel', amp.rel)}</div>
+                        <div className="param-item"><span className="param-label">VOL</span>{renderParamValue(activePart.part_id, 'amps', trackIdx, 'vol', amp.vol)}</div>
+                        <div className="param-item"><span className="param-label">BAL</span>{renderParamValue(activePart.part_id, 'amps', trackIdx, 'bal', amp.bal)}</div>
+                        <div className="param-item"><span className="param-label">F</span>{renderParamValue(activePart.part_id, 'amps', trackIdx, 'f', amp.f)}</div>
                       </div>
                     </div>
                     <div className="params-subsection">
                       <div className="params-column-label">SETUP</div>
                       <div className="params-grid">
-                        <div className="param-item"><span className="param-label">AMP</span><span className="param-value">{amp.amp_setup_amp}</span></div>
-                        <div className="param-item"><span className="param-label">SYNC</span><span className="param-value">{amp.amp_setup_sync}</span></div>
-                        <div className="param-item"><span className="param-label">ATCK</span><span className="param-value">{amp.amp_setup_atck}</span></div>
-                        <div className="param-item"><span className="param-label">FX1</span><span className="param-value">{formatFxEnvTrig(amp.amp_setup_fx1)}</span></div>
-                        <div className="param-item"><span className="param-label">FX2</span><span className="param-value">{formatFxEnvTrig(amp.amp_setup_fx2)}</span></div>
+                        <div className="param-item"><span className="param-label">AMP</span>{renderParamValue(activePart.part_id, 'amps', trackIdx, 'amp_setup_amp', amp.amp_setup_amp)}</div>
+                        <div className="param-item"><span className="param-label">SYNC</span>{renderParamValue(activePart.part_id, 'amps', trackIdx, 'amp_setup_sync', amp.amp_setup_sync)}</div>
+                        <div className="param-item"><span className="param-label">ATCK</span>{renderParamValue(activePart.part_id, 'amps', trackIdx, 'amp_setup_atck', amp.amp_setup_atck)}</div>
+                        <div className="param-item"><span className="param-label">FX1</span>{renderParamValue(activePart.part_id, 'amps', trackIdx, 'amp_setup_fx1', amp.amp_setup_fx1)}</div>
+                        <div className="param-item"><span className="param-label">FX2</span>{renderParamValue(activePart.part_id, 'amps', trackIdx, 'amp_setup_fx2', amp.amp_setup_fx2)}</div>
                       </div>
                     </div>
                   </div>
@@ -1710,12 +1695,12 @@ export default function PartsPanel({
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
                       <div className="params-grid">
-                        <div className="param-item"><span className="param-label">PMTR</span><span className="param-value">{lfo.lfo1_pmtr}</span></div>
-                        <div className="param-item"><span className="param-label">WAVE</span><span className="param-value">{formatLfoWave(lfo.lfo1_wave)}</span></div>
-                        <div className="param-item"><span className="param-label">MULT</span><span className="param-value">{formatLfoMult(lfo.lfo1_mult)}</span></div>
-                        <div className="param-item"><span className="param-label">TRIG</span><span className="param-value">{formatLfoTrig(lfo.lfo1_trig)}</span></div>
-                        <div className="param-item"><span className="param-label">SPD</span><span className="param-value">{lfo.spd1}</span></div>
-                        <div className="param-item"><span className="param-label">DEP</span><span className="param-value">{lfo.dep1}</span></div>
+                        <div className="param-item"><span className="param-label">PMTR</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo1_pmtr', lfo.lfo1_pmtr)}</div>
+                        <div className="param-item"><span className="param-label">WAVE</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo1_wave', lfo.lfo1_wave)}</div>
+                        <div className="param-item"><span className="param-label">MULT</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo1_mult', lfo.lfo1_mult)}</div>
+                        <div className="param-item"><span className="param-label">TRIG</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo1_trig', lfo.lfo1_trig)}</div>
+                        <div className="param-item"><span className="param-label">SPD</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'spd1', lfo.spd1)}</div>
+                        <div className="param-item"><span className="param-label">DEP</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'dep1', lfo.dep1)}</div>
                       </div>
                     </div>
                     <div className="params-subsection">
@@ -1734,12 +1719,12 @@ export default function PartsPanel({
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
                       <div className="params-grid">
-                        <div className="param-item"><span className="param-label">PMTR</span><span className="param-value">{lfo.lfo2_pmtr}</span></div>
-                        <div className="param-item"><span className="param-label">WAVE</span><span className="param-value">{formatLfoWave(lfo.lfo2_wave)}</span></div>
-                        <div className="param-item"><span className="param-label">MULT</span><span className="param-value">{formatLfoMult(lfo.lfo2_mult)}</span></div>
-                        <div className="param-item"><span className="param-label">TRIG</span><span className="param-value">{formatLfoTrig(lfo.lfo2_trig)}</span></div>
-                        <div className="param-item"><span className="param-label">SPD</span><span className="param-value">{lfo.spd2}</span></div>
-                        <div className="param-item"><span className="param-label">DEP</span><span className="param-value">{lfo.dep2}</span></div>
+                        <div className="param-item"><span className="param-label">PMTR</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo2_pmtr', lfo.lfo2_pmtr)}</div>
+                        <div className="param-item"><span className="param-label">WAVE</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo2_wave', lfo.lfo2_wave)}</div>
+                        <div className="param-item"><span className="param-label">MULT</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo2_mult', lfo.lfo2_mult)}</div>
+                        <div className="param-item"><span className="param-label">TRIG</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo2_trig', lfo.lfo2_trig)}</div>
+                        <div className="param-item"><span className="param-label">SPD</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'spd2', lfo.spd2)}</div>
+                        <div className="param-item"><span className="param-label">DEP</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'dep2', lfo.dep2)}</div>
                       </div>
                     </div>
                     <div className="params-subsection">
@@ -1761,12 +1746,12 @@ export default function PartsPanel({
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
                       <div className="params-grid">
-                        <div className="param-item"><span className="param-label">PMTR</span><span className="param-value">{lfo.lfo3_pmtr}</span></div>
-                        <div className="param-item"><span className="param-label">WAVE</span><span className="param-value">{formatLfoWave(lfo.lfo3_wave)}</span></div>
-                        <div className="param-item"><span className="param-label">MULT</span><span className="param-value">{formatLfoMult(lfo.lfo3_mult)}</span></div>
-                        <div className="param-item"><span className="param-label">TRIG</span><span className="param-value">{formatLfoTrig(lfo.lfo3_trig)}</span></div>
-                        <div className="param-item"><span className="param-label">SPD</span><span className="param-value">{lfo.spd3}</span></div>
-                        <div className="param-item"><span className="param-label">DEP</span><span className="param-value">{lfo.dep3}</span></div>
+                        <div className="param-item"><span className="param-label">PMTR</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo3_pmtr', lfo.lfo3_pmtr)}</div>
+                        <div className="param-item"><span className="param-label">WAVE</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo3_wave', lfo.lfo3_wave)}</div>
+                        <div className="param-item"><span className="param-label">MULT</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo3_mult', lfo.lfo3_mult)}</div>
+                        <div className="param-item"><span className="param-label">TRIG</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo3_trig', lfo.lfo3_trig)}</div>
+                        <div className="param-item"><span className="param-label">SPD</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'spd3', lfo.spd3)}</div>
+                        <div className="param-item"><span className="param-label">DEP</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'dep3', lfo.dep3)}</div>
                       </div>
                     </div>
                     <div className="params-subsection">
@@ -1798,8 +1783,9 @@ export default function PartsPanel({
                         {fx1MainLabels.some(label => label) ? (
                           fx1MainLabels.map((label, index) => {
                             if (!label) return null;
+                            const fieldName = `fx1_param${index + 1}`;
                             return (
-                              <div key={index} className="param-item"><span className="param-label">{label}</span><span className="param-value">{fx1MainValues[index]}</span></div>
+                              <div key={index} className="param-item"><span className="param-label">{label}</span>{renderParamValue(activePart.part_id, 'fxs', trackIdx, fieldName, fx1MainValues[index])}</div>
                             );
                           })
                         ) : (
@@ -1813,8 +1799,9 @@ export default function PartsPanel({
                         {fx1SetupLabels.some(label => label) ? (
                           fx1SetupLabels.map((label, index) => {
                             if (!label) return null;
+                            const fieldName = `fx1_setup${index + 1}`;
                             return (
-                              <div key={index} className="param-item"><span className="param-label">{label}</span><span className="param-value">{fx1SetupValues[index]}</span></div>
+                              <div key={index} className="param-item"><span className="param-label">{label}</span>{renderParamValue(activePart.part_id, 'fxs', trackIdx, fieldName, fx1SetupValues[index])}</div>
                             );
                           })
                         ) : (
@@ -1835,8 +1822,9 @@ export default function PartsPanel({
                         {fx2MainLabels.some(label => label) ? (
                           fx2MainLabels.map((label, index) => {
                             if (!label) return null;
+                            const fieldName = `fx2_param${index + 1}`;
                             return (
-                              <div key={index} className="param-item"><span className="param-label">{label}</span><span className="param-value">{fx2MainValues[index]}</span></div>
+                              <div key={index} className="param-item"><span className="param-label">{label}</span>{renderParamValue(activePart.part_id, 'fxs', trackIdx, fieldName, fx2MainValues[index])}</div>
                             );
                           })
                         ) : (
@@ -1850,8 +1838,9 @@ export default function PartsPanel({
                         {fx2SetupLabels.some(label => label) ? (
                           fx2SetupLabels.map((label, index) => {
                             if (!label) return null;
+                            const fieldName = `fx2_setup${index + 1}`;
                             return (
-                              <div key={index} className="param-item"><span className="param-label">{label}</span><span className="param-value">{fx2SetupValues[index]}</span></div>
+                              <div key={index} className="param-item"><span className="param-label">{label}</span>{renderParamValue(activePart.part_id, 'fxs', trackIdx, fieldName, fx2SetupValues[index])}</div>
                             );
                           })
                         ) : (
@@ -1902,21 +1891,21 @@ export default function PartsPanel({
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
                       <div className="params-grid">
-                        <div className="param-item"><span className="param-label">NOTE</span><span className="param-value">{midi_note.note}</span></div>
-                        <div className="param-item"><span className="param-label">VEL</span><span className="param-value">{midi_note.vel}</span></div>
-                        <div className="param-item"><span className="param-label">LEN</span><span className="param-value">{midi_note.len}</span></div>
-                        <div className="param-item"><span className="param-label">NOT2</span><span className="param-value">{midi_note.not2}</span></div>
-                        <div className="param-item"><span className="param-label">NOT3</span><span className="param-value">{midi_note.not3}</span></div>
-                        <div className="param-item"><span className="param-label">NOT4</span><span className="param-value">{midi_note.not4}</span></div>
+                        <div className="param-item"><span className="param-label">NOTE</span>{renderParamValue(activePart.part_id, 'midi_notes', trackIdx, 'note', midi_note.note)}</div>
+                        <div className="param-item"><span className="param-label">VEL</span>{renderParamValue(activePart.part_id, 'midi_notes', trackIdx, 'vel', midi_note.vel)}</div>
+                        <div className="param-item"><span className="param-label">LEN</span>{renderParamValue(activePart.part_id, 'midi_notes', trackIdx, 'len', midi_note.len)}</div>
+                        <div className="param-item"><span className="param-label">NOT2</span>{renderParamValue(activePart.part_id, 'midi_notes', trackIdx, 'not2', midi_note.not2)}</div>
+                        <div className="param-item"><span className="param-label">NOT3</span>{renderParamValue(activePart.part_id, 'midi_notes', trackIdx, 'not3', midi_note.not3)}</div>
+                        <div className="param-item"><span className="param-label">NOT4</span>{renderParamValue(activePart.part_id, 'midi_notes', trackIdx, 'not4', midi_note.not4)}</div>
                       </div>
                     </div>
                     <div className="params-subsection">
                       <div className="params-column-label">SETUP</div>
                       <div className="params-grid">
-                        <div className="param-item"><span className="param-label">CHAN</span><span className="param-value">{midi_note.chan}</span></div>
-                        <div className="param-item"><span className="param-label">BANK</span><span className="param-value">{midi_note.bank}</span></div>
-                        <div className="param-item"><span className="param-label">PROG</span><span className="param-value">{midi_note.prog}</span></div>
-                        <div className="param-item"><span className="param-label">SBNK</span><span className="param-value">{midi_note.sbnk}</span></div>
+                        <div className="param-item"><span className="param-label">CHAN</span>{renderParamValue(activePart.part_id, 'midi_notes', trackIdx, 'chan', midi_note.chan)}</div>
+                        <div className="param-item"><span className="param-label">BANK</span>{renderParamValue(activePart.part_id, 'midi_notes', trackIdx, 'bank', midi_note.bank)}</div>
+                        <div className="param-item"><span className="param-label">PROG</span>{renderParamValue(activePart.part_id, 'midi_notes', trackIdx, 'prog', midi_note.prog)}</div>
+                        <div className="param-item"><span className="param-label">SBNK</span>{renderParamValue(activePart.part_id, 'midi_notes', trackIdx, 'sbnk', midi_note.sbnk)}</div>
                       </div>
                     </div>
                   </div>
@@ -1929,19 +1918,19 @@ export default function PartsPanel({
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
                       <div className="params-grid">
-                        <div className="param-item"><span className="param-label">TRAN</span><span className="param-value">{midi_arp.tran}</span></div>
-                        <div className="param-item"><span className="param-label">LEG</span><span className="param-value">{midi_arp.leg}</span></div>
-                        <div className="param-item"><span className="param-label">MODE</span><span className="param-value">{midi_arp.mode}</span></div>
-                        <div className="param-item"><span className="param-label">SPD</span><span className="param-value">{midi_arp.spd}</span></div>
-                        <div className="param-item"><span className="param-label">RNGE</span><span className="param-value">{midi_arp.rnge}</span></div>
-                        <div className="param-item"><span className="param-label">NLEN</span><span className="param-value">{midi_arp.nlen}</span></div>
+                        <div className="param-item"><span className="param-label">TRAN</span>{renderParamValue(activePart.part_id, 'midi_arps', trackIdx, 'tran', midi_arp.tran)}</div>
+                        <div className="param-item"><span className="param-label">LEG</span>{renderParamValue(activePart.part_id, 'midi_arps', trackIdx, 'leg', midi_arp.leg)}</div>
+                        <div className="param-item"><span className="param-label">MODE</span>{renderParamValue(activePart.part_id, 'midi_arps', trackIdx, 'mode', midi_arp.mode)}</div>
+                        <div className="param-item"><span className="param-label">SPD</span>{renderParamValue(activePart.part_id, 'midi_arps', trackIdx, 'spd', midi_arp.spd)}</div>
+                        <div className="param-item"><span className="param-label">RNGE</span>{renderParamValue(activePart.part_id, 'midi_arps', trackIdx, 'rnge', midi_arp.rnge)}</div>
+                        <div className="param-item"><span className="param-label">NLEN</span>{renderParamValue(activePart.part_id, 'midi_arps', trackIdx, 'nlen', midi_arp.nlen)}</div>
                       </div>
                     </div>
                     <div className="params-subsection">
                       <div className="params-column-label">SETUP</div>
                       <div className="params-grid">
-                        <div className="param-item"><span className="param-label">LEN</span><span className="param-value">{midi_arp.len}</span></div>
-                        <div className="param-item"><span className="param-label">KEY</span><span className="param-value">{midi_arp.key}</span></div>
+                        <div className="param-item"><span className="param-label">LEN</span>{renderParamValue(activePart.part_id, 'midi_arps', trackIdx, 'len', midi_arp.len)}</div>
+                        <div className="param-item"><span className="param-label">KEY</span>{renderParamValue(activePart.part_id, 'midi_arps', trackIdx, 'key', midi_arp.key)}</div>
                       </div>
                     </div>
                   </div>
@@ -1954,12 +1943,12 @@ export default function PartsPanel({
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
                       <div className="params-grid">
-                        <div className="param-item"><span className="param-label">PMTR</span><span className="param-value">{midi_lfo.lfo1_pmtr}</span></div>
-                        <div className="param-item"><span className="param-label">WAVE</span><span className="param-value">{formatLfoWave(midi_lfo.lfo1_wave)}</span></div>
-                        <div className="param-item"><span className="param-label">MULT</span><span className="param-value">{formatLfoMult(midi_lfo.lfo1_mult)}</span></div>
-                        <div className="param-item"><span className="param-label">TRIG</span><span className="param-value">{formatLfoTrig(midi_lfo.lfo1_trig)}</span></div>
-                        <div className="param-item"><span className="param-label">SPD</span><span className="param-value">{midi_lfo.spd1}</span></div>
-                        <div className="param-item"><span className="param-label">DEP</span><span className="param-value">{midi_lfo.dep1}</span></div>
+                        <div className="param-item"><span className="param-label">PMTR</span>{renderParamValue(activePart.part_id, 'midi_lfos', trackIdx, 'lfo1_pmtr', midi_lfo.lfo1_pmtr)}</div>
+                        <div className="param-item"><span className="param-label">WAVE</span>{renderParamValue(activePart.part_id, 'midi_lfos', trackIdx, 'lfo1_wave', midi_lfo.lfo1_wave)}</div>
+                        <div className="param-item"><span className="param-label">MULT</span>{renderParamValue(activePart.part_id, 'midi_lfos', trackIdx, 'lfo1_mult', midi_lfo.lfo1_mult)}</div>
+                        <div className="param-item"><span className="param-label">TRIG</span>{renderParamValue(activePart.part_id, 'midi_lfos', trackIdx, 'lfo1_trig', midi_lfo.lfo1_trig)}</div>
+                        <div className="param-item"><span className="param-label">SPD</span>{renderParamValue(activePart.part_id, 'midi_lfos', trackIdx, 'spd1', midi_lfo.spd1)}</div>
+                        <div className="param-item"><span className="param-label">DEP</span>{renderParamValue(activePart.part_id, 'midi_lfos', trackIdx, 'dep1', midi_lfo.dep1)}</div>
                       </div>
                     </div>
                     <div className="params-subsection">
@@ -1978,12 +1967,12 @@ export default function PartsPanel({
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
                       <div className="params-grid">
-                        <div className="param-item"><span className="param-label">PMTR</span><span className="param-value">{midi_lfo.lfo2_pmtr}</span></div>
-                        <div className="param-item"><span className="param-label">WAVE</span><span className="param-value">{formatLfoWave(midi_lfo.lfo2_wave)}</span></div>
-                        <div className="param-item"><span className="param-label">MULT</span><span className="param-value">{formatLfoMult(midi_lfo.lfo2_mult)}</span></div>
-                        <div className="param-item"><span className="param-label">TRIG</span><span className="param-value">{formatLfoTrig(midi_lfo.lfo2_trig)}</span></div>
-                        <div className="param-item"><span className="param-label">SPD</span><span className="param-value">{midi_lfo.spd2}</span></div>
-                        <div className="param-item"><span className="param-label">DEP</span><span className="param-value">{midi_lfo.dep2}</span></div>
+                        <div className="param-item"><span className="param-label">PMTR</span>{renderParamValue(activePart.part_id, 'midi_lfos', trackIdx, 'lfo2_pmtr', midi_lfo.lfo2_pmtr)}</div>
+                        <div className="param-item"><span className="param-label">WAVE</span>{renderParamValue(activePart.part_id, 'midi_lfos', trackIdx, 'lfo2_wave', midi_lfo.lfo2_wave)}</div>
+                        <div className="param-item"><span className="param-label">MULT</span>{renderParamValue(activePart.part_id, 'midi_lfos', trackIdx, 'lfo2_mult', midi_lfo.lfo2_mult)}</div>
+                        <div className="param-item"><span className="param-label">TRIG</span>{renderParamValue(activePart.part_id, 'midi_lfos', trackIdx, 'lfo2_trig', midi_lfo.lfo2_trig)}</div>
+                        <div className="param-item"><span className="param-label">SPD</span>{renderParamValue(activePart.part_id, 'midi_lfos', trackIdx, 'spd2', midi_lfo.spd2)}</div>
+                        <div className="param-item"><span className="param-label">DEP</span>{renderParamValue(activePart.part_id, 'midi_lfos', trackIdx, 'dep2', midi_lfo.dep2)}</div>
                       </div>
                     </div>
                     <div className="params-subsection">
@@ -2005,12 +1994,12 @@ export default function PartsPanel({
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
                       <div className="params-grid">
-                        <div className="param-item"><span className="param-label">PMTR</span><span className="param-value">{midi_lfo.lfo3_pmtr}</span></div>
-                        <div className="param-item"><span className="param-label">WAVE</span><span className="param-value">{formatLfoWave(midi_lfo.lfo3_wave)}</span></div>
-                        <div className="param-item"><span className="param-label">MULT</span><span className="param-value">{formatLfoMult(midi_lfo.lfo3_mult)}</span></div>
-                        <div className="param-item"><span className="param-label">TRIG</span><span className="param-value">{formatLfoTrig(midi_lfo.lfo3_trig)}</span></div>
-                        <div className="param-item"><span className="param-label">SPD</span><span className="param-value">{midi_lfo.spd3}</span></div>
-                        <div className="param-item"><span className="param-label">DEP</span><span className="param-value">{midi_lfo.dep3}</span></div>
+                        <div className="param-item"><span className="param-label">PMTR</span>{renderParamValue(activePart.part_id, 'midi_lfos', trackIdx, 'lfo3_pmtr', midi_lfo.lfo3_pmtr)}</div>
+                        <div className="param-item"><span className="param-label">WAVE</span>{renderParamValue(activePart.part_id, 'midi_lfos', trackIdx, 'lfo3_wave', midi_lfo.lfo3_wave)}</div>
+                        <div className="param-item"><span className="param-label">MULT</span>{renderParamValue(activePart.part_id, 'midi_lfos', trackIdx, 'lfo3_mult', midi_lfo.lfo3_mult)}</div>
+                        <div className="param-item"><span className="param-label">TRIG</span>{renderParamValue(activePart.part_id, 'midi_lfos', trackIdx, 'lfo3_trig', midi_lfo.lfo3_trig)}</div>
+                        <div className="param-item"><span className="param-label">SPD</span>{renderParamValue(activePart.part_id, 'midi_lfos', trackIdx, 'spd3', midi_lfo.spd3)}</div>
+                        <div className="param-item"><span className="param-label">DEP</span>{renderParamValue(activePart.part_id, 'midi_lfos', trackIdx, 'dep3', midi_lfo.dep3)}</div>
                       </div>
                     </div>
                     <div className="params-subsection">
@@ -2039,21 +2028,21 @@ export default function PartsPanel({
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
                       <div className="params-grid">
-                        <div className="param-item"><span className="param-label">PB</span><span className="param-value">{midi_ctrl1.pb}</span></div>
-                        <div className="param-item"><span className="param-label">AT</span><span className="param-value">{midi_ctrl1.at}</span></div>
-                        <div className="param-item"><span className="param-label">CC1</span><span className="param-value">{midi_ctrl1.cc1}</span></div>
-                        <div className="param-item"><span className="param-label">CC2</span><span className="param-value">{midi_ctrl1.cc2}</span></div>
-                        <div className="param-item"><span className="param-label">CC3</span><span className="param-value">{midi_ctrl1.cc3}</span></div>
-                        <div className="param-item"><span className="param-label">CC4</span><span className="param-value">{midi_ctrl1.cc4}</span></div>
+                        <div className="param-item"><span className="param-label">PB</span>{renderParamValue(activePart.part_id, 'midi_ctrl1s', trackIdx, 'pb', midi_ctrl1.pb)}</div>
+                        <div className="param-item"><span className="param-label">AT</span>{renderParamValue(activePart.part_id, 'midi_ctrl1s', trackIdx, 'at', midi_ctrl1.at)}</div>
+                        <div className="param-item"><span className="param-label">CC1</span>{renderParamValue(activePart.part_id, 'midi_ctrl1s', trackIdx, 'cc1', midi_ctrl1.cc1)}</div>
+                        <div className="param-item"><span className="param-label">CC2</span>{renderParamValue(activePart.part_id, 'midi_ctrl1s', trackIdx, 'cc2', midi_ctrl1.cc2)}</div>
+                        <div className="param-item"><span className="param-label">CC3</span>{renderParamValue(activePart.part_id, 'midi_ctrl1s', trackIdx, 'cc3', midi_ctrl1.cc3)}</div>
+                        <div className="param-item"><span className="param-label">CC4</span>{renderParamValue(activePart.part_id, 'midi_ctrl1s', trackIdx, 'cc4', midi_ctrl1.cc4)}</div>
                       </div>
                     </div>
                     <div className="params-subsection">
                       <div className="params-column-label">SETUP</div>
                       <div className="params-grid">
-                        <div className="param-item"><span className="param-label">CC1#</span><span className="param-value">{midi_ctrl1.cc1_num}</span></div>
-                        <div className="param-item"><span className="param-label">CC2#</span><span className="param-value">{midi_ctrl1.cc2_num}</span></div>
-                        <div className="param-item"><span className="param-label">CC3#</span><span className="param-value">{midi_ctrl1.cc3_num}</span></div>
-                        <div className="param-item"><span className="param-label">CC4#</span><span className="param-value">{midi_ctrl1.cc4_num}</span></div>
+                        <div className="param-item"><span className="param-label">CC1#</span>{renderParamValue(activePart.part_id, 'midi_ctrl1s', trackIdx, 'cc1_num', midi_ctrl1.cc1_num)}</div>
+                        <div className="param-item"><span className="param-label">CC2#</span>{renderParamValue(activePart.part_id, 'midi_ctrl1s', trackIdx, 'cc2_num', midi_ctrl1.cc2_num)}</div>
+                        <div className="param-item"><span className="param-label">CC3#</span>{renderParamValue(activePart.part_id, 'midi_ctrl1s', trackIdx, 'cc3_num', midi_ctrl1.cc3_num)}</div>
+                        <div className="param-item"><span className="param-label">CC4#</span>{renderParamValue(activePart.part_id, 'midi_ctrl1s', trackIdx, 'cc4_num', midi_ctrl1.cc4_num)}</div>
                       </div>
                     </div>
                   </div>
@@ -2066,23 +2055,23 @@ export default function PartsPanel({
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
                       <div className="params-grid">
-                        <div className="param-item"><span className="param-label">CC5</span><span className="param-value">{midi_ctrl2.cc5}</span></div>
-                        <div className="param-item"><span className="param-label">CC6</span><span className="param-value">{midi_ctrl2.cc6}</span></div>
-                        <div className="param-item"><span className="param-label">CC7</span><span className="param-value">{midi_ctrl2.cc7}</span></div>
-                        <div className="param-item"><span className="param-label">CC8</span><span className="param-value">{midi_ctrl2.cc8}</span></div>
-                        <div className="param-item"><span className="param-label">CC9</span><span className="param-value">{midi_ctrl2.cc9}</span></div>
-                        <div className="param-item"><span className="param-label">CC10</span><span className="param-value">{midi_ctrl2.cc10}</span></div>
+                        <div className="param-item"><span className="param-label">CC5</span>{renderParamValue(activePart.part_id, 'midi_ctrl2s', trackIdx, 'cc5', midi_ctrl2.cc5)}</div>
+                        <div className="param-item"><span className="param-label">CC6</span>{renderParamValue(activePart.part_id, 'midi_ctrl2s', trackIdx, 'cc6', midi_ctrl2.cc6)}</div>
+                        <div className="param-item"><span className="param-label">CC7</span>{renderParamValue(activePart.part_id, 'midi_ctrl2s', trackIdx, 'cc7', midi_ctrl2.cc7)}</div>
+                        <div className="param-item"><span className="param-label">CC8</span>{renderParamValue(activePart.part_id, 'midi_ctrl2s', trackIdx, 'cc8', midi_ctrl2.cc8)}</div>
+                        <div className="param-item"><span className="param-label">CC9</span>{renderParamValue(activePart.part_id, 'midi_ctrl2s', trackIdx, 'cc9', midi_ctrl2.cc9)}</div>
+                        <div className="param-item"><span className="param-label">CC10</span>{renderParamValue(activePart.part_id, 'midi_ctrl2s', trackIdx, 'cc10', midi_ctrl2.cc10)}</div>
                       </div>
                     </div>
                     <div className="params-subsection">
                       <div className="params-column-label">SETUP</div>
                       <div className="params-grid">
-                        <div className="param-item"><span className="param-label">CC5#</span><span className="param-value">{midi_ctrl2.cc5_num}</span></div>
-                        <div className="param-item"><span className="param-label">CC6#</span><span className="param-value">{midi_ctrl2.cc6_num}</span></div>
-                        <div className="param-item"><span className="param-label">CC7#</span><span className="param-value">{midi_ctrl2.cc7_num}</span></div>
-                        <div className="param-item"><span className="param-label">CC8#</span><span className="param-value">{midi_ctrl2.cc8_num}</span></div>
-                        <div className="param-item"><span className="param-label">CC9#</span><span className="param-value">{midi_ctrl2.cc9_num}</span></div>
-                        <div className="param-item"><span className="param-label">CC10#</span><span className="param-value">{midi_ctrl2.cc10_num}</span></div>
+                        <div className="param-item"><span className="param-label">CC5#</span>{renderParamValue(activePart.part_id, 'midi_ctrl2s', trackIdx, 'cc5_num', midi_ctrl2.cc5_num)}</div>
+                        <div className="param-item"><span className="param-label">CC6#</span>{renderParamValue(activePart.part_id, 'midi_ctrl2s', trackIdx, 'cc6_num', midi_ctrl2.cc6_num)}</div>
+                        <div className="param-item"><span className="param-label">CC7#</span>{renderParamValue(activePart.part_id, 'midi_ctrl2s', trackIdx, 'cc7_num', midi_ctrl2.cc7_num)}</div>
+                        <div className="param-item"><span className="param-label">CC8#</span>{renderParamValue(activePart.part_id, 'midi_ctrl2s', trackIdx, 'cc8_num', midi_ctrl2.cc8_num)}</div>
+                        <div className="param-item"><span className="param-label">CC9#</span>{renderParamValue(activePart.part_id, 'midi_ctrl2s', trackIdx, 'cc9_num', midi_ctrl2.cc9_num)}</div>
+                        <div className="param-item"><span className="param-label">CC10#</span>{renderParamValue(activePart.part_id, 'midi_ctrl2s', trackIdx, 'cc10_num', midi_ctrl2.cc10_num)}</div>
                       </div>
                     </div>
                   </div>
