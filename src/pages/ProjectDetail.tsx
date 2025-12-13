@@ -333,19 +333,13 @@ export function ProjectDetail() {
           </button>
           <h1 title={projectPath || ''}>{projectName}</h1>
           {/* View/Edit mode toggle */}
-          <div className="mode-toggle">
-            <button
-              className={`mode-toggle-btn ${!isEditMode ? 'active' : ''}`}
-              onClick={() => setIsEditMode(false)}
-            >
+          <div className="mode-toggle" onClick={() => setIsEditMode(!isEditMode)}>
+            <span className={`mode-toggle-btn ${!isEditMode ? 'active' : ''}`}>
               View
-            </button>
-            <button
-              className={`mode-toggle-btn ${isEditMode ? 'active' : ''}`}
-              onClick={() => setIsEditMode(true)}
-            >
+            </span>
+            <span className={`mode-toggle-btn ${isEditMode ? 'active' : ''}`}>
               Edit
-            </button>
+            </span>
           </div>
           {/* Parts write status indicator */}
           <span className={`save-status-indicator ${partsWriteStatus.state}`}>
