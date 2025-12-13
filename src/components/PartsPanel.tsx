@@ -2192,9 +2192,9 @@ export default function PartsPanel({
             className="save-button"
             onClick={() => commitPart(activePartIndex)}
             disabled={isCommitting || isReloading || !modifiedPartIds.has(activePartIndex)}
-            title={modifiedPartIds.has(activePartIndex) ? `Save ${partNames[activePartIndex]}` : 'No changes to save'}
+            title={modifiedPartIds.has(activePartIndex) ? `Save part ${partNames[activePartIndex]}` : 'No changes to save'}
           >
-            {isCommitting ? 'Saving...' : 'Save'}
+            Save
           </button>
           {/* Save All: commit all modified parts */}
           <button
