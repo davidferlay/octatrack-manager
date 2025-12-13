@@ -2179,7 +2179,7 @@ export default function PartsPanel({
             disabled={isReloading || isCommitting || !modifiedPartIds.has(activePartIndex) || partsSavedState[activePartIndex] !== 1}
             title={
               partsSavedState[activePartIndex] !== 1
-                ? 'No saved backup available for this part'
+                ? 'No saved state yet: Save part first!'
                 : modifiedPartIds.has(activePartIndex)
                   ? `Reload part ${partNames[activePartIndex]} from saved state`
                   : 'No changes to reload'
