@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { PartData, PartsDataResponse } from '../context/ProjectsContext';
 import { TrackBadge } from './TrackBadge';
@@ -58,6 +58,9 @@ export default function PartsPanel({
   // partsEditedBitmask is kept in sync but we use modifiedPartIds for UI logic
   const [, setPartsEditedBitmask] = useState<number>(0);
   const [partsSavedState, setPartsSavedState] = useState<number[]>([0, 0, 0, 0]);
+
+  // Ref for tracking LFO drawing state
+  const lfoDrawingRef = useRef<{ isDrawing: boolean; partId: number; section: 'lfos' | 'midi_lfos'; trackId: number } | null>(null);
 
   // Use shared page index if provided (All banks mode), otherwise use local state
   const activePageIndex = sharedPageIndex !== undefined ? sharedPageIndex : localPageIndex;
@@ -262,7 +265,16 @@ export default function PartsPanel({
       console.error('[PartsPanel] Track not found:', trackId);
       return;
     }
-    track[field] = value;
+    // Support nested field paths (e.g., "machine_params.ptch")
+    if (field.includes('.')) {
+      const [parent, child] = field.split('.');
+      const parentObj = track[parent] as Record<string, unknown> | undefined;
+      if (parentObj) {
+        parentObj[child] = value;
+      }
+    } else {
+      track[field] = value;
+    }
 
     // Update local state
     setPartsData(prev => {
@@ -294,21 +306,78 @@ export default function PartsPanel({
     });
   }, [projectPath, bankId, partsData, onWriteStatusChange]);
 
+  // Update a single point in the LFO design array (local state only, no save)
+  const updateLfoDesignLocal = useCallback((
+    partId: number,
+    section: 'lfos' | 'midi_lfos',
+    trackId: number,
+    stepIndex: number,
+    value: number
+  ) => {
+    setPartsData(prev => {
+      const partIndex = prev.findIndex(p => p.part_id === partId);
+      if (partIndex === -1) return prev;
+
+      const updatedPart = JSON.parse(JSON.stringify(prev[partIndex])) as PartData;
+      const sectionArray = updatedPart[section] as unknown[];
+      const track = sectionArray[trackId] as Record<string, unknown> | undefined;
+      if (!track || !track.custom_lfo_design) return prev;
+
+      const lfoDesign = track.custom_lfo_design as number[];
+      lfoDesign[stepIndex] = value;
+
+      const newData = [...prev];
+      newData[partIndex] = updatedPart;
+      return newData;
+    });
+
+    // Track which part was modified (shows * indicator)
+    setModifiedPartIds(prev => new Set([...prev, partId]));
+  }, []);
+
+  // Save LFO design to backend (called on mouse release)
+  const saveLfoDesign = useCallback((partId: number) => {
+    const partIndex = partsData.findIndex(p => p.part_id === partId);
+    if (partIndex === -1) {
+      console.error('[PartsPanel] Part not found:', partId);
+      return;
+    }
+
+    const partToSave = partsData[partIndex];
+    onWriteStatusChange?.(writeStatus.writing());
+    invoke('save_parts', {
+      path: projectPath,
+      bankId: bankId,
+      partsData: [partToSave]
+    }).then(() => {
+      const partName = partNames[partId] || `Part ${partId + 1}`;
+      onWriteStatusChange?.(writeStatus.success(`Part ${partName} saved as *`));
+      setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
+    }).catch(err => {
+      console.error('Failed to save LFO design:', err);
+      onWriteStatusChange?.(writeStatus.error('Save failed'));
+      setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
+    });
+  }, [projectPath, bankId, partsData, onWriteStatusChange]);
+
   // Parameter value component - editable in edit mode, read-only in view mode
   const renderParamValue = (
     partId: number,
     section: keyof PartData,
     trackId: number,
     field: string,
-    value: number,
+    value: number | null,
     _formatter?: (val: number) => string  // Unused now, kept for API compatibility
   ) => {
+    // Handle null values
+    const displayValue = value ?? 0;
+
     // Always render input, but style and behavior changes based on edit mode
     return (
       <input
         type="number"
         className={`param-value ${isEditMode ? 'editable' : ''}`}
-        value={value}
+        value={displayValue}
         onChange={(e) => {
           if (!isEditMode) return;
           const newValue = parseInt(e.target.value, 10);
@@ -427,9 +496,11 @@ export default function PartsPanel({
   };
 
   const renderSrcPage = (part: PartData) => {
+    // Always use activePartsData to show current state
+    const activePart = activePartsData.find(p => p.part_id === part.part_id) || part;
     const tracksToShow = selectedTrack !== undefined && selectedTrack >= 0 && selectedTrack <= 7
-      ? [part.machines[selectedTrack]]
-      : part.machines;
+      ? [activePart.machines[selectedTrack]]
+      : activePart.machines;
 
     return (
       <div className="parts-tracks">
@@ -448,19 +519,19 @@ export default function PartsPanel({
                     {/* THRU MAIN parameters */}
                     <div className="param-item">
                       <span className="param-label">INAB</span>
-                      <span className="param-value">{formatParamValue(machine.machine_params.in_ab)}</span>
+                      {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_params.in_ab', machine.machine_params.in_ab)}
                     </div>
                     <div className="param-item">
                       <span className="param-label">VOL</span>
-                      <span className="param-value">{formatParamValue(machine.machine_params.vol_ab)}</span>
+                      {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_params.vol_ab', machine.machine_params.vol_ab)}
                     </div>
                     <div className="param-item">
                       <span className="param-label">INCD</span>
-                      <span className="param-value">{formatParamValue(machine.machine_params.in_cd)}</span>
+                      {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_params.in_cd', machine.machine_params.in_cd)}
                     </div>
                     <div className="param-item">
                       <span className="param-label">VOL</span>
-                      <span className="param-value">{formatParamValue(machine.machine_params.vol_cd)}</span>
+                      {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_params.vol_cd', machine.machine_params.vol_cd)}
                     </div>
                   </>
                 ) : machine.machine_type === 'Neighbor' ? (
@@ -472,23 +543,23 @@ export default function PartsPanel({
                     {/* PICKUP MAIN parameters */}
                     <div className="param-item">
                       <span className="param-label">PITCH</span>
-                      <span className="param-value">{formatParamValue(machine.machine_params.ptch)}</span>
+                      {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_params.ptch', machine.machine_params.ptch)}
                     </div>
                     <div className="param-item">
                       <span className="param-label">DIR</span>
-                      <span className="param-value">{formatParamValue(machine.machine_params.dir)}</span>
+                      {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_params.dir', machine.machine_params.dir)}
                     </div>
                     <div className="param-item">
                       <span className="param-label">LEN</span>
-                      <span className="param-value">{formatParamValue(machine.machine_params.len)}</span>
+                      {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_params.len', machine.machine_params.len)}
                     </div>
                     <div className="param-item">
                       <span className="param-label">GAIN</span>
-                      <span className="param-value">{formatParamValue(machine.machine_params.gain)}</span>
+                      {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_params.gain', machine.machine_params.gain)}
                     </div>
                     <div className="param-item">
                       <span className="param-label">OP</span>
-                      <span className="param-value">{formatParamValue(machine.machine_params.op)}</span>
+                      {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_params.op', machine.machine_params.op)}
                     </div>
                   </>
                 ) : (
@@ -496,27 +567,27 @@ export default function PartsPanel({
                     {/* FLEX/STATIC MAIN parameters */}
                     <div className="param-item">
                       <span className="param-label">PTCH</span>
-                      <span className="param-value">{formatParamValue(machine.machine_params.ptch)}</span>
+                      {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_params.ptch', machine.machine_params.ptch)}
                     </div>
                     <div className="param-item">
                       <span className="param-label">STRT</span>
-                      <span className="param-value">{formatParamValue(machine.machine_params.strt)}</span>
+                      {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_params.strt', machine.machine_params.strt)}
                     </div>
                     <div className="param-item">
                       <span className="param-label">LEN</span>
-                      <span className="param-value">{formatParamValue(machine.machine_params.len)}</span>
+                      {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_params.len', machine.machine_params.len)}
                     </div>
                     <div className="param-item">
                       <span className="param-label">RATE</span>
-                      <span className="param-value">{formatParamValue(machine.machine_params.rate)}</span>
+                      {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_params.rate', machine.machine_params.rate)}
                     </div>
                     <div className="param-item">
                       <span className="param-label">RTRG</span>
-                      <span className="param-value">{formatParamValue(machine.machine_params.rtrg)}</span>
+                      {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_params.rtrg', machine.machine_params.rtrg)}
                     </div>
                     <div className="param-item">
                       <span className="param-label">RTIM</span>
-                      <span className="param-value">{formatParamValue(machine.machine_params.rtim)}</span>
+                      {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_params.rtim', machine.machine_params.rtim)}
                     </div>
                   </>
                 )}
@@ -532,11 +603,11 @@ export default function PartsPanel({
                       {/* PICKUP SETUP parameters */}
                       <div className="param-item">
                         <span className="param-label">TSTR</span>
-                        <span className="param-value">{formatParamValue(machine.machine_setup.tstr)}</span>
+                        {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tstr', machine.machine_setup.tstr)}
                       </div>
                       <div className="param-item">
                         <span className="param-label">TSNS</span>
-                        <span className="param-value">{formatParamValue(machine.machine_setup.tsns)}</span>
+                        {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tsns', machine.machine_setup.tsns)}
                       </div>
                     </>
                   ) : (
@@ -544,27 +615,27 @@ export default function PartsPanel({
                       {/* FLEX/STATIC SETUP parameters */}
                       <div className="param-item">
                         <span className="param-label">LOOP</span>
-                        <span className="param-value">{formatParamValue(machine.machine_setup.xloop)}</span>
+                        {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.xloop', machine.machine_setup.xloop)}
                       </div>
                       <div className="param-item">
                         <span className="param-label">SLIC</span>
-                        <span className="param-value">{formatParamValue(machine.machine_setup.slic)}</span>
+                        {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.slic', machine.machine_setup.slic)}
                       </div>
                       <div className="param-item">
                         <span className="param-label">LEN</span>
-                        <span className="param-value">{formatParamValue(machine.machine_setup.len)}</span>
+                        {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.len', machine.machine_setup.len)}
                       </div>
                       <div className="param-item">
                         <span className="param-label">RATE</span>
-                        <span className="param-value">{formatParamValue(machine.machine_setup.rate)}</span>
+                        {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.rate', machine.machine_setup.rate)}
                       </div>
                       <div className="param-item">
                         <span className="param-label">TSTR</span>
-                        <span className="param-value">{formatParamValue(machine.machine_setup.tstr)}</span>
+                        {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tstr', machine.machine_setup.tstr)}
                       </div>
                       <div className="param-item">
                         <span className="param-label">TSNS</span>
-                        <span className="param-value">{formatParamValue(machine.machine_setup.tsns)}</span>
+                        {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tsns', machine.machine_setup.tsns)}
                       </div>
                     </>
                   )}
@@ -660,7 +731,12 @@ export default function PartsPanel({
     );
   };
 
-  const renderLfoEnvelope = (customLfoDesign: number[]) => {
+  const renderLfoEnvelope = (
+    customLfoDesign: number[],
+    partId?: number,
+    section?: 'lfos' | 'midi_lfos',
+    trackId?: number
+  ) => {
     // Validate custom LFO design data
     if (!customLfoDesign || customLfoDesign.length !== 16) {
       return (
@@ -674,6 +750,7 @@ export default function PartsPanel({
 
     const envelopeData = customLfoDesign;
     const stepCount = 16;
+    const canDraw = isEditMode && partId !== undefined && section !== undefined && trackId !== undefined;
 
     // Convert data points to coordinates
     // Octatrack stores LFO values using a special encoding:
@@ -714,35 +791,131 @@ export default function PartsPanel({
       return path;
     };
 
+    // Convert mouse position to step index and value
+    const handleMouseDraw = (e: React.MouseEvent<SVGSVGElement>) => {
+      if (!canDraw) return;
+
+      const svg = e.currentTarget;
+      const rect = svg.getBoundingClientRect();
+
+      // Get mouse position relative to SVG
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      // Convert to viewBox coordinates (0-100 for x, 0-60 for y)
+      const viewBoxX = (mouseX / rect.width) * 100;
+      const viewBoxY = (mouseY / rect.height) * 60;
+
+      // Calculate step index (0-15)
+      const stepIndex = Math.round((viewBoxX / 100) * (stepCount - 1));
+      const clampedStepIndex = Math.max(0, Math.min(15, stepIndex));
+
+      // Convert viewBox Y to signed value (-128 to +127)
+      // y=1 → +127, y=30 → 0, y=59 → -128
+      const signedValue = Math.round(((centerY - viewBoxY) / rangeY) * 128);
+      const clampedSignedValue = Math.max(-128, Math.min(127, signedValue));
+
+      // Convert signed to unsigned (Octatrack format)
+      // 0-127 stays as is, -128 to -1 becomes 128-255
+      const unsignedValue = clampedSignedValue >= 0 ? clampedSignedValue : clampedSignedValue + 256;
+
+      // Update local state only (no save during drawing)
+      updateLfoDesignLocal(partId!, section!, trackId!, clampedStepIndex, unsignedValue);
+    };
+
+    const handleMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
+      if (!canDraw) return;
+      lfoDrawingRef.current = { isDrawing: true, partId: partId!, section: section!, trackId: trackId! };
+      handleMouseDraw(e);
+    };
+
+    const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+      if (!lfoDrawingRef.current?.isDrawing) return;
+      handleMouseDraw(e);
+    };
+
+    const handleMouseUp = () => {
+      if (lfoDrawingRef.current) {
+        // Save on mouse release
+        saveLfoDesign(lfoDrawingRef.current.partId);
+        lfoDrawingRef.current = null;
+      }
+    };
+
+    const handleMouseLeave = () => {
+      if (lfoDrawingRef.current) {
+        // Save when mouse leaves while drawing
+        saveLfoDesign(lfoDrawingRef.current.partId);
+        lfoDrawingRef.current = null;
+      }
+    };
+
     return (
       <div className="lfo-envelope-container">
-        <svg className="lfo-envelope-svg" viewBox="0 0 100 60" preserveAspectRatio="none">
-          <defs>
-            <linearGradient id="lfoGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" style={{ stopColor: '#4ac8ff', stopOpacity: 1 }} />
-              <stop offset="50%" style={{ stopColor: '#7b68ee', stopOpacity: 1 }} />
-              <stop offset="100%" style={{ stopColor: '#ff6b9d', stopOpacity: 1 }} />
-            </linearGradient>
-          </defs>
+        <div className="lfo-envelope-wrapper">
+          <svg
+            className={`lfo-envelope-svg ${canDraw ? 'lfo-envelope-editable' : ''}`}
+            viewBox="0 0 100 60"
+            preserveAspectRatio="none"
+            onMouseDown={canDraw ? handleMouseDown : undefined}
+            onMouseMove={canDraw ? handleMouseMove : undefined}
+            onMouseUp={canDraw ? handleMouseUp : undefined}
+            onMouseLeave={canDraw ? handleMouseLeave : undefined}
+          >
+            <defs>
+              <linearGradient id="lfoGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" style={{ stopColor: '#4ac8ff', stopOpacity: 1 }} />
+                <stop offset="50%" style={{ stopColor: '#7b68ee', stopOpacity: 1 }} />
+                <stop offset="100%" style={{ stopColor: '#ff6b9d', stopOpacity: 1 }} />
+              </linearGradient>
+            </defs>
 
-          {/* Draw vertical grid lines for each step */}
-          {Array.from({ length: stepCount }).map((_, index) => (
-            <line
-              key={`grid-${index}`}
-              className="lfo-envelope-grid"
-              x1={(index / (stepCount - 1)) * 100}
-              y1="5"
-              x2={(index / (stepCount - 1)) * 100}
-              y2="50"
+            {/* Draw vertical grid lines for each step */}
+            {Array.from({ length: stepCount }).map((_, index) => (
+              <line
+                key={`grid-${index}`}
+                className="lfo-envelope-grid"
+                x1={(index / (stepCount - 1)) * 100}
+                y1="5"
+                x2={(index / (stepCount - 1)) * 100}
+                y2="50"
+              />
+            ))}
+
+            {/* Draw center line when in edit mode */}
+            {canDraw && (
+              <line
+                className="lfo-envelope-center"
+                x1="0"
+                y1={centerY}
+                x2="100"
+                y2={centerY}
+              />
+            )}
+
+            {/* Draw the smooth waveform */}
+            <path
+              className="lfo-envelope-line"
+              d={createSmoothPath(points)}
             />
-          ))}
+          </svg>
 
-          {/* Draw the smooth waveform */}
-          <path
-            className="lfo-envelope-line"
-            d={createSmoothPath(points)}
-          />
-        </svg>
+          {/* Render points as HTML elements to avoid SVG distortion */}
+          {canDraw && (
+            <div className="lfo-envelope-points-overlay">
+              {points.map((point, index) => (
+                <div
+                  key={`point-${index}`}
+                  className="lfo-envelope-point"
+                  style={{
+                    left: `${point.x}%`,
+                    top: `${(point.y / 60) * 100}%`,
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Step indicators */}
         <div className="lfo-envelope-steps">
@@ -762,9 +935,19 @@ export default function PartsPanel({
   };
 
   const renderLfoPage = (part: PartData) => {
+    // Always use activePartsData to show current state
+    const activePart = activePartsData.find(p => p.part_id === part.part_id) || part;
     const tracksToShow = selectedTrack !== undefined && selectedTrack >= 0 && selectedTrack <= 7
-      ? [part.lfos[selectedTrack]]
-      : part.lfos;
+      ? [activePart.lfos[selectedTrack]]
+      : activePart.lfos;
+
+    // Get field names based on active LFO tab
+    const getLfoFieldNames = () => {
+      if (activeLfoTab === 'LFO1') return { pmtr: 'lfo1_pmtr', wave: 'lfo1_wave', mult: 'lfo1_mult', trig: 'lfo1_trig', spd: 'spd1', dep: 'dep1' };
+      if (activeLfoTab === 'LFO2') return { pmtr: 'lfo2_pmtr', wave: 'lfo2_wave', mult: 'lfo2_mult', trig: 'lfo2_trig', spd: 'spd2', dep: 'dep2' };
+      if (activeLfoTab === 'LFO3') return { pmtr: 'lfo3_pmtr', wave: 'lfo3_wave', mult: 'lfo3_mult', trig: 'lfo3_trig', spd: 'spd3', dep: 'dep3' };
+      return null;
+    };
 
     return (
       <div className="parts-lfo-layout">
@@ -799,7 +982,7 @@ export default function PartsPanel({
         <div className="parts-tracks" style={{ flex: 1 }}>
           {tracksToShow.map((lfo) => {
             // Get the machine type from the corresponding machine data
-            const machine = part.machines[lfo.track_id];
+            const machine = activePart.machines[lfo.track_id];
             const machineType = machine.machine_type;
 
             // Determine which LFO's parameters to show
@@ -826,6 +1009,8 @@ export default function PartsPanel({
               dep: lfo.dep3,
             } : null;
 
+            const fieldNames = getLfoFieldNames();
+
             return (
               <div key={lfo.track_id} className="parts-track">
                 <div className="parts-track-header">
@@ -833,37 +1018,37 @@ export default function PartsPanel({
                   <span className="machine-type">{machineType}</span>
                 </div>
 
-                {activeLfoTab !== 'DESIGN' ? (
+                {activeLfoTab !== 'DESIGN' && lfoParams && fieldNames ? (
                   <div className="parts-params-section">
                     <div className="params-grid">
                       <div className="param-item">
                         <span className="param-label">PMTR</span>
-                        <span className="param-value">{lfoParams!.pmtr}</span>
+                        {renderParamValue(activePart.part_id, 'lfos', lfo.track_id, fieldNames.pmtr, lfoParams.pmtr)}
                       </div>
                       <div className="param-item">
                         <span className="param-label">WAVE</span>
-                        <span className="param-value">{formatLfoWave(lfoParams!.wave)}</span>
+                        {renderParamValue(activePart.part_id, 'lfos', lfo.track_id, fieldNames.wave, lfoParams.wave)}
                       </div>
                       <div className="param-item">
                         <span className="param-label">MULT</span>
-                        <span className="param-value">{formatLfoMult(lfoParams!.mult)}</span>
+                        {renderParamValue(activePart.part_id, 'lfos', lfo.track_id, fieldNames.mult, lfoParams.mult)}
                       </div>
                       <div className="param-item">
                         <span className="param-label">TRIG</span>
-                        <span className="param-value">{formatLfoTrig(lfoParams!.trig)}</span>
+                        {renderParamValue(activePart.part_id, 'lfos', lfo.track_id, fieldNames.trig, lfoParams.trig)}
                       </div>
                       <div className="param-item">
                         <span className="param-label">SPD</span>
-                        <span className="param-value">{lfoParams!.spd}</span>
+                        {renderParamValue(activePart.part_id, 'lfos', lfo.track_id, fieldNames.spd, lfoParams.spd)}
                       </div>
                       <div className="param-item">
                         <span className="param-label">DEP</span>
-                        <span className="param-value">{lfoParams!.dep}</span>
+                        {renderParamValue(activePart.part_id, 'lfos', lfo.track_id, fieldNames.dep, lfoParams.dep)}
                       </div>
                     </div>
                   </div>
                 ) : (
-                  renderLfoEnvelope(lfo.custom_lfo_design)
+                  renderLfoEnvelope(lfo.custom_lfo_design, activePart.part_id, 'lfos', lfo.track_id)
                 )}
               </div>
             );
@@ -874,14 +1059,19 @@ export default function PartsPanel({
   };
 
   const renderFx1Page = (part: PartData) => {
+    // Always use activePartsData to show current state
+    const activePart = activePartsData.find(p => p.part_id === part.part_id) || part;
     const tracksToShow = selectedTrack !== undefined && selectedTrack >= 0 && selectedTrack <= 7
-      ? [part.fxs[selectedTrack]]
-      : part.fxs;
+      ? [activePart.fxs[selectedTrack]]
+      : activePart.fxs;
+
+    const mainFieldNames = ['fx1_param1', 'fx1_param2', 'fx1_param3', 'fx1_param4', 'fx1_param5', 'fx1_param6'];
+    const setupFieldNames = ['fx1_setup1', 'fx1_setup2', 'fx1_setup3', 'fx1_setup4', 'fx1_setup5', 'fx1_setup6'];
 
     return (
       <div className="parts-tracks">
         {tracksToShow.map((fx) => {
-          const machine = part.machines[fx.track_id];
+          const machine = activePart.machines[fx.track_id];
           const machineType = machine.machine_type;
           const mainLabels = getFxMainLabels(fx.fx1_type);
           const setupLabels = getFxSetupLabels(fx.fx1_type);
@@ -896,14 +1086,14 @@ export default function PartsPanel({
               </div>
 
               <div className="parts-params-section">
-                <div className="params-label">FX1 - {formatFxType(fx.fx1_type)}</div>
+                <div className="params-label">MAIN - {formatFxType(fx.fx1_type)}</div>
                 <div className="params-grid">
                   {mainLabels.map((label, index) => {
                     if (!label) return null; // Skip empty labels
                     return (
                       <div key={index} className="param-item">
                         <span className="param-label">{label}</span>
-                        <span className="param-value">{mainValues[index]}</span>
+                        {renderParamValue(activePart.part_id, 'fxs', fx.track_id, mainFieldNames[index], mainValues[index])}
                       </div>
                     );
                   })}
@@ -918,7 +1108,7 @@ export default function PartsPanel({
                     return (
                       <div key={index} className="param-item">
                         <span className="param-label">{label}</span>
-                        <span className="param-value">{setupValues[index]}</span>
+                        {renderParamValue(activePart.part_id, 'fxs', fx.track_id, setupFieldNames[index], setupValues[index])}
                       </div>
                     );
                   })}
@@ -932,14 +1122,19 @@ export default function PartsPanel({
   };
 
   const renderFx2Page = (part: PartData) => {
+    // Always use activePartsData to show current state
+    const activePart = activePartsData.find(p => p.part_id === part.part_id) || part;
     const tracksToShow = selectedTrack !== undefined && selectedTrack >= 0 && selectedTrack <= 7
-      ? [part.fxs[selectedTrack]]
-      : part.fxs;
+      ? [activePart.fxs[selectedTrack]]
+      : activePart.fxs;
+
+    const mainFieldNames = ['fx2_param1', 'fx2_param2', 'fx2_param3', 'fx2_param4', 'fx2_param5', 'fx2_param6'];
+    const setupFieldNames = ['fx2_setup1', 'fx2_setup2', 'fx2_setup3', 'fx2_setup4', 'fx2_setup5', 'fx2_setup6'];
 
     return (
       <div className="parts-tracks">
         {tracksToShow.map((fx) => {
-          const machine = part.machines[fx.track_id];
+          const machine = activePart.machines[fx.track_id];
           const machineType = machine.machine_type;
           const mainLabels = getFxMainLabels(fx.fx2_type);
           const setupLabels = getFxSetupLabels(fx.fx2_type);
@@ -954,14 +1149,14 @@ export default function PartsPanel({
               </div>
 
               <div className="parts-params-section">
-                <div className="params-label">FX2 - {formatFxType(fx.fx2_type)}</div>
+                <div className="params-label">MAIN - {formatFxType(fx.fx2_type)}</div>
                 <div className="params-grid">
                   {mainLabels.map((label, index) => {
                     if (!label) return null; // Skip empty labels
                     return (
                       <div key={index} className="param-item">
                         <span className="param-label">{label}</span>
-                        <span className="param-value">{mainValues[index]}</span>
+                        {renderParamValue(activePart.part_id, 'fxs', fx.track_id, mainFieldNames[index], mainValues[index])}
                       </div>
                     );
                   })}
@@ -976,7 +1171,7 @@ export default function PartsPanel({
                     return (
                       <div key={index} className="param-item">
                         <span className="param-label">{label}</span>
-                        <span className="param-value">{setupValues[index]}</span>
+                        {renderParamValue(activePart.part_id, 'fxs', fx.track_id, setupFieldNames[index], setupValues[index])}
                       </div>
                     );
                   })}
@@ -1125,9 +1320,11 @@ export default function PartsPanel({
   };
 
   const renderMidiLfoPage = (part: PartData) => {
+    // Always use activePartsData to show current state
+    const activePart = activePartsData.find(p => p.part_id === part.part_id) || part;
     const tracksToShow = selectedTrack !== undefined && selectedTrack >= 8
-      ? [part.midi_lfos[selectedTrack - 8]]
-      : part.midi_lfos;
+      ? [activePart.midi_lfos[selectedTrack - 8]]
+      : activePart.midi_lfos;
 
     return (
       <div className="parts-lfo-layout">
@@ -1222,7 +1419,7 @@ export default function PartsPanel({
                     </div>
                   </div>
                 ) : (
-                  renderLfoEnvelope(lfo.custom_lfo_design)
+                  renderLfoEnvelope(lfo.custom_lfo_design, activePart.part_id, 'midi_lfos', lfo.track_id)
                 )}
               </div>
             );
@@ -1384,6 +1581,8 @@ export default function PartsPanel({
 
   // Render all Audio pages - same style as individual tabs with MAIN/SETUP side by side
   const renderAllAudioPages = (part: PartData) => {
+    // Always use activePartsData to show current state
+    const activePart = activePartsData.find(p => p.part_id === part.part_id) || part;
     const tracksToShow = selectedTrack !== undefined && selectedTrack >= 0 && selectedTrack <= 7
       ? [selectedTrack]
       : [0, 1, 2, 3, 4, 5, 6, 7];
@@ -1391,10 +1590,10 @@ export default function PartsPanel({
     return (
       <div className="parts-tracks full-width">
         {tracksToShow.map((trackIdx) => {
-          const machine = part.machines[trackIdx];
-          const amp = part.amps[trackIdx];
-          const lfo = part.lfos[trackIdx];
-          const fx = part.fxs[trackIdx];
+          const machine = activePart.machines[trackIdx];
+          const amp = activePart.amps[trackIdx];
+          const lfo = activePart.lfos[trackIdx];
+          const fx = activePart.fxs[trackIdx];
           const machineType = machine.machine_type;
           const fx1MainLabels = getFxMainLabels(fx.fx1_type);
           const fx2MainLabels = getFxMainLabels(fx.fx2_type);
@@ -1583,7 +1782,7 @@ export default function PartsPanel({
                   <div className="params-label">DESIGN</div>
                   <div className="params-vertical-layout">
                     <div className="params-subsection">
-                      {renderLfoEnvelope(lfo.custom_lfo_design)}
+                      {renderLfoEnvelope(lfo.custom_lfo_design, activePart.part_id, 'lfos', trackIdx)}
                     </div>
                   </div>
                 </div>
@@ -1671,6 +1870,8 @@ export default function PartsPanel({
 
   // Render all MIDI pages - 2-row layout matching Audio tracks
   const renderAllMidiPages = (part: PartData) => {
+    // Always use activePartsData to show current state
+    const activePart = activePartsData.find(p => p.part_id === part.part_id) || part;
     const tracksToShow = selectedTrack !== undefined && selectedTrack >= 8
       ? [selectedTrack - 8]
       : [0, 1, 2, 3, 4, 5, 6, 7];
@@ -1678,11 +1879,11 @@ export default function PartsPanel({
     return (
       <div className="parts-tracks full-width">
         {tracksToShow.map((trackIdx) => {
-          const midi_note = part.midi_notes[trackIdx];
-          const midi_arp = part.midi_arps[trackIdx];
-          const midi_lfo = part.midi_lfos[trackIdx];
-          const midi_ctrl1 = part.midi_ctrl1s[trackIdx];
-          const midi_ctrl2 = part.midi_ctrl2s[trackIdx];
+          const midi_note = activePart.midi_notes[trackIdx];
+          const midi_arp = activePart.midi_arps[trackIdx];
+          const midi_lfo = activePart.midi_lfos[trackIdx];
+          const midi_ctrl1 = activePart.midi_ctrl1s[trackIdx];
+          const midi_ctrl2 = activePart.midi_ctrl2s[trackIdx];
 
           return (
             <div key={trackIdx} className="parts-track parts-track-wide">
@@ -1825,7 +2026,7 @@ export default function PartsPanel({
                   <div className="params-label">DESIGN</div>
                   <div className="params-vertical-layout">
                     <div className="params-subsection">
-                      {renderLfoEnvelope(midi_lfo.custom_lfo_design)}
+                      {renderLfoEnvelope(midi_lfo.custom_lfo_design, activePart.part_id, 'midi_lfos', trackIdx)}
                     </div>
                   </div>
                 </div>
