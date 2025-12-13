@@ -2178,7 +2178,7 @@ export default function PartsPanel({
                   : 'No changes to reload'
             }
           >
-            {isReloading ? 'Reloading...' : 'Reload'}
+            Reload
           </button>
           {/* Save: commit active part from parts.unsaved to parts.saved */}
           <button
