@@ -332,15 +332,17 @@ export function ProjectDetail() {
             ← Back
           </button>
           <h1 title={projectPath || ''}>{projectName}</h1>
-          {/* View/Edit mode toggle */}
-          <div className="mode-toggle" onClick={() => setIsEditMode(!isEditMode)}>
-            <span className={`mode-toggle-btn ${!isEditMode ? 'active' : ''}`}>
-              View
-            </span>
-            <span className={`mode-toggle-btn ${isEditMode ? 'active' : ''}`}>
-              Edit
-            </span>
-          </div>
+          {/* View/Edit mode toggle - hidden during loading */}
+          {!isLoading && (
+            <div className="mode-toggle" onClick={() => setIsEditMode(!isEditMode)}>
+              <span className={`mode-toggle-btn ${!isEditMode ? 'active' : ''}`}>
+                View
+              </span>
+              <span className={`mode-toggle-btn ${isEditMode ? 'active' : ''}`}>
+                Edit
+              </span>
+            </div>
+          )}
           {/* Parts write status indicator */}
           <span className={`save-status-indicator ${partsWriteStatus.state}`}>
             {partsWriteStatus.state === 'writing' && (partsWriteStatus.message || 'Saving...')}
