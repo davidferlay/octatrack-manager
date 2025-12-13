@@ -656,8 +656,8 @@
 /* All tab 2-row layout */
 .parts-all-row {
   display: flex;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 0;
+  margin-bottom: 0;
   width: 100%;
 }
 
@@ -668,12 +668,21 @@
 .parts-all-section {
   background: #252525;
   border: 1px solid #333;
-  border-radius: 4px;
+  border-right: none;
+  border-radius: 0;
   padding: 12px;
   flex: 1;
   min-width: 180px;
   display: flex;
   flex-direction: column;
+}
+
+.parts-all-section:last-child {
+  border-right: 1px solid #333;
+}
+
+.parts-all-row:not(:last-child) .parts-all-section {
+  border-bottom: none;
 }
 
 .parts-all-section > .params-label {
