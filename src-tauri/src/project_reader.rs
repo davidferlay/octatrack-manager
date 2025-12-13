@@ -920,11 +920,10 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
 
                 // Each bank has 4 parts (1-4)
                 for part_id in 0..4 {
-                    // Extract part name from the byte array
+                    // Extract part name from the byte array (stop at first null byte)
                     let part_name_bytes = &bank_data.part_names[part_id as usize];
-                    let part_name = String::from_utf8_lossy(part_name_bytes)
-                        .trim_end_matches('\0')
-                        .to_string();
+                    let null_pos = part_name_bytes.iter().position(|&b| b == 0).unwrap_or(part_name_bytes.len());
+                    let part_name = String::from_utf8_lossy(&part_name_bytes[..null_pos]).to_string();
                     let part_name = if part_name.is_empty() {
                         format!("Part {}", part_id + 1)
                     } else {
