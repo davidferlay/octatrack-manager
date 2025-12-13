@@ -673,6 +673,8 @@ h1 {
   border-radius: 6px;
   padding: 2px;
   border: 1px solid #444;
+  cursor: pointer;
+  user-select: none;
 }
 
 .mode-toggle-btn {
