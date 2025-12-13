@@ -480,6 +480,19 @@
   display: flex;
   gap: 8px;
   margin-left: 16px;
+  transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+}
+
+.parts-edit-controls.visible {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.parts-edit-controls.hidden {
+  opacity: 0;
+  transform: translateX(-10px);
+  pointer-events: none;
 }
 
 .edit-button,
