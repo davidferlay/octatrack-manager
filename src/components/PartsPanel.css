@@ -242,11 +242,14 @@
   font-size: 12px;
   font-weight: 700;
   background: #333;
-  padding: 4px 8px;
+  padding: 0 8px;
   border-radius: 3px;
   border: 1px solid #666;
   width: 60px;
+  height: 26px;
+  line-height: 26px;
   text-align: right;
+  box-sizing: border-box;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
   flex-shrink: 0;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
