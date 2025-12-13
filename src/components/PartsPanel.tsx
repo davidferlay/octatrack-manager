@@ -489,7 +489,7 @@ export default function PartsPanel({
             </div>
 
             <div className="parts-params-section">
-              <div className="params-label">MAIN</div>
+              <div className="params-column-label">MAIN</div>
               <div className="params-grid">
                 {machine.machine_type === 'Thru' ? (
                   <>
@@ -512,9 +512,7 @@ export default function PartsPanel({
                     </div>
                   </>
                 ) : machine.machine_type === 'Neighbor' ? (
-                  <>
-                    {/* NEIGHBOR has no MAIN parameters */}
-                  </>
+                  <div className="params-empty-message">-</div>
                 ) : machine.machine_type === 'Pickup' ? (
                   <>
                     {/* PICKUP MAIN parameters */}
@@ -571,54 +569,54 @@ export default function PartsPanel({
               </div>
             </div>
 
-            {machine.machine_type !== 'Thru' && machine.machine_type !== 'Neighbor' && (
-              <div className="parts-params-section">
-                <div className="params-label">SETUP</div>
-                <div className="params-grid">
-                  {machine.machine_type === 'Pickup' ? (
-                    <>
-                      {/* PICKUP SETUP parameters */}
-                      <div className="param-item">
-                        <span className="param-label">TSTR</span>
-                        {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tstr', machine.machine_setup.tstr)}
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">TSNS</span>
-                        {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tsns', machine.machine_setup.tsns)}
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      {/* FLEX/STATIC SETUP parameters */}
-                      <div className="param-item">
-                        <span className="param-label">LOOP</span>
-                        {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.xloop', machine.machine_setup.xloop)}
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">SLIC</span>
-                        {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.slic', machine.machine_setup.slic)}
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">LEN</span>
-                        {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.len', machine.machine_setup.len)}
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">RATE</span>
-                        {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.rate', machine.machine_setup.rate)}
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">TSTR</span>
-                        {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tstr', machine.machine_setup.tstr)}
-                      </div>
-                      <div className="param-item">
-                        <span className="param-label">TSNS</span>
-                        {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tsns', machine.machine_setup.tsns)}
-                      </div>
-                    </>
-                  )}
-                </div>
+            <div className="parts-params-section">
+              <div className="params-column-label">SETUP</div>
+              <div className="params-grid">
+                {machine.machine_type === 'Thru' || machine.machine_type === 'Neighbor' ? (
+                  <div className="params-empty-message">-</div>
+                ) : machine.machine_type === 'Pickup' ? (
+                  <>
+                    {/* PICKUP SETUP parameters */}
+                    <div className="param-item">
+                      <span className="param-label">TSTR</span>
+                      {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tstr', machine.machine_setup.tstr)}
+                    </div>
+                    <div className="param-item">
+                      <span className="param-label">TSNS</span>
+                      {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tsns', machine.machine_setup.tsns)}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* FLEX/STATIC SETUP parameters */}
+                    <div className="param-item">
+                      <span className="param-label">LOOP</span>
+                      {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.xloop', machine.machine_setup.xloop)}
+                    </div>
+                    <div className="param-item">
+                      <span className="param-label">SLIC</span>
+                      {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.slic', machine.machine_setup.slic)}
+                    </div>
+                    <div className="param-item">
+                      <span className="param-label">LEN</span>
+                      {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.len', machine.machine_setup.len)}
+                    </div>
+                    <div className="param-item">
+                      <span className="param-label">RATE</span>
+                      {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.rate', machine.machine_setup.rate)}
+                    </div>
+                    <div className="param-item">
+                      <span className="param-label">TSTR</span>
+                      {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tstr', machine.machine_setup.tstr)}
+                    </div>
+                    <div className="param-item">
+                      <span className="param-label">TSNS</span>
+                      {renderParamValue(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tsns', machine.machine_setup.tsns)}
+                    </div>
+                  </>
+                )}
               </div>
-            )}
+            </div>
           </div>
         ))}
       </div>
@@ -647,7 +645,7 @@ export default function PartsPanel({
               </div>
 
               <div className="parts-params-section">
-                <div className="params-label">MAIN</div>
+                <div className="params-column-label">MAIN</div>
                 <div className="params-grid">
                   <div className="param-item">
                     <span className="param-label">ATK</span>
@@ -677,7 +675,7 @@ export default function PartsPanel({
               </div>
 
               <div className="parts-params-section">
-                <div className="params-label">SETUP</div>
+                <div className="params-column-label">SETUP</div>
                 <div className="params-grid">
                   <div className="param-item">
                     <span className="param-label">AMP</span>
@@ -1064,32 +1062,40 @@ export default function PartsPanel({
               </div>
 
               <div className="parts-params-section">
-                <div className="params-label">MAIN - {formatFxType(fx.fx1_type)}</div>
+                <div className="params-column-label">MAIN - {formatFxType(fx.fx1_type)}</div>
                 <div className="params-grid">
-                  {mainLabels.map((label, index) => {
-                    if (!label) return null; // Skip empty labels
-                    return (
-                      <div key={index} className="param-item">
-                        <span className="param-label">{label}</span>
-                        {renderParamValue(activePart.part_id, 'fxs', fx.track_id, mainFieldNames[index], mainValues[index])}
-                      </div>
-                    );
-                  })}
+                  {mainLabels.some(label => label) ? (
+                    mainLabels.map((label, index) => {
+                      if (!label) return null; // Skip empty labels
+                      return (
+                        <div key={index} className="param-item">
+                          <span className="param-label">{label}</span>
+                          {renderParamValue(activePart.part_id, 'fxs', fx.track_id, mainFieldNames[index], mainValues[index])}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="params-empty-message">-</div>
+                  )}
                 </div>
               </div>
 
               <div className="parts-params-section">
-                <div className="params-label">SETUP</div>
+                <div className="params-column-label">SETUP</div>
                 <div className="params-grid">
-                  {setupLabels.map((label, index) => {
-                    if (!label) return null; // Skip empty labels
-                    return (
-                      <div key={index} className="param-item">
-                        <span className="param-label">{label}</span>
-                        {renderParamValue(activePart.part_id, 'fxs', fx.track_id, setupFieldNames[index], setupValues[index])}
-                      </div>
-                    );
-                  })}
+                  {setupLabels.some(label => label) ? (
+                    setupLabels.map((label, index) => {
+                      if (!label) return null; // Skip empty labels
+                      return (
+                        <div key={index} className="param-item">
+                          <span className="param-label">{label}</span>
+                          {renderParamValue(activePart.part_id, 'fxs', fx.track_id, setupFieldNames[index], setupValues[index])}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="params-empty-message">-</div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1127,32 +1133,40 @@ export default function PartsPanel({
               </div>
 
               <div className="parts-params-section">
-                <div className="params-label">MAIN - {formatFxType(fx.fx2_type)}</div>
+                <div className="params-column-label">MAIN - {formatFxType(fx.fx2_type)}</div>
                 <div className="params-grid">
-                  {mainLabels.map((label, index) => {
-                    if (!label) return null; // Skip empty labels
-                    return (
-                      <div key={index} className="param-item">
-                        <span className="param-label">{label}</span>
-                        {renderParamValue(activePart.part_id, 'fxs', fx.track_id, mainFieldNames[index], mainValues[index])}
-                      </div>
-                    );
-                  })}
+                  {mainLabels.some(label => label) ? (
+                    mainLabels.map((label, index) => {
+                      if (!label) return null; // Skip empty labels
+                      return (
+                        <div key={index} className="param-item">
+                          <span className="param-label">{label}</span>
+                          {renderParamValue(activePart.part_id, 'fxs', fx.track_id, mainFieldNames[index], mainValues[index])}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="params-empty-message">-</div>
+                  )}
                 </div>
               </div>
 
               <div className="parts-params-section">
-                <div className="params-label">SETUP</div>
+                <div className="params-column-label">SETUP</div>
                 <div className="params-grid">
-                  {setupLabels.map((label, index) => {
-                    if (!label) return null; // Skip empty labels
-                    return (
-                      <div key={index} className="param-item">
-                        <span className="param-label">{label}</span>
-                        {renderParamValue(activePart.part_id, 'fxs', fx.track_id, setupFieldNames[index], setupValues[index])}
-                      </div>
-                    );
-                  })}
+                  {setupLabels.some(label => label) ? (
+                    setupLabels.map((label, index) => {
+                      if (!label) return null; // Skip empty labels
+                      return (
+                        <div key={index} className="param-item">
+                          <span className="param-label">{label}</span>
+                          {renderParamValue(activePart.part_id, 'fxs', fx.track_id, setupFieldNames[index], setupValues[index])}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="params-empty-message">-</div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1180,7 +1194,7 @@ export default function PartsPanel({
             </div>
 
             <div className="parts-params-section">
-              <div className="params-label">NOTE MAIN</div>
+              <div className="params-column-label">MAIN</div>
               <div className="params-grid">
                 <div className="param-item">
                   <span className="param-label">NOTE</span>
@@ -1210,7 +1224,7 @@ export default function PartsPanel({
             </div>
 
             <div className="parts-params-section">
-              <div className="params-label">NOTE SETUP</div>
+              <div className="params-column-label">SETUP</div>
               <div className="params-grid">
                 <div className="param-item">
                   <span className="param-label">CHAN</span>
@@ -1253,7 +1267,7 @@ export default function PartsPanel({
             </div>
 
             <div className="parts-params-section">
-              <div className="params-label">ARP MAIN</div>
+              <div className="params-column-label">MAIN</div>
               <div className="params-grid">
                 <div className="param-item">
                   <span className="param-label">TRAN</span>
@@ -1283,7 +1297,7 @@ export default function PartsPanel({
             </div>
 
             <div className="parts-params-section">
-              <div className="params-label">ARP SETUP</div>
+              <div className="params-column-label">SETUP</div>
               <div className="params-grid">
                 <div className="param-item">
                   <span className="param-label">LEN</span>
@@ -1428,7 +1442,7 @@ export default function PartsPanel({
             </div>
 
             <div className="parts-params-section">
-              <div className="params-label">CTRL1 MAIN</div>
+              <div className="params-column-label">MAIN</div>
               <div className="params-grid">
                 <div className="param-item">
                   <span className="param-label">PB</span>
@@ -1458,7 +1472,7 @@ export default function PartsPanel({
             </div>
 
             <div className="parts-params-section">
-              <div className="params-label">CTRL1 SETUP</div>
+              <div className="params-column-label">SETUP</div>
               <div className="params-grid">
                 <div className="param-item">
                   <span className="param-label">CC1#</span>
@@ -1501,7 +1515,7 @@ export default function PartsPanel({
             </div>
 
             <div className="parts-params-section">
-              <div className="params-label">CTRL2 MAIN</div>
+              <div className="params-column-label">MAIN</div>
               <div className="params-grid">
                 <div className="param-item">
                   <span className="param-label">CC5</span>
@@ -1531,7 +1545,7 @@ export default function PartsPanel({
             </div>
 
             <div className="parts-params-section">
-              <div className="params-label">CTRL2 SETUP</div>
+              <div className="params-column-label">SETUP</div>
               <div className="params-grid">
                 <div className="param-item">
                   <span className="param-label">CC5#</span>
