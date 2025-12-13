@@ -825,6 +825,7 @@ export default function PartsPanel({
 
     const handleMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
       if (!canDraw) return;
+      e.preventDefault(); // Prevent text selection while dragging
       lfoDrawingRef.current = { isDrawing: true, partId: partId!, section: section!, trackId: trackId! };
       handleMouseDraw(e);
     };
