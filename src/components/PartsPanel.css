@@ -31,7 +31,9 @@
 }
 
 .parts-part-tab {
+  position: relative;
   padding: 0.65rem 1rem;
+  padding-right: 1.05rem;
   background: #2a2a2a;
   border: 2px solid #444;
   border-radius: 0;
@@ -64,9 +66,17 @@
 }
 
 .parts-part-tab .unsaved-indicator {
+  position: absolute;
+  right: 0.3rem;
+  top: 50%;
+  transform: translateY(-50%);
   color: #f59e0b;
   font-size: 1rem;
-  margin-left: 2px;
+  visibility: hidden;
+}
+
+.parts-part-tab .unsaved-indicator.visible {
+  visibility: visible;
 }
 
 /* SRC/AMP Page Tabs */
