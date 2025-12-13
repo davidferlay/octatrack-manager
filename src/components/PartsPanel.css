@@ -57,14 +57,6 @@
   font-weight: 600;
 }
 
-.parts-part-tab.modified {
-  border-color: #f59e0b;
-}
-
-.parts-part-tab.modified.active {
-  border-color: #f59e0b;
-}
-
 .parts-part-tab .unsaved-indicator {
   position: absolute;
   right: 0.3rem;
@@ -440,12 +432,6 @@
   .params-column {
     min-width: 100%;
   }
-}
-
-/* Edit Mode Styles */
-.bank-card.edit-mode {
-  border-color: #f59e0b;
-  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
 }
 
 .bank-card-header-left {

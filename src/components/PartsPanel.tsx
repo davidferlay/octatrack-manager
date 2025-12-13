@@ -13,6 +13,7 @@ interface PartsPanelProps {
   partNames: string[];  // Array of 4 part names
   selectedTrack?: number;  // 0-7 for T1-T8, 8-15 for M1-M8, -1 for all audio, -2 for all MIDI, undefined = show all audio
   initialActivePart?: number;  // Optional initial active part index (0-3)
+  isEditMode?: boolean;  // Global edit mode toggle
   sharedPageIndex?: number;  // Optional shared page index for unified tab selection across banks
   onSharedPageChange?: (index: number) => void;  // Optional callback for shared page change
   sharedLfoTab?: LfoTabType;  // Optional shared LFO tab for unified LFO tab selection across banks
@@ -32,6 +33,7 @@ export default function PartsPanel({
   partNames,
   selectedTrack,
   initialActivePart,
+  isEditMode = false,
   sharedPageIndex,
   onSharedPageChange,
   sharedLfoTab,
@@ -292,7 +294,7 @@ export default function PartsPanel({
     });
   }, [projectPath, bankId, partsData, onWriteStatusChange]);
 
-  // Editable parameter value component - always editable (Octatrack behavior)
+  // Parameter value component - editable in edit mode, static in view mode
   const renderParamValue = (
     partId: number,
     section: keyof PartData,
@@ -301,22 +303,26 @@ export default function PartsPanel({
     value: number,
     _formatter?: (val: number) => string  // Unused now, kept for API compatibility
   ) => {
-    // Always show editable input - changes are auto-saved to parts.unsaved
-    return (
-      <input
-        type="number"
-        className="param-value param-value-editable"
-        value={value}
-        onChange={(e) => {
-          const newValue = parseInt(e.target.value, 10);
-          if (!isNaN(newValue)) {
-            updatePartParam(partId, section, trackId, field, newValue);
-          }
-        }}
-        min={0}
-        max={127}
-      />
-    );
+    if (isEditMode) {
+      // Edit mode: show editable input - changes are auto-saved to parts.unsaved
+      return (
+        <input
+          type="number"
+          className="param-value param-value-editable"
+          value={value}
+          onChange={(e) => {
+            const newValue = parseInt(e.target.value, 10);
+            if (!isNaN(newValue)) {
+              updatePartParam(partId, section, trackId, field, newValue);
+            }
+          }}
+          min={0}
+          max={127}
+        />
+      );
+    }
+    // View mode: show static value
+    return <span className="param-value">{value}</span>;
   };
 
   const formatParamValue = (value: number | null): string => {
@@ -2166,41 +2172,43 @@ export default function PartsPanel({
         <div className="bank-card-header-left">
           <h3>{bankName} - Parts</h3>
         </div>
-        <div className="parts-edit-controls">
-          {/* Reload: restore active part from parts.saved (requires valid saved state AND unsaved changes) */}
-          <button
-            className="cancel-button"
-            onClick={() => reloadPart(activePartIndex)}
-            disabled={isReloading || isCommitting || !modifiedPartIds.has(activePartIndex) || partsSavedState[activePartIndex] !== 1}
-            title={
-              partsSavedState[activePartIndex] !== 1
-                ? 'No saved backup available for this part'
-                : modifiedPartIds.has(activePartIndex)
-                  ? `Reload part ${partNames[activePartIndex]} from saved state`
-                  : 'No changes to reload'
-            }
-          >
-            Reload
-          </button>
-          {/* Save: commit active part from parts.unsaved to parts.saved */}
-          <button
-            className="save-button"
-            onClick={() => commitPart(activePartIndex)}
-            disabled={isCommitting || isReloading || !modifiedPartIds.has(activePartIndex)}
-            title={modifiedPartIds.has(activePartIndex) ? `Save ${partNames[activePartIndex]}` : 'No changes to save'}
-          >
-            {isCommitting ? 'Saving...' : 'Save'}
-          </button>
-          {/* Save All: commit all modified parts */}
-          <button
-            className="save-button"
-            onClick={commitAllParts}
-            disabled={isCommitting || isReloading || modifiedPartIds.size === 0}
-            title={modifiedPartIds.size > 0 ? `Save all ${modifiedPartIds.size} modified parts` : 'No changes to save'}
-          >
-            Save All
-          </button>
-        </div>
+        {isEditMode && (
+          <div className="parts-edit-controls">
+            {/* Reload: restore active part from parts.saved (requires valid saved state AND unsaved changes) */}
+            <button
+              className="cancel-button"
+              onClick={() => reloadPart(activePartIndex)}
+              disabled={isReloading || isCommitting || !modifiedPartIds.has(activePartIndex) || partsSavedState[activePartIndex] !== 1}
+              title={
+                partsSavedState[activePartIndex] !== 1
+                  ? 'No saved backup available for this part'
+                  : modifiedPartIds.has(activePartIndex)
+                    ? `Reload part ${partNames[activePartIndex]} from saved state`
+                    : 'No changes to reload'
+              }
+            >
+              Reload
+            </button>
+            {/* Save: commit active part from parts.unsaved to parts.saved */}
+            <button
+              className="save-button"
+              onClick={() => commitPart(activePartIndex)}
+              disabled={isCommitting || isReloading || !modifiedPartIds.has(activePartIndex)}
+              title={modifiedPartIds.has(activePartIndex) ? `Save ${partNames[activePartIndex]}` : 'No changes to save'}
+            >
+              {isCommitting ? 'Saving...' : 'Save'}
+            </button>
+            {/* Save All: commit all modified parts */}
+            <button
+              className="save-button"
+              onClick={commitAllParts}
+              disabled={isCommitting || isReloading || modifiedPartIds.size === 0}
+              title={modifiedPartIds.size > 0 ? `Save all ${modifiedPartIds.size} modified parts` : 'No changes to save'}
+            >
+              Save All
+            </button>
+          </div>
+        )}
         <div className="parts-part-tabs">
           {partNames.map((partName, index) => (
             <button
