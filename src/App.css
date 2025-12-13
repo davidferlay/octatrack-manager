@@ -666,6 +666,40 @@ h1 {
   transition: opacity 1.2s ease-out;
 }
 
+/* View/Edit mode toggle */
+.mode-toggle {
+  display: flex;
+  background: #2a2a2a;
+  border-radius: 6px;
+  padding: 2px;
+  border: 1px solid #444;
+}
+
+.mode-toggle-btn {
+  padding: 4px 12px;
+  background: transparent;
+  border: none;
+  color: #888;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.mode-toggle-btn:hover {
+  color: #ccc;
+}
+
+.mode-toggle-btn.active {
+  background: #3a7bc8;
+  color: #fff;
+}
+
+.mode-toggle-btn.active:last-child {
+  background: #f59e0b;
+}
+
 /* Header tabs for Project Details page */
 .header-tabs {
   display: flex;

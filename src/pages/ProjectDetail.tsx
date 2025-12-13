@@ -124,6 +124,7 @@ export function ProjectDetail() {
   const [isSpinning, setIsSpinning] = useState<boolean>(false); // For refresh button animation
   const [partsWriteStatus, setPartsWriteStatus] = useState<WriteStatus>(IDLE_STATUS); // Parts write status
   const [lastStatusMessage, setLastStatusMessage] = useState<string>(''); // Keep last message for fade-out
+  const [isEditMode, setIsEditMode] = useState<boolean>(false); // Global edit mode toggle
 
   // Wrapper to capture last message before going idle (for fade-out effect)
   const handleWriteStatusChange = useCallback((status: WriteStatus) => {
@@ -331,6 +332,21 @@ export function ProjectDetail() {
             ← Back
           </button>
           <h1 title={projectPath || ''}>{projectName}</h1>
+          {/* View/Edit mode toggle */}
+          <div className="mode-toggle">
+            <button
+              className={`mode-toggle-btn ${!isEditMode ? 'active' : ''}`}
+              onClick={() => setIsEditMode(false)}
+            >
+              View
+            </button>
+            <button
+              className={`mode-toggle-btn ${isEditMode ? 'active' : ''}`}
+              onClick={() => setIsEditMode(true)}
+            >
+              Edit
+            </button>
+          </div>
           {/* Parts write status indicator */}
           <span className={`save-status-indicator ${partsWriteStatus.state}`}>
             {partsWriteStatus.state === 'writing' && (partsWriteStatus.message || 'Saving...')}
@@ -731,6 +747,7 @@ export function ProjectDetail() {
                           partNames={partNames}
                           selectedTrack={trackForParts}
                           initialActivePart={initialPart}
+                          isEditMode={isEditMode}
                           sharedPageIndex={selectedBankIndex === ALL_BANKS ? sharedPartsPageIndex : undefined}
                           onSharedPageChange={selectedBankIndex === ALL_BANKS ? setSharedPartsPageIndex : undefined}
                           sharedLfoTab={selectedBankIndex === ALL_BANKS ? sharedPartsLfoTab : undefined}
