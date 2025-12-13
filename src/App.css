@@ -2500,13 +2500,13 @@ h1 {
 }
 
 .loading-section p {
-  font-size: 1.2rem;
-  color: var(--elektron-text-secondary);
+  font-size: 1.5rem;
+  color: var(--elektron-text-primary);
   margin: 0;
 }
 
 .loading-section .loading-status {
-  font-size: 0.9rem;
-  color: var(--elektron-text-muted, #888);
+  font-size: 1.1rem;
+  color: var(--elektron-text-secondary);
   font-style: italic;
 }
