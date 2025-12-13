@@ -12,6 +12,7 @@ interface PartsPanelProps {
   bankName: string;
   partNames: string[];  // Array of 4 part names
   selectedTrack?: number;  // 0-7 for T1-T8, 8-15 for M1-M8, -1 for all audio, -2 for all MIDI, undefined = show all audio
+  initialActivePart?: number;  // Optional initial active part index (0-3)
   sharedPageIndex?: number;  // Optional shared page index for unified tab selection across banks
   onSharedPageChange?: (index: number) => void;  // Optional callback for shared page change
   sharedLfoTab?: LfoTabType;  // Optional shared LFO tab for unified LFO tab selection across banks
@@ -30,6 +31,7 @@ export default function PartsPanel({
   bankName,
   partNames,
   selectedTrack,
+  initialActivePart,
   sharedPageIndex,
   onSharedPageChange,
   sharedLfoTab,
@@ -42,7 +44,7 @@ export default function PartsPanel({
   const [error, setError] = useState<string | null>(null);
   // Unified page index: -1=ALL, 0=SRC/NOTE, 1=AMP/ARP, 2=LFO, 3=FX1/CTRL1, 4=FX2/CTRL2
   const [localPageIndex, setLocalPageIndex] = useState<number>(-1);
-  const [activePartIndex, setActivePartIndex] = useState<number>(0);
+  const [activePartIndex, setActivePartIndex] = useState<number>(initialActivePart ?? 0);
   const [localLfoTab, setLocalLfoTab] = useState<LfoTabType>('LFO1');
 
   // Editing state - always editable (like Octatrack behavior)

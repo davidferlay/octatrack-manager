@@ -719,6 +719,9 @@ export function ProjectDetail() {
                       // Get part names from bank
                       const partNames = bank.parts.map(part => part.name);
 
+                      // Pass initial active part only for the current bank from project state
+                      const initialPart = bankIndex === metadata?.current_state.bank ? metadata?.current_state.part : undefined;
+
                       return (
                         <PartsPanel
                           key={`bank-parts-${bankIndex}`}
@@ -727,6 +730,7 @@ export function ProjectDetail() {
                           bankName={formatBankName(bank.name, bankIndex)}
                           partNames={partNames}
                           selectedTrack={trackForParts}
+                          initialActivePart={initialPart}
                           sharedPageIndex={selectedBankIndex === ALL_BANKS ? sharedPartsPageIndex : undefined}
                           onSharedPageChange={selectedBankIndex === ALL_BANKS ? setSharedPartsPageIndex : undefined}
                           sharedLfoTab={selectedBankIndex === ALL_BANKS ? sharedPartsLfoTab : undefined}
