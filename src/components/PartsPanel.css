@@ -653,36 +653,38 @@
   cursor: not-allowed;
 }
 
-/* All tab 2-row layout */
-.parts-all-row {
-  display: flex;
+/* All tab 2-row layout - use grid for perfect column alignment */
+.parts-track.parts-track-wide {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
   gap: 0;
-  margin-bottom: 0;
-  width: 100%;
 }
 
-.parts-all-row:last-child {
-  margin-bottom: 0;
+.parts-track.parts-track-wide > .parts-track-header {
+  grid-column: 1 / -1;
+}
+
+.parts-all-row {
+  display: contents;
 }
 
 .parts-all-section {
   background: #252525;
   border: 1px solid #333;
   border-right: none;
+  border-bottom: none;
   border-radius: 0;
   padding: 12px;
-  flex: 1;
-  min-width: 180px;
   display: flex;
   flex-direction: column;
 }
 
-.parts-all-section:last-child {
+.parts-all-section:nth-child(4n) {
   border-right: 1px solid #333;
 }
 
-.parts-all-row:not(:last-child) .parts-all-section {
-  border-bottom: none;
+.parts-all-row:last-child .parts-all-section {
+  border-bottom: 1px solid #333;
 }
 
 .parts-all-section > .params-label {
