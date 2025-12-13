@@ -132,7 +132,7 @@ export default function PartsPanel({
       });
       setPartsEditedBitmask(prev => prev & ~(1 << partIndex));
 
-      onWriteStatusChange?.(writeStatus.success(`${partName} saved`));
+      onWriteStatusChange?.(writeStatus.success(`Part ${partName} saved`));
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
 
       // Notify parent to invalidate cache
@@ -279,7 +279,8 @@ export default function PartsPanel({
       partsData: [updatedPart]
     }).then(() => {
       console.log('[PartsPanel] Auto-saved part', partId, 'to parts.unsaved');
-      onWriteStatusChange?.(writeStatus.success());
+      const partName = partNames[partId] || `Part ${partId + 1}`;
+      onWriteStatusChange?.(writeStatus.success(`Part ${partName} saved as *`));
       // Reset to idle after a short delay
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
     }).catch(err => {
