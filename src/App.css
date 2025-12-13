@@ -628,10 +628,10 @@ h1 {
 
 /* Write status indicator in project header */
 .save-status-indicator {
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.03em;
-  padding: 3px 10px;
+  padding: 4px 12px;
   border-radius: 10px;
   opacity: 0;
   transition: opacity 1.2s ease-out;
