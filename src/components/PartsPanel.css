@@ -458,6 +458,7 @@
 .parts-track.parts-track-wide {
   width: 100%;
   flex-shrink: 1;
+  overflow: hidden;
 }
 
 .parts-track.parts-track-wide .parts-all-row {
@@ -781,6 +782,34 @@
   line-height: 24px;
   padding: 0 6px;
   flex-shrink: 0;
+}
+
+/* Vertical layout for param-items in All view (labels above values) */
+.parts-track-wide .params-subsection .param-item {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+}
+
+.parts-track-wide .params-subsection .param-label {
+  width: auto;
+  text-align: center;
+  font-size: 12px;
+  color: var(--elektron-text-secondary);
+}
+
+.parts-track-wide .params-subsection .param-value {
+  width: 48px;
+  height: 26px;
+  line-height: 26px;
+  font-size: 13px;
+  padding: 0 5px;
+}
+
+.parts-track-wide .params-subsection .params-grid {
+  grid-template-columns: repeat(auto-fit, minmax(50px, 1fr));
+  gap: 4px 6px;
 }
 
 /* Responsive adjustments for All tab */
