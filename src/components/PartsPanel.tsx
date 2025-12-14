@@ -4,6 +4,7 @@ import { PartData, PartsDataResponse } from '../context/ProjectsContext';
 import { TrackBadge } from './TrackBadge';
 import { ALL_MIDI_TRACKS } from './TrackSelector';
 import { WriteStatus, writeStatus } from '../types/writeStatus';
+import { RotaryKnob } from './RotaryKnob';
 import './PartsPanel.css';
 
 interface PartsPanelProps {
@@ -390,6 +391,121 @@ export default function PartsPanel({
         min={0}
         max={127}
       />
+    );
+  };
+
+  // Update a param locally without saving to backend (for knob dragging)
+  const updatePartParamLocal = useCallback(<T extends keyof PartData>(
+    partId: number,
+    section: T,
+    trackId: number,
+    field: string,
+    value: number
+  ) => {
+    setPartsData(prev => {
+      const partIndex = prev.findIndex(p => p.part_id === partId);
+      if (partIndex === -1) return prev;
+
+      const updatedPart = JSON.parse(JSON.stringify(prev[partIndex])) as PartData;
+      const sectionArray = updatedPart[section] as unknown[];
+      const track = sectionArray[trackId] as Record<string, unknown> | undefined;
+      if (!track) return prev;
+
+      // Support nested field paths (e.g., "machine_params.ptch")
+      if (field.includes('.')) {
+        const [parent, child] = field.split('.');
+        const parentObj = track[parent] as Record<string, unknown> | undefined;
+        if (parentObj) {
+          parentObj[child] = value;
+        }
+      } else {
+        track[field] = value;
+      }
+
+      const newData = [...prev];
+      newData[partIndex] = updatedPart;
+      return newData;
+    });
+
+    // Track which part was modified (shows * indicator)
+    setModifiedPartIds(prev => new Set([...prev, partId]));
+  }, []);
+
+  // Save part to backend (called on mouse release from knob)
+  const savePart = useCallback((partId: number) => {
+    const partIndex = partsData.findIndex(p => p.part_id === partId);
+    if (partIndex === -1) {
+      console.error('[PartsPanel] Part not found:', partId);
+      return;
+    }
+
+    const partToSave = partsData[partIndex];
+    onWriteStatusChange?.(writeStatus.writing());
+    invoke('save_parts', {
+      path: projectPath,
+      bankId: bankId,
+      partsData: [partToSave]
+    }).then(() => {
+      const partName = partNames[partId] || `Part ${partId + 1}`;
+      onWriteStatusChange?.(writeStatus.success(`Part ${partName} saved as *`));
+      setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
+    }).catch(err => {
+      console.error('Failed to save part:', err);
+      onWriteStatusChange?.(writeStatus.error('Save failed'));
+      setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
+    });
+  }, [projectPath, bankId, partsData, partNames, onWriteStatusChange]);
+
+  // Render param with rotary knob for All view
+  const renderParamWithKnob = (
+    partId: number,
+    section: keyof PartData,
+    trackId: number,
+    field: string,
+    value: number | null,
+    label: string,
+    key?: string | number
+  ) => {
+    const displayValue = value ?? 0;
+
+    return (
+      <div className="param-item" key={key}>
+        <span className="param-label">{label}</span>
+        <RotaryKnob
+          value={displayValue}
+          min={0}
+          max={127}
+          size={38}
+          onChange={isEditMode ? (newValue) => {
+            updatePartParamLocal(partId, section, trackId, field, newValue);
+          } : undefined}
+          onChangeEnd={isEditMode ? () => {
+            savePart(partId);
+          } : undefined}
+          disabled={!isEditMode}
+        />
+        <input
+          type="number"
+          className={`param-value ${isEditMode ? 'editable' : ''}`}
+          value={displayValue}
+          onChange={(e) => {
+            if (!isEditMode) return;
+            const newValue = parseInt(e.target.value, 10);
+            if (!isNaN(newValue)) {
+              updatePartParam(partId, section, trackId, field, newValue);
+            }
+          }}
+          onBlur={() => {
+            if (isEditMode) {
+              savePart(partId);
+            }
+          }}
+          readOnly={!isEditMode}
+          tabIndex={isEditMode ? 0 : -1}
+          min={0}
+          max={127}
+        />
+      </div>
     );
   };
 
@@ -1622,29 +1738,29 @@ export default function PartsPanel({
                       <div className="params-grid">
                         {machineType === 'Thru' ? (
                           <>
-                            <div className="param-item"><span className="param-label">INAB</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.in_ab', machine.machine_params.in_ab)}</div>
-                            <div className="param-item"><span className="param-label">VOL</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.vol_ab', machine.machine_params.vol_ab)}</div>
-                            <div className="param-item"><span className="param-label">INCD</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.in_cd', machine.machine_params.in_cd)}</div>
-                            <div className="param-item"><span className="param-label">VOL</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.vol_cd', machine.machine_params.vol_cd)}</div>
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.in_ab', machine.machine_params.in_ab, 'INAB')}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.vol_ab', machine.machine_params.vol_ab, 'VOL')}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.in_cd', machine.machine_params.in_cd, 'INCD')}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.vol_cd', machine.machine_params.vol_cd, 'VOL')}
                           </>
                         ) : machineType === 'Neighbor' ? (
                           <div className="params-empty-message">-</div>
                         ) : machineType === 'Pickup' ? (
                           <>
-                            <div className="param-item"><span className="param-label">PITCH</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.ptch', machine.machine_params.ptch)}</div>
-                            <div className="param-item"><span className="param-label">DIR</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.dir', machine.machine_params.dir)}</div>
-                            <div className="param-item"><span className="param-label">LEN</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.len', machine.machine_params.len)}</div>
-                            <div className="param-item"><span className="param-label">GAIN</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.gain', machine.machine_params.gain)}</div>
-                            <div className="param-item"><span className="param-label">OP</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.op', machine.machine_params.op)}</div>
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.ptch', machine.machine_params.ptch, 'PITCH')}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.dir', machine.machine_params.dir, 'DIR')}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.len', machine.machine_params.len, 'LEN')}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.gain', machine.machine_params.gain, 'GAIN')}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.op', machine.machine_params.op, 'OP')}
                           </>
                         ) : (
                           <>
-                            <div className="param-item"><span className="param-label">PTCH</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.ptch', machine.machine_params.ptch)}</div>
-                            <div className="param-item"><span className="param-label">STRT</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.strt', machine.machine_params.strt)}</div>
-                            <div className="param-item"><span className="param-label">LEN</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.len', machine.machine_params.len)}</div>
-                            <div className="param-item"><span className="param-label">RATE</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.rate', machine.machine_params.rate)}</div>
-                            <div className="param-item"><span className="param-label">RTRG</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.rtrg', machine.machine_params.rtrg)}</div>
-                            <div className="param-item"><span className="param-label">RTIM</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_params.rtim', machine.machine_params.rtim)}</div>
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.ptch', machine.machine_params.ptch, 'PTCH')}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.strt', machine.machine_params.strt, 'STRT')}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.len', machine.machine_params.len, 'LEN')}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.rate', machine.machine_params.rate, 'RATE')}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.rtrg', machine.machine_params.rtrg, 'RTRG')}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.rtim', machine.machine_params.rtim, 'RTIM')}
                           </>
                         )}
                       </div>
@@ -1656,17 +1772,17 @@ export default function PartsPanel({
                           <div className="params-empty-message">-</div>
                         ) : machineType === 'Pickup' ? (
                           <>
-                            <div className="param-item"><span className="param-label">TSTR</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_setup.tstr', machine.machine_setup.tstr)}</div>
-                            <div className="param-item"><span className="param-label">TSNS</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_setup.tsns', machine.machine_setup.tsns)}</div>
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.tstr', machine.machine_setup.tstr, 'TSTR')}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.tsns', machine.machine_setup.tsns, 'TSNS')}
                           </>
                         ) : (
                           <>
-                            <div className="param-item"><span className="param-label">LOOP</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_setup.xloop', machine.machine_setup.xloop)}</div>
-                            <div className="param-item"><span className="param-label">SLIC</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_setup.slic', machine.machine_setup.slic)}</div>
-                            <div className="param-item"><span className="param-label">LEN</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_setup.len', machine.machine_setup.len)}</div>
-                            <div className="param-item"><span className="param-label">RATE</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_setup.rate', machine.machine_setup.rate)}</div>
-                            <div className="param-item"><span className="param-label">TSTR</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_setup.tstr', machine.machine_setup.tstr)}</div>
-                            <div className="param-item"><span className="param-label">TSNS</span>{renderParamValue(activePart.part_id, 'machines', trackIdx, 'machine_setup.tsns', machine.machine_setup.tsns)}</div>
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.xloop', machine.machine_setup.xloop, 'LOOP')}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.slic', machine.machine_setup.slic, 'SLIC')}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.len', machine.machine_setup.len, 'LEN')}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.rate', machine.machine_setup.rate, 'RATE')}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.tstr', machine.machine_setup.tstr, 'TSTR')}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.tsns', machine.machine_setup.tsns, 'TSNS')}
                           </>
                         )}
                       </div>
@@ -1681,22 +1797,22 @@ export default function PartsPanel({
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
                       <div className="params-grid">
-                        <div className="param-item"><span className="param-label">ATK</span>{renderParamValue(activePart.part_id, 'amps', trackIdx, 'atk', amp.atk)}</div>
-                        <div className="param-item"><span className="param-label">HOLD</span>{renderParamValue(activePart.part_id, 'amps', trackIdx, 'hold', amp.hold)}</div>
-                        <div className="param-item"><span className="param-label">REL</span>{renderParamValue(activePart.part_id, 'amps', trackIdx, 'rel', amp.rel)}</div>
-                        <div className="param-item"><span className="param-label">VOL</span>{renderParamValue(activePart.part_id, 'amps', trackIdx, 'vol', amp.vol)}</div>
-                        <div className="param-item"><span className="param-label">BAL</span>{renderParamValue(activePart.part_id, 'amps', trackIdx, 'bal', amp.bal)}</div>
-                        <div className="param-item"><span className="param-label">F</span>{renderParamValue(activePart.part_id, 'amps', trackIdx, 'f', amp.f)}</div>
+                        {renderParamWithKnob(activePart.part_id, 'amps', trackIdx, 'atk', amp.atk, 'ATK')}
+                        {renderParamWithKnob(activePart.part_id, 'amps', trackIdx, 'hold', amp.hold, 'HOLD')}
+                        {renderParamWithKnob(activePart.part_id, 'amps', trackIdx, 'rel', amp.rel, 'REL')}
+                        {renderParamWithKnob(activePart.part_id, 'amps', trackIdx, 'vol', amp.vol, 'VOL')}
+                        {renderParamWithKnob(activePart.part_id, 'amps', trackIdx, 'bal', amp.bal, 'BAL')}
+                        {renderParamWithKnob(activePart.part_id, 'amps', trackIdx, 'f', amp.f, 'F')}
                       </div>
                     </div>
                     <div className="params-subsection">
                       <div className="params-column-label">SETUP</div>
                       <div className="params-grid">
-                        <div className="param-item"><span className="param-label">AMP</span>{renderParamValue(activePart.part_id, 'amps', trackIdx, 'amp_setup_amp', amp.amp_setup_amp)}</div>
-                        <div className="param-item"><span className="param-label">SYNC</span>{renderParamValue(activePart.part_id, 'amps', trackIdx, 'amp_setup_sync', amp.amp_setup_sync)}</div>
-                        <div className="param-item"><span className="param-label">ATCK</span>{renderParamValue(activePart.part_id, 'amps', trackIdx, 'amp_setup_atck', amp.amp_setup_atck)}</div>
-                        <div className="param-item"><span className="param-label">FX1</span>{renderParamValue(activePart.part_id, 'amps', trackIdx, 'amp_setup_fx1', amp.amp_setup_fx1)}</div>
-                        <div className="param-item"><span className="param-label">FX2</span>{renderParamValue(activePart.part_id, 'amps', trackIdx, 'amp_setup_fx2', amp.amp_setup_fx2)}</div>
+                        {renderParamWithKnob(activePart.part_id, 'amps', trackIdx, 'amp_setup_amp', amp.amp_setup_amp, 'AMP')}
+                        {renderParamWithKnob(activePart.part_id, 'amps', trackIdx, 'amp_setup_sync', amp.amp_setup_sync, 'SYNC')}
+                        {renderParamWithKnob(activePart.part_id, 'amps', trackIdx, 'amp_setup_atck', amp.amp_setup_atck, 'ATCK')}
+                        {renderParamWithKnob(activePart.part_id, 'amps', trackIdx, 'amp_setup_fx1', amp.amp_setup_fx1, 'FX1')}
+                        {renderParamWithKnob(activePart.part_id, 'amps', trackIdx, 'amp_setup_fx2', amp.amp_setup_fx2, 'FX2')}
                       </div>
                     </div>
                   </div>
@@ -1709,12 +1825,12 @@ export default function PartsPanel({
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
                       <div className="params-grid">
-                        <div className="param-item"><span className="param-label">PMTR</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo1_pmtr', lfo.lfo1_pmtr)}</div>
-                        <div className="param-item"><span className="param-label">WAVE</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo1_wave', lfo.lfo1_wave)}</div>
-                        <div className="param-item"><span className="param-label">MULT</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo1_mult', lfo.lfo1_mult)}</div>
-                        <div className="param-item"><span className="param-label">TRIG</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo1_trig', lfo.lfo1_trig)}</div>
-                        <div className="param-item"><span className="param-label">SPD</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'spd1', lfo.spd1)}</div>
-                        <div className="param-item"><span className="param-label">DEP</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'dep1', lfo.dep1)}</div>
+                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo1_pmtr', lfo.lfo1_pmtr, 'PMTR')}
+                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo1_wave', lfo.lfo1_wave, 'WAVE')}
+                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo1_mult', lfo.lfo1_mult, 'MULT')}
+                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo1_trig', lfo.lfo1_trig, 'TRIG')}
+                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'spd1', lfo.spd1, 'SPD')}
+                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'dep1', lfo.dep1, 'DEP')}
                       </div>
                     </div>
                     <div className="params-subsection">
@@ -1733,12 +1849,12 @@ export default function PartsPanel({
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
                       <div className="params-grid">
-                        <div className="param-item"><span className="param-label">PMTR</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo2_pmtr', lfo.lfo2_pmtr)}</div>
-                        <div className="param-item"><span className="param-label">WAVE</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo2_wave', lfo.lfo2_wave)}</div>
-                        <div className="param-item"><span className="param-label">MULT</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo2_mult', lfo.lfo2_mult)}</div>
-                        <div className="param-item"><span className="param-label">TRIG</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo2_trig', lfo.lfo2_trig)}</div>
-                        <div className="param-item"><span className="param-label">SPD</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'spd2', lfo.spd2)}</div>
-                        <div className="param-item"><span className="param-label">DEP</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'dep2', lfo.dep2)}</div>
+                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo2_pmtr', lfo.lfo2_pmtr, 'PMTR')}
+                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo2_wave', lfo.lfo2_wave, 'WAVE')}
+                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo2_mult', lfo.lfo2_mult, 'MULT')}
+                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo2_trig', lfo.lfo2_trig, 'TRIG')}
+                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'spd2', lfo.spd2, 'SPD')}
+                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'dep2', lfo.dep2, 'DEP')}
                       </div>
                     </div>
                     <div className="params-subsection">
@@ -1760,12 +1876,12 @@ export default function PartsPanel({
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
                       <div className="params-grid">
-                        <div className="param-item"><span className="param-label">PMTR</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo3_pmtr', lfo.lfo3_pmtr)}</div>
-                        <div className="param-item"><span className="param-label">WAVE</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo3_wave', lfo.lfo3_wave)}</div>
-                        <div className="param-item"><span className="param-label">MULT</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo3_mult', lfo.lfo3_mult)}</div>
-                        <div className="param-item"><span className="param-label">TRIG</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'lfo3_trig', lfo.lfo3_trig)}</div>
-                        <div className="param-item"><span className="param-label">SPD</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'spd3', lfo.spd3)}</div>
-                        <div className="param-item"><span className="param-label">DEP</span>{renderParamValue(activePart.part_id, 'lfos', trackIdx, 'dep3', lfo.dep3)}</div>
+                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo3_pmtr', lfo.lfo3_pmtr, 'PMTR')}
+                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo3_wave', lfo.lfo3_wave, 'WAVE')}
+                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo3_mult', lfo.lfo3_mult, 'MULT')}
+                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo3_trig', lfo.lfo3_trig, 'TRIG')}
+                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'spd3', lfo.spd3, 'SPD')}
+                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'dep3', lfo.dep3, 'DEP')}
                       </div>
                     </div>
                     <div className="params-subsection">
@@ -1798,9 +1914,7 @@ export default function PartsPanel({
                           fx1MainLabels.map((label, index) => {
                             if (!label) return null;
                             const fieldName = `fx1_param${index + 1}`;
-                            return (
-                              <div key={index} className="param-item"><span className="param-label">{label}</span>{renderParamValue(activePart.part_id, 'fxs', trackIdx, fieldName, fx1MainValues[index])}</div>
-                            );
+                            return renderParamWithKnob(activePart.part_id, 'fxs', trackIdx, fieldName, fx1MainValues[index], label, index);
                           })
                         ) : (
                           <div className="params-empty-message">-</div>
@@ -1814,9 +1928,7 @@ export default function PartsPanel({
                           fx1SetupLabels.map((label, index) => {
                             if (!label) return null;
                             const fieldName = `fx1_setup${index + 1}`;
-                            return (
-                              <div key={index} className="param-item"><span className="param-label">{label}</span>{renderParamValue(activePart.part_id, 'fxs', trackIdx, fieldName, fx1SetupValues[index])}</div>
-                            );
+                            return renderParamWithKnob(activePart.part_id, 'fxs', trackIdx, fieldName, fx1SetupValues[index], label, index);
                           })
                         ) : (
                           <div className="params-empty-message">-</div>
@@ -1837,9 +1949,7 @@ export default function PartsPanel({
                           fx2MainLabels.map((label, index) => {
                             if (!label) return null;
                             const fieldName = `fx2_param${index + 1}`;
-                            return (
-                              <div key={index} className="param-item"><span className="param-label">{label}</span>{renderParamValue(activePart.part_id, 'fxs', trackIdx, fieldName, fx2MainValues[index])}</div>
-                            );
+                            return renderParamWithKnob(activePart.part_id, 'fxs', trackIdx, fieldName, fx2MainValues[index], label, index);
                           })
                         ) : (
                           <div className="params-empty-message">-</div>
@@ -1853,9 +1963,7 @@ export default function PartsPanel({
                           fx2SetupLabels.map((label, index) => {
                             if (!label) return null;
                             const fieldName = `fx2_setup${index + 1}`;
-                            return (
-                              <div key={index} className="param-item"><span className="param-label">{label}</span>{renderParamValue(activePart.part_id, 'fxs', trackIdx, fieldName, fx2SetupValues[index])}</div>
-                            );
+                            return renderParamWithKnob(activePart.part_id, 'fxs', trackIdx, fieldName, fx2SetupValues[index], label, index);
                           })
                         ) : (
                           <div className="params-empty-message">-</div>
