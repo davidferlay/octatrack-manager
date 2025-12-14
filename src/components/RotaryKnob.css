@@ -3,88 +3,44 @@
   user-select: none;
   -webkit-user-select: none;
   outline: none;
-  border-radius: 50%;
-  transition: box-shadow 0.15s ease;
+  overflow: visible;
 }
 
 .rotary-knob.editable {
-  cursor: ns-resize;
+  cursor: default;
 }
 
 .rotary-knob.dragging {
-  cursor: ns-resize;
+  cursor: default;
 }
 
 .rotary-knob.disabled {
   cursor: default;
 }
 
-/* Background arc track */
+/* Background arc track (unfilled portion) */
 .knob-track {
-  stroke: #aaa;
+  stroke: var(--elektron-text-primary);
   transition: stroke 0.1s ease;
 }
 
-/* Clock hand indicator */
+/* Value arc (filled portion - blue) */
+.knob-value {
+  stroke: #5dade2;
+  transition: stroke 0.1s ease;
+}
+
+/* Hand indicator */
 .knob-hand {
-  stroke: #fff;
+  stroke: var(--elektron-text-primary);
   transition: stroke 0.1s ease;
 }
 
-/* Center dot */
-.knob-center {
-  fill: #fff;
-  transition: fill 0.1s ease;
+
+/* Corner brackets for selection */
+.knob-corners path {
+  fill: none;
+  stroke: var(--elektron-text-secondary);
+  stroke-width: 1;
 }
 
-/* Hover state (editable only) */
-.rotary-knob.editable:hover .knob-track {
-  stroke: #bbb;
-}
-
-.rotary-knob.editable:hover .knob-hand {
-  stroke: #fff;
-}
-
-.rotary-knob.editable:hover .knob-center {
-  fill: #fff;
-}
-
-/* Focus state - visual ring for accessibility */
-.rotary-knob.focused {
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
-}
-
-.rotary-knob.focused .knob-track {
-  stroke: #ccc;
-}
-
-.rotary-knob.focused .knob-hand {
-  stroke: #fff;
-}
-
-.rotary-knob.focused .knob-center {
-  fill: #fff;
-}
-
-/* Focus + Editable - show orange ring to indicate value can be changed */
-.rotary-knob.focused.editable {
-  box-shadow: 0 0 0 2px var(--elektron-orange, #FF6600);
-}
-
-.rotary-knob.focused.editable .knob-track {
-  stroke: var(--elektron-orange, #FF6600);
-}
-
-/* Dragging state */
-.rotary-knob.dragging .knob-track {
-  stroke: var(--elektron-orange, #FF6600);
-}
-
-.rotary-knob.dragging .knob-hand {
-  stroke: var(--elektron-orange, #FF6600);
-}
-
-.rotary-knob.dragging .knob-center {
-  fill: var(--elektron-orange, #FF6600);
-}

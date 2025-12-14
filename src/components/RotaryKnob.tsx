@@ -124,29 +124,77 @@ export function RotaryKnob({
     }
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
-  const center = size / 2;
-  const radius = (size - 4) / 2;
-  const strokeWidth = 2;
+  // Corner bracket dimensions
+  const cornerPadding = 4; // Space outside the knob for corners
+  const cornerLength = 6;
+  const totalSize = size + cornerPadding * 2;
 
-  // Arc calculations (270 degrees, from 135° to 405°)
-  const startAngleDeg = 135;
-  const totalArc = 270;
+  // Knob center is offset by cornerPadding
+  const center = cornerPadding + size / 2;
+  const radius = (size - 4) / 2;
+  const trackStrokeWidth = 2;
+  const handStrokeWidth = 2;
+
+  // Arc calculations (290 degrees, from 125° to 415°)
+  const startAngleDeg = 125;
+  const totalArc = 290;
 
   // Hand indicator angle
   const handAngleDeg = startAngleDeg + (normalizedValue * totalArc);
   const toRad = (deg: number) => (deg * Math.PI) / 180;
 
-  // Background arc path
+  // Arc start and end points
   const bgStartX = center + radius * Math.cos(toRad(startAngleDeg));
   const bgStartY = center + radius * Math.sin(toRad(startAngleDeg));
   const bgEndX = center + radius * Math.cos(toRad(startAngleDeg + totalArc));
   const bgEndY = center + radius * Math.sin(toRad(startAngleDeg + totalArc));
-  const bgPath = `M ${bgStartX} ${bgStartY} A ${radius} ${radius} 0 1 1 ${bgEndX} ${bgEndY}`;
 
-  // Hand indicator end point
-  const handLength = radius - 3;
+  // Value arc path (from start to current value position)
+  const valueEndX = center + radius * Math.cos(toRad(handAngleDeg));
+  const valueEndY = center + radius * Math.sin(toRad(handAngleDeg));
+  const valueArcDeg = normalizedValue * totalArc;
+  const largeArcFlag = valueArcDeg > 180 ? 1 : 0;
+  const valuePath = normalizedValue > 0.001
+    ? `M ${bgStartX} ${bgStartY} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${valueEndX} ${valueEndY}`
+    : '';
+
+  // Hand indicator - single line from center to circle edge
+  const handLength = radius; // Stops at the circle edge (inside the gap)
   const handEndX = center + handLength * Math.cos(toRad(handAngleDeg));
   const handEndY = center + handLength * Math.sin(toRad(handAngleDeg));
+
+  // Gap in the circle just after the hand position (in the direction of higher values)
+  const gapAngleDeg = 13; // Gap size in degrees
+
+  // Gap starts at the hand position and extends in the positive direction
+  const gapStartAngle = handAngleDeg;
+  const gapEndAngle = handAngleDeg + gapAngleDeg;
+
+  // Clamp gap angles to arc bounds
+  const arcStart = startAngleDeg;
+  const arcEnd = startAngleDeg + totalArc;
+
+  // Calculate the two track segments (avoiding the gap)
+  const track1End = Math.max(arcStart, Math.min(gapStartAngle, arcEnd));
+  const track2Start = Math.max(arcStart, Math.min(gapEndAngle, arcEnd));
+
+  // Track segment 1 path (from arc start to gap start)
+  const track1EndX = center + radius * Math.cos(toRad(track1End));
+  const track1EndY = center + radius * Math.sin(toRad(track1End));
+  const track1ArcDeg = track1End - arcStart;
+  const track1LargeArc = track1ArcDeg > 180 ? 1 : 0;
+  const track1Path = track1ArcDeg > 1
+    ? `M ${bgStartX} ${bgStartY} A ${radius} ${radius} 0 ${track1LargeArc} 1 ${track1EndX} ${track1EndY}`
+    : '';
+
+  // Track segment 2 path (from gap end to arc end)
+  const track2StartX = center + radius * Math.cos(toRad(track2Start));
+  const track2StartY = center + radius * Math.sin(toRad(track2Start));
+  const track2ArcDeg = arcEnd - track2Start;
+  const track2LargeArc = track2ArcDeg > 180 ? 1 : 0;
+  const track2Path = track2ArcDeg > 1
+    ? `M ${track2StartX} ${track2StartY} A ${radius} ${radius} 0 ${track2LargeArc} 1 ${bgEndX} ${bgEndY}`
+    : '';
 
   const isEditable = !disabled && onChange;
 
@@ -154,9 +202,9 @@ export function RotaryKnob({
     <svg
       ref={knobRef}
       className={`rotary-knob ${isDragging ? 'dragging' : ''} ${disabled ? 'disabled' : ''} ${isEditable ? 'editable' : ''} ${isFocused ? 'focused' : ''}`}
-      width={size}
-      height={size}
-      viewBox={`0 0 ${size} ${size}`}
+      width={totalSize}
+      height={totalSize}
+      viewBox={`0 0 ${totalSize} ${totalSize}`}
       onMouseDown={handleMouseDown}
       onKeyDown={handleKeyDown}
       onFocus={() => setIsFocused(true)}
@@ -167,33 +215,64 @@ export function RotaryKnob({
       aria-valuemax={max}
       aria-valuenow={value}
     >
-      {/* Background arc track */}
-      <path
-        className="knob-track"
-        d={bgPath}
-        fill="none"
-        strokeWidth={strokeWidth}
-        strokeLinecap="round"
-      />
+      {/* Selection corner brackets */}
+      {isFocused && isEditable && (
+        <g className="knob-corners">
+          {/* Top-left corner */}
+          <path d={`M 1 ${1 + cornerLength} L 1 1 L ${1 + cornerLength} 1`} />
+          {/* Top-right corner */}
+          <path d={`M ${totalSize - 1 - cornerLength} 1 L ${totalSize - 1} 1 L ${totalSize - 1} ${1 + cornerLength}`} />
+          {/* Bottom-left corner */}
+          <path d={`M 1 ${totalSize - 1 - cornerLength} L 1 ${totalSize - 1} L ${1 + cornerLength} ${totalSize - 1}`} />
+          {/* Bottom-right corner */}
+          <path d={`M ${totalSize - 1 - cornerLength} ${totalSize - 1} L ${totalSize - 1} ${totalSize - 1} L ${totalSize - 1} ${totalSize - 1 - cornerLength}`} />
+        </g>
+      )}
 
-      {/* Clock-style hand indicator */}
+      {/* Background arc track segment 1 (before gap) */}
+      {track1Path && (
+        <path
+          className="knob-track"
+          d={track1Path}
+          fill="none"
+          strokeWidth={trackStrokeWidth}
+          strokeLinecap="round"
+        />
+      )}
+
+      {/* Background arc track segment 2 (after gap) */}
+      {track2Path && (
+        <path
+          className="knob-track"
+          d={track2Path}
+          fill="none"
+          strokeWidth={trackStrokeWidth}
+          strokeLinecap="round"
+        />
+      )}
+
+      {/* Value arc (blue fill) */}
+      {valuePath && (
+        <path
+          className="knob-value"
+          d={valuePath}
+          fill="none"
+          strokeWidth={trackStrokeWidth}
+          strokeLinecap="round"
+        />
+      )}
+
+      {/* Hand indicator - single line from center to beyond circle */}
       <line
         className="knob-hand"
         x1={center}
         y1={center}
         x2={handEndX}
         y2={handEndY}
-        strokeWidth={2}
+        strokeWidth={handStrokeWidth}
         strokeLinecap="round"
       />
 
-      {/* Center dot */}
-      <circle
-        className="knob-center"
-        cx={center}
-        cy={center}
-        r={3}
-      />
     </svg>
   );
 }
