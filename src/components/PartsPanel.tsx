@@ -2051,6 +2051,7 @@ export default function PartsPanel({
                   <div className="params-label">DESIGN</div>
                   <div className="params-vertical-layout">
                     <div className="params-subsection">
+                      <div className="params-column-label">MAIN</div>
                       {renderLfoEnvelope(lfo.custom_lfo_design, activePart.part_id, 'lfos', trackIdx)}
                     </div>
                   </div>
@@ -2291,6 +2292,7 @@ export default function PartsPanel({
                   <div className="params-label">DESIGN</div>
                   <div className="params-vertical-layout">
                     <div className="params-subsection">
+                      <div className="params-column-label">MAIN</div>
                       {renderLfoEnvelope(midi_lfo.custom_lfo_design, activePart.part_id, 'midi_lfos', trackIdx)}
                     </div>
                   </div>
