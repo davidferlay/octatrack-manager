@@ -558,13 +558,92 @@ export default function PartsPanel({
     return setupMappings[fxType] || ['S1', 'S2', 'S3', 'S4', 'S5', 'S6'];
   };
 
+  // Helper function to render SRC section content (MAIN + SETUP)
+  const renderSrcSectionContent = (activePart: PartData, machine: typeof activePart.machines[0]) => (
+    <div className="params-vertical-layout">
+      <div className="params-subsection">
+        <div className="params-column-label">MAIN</div>
+        <div className="params-grid">
+          {machine.machine_type === 'Thru' ? (
+            <>
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.in_ab', machine.machine_params.in_ab, 'INAB')}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.vol_ab', machine.machine_params.vol_ab, 'VOL')}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.in_cd', machine.machine_params.in_cd, 'INCD')}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.vol_cd', machine.machine_params.vol_cd, 'VOL')}
+            </>
+          ) : machine.machine_type === 'Neighbor' ? (
+            <div className="params-empty-message">-</div>
+          ) : machine.machine_type === 'Pickup' ? (
+            <>
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.ptch', machine.machine_params.ptch, 'PITCH')}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.dir', machine.machine_params.dir, 'DIR')}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.len', machine.machine_params.len, 'LEN')}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.gain', machine.machine_params.gain, 'GAIN')}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.op', machine.machine_params.op, 'OP')}
+            </>
+          ) : (
+            <>
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.ptch', machine.machine_params.ptch, 'PTCH')}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.strt', machine.machine_params.strt, 'STRT')}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.len', machine.machine_params.len, 'LEN')}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.rate', machine.machine_params.rate, 'RATE')}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.rtrg', machine.machine_params.rtrg, 'RTRG')}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.rtim', machine.machine_params.rtim, 'RTIM')}
+            </>
+          )}
+        </div>
+      </div>
+      <div className="params-subsection">
+        <div className="params-column-label">SETUP</div>
+        <div className="params-grid">
+          {machine.machine_type === 'Thru' || machine.machine_type === 'Neighbor' ? (
+            <div className="params-empty-message">-</div>
+          ) : machine.machine_type === 'Pickup' ? (
+            <>
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tstr', machine.machine_setup.tstr, 'TSTR')}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tsns', machine.machine_setup.tsns, 'TSNS')}
+            </>
+          ) : (
+            <>
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.xloop', machine.machine_setup.xloop, 'LOOP')}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.slic', machine.machine_setup.slic, 'SLIC')}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.len', machine.machine_setup.len, 'LEN')}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.rate', machine.machine_setup.rate, 'RATE')}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tstr', machine.machine_setup.tstr, 'TSTR')}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tsns', machine.machine_setup.tsns, 'TSNS')}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
   const renderSrcPage = (part: PartData) => {
     // Always use activePartsData to show current state
     const activePart = activePartsData.find(p => p.part_id === part.part_id) || part;
-    const tracksToShow = selectedTrack !== undefined && selectedTrack >= 0 && selectedTrack <= 7
-      ? [activePart.machines[selectedTrack]]
-      : activePart.machines;
+    const isShowingAllTracks = selectedTrack === undefined || selectedTrack < 0;
+    const tracksToShow = isShowingAllTracks
+      ? activePart.machines
+      : [activePart.machines[selectedTrack]];
 
+    // Use grid layout when showing all tracks
+    if (isShowingAllTracks) {
+      return (
+        <div className="parts-individual-grid">
+          {tracksToShow.map((machine) => (
+            <div key={machine.track_id} className="parts-individual-section">
+              <div className="parts-track-header">
+                <TrackBadge trackId={machine.track_id} />
+                <span className="machine-type">{machine.machine_type}</span>
+              </div>
+              {renderSrcSectionContent(activePart, machine)}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // Single track view - use original layout
     return (
       <div className="parts-tracks">
         {tracksToShow.map((machine) => (
@@ -640,13 +719,63 @@ export default function PartsPanel({
     );
   };
 
+  // Helper function to render AMP section content (MAIN + SETUP)
+  const renderAmpSectionContent = (activePart: PartData, amp: typeof activePart.amps[0]) => (
+    <div className="params-vertical-layout">
+      <div className="params-subsection">
+        <div className="params-column-label">MAIN</div>
+        <div className="params-grid">
+          {renderParamWithKnob(activePart.part_id, 'amps', amp.track_id, 'atk', amp.atk, 'ATK')}
+          {renderParamWithKnob(activePart.part_id, 'amps', amp.track_id, 'hold', amp.hold, 'HOLD')}
+          {renderParamWithKnob(activePart.part_id, 'amps', amp.track_id, 'rel', amp.rel, 'REL')}
+          {renderParamWithKnob(activePart.part_id, 'amps', amp.track_id, 'vol', amp.vol, 'VOL')}
+          {renderParamWithKnob(activePart.part_id, 'amps', amp.track_id, 'bal', amp.bal, 'BAL')}
+          {renderParamWithKnob(activePart.part_id, 'amps', amp.track_id, 'f', amp.f, 'F')}
+        </div>
+      </div>
+      <div className="params-subsection">
+        <div className="params-column-label">SETUP</div>
+        <div className="params-grid">
+          {renderParamWithKnob(activePart.part_id, 'amps', amp.track_id, 'amp_setup_amp', amp.amp_setup_amp, 'AMP')}
+          {renderParamWithKnob(activePart.part_id, 'amps', amp.track_id, 'amp_setup_sync', amp.amp_setup_sync, 'SYNC')}
+          {renderParamWithKnob(activePart.part_id, 'amps', amp.track_id, 'amp_setup_atck', amp.amp_setup_atck, 'ATCK')}
+          {renderParamWithKnob(activePart.part_id, 'amps', amp.track_id, 'amp_setup_fx1', amp.amp_setup_fx1, 'FX1', formatFxEnvTrig)}
+          {renderParamWithKnob(activePart.part_id, 'amps', amp.track_id, 'amp_setup_fx2', amp.amp_setup_fx2, 'FX2', formatFxEnvTrig)}
+        </div>
+      </div>
+    </div>
+  );
+
   const renderAmpPage = (part: PartData) => {
     // Always use activePartsData to show current state
     const activePart = activePartsData.find(p => p.part_id === part.part_id) || part;
-    const tracksToShow = selectedTrack !== undefined && selectedTrack >= 0 && selectedTrack <= 7
-      ? [activePart.amps[selectedTrack]]
-      : activePart.amps;
+    const isShowingAllTracks = selectedTrack === undefined || selectedTrack < 0;
+    const tracksToShow = isShowingAllTracks
+      ? activePart.amps
+      : [activePart.amps[selectedTrack]];
 
+    // Use grid layout when showing all tracks
+    if (isShowingAllTracks) {
+      return (
+        <div className="parts-individual-grid">
+          {tracksToShow.map((amp) => {
+            const machine = activePart.machines[amp.track_id];
+            const machineType = machine.machine_type;
+            return (
+              <div key={amp.track_id} className="parts-individual-section">
+                <div className="parts-track-header">
+                  <TrackBadge trackId={amp.track_id} />
+                  <span className="machine-type">{machineType}</span>
+                </div>
+                {renderAmpSectionContent(activePart, amp)}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // Single track view - use original layout
     return (
       <div className="parts-tracks">
         {tracksToShow.map((amp) => {
@@ -897,9 +1026,10 @@ export default function PartsPanel({
   const renderLfoPage = (part: PartData) => {
     // Always use activePartsData to show current state
     const activePart = activePartsData.find(p => p.part_id === part.part_id) || part;
-    const tracksToShow = selectedTrack !== undefined && selectedTrack >= 0 && selectedTrack <= 7
-      ? [activePart.lfos[selectedTrack]]
-      : activePart.lfos;
+    const isShowingAllTracks = selectedTrack === undefined || selectedTrack < 0;
+    const tracksToShow = isShowingAllTracks
+      ? activePart.lfos
+      : [activePart.lfos[selectedTrack]];
 
     // Get field names based on active LFO tab
     const getLfoFieldNames = () => {
@@ -907,6 +1037,63 @@ export default function PartsPanel({
       if (activeLfoTab === 'LFO2') return { pmtr: 'lfo2_pmtr', wave: 'lfo2_wave', mult: 'lfo2_mult', trig: 'lfo2_trig', spd: 'spd2', dep: 'dep2' };
       if (activeLfoTab === 'LFO3') return { pmtr: 'lfo3_pmtr', wave: 'lfo3_wave', mult: 'lfo3_mult', trig: 'lfo3_trig', spd: 'spd3', dep: 'dep3' };
       return null;
+    };
+
+    // Helper to render a single LFO track section
+    const renderLfoTrackSection = (lfo: typeof activePart.lfos[0], isGridMode: boolean) => {
+      const machine = activePart.machines[lfo.track_id];
+      const machineType = machine.machine_type;
+
+      const lfoParams = activeLfoTab === 'LFO1' ? {
+        pmtr: lfo.lfo1_pmtr,
+        wave: lfo.lfo1_wave,
+        mult: lfo.lfo1_mult,
+        trig: lfo.lfo1_trig,
+        spd: lfo.spd1,
+        dep: lfo.dep1,
+      } : activeLfoTab === 'LFO2' ? {
+        pmtr: lfo.lfo2_pmtr,
+        wave: lfo.lfo2_wave,
+        mult: lfo.lfo2_mult,
+        trig: lfo.lfo2_trig,
+        spd: lfo.spd2,
+        dep: lfo.dep2,
+      } : activeLfoTab === 'LFO3' ? {
+        pmtr: lfo.lfo3_pmtr,
+        wave: lfo.lfo3_wave,
+        mult: lfo.lfo3_mult,
+        trig: lfo.lfo3_trig,
+        spd: lfo.spd3,
+        dep: lfo.dep3,
+      } : null;
+
+      const fieldNames = getLfoFieldNames();
+
+      return (
+        <div key={lfo.track_id} className={isGridMode ? "parts-individual-section" : "parts-track"}>
+          <div className="parts-track-header">
+            <TrackBadge trackId={lfo.track_id} />
+            <span className="machine-type">{machineType}</span>
+          </div>
+
+          {activeLfoTab !== 'DESIGN' && lfoParams && fieldNames ? (
+            <div className={isGridMode ? "params-vertical-layout" : "parts-params-section"}>
+              <div className={isGridMode ? "params-subsection" : ""}>
+                <div className="params-grid">
+                  {renderParamWithKnob(activePart.part_id, 'lfos', lfo.track_id, fieldNames.pmtr, lfoParams.pmtr, 'PMTR')}
+                  {renderParamWithKnob(activePart.part_id, 'lfos', lfo.track_id, fieldNames.wave, lfoParams.wave, 'WAVE')}
+                  {renderParamWithKnob(activePart.part_id, 'lfos', lfo.track_id, fieldNames.mult, lfoParams.mult, 'MULT')}
+                  {renderParamWithKnob(activePart.part_id, 'lfos', lfo.track_id, fieldNames.trig, lfoParams.trig, 'TRIG')}
+                  {renderParamWithKnob(activePart.part_id, 'lfos', lfo.track_id, fieldNames.spd, lfoParams.spd, 'SPD')}
+                  {renderParamWithKnob(activePart.part_id, 'lfos', lfo.track_id, fieldNames.dep, lfoParams.dep, 'DEP')}
+                </div>
+              </div>
+            </div>
+          ) : (
+            renderLfoEnvelope(lfo.custom_lfo_design, activePart.part_id, 'lfos', lfo.track_id)
+          )}
+        </div>
+      );
     };
 
     return (
@@ -939,62 +1126,97 @@ export default function PartsPanel({
           </button>
         </div>
 
-        <div className="parts-tracks" style={{ flex: 1 }}>
-          {tracksToShow.map((lfo) => {
-            // Get the machine type from the corresponding machine data
-            const machine = activePart.machines[lfo.track_id];
-            const machineType = machine.machine_type;
+        {/* Use 2-column grid layout when showing all tracks */}
+        {isShowingAllTracks ? (
+          <div className="parts-lfo-individual-grid">
+            {tracksToShow.map((lfo) => renderLfoTrackSection(lfo, true))}
+          </div>
+        ) : (
+          <div className="parts-tracks" style={{ flex: 1 }}>
+            {tracksToShow.map((lfo) => renderLfoTrackSection(lfo, false))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
-            // Determine which LFO's parameters to show
-            const lfoParams = activeLfoTab === 'LFO1' ? {
-              pmtr: lfo.lfo1_pmtr,
-              wave: lfo.lfo1_wave,
-              mult: lfo.lfo1_mult,
-              trig: lfo.lfo1_trig,
-              spd: lfo.spd1,
-              dep: lfo.dep1,
-            } : activeLfoTab === 'LFO2' ? {
-              pmtr: lfo.lfo2_pmtr,
-              wave: lfo.lfo2_wave,
-              mult: lfo.lfo2_mult,
-              trig: lfo.lfo2_trig,
-              spd: lfo.spd2,
-              dep: lfo.dep2,
-            } : activeLfoTab === 'LFO3' ? {
-              pmtr: lfo.lfo3_pmtr,
-              wave: lfo.lfo3_wave,
-              mult: lfo.lfo3_mult,
-              trig: lfo.lfo3_trig,
-              spd: lfo.spd3,
-              dep: lfo.dep3,
-            } : null;
+  // Helper function to render FX1 section content (MAIN + SETUP)
+  const renderFx1SectionContent = (activePart: PartData, fx: typeof activePart.fxs[0]) => {
+    const mainFieldNames = ['fx1_param1', 'fx1_param2', 'fx1_param3', 'fx1_param4', 'fx1_param5', 'fx1_param6'];
+    const setupFieldNames = ['fx1_setup1', 'fx1_setup2', 'fx1_setup3', 'fx1_setup4', 'fx1_setup5', 'fx1_setup6'];
+    const mainLabels = getFxMainLabels(fx.fx1_type);
+    const setupLabels = getFxSetupLabels(fx.fx1_type);
+    const mainValues = [fx.fx1_param1, fx.fx1_param2, fx.fx1_param3, fx.fx1_param4, fx.fx1_param5, fx.fx1_param6];
+    const setupValues = [fx.fx1_setup1, fx.fx1_setup2, fx.fx1_setup3, fx.fx1_setup4, fx.fx1_setup5, fx.fx1_setup6];
 
-            const fieldNames = getLfoFieldNames();
+    return (
+      <div className="params-vertical-layout">
+        <div className="params-subsection">
+          <div className="params-column-label">MAIN - {formatFxType(fx.fx1_type)}</div>
+          <div className="params-grid">
+            {mainLabels.some(label => label) ? (
+              mainLabels.map((label, index) => {
+                if (!label) return null;
+                return renderParamWithKnob(activePart.part_id, 'fxs', fx.track_id, mainFieldNames[index], mainValues[index], label, undefined, index);
+              })
+            ) : (
+              <div className="params-empty-message">-</div>
+            )}
+          </div>
+        </div>
+        <div className="params-subsection">
+          <div className="params-column-label">SETUP</div>
+          <div className="params-grid">
+            {setupLabels.some(label => label) ? (
+              setupLabels.map((label, index) => {
+                if (!label) return null;
+                return renderParamWithKnob(activePart.part_id, 'fxs', fx.track_id, setupFieldNames[index], setupValues[index], label, undefined, index);
+              })
+            ) : (
+              <div className="params-empty-message">-</div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
-            return (
-              <div key={lfo.track_id} className="parts-track">
-                <div className="parts-track-header">
-                  <TrackBadge trackId={lfo.track_id} />
-                  <span className="machine-type">{machineType}</span>
-                </div>
+  // Helper function to render FX2 section content (MAIN + SETUP)
+  const renderFx2SectionContent = (activePart: PartData, fx: typeof activePart.fxs[0]) => {
+    const mainFieldNames = ['fx2_param1', 'fx2_param2', 'fx2_param3', 'fx2_param4', 'fx2_param5', 'fx2_param6'];
+    const setupFieldNames = ['fx2_setup1', 'fx2_setup2', 'fx2_setup3', 'fx2_setup4', 'fx2_setup5', 'fx2_setup6'];
+    const mainLabels = getFxMainLabels(fx.fx2_type);
+    const setupLabels = getFxSetupLabels(fx.fx2_type);
+    const mainValues = [fx.fx2_param1, fx.fx2_param2, fx.fx2_param3, fx.fx2_param4, fx.fx2_param5, fx.fx2_param6];
+    const setupValues = [fx.fx2_setup1, fx.fx2_setup2, fx.fx2_setup3, fx.fx2_setup4, fx.fx2_setup5, fx.fx2_setup6];
 
-                {activeLfoTab !== 'DESIGN' && lfoParams && fieldNames ? (
-                  <div className="parts-params-section">
-                    <div className="params-grid">
-                      {renderParamWithKnob(activePart.part_id, 'lfos', lfo.track_id, fieldNames.pmtr, lfoParams.pmtr, 'PMTR')}
-                      {renderParamWithKnob(activePart.part_id, 'lfos', lfo.track_id, fieldNames.wave, lfoParams.wave, 'WAVE')}
-                      {renderParamWithKnob(activePart.part_id, 'lfos', lfo.track_id, fieldNames.mult, lfoParams.mult, 'MULT')}
-                      {renderParamWithKnob(activePart.part_id, 'lfos', lfo.track_id, fieldNames.trig, lfoParams.trig, 'TRIG')}
-                      {renderParamWithKnob(activePart.part_id, 'lfos', lfo.track_id, fieldNames.spd, lfoParams.spd, 'SPD')}
-                      {renderParamWithKnob(activePart.part_id, 'lfos', lfo.track_id, fieldNames.dep, lfoParams.dep, 'DEP')}
-                    </div>
-                  </div>
-                ) : (
-                  renderLfoEnvelope(lfo.custom_lfo_design, activePart.part_id, 'lfos', lfo.track_id)
-                )}
-              </div>
-            );
-          })}
+    return (
+      <div className="params-vertical-layout">
+        <div className="params-subsection">
+          <div className="params-column-label">MAIN - {formatFxType(fx.fx2_type)}</div>
+          <div className="params-grid">
+            {mainLabels.some(label => label) ? (
+              mainLabels.map((label, index) => {
+                if (!label) return null;
+                return renderParamWithKnob(activePart.part_id, 'fxs', fx.track_id, mainFieldNames[index], mainValues[index], label, undefined, index);
+              })
+            ) : (
+              <div className="params-empty-message">-</div>
+            )}
+          </div>
+        </div>
+        <div className="params-subsection">
+          <div className="params-column-label">SETUP</div>
+          <div className="params-grid">
+            {setupLabels.some(label => label) ? (
+              setupLabels.map((label, index) => {
+                if (!label) return null;
+                return renderParamWithKnob(activePart.part_id, 'fxs', fx.track_id, setupFieldNames[index], setupValues[index], label, undefined, index);
+              })
+            ) : (
+              <div className="params-empty-message">-</div>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -1003,13 +1225,36 @@ export default function PartsPanel({
   const renderFx1Page = (part: PartData) => {
     // Always use activePartsData to show current state
     const activePart = activePartsData.find(p => p.part_id === part.part_id) || part;
-    const tracksToShow = selectedTrack !== undefined && selectedTrack >= 0 && selectedTrack <= 7
-      ? [activePart.fxs[selectedTrack]]
-      : activePart.fxs;
+    const isShowingAllTracks = selectedTrack === undefined || selectedTrack < 0;
+    const tracksToShow = isShowingAllTracks
+      ? activePart.fxs
+      : [activePart.fxs[selectedTrack]];
 
     const mainFieldNames = ['fx1_param1', 'fx1_param2', 'fx1_param3', 'fx1_param4', 'fx1_param5', 'fx1_param6'];
     const setupFieldNames = ['fx1_setup1', 'fx1_setup2', 'fx1_setup3', 'fx1_setup4', 'fx1_setup5', 'fx1_setup6'];
 
+    // Use grid layout when showing all tracks
+    if (isShowingAllTracks) {
+      return (
+        <div className="parts-individual-grid">
+          {tracksToShow.map((fx) => {
+            const machine = activePart.machines[fx.track_id];
+            const machineType = machine.machine_type;
+            return (
+              <div key={fx.track_id} className="parts-individual-section">
+                <div className="parts-track-header">
+                  <TrackBadge trackId={fx.track_id} />
+                  <span className="machine-type">{machineType}</span>
+                </div>
+                {renderFx1SectionContent(activePart, fx)}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // Single track view - use original layout
     return (
       <div className="parts-tracks">
         {tracksToShow.map((fx) => {
@@ -1064,13 +1309,36 @@ export default function PartsPanel({
   const renderFx2Page = (part: PartData) => {
     // Always use activePartsData to show current state
     const activePart = activePartsData.find(p => p.part_id === part.part_id) || part;
-    const tracksToShow = selectedTrack !== undefined && selectedTrack >= 0 && selectedTrack <= 7
-      ? [activePart.fxs[selectedTrack]]
-      : activePart.fxs;
+    const isShowingAllTracks = selectedTrack === undefined || selectedTrack < 0;
+    const tracksToShow = isShowingAllTracks
+      ? activePart.fxs
+      : [activePart.fxs[selectedTrack]];
 
     const mainFieldNames = ['fx2_param1', 'fx2_param2', 'fx2_param3', 'fx2_param4', 'fx2_param5', 'fx2_param6'];
     const setupFieldNames = ['fx2_setup1', 'fx2_setup2', 'fx2_setup3', 'fx2_setup4', 'fx2_setup5', 'fx2_setup6'];
 
+    // Use grid layout when showing all tracks
+    if (isShowingAllTracks) {
+      return (
+        <div className="parts-individual-grid">
+          {tracksToShow.map((fx) => {
+            const machine = activePart.machines[fx.track_id];
+            const machineType = machine.machine_type;
+            return (
+              <div key={fx.track_id} className="parts-individual-section">
+                <div className="parts-track-header">
+                  <TrackBadge trackId={fx.track_id} />
+                  <span className="machine-type">{machineType}</span>
+                </div>
+                {renderFx2SectionContent(activePart, fx)}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // Single track view - use original layout
     return (
       <div className="parts-tracks">
         {tracksToShow.map((fx) => {
@@ -1123,13 +1391,83 @@ export default function PartsPanel({
   };
 
   // MIDI Track Rendering Functions
+
+  // Helper function to render NOTE section content (MAIN + SETUP)
+  const renderNoteSectionContent = (activePart: PartData, midi_note: typeof activePart.midi_notes[0]) => (
+    <div className="params-vertical-layout">
+      <div className="params-subsection">
+        <div className="params-column-label">MAIN</div>
+        <div className="params-grid">
+          {renderParamWithKnob(activePart.part_id, 'midi_notes', midi_note.track_id, 'note', midi_note.note, 'NOTE')}
+          {renderParamWithKnob(activePart.part_id, 'midi_notes', midi_note.track_id, 'vel', midi_note.vel, 'VEL')}
+          {renderParamWithKnob(activePart.part_id, 'midi_notes', midi_note.track_id, 'len', midi_note.len, 'LEN')}
+          {renderParamWithKnob(activePart.part_id, 'midi_notes', midi_note.track_id, 'not2', midi_note.not2, 'NOT2')}
+          {renderParamWithKnob(activePart.part_id, 'midi_notes', midi_note.track_id, 'not3', midi_note.not3, 'NOT3')}
+          {renderParamWithKnob(activePart.part_id, 'midi_notes', midi_note.track_id, 'not4', midi_note.not4, 'NOT4')}
+        </div>
+      </div>
+      <div className="params-subsection">
+        <div className="params-column-label">SETUP</div>
+        <div className="params-grid">
+          {renderParamWithKnob(activePart.part_id, 'midi_notes', midi_note.track_id, 'chan', midi_note.chan, 'CHAN')}
+          {renderParamWithKnob(activePart.part_id, 'midi_notes', midi_note.track_id, 'bank', midi_note.bank, 'BANK')}
+          {renderParamWithKnob(activePart.part_id, 'midi_notes', midi_note.track_id, 'prog', midi_note.prog, 'PROG')}
+          {renderParamWithKnob(activePart.part_id, 'midi_notes', midi_note.track_id, 'sbnk', midi_note.sbnk, 'SBNK')}
+        </div>
+      </div>
+    </div>
+  );
+
+  // Helper function to render ARP section content (MAIN + SETUP)
+  const renderArpSectionContent = (activePart: PartData, midi_arp: typeof activePart.midi_arps[0]) => (
+    <div className="params-vertical-layout">
+      <div className="params-subsection">
+        <div className="params-column-label">MAIN</div>
+        <div className="params-grid">
+          {renderParamWithKnob(activePart.part_id, 'midi_arps', midi_arp.track_id, 'tran', midi_arp.tran, 'TRAN')}
+          {renderParamWithKnob(activePart.part_id, 'midi_arps', midi_arp.track_id, 'leg', midi_arp.leg, 'LEG')}
+          {renderParamWithKnob(activePart.part_id, 'midi_arps', midi_arp.track_id, 'mode', midi_arp.mode, 'MODE')}
+          {renderParamWithKnob(activePart.part_id, 'midi_arps', midi_arp.track_id, 'spd', midi_arp.spd, 'SPD')}
+          {renderParamWithKnob(activePart.part_id, 'midi_arps', midi_arp.track_id, 'rnge', midi_arp.rnge, 'RNGE')}
+          {renderParamWithKnob(activePart.part_id, 'midi_arps', midi_arp.track_id, 'nlen', midi_arp.nlen, 'NLEN')}
+        </div>
+      </div>
+      <div className="params-subsection">
+        <div className="params-column-label">SETUP</div>
+        <div className="params-grid">
+          {renderParamWithKnob(activePart.part_id, 'midi_arps', midi_arp.track_id, 'len', midi_arp.len, 'LEN')}
+          {renderParamWithKnob(activePart.part_id, 'midi_arps', midi_arp.track_id, 'key', midi_arp.key, 'KEY')}
+        </div>
+      </div>
+    </div>
+  );
+
   const renderNotePage = (part: PartData) => {
     // Always use activePartsData to show current state
     const activePart = activePartsData.find(p => p.part_id === part.part_id) || part;
-    const tracksToShow = selectedTrack !== undefined && selectedTrack >= 8
-      ? [activePart.midi_notes[selectedTrack - 8]]
-      : activePart.midi_notes;
+    const isShowingAllTracks = selectedTrack === undefined || selectedTrack === ALL_MIDI_TRACKS;
+    const tracksToShow = isShowingAllTracks
+      ? activePart.midi_notes
+      : [activePart.midi_notes[selectedTrack - 8]];
 
+    // Use grid layout when showing all tracks
+    if (isShowingAllTracks) {
+      return (
+        <div className="parts-individual-grid">
+          {tracksToShow.map((midi_note) => (
+            <div key={midi_note.track_id} className="parts-individual-section">
+              <div className="parts-track-header">
+                <TrackBadge trackId={midi_note.track_id + 8} />
+                <span className="machine-type">MIDI</span>
+              </div>
+              {renderNoteSectionContent(activePart, midi_note)}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // Single track view - use original layout
     return (
       <div className="parts-tracks">
         {tracksToShow.map((midi_note) => (
@@ -1169,10 +1507,29 @@ export default function PartsPanel({
   const renderArpPage = (part: PartData) => {
     // Always use activePartsData to show current state
     const activePart = activePartsData.find(p => p.part_id === part.part_id) || part;
-    const tracksToShow = selectedTrack !== undefined && selectedTrack >= 8
-      ? [activePart.midi_arps[selectedTrack - 8]]
-      : activePart.midi_arps;
+    const isShowingAllTracks = selectedTrack === undefined || selectedTrack === ALL_MIDI_TRACKS;
+    const tracksToShow = isShowingAllTracks
+      ? activePart.midi_arps
+      : [activePart.midi_arps[selectedTrack - 8]];
 
+    // Use grid layout when showing all tracks
+    if (isShowingAllTracks) {
+      return (
+        <div className="parts-individual-grid">
+          {tracksToShow.map((midi_arp) => (
+            <div key={midi_arp.track_id} className="parts-individual-section">
+              <div className="parts-track-header">
+                <TrackBadge trackId={midi_arp.track_id + 8} />
+                <span className="machine-type">MIDI</span>
+              </div>
+              {renderArpSectionContent(activePart, midi_arp)}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // Single track view - use original layout
     return (
       <div className="parts-tracks">
         {tracksToShow.map((midi_arp) => (
@@ -1210,9 +1567,62 @@ export default function PartsPanel({
   const renderMidiLfoPage = (part: PartData) => {
     // Always use activePartsData to show current state
     const activePart = activePartsData.find(p => p.part_id === part.part_id) || part;
-    const tracksToShow = selectedTrack !== undefined && selectedTrack >= 8
-      ? [activePart.midi_lfos[selectedTrack - 8]]
-      : activePart.midi_lfos;
+    const isShowingAllTracks = selectedTrack === undefined || selectedTrack === ALL_MIDI_TRACKS;
+    const tracksToShow = isShowingAllTracks
+      ? activePart.midi_lfos
+      : [activePart.midi_lfos[selectedTrack - 8]];
+
+    // Helper to render a single MIDI LFO track section
+    const renderMidiLfoTrackSection = (lfo: typeof activePart.midi_lfos[0], isGridMode: boolean) => {
+      const lfoData = activeLfoTab === 'LFO1' ? {
+        pmtr: lfo.lfo1_pmtr, pmtrField: 'lfo1_pmtr',
+        wave: lfo.lfo1_wave, waveField: 'lfo1_wave',
+        mult: lfo.lfo1_mult, multField: 'lfo1_mult',
+        trig: lfo.lfo1_trig, trigField: 'lfo1_trig',
+        spd: lfo.spd1, spdField: 'spd1',
+        dep: lfo.dep1, depField: 'dep1',
+      } : activeLfoTab === 'LFO2' ? {
+        pmtr: lfo.lfo2_pmtr, pmtrField: 'lfo2_pmtr',
+        wave: lfo.lfo2_wave, waveField: 'lfo2_wave',
+        mult: lfo.lfo2_mult, multField: 'lfo2_mult',
+        trig: lfo.lfo2_trig, trigField: 'lfo2_trig',
+        spd: lfo.spd2, spdField: 'spd2',
+        dep: lfo.dep2, depField: 'dep2',
+      } : activeLfoTab === 'LFO3' ? {
+        pmtr: lfo.lfo3_pmtr, pmtrField: 'lfo3_pmtr',
+        wave: lfo.lfo3_wave, waveField: 'lfo3_wave',
+        mult: lfo.lfo3_mult, multField: 'lfo3_mult',
+        trig: lfo.lfo3_trig, trigField: 'lfo3_trig',
+        spd: lfo.spd3, spdField: 'spd3',
+        dep: lfo.dep3, depField: 'dep3',
+      } : null;
+
+      return (
+        <div key={lfo.track_id} className={isGridMode ? "parts-individual-section" : "parts-track"}>
+          <div className="parts-track-header">
+            <TrackBadge trackId={lfo.track_id + 8} />
+            <span className="machine-type">MIDI</span>
+          </div>
+
+          {activeLfoTab !== 'DESIGN' && lfoData ? (
+            <div className={isGridMode ? "params-vertical-layout" : "parts-params-section"}>
+              <div className={isGridMode ? "params-subsection" : ""}>
+                <div className="params-grid">
+                  {renderParamWithKnob(activePart.part_id, 'midi_lfos', lfo.track_id, lfoData.pmtrField, lfoData.pmtr, 'PMTR')}
+                  {renderParamWithKnob(activePart.part_id, 'midi_lfos', lfo.track_id, lfoData.waveField, lfoData.wave, 'WAVE')}
+                  {renderParamWithKnob(activePart.part_id, 'midi_lfos', lfo.track_id, lfoData.multField, lfoData.mult, 'MULT')}
+                  {renderParamWithKnob(activePart.part_id, 'midi_lfos', lfo.track_id, lfoData.trigField, lfoData.trig, 'TRIG')}
+                  {renderParamWithKnob(activePart.part_id, 'midi_lfos', lfo.track_id, lfoData.spdField, lfoData.spd, 'SPD')}
+                  {renderParamWithKnob(activePart.part_id, 'midi_lfos', lfo.track_id, lfoData.depField, lfoData.dep, 'DEP')}
+                </div>
+              </div>
+            </div>
+          ) : (
+            renderLfoEnvelope(lfo.custom_lfo_design, activePart.part_id, 'midi_lfos', lfo.track_id)
+          )}
+        </div>
+      );
+    };
 
     return (
       <div className="parts-lfo-layout">
@@ -1244,68 +1654,100 @@ export default function PartsPanel({
           </button>
         </div>
 
-        <div className="parts-tracks" style={{ flex: 1 }}>
-          {tracksToShow.map((lfo) => {
-            // Determine which LFO's parameters and field names to show
-            const lfoData = activeLfoTab === 'LFO1' ? {
-              pmtr: lfo.lfo1_pmtr, pmtrField: 'lfo1_pmtr',
-              wave: lfo.lfo1_wave, waveField: 'lfo1_wave',
-              mult: lfo.lfo1_mult, multField: 'lfo1_mult',
-              trig: lfo.lfo1_trig, trigField: 'lfo1_trig',
-              spd: lfo.spd1, spdField: 'spd1',
-              dep: lfo.dep1, depField: 'dep1',
-            } : activeLfoTab === 'LFO2' ? {
-              pmtr: lfo.lfo2_pmtr, pmtrField: 'lfo2_pmtr',
-              wave: lfo.lfo2_wave, waveField: 'lfo2_wave',
-              mult: lfo.lfo2_mult, multField: 'lfo2_mult',
-              trig: lfo.lfo2_trig, trigField: 'lfo2_trig',
-              spd: lfo.spd2, spdField: 'spd2',
-              dep: lfo.dep2, depField: 'dep2',
-            } : activeLfoTab === 'LFO3' ? {
-              pmtr: lfo.lfo3_pmtr, pmtrField: 'lfo3_pmtr',
-              wave: lfo.lfo3_wave, waveField: 'lfo3_wave',
-              mult: lfo.lfo3_mult, multField: 'lfo3_mult',
-              trig: lfo.lfo3_trig, trigField: 'lfo3_trig',
-              spd: lfo.spd3, spdField: 'spd3',
-              dep: lfo.dep3, depField: 'dep3',
-            } : null;
-
-            return (
-              <div key={lfo.track_id} className="parts-track">
-                <div className="parts-track-header">
-                  <TrackBadge trackId={lfo.track_id + 8} />
-                  <span className="machine-type">MIDI</span>
-                </div>
-
-                {activeLfoTab !== 'DESIGN' ? (
-                  <div className="parts-params-section">
-                    <div className="params-grid">
-                      {renderParamWithKnob(activePart.part_id, 'midi_lfos', lfo.track_id, lfoData!.pmtrField, lfoData!.pmtr, 'PMTR')}
-                      {renderParamWithKnob(activePart.part_id, 'midi_lfos', lfo.track_id, lfoData!.waveField, lfoData!.wave, 'WAVE')}
-                      {renderParamWithKnob(activePart.part_id, 'midi_lfos', lfo.track_id, lfoData!.multField, lfoData!.mult, 'MULT')}
-                      {renderParamWithKnob(activePart.part_id, 'midi_lfos', lfo.track_id, lfoData!.trigField, lfoData!.trig, 'TRIG')}
-                      {renderParamWithKnob(activePart.part_id, 'midi_lfos', lfo.track_id, lfoData!.spdField, lfoData!.spd, 'SPD')}
-                      {renderParamWithKnob(activePart.part_id, 'midi_lfos', lfo.track_id, lfoData!.depField, lfoData!.dep, 'DEP')}
-                    </div>
-                  </div>
-                ) : (
-                  renderLfoEnvelope(lfo.custom_lfo_design, activePart.part_id, 'midi_lfos', lfo.track_id)
-                )}
-              </div>
-            );
-          })}
-        </div>
+        {/* Use 2-column grid layout when showing all tracks */}
+        {isShowingAllTracks ? (
+          <div className="parts-lfo-individual-grid">
+            {tracksToShow.map((lfo) => renderMidiLfoTrackSection(lfo, true))}
+          </div>
+        ) : (
+          <div className="parts-tracks" style={{ flex: 1 }}>
+            {tracksToShow.map((lfo) => renderMidiLfoTrackSection(lfo, false))}
+          </div>
+        )}
       </div>
     );
   };
 
+  // Helper function to render CTRL1 section content (MAIN + SETUP)
+  const renderCtrl1SectionContent = (activePart: PartData, midi_ctrl1: typeof activePart.midi_ctrl1s[0]) => (
+    <div className="params-vertical-layout">
+      <div className="params-subsection">
+        <div className="params-column-label">MAIN</div>
+        <div className="params-grid">
+          {renderParamWithKnob(activePart.part_id, 'midi_ctrl1s', midi_ctrl1.track_id, 'pb', midi_ctrl1.pb, 'PB')}
+          {renderParamWithKnob(activePart.part_id, 'midi_ctrl1s', midi_ctrl1.track_id, 'at', midi_ctrl1.at, 'AT')}
+          {renderParamWithKnob(activePart.part_id, 'midi_ctrl1s', midi_ctrl1.track_id, 'cc1', midi_ctrl1.cc1, 'CC1')}
+          {renderParamWithKnob(activePart.part_id, 'midi_ctrl1s', midi_ctrl1.track_id, 'cc2', midi_ctrl1.cc2, 'CC2')}
+          {renderParamWithKnob(activePart.part_id, 'midi_ctrl1s', midi_ctrl1.track_id, 'cc3', midi_ctrl1.cc3, 'CC3')}
+          {renderParamWithKnob(activePart.part_id, 'midi_ctrl1s', midi_ctrl1.track_id, 'cc4', midi_ctrl1.cc4, 'CC4')}
+        </div>
+      </div>
+      <div className="params-subsection">
+        <div className="params-column-label">SETUP</div>
+        <div className="params-grid">
+          {renderParamWithKnob(activePart.part_id, 'midi_ctrl1s', midi_ctrl1.track_id, 'cc1_num', midi_ctrl1.cc1_num, 'CC1#')}
+          {renderParamWithKnob(activePart.part_id, 'midi_ctrl1s', midi_ctrl1.track_id, 'cc2_num', midi_ctrl1.cc2_num, 'CC2#')}
+          {renderParamWithKnob(activePart.part_id, 'midi_ctrl1s', midi_ctrl1.track_id, 'cc3_num', midi_ctrl1.cc3_num, 'CC3#')}
+          {renderParamWithKnob(activePart.part_id, 'midi_ctrl1s', midi_ctrl1.track_id, 'cc4_num', midi_ctrl1.cc4_num, 'CC4#')}
+        </div>
+      </div>
+    </div>
+  );
+
+  // Helper function to render CTRL2 section content (MAIN + SETUP)
+  const renderCtrl2SectionContent = (activePart: PartData, midi_ctrl2: typeof activePart.midi_ctrl2s[0]) => (
+    <div className="params-vertical-layout">
+      <div className="params-subsection">
+        <div className="params-column-label">MAIN</div>
+        <div className="params-grid">
+          {renderParamWithKnob(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc5', midi_ctrl2.cc5, 'CC5')}
+          {renderParamWithKnob(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc6', midi_ctrl2.cc6, 'CC6')}
+          {renderParamWithKnob(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc7', midi_ctrl2.cc7, 'CC7')}
+          {renderParamWithKnob(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc8', midi_ctrl2.cc8, 'CC8')}
+          {renderParamWithKnob(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc9', midi_ctrl2.cc9, 'CC9')}
+          {renderParamWithKnob(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc10', midi_ctrl2.cc10, 'CC10')}
+        </div>
+      </div>
+      <div className="params-subsection">
+        <div className="params-column-label">SETUP</div>
+        <div className="params-grid">
+          {renderParamWithKnob(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc5_num', midi_ctrl2.cc5_num, 'CC5#')}
+          {renderParamWithKnob(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc6_num', midi_ctrl2.cc6_num, 'CC6#')}
+          {renderParamWithKnob(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc7_num', midi_ctrl2.cc7_num, 'CC7#')}
+          {renderParamWithKnob(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc8_num', midi_ctrl2.cc8_num, 'CC8#')}
+          {renderParamWithKnob(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc9_num', midi_ctrl2.cc9_num, 'CC9#')}
+          {renderParamWithKnob(activePart.part_id, 'midi_ctrl2s', midi_ctrl2.track_id, 'cc10_num', midi_ctrl2.cc10_num, 'CC10#')}
+        </div>
+      </div>
+    </div>
+  );
+
   const renderCtrl1Page = (part: PartData) => {
     // Always use activePartsData to show current state
     const activePart = activePartsData.find(p => p.part_id === part.part_id) || part;
-    const tracksToShow = selectedTrack !== undefined && selectedTrack >= 8
-      ? [activePart.midi_ctrl1s[selectedTrack - 8]]
-      : activePart.midi_ctrl1s;
+    const isShowingAllTracks = selectedTrack === undefined || selectedTrack === ALL_MIDI_TRACKS;
+    const tracksToShow = isShowingAllTracks
+      ? activePart.midi_ctrl1s
+      : [activePart.midi_ctrl1s[selectedTrack - 8]];
 
+    // Use grid layout when showing all tracks
+    if (isShowingAllTracks) {
+      return (
+        <div className="parts-individual-grid">
+          {tracksToShow.map((midi_ctrl1) => (
+            <div key={midi_ctrl1.track_id} className="parts-individual-section">
+              <div className="parts-track-header">
+                <TrackBadge trackId={midi_ctrl1.track_id + 8} />
+                <span className="machine-type">MIDI</span>
+              </div>
+              {renderCtrl1SectionContent(activePart, midi_ctrl1)}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // Single track view - use original layout
     return (
       <div className="parts-tracks">
         {tracksToShow.map((midi_ctrl1) => (
@@ -1345,10 +1787,29 @@ export default function PartsPanel({
   const renderCtrl2Page = (part: PartData) => {
     // Always use activePartsData to show current state
     const activePart = activePartsData.find(p => p.part_id === part.part_id) || part;
-    const tracksToShow = selectedTrack !== undefined && selectedTrack >= 8
-      ? [activePart.midi_ctrl2s[selectedTrack - 8]]
-      : activePart.midi_ctrl2s;
+    const isShowingAllTracks = selectedTrack === undefined || selectedTrack === ALL_MIDI_TRACKS;
+    const tracksToShow = isShowingAllTracks
+      ? activePart.midi_ctrl2s
+      : [activePart.midi_ctrl2s[selectedTrack - 8]];
 
+    // Use grid layout when showing all tracks
+    if (isShowingAllTracks) {
+      return (
+        <div className="parts-individual-grid">
+          {tracksToShow.map((midi_ctrl2) => (
+            <div key={midi_ctrl2.track_id} className="parts-individual-section">
+              <div className="parts-track-header">
+                <TrackBadge trackId={midi_ctrl2.track_id + 8} />
+                <span className="machine-type">MIDI</span>
+              </div>
+              {renderCtrl2SectionContent(activePart, midi_ctrl2)}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // Single track view - use original layout
     return (
       <div className="parts-tracks">
         {tracksToShow.map((midi_ctrl2) => (
