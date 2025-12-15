@@ -90,6 +90,13 @@
   margin: 0 auto;
 }
 
+/* When LFO layout contains the individual grid, expand to full width */
+.parts-lfo-layout:has(.parts-lfo-individual-grid) {
+  max-width: none;
+  width: 100%;
+  justify-content: flex-start;
+}
+
 .parts-lfo-sidebar {
   display: flex;
   flex-direction: column;
@@ -142,7 +149,8 @@
 }
 
 /* When full-width tracks are inside centered content, let them stretch */
-.parts-content.centered:has(.parts-tracks.full-width) {
+.parts-content.centered:has(.parts-tracks.full-width),
+.parts-content.centered:has(.parts-individual-grid) {
   display: block;
   padding: 16px 0;
   margin: 0 -1rem;
@@ -821,7 +829,7 @@
 }
 
 .parts-track-wide .params-subsection .params-grid {
-  grid-template-columns: repeat(auto-fit, minmax(50px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   row-gap: 16px;
   column-gap: 6px;
 }
@@ -841,6 +849,199 @@
 @media (max-width: 600px) {
   .parts-all-section {
     flex: 1 1 100%;
+  }
+}
+
+/* Individual pages grid layout - 4 columns for non-LFO, 2 columns for LFO */
+.parts-individual-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  width: 100%;
+}
+
+.parts-individual-grid.two-columns {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.parts-individual-grid > .parts-individual-section {
+  background: #252525;
+  border: 1px solid #333;
+  border-right: none;
+  border-bottom: none;
+  border-radius: 0;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+}
+
+.parts-individual-grid > .parts-individual-section:nth-child(4n) {
+  border-right: 1px solid #333;
+}
+
+.parts-individual-grid.two-columns > .parts-individual-section:nth-child(4n) {
+  border-right: none;
+}
+
+.parts-individual-grid.two-columns > .parts-individual-section:nth-child(2n) {
+  border-right: 1px solid #333;
+}
+
+/* Last row needs bottom border */
+.parts-individual-grid > .parts-individual-section:nth-last-child(-n+4) {
+  border-bottom: 1px solid #333;
+}
+
+.parts-individual-grid.two-columns > .parts-individual-section:nth-last-child(-n+2) {
+  border-bottom: 1px solid #333;
+}
+
+.parts-individual-section .parts-track-header {
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #333;
+}
+
+.parts-individual-section .params-vertical-layout {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.parts-individual-section .params-subsection .params-column-label {
+  font-size: 11px;
+  color: var(--elektron-text-secondary);
+  margin-bottom: 10px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #333;
+}
+
+.parts-individual-section .params-subsection .params-grid {
+  grid-template-columns: repeat(4, 1fr);
+  row-gap: 16px;
+  column-gap: 6px;
+}
+
+.parts-individual-section .params-subsection .param-item {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+}
+
+.parts-individual-section .params-subsection .param-label {
+  width: auto;
+  text-align: center;
+  font-size: 12px;
+  color: var(--elektron-text-secondary);
+}
+
+.parts-individual-section .params-subsection .param-value {
+  width: 48px;
+  height: 26px;
+  line-height: 26px;
+  font-size: 13px;
+  padding: 0 5px;
+}
+
+/* LFO individual page with sidebar - 2 columns grid */
+.parts-lfo-individual-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0;
+  flex: 1;
+}
+
+.parts-lfo-individual-grid > .parts-individual-section {
+  background: #252525;
+  border: 1px solid #333;
+  border-right: none;
+  border-bottom: none;
+  border-radius: 0;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  min-height: 180px;
+}
+
+.parts-lfo-individual-grid > .parts-individual-section:nth-child(2n) {
+  border-right: 1px solid #333;
+}
+
+.parts-lfo-individual-grid > .parts-individual-section:nth-last-child(-n+2) {
+  border-bottom: 1px solid #333;
+}
+
+.parts-lfo-individual-grid .parts-track-header {
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #333;
+}
+
+.parts-lfo-individual-grid .params-grid {
+  grid-template-columns: repeat(4, 1fr);
+  row-gap: 16px;
+  column-gap: 6px;
+}
+
+.parts-lfo-individual-grid .param-item {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+}
+
+.parts-lfo-individual-grid .param-label {
+  width: auto;
+  text-align: center;
+  font-size: 12px;
+  color: var(--elektron-text-secondary);
+}
+
+.parts-lfo-individual-grid .param-value {
+  width: 48px;
+  height: 26px;
+  line-height: 26px;
+  font-size: 13px;
+  padding: 0 5px;
+}
+
+/* Responsive adjustments for individual pages grid */
+@media (max-width: 800px) {
+  .parts-individual-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .parts-individual-grid > .parts-individual-section:nth-child(4n) {
+    border-right: none;
+  }
+
+  .parts-individual-grid > .parts-individual-section:nth-child(2n) {
+    border-right: 1px solid #333;
+  }
+
+  .parts-individual-grid > .parts-individual-section:nth-last-child(-n+4) {
+    border-bottom: none;
+  }
+
+  .parts-individual-grid > .parts-individual-section:nth-last-child(-n+2) {
+    border-bottom: 1px solid #333;
+  }
+}
+
+@media (max-width: 600px) {
+  .parts-individual-grid,
+  .parts-individual-grid.two-columns,
+  .parts-lfo-individual-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .parts-individual-grid > .parts-individual-section,
+  .parts-individual-grid.two-columns > .parts-individual-section,
+  .parts-lfo-individual-grid > .parts-individual-section {
+    border-right: 1px solid #333;
+    border-bottom: 1px solid #333;
   }
 }
 
