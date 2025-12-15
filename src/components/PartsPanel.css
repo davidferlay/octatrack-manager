@@ -439,6 +439,11 @@
   margin-bottom: 10px;
 }
 
+/* Taller envelope for single track LFO view */
+.parts-track:not(.parts-track-wide) .lfo-envelope-wrapper {
+  height: 170px;
+}
+
 .lfo-envelope-wrapper:active {
   user-select: none;
   -webkit-user-select: none;
