@@ -526,13 +526,18 @@
 }
 
 /* Empty params message */
+.params-grid:has(.params-empty-message) {
+  min-height: 80px;
+  align-content: center;
+}
+
 .params-empty-message {
   color: #666;
   font-size: 13px;
   font-style: italic;
-  padding: 12px 0;
   text-align: center;
   grid-column: 1 / -1;
+  justify-self: center;
 }
 
 /* Responsive adjustments */
