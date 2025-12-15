@@ -238,10 +238,10 @@
 
 .params-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   row-gap: 24px;
   column-gap: 12px;
-  justify-items: start;
+  justify-items: center;
 }
 
 .param-item {
@@ -834,9 +834,10 @@
 }
 
 .parts-track-wide .params-subsection .params-grid {
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   row-gap: 16px;
   column-gap: 6px;
+  justify-items: center;
 }
 
 /* Responsive adjustments for All tab */
@@ -923,9 +924,10 @@
 }
 
 .parts-individual-section .params-subsection .params-grid {
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   row-gap: 16px;
   column-gap: 6px;
+  justify-items: center;
 }
 
 .parts-individual-section .params-subsection .param-item {
@@ -985,7 +987,7 @@
 }
 
 .parts-lfo-individual-grid .params-grid {
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   row-gap: 16px;
   column-gap: 6px;
   justify-items: center;
