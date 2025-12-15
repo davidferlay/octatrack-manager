@@ -743,6 +743,10 @@
   height: 100%;
 }
 
+.parts-track-wide .parts-all-section .lfo-envelope-wrapper {
+  height: 237px;
+}
+
 .parts-track-wide .parts-all-section .lfo-envelope-container .lfo-envelope-svg {
   flex: 1 1 auto;
 }
