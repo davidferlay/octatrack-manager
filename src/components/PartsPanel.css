@@ -962,7 +962,7 @@
   padding: 10px;
   display: flex;
   flex-direction: column;
-  min-height: 180px;
+  min-height: 290px;
 }
 
 .parts-lfo-individual-grid > .parts-individual-section:nth-child(2n) {
@@ -983,6 +983,7 @@
   grid-template-columns: repeat(4, 1fr);
   row-gap: 16px;
   column-gap: 6px;
+  justify-items: center;
 }
 
 .parts-lfo-individual-grid .param-item {
@@ -1005,6 +1006,10 @@
   line-height: 26px;
   font-size: 13px;
   padding: 0 5px;
+}
+
+.parts-lfo-individual-grid .lfo-envelope-wrapper {
+  height: 180px;
 }
 
 /* Responsive adjustments for individual pages grid */
