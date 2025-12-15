@@ -721,8 +721,13 @@
 
 .parts-all-section .params-vertical-layout {
   flex: 1;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 12px;
+}
+
+.parts-all-section .params-vertical-layout:has(.params-subsection:only-child) {
+  grid-template-rows: 1fr;
 }
 
 .parts-all-section .params-vertical-layout .params-subsection:only-child {
@@ -911,8 +916,9 @@
 
 .parts-individual-section .params-vertical-layout {
   flex: 1;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 12px;
 }
 
 .parts-individual-section .params-subsection .params-column-label {
