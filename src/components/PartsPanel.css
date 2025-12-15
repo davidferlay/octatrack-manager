@@ -921,6 +921,10 @@
   gap: 12px;
 }
 
+.parts-individual-section .params-vertical-layout:has(.params-subsection:only-child) {
+  grid-template-rows: 1fr;
+}
+
 .parts-individual-section .params-subsection .params-column-label {
   font-size: 11px;
   color: var(--elektron-text-secondary);
