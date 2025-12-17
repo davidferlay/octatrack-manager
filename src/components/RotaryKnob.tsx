@@ -27,6 +27,7 @@ export function RotaryKnob({
   const dragStartValue = useRef<number>(0);
   const currentValue = useRef<number>(value);
   const valueChanged = useRef<boolean>(false);
+  const keyboardDebounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const normalizedValue = (value - min) / (max - min);
 
@@ -107,11 +108,34 @@ export function RotaryKnob({
     }
 
     if (newValue !== value) {
+      currentValue.current = newValue; // Track latest value for save on keyup
+      valueChanged.current = true; // Mark that value changed during this key session
       onChange(newValue);
-      // For keyboard, save immediately after each change
-      onChangeEnd?.(newValue);
+      // Clear any pending debounce timer when new key is pressed
+      if (keyboardDebounceTimer.current) {
+        clearTimeout(keyboardDebounceTimer.current);
+        keyboardDebounceTimer.current = null;
+      }
     }
-  }, [disabled, onChange, onChangeEnd, value, min, max]);
+  }, [disabled, onChange, value, min, max]);
+
+  const handleKeyUp = useCallback((e: React.KeyboardEvent) => {
+    // Only trigger save for keys that modify value
+    const valueKeys = ['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft', 'Home', 'End', 'PageUp', 'PageDown'];
+    if (!valueKeys.includes(e.key)) return;
+
+    // Debounce save on key release - wait 300ms in case of rapid key presses
+    if (valueChanged.current && onChangeEnd) {
+      if (keyboardDebounceTimer.current) {
+        clearTimeout(keyboardDebounceTimer.current);
+      }
+      keyboardDebounceTimer.current = setTimeout(() => {
+        onChangeEnd(currentValue.current);
+        valueChanged.current = false;
+        keyboardDebounceTimer.current = null;
+      }, 300);
+    }
+  }, [onChangeEnd]);
 
   useEffect(() => {
     if (isDragging) {
@@ -123,6 +147,15 @@ export function RotaryKnob({
       };
     }
   }, [isDragging, handleMouseMove, handleMouseUp]);
+
+  // Cleanup keyboard debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (keyboardDebounceTimer.current) {
+        clearTimeout(keyboardDebounceTimer.current);
+      }
+    };
+  }, []);
 
   // Corner bracket dimensions
   const cornerPadding = 4; // Space outside the knob for corners
@@ -207,6 +240,7 @@ export function RotaryKnob({
       viewBox={`0 0 ${totalSize} ${totalSize}`}
       onMouseDown={handleMouseDown}
       onKeyDown={handleKeyDown}
+      onKeyUp={handleKeyUp}
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
       tabIndex={0}

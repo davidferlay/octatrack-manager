@@ -63,6 +63,12 @@ export default function PartsPanel({
   // Ref for tracking LFO drawing state
   const lfoDrawingRef = useRef<{ isDrawing: boolean; partId: number; section: 'lfos' | 'midi_lfos'; trackId: number } | null>(null);
 
+  // Ref for debouncing save operations (prevents rapid saves during keyboard input)
+  const saveDebounceRef = useRef<{ timer: ReturnType<typeof setTimeout> | null; partId: number | null }>({ timer: null, partId: null });
+
+  // Ref to always access latest partsData (avoids stale closure issues in debounced callbacks)
+  const partsDataRef = useRef<PartData[]>(partsData);
+
   // Use shared page index if provided (All banks mode), otherwise use local state
   const activePageIndex = sharedPageIndex !== undefined ? sharedPageIndex : localPageIndex;
   const setActivePageIndex = onSharedPageChange !== undefined ? onSharedPageChange : setLocalPageIndex;
@@ -84,6 +90,11 @@ export default function PartsPanel({
   useEffect(() => {
     loadPartsData();
   }, [projectPath, bankId]);
+
+  // Keep partsDataRef in sync with partsData state
+  useEffect(() => {
+    partsDataRef.current = partsData;
+  }, [partsData]);
 
   const loadPartsData = async () => {
     try {
@@ -287,25 +298,52 @@ export default function PartsPanel({
     // Track which part was modified (shows * indicator)
     setModifiedPartIds(prev => new Set([...prev, partId]));
 
-    // Auto-save to backend (parts.unsaved)
-    console.log('[PartsPanel] Auto-saving part', partId, 'field', field, '=', value);
+    // Debounced auto-save to backend (parts.unsaved)
+    // Clear any existing debounce timer
+    if (saveDebounceRef.current.timer) {
+      clearTimeout(saveDebounceRef.current.timer);
+    }
+
+    // Show "writing" status immediately for user feedback
     onWriteStatusChange?.(writeStatus.writing());
-    invoke('save_parts', {
-      path: projectPath,
-      bankId: bankId,
-      partsData: [updatedPart]
-    }).then(() => {
-      console.log('[PartsPanel] Auto-saved part', partId, 'to parts.unsaved');
-      const partName = partNames[partId] || `Part ${partId + 1}`;
-      onWriteStatusChange?.(writeStatus.success(`Part ${partName} saved as *`));
-      // Reset to idle after a short delay
-      setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
-    }).catch(err => {
-      console.error('Failed to auto-save part:', err);
-      onWriteStatusChange?.(writeStatus.error('Auto-save failed'));
-      setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
-    });
-  }, [projectPath, bankId, partsData, onWriteStatusChange]);
+
+    // Set new debounce timer - save after 500ms of no changes
+    saveDebounceRef.current.timer = setTimeout(() => {
+      // Get the latest part data from state at save time
+      setPartsData(currentPartsData => {
+        const currentPartIndex = currentPartsData.findIndex(p => p.part_id === partId);
+        if (currentPartIndex === -1) {
+          console.error('[PartsPanel] Part not found at save time:', partId);
+          return currentPartsData;
+        }
+
+        const partToSave = currentPartsData[currentPartIndex];
+        console.log('[PartsPanel] Debounced save - saving part', partId, 'field', field, '=', value);
+
+        invoke('save_parts', {
+          path: projectPath,
+          bankId: bankId,
+          partsData: [partToSave]
+        }).then(() => {
+          console.log('[PartsPanel] Auto-saved part', partId, 'to parts.unsaved');
+          const partName = partNames[partId] || `Part ${partId + 1}`;
+          onWriteStatusChange?.(writeStatus.success(`Part ${partName} saved as *`));
+          // Reset to idle after a short delay
+          setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
+        }).catch(err => {
+          console.error('Failed to auto-save part:', err);
+          onWriteStatusChange?.(writeStatus.error('Auto-save failed'));
+          setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
+        });
+
+        return currentPartsData; // Don't modify state, just use it to get current data
+      });
+
+      saveDebounceRef.current.timer = null;
+    }, 500);
+
+    saveDebounceRef.current.partId = partId;
+  }, [projectPath, bankId, partsData, partNames, onWriteStatusChange]);
 
   // Update a single point in the LFO design array (local state only, no save)
   const updateLfoDesignLocal = useCallback((
@@ -392,6 +430,8 @@ export default function PartsPanel({
 
       const newData = [...prev];
       newData[partIndex] = updatedPart;
+      // Also update ref synchronously so debounced saves always have latest data
+      partsDataRef.current = newData;
       return newData;
     });
 
@@ -400,14 +440,16 @@ export default function PartsPanel({
   }, []);
 
   // Save part to backend (called on mouse release from knob)
+  // Uses partsDataRef to always get latest data, avoiding stale closure issues with debounced callbacks
   const savePart = useCallback((partId: number) => {
-    const partIndex = partsData.findIndex(p => p.part_id === partId);
+    const currentPartsData = partsDataRef.current;
+    const partIndex = currentPartsData.findIndex(p => p.part_id === partId);
     if (partIndex === -1) {
       console.error('[PartsPanel] Part not found:', partId);
       return;
     }
 
-    const partToSave = partsData[partIndex];
+    const partToSave = currentPartsData[partIndex];
     onWriteStatusChange?.(writeStatus.writing());
     invoke('save_parts', {
       path: projectPath,
@@ -422,7 +464,7 @@ export default function PartsPanel({
       onWriteStatusChange?.(writeStatus.error('Save failed'));
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
     });
-  }, [projectPath, bankId, partsData, partNames, onWriteStatusChange]);
+  }, [projectPath, bankId, partNames, onWriteStatusChange]);
 
   // Render param with rotary knob for All view
   const renderParamWithKnob = (
