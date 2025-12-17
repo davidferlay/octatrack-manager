@@ -245,7 +245,8 @@
   justify-items: center;
 }
 
-.parts-track .param-item {
+.parts-track .param-item,
+.parts-individual-section .param-item {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -254,7 +255,8 @@
   min-width: 54px;
 }
 
-.parts-track .param-label {
+.parts-track .param-label,
+.parts-individual-section .param-label {
   color: var(--elektron-text-secondary);
   font-weight: 700;
   font-size: 12px;
@@ -265,7 +267,8 @@
   text-align: center;
 }
 
-.parts-track .param-value {
+.parts-track .param-value,
+.parts-individual-section .param-value {
   color: #ffffff;
   font-family: 'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
   font-size: 13px;
@@ -289,19 +292,23 @@
 }
 
 .parts-track .param-value::-webkit-outer-spin-button,
-.parts-track .param-value::-webkit-inner-spin-button {
+.parts-track .param-value::-webkit-inner-spin-button,
+.parts-individual-section .param-value::-webkit-outer-spin-button,
+.parts-individual-section .param-value::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
 
-.parts-track .param-value.editable {
+.parts-track .param-value.editable,
+.parts-individual-section .param-value.editable {
   background: #1a1a1a;
   border-color: #f59e0b;
   box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
   cursor: text;
 }
 
-.parts-track .param-value.editable:focus {
+.parts-track .param-value.editable:focus,
+.parts-individual-section .param-value.editable:focus {
   border-color: #fbbf24;
   box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.3);
 }
