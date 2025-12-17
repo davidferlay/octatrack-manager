@@ -549,60 +549,6 @@ export function ProjectDetail() {
                     </div>
                   </section>
 
-                  {/* Mixer Settings */}
-                  <section className="overview-section">
-                    <h2>Mixer</h2>
-                    <div className="compact-grid">
-                      <div className="compact-item">
-                        <span className="compact-label">Gain AB</span>
-                        <span className="compact-value">{metadata.mixer_settings.gain_ab}</span>
-                      </div>
-                      <div className="compact-item">
-                        <span className="compact-label">Gain CD</span>
-                        <span className="compact-value">{metadata.mixer_settings.gain_cd}</span>
-                      </div>
-                      <div className="compact-item">
-                        <span className="compact-label">Dir AB</span>
-                        <span className="compact-value">{metadata.mixer_settings.dir_ab}</span>
-                      </div>
-                      <div className="compact-item">
-                        <span className="compact-label">Dir CD</span>
-                        <span className="compact-value">{metadata.mixer_settings.dir_cd}</span>
-                      </div>
-                      <div className="compact-item">
-                        <span className="compact-label">Phones</span>
-                        <span className="compact-value">{metadata.mixer_settings.phones_mix}</span>
-                      </div>
-                      <div className="compact-item">
-                        <span className="compact-label">Main</span>
-                        <span className="compact-value">{metadata.mixer_settings.main_level}</span>
-                      </div>
-                      <div className="compact-item">
-                        <span className="compact-label">Cue</span>
-                        <span className="compact-value">{metadata.mixer_settings.cue_level}</span>
-                      </div>
-                    </div>
-                  </section>
-
-                  {/* MIDI Channels */}
-                  {metadata.midi_settings && (
-                  <section className="overview-section">
-                    <h2>MIDI Channels</h2>
-                    <div className="compact-grid">
-                      {metadata.midi_settings.trig_channels.map((ch, idx) => (
-                        <div key={idx} className="compact-item">
-                          <span className="compact-label">T{idx + 1}</span>
-                          <span className="compact-value">{ch === -1 ? 'Off' : ch}</span>
-                        </div>
-                      ))}
-                      <div className="compact-item">
-                        <span className="compact-label">Auto</span>
-                        <span className="compact-value">{metadata.midi_settings.auto_channel === -1 ? 'Off' : metadata.midi_settings.auto_channel}</span>
-                      </div>
-                    </div>
-                  </section>
-                  )}
-
                   {/* MIDI Sync */}
                   {metadata.midi_settings && (
                   <section className="overview-section">
@@ -643,6 +589,60 @@ export function ProjectDetail() {
                     </div>
                   </section>
                   )}
+
+                  {/* MIDI Channels */}
+                  {metadata.midi_settings && (
+                  <section className="overview-section">
+                    <h2>MIDI Channels</h2>
+                    <div className="compact-grid">
+                      {metadata.midi_settings.trig_channels.map((ch, idx) => (
+                        <div key={idx} className="compact-item">
+                          <span className="compact-label">T{idx + 1}</span>
+                          <span className="compact-value">{ch === -1 ? 'Off' : ch}</span>
+                        </div>
+                      ))}
+                      <div className="compact-item">
+                        <span className="compact-label">Auto</span>
+                        <span className="compact-value">{metadata.midi_settings.auto_channel === -1 ? 'Off' : metadata.midi_settings.auto_channel}</span>
+                      </div>
+                    </div>
+                  </section>
+                  )}
+
+                  {/* Mixer Settings */}
+                  <section className="overview-section">
+                    <h2>Mixer</h2>
+                    <div className="compact-grid">
+                      <div className="compact-item">
+                        <span className="compact-label">Gain AB</span>
+                        <span className="compact-value">{metadata.mixer_settings.gain_ab}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Gain CD</span>
+                        <span className="compact-value">{metadata.mixer_settings.gain_cd}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Dir AB</span>
+                        <span className="compact-value">{metadata.mixer_settings.dir_ab}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Dir CD</span>
+                        <span className="compact-value">{metadata.mixer_settings.dir_cd}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Phones</span>
+                        <span className="compact-value">{metadata.mixer_settings.phones_mix}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Main</span>
+                        <span className="compact-value">{metadata.mixer_settings.main_level}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Cue</span>
+                        <span className="compact-value">{metadata.mixer_settings.cue_level}</span>
+                      </div>
+                    </div>
+                  </section>
 
                   {/* Metronome Settings */}
                   {metadata.metronome_settings && (
