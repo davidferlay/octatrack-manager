@@ -224,16 +224,17 @@
 
 .params-label {
   font-size: 13px;
-  color: #fff;
+  color: #ccc;
   margin-bottom: 10px;
-  padding: 6px 10px;
+  padding: 5px 10px;
   text-transform: uppercase;
-  font-weight: 700;
-  background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
-  border-left: 3px solid #4ac8ff;
-  border-radius: 3px;
+  font-weight: 600;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 2px;
   letter-spacing: 0.5px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  box-shadow: none;
+  text-align: center;
 }
 
 .params-grid {
@@ -719,7 +720,7 @@
 }
 
 .parts-all-section > .params-label {
-  font-size: 12px;
+  font-size: 13px;
   margin-bottom: 10px;
   padding: 5px 10px;
 }
