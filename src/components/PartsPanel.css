@@ -245,7 +245,7 @@
   justify-items: center;
 }
 
-.param-item {
+.parts-track .param-item {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -254,7 +254,7 @@
   min-width: 54px;
 }
 
-.param-label {
+.parts-track .param-label {
   color: var(--elektron-text-secondary);
   font-weight: 700;
   font-size: 12px;
