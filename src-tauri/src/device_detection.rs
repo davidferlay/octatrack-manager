@@ -474,9 +474,9 @@ mod tests {
 
     #[test]
     fn test_discover_devices() {
-        let locations = discover_devices();
-        println!("Found {} Octatrack locations", locations.len());
-        for location in locations {
+        let scan_result = discover_devices();
+        println!("Found {} Octatrack locations", scan_result.locations.len());
+        for location in scan_result.locations {
             println!("Location: {} at {}", location.name, location.path);
             for set in location.sets {
                 println!("  - Set: {} ({})", set.name, set.path);
@@ -486,6 +486,10 @@ mod tests {
                     println!("      * Project: {}", project.name);
                 }
             }
+        }
+        println!("Found {} standalone projects", scan_result.standalone_projects.len());
+        for project in scan_result.standalone_projects {
+            println!("Standalone project: {}", project.name);
         }
     }
 }
