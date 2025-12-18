@@ -1,6 +1,12 @@
 import Dexie, { Table } from 'dexie';
 import type { ProjectMetadata, Bank } from '../context/ProjectsContext';
 
+// File timestamps from the backend for cache validation
+export interface ProjectFileTimestamps {
+  project_file: number | null;  // Modification time of project.work or project.strd
+  bank_files: number[];         // Modification times of bank01.work through bank16.work
+}
+
 export interface CachedProjectData {
   path: string; // Primary key
   metadata: ProjectMetadata;
@@ -12,6 +18,7 @@ export interface CachedMetadata {
   path: string; // Primary key
   metadata: ProjectMetadata;
   timestamp: number;
+  fileTimestamps?: ProjectFileTimestamps; // File modification times for cache validation
 }
 
 export interface CachedBank {
@@ -20,6 +27,7 @@ export interface CachedBank {
   bankId: string; // Bank ID (A-P)
   bank: Bank;
   timestamp: number;
+  fileTimestamp?: number; // File modification time for this bank file
 }
 
 export class ProjectDatabase extends Dexie {
@@ -96,6 +104,31 @@ export async function getCachedMetadata(path: string): Promise<ProjectMetadata |
 }
 
 /**
+ * Get cached metadata with file timestamps for validation
+ */
+export async function getCachedMetadataWithTimestamps(path: string): Promise<CachedMetadata | null> {
+  try {
+    return await db.projectMetadata.get(path) ?? null;
+  } catch (error) {
+    console.error('Error getting cached metadata from IndexedDB:', error);
+    return null;
+  }
+}
+
+/**
+ * Get cached bank with file timestamp for validation
+ */
+export async function getCachedBankWithTimestamp(path: string, bankId: string): Promise<CachedBank | null> {
+  try {
+    const id = `${path}:${bankId}`;
+    return await db.projectBanks.get(id) ?? null;
+  } catch (error) {
+    console.error('Error getting cached bank from IndexedDB:', error);
+    return null;
+  }
+}
+
+/**
  * Get a specific cached bank by path and bank ID
  */
 export async function getCachedBank(path: string, bankId: string): Promise<Bank | null> {
@@ -157,13 +190,15 @@ export async function getCachedProject(path: string): Promise<CachedProjectData 
  */
 export async function setCachedMetadata(
   path: string,
-  metadata: ProjectMetadata
+  metadata: ProjectMetadata,
+  fileTimestamps?: ProjectFileTimestamps
 ): Promise<void> {
   try {
     await db.projectMetadata.put({
       path,
       metadata,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      fileTimestamps
     });
   } catch (error) {
     console.error('Error saving metadata to IndexedDB:', error);
@@ -177,7 +212,8 @@ export async function setCachedMetadata(
 export async function setCachedBank(
   path: string,
   bankId: string,
-  bank: Bank
+  bank: Bank,
+  fileTimestamp?: number
 ): Promise<void> {
   try {
     const id = `${path}:${bankId}`;
@@ -186,7 +222,8 @@ export async function setCachedBank(
       path,
       bankId,
       bank,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      fileTimestamp
     });
   } catch (error) {
     console.error('Error saving bank to IndexedDB:', error);
@@ -201,16 +238,20 @@ export async function setCachedBank(
 export async function setCachedProject(
   path: string,
   metadata: ProjectMetadata,
-  banks: Bank[]
+  banks: Bank[],
+  fileTimestamps?: ProjectFileTimestamps
 ): Promise<void> {
   const saveProject = async () => {
-    // Save metadata
-    await setCachedMetadata(path, metadata);
+    // Save metadata with file timestamps
+    await setCachedMetadata(path, metadata, fileTimestamps);
 
-    // Save each bank separately
-    const bankPromises = banks.map(bank =>
-      setCachedBank(path, bank.id, bank)
-    );
+    // Save each bank separately with its file timestamp
+    const bankIds = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'];
+    const bankPromises = banks.map(bank => {
+      const bankIndex = bankIds.indexOf(bank.id);
+      const bankFileTimestamp = fileTimestamps?.bank_files[bankIndex];
+      return setCachedBank(path, bank.id, bank, bankFileTimestamp);
+    });
     await Promise.all(bankPromises);
   };
 
@@ -303,5 +344,56 @@ export async function getCacheStats(): Promise<{
   } catch (error) {
     console.error('Error getting cache stats from IndexedDB:', error);
     return { projectCount: 0, bankCount: 0, oldestTimestamp: 0, newestTimestamp: 0 };
+  }
+}
+
+/**
+ * Validate cache against current file timestamps
+ * Returns true if cache is valid (files haven't changed), false if stale
+ */
+export async function isCacheValid(
+  path: string,
+  currentTimestamps: ProjectFileTimestamps
+): Promise<boolean> {
+  try {
+    const cachedMeta = await getCachedMetadataWithTimestamps(path);
+
+    if (!cachedMeta?.fileTimestamps) {
+      // No cached timestamps - cache is from before timestamp tracking
+      console.log('[Cache Validation] No cached timestamps found - cache is stale');
+      return false;
+    }
+
+    const cached = cachedMeta.fileTimestamps;
+
+    // Check project file timestamp
+    if (cached.project_file !== currentTimestamps.project_file) {
+      console.log('[Cache Validation] Project file changed:', {
+        cached: cached.project_file,
+        current: currentTimestamps.project_file
+      });
+      return false;
+    }
+
+    // Check bank file timestamps
+    for (let i = 0; i < 16; i++) {
+      const cachedBank = cached.bank_files[i] || 0;
+      const currentBank = currentTimestamps.bank_files[i] || 0;
+
+      if (cachedBank !== currentBank) {
+        const bankId = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'][i];
+        console.log(`[Cache Validation] Bank ${bankId} file changed:`, {
+          cached: cachedBank,
+          current: currentBank
+        });
+        return false;
+      }
+    }
+
+    console.log('[Cache Validation] Cache is valid - no file changes detected');
+    return true;
+  } catch (error) {
+    console.error('Error validating cache:', error);
+    return false; // Assume stale on error
   }
 }

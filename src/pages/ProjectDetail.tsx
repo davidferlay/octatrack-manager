@@ -100,7 +100,7 @@ function getLengthDenominator(length: number): number {
 export function ProjectDetail() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { setCachedProject, getInMemoryProject, setInMemoryProject, clearProjectCache } = useProjects();
+  const { getInMemoryProject, setInMemoryProject, clearProjectCache } = useProjects();
   const projectPath = searchParams.get("path");
   const projectName = searchParams.get("name");
 
@@ -150,13 +150,41 @@ export function ProjectDetail() {
   useEffect(() => {
     if (projectPath) {
       // Multi-level caching: Memory → IndexedDB → Backend
+      // With timestamp validation to detect external changes
       const loadWithMultiLevelCache = async () => {
         const startTime = performance.now();
+
+        // First, get current file timestamps to validate cache
+        setLoadingStatus("Checking for external changes...");
+        let currentTimestamps: { project_file: number | null; bank_files: number[] } | null = null;
+        try {
+          currentTimestamps = await invoke<{ project_file: number | null; bank_files: number[] }>("get_project_timestamps", { path: projectPath });
+        } catch (error) {
+          console.warn('[Cache Validation] Could not get file timestamps:', error);
+        }
 
         // Level 1: Check in-memory cache (instant!)
         setLoadingStatus("Checking memory cache...");
         const inMemory = getInMemoryProject(projectPath);
         if (inMemory) {
+          // Validate in-memory cache against file timestamps
+          if (currentTimestamps) {
+            const { isCacheValid } = await import("../utils/projectDB");
+            const isValid = await isCacheValid(projectPath, currentTimestamps);
+            if (!isValid) {
+              console.log('[L1 Cache STALE - Memory] Files changed externally, reloading from backend');
+              // Clear stale caches
+              await clearProjectCache(projectPath);
+              setLoadingStatus("Loading from project files...");
+              requestAnimationFrame(() => {
+                setTimeout(() => {
+                  loadProjectData(currentTimestamps!);
+                }, 10);
+              });
+              return;
+            }
+          }
+
           const loadTime = performance.now() - startTime;
           console.log(`[L1 Cache HIT - Memory] Loaded instantly in ${loadTime.toFixed(2)}ms:`, projectPath);
 
@@ -173,7 +201,25 @@ export function ProjectDetail() {
         setLoadingStatus("Checking local cache...");
 
         // Level 2: Check IndexedDB
-        const { getCachedMetadata, getCachedBank } = await import("../utils/projectDB");
+        const { getCachedMetadata, getCachedBank, isCacheValid } = await import("../utils/projectDB");
+
+        // Validate IndexedDB cache against file timestamps
+        if (currentTimestamps) {
+          const isValid = await isCacheValid(projectPath, currentTimestamps);
+          if (!isValid) {
+            console.log('[L2 Cache STALE - IndexedDB] Files changed externally, reloading from backend');
+            // Clear stale caches
+            await clearProjectCache(projectPath);
+            setLoadingStatus("Loading from project files...");
+            requestAnimationFrame(() => {
+              setTimeout(() => {
+                loadProjectData(currentTimestamps!);
+              }, 10);
+            });
+            return;
+          }
+        }
+
         const cachedMetadata = await getCachedMetadata(projectPath);
         const l2Time = performance.now() - startTime;
 
@@ -247,7 +293,7 @@ export function ProjectDetail() {
           // Level 3: Load from backend
           requestAnimationFrame(() => {
             setTimeout(() => {
-              loadProjectData();
+              loadProjectData(currentTimestamps || undefined);
             }, 10);
           });
         }
@@ -257,7 +303,7 @@ export function ProjectDetail() {
     }
   }, [projectPath]);
 
-  async function loadProjectData() {
+  async function loadProjectData(fileTimestamps?: { project_file: number | null; bank_files: number[] }) {
     setIsLoading(true);
     setError(null);
     try {
@@ -276,14 +322,26 @@ export function ProjectDetail() {
       setMetadata(projectMetadata);
       setBanks(projectBanks);
 
-      // Cache the loaded data to all levels
+      // Cache the loaded data to all levels (with file timestamps for validation)
       if (projectPath) {
         setLoadingStatus("Caching for faster access...");
-        // Save to IndexedDB (Level 2)
+
+        // Get fresh timestamps if not provided
+        let timestamps = fileTimestamps;
+        if (!timestamps) {
+          try {
+            timestamps = await invoke<{ project_file: number | null; bank_files: number[] }>("get_project_timestamps", { path: projectPath });
+          } catch (error) {
+            console.warn('[Cache] Could not get file timestamps for caching:', error);
+          }
+        }
+
+        // Save to IndexedDB (Level 2) with timestamps
         const cacheStart = performance.now();
-        await setCachedProject(projectPath, projectMetadata, projectBanks);
+        const { setCachedProject: saveToDB } = await import("../utils/projectDB");
+        await saveToDB(projectPath, projectMetadata, projectBanks, timestamps);
         const cacheTime = performance.now() - cacheStart;
-        console.log(`[L2 Cache] Saved to IndexedDB in ${cacheTime.toFixed(2)}ms`);
+        console.log(`[L2 Cache] Saved to IndexedDB with timestamps in ${cacheTime.toFixed(2)}ms`);
 
         // Save to in-memory cache (Level 1)
         setInMemoryProject(projectPath, projectMetadata, projectBanks);
@@ -317,10 +375,14 @@ export function ProjectDetail() {
     );
   }
 
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     // Trigger spin animation
     setIsSpinning(true);
     setTimeout(() => setIsSpinning(false), 600);
+    // Clear caches before refreshing to ensure fresh data
+    if (projectPath) {
+      await clearProjectCache(projectPath);
+    }
     loadProjectData();
   };
 
@@ -396,7 +458,7 @@ export function ProjectDetail() {
             onClick={handleRefresh}
             className={`toolbar-button ${isSpinning ? 'refreshing' : ''}`}
             disabled={isLoading}
-            title="Refresh project data"
+            title="Clear project caches"
           >
             <i className="fas fa-sync-alt"></i>
           </button>
