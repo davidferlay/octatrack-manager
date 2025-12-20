@@ -7,6 +7,7 @@ interface BankSelectorProps {
   onChange: (bankIndex: number) => void;
   currentBank?: number;
   loadedBankIndices?: Set<number>;  // Set of loaded bank indices
+  failedBankIndices?: Map<number, string>;  // Map of failed bank indices to error messages
   allBanksLoaded?: boolean;  // Whether all banks are fully loaded
 }
 
@@ -21,7 +22,7 @@ export function formatBankName(bankName: string, bankIndex: number): string {
   return `${bankName} (${bankIndex + 1})`;
 }
 
-export function BankSelector({ id, banks, value, onChange, currentBank, loadedBankIndices, allBanksLoaded = false }: BankSelectorProps) {
+export function BankSelector({ id, banks, value, onChange, currentBank, loadedBankIndices, failedBankIndices, allBanksLoaded = false }: BankSelectorProps) {
   const hasAnyBanks = loadedBankIndices ? loadedBankIndices.size > 0 : banks.length > 0;
   const isFullyDisabled = !hasAnyBanks;
 
@@ -48,14 +49,21 @@ export function BankSelector({ id, banks, value, onChange, currentBank, loadedBa
             {BANK_LETTERS.map((letter, index) => {
               const bank = banks[index];
               const isLoaded = loadedBankIndices ? loadedBankIndices.has(index) : !!bank;
+              const isFailed = failedBankIndices?.has(index);
               const isActive = index === currentBank;
 
+              let label: string;
+              if (isLoaded && bank) {
+                label = `${formatBankName(bank.name, index)}${isActive ? ' (Active)' : ''}`;
+              } else if (isFailed) {
+                label = `Bank ${letter} (unsupported)`;
+              } else {
+                label = `Bank ${letter} (loading...)`;
+              }
+
               return (
-                <option key={letter} value={index} disabled={!isLoaded}>
-                  {isLoaded && bank
-                    ? `${formatBankName(bank.name, index)}${isActive ? ' (Active)' : ''}`
-                    : `Bank ${letter} (loading...)`
-                  }
+                <option key={letter} value={index} disabled={!isLoaded || isFailed}>
+                  {label}
                 </option>
               );
             })}

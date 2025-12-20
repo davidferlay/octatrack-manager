@@ -1717,7 +1717,11 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
             }
             Err(e) => {
                 eprintln!("Warning: Failed to read bank {}: {:?}", bank_letter, e);
-                // Continue with other banks
+                // If we're targeting a specific bank and it failed, return the error
+                if target_bank_index.is_some() {
+                    return Err(format!("Failed to read bank {}: {:?}", bank_letter, e));
+                }
+                // Otherwise continue with other banks
             }
         }
     }
