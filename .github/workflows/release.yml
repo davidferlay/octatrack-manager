@@ -1,4 +1,4 @@
-name: Release Build
+name: Prod Release Build
 
 on:
   release:
