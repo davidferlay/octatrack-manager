@@ -1,11 +1,10 @@
-import { useState, useTransition, useCallback } from "react";
+import { useState, useTransition } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useNavigate } from "react-router-dom";
 import { useProjects } from "../context/ProjectsContext";
 import { Version } from "../components/Version";
 import { ScrollToTop } from "../components/ScrollToTop";
-import { clearProjectCache } from "../utils/projectDB";
 import "../App.css";
 
 interface OctatrackProject {
@@ -48,30 +47,10 @@ export function HomePage() {
     setOpenLocations,
     setIsIndividualProjectsOpen,
     setIsLocationsOpen,
-    clearAll,
   } = useProjects();
   const [isScanning, setIsScanning] = useState(false);
-  const [isClearingCaches, setIsClearingCaches] = useState(false);
   const navigate = useNavigate();
   const [, startTransition] = useTransition();
-
-  // Hidden cache clear function - clears all caches (IndexedDB, sessionStorage, in-memory)
-  const handleClearAllCaches = useCallback(async () => {
-    setIsClearingCaches(true);
-    try {
-      // Clear IndexedDB project cache
-      await clearProjectCache();
-      // Clear all context state and sessionStorage
-      clearAll();
-      // Clear update-checked flag from sessionStorage
-      sessionStorage.removeItem('update-checked');
-      console.log('All caches cleared successfully');
-    } catch (error) {
-      console.error('Error clearing caches:', error);
-    } finally {
-      setTimeout(() => setIsClearingCaches(false), 600);
-    }
-  }, [clearAll]);
 
   // Helper to sort projects within a location's sets
   function sortProjectsInLocations(locations: OctatrackLocation[]): OctatrackLocation[] {
@@ -197,13 +176,6 @@ export function HomePage() {
           <h1>Octatrack Manager</h1>
           <span className="header-path-info">Discover and manage your Elektron Octatrack projects</span>
         </div>
-        <button
-          onClick={handleClearAllCaches}
-          className={`toolbar-button ${isClearingCaches ? 'refreshing' : ''}`}
-          title="Clear all caches"
-        >
-          <i className="fas fa-sync-alt"></i>
-        </button>
         <Version />
       </div>
 

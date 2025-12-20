@@ -886,26 +886,67 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
     }
 }
 
+const BANK_LETTERS: [&str; 16] = [
+    "A", "B", "C", "D", "E", "F", "G", "H",
+    "I", "J", "K", "L", "M", "N", "O", "P"
+];
+
+/// Read a single bank by index (0-15, corresponding to banks A-P)
+/// This is optimized to only read the single bank file.
+pub fn read_single_bank(project_path: &str, bank_index: u8) -> Result<Option<Bank>, String> {
+    if bank_index >= 16 {
+        return Err(format!("Invalid bank index: {}. Must be 0-15.", bank_index));
+    }
+
+    let path = Path::new(project_path);
+    let bank_num = (bank_index as usize) + 1;
+
+    // Find the bank file
+    let bank_file_name = format!("bank{:02}.work", bank_num);
+    let mut bank_file_path = path.join(&bank_file_name);
+
+    if !bank_file_path.exists() {
+        let bank_file_name = format!("bank{:02}.strd", bank_num);
+        bank_file_path = path.join(&bank_file_name);
+        if !bank_file_path.exists() {
+            return Ok(None); // Bank doesn't exist
+        }
+    }
+
+    // Read only this bank using read_project_banks_internal
+    match read_project_banks_internal(project_path, Some(bank_index)) {
+        Ok(banks) => Ok(banks.into_iter().next()),
+        Err(e) => Err(e),
+    }
+}
+
 pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
+    read_project_banks_internal(project_path, None)
+}
+
+fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>) -> Result<Vec<Bank>, String> {
     let path = Path::new(project_path);
     let mut banks = Vec::new();
 
     // Bank files are named bank01.work, bank02.work, etc.
     // Octatrack supports up to 16 banks (A-P)
-    let bank_letters = [
-        "A", "B", "C", "D", "E", "F", "G", "H",
-        "I", "J", "K", "L", "M", "N", "O", "P"
-    ];
 
-    for (idx, bank_letter) in bank_letters.iter().enumerate() {
+    for (idx, bank_letter) in BANK_LETTERS.iter().enumerate() {
+        // Skip banks that aren't the target (if a target is specified)
+        if let Some(target) = target_bank_index {
+            if idx != target as usize {
+                continue;
+            }
+        }
+
         let bank_num = idx + 1;
         let bank_file_name = format!("bank{:02}.work", bank_num);
-        let bank_file_path = path.join(&bank_file_name);
+        let mut bank_file_path = path.join(&bank_file_name);
 
         if !bank_file_path.exists() {
             // Try .strd extension
             let bank_file_name = format!("bank{:02}.strd", bank_num);
-            let bank_file_path = path.join(&bank_file_name);
+            bank_file_path = path.join(&bank_file_name);
             if !bank_file_path.exists() {
                 continue; // Skip missing banks
             }

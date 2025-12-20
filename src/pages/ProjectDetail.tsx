@@ -1,7 +1,6 @@
 import { useState, useEffect, useTransition, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
-import { useProjects } from "../context/ProjectsContext";
 import type { ProjectMetadata, Bank } from "../context/ProjectsContext";
 import { BankSelector, ALL_BANKS, formatBankName } from "../components/BankSelector";
 import { TrackSelector, ALL_AUDIO_TRACKS, ALL_MIDI_TRACKS } from "../components/TrackSelector";
@@ -100,13 +99,14 @@ function getLengthDenominator(length: number): number {
 export function ProjectDetail() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { getInMemoryProject, setInMemoryProject, clearProjectCache } = useProjects();
   const projectPath = searchParams.get("path");
   const projectName = searchParams.get("name");
 
   const [metadata, setMetadata] = useState<ProjectMetadata | null>(null);
   const [banks, setBanks] = useState<Bank[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadedBankIndices, setLoadedBankIndices] = useState<Set<number>>(new Set());
+  const [allBanksLoaded, setAllBanksLoaded] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState<string>("Initializing...");
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>("overview");
@@ -139,226 +139,76 @@ export function ProjectDetail() {
     setPartsWriteStatus(status);
   }, []);
 
-  // Callback to invalidate cache when Parts are saved
-  const handlePartsChanged = useCallback(async () => {
-    if (projectPath) {
-      console.log('[Cache] Invalidating cache after Parts save for:', projectPath);
-      await clearProjectCache(projectPath);
-    }
-  }, [projectPath, clearProjectCache]);
-
   useEffect(() => {
     if (!projectPath) return;
 
-    // Cancellation flag to prevent duplicate loads (React StrictMode)
-    let cancelled = false;
-
-    // Multi-level caching: Memory → IndexedDB → Backend
-    // With timestamp validation to detect external changes
-    const loadWithMultiLevelCache = async () => {
-      const startTime = performance.now();
-
-      // First, get current file timestamps to validate cache
-      setLoadingStatus("Checking for external changes...");
-      let currentTimestamps: { project_file: number | null; bank_files: number[] } | null = null;
-      try {
-        currentTimestamps = await invoke<{ project_file: number | null; bank_files: number[] }>("get_project_timestamps", { path: projectPath });
-      } catch (error) {
-        console.warn('[Cache Validation] Could not get file timestamps:', error);
-      }
-
-      if (cancelled) return;
-
-      // Level 1: Check in-memory cache (instant!)
-      setLoadingStatus("Checking memory cache...");
-      const inMemory = getInMemoryProject(projectPath);
-      if (inMemory) {
-        // Validate in-memory cache against file timestamps
-        if (currentTimestamps) {
-          const { isCacheValid } = await import("../utils/projectDB");
-          const isValid = await isCacheValid(projectPath, currentTimestamps);
-          if (cancelled) return;
-          if (!isValid) {
-            console.log('[L1 Cache STALE - Memory] Files changed externally, reloading from backend');
-            // Clear stale caches
-            await clearProjectCache(projectPath);
-            if (cancelled) return;
-            setLoadingStatus("Loading from project files...");
-            loadProjectData(currentTimestamps!);
-            return;
-          }
-        }
-
-        const loadTime = performance.now() - startTime;
-        console.log(`[L1 Cache HIT - Memory] Loaded instantly in ${loadTime.toFixed(2)}ms:`, projectPath);
-
-        setMetadata(inMemory.metadata);
-        setBanks(inMemory.banks);
-        setSelectedBankIndex(inMemory.metadata.current_state.bank);
-        setSelectedTrackIndex(inMemory.metadata.current_state.track);
-        setSelectedPatternIndex(inMemory.metadata.current_state.pattern);
-        setIsLoading(false);
-        return;
-      }
-
-      console.log("[L1 Cache MISS - Memory] Checking IndexedDB...");
-      setLoadingStatus("Checking local cache...");
-
-      // Level 2: Check IndexedDB
-      const { getCachedMetadata, getCachedBank, isCacheValid } = await import("../utils/projectDB");
-
-      // Validate IndexedDB cache against file timestamps
-      if (currentTimestamps) {
-        const isValid = await isCacheValid(projectPath, currentTimestamps);
-        if (cancelled) return;
-        if (!isValid) {
-          console.log('[L2 Cache STALE - IndexedDB] Files changed externally, reloading from backend');
-          // Clear stale caches
-          await clearProjectCache(projectPath);
-          if (cancelled) return;
-          setLoadingStatus("Loading from project files...");
-          loadProjectData(currentTimestamps!);
-          return;
-        }
-      }
-
-      const cachedMetadata = await getCachedMetadata(projectPath);
-      if (cancelled) return;
-      const l2Time = performance.now() - startTime;
-
-      if (cachedMetadata) {
-        console.log(`[L2 Cache HIT - IndexedDB] Loaded metadata in ${l2Time.toFixed(2)}ms`);
-        setLoadingStatus("Loading cached banks...");
-
-        // Set metadata immediately
-        setMetadata(cachedMetadata);
-        setSelectedBankIndex(cachedMetadata.current_state.bank);
-        setSelectedTrackIndex(cachedMetadata.current_state.track);
-        setSelectedPatternIndex(cachedMetadata.current_state.pattern);
-
-        // OPTIMIZATION: Load active bank first for instant UI
-        const bankIds = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'];
-        const activeBankId = bankIds[cachedMetadata.current_state.bank];
-
-        // Load active bank first (priority)
-        const activeBankStart = performance.now();
-        const activeBank = await getCachedBank(projectPath, activeBankId);
-        if (cancelled) return;
-        const activeBankTime = performance.now() - activeBankStart;
-
-        if (activeBank) {
-          console.log(`[L2 Cache - Priority] Loaded active bank ${activeBankId} in ${activeBankTime.toFixed(2)}ms`);
-
-          // Create banks array with active bank in correct position
-          const banksArr: Bank[] = new Array(16).fill(null);
-          banksArr[cachedMetadata.current_state.bank] = activeBank;
-          setBanks(banksArr.filter(b => b !== null));
-
-          // UI is now ready!
-          setIsLoading(false);
-          const uiReadyTime = performance.now() - startTime;
-          console.log(`[L2 Cache] UI ready in ${uiReadyTime.toFixed(2)}ms ⚡`);
-        }
-
-        // Load remaining banks in background (lazy)
-        const loadRemainingBanks = async () => {
-          const remainingBankIds = bankIds.filter((_, idx) => idx !== cachedMetadata.current_state.bank);
-          const allBanks: Bank[] = activeBank ? [activeBank] : [];
-
-          for (const bankId of remainingBankIds) {
-            if (cancelled) return;
-            const bank = await getCachedBank(projectPath, bankId);
-            if (cancelled) return;
-            if (bank) {
-              allBanks.push(bank);
-              // Update banks state with all loaded so far
-              setBanks([...allBanks]);
-            }
-          }
-
-          const totalTime = performance.now() - startTime;
-          console.log(`[L2 Cache] All banks loaded in ${totalTime.toFixed(2)}ms (background)`);
-
-          // Save complete data to in-memory cache
-          if (!cancelled && allBanks.length > 0) {
-            setInMemoryProject(projectPath, cachedMetadata, allBanks);
-          }
-        };
-
-        // Load remaining banks in background without blocking
-        loadRemainingBanks();
-      } else {
-        console.log(`[L2 Cache MISS - IndexedDB] Loading from backend`);
-        setLoadingStatus("Loading from project files...");
-        // Level 3: Load from backend
-        loadProjectData(currentTimestamps || undefined);
-      }
-    };
-
-    loadWithMultiLevelCache();
-
-    // Cleanup function to cancel on unmount (React StrictMode double-mount)
-    return () => {
-      cancelled = true;
-    };
+    loadProjectData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectPath]); // Only re-run when projectPath changes; cache functions are stable
+  }, [projectPath]);
 
-  async function loadProjectData(fileTimestamps?: { project_file: number | null; bank_files: number[] }) {
+  async function loadProjectData() {
     setIsLoading(true);
+    setLoadedBankIndices(new Set());
+    setAllBanksLoaded(false);
     setError(null);
     try {
-      console.log("[L3 Backend] Loading project from backend:", projectPath);
-      const loadStart = performance.now();
-
+      // Step 1: Load metadata first (fast) - this enables Overview tab immediately
       setLoadingStatus("Reading project metadata...");
       const projectMetadata = await invoke<ProjectMetadata>("load_project_metadata", { path: projectPath });
 
-      setLoadingStatus("Reading banks (this may take a moment)...");
-      const projectBanks = await invoke<Bank[]>("load_project_banks", { path: projectPath });
-
-      const loadTime = performance.now() - loadStart;
-      console.log(`[L3 Backend] Loaded from backend in ${loadTime.toFixed(2)}ms`);
-
       setMetadata(projectMetadata);
-      setBanks(projectBanks);
-
-      // Cache the loaded data to all levels (with file timestamps for validation)
-      if (projectPath) {
-        setLoadingStatus("Caching for faster access...");
-
-        // Get fresh timestamps if not provided
-        let timestamps = fileTimestamps;
-        if (!timestamps) {
-          try {
-            timestamps = await invoke<{ project_file: number | null; bank_files: number[] }>("get_project_timestamps", { path: projectPath });
-          } catch (error) {
-            console.warn('[Cache] Could not get file timestamps for caching:', error);
-          }
-        }
-
-        // Save to IndexedDB (Level 2) with timestamps
-        const cacheStart = performance.now();
-        const { setCachedProject: saveToDB } = await import("../utils/projectDB");
-        await saveToDB(projectPath, projectMetadata, projectBanks, timestamps);
-        const cacheTime = performance.now() - cacheStart;
-        console.log(`[L2 Cache] Saved to IndexedDB with timestamps in ${cacheTime.toFixed(2)}ms`);
-
-        // Save to in-memory cache (Level 1)
-        setInMemoryProject(projectPath, projectMetadata, projectBanks);
-        console.log(`[L1 Cache] Saved to memory`);
-      }
-
+      const activeBankIndex = projectMetadata.current_state.bank;
       // Set the selected bank to the currently active bank
-      setSelectedBankIndex(projectMetadata.current_state.bank);
+      setSelectedBankIndex(activeBankIndex);
       // Set the selected track to the currently active track
       setSelectedTrackIndex(projectMetadata.current_state.track);
       // Set the selected pattern to the currently active pattern
       setSelectedPatternIndex(projectMetadata.current_state.pattern);
+
+      // Step 2: Show UI immediately with metadata loaded
+      setIsLoading(false);
+
+      // Step 3: Load only the active bank first (fast) - enables Parts/Patterns/Tracks for active bank
+      setLoadingStatus("Loading active bank...");
+      const activeBank = await invoke<Bank | null>("load_single_bank", {
+        path: projectPath,
+        bankIndex: activeBankIndex
+      });
+
+      if (activeBank) {
+        // Initialize banks array with just the active bank
+        const initialBanks: Bank[] = [];
+        initialBanks[activeBankIndex] = activeBank;
+        setBanks(initialBanks);
+        setLoadedBankIndices(new Set([activeBankIndex]));
+      }
+
+      // Step 4: Load remaining banks in background
+      setLoadingStatus("Loading remaining banks...");
+      const remainingIndices = Array.from({ length: 16 }, (_, i) => i).filter(i => i !== activeBankIndex);
+
+      // Load remaining banks one by one to show progress
+      for (const bankIndex of remainingIndices) {
+        const bank = await invoke<Bank | null>("load_single_bank", {
+          path: projectPath,
+          bankIndex
+        });
+
+        if (bank) {
+          setBanks(prev => {
+            const newBanks = [...prev];
+            newBanks[bankIndex] = bank;
+            return newBanks;
+          });
+          setLoadedBankIndices(prev => new Set([...prev, bankIndex]));
+        }
+      }
+
+      setAllBanksLoaded(true);
+      setLoadingStatus("");
     } catch (err) {
-      console.error("[L3 Backend] Error loading project data:", err);
+      console.error("Error loading project data:", err);
       setError(String(err));
-    } finally {
       setIsLoading(false);
     }
   }
@@ -376,14 +226,10 @@ export function ProjectDetail() {
     );
   }
 
-  const handleRefresh = async () => {
+  const handleRefresh = () => {
     // Trigger spin animation
     setIsSpinning(true);
     setTimeout(() => setIsSpinning(false), 600);
-    // Clear caches before refreshing to ensure fresh data
-    if (projectPath) {
-      await clearProjectCache(projectPath);
-    }
     loadProjectData();
   };
 
@@ -459,7 +305,7 @@ export function ProjectDetail() {
             onClick={handleRefresh}
             className={`toolbar-button ${isSpinning ? 'refreshing' : ''}`}
             disabled={isLoading}
-            title="Clear project caches"
+            title="Refresh project"
           >
             <i className="fas fa-sync-alt"></i>
           </button>
@@ -756,6 +602,8 @@ export function ProjectDetail() {
                     value={selectedBankIndex}
                     onChange={setSelectedBankIndex}
                     currentBank={metadata?.current_state.bank}
+                    loadedBankIndices={loadedBankIndices}
+                    allBanksLoaded={allBanksLoaded}
                   />
 
                   <TrackSelector
@@ -766,12 +614,18 @@ export function ProjectDetail() {
                   />
                 </div>
 
+                {loadedBankIndices.size === 0 ? (
+                  <div className="loading-section">
+                    <div className="loading-spinner"></div>
+                    <p>Loading banks...</p>
+                  </div>
+                ) : (
                 <div className="bank-cards">
                   {(() => {
-                    // Determine which banks to display
+                    // Determine which banks to display (only show loaded banks)
                     const banksToDisplay = selectedBankIndex === ALL_BANKS
-                      ? banks.map((_, index) => index)
-                      : [selectedBankIndex];
+                      ? Array.from(loadedBankIndices).sort((a, b) => a - b)
+                      : loadedBankIndices.has(selectedBankIndex) ? [selectedBankIndex] : [];
 
                     return banksToDisplay.map((bankIndex) => {
                       const bank = banks[bankIndex];
@@ -811,13 +665,13 @@ export function ProjectDetail() {
                           onSharedPageChange={selectedBankIndex === ALL_BANKS ? setSharedPartsPageIndex : undefined}
                           sharedLfoTab={selectedBankIndex === ALL_BANKS ? sharedPartsLfoTab : undefined}
                           onSharedLfoTabChange={selectedBankIndex === ALL_BANKS ? setSharedPartsLfoTab : undefined}
-                          onPartsChanged={handlePartsChanged}
                           onWriteStatusChange={handleWriteStatusChange}
                         />
                       );
                     });
                   })()}
                 </div>
+                )}
               </div>
             )}
 
@@ -830,6 +684,8 @@ export function ProjectDetail() {
                     value={selectedBankIndex}
                     onChange={setSelectedBankIndex}
                     currentBank={metadata?.current_state.bank}
+                    loadedBankIndices={loadedBankIndices}
+                    allBanksLoaded={allBanksLoaded}
                   />
 
                   <label className={`toggle-switch ${isPending ? 'pending' : ''}`}>
@@ -860,12 +716,18 @@ export function ProjectDetail() {
                   />
                 </div>
 
+                {loadedBankIndices.size === 0 ? (
+                  <div className="loading-section">
+                    <div className="loading-spinner"></div>
+                    <p>Loading banks...</p>
+                  </div>
+                ) : (
                 <div className="bank-cards">
                   {(() => {
-                    // Determine which banks to display
+                    // Determine which banks to display (only show loaded banks)
                     const banksToDisplay = selectedBankIndex === ALL_BANKS
-                      ? banks.map((_, index) => index)
-                      : [selectedBankIndex];
+                      ? Array.from(loadedBankIndices).sort((a, b) => a - b)
+                      : loadedBankIndices.has(selectedBankIndex) ? [selectedBankIndex] : [];
 
                     return banksToDisplay.map((bankIndex) => {
                       const bank = banks[bankIndex];
@@ -1273,6 +1135,7 @@ export function ProjectDetail() {
           });
         })()}
       </div>
+                )}
     </div>
   )}
 
@@ -1285,6 +1148,8 @@ export function ProjectDetail() {
                     value={selectedBankIndex}
                     onChange={setSelectedBankIndex}
                     currentBank={metadata?.current_state.bank}
+                    loadedBankIndices={loadedBankIndices}
+                    allBanksLoaded={allBanksLoaded}
                   />
 
                   <TrackSelector
@@ -1295,12 +1160,18 @@ export function ProjectDetail() {
                   />
                 </div>
 
+                {loadedBankIndices.size === 0 ? (
+                  <div className="loading-section">
+                    <div className="loading-spinner"></div>
+                    <p>Loading banks...</p>
+                  </div>
+                ) : (
                 <section className="tracks-section">
                   {(() => {
-                    // Determine which banks to display
+                    // Determine which banks to display (only show loaded banks)
                     const banksToDisplay = selectedBankIndex === ALL_BANKS
-                      ? banks.map((_, index) => index)
-                      : [selectedBankIndex];
+                      ? Array.from(loadedBankIndices).sort((a, b) => a - b)
+                      : loadedBankIndices.has(selectedBankIndex) ? [selectedBankIndex] : [];
 
                     return banksToDisplay.map((bankIndex) => {
                       const bank = banks[bankIndex];
@@ -1364,6 +1235,7 @@ export function ProjectDetail() {
                     });
                   })()}
                 </section>
+                )}
               </div>
             )}
 
