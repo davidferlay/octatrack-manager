@@ -183,24 +183,51 @@ export function ProjectDetail() {
         setLoadedBankIndices(new Set([activeBankIndex]));
       }
 
-      // Step 4: Load remaining banks in background
+      // Step 4: Load remaining banks in parallel with dynamic concurrency
       setLoadingStatus("Loading remaining banks...");
       const remainingIndices = Array.from({ length: 16 }, (_, i) => i).filter(i => i !== activeBankIndex);
 
-      // Load remaining banks one by one to show progress
-      for (const bankIndex of remainingIndices) {
-        const bank = await invoke<Bank | null>("load_single_bank", {
-          path: projectPath,
-          bankIndex
-        });
+      // Get system resources to determine optimal concurrency
+      const resources = await invoke<{ cpu_cores: number; available_memory_mb: number; recommended_concurrency: number }>("get_system_resources");
+      const concurrency = Math.max(2, Math.min(resources.recommended_concurrency, 6)); // Between 2 and 6
 
-        if (bank) {
+      // Helper to load a single bank
+      const loadBank = async (bankIndex: number): Promise<{ bankIndex: number; bank: Bank | null }> => {
+        try {
+          const bank = await invoke<Bank | null>("load_single_bank", {
+            path: projectPath,
+            bankIndex
+          });
+          return { bankIndex, bank };
+        } catch {
+          return { bankIndex, bank: null };
+        }
+      };
+
+      // Process banks with controlled concurrency
+      const allResults: { bankIndex: number; bank: Bank | null }[] = [];
+      for (let i = 0; i < remainingIndices.length; i += concurrency) {
+        const batch = remainingIndices.slice(i, i + concurrency);
+        const batchResults = await Promise.all(batch.map(loadBank));
+        allResults.push(...batchResults);
+
+        // Update state progressively after each batch
+        const batchLoaded = batchResults.filter((r): r is { bankIndex: number; bank: Bank } => r.bank !== null);
+        if (batchLoaded.length > 0) {
           setBanks(prev => {
             const newBanks = [...prev];
-            newBanks[bankIndex] = bank;
+            for (const { bankIndex, bank } of batchLoaded) {
+              newBanks[bankIndex] = bank;
+            }
             return newBanks;
           });
-          setLoadedBankIndices(prev => new Set([...prev, bankIndex]));
+          setLoadedBankIndices(prev => {
+            const newSet = new Set(prev);
+            for (const { bankIndex } of batchLoaded) {
+              newSet.add(bankIndex);
+            }
+            return newSet;
+          });
         }
       }
 
