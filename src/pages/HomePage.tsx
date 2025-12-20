@@ -49,6 +49,7 @@ export function HomePage() {
     setIsLocationsOpen,
   } = useProjects();
   const [isScanning, setIsScanning] = useState(false);
+  const [isSpinning, setIsSpinning] = useState(false);
   const navigate = useNavigate();
   const [, startTransition] = useTransition();
 
@@ -169,6 +170,18 @@ export function HomePage() {
     }
   }
 
+  function handleRefresh() {
+    // Trigger spin animation
+    setIsSpinning(true);
+    setTimeout(() => setIsSpinning(false), 600);
+
+    // Clear existing data
+    setLocations([]);
+    setStandaloneProjects([]);
+    setOpenLocations(new Set());
+    setHasScanned(false);
+  }
+
   return (
     <main className="container">
       <div className="project-header">
@@ -176,7 +189,17 @@ export function HomePage() {
           <h1>Octatrack Manager</h1>
           <span className="header-path-info">Discover and manage your Elektron Octatrack projects</span>
         </div>
-        <Version />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <button
+            onClick={handleRefresh}
+            className={`toolbar-button ${isSpinning ? 'refreshing' : ''}`}
+            disabled={isScanning}
+            title="Refresh projects list"
+          >
+            <i className="fas fa-sync-alt"></i>
+          </button>
+          <Version />
+        </div>
       </div>
 
       <div className="scan-section">
