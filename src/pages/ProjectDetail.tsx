@@ -148,160 +148,161 @@ export function ProjectDetail() {
   }, [projectPath, clearProjectCache]);
 
   useEffect(() => {
-    if (projectPath) {
-      // Multi-level caching: Memory → IndexedDB → Backend
-      // With timestamp validation to detect external changes
-      const loadWithMultiLevelCache = async () => {
-        const startTime = performance.now();
+    if (!projectPath) return;
 
-        // First, get current file timestamps to validate cache
-        setLoadingStatus("Checking for external changes...");
-        let currentTimestamps: { project_file: number | null; bank_files: number[] } | null = null;
-        try {
-          currentTimestamps = await invoke<{ project_file: number | null; bank_files: number[] }>("get_project_timestamps", { path: projectPath });
-        } catch (error) {
-          console.warn('[Cache Validation] Could not get file timestamps:', error);
-        }
+    // Cancellation flag to prevent duplicate loads (React StrictMode)
+    let cancelled = false;
 
-        // Level 1: Check in-memory cache (instant!)
-        setLoadingStatus("Checking memory cache...");
-        const inMemory = getInMemoryProject(projectPath);
-        if (inMemory) {
-          // Validate in-memory cache against file timestamps
-          if (currentTimestamps) {
-            const { isCacheValid } = await import("../utils/projectDB");
-            const isValid = await isCacheValid(projectPath, currentTimestamps);
-            if (!isValid) {
-              console.log('[L1 Cache STALE - Memory] Files changed externally, reloading from backend');
-              // Clear stale caches
-              await clearProjectCache(projectPath);
-              setLoadingStatus("Loading from project files...");
-              requestAnimationFrame(() => {
-                setTimeout(() => {
-                  loadProjectData(currentTimestamps!);
-                }, 10);
-              });
-              return;
-            }
-          }
+    // Multi-level caching: Memory → IndexedDB → Backend
+    // With timestamp validation to detect external changes
+    const loadWithMultiLevelCache = async () => {
+      const startTime = performance.now();
 
-          const loadTime = performance.now() - startTime;
-          console.log(`[L1 Cache HIT - Memory] Loaded instantly in ${loadTime.toFixed(2)}ms:`, projectPath);
+      // First, get current file timestamps to validate cache
+      setLoadingStatus("Checking for external changes...");
+      let currentTimestamps: { project_file: number | null; bank_files: number[] } | null = null;
+      try {
+        currentTimestamps = await invoke<{ project_file: number | null; bank_files: number[] }>("get_project_timestamps", { path: projectPath });
+      } catch (error) {
+        console.warn('[Cache Validation] Could not get file timestamps:', error);
+      }
 
-          setMetadata(inMemory.metadata);
-          setBanks(inMemory.banks);
-          setSelectedBankIndex(inMemory.metadata.current_state.bank);
-          setSelectedTrackIndex(inMemory.metadata.current_state.track);
-          setSelectedPatternIndex(inMemory.metadata.current_state.pattern);
-          setIsLoading(false);
-          return;
-        }
+      if (cancelled) return;
 
-        console.log("[L1 Cache MISS - Memory] Checking IndexedDB...");
-        setLoadingStatus("Checking local cache...");
-
-        // Level 2: Check IndexedDB
-        const { getCachedMetadata, getCachedBank, isCacheValid } = await import("../utils/projectDB");
-
-        // Validate IndexedDB cache against file timestamps
+      // Level 1: Check in-memory cache (instant!)
+      setLoadingStatus("Checking memory cache...");
+      const inMemory = getInMemoryProject(projectPath);
+      if (inMemory) {
+        // Validate in-memory cache against file timestamps
         if (currentTimestamps) {
+          const { isCacheValid } = await import("../utils/projectDB");
           const isValid = await isCacheValid(projectPath, currentTimestamps);
+          if (cancelled) return;
           if (!isValid) {
-            console.log('[L2 Cache STALE - IndexedDB] Files changed externally, reloading from backend');
+            console.log('[L1 Cache STALE - Memory] Files changed externally, reloading from backend');
             // Clear stale caches
             await clearProjectCache(projectPath);
+            if (cancelled) return;
             setLoadingStatus("Loading from project files...");
-            requestAnimationFrame(() => {
-              setTimeout(() => {
-                loadProjectData(currentTimestamps!);
-              }, 10);
-            });
+            loadProjectData(currentTimestamps!);
             return;
           }
         }
 
-        const cachedMetadata = await getCachedMetadata(projectPath);
-        const l2Time = performance.now() - startTime;
+        const loadTime = performance.now() - startTime;
+        console.log(`[L1 Cache HIT - Memory] Loaded instantly in ${loadTime.toFixed(2)}ms:`, projectPath);
 
-        if (cachedMetadata) {
-          console.log(`[L2 Cache HIT - IndexedDB] Loaded metadata in ${l2Time.toFixed(2)}ms`);
-          setLoadingStatus("Loading cached banks...");
+        setMetadata(inMemory.metadata);
+        setBanks(inMemory.banks);
+        setSelectedBankIndex(inMemory.metadata.current_state.bank);
+        setSelectedTrackIndex(inMemory.metadata.current_state.track);
+        setSelectedPatternIndex(inMemory.metadata.current_state.pattern);
+        setIsLoading(false);
+        return;
+      }
 
-          // Set metadata immediately
-          setMetadata(cachedMetadata);
-          setSelectedBankIndex(cachedMetadata.current_state.bank);
-          setSelectedTrackIndex(cachedMetadata.current_state.track);
-          setSelectedPatternIndex(cachedMetadata.current_state.pattern);
+      console.log("[L1 Cache MISS - Memory] Checking IndexedDB...");
+      setLoadingStatus("Checking local cache...");
 
-          // OPTIMIZATION: Load active bank first for instant UI
-          const bankIds = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'];
-          const activeBankId = bankIds[cachedMetadata.current_state.bank];
+      // Level 2: Check IndexedDB
+      const { getCachedMetadata, getCachedBank, isCacheValid } = await import("../utils/projectDB");
 
-          // Load active bank first (priority)
-          const activeBankStart = performance.now();
-          const activeBank = await getCachedBank(projectPath, activeBankId);
-          const activeBankTime = performance.now() - activeBankStart;
+      // Validate IndexedDB cache against file timestamps
+      if (currentTimestamps) {
+        const isValid = await isCacheValid(projectPath, currentTimestamps);
+        if (cancelled) return;
+        if (!isValid) {
+          console.log('[L2 Cache STALE - IndexedDB] Files changed externally, reloading from backend');
+          // Clear stale caches
+          await clearProjectCache(projectPath);
+          if (cancelled) return;
+          setLoadingStatus("Loading from project files...");
+          loadProjectData(currentTimestamps!);
+          return;
+        }
+      }
 
-          if (activeBank) {
-            console.log(`[L2 Cache - Priority] Loaded active bank ${activeBankId} in ${activeBankTime.toFixed(2)}ms`);
+      const cachedMetadata = await getCachedMetadata(projectPath);
+      if (cancelled) return;
+      const l2Time = performance.now() - startTime;
 
-            // Create banks array with active bank in correct position
-            const banks: any[] = new Array(16).fill(null);
-            banks[cachedMetadata.current_state.bank] = activeBank;
-            setBanks(banks.filter(b => b !== null));
+      if (cachedMetadata) {
+        console.log(`[L2 Cache HIT - IndexedDB] Loaded metadata in ${l2Time.toFixed(2)}ms`);
+        setLoadingStatus("Loading cached banks...");
 
-            // UI is now ready!
-            setIsLoading(false);
-            const uiReadyTime = performance.now() - startTime;
-            console.log(`[L2 Cache] UI ready in ${uiReadyTime.toFixed(2)}ms ⚡`);
+        // Set metadata immediately
+        setMetadata(cachedMetadata);
+        setSelectedBankIndex(cachedMetadata.current_state.bank);
+        setSelectedTrackIndex(cachedMetadata.current_state.track);
+        setSelectedPatternIndex(cachedMetadata.current_state.pattern);
+
+        // OPTIMIZATION: Load active bank first for instant UI
+        const bankIds = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'];
+        const activeBankId = bankIds[cachedMetadata.current_state.bank];
+
+        // Load active bank first (priority)
+        const activeBankStart = performance.now();
+        const activeBank = await getCachedBank(projectPath, activeBankId);
+        if (cancelled) return;
+        const activeBankTime = performance.now() - activeBankStart;
+
+        if (activeBank) {
+          console.log(`[L2 Cache - Priority] Loaded active bank ${activeBankId} in ${activeBankTime.toFixed(2)}ms`);
+
+          // Create banks array with active bank in correct position
+          const banksArr: Bank[] = new Array(16).fill(null);
+          banksArr[cachedMetadata.current_state.bank] = activeBank;
+          setBanks(banksArr.filter(b => b !== null));
+
+          // UI is now ready!
+          setIsLoading(false);
+          const uiReadyTime = performance.now() - startTime;
+          console.log(`[L2 Cache] UI ready in ${uiReadyTime.toFixed(2)}ms ⚡`);
+        }
+
+        // Load remaining banks in background (lazy)
+        const loadRemainingBanks = async () => {
+          const remainingBankIds = bankIds.filter((_, idx) => idx !== cachedMetadata.current_state.bank);
+          const allBanks: Bank[] = activeBank ? [activeBank] : [];
+
+          for (const bankId of remainingBankIds) {
+            if (cancelled) return;
+            const bank = await getCachedBank(projectPath, bankId);
+            if (cancelled) return;
+            if (bank) {
+              allBanks.push(bank);
+              // Update banks state with all loaded so far
+              setBanks([...allBanks]);
+            }
           }
 
-          // Load remaining banks in background (lazy)
-          const loadRemainingBanks = async () => {
-            const remainingBankIds = bankIds.filter((_, idx) => idx !== cachedMetadata.current_state.bank);
-            const allBanks: any[] = activeBank ? [activeBank] : [];
+          const totalTime = performance.now() - startTime;
+          console.log(`[L2 Cache] All banks loaded in ${totalTime.toFixed(2)}ms (background)`);
 
-            for (const bankId of remainingBankIds) {
-              // Small delay to keep UI responsive
-              await new Promise<void>(resolve => {
-                setTimeout(async () => {
-                  const bank = await getCachedBank(projectPath, bankId);
-                  if (bank) {
-                    allBanks.push(bank);
-                    // Update banks state with all loaded so far
-                    setBanks([...allBanks]);
-                  }
-                  resolve();
-                }, 0);
-              });
-            }
+          // Save complete data to in-memory cache
+          if (!cancelled && allBanks.length > 0) {
+            setInMemoryProject(projectPath, cachedMetadata, allBanks);
+          }
+        };
 
-            const totalTime = performance.now() - startTime;
-            console.log(`[L2 Cache] All banks loaded in ${totalTime.toFixed(2)}ms (background)`);
+        // Load remaining banks in background without blocking
+        loadRemainingBanks();
+      } else {
+        console.log(`[L2 Cache MISS - IndexedDB] Loading from backend`);
+        setLoadingStatus("Loading from project files...");
+        // Level 3: Load from backend
+        loadProjectData(currentTimestamps || undefined);
+      }
+    };
 
-            // Save complete data to in-memory cache
-            if (allBanks.length > 0) {
-              setInMemoryProject(projectPath, cachedMetadata, allBanks);
-            }
-          };
+    loadWithMultiLevelCache();
 
-          // Load remaining banks in background without blocking
-          loadRemainingBanks();
-        } else {
-          console.log(`[L2 Cache MISS - IndexedDB] Loading from backend`);
-          setLoadingStatus("Loading from project files...");
-          // Level 3: Load from backend
-          requestAnimationFrame(() => {
-            setTimeout(() => {
-              loadProjectData(currentTimestamps || undefined);
-            }, 10);
-          });
-        }
-      };
-
-      loadWithMultiLevelCache();
-    }
-  }, [projectPath]);
+    // Cleanup function to cancel on unmount (React StrictMode double-mount)
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectPath]); // Only re-run when projectPath changes; cache functions are stable
 
   async function loadProjectData(fileTimestamps?: { project_file: number | null; bank_files: number[] }) {
     setIsLoading(true);

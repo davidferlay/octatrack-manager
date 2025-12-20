@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import * as projectDB from "../utils/projectDB";
 
 interface OctatrackProject {
@@ -608,25 +608,39 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     setIsLocationsOpenState(open);
   };
 
-  // Project cache methods (now using IndexedDB)
-  const getCachedProject = async (path: string): Promise<projectDB.CachedProjectData | null> => {
+  // Project cache methods (now using IndexedDB) - memoized to prevent effect re-runs
+  const getCachedProject = useCallback(async (path: string): Promise<projectDB.CachedProjectData | null> => {
     return await projectDB.getCachedProject(path);
-  };
+  }, []);
 
-  const setCachedProject = async (path: string, metadata: ProjectMetadata, banks: Bank[]): Promise<void> => {
+  const setCachedProject = useCallback(async (path: string, metadata: ProjectMetadata, banks: Bank[]): Promise<void> => {
     await projectDB.setCachedProject(path, metadata, banks);
-  };
+  }, []);
 
-  const clearProjectCache = async (path?: string): Promise<void> => {
+  const clearProjectCache = useCallback(async (path?: string): Promise<void> => {
+    // Clear IndexedDB cache
     await projectDB.clearProjectCache(path);
-  };
+    // Also clear in-memory cache to keep caches in sync
+    if (path) {
+      setInMemoryCache(prev => {
+        const newCache = new Map(prev);
+        newCache.delete(path);
+        return newCache;
+      });
+    } else {
+      // Clear all in-memory cache
+      setInMemoryCache(new Map());
+    }
+  }, []);
 
-  // In-memory cache methods (Level 1 - instant access)
-  const getInMemoryProject = (path: string): InMemoryCachedProject | null => {
+  // In-memory cache methods (Level 1 - instant access) - memoized
+  // Note: getInMemoryProject reads from inMemoryCache but we keep it stable
+  // by using the callback form; consumers should not rely on it in effect deps
+  const getInMemoryProject = useCallback((path: string): InMemoryCachedProject | null => {
     return inMemoryCache.get(path) || null;
-  };
+  }, [inMemoryCache]);
 
-  const setInMemoryProject = (path: string, metadata: ProjectMetadata, banks: Bank[]) => {
+  const setInMemoryProject = useCallback((path: string, metadata: ProjectMetadata, banks: Bank[]) => {
     setInMemoryCache(prev => {
       const newCache = new Map(prev);
       newCache.set(path, {
@@ -643,7 +657,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
       }
       return newCache;
     });
-  };
+  }, []);
 
   const clearAll = () => {
     setLocationsState([]);

@@ -194,12 +194,19 @@ export async function setCachedMetadata(
   fileTimestamps?: ProjectFileTimestamps
 ): Promise<void> {
   try {
+    console.log('[Cache Save] Saving metadata to IndexedDB:', {
+      path,
+      hasTimestamps: !!fileTimestamps,
+      projectFileTs: fileTimestamps?.project_file,
+      bankCount: fileTimestamps?.bank_files?.length
+    });
     await db.projectMetadata.put({
       path,
       metadata,
       timestamp: Date.now(),
       fileTimestamps
     });
+    console.log('[Cache Save] Successfully saved metadata with timestamps');
   } catch (error) {
     console.error('Error saving metadata to IndexedDB:', error);
     throw error;
@@ -358,13 +365,24 @@ export async function isCacheValid(
   try {
     const cachedMeta = await getCachedMetadataWithTimestamps(path);
 
-    if (!cachedMeta?.fileTimestamps) {
+    if (!cachedMeta) {
+      console.log('[Cache Validation] No cached metadata found at all');
+      return false;
+    }
+
+    if (!cachedMeta.fileTimestamps) {
       // No cached timestamps - cache is from before timestamp tracking
-      console.log('[Cache Validation] No cached timestamps found - cache is stale');
+      console.log('[Cache Validation] Cached metadata exists but no timestamps - cache is stale');
       return false;
     }
 
     const cached = cachedMeta.fileTimestamps;
+    console.log('[Cache Validation] Comparing timestamps:', {
+      cachedProjectFile: cached.project_file,
+      currentProjectFile: currentTimestamps.project_file,
+      cachedBankCount: cached.bank_files?.length,
+      currentBankCount: currentTimestamps.bank_files?.length
+    });
 
     // Check project file timestamp
     if (cached.project_file !== currentTimestamps.project_file) {
