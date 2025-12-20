@@ -106,6 +106,7 @@ export function ProjectDetail() {
   const [banks, setBanks] = useState<Bank[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadedBankIndices, setLoadedBankIndices] = useState<Set<number>>(new Set());
+  const [failedBankIndices, setFailedBankIndices] = useState<Map<number, string>>(new Map()); // bank index -> error message
   const [allBanksLoaded, setAllBanksLoaded] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState<string>("Initializing...");
   const [error, setError] = useState<string | null>(null);
@@ -125,6 +126,8 @@ export function ProjectDetail() {
   const [partsWriteStatus, setPartsWriteStatus] = useState<WriteStatus>(IDLE_STATUS); // Parts write status
   const [lastStatusMessage, setLastStatusMessage] = useState<string>(''); // Keep last message for fade-out
   const [isEditMode, setIsEditMode] = useState<boolean>(false); // Global edit mode toggle
+  const [showBankWarning, setShowBankWarning] = useState<boolean>(false); // Show failed banks warning
+  const [showBankWarningModal, setShowBankWarningModal] = useState<boolean>(false); // Show modal with details
 
   // Wrapper to capture last message before going idle (for fade-out effect)
   const handleWriteStatusChange = useCallback((status: WriteStatus) => {
@@ -146,9 +149,26 @@ export function ProjectDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectPath]);
 
+  // Show bank warning when failed banks are detected, auto-hide after 90 seconds
+  useEffect(() => {
+    if (failedBankIndices.size > 0) {
+      setShowBankWarning(true);
+      const timer = setTimeout(() => setShowBankWarning(false), 90000);
+      return () => clearTimeout(timer);
+    }
+  }, [failedBankIndices.size]);
+
+  // Hide bank warning when save status indicator appears
+  useEffect(() => {
+    if (partsWriteStatus.state !== 'idle') {
+      setShowBankWarning(false);
+    }
+  }, [partsWriteStatus.state]);
+
   async function loadProjectData() {
     setIsLoading(true);
     setLoadedBankIndices(new Set());
+    setFailedBankIndices(new Map());
     setAllBanksLoaded(false);
     setError(null);
     try {
@@ -192,15 +212,16 @@ export function ProjectDetail() {
       const concurrency = Math.max(2, Math.min(resources.recommended_concurrency, 4)); // Between 2 and 4 (conservative for UI)
 
       // Helper to load a single bank
-      const loadBank = async (bankIndex: number): Promise<{ bankIndex: number; bank: Bank | null }> => {
+      const loadBank = async (bankIndex: number): Promise<{ bankIndex: number; bank: Bank | null; error?: string }> => {
         try {
           const bank = await invoke<Bank | null>("load_single_bank", {
             path: projectPath,
             bankIndex
           });
           return { bankIndex, bank };
-        } catch {
-          return { bankIndex, bank: null };
+        } catch (err) {
+          console.error(`Failed to load bank ${bankIndex}:`, err);
+          return { bankIndex, bank: null, error: String(err) };
         }
       };
 
@@ -214,8 +235,12 @@ export function ProjectDetail() {
 
         // Update state progressively after each batch using startTransition for smooth UI
         const batchLoaded = batchResults.filter((r): r is { bankIndex: number; bank: Bank } => r.bank !== null);
-        if (batchLoaded.length > 0) {
-          startTransition(() => {
+        const batchFailed = batchResults.filter(r => r.bank === null && r.error);
+
+        // Always mark all attempted banks as loaded (even if they failed/returned null)
+        // This prevents "(loading...)" state from persisting forever for failed banks
+        startTransition(() => {
+          if (batchLoaded.length > 0) {
             setBanks(prev => {
               const newBanks = [...prev];
               for (const { bankIndex, bank } of batchLoaded) {
@@ -223,15 +248,25 @@ export function ProjectDetail() {
               }
               return newBanks;
             });
-            setLoadedBankIndices(prev => {
-              const newSet = new Set(prev);
-              for (const { bankIndex } of batchLoaded) {
-                newSet.add(bankIndex);
-              }
-              return newSet;
-            });
+          }
+          setLoadedBankIndices(prev => {
+            const newSet = new Set(prev);
+            for (const { bankIndex } of batchResults) {
+              newSet.add(bankIndex);
+            }
+            return newSet;
           });
-        }
+          // Track failed banks for user-friendly error display
+          if (batchFailed.length > 0) {
+            setFailedBankIndices(prev => {
+              const newMap = new Map(prev);
+              for (const { bankIndex, error } of batchFailed) {
+                newMap.set(bankIndex, error || 'Unknown error');
+              }
+              return newMap;
+            });
+          }
+        });
 
         // Yield to main thread between batches to keep UI responsive
         await yieldToMain();
@@ -285,13 +320,25 @@ export function ProjectDetail() {
               </span>
             </div>
           )}
-          {/* Parts write status indicator */}
-          <span className={`save-status-indicator ${partsWriteStatus.state}`}>
-            {partsWriteStatus.state === 'writing' && (partsWriteStatus.message || 'Saving...')}
-            {partsWriteStatus.state === 'success' && (partsWriteStatus.message || 'Saved')}
-            {partsWriteStatus.state === 'error' && (partsWriteStatus.message || 'Error')}
-            {partsWriteStatus.state === 'idle' && lastStatusMessage}
-          </span>
+          {/* Status indicator area - shows either save status or bank warning */}
+          <div className="status-indicator-area">
+            <span className={`save-status-indicator ${partsWriteStatus.state}`}>
+              {partsWriteStatus.state === 'writing' && (partsWriteStatus.message || 'Saving...')}
+              {partsWriteStatus.state === 'success' && (partsWriteStatus.message || 'Saved')}
+              {partsWriteStatus.state === 'error' && (partsWriteStatus.message || 'Error')}
+              {partsWriteStatus.state === 'idle' && lastStatusMessage}
+            </span>
+            {/* Failed banks warning indicator - only shown when save status is idle */}
+            {showBankWarning && failedBankIndices.size > 0 && partsWriteStatus.state === 'idle' && (
+              <span
+                className="bank-warning-indicator"
+                onClick={() => setShowBankWarningModal(true)}
+                title="Click for details"
+              >
+                <i className="fas fa-exclamation-triangle"></i> Unsupported banks
+              </span>
+            )}
+          </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           {!isLoading && !error && metadata && (
@@ -357,6 +404,33 @@ export function ProjectDetail() {
       {error && (
         <div className="error-section">
           <p>Error loading project: {error}</p>
+        </div>
+      )}
+
+      {/* Modal for failed banks details */}
+      {showBankWarningModal && (
+        <div className="modal-overlay" onClick={() => setShowBankWarningModal(false)}>
+          <div className="modal-content warning-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3><i className="fas fa-exclamation-triangle"></i> Some banks could not be loaded</h3>
+              <button className="modal-close" onClick={() => setShowBankWarningModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p>
+                <strong>Failed banks: </strong>
+                {Array.from(failedBankIndices.entries()).map(([idx]) =>
+                  String.fromCharCode(65 + idx)
+                ).join(', ')}
+              </p>
+              <p>
+                These banks may be from an older Octatrack OS version with an incompatible file format.
+              </p>
+              <p>
+                <strong>To fix:</strong> Open the project on your Octatrack and re-save the affected banks.
+                This will update them to the current file format.
+              </p>
+            </div>
+          </div>
         </div>
       )}
 
@@ -636,6 +710,7 @@ export function ProjectDetail() {
                     onChange={setSelectedBankIndex}
                     currentBank={metadata?.current_state.bank}
                     loadedBankIndices={loadedBankIndices}
+                    failedBankIndices={failedBankIndices}
                     allBanksLoaded={allBanksLoaded}
                   />
 
@@ -718,6 +793,7 @@ export function ProjectDetail() {
                     onChange={setSelectedBankIndex}
                     currentBank={metadata?.current_state.bank}
                     loadedBankIndices={loadedBankIndices}
+                    failedBankIndices={failedBankIndices}
                     allBanksLoaded={allBanksLoaded}
                   />
 
@@ -1182,6 +1258,7 @@ export function ProjectDetail() {
                     onChange={setSelectedBankIndex}
                     currentBank={metadata?.current_state.bank}
                     loadedBankIndices={loadedBankIndices}
+                    failedBankIndices={failedBankIndices}
                     allBanksLoaded={allBanksLoaded}
                   />
 

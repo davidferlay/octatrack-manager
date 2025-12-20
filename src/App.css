@@ -666,6 +666,123 @@ h1 {
   transition: opacity 1.2s ease-out;
 }
 
+/* Status indicator area - contains save status and bank warning */
+.status-indicator-area {
+  position: relative;
+  min-width: 200px;
+  height: 24px;
+}
+
+.status-indicator-area .save-status-indicator,
+.status-indicator-area .bank-warning-indicator {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+
+/* Bank warning indicator (in header) */
+.bank-warning-indicator {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 4px 12px;
+  border-radius: 10px;
+  color: #FFAA32;
+  background: rgba(255, 170, 50, 0.15);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.bank-warning-indicator:hover {
+  background: rgba(255, 170, 50, 0.25);
+}
+
+.bank-warning-indicator i {
+  margin-right: 6px;
+}
+
+/* Warning modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: var(--elektron-dark-gray);
+  border: 1px solid var(--elektron-border-gray);
+  border-radius: 8px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.modal-content.warning-modal {
+  border-color: rgba(255, 170, 50, 0.4);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--elektron-border-gray);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #FFCC66;
+}
+
+.modal-header h3 i {
+  margin-right: 0.5rem;
+  color: #FFAA32;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--elektron-text-secondary);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  color: var(--elektron-text-primary);
+}
+
+.modal-body {
+  padding: 1.25rem;
+}
+
+.modal-body p {
+  margin: 0 0 1rem 0;
+  color: var(--elektron-text-secondary);
+  line-height: 1.5;
+}
+
+.modal-body p:last-child {
+  margin-bottom: 0;
+}
+
+.modal-body strong {
+  color: var(--elektron-text-primary);
+}
+
 /* View/Edit mode toggle */
 .mode-toggle {
   display: flex;
