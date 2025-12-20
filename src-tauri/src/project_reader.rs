@@ -893,6 +893,24 @@ const BANK_LETTERS: [&str; 16] = [
 
 /// Read a single bank by index (0-15, corresponding to banks A-P)
 /// This is optimized to only read the single bank file.
+/// Returns a list of bank indices (0-15) that have existing bank files
+pub fn get_existing_bank_indices(project_path: &str) -> Vec<u8> {
+    let path = Path::new(project_path);
+    let mut existing = Vec::new();
+
+    for idx in 0..16u8 {
+        let bank_num = (idx as usize) + 1;
+        let work_file = path.join(format!("bank{:02}.work", bank_num));
+        let strd_file = path.join(format!("bank{:02}.strd", bank_num));
+
+        if work_file.exists() || strd_file.exists() {
+            existing.push(idx);
+        }
+    }
+
+    existing
+}
+
 pub fn read_single_bank(project_path: &str, bank_index: u8) -> Result<Option<Bank>, String> {
     if bank_index >= 16 {
         return Err(format!("Invalid bank index: {}. Must be 0-15.", bank_index));

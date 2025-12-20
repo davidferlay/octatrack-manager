@@ -188,7 +188,17 @@ export function ProjectDetail() {
       // Step 2: Show UI immediately with metadata loaded
       setIsLoading(false);
 
-      // Step 3: Load only the active bank first (fast) - enables Parts/Patterns/Tracks for active bank
+      // Step 3: Get list of existing bank files (skip non-existent banks early)
+      const existingBankIndices = await invoke<number[]>("get_existing_banks", { path: projectPath });
+      const existingBanksSet = new Set(existingBankIndices);
+
+      // Mark non-existent banks as "loaded" immediately (nothing to load)
+      const nonExistentIndices = Array.from({ length: 16 }, (_, i) => i).filter(i => !existingBanksSet.has(i));
+      if (nonExistentIndices.length > 0) {
+        setLoadedBankIndices(new Set(nonExistentIndices));
+      }
+
+      // Step 4: Load only the active bank first (fast) - enables Parts/Patterns/Tracks for active bank
       setLoadingStatus("Loading active bank...");
       const activeBank = await invoke<Bank | null>("load_single_bank", {
         path: projectPath,
@@ -200,12 +210,12 @@ export function ProjectDetail() {
         const initialBanks: Bank[] = [];
         initialBanks[activeBankIndex] = activeBank;
         setBanks(initialBanks);
-        setLoadedBankIndices(new Set([activeBankIndex]));
+        setLoadedBankIndices(prev => new Set([...prev, activeBankIndex]));
       }
 
-      // Step 4: Load remaining banks in parallel with dynamic concurrency
+      // Step 5: Load remaining existing banks in parallel with dynamic concurrency
       setLoadingStatus("Loading remaining banks...");
-      const remainingIndices = Array.from({ length: 16 }, (_, i) => i).filter(i => i !== activeBankIndex);
+      const remainingIndices = existingBankIndices.filter(i => i !== activeBankIndex);
 
       // Get system resources to determine optimal concurrency
       const resources = await invoke<{ cpu_cores: number; available_memory_mb: number; recommended_concurrency: number }>("get_system_resources");
