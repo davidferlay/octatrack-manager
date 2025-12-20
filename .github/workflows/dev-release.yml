@@ -2,11 +2,6 @@ name: Dev Release Build
 
 on:
   workflow_dispatch:
-    inputs:
-      version_suffix:
-        description: 'Version suffix (e.g., alpha, beta, rc1). Will create tag like v0.1.35-alpha'
-        required: false
-        default: 'dev'
 
 jobs:
   create-release:
@@ -21,20 +16,36 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Get current version and create tag
+      - name: Get version info
         id: version
         run: |
-          # Get current version from Cargo.toml
-          CURRENT_VERSION=$(grep '^version = ' src-tauri/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
-
-          # Create dev version with suffix and short SHA
+          # Use fixed 0.0.0 for dev builds
           SHORT_SHA=$(git rev-parse --short HEAD)
-          DEV_VERSION="${CURRENT_VERSION}-${{ github.event.inputs.version_suffix }}.${SHORT_SHA}"
-          TAG_NAME="v${DEV_VERSION}"
+          DEV_VERSION="0.0.0"
+          TAG_NAME="v0.0.0"
 
           echo "version=${DEV_VERSION}" >> $GITHUB_OUTPUT
           echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
-          echo "Created dev version: ${DEV_VERSION}"
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "Created dev build (version: ${DEV_VERSION}, tag: ${TAG_NAME}, commit: ${SHORT_SHA})"
+
+      - name: Delete existing release and tag
+        run: |
+          TAG_NAME="${{ steps.version.outputs.tag_name }}"
+
+          # Delete existing release if it exists
+          if gh release view "$TAG_NAME" &>/dev/null; then
+            echo "Deleting existing release: $TAG_NAME"
+            gh release delete "$TAG_NAME" --yes
+          fi
+
+          # Delete existing tag if it exists
+          if git ls-remote --tags origin | grep -q "refs/tags/$TAG_NAME"; then
+            echo "Deleting existing tag: $TAG_NAME"
+            git push origin --delete "$TAG_NAME" || true
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release
         id: create_release
@@ -46,14 +57,12 @@ jobs:
             ## Dev Build for Testing
 
             **This is a pre-release build for testing purposes only.**
+            **This release is automatically overwritten on each dev build.**
 
-            - Version: `${{ steps.version.outputs.version }}`
+            - Version: `${{ steps.version.outputs.version }}` (`${{ steps.version.outputs.short_sha }}`)
             - Commit: `${{ github.sha }}`
             - Branch: `${{ github.ref_name }}`
-            - Triggered by: @${{ github.actor }}
-
-            ### Installation
-            Download the appropriate artifact for your platform below.
+            - Built: `${{ github.event.repository.updated_at }}`
 
             > **Warning**: This build may be unstable. Use at your own risk.
           draft: false
