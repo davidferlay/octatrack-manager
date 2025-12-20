@@ -3,12 +3,10 @@ mod project_reader;
 mod audio_pool;
 
 use device_detection::{discover_devices, scan_directory, ScanResult};
-use project_reader::{read_project_metadata, read_project_banks, read_parts_data, save_parts_data, commit_part_data, commit_all_parts_data, reload_part_data, ProjectMetadata, Bank, PartData, PartsDataResponse};
+use project_reader::{read_project_metadata, read_project_banks, read_single_bank, read_parts_data, save_parts_data, commit_part_data, commit_all_parts_data, reload_part_data, ProjectMetadata, Bank, PartData, PartsDataResponse};
 use audio_pool::{list_directory, get_parent_directory, create_directory, copy_files_with_overwrite, copy_single_file_with_progress, move_files, delete_files, rename_file as rename_file_impl, AudioFileInfo, register_cancellation_token, cancel_transfer, remove_cancellation_token};
 use tauri::{AppHandle, Emitter};
 use serde::Serialize;
-use std::path::Path;
-use std::fs;
 
 #[derive(Clone, Serialize)]
 struct CopyProgressEvent {
@@ -54,6 +52,14 @@ async fn load_project_banks(path: String) -> Result<Vec<Bank>, String> {
     // Run on a blocking thread pool to avoid blocking the main event loop
     tauri::async_runtime::spawn_blocking(move || {
         read_project_banks(&path)
+    }).await.unwrap()
+}
+
+#[tauri::command]
+async fn load_single_bank(path: String, bank_index: u8) -> Result<Option<Bank>, String> {
+    // Run on a blocking thread pool to avoid blocking the main event loop
+    tauri::async_runtime::spawn_blocking(move || {
+        read_single_bank(&path, bank_index)
     }).await.unwrap()
 }
 
@@ -232,53 +238,6 @@ fn get_system_resources() -> SystemResources {
     }
 }
 
-#[derive(Clone, Serialize)]
-pub struct ProjectFileTimestamps {
-    pub project_file: Option<u64>,  // Modification time of project.work or project.strd
-    pub bank_files: Vec<u64>,       // Modification times of bank01.work through bank16.work
-}
-
-/// Get modification timestamps for project files to detect external changes
-#[tauri::command]
-fn get_project_timestamps(path: String) -> Result<ProjectFileTimestamps, String> {
-    let project_path = Path::new(&path);
-
-    // Get project file timestamp (try .work first, then .strd)
-    let project_file_timestamp = {
-        let work_path = project_path.join("project.work");
-        let strd_path = project_path.join("project.strd");
-
-        if work_path.exists() {
-            get_file_mtime(&work_path)
-        } else if strd_path.exists() {
-            get_file_mtime(&strd_path)
-        } else {
-            None
-        }
-    };
-
-    // Get bank file timestamps
-    let mut bank_timestamps = Vec::with_capacity(16);
-    for i in 1..=16 {
-        let bank_path = project_path.join(format!("bank{:02}.work", i));
-        bank_timestamps.push(get_file_mtime(&bank_path).unwrap_or(0));
-    }
-
-    Ok(ProjectFileTimestamps {
-        project_file: project_file_timestamp,
-        bank_files: bank_timestamps,
-    })
-}
-
-/// Helper to get file modification time as Unix timestamp (milliseconds)
-fn get_file_mtime(path: &Path) -> Option<u64> {
-    fs::metadata(path)
-        .ok()
-        .and_then(|m| m.modified().ok())
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map(|d| d.as_millis() as u64)
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -292,6 +251,7 @@ pub fn run() {
             scan_custom_directory,
             load_project_metadata,
             load_project_banks,
+            load_single_bank,
             load_parts_data,
             save_parts,
             commit_part,
@@ -309,8 +269,7 @@ pub fn run() {
             rename_file,
             delete_file,
             open_in_file_manager,
-            get_system_resources,
-            get_project_timestamps
+            get_system_resources
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

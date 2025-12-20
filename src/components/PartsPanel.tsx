@@ -19,7 +19,6 @@ interface PartsPanelProps {
   onSharedPageChange?: (index: number) => void;  // Optional callback for shared page change
   sharedLfoTab?: LfoTabType;  // Optional shared LFO tab for unified LFO tab selection across banks
   onSharedLfoTabChange?: (tab: LfoTabType) => void;  // Optional callback for shared LFO tab change
-  onPartsChanged?: () => void;  // Optional callback when parts are saved (to invalidate cache)
   onWriteStatusChange?: (status: WriteStatus) => void;  // Optional callback to report write status to parent
 }
 
@@ -39,7 +38,6 @@ export default function PartsPanel({
   onSharedPageChange,
   sharedLfoTab,
   onSharedLfoTabChange,
-  onPartsChanged,
   onWriteStatusChange
 }: PartsPanelProps) {
   const [partsData, setPartsData] = useState<PartData[]>([]);
@@ -153,11 +151,6 @@ export default function PartsPanel({
 
       onWriteStatusChange?.(writeStatus.success(`Part ${partName} saved`));
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
-
-      // Notify parent to invalidate cache
-      if (onPartsChanged) {
-        onPartsChanged();
-      }
     } catch (err) {
       console.error('Failed to commit part:', err);
       setError(`Failed to save: ${err}`);
@@ -166,7 +159,7 @@ export default function PartsPanel({
     } finally {
       setIsCommitting(false);
     }
-  }, [projectPath, bankId, partNames, onPartsChanged, onWriteStatusChange]);
+  }, [projectPath, bankId, partNames, onWriteStatusChange]);
 
   // Commit all parts: copy all parts.unsaved to parts.saved (like Octatrack's "SAVE ALL" command)
   const commitAllParts = useCallback(async () => {
@@ -190,11 +183,6 @@ export default function PartsPanel({
 
       onWriteStatusChange?.(writeStatus.success('All parts saved'));
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
-
-      // Notify parent to invalidate cache
-      if (onPartsChanged) {
-        onPartsChanged();
-      }
     } catch (err) {
       console.error('Failed to commit all parts:', err);
       setError(`Failed to save all: ${err}`);
@@ -203,7 +191,7 @@ export default function PartsPanel({
     } finally {
       setIsCommitting(false);
     }
-  }, [projectPath, bankId, modifiedPartIds.size, onPartsChanged, onWriteStatusChange]);
+  }, [projectPath, bankId, modifiedPartIds.size, onWriteStatusChange]);
 
   // Reload part: copy parts.saved back to parts.unsaved (like Octatrack's "RELOAD" command)
   // Only available if the part has valid saved state AND has been edited
@@ -238,11 +226,6 @@ export default function PartsPanel({
 
       onWriteStatusChange?.(writeStatus.success(`Part ${partName} reloaded`));
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
-
-      // Notify parent to invalidate cache
-      if (onPartsChanged) {
-        onPartsChanged();
-      }
     } catch (err) {
       console.error('Failed to reload part:', err);
       setError(`Failed to reload: ${err}`);
@@ -251,7 +234,7 @@ export default function PartsPanel({
     } finally {
       setIsReloading(false);
     }
-  }, [projectPath, bankId, partNames, onPartsChanged, onWriteStatusChange]);
+  }, [projectPath, bankId, partNames, onWriteStatusChange]);
 
 
   // Generic function to update a parameter value and auto-save to parts.unsaved
