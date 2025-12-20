@@ -189,7 +189,7 @@ export function ProjectDetail() {
 
       // Get system resources to determine optimal concurrency
       const resources = await invoke<{ cpu_cores: number; available_memory_mb: number; recommended_concurrency: number }>("get_system_resources");
-      const concurrency = Math.max(2, Math.min(resources.recommended_concurrency, 6)); // Between 2 and 6
+      const concurrency = Math.max(2, Math.min(resources.recommended_concurrency, 4)); // Between 2 and 4 (conservative for UI)
 
       // Helper to load a single bank
       const loadBank = async (bankIndex: number): Promise<{ bankIndex: number; bank: Bank | null }> => {
@@ -204,31 +204,37 @@ export function ProjectDetail() {
         }
       };
 
+      // Helper to yield to the main thread for UI responsiveness
+      const yieldToMain = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+
       // Process banks with controlled concurrency
-      const allResults: { bankIndex: number; bank: Bank | null }[] = [];
       for (let i = 0; i < remainingIndices.length; i += concurrency) {
         const batch = remainingIndices.slice(i, i + concurrency);
         const batchResults = await Promise.all(batch.map(loadBank));
-        allResults.push(...batchResults);
 
-        // Update state progressively after each batch
+        // Update state progressively after each batch using startTransition for smooth UI
         const batchLoaded = batchResults.filter((r): r is { bankIndex: number; bank: Bank } => r.bank !== null);
         if (batchLoaded.length > 0) {
-          setBanks(prev => {
-            const newBanks = [...prev];
-            for (const { bankIndex, bank } of batchLoaded) {
-              newBanks[bankIndex] = bank;
-            }
-            return newBanks;
-          });
-          setLoadedBankIndices(prev => {
-            const newSet = new Set(prev);
-            for (const { bankIndex } of batchLoaded) {
-              newSet.add(bankIndex);
-            }
-            return newSet;
+          startTransition(() => {
+            setBanks(prev => {
+              const newBanks = [...prev];
+              for (const { bankIndex, bank } of batchLoaded) {
+                newBanks[bankIndex] = bank;
+              }
+              return newBanks;
+            });
+            setLoadedBankIndices(prev => {
+              const newSet = new Set(prev);
+              for (const { bankIndex } of batchLoaded) {
+                newSet.add(bankIndex);
+              }
+              return newSet;
+            });
           });
         }
+
+        // Yield to main thread between batches to keep UI responsive
+        await yieldToMain();
       }
 
       setAllBanksLoaded(true);
