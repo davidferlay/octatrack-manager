@@ -3155,16 +3155,17 @@ h1 {
   width: 200px;
   font-size: 1.1rem;
   font-weight: 600;
-  background-color: var(--elektron-orange);
-  border: none;
+  background-color: transparent;
+  border: 2px solid var(--elektron-orange);
   border-radius: 8px;
-  color: #000;
+  color: var(--elektron-orange);
   cursor: pointer;
-  transition: background-color 0.2s, box-shadow 0.2s;
+  transition: all 0.2s;
 }
 
 .tools-execute-btn:hover:not(:disabled) {
-  background-color: #ff9a30;
+  background-color: var(--elektron-orange);
+  color: #000;
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(255, 138, 0, 0.3);
 }
@@ -3174,7 +3175,8 @@ h1 {
 }
 
 .tools-execute-btn:disabled {
-  background-color: var(--elektron-medium-gray);
+  background-color: transparent;
+  border-color: var(--elektron-medium-gray);
   color: var(--elektron-text-secondary);
   cursor: not-allowed;
 }
@@ -3193,8 +3195,8 @@ h1 {
 .loading-spinner-small {
   width: 1rem;
   height: 1rem;
-  border: 2px solid rgba(0, 0, 0, 0.2);
-  border-top-color: #000;
+  border: 2px solid rgba(255, 138, 0, 0.3);
+  border-top-color: var(--elektron-orange);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
