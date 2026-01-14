@@ -88,7 +88,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [sourcePartIndices, setSourcePartIndices] = useState<number[]>([0]);
   const [sourcePatternIndices, setSourcePatternIndices] = useState<number[]>([0]);
   const [sourceTrackIndices, setSourceTrackIndices] = useState<number[]>([0]);
-  const [sourceSampleIndices, setSourceSampleIndices] = useState<number[]>([0]);
+  const [sourceSampleIndices, setSourceSampleIndices] = useState<number[]>(Array.from({ length: 128 }, (_, i) => i));
 
   // Destination selection
   const [destProject, setDestProject] = useState<string>(projectPath);
@@ -96,7 +96,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [destPartIndices, setDestPartIndices] = useState<number[]>([0]);
   const [destPatternStart, setDestPatternStart] = useState<number>(0);
   const [destTrackIndices, setDestTrackIndices] = useState<number[]>([0]);
-  const [destSampleIndices, setDestSampleIndices] = useState<number[]>([0]);
+  const [destSampleIndices, setDestSampleIndices] = useState<number[]>(Array.from({ length: 128 }, (_, i) => i));
 
   // Operation-specific options
   // Copy Patterns options
@@ -111,7 +111,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
 
   // Copy Sample Slots options
   const [slotType, setSlotType] = useState<SlotType>(savedSettings.slotType || "both");
-  const [audioMode, setAudioMode] = useState<AudioMode>(savedSettings.audioMode || "none");
+  const [audioMode, setAudioMode] = useState<AudioMode>(savedSettings.audioMode || "copy");
   const [includeEditorSettings, setIncludeEditorSettings] = useState<boolean>(savedSettings.includeEditorSettings ?? true);
 
   // Audio Pool status
@@ -518,33 +518,110 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           {/* Sample slot selector for copy_sample_slots */}
           {operation === "copy_sample_slots" && (
             <div className="tools-field">
-              <label>Slots (1-128)</label>
-              <div className="tools-slot-range">
-                <input
-                  type="number"
-                  min="1"
-                  max="128"
-                  value={sourceSampleIndices[0] + 1}
-                  onChange={(e) => {
-                    const start = Math.max(0, Math.min(127, Number(e.target.value) - 1));
-                    const count = sourceSampleIndices.length;
-                    setSourceSampleIndices(Array.from({ length: count }, (_, i) => Math.min(127, start + i)));
-                  }}
-                />
-                <span>to</span>
-                <input
-                  type="number"
-                  min="1"
-                  max="128"
-                  value={sourceSampleIndices[sourceSampleIndices.length - 1] + 1}
-                  onChange={(e) => {
-                    const end = Math.max(0, Math.min(127, Number(e.target.value) - 1));
-                    const start = sourceSampleIndices[0];
-                    if (end >= start) {
-                      setSourceSampleIndices(Array.from({ length: end - start + 1 }, (_, i) => start + i));
-                    }
-                  }}
-                />
+              <label>Slots</label>
+              <div className="tools-slot-selector">
+                <div className="tools-slot-header">
+                  <div className="tools-slot-range-display">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      className="tools-slot-value-input"
+                      defaultValue={sourceSampleIndices[0] + 1}
+                      key={`from-${sourceSampleIndices[0]}`}
+                      onBlur={(e) => {
+                        let val = parseInt(e.target.value, 10);
+                        if (isNaN(val) || val < 1) val = 1;
+                        if (val > 128) val = 128;
+                        e.target.value = String(val);
+                        const start = val - 1;
+                        const end = sourceSampleIndices[sourceSampleIndices.length - 1];
+                        if (start <= end) {
+                          setSourceSampleIndices(Array.from({ length: end - start + 1 }, (_, i) => start + i));
+                        } else {
+                          setSourceSampleIndices([start]);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.currentTarget.blur();
+                        }
+                      }}
+                    />
+                    <span className="tools-slot-separator">–</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      className="tools-slot-value-input"
+                      defaultValue={sourceSampleIndices[sourceSampleIndices.length - 1] + 1}
+                      key={`to-${sourceSampleIndices[sourceSampleIndices.length - 1]}`}
+                      onBlur={(e) => {
+                        let val = parseInt(e.target.value, 10);
+                        if (isNaN(val) || val < 1) val = 1;
+                        if (val > 128) val = 128;
+                        e.target.value = String(val);
+                        const end = val - 1;
+                        const start = sourceSampleIndices[0];
+                        if (end >= start) {
+                          setSourceSampleIndices(Array.from({ length: end - start + 1 }, (_, i) => start + i));
+                        } else {
+                          setSourceSampleIndices([end]);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.currentTarget.blur();
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="tools-slot-count">
+                    <span className="tools-slot-count-number">{sourceSampleIndices.length}</span>
+                    <span className="tools-slot-count-label">slot{sourceSampleIndices.length !== 1 ? 's' : ''}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="tools-slot-all-btn"
+                    onClick={() => setSourceSampleIndices(Array.from({ length: 128 }, (_, i) => i))}
+                  >
+                    All
+                  </button>
+                </div>
+                <div className="tools-slot-sliders">
+                  <div className="tools-slot-slider-group">
+                    <span className="tools-slot-label">From</span>
+                    <input
+                      type="range"
+                      min="1"
+                      max="128"
+                      value={sourceSampleIndices[0] + 1}
+                      onChange={(e) => {
+                        const start = Math.max(0, Math.min(127, Number(e.target.value) - 1));
+                        const end = sourceSampleIndices[sourceSampleIndices.length - 1];
+                        if (start <= end) {
+                          setSourceSampleIndices(Array.from({ length: end - start + 1 }, (_, i) => start + i));
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="tools-slot-slider-group">
+                    <span className="tools-slot-label">To</span>
+                    <input
+                      type="range"
+                      min="1"
+                      max="128"
+                      value={sourceSampleIndices[sourceSampleIndices.length - 1] + 1}
+                      onChange={(e) => {
+                        const end = Math.max(0, Math.min(127, Number(e.target.value) - 1));
+                        const start = sourceSampleIndices[0];
+                        if (end >= start) {
+                          setSourceSampleIndices(Array.from({ length: end - start + 1 }, (_, i) => start + i));
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -647,16 +724,36 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               </div>
               <div className="tools-field">
                 <label>Audio Files</label>
-                <select
-                  value={audioMode}
-                  onChange={(e) => setAudioMode(e.target.value as AudioMode)}
-                >
-                  <option value="none">Don't Copy Audio</option>
-                  <option value="copy">Copy to Destination</option>
-                  {sameSetStatus && audioPoolStatus && (
-                    <option value="move_to_pool">Move to Audio Pool</option>
-                  )}
-                </select>
+                <div className="tools-toggle-group">
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn ${audioMode === "copy" ? "selected" : ""}`}
+                    onClick={() => setAudioMode("copy")}
+                    title="Copy audio files to the destination project's sample folder"
+                  >
+                    Copy
+                  </button>
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn ${audioMode === "move_to_pool" ? "selected" : ""}`}
+                    onClick={() => sameSetStatus && setAudioMode("move_to_pool")}
+                    disabled={!sameSetStatus}
+                    title={sameSetStatus
+                      ? "Move audio files to the Set's Audio Pool folder, shared between all projects in the Set"
+                      : "Source and destination projects must be in the same Set to use Audio Pool"
+                    }
+                  >
+                    Move to Pool
+                  </button>
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn ${audioMode === "none" ? "selected" : ""}`}
+                    onClick={() => setAudioMode("none")}
+                    title="Only copy slot settings, don't copy audio files (files must already exist at destination)"
+                  >
+                    Don't Copy
+                  </button>
+                </div>
                 {audioMode === "move_to_pool" && !audioPoolStatus?.exists && (
                   <span className="tools-hint">Audio Pool will be created</span>
                 )}
@@ -831,23 +928,72 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           {/* Sample slot destination for copy_sample_slots */}
           {operation === "copy_sample_slots" && (
             <div className="tools-field">
-              <label>Starting at Slot</label>
-              <input
-                type="number"
-                min="1"
-                max="128"
-                value={destSampleIndices[0] + 1}
-                onChange={(e) => {
-                  const start = Math.max(0, Math.min(127, Number(e.target.value) - 1));
-                  const count = sourceSampleIndices.length;
-                  setDestSampleIndices(Array.from({ length: count }, (_, i) => Math.min(127, start + i)));
-                }}
-              />
-              {sourceSampleIndices.length + destSampleIndices[0] > 128 && (
-                <span className="tools-warning">
-                  Some slots will overflow (max 128)
-                </span>
-              )}
+              <label>Slots</label>
+              <div className="tools-slot-selector">
+                <div className="tools-slot-header">
+                  <div className="tools-slot-range-display">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      className="tools-slot-value-input"
+                      defaultValue={destSampleIndices[0] + 1}
+                      key={`dest-from-${destSampleIndices[0]}`}
+                      onBlur={(e) => {
+                        let val = parseInt(e.target.value, 10);
+                        if (isNaN(val) || val < 1) val = 1;
+                        if (val > 128) val = 128;
+                        e.target.value = String(val);
+                        const start = val - 1;
+                        const count = sourceSampleIndices.length;
+                        setDestSampleIndices(Array.from({ length: count }, (_, i) => Math.min(127, start + i)));
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.currentTarget.blur();
+                        }
+                      }}
+                    />
+                    <span className="tools-slot-separator">–</span>
+                    <span className="tools-slot-value-display">{Math.min(128, destSampleIndices[0] + sourceSampleIndices.length)}</span>
+                  </div>
+                  <div className="tools-slot-count">
+                    <span className="tools-slot-count-number">{sourceSampleIndices.length}</span>
+                    <span className="tools-slot-count-label">slot{sourceSampleIndices.length !== 1 ? 's' : ''}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="tools-slot-all-btn"
+                    onClick={() => {
+                      const count = sourceSampleIndices.length;
+                      setDestSampleIndices(Array.from({ length: count }, (_, i) => i));
+                    }}
+                  >
+                    Reset
+                  </button>
+                </div>
+                <div className="tools-slot-sliders">
+                  <div className="tools-slot-slider-group">
+                    <span className="tools-slot-label">Start</span>
+                    <input
+                      type="range"
+                      min="1"
+                      max="128"
+                      value={destSampleIndices[0] + 1}
+                      onChange={(e) => {
+                        const start = Math.max(0, Math.min(127, Number(e.target.value) - 1));
+                        const count = sourceSampleIndices.length;
+                        setDestSampleIndices(Array.from({ length: count }, (_, i) => Math.min(127, start + i)));
+                      }}
+                    />
+                  </div>
+                </div>
+                {sourceSampleIndices.length + destSampleIndices[0] > 128 && (
+                  <span className="tools-warning">
+                    Some slots will overflow (max 128)
+                  </span>
+                )}
+              </div>
             </div>
           )}
         </div>
