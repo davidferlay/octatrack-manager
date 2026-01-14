@@ -2739,7 +2739,7 @@ h1 {
   margin-bottom: 2rem;
 }
 
-@media (max-width: 1200px) {
+@media (max-width: 768px) {
   .tools-panels {
     grid-template-columns: 1fr;
   }
