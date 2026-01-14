@@ -111,7 +111,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
 
   // Copy Sample Slots options
   const [slotType, setSlotType] = useState<SlotType>(savedSettings.slotType || "both");
-  const [audioMode, setAudioMode] = useState<AudioMode>(savedSettings.audioMode || "copy");
+  const [audioMode, setAudioMode] = useState<AudioMode>(savedSettings.audioMode || "move_to_pool");
   const [includeEditorSettings, setIncludeEditorSettings] = useState<boolean>(savedSettings.includeEditorSettings ?? true);
 
   // Audio Pool status
@@ -715,6 +715,14 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 <div className="tools-toggle-group">
                   <button
                     type="button"
+                    className={`tools-toggle-btn ${slotType === "flex" ? "selected" : ""}`}
+                    onClick={() => setSlotType("flex")}
+                    title="Copy only Flex machine sample slots"
+                  >
+                    Flex
+                  </button>
+                  <button
+                    type="button"
                     className={`tools-toggle-btn ${slotType === "both" ? "selected" : ""}`}
                     onClick={() => setSlotType("both")}
                     title="Copy both Static and Flex machine sample slots"
@@ -728,14 +736,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     title="Copy only Static machine sample slots"
                   >
                     Static
-                  </button>
-                  <button
-                    type="button"
-                    className={`tools-toggle-btn ${slotType === "flex" ? "selected" : ""}`}
-                    onClick={() => setSlotType("flex")}
-                    title="Copy only Flex machine sample slots"
-                  >
-                    Flex
                   </button>
                 </div>
               </div>
