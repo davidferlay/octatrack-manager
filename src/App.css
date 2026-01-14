@@ -731,6 +731,30 @@ h1 {
   border-color: rgba(255, 170, 50, 0.4);
 }
 
+.modal-content.success-modal {
+  border-color: rgba(40, 167, 69, 0.5);
+}
+
+.modal-content.success-modal .modal-header h3 {
+  color: #66CC88;
+}
+
+.modal-content.success-modal .modal-header h3 i {
+  color: #28a745;
+}
+
+.modal-content.error-modal {
+  border-color: rgba(220, 53, 69, 0.5);
+}
+
+.modal-content.error-modal .modal-header h3 {
+  color: #FF8888;
+}
+
+.modal-content.error-modal .modal-header h3 i {
+  color: #dc3545;
+}
+
 .modal-header {
   display: flex;
   align-items: center;

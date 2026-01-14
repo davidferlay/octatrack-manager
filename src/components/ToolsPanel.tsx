@@ -281,9 +281,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices 
     <div className="tools-panel">
       <div className="tools-header">
         <h2>Tools</h2>
-        {statusMessage && (
-          <span className={`tools-status ${statusType}`}>{statusMessage}</span>
-        )}
       </div>
 
       {/* Operation Selector */}
@@ -782,6 +779,26 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices 
           )}
         </button>
       </div>
+
+      {/* Status Modal */}
+      {statusMessage && (
+        <div className="modal-overlay" onClick={() => setStatusMessage("")}>
+          <div className={`modal-content ${statusType === "error" ? "error-modal" : statusType === "success" ? "success-modal" : ""}`} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>
+                {statusType === "success" && <i className="fas fa-check-circle"></i>}
+                {statusType === "error" && <i className="fas fa-exclamation-circle"></i>}
+                {statusType === "info" && <i className="fas fa-info-circle"></i>}
+                {statusType === "success" ? "Success" : statusType === "error" ? "Error" : "Info"}
+              </h3>
+              <button className="modal-close" onClick={() => setStatusMessage("")}>×</button>
+            </div>
+            <div className="modal-body">
+              <p>{statusMessage}</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
