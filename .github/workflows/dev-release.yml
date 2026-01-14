@@ -155,3 +155,25 @@ jobs:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           tagName: ${{ needs.create-release.outputs.tag_name }}
           args: ${{ matrix.args }}
+
+      - name: Retry upload on failure
+        if: failure()
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 2
+          retry_wait_seconds: 30
+          shell: bash
+          command: |
+            cd src-tauri/target
+
+            # Upload any built artifacts that may have failed
+            if [[ "${{ matrix.platform }}" == "ubuntu-22.04" ]]; then
+              find release/bundle -name "*.deb" -o -name "*.AppImage" | xargs -I {} gh release upload "${{ needs.create-release.outputs.tag_name }}" {} --clobber || true
+            elif [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
+              find release/bundle -name "*.msi" -o -name "*.exe" | xargs -I {} gh release upload "${{ needs.create-release.outputs.tag_name }}" {} --clobber || true
+            else
+              find . -name "*.dmg" | xargs -I {} gh release upload "${{ needs.create-release.outputs.tag_name }}" {} --clobber || true
+            fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
