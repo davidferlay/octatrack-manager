@@ -2750,15 +2750,15 @@ h1 {
   display: block;
   margin: 0 auto;
   width: auto;
-  min-width: 220px;
-  padding: 0.6rem 1rem;
+  min-width: 280px;
+  padding: 0.85rem 1.25rem;
   border: 1px solid var(--elektron-medium-gray);
   border-bottom: 3px solid var(--elektron-orange);
   border-radius: 4px 4px 0 0;
   background-color: var(--elektron-darker-gray);
   color: var(--elektron-text-primary);
-  font-weight: 500;
-  font-size: 0.95rem;
+  font-weight: 600;
+  font-size: 1.1rem;
 }
 
 .tools-label {
