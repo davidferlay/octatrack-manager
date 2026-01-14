@@ -71,12 +71,38 @@ jobs:
       - name: TypeScript type check
         run: npm run typecheck
 
+      - name: Run frontend unit tests
+        run: npm run test:frontend
+
       - name: Build frontend
         run: npm run build
 
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+
   build-check:
     name: Build Check (${{ matrix.platform }})
-    needs: [rust-tests, frontend-checks]
+    needs: [rust-tests, frontend-checks, e2e-tests]
     runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false

@@ -2131,4 +2131,365 @@ mod tests {
         // Empty file should still copy successfully
         assert!(result.is_ok(), "Empty WAV should copy: {:?}", result);
     }
+
+    // =========================================================================
+    // Additional edge case tests
+    // =========================================================================
+
+    /// Helper to create a mono WAV file
+    fn create_mono_wav(path: &Path, sample_rate: u32, bits_per_sample: u16, num_samples: usize) {
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate,
+            bits_per_sample,
+            sample_format: hound::SampleFormat::Int,
+        };
+        let mut writer = hound::WavWriter::create(path, spec).unwrap();
+        for i in 0..num_samples {
+            // Create a simple sine wave pattern
+            let sample = ((i as f32 * 0.1).sin() * 16000.0) as i16;
+            writer.write_sample(sample).unwrap();
+        }
+        writer.finalize().unwrap();
+    }
+
+    #[test]
+    fn test_copy_mono_wav_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_path = temp_dir.path().join("mono.wav");
+        let dest_dir = temp_dir.path().join("dest");
+        fs::create_dir(&dest_dir).unwrap();
+
+        // Create a mono WAV file
+        create_mono_wav(&source_path, 44100, 16, 1000);
+
+        let result = copy_single_file_with_progress(
+            source_path.to_str().unwrap(),
+            dest_dir.to_str().unwrap(),
+            false,
+            |_, _| {},
+            None,
+        );
+
+        assert!(result.is_ok(), "Mono WAV should copy: {:?}", result);
+
+        // Verify the output exists
+        let dest_path = result.unwrap();
+        assert!(Path::new(&dest_path).exists());
+    }
+
+    #[test]
+    fn test_copy_mono_wav_needs_conversion() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_path = temp_dir.path().join("mono_48k.wav");
+        let dest_dir = temp_dir.path().join("dest");
+        fs::create_dir(&dest_dir).unwrap();
+
+        // Create a mono 48kHz WAV file that needs conversion
+        create_mono_wav(&source_path, 48000, 16, 1000);
+
+        let result = copy_single_file_with_progress(
+            source_path.to_str().unwrap(),
+            dest_dir.to_str().unwrap(),
+            false,
+            |_, _| {},
+            None,
+        );
+
+        assert!(
+            result.is_ok(),
+            "Mono 48kHz WAV conversion should succeed: {:?}",
+            result
+        );
+
+        // Verify output is 44.1kHz
+        let dest_path = result.unwrap();
+        let reader = hound::WavReader::open(&dest_path).unwrap();
+        assert_eq!(reader.spec().sample_rate, 44100);
+    }
+
+    #[test]
+    fn test_copy_22050hz_wav() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_path = temp_dir.path().join("22k.wav");
+        let dest_dir = temp_dir.path().join("dest");
+        fs::create_dir(&dest_dir).unwrap();
+
+        create_test_wav(&source_path, 22050, 16, 1000);
+
+        let result = copy_single_file_with_progress(
+            source_path.to_str().unwrap(),
+            dest_dir.to_str().unwrap(),
+            false,
+            |_, _| {},
+            None,
+        );
+
+        assert!(
+            result.is_ok(),
+            "22.05kHz WAV conversion should succeed: {:?}",
+            result
+        );
+
+        let dest_path = result.unwrap();
+        let reader = hound::WavReader::open(&dest_path).unwrap();
+        assert_eq!(
+            reader.spec().sample_rate,
+            44100,
+            "Should be upsampled to 44.1kHz"
+        );
+    }
+
+    #[test]
+    fn test_copy_96khz_wav() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_path = temp_dir.path().join("96k.wav");
+        let dest_dir = temp_dir.path().join("dest");
+        fs::create_dir(&dest_dir).unwrap();
+
+        create_test_wav(&source_path, 96000, 16, 1000);
+
+        let result = copy_single_file_with_progress(
+            source_path.to_str().unwrap(),
+            dest_dir.to_str().unwrap(),
+            false,
+            |_, _| {},
+            None,
+        );
+
+        assert!(
+            result.is_ok(),
+            "96kHz WAV conversion should succeed: {:?}",
+            result
+        );
+
+        let dest_path = result.unwrap();
+        let reader = hound::WavReader::open(&dest_path).unwrap();
+        assert_eq!(
+            reader.spec().sample_rate,
+            44100,
+            "Should be downsampled to 44.1kHz"
+        );
+    }
+
+    #[test]
+    fn test_copy_very_short_wav() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_path = temp_dir.path().join("short.wav");
+        let dest_dir = temp_dir.path().join("dest");
+        fs::create_dir(&dest_dir).unwrap();
+
+        // Create a WAV with just 10 samples
+        create_test_wav(&source_path, 44100, 16, 10);
+
+        let result = copy_single_file_with_progress(
+            source_path.to_str().unwrap(),
+            dest_dir.to_str().unwrap(),
+            false,
+            |_, _| {},
+            None,
+        );
+
+        assert!(result.is_ok(), "Very short WAV should copy: {:?}", result);
+    }
+
+    #[test]
+    fn test_copy_wav_with_spaces_in_name() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_path = temp_dir.path().join("my sample file.wav");
+        let dest_dir = temp_dir.path().join("dest");
+        fs::create_dir(&dest_dir).unwrap();
+
+        create_test_wav(&source_path, 44100, 16, 100);
+
+        let result = copy_single_file_with_progress(
+            source_path.to_str().unwrap(),
+            dest_dir.to_str().unwrap(),
+            false,
+            |_, _| {},
+            None,
+        );
+
+        assert!(result.is_ok(), "WAV with spaces should copy: {:?}", result);
+        let dest_path = result.unwrap();
+        assert!(dest_path.contains("my sample file.wav"));
+    }
+
+    #[test]
+    fn test_copy_wav_with_unicode_name() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_path = temp_dir.path().join("サンプル_音声.wav");
+        let dest_dir = temp_dir.path().join("dest");
+        fs::create_dir(&dest_dir).unwrap();
+
+        create_test_wav(&source_path, 44100, 16, 100);
+
+        let result = copy_single_file_with_progress(
+            source_path.to_str().unwrap(),
+            dest_dir.to_str().unwrap(),
+            false,
+            |_, _| {},
+            None,
+        );
+
+        assert!(
+            result.is_ok(),
+            "WAV with unicode name should copy: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_needs_conversion_22khz() {
+        let temp_dir = TempDir::new().unwrap();
+        let wav_path = temp_dir.path().join("22k.wav");
+        create_test_wav(&wav_path, 22050, 16, 100);
+
+        assert!(
+            super::needs_conversion(&wav_path),
+            "22.05kHz should need conversion"
+        );
+    }
+
+    #[test]
+    fn test_needs_conversion_96khz() {
+        let temp_dir = TempDir::new().unwrap();
+        let wav_path = temp_dir.path().join("96k.wav");
+        create_test_wav(&wav_path, 96000, 16, 100);
+
+        assert!(
+            super::needs_conversion(&wav_path),
+            "96kHz should need conversion"
+        );
+    }
+
+    #[test]
+    fn test_copy_corrupted_wav_header() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_path = temp_dir.path().join("corrupted.wav");
+        let dest_dir = temp_dir.path().join("dest");
+        fs::create_dir(&dest_dir).unwrap();
+
+        // Write invalid WAV data (just some random bytes with .wav extension)
+        fs::write(
+            &source_path,
+            b"RIFF\x00\x00\x00\x00WAVEfmt corrupted data here",
+        )
+        .unwrap();
+
+        let result = copy_single_file_with_progress(
+            source_path.to_str().unwrap(),
+            dest_dir.to_str().unwrap(),
+            false,
+            |_, _| {},
+            None,
+        );
+
+        // Should fail gracefully with an error, not panic
+        assert!(result.is_err(), "Corrupted WAV should fail");
+    }
+
+    #[test]
+    fn test_copy_non_audio_as_wav() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_path = temp_dir.path().join("fake.wav");
+        let dest_dir = temp_dir.path().join("dest");
+        fs::create_dir(&dest_dir).unwrap();
+
+        // Write a text file with .wav extension
+        fs::write(&source_path, b"This is not a WAV file at all!").unwrap();
+
+        let result = copy_single_file_with_progress(
+            source_path.to_str().unwrap(),
+            dest_dir.to_str().unwrap(),
+            false,
+            |_, _| {},
+            None,
+        );
+
+        // Should fail gracefully
+        assert!(result.is_err(), "Fake WAV should fail");
+    }
+
+    #[test]
+    fn test_list_directory_with_many_files() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create 100 files
+        for i in 0..100 {
+            let file_path = temp_dir.path().join(format!("file_{:03}.wav", i));
+            create_test_wav(&file_path, 44100, 16, 10);
+        }
+
+        let result = list_directory(temp_dir.path().to_str().unwrap());
+        assert!(result.is_ok());
+        let files = result.unwrap();
+        assert_eq!(files.len(), 100, "Should list all 100 files");
+    }
+
+    #[test]
+    fn test_copy_multiple_files_sequentially() {
+        let temp_dir = TempDir::new().unwrap();
+        let dest_dir = temp_dir.path().join("dest");
+        fs::create_dir(&dest_dir).unwrap();
+
+        // Create and copy 5 files sequentially
+        for i in 0..5 {
+            let source_path = temp_dir.path().join(format!("sample_{}.wav", i));
+            create_test_wav(&source_path, 44100, 16, 100);
+
+            let result = copy_single_file_with_progress(
+                source_path.to_str().unwrap(),
+                dest_dir.to_str().unwrap(),
+                false,
+                |_, _| {},
+                None,
+            );
+
+            assert!(result.is_ok(), "Copy {} should succeed: {:?}", i, result);
+        }
+
+        // Verify all files exist
+        let files = list_directory(dest_dir.to_str().unwrap()).unwrap();
+        assert_eq!(files.len(), 5, "All 5 files should be copied");
+    }
+
+    #[test]
+    fn test_needs_conversion_m4a() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().join("audio.m4a");
+        fs::write(&path, b"fake m4a data").unwrap();
+
+        assert!(super::needs_conversion(&path), "M4A should need conversion");
+    }
+
+    #[test]
+    fn test_needs_conversion_aac() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().join("audio.aac");
+        fs::write(&path, b"fake aac data").unwrap();
+
+        assert!(super::needs_conversion(&path), "AAC should need conversion");
+    }
+
+    #[test]
+    fn test_is_audio_file_m4a() {
+        assert!(
+            is_audio_file("song.m4a"),
+            "M4A should be recognized as audio"
+        );
+    }
+
+    #[test]
+    fn test_is_audio_file_uppercase_extensions() {
+        assert!(is_audio_file("song.WAV"), "WAV uppercase should be audio");
+        assert!(is_audio_file("song.MP3"), "MP3 uppercase should be audio");
+        assert!(is_audio_file("song.FLAC"), "FLAC uppercase should be audio");
+    }
+
+    #[test]
+    fn test_is_audio_file_mixed_case() {
+        assert!(is_audio_file("song.WaV"), "Mixed case should be audio");
+        assert!(is_audio_file("song.Mp3"), "Mixed case should be audio");
+    }
 }
