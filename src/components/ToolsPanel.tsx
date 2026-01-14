@@ -393,9 +393,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         {/* Source Panel */}
         <div className="tools-source-panel">
           <h3>Source</h3>
-          <div className="tools-source-info">
-            <span className="tools-project-name">{projectName}</span>
-          </div>
 
           {/* Bank selector for bank-related operations */}
           {(operation === "copy_bank" || operation === "copy_parts" || operation === "copy_patterns" || operation === "copy_tracks") && (

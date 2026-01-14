@@ -2805,16 +2805,6 @@ h1 {
   border-bottom: 1px solid var(--elektron-medium-gray);
 }
 
-.tools-source-info {
-  margin-bottom: 1rem;
-}
-
-.tools-project-name {
-  font-weight: 500;
-  color: var(--elektron-text-primary);
-  font-size: 1rem;
-}
-
 .tools-field {
   margin-bottom: 1rem;
 }
