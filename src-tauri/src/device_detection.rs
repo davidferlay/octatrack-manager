@@ -191,7 +191,10 @@ fn scan_for_projects(set_path: &Path) -> Vec<OctatrackProject> {
 }
 
 /// Scans a location for Sets and individual projects
-fn scan_for_sets(location_path: &Path, max_depth: usize) -> (Vec<OctatrackSet>, Vec<OctatrackProject>) {
+fn scan_for_sets(
+    location_path: &Path,
+    max_depth: usize,
+) -> (Vec<OctatrackSet>, Vec<OctatrackProject>) {
     let mut sets = Vec::new();
     let mut standalone_projects = Vec::new();
     let mut set_paths = std::collections::HashSet::new();
@@ -210,9 +213,8 @@ fn scan_for_sets(location_path: &Path, max_depth: usize) -> (Vec<OctatrackSet>, 
             let projects = scan_for_projects(path);
 
             // Check if AUDIO directory exists and contains valid audio files
-            let has_audio_pool = audio_pool.exists()
-                && audio_pool.is_dir()
-                && has_valid_audio_pool(&audio_pool);
+            let has_audio_pool =
+                audio_pool.exists() && audio_pool.is_dir() && has_valid_audio_pool(&audio_pool);
 
             // Store the canonical path to avoid duplicate detection
             if let Ok(canonical_path) = path.canonicalize() {
@@ -243,9 +245,9 @@ fn scan_for_sets(location_path: &Path, max_depth: usize) -> (Vec<OctatrackSet>, 
         if is_octatrack_project(path) {
             // Check if this path is itself a Set or is a subdirectory of any Set
             let is_set_or_part_of_set = if let Ok(canonical_path) = path.canonicalize() {
-                set_paths.iter().any(|set_path| {
-                    canonical_path.starts_with(set_path)
-                })
+                set_paths
+                    .iter()
+                    .any(|set_path| canonical_path.starts_with(set_path))
             } else {
                 false
             };
@@ -274,7 +276,10 @@ fn scan_for_sets(location_path: &Path, max_depth: usize) -> (Vec<OctatrackSet>, 
 
 /// Groups Sets by their parent directory and creates locations
 /// Returns (locations, deduplicated_standalone_projects)
-fn group_sets_by_parent(sets: Vec<OctatrackSet>, standalone_projects: Vec<OctatrackProject>) -> (Vec<OctatrackLocation>, Vec<OctatrackProject>) {
+fn group_sets_by_parent(
+    sets: Vec<OctatrackSet>,
+    standalone_projects: Vec<OctatrackProject>,
+) -> (Vec<OctatrackLocation>, Vec<OctatrackProject>) {
     use std::collections::HashMap;
     use std::collections::HashSet;
 
@@ -286,7 +291,7 @@ fn group_sets_by_parent(sets: Vec<OctatrackSet>, standalone_projects: Vec<Octatr
         if seen_set_paths.insert(set.path.clone()) {
             if let Some(parent_path) = Path::new(&set.path).parent() {
                 let parent_str = parent_path.to_string_lossy().to_string();
-                grouped.entry(parent_str).or_insert_with(Vec::new).push(set);
+                grouped.entry(parent_str).or_default().push(set);
             }
         }
     }
@@ -431,7 +436,8 @@ pub fn discover_devices() -> ScanResult {
     }
 
     // Group removable Sets by parent directory and mark as CompactFlash
-    let (mut removable_locations, removable_standalone) = group_sets_by_parent(all_removable_sets, all_removable_projects);
+    let (mut removable_locations, removable_standalone) =
+        group_sets_by_parent(all_removable_sets, all_removable_projects);
     for location in &mut removable_locations {
         location.device_type = DeviceType::CompactFlash;
     }
@@ -471,8 +477,8 @@ pub fn discover_devices() -> ScanResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     // Helper to create an Octatrack project structure
     fn create_project(path: &Path, name: &str) -> std::path::PathBuf {
@@ -524,7 +530,10 @@ mod tests {
                 }
             }
         }
-        println!("Found {} standalone projects", scan_result.standalone_projects.len());
+        println!(
+            "Found {} standalone projects",
+            scan_result.standalone_projects.len()
+        );
         for project in scan_result.standalone_projects {
             println!("Standalone project: {}", project.name);
         }
@@ -537,8 +546,14 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
 
         let result = scan_directory(&temp_dir.path().to_string_lossy());
-        assert!(result.locations.is_empty(), "Empty directory should have no locations");
-        assert!(result.standalone_projects.is_empty(), "Empty directory should have no projects");
+        assert!(
+            result.locations.is_empty(),
+            "Empty directory should have no locations"
+        );
+        assert!(
+            result.standalone_projects.is_empty(),
+            "Empty directory should have no projects"
+        );
     }
 
     #[test]
@@ -561,8 +576,10 @@ mod tests {
         let result = scan_directory(&temp_dir.path().to_string_lossy());
 
         // Should find the set
-        assert!(!result.locations.is_empty() || !result.standalone_projects.is_empty(),
-            "Should find something in the scanned directory");
+        assert!(
+            !result.locations.is_empty() || !result.standalone_projects.is_empty(),
+            "Should find something in the scanned directory"
+        );
     }
 
     #[test]
@@ -575,8 +592,10 @@ mod tests {
         let result = scan_directory(&temp_dir.path().to_string_lossy());
 
         // Should find as standalone project
-        assert!(!result.standalone_projects.is_empty() || !result.locations.is_empty(),
-            "Should find the standalone project");
+        assert!(
+            !result.standalone_projects.is_empty() || !result.locations.is_empty(),
+            "Should find the standalone project"
+        );
     }
 
     #[test]
@@ -590,12 +609,15 @@ mod tests {
         let result = scan_directory(&temp_dir.path().to_string_lossy());
 
         // Check if detected as project or set
-        let found_something = !result.locations.is_empty() || !result.standalone_projects.is_empty();
+        let found_something =
+            !result.locations.is_empty() || !result.standalone_projects.is_empty();
         assert!(found_something, "Should detect Set or project");
 
         // If we found sets, verify audio pool detection
         if !result.locations.is_empty() {
-            let _has_audio_pool = result.locations.iter()
+            let _has_audio_pool = result
+                .locations
+                .iter()
                 .flat_map(|l| &l.sets)
                 .any(|s| s.has_audio_pool);
             // Audio pool detection depends on the Set detection logic
@@ -614,7 +636,8 @@ mod tests {
 
         let result = scan_directory(&temp_dir.path().to_string_lossy());
 
-        let found_something = !result.locations.is_empty() || !result.standalone_projects.is_empty();
+        let found_something =
+            !result.locations.is_empty() || !result.standalone_projects.is_empty();
         assert!(found_something, "Should find projects");
     }
 
@@ -623,7 +646,9 @@ mod tests {
     #[test]
     fn test_is_system_path_macos() {
         assert!(is_system_path(Path::new("/System/Library")));
-        assert!(is_system_path(Path::new("/Library/Application Support/Something")));
+        assert!(is_system_path(Path::new(
+            "/Library/Application Support/Something"
+        )));
         assert!(is_system_path(Path::new("/private/var")));
     }
 
@@ -676,7 +701,10 @@ mod tests {
         fs::create_dir_all(&audio_path).unwrap();
         fs::write(audio_path.join("sample.aiff"), [0u8; 44]).unwrap();
 
-        assert!(has_valid_audio_pool(&audio_path), "Should detect AIFF files");
+        assert!(
+            has_valid_audio_pool(&audio_path),
+            "Should detect AIFF files"
+        );
     }
 
     #[test]
@@ -685,7 +713,10 @@ mod tests {
         let audio_path = temp_dir.path().join("AUDIO");
         fs::create_dir_all(&audio_path).unwrap();
 
-        assert!(!has_valid_audio_pool(&audio_path), "Empty directory should not be valid");
+        assert!(
+            !has_valid_audio_pool(&audio_path),
+            "Empty directory should not be valid"
+        );
     }
 
     #[test]
@@ -696,7 +727,10 @@ mod tests {
         fs::write(audio_path.join("readme.txt"), "text").unwrap();
         fs::write(audio_path.join("data.bin"), [0u8; 100]).unwrap();
 
-        assert!(!has_valid_audio_pool(&audio_path), "Should not detect non-audio files");
+        assert!(
+            !has_valid_audio_pool(&audio_path),
+            "Should not detect non-audio files"
+        );
     }
 
     #[test]
@@ -707,7 +741,10 @@ mod tests {
         fs::create_dir_all(&subdir).unwrap();
         fs::write(subdir.join("kick.wav"), [0u8; 44]).unwrap();
 
-        assert!(has_valid_audio_pool(&audio_path), "Should detect audio in subdirectory");
+        assert!(
+            has_valid_audio_pool(&audio_path),
+            "Should detect audio in subdirectory"
+        );
     }
 
     #[test]
@@ -721,7 +758,10 @@ mod tests {
         let file_path = temp_dir.path().join("file.txt");
         fs::write(&file_path, "content").unwrap();
 
-        assert!(!has_valid_audio_pool(&file_path), "File should not be valid audio pool");
+        assert!(
+            !has_valid_audio_pool(&file_path),
+            "File should not be valid audio pool"
+        );
     }
 
     // ==================== SCAN RESULT STRUCTURE TESTS ====================
@@ -729,14 +769,12 @@ mod tests {
     #[test]
     fn test_scan_result_serialization() {
         let result = ScanResult {
-            locations: vec![
-                OctatrackLocation {
-                    name: "Test Location".to_string(),
-                    path: "/test/path".to_string(),
-                    device_type: DeviceType::LocalCopy,
-                    sets: vec![],
-                }
-            ],
+            locations: vec![OctatrackLocation {
+                name: "Test Location".to_string(),
+                path: "/test/path".to_string(),
+                device_type: DeviceType::LocalCopy,
+                sets: vec![],
+            }],
             standalone_projects: vec![],
         };
 
@@ -776,14 +814,12 @@ mod tests {
             name: "MySet".to_string(),
             path: "/path/to/set".to_string(),
             has_audio_pool: true,
-            projects: vec![
-                OctatrackProject {
-                    name: "Project1".to_string(),
-                    path: "/path/to/set/Project1".to_string(),
-                    has_project_file: true,
-                    has_banks: true,
-                }
-            ],
+            projects: vec![OctatrackProject {
+                name: "Project1".to_string(),
+                path: "/path/to/set/Project1".to_string(),
+                has_project_file: true,
+                has_banks: true,
+            }],
         };
 
         assert_eq!(set.name, "MySet");
@@ -798,10 +834,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
 
         // Create a deeply nested structure
-        let deep_path = temp_dir.path()
-            .join("level1")
-            .join("level2")
-            .join("level3");
+        let deep_path = temp_dir.path().join("level1").join("level2").join("level3");
         fs::create_dir_all(&deep_path).unwrap();
 
         // Create a project in the deep path
@@ -821,7 +854,8 @@ mod tests {
         create_project(&set_path, "Project With Spaces");
 
         let result = scan_directory(&temp_dir.path().to_string_lossy());
-        let found_something = !result.locations.is_empty() || !result.standalone_projects.is_empty();
+        let found_something =
+            !result.locations.is_empty() || !result.standalone_projects.is_empty();
         assert!(found_something, "Should handle spaces in names");
     }
 

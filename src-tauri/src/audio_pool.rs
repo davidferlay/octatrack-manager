@@ -1,25 +1,29 @@
+// Allow certain clippy lints for clearer code
+#![allow(clippy::needless_range_loop)] // indexed loop pattern is clearer for audio buffer operations
+#![allow(clippy::collapsible_if)] // separate if statements are sometimes clearer
+
+use once_cell::sync::Lazy;
+use rubato::{
+    Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
+};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::collections::HashMap;
-use once_cell::sync::Lazy;
 use std::sync::Mutex;
-use hound;
 use symphonia::core::audio::{AudioBufferRef, Signal};
 use symphonia::core::codecs::{DecoderOptions, CODEC_TYPE_NULL};
 use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
-use rubato::{Resampler, SincFixedIn, SincInterpolationType, SincInterpolationParameters, WindowFunction};
 
 // Global cancellation token registry
-static CANCELLATION_TOKENS: Lazy<Mutex<HashMap<String, Arc<AtomicBool>>>> = Lazy::new(|| {
-    Mutex::new(HashMap::new())
-});
+static CANCELLATION_TOKENS: Lazy<Mutex<HashMap<String, Arc<AtomicBool>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 /// Register a cancellation token for a transfer
 pub fn register_cancellation_token(transfer_id: &str) -> Arc<AtomicBool> {
@@ -76,12 +80,12 @@ pub fn list_directory(path: &str) -> Result<Vec<AudioFileInfo>, String> {
 
     let mut files = Vec::new();
 
-    let entries = fs::read_dir(dir_path)
-        .map_err(|e| format!("Failed to read directory: {}", e))?;
+    let entries = fs::read_dir(dir_path).map_err(|e| format!("Failed to read directory: {}", e))?;
 
     for entry in entries {
         let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
-        let metadata = entry.metadata()
+        let metadata = entry
+            .metadata()
             .map_err(|e| format!("Failed to read metadata: {}", e))?;
 
         let file_path = entry.path();
@@ -114,12 +118,10 @@ pub fn list_directory(path: &str) -> Result<Vec<AudioFileInfo>, String> {
     }
 
     // Sort: directories first, then by name
-    files.sort_by(|a, b| {
-        match (a.is_directory, b.is_directory) {
-            (true, false) => std::cmp::Ordering::Less,
-            (false, true) => std::cmp::Ordering::Greater,
-            _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-        }
+    files.sort_by(|a, b| match (a.is_directory, b.is_directory) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
     });
 
     Ok(files)
@@ -128,18 +130,19 @@ pub fn list_directory(path: &str) -> Result<Vec<AudioFileInfo>, String> {
 /// Check if a file is an audio file based on extension
 fn is_audio_file(filename: &str) -> bool {
     let lower = filename.to_lowercase();
-    lower.ends_with(".wav") ||
-    lower.ends_with(".aif") ||
-    lower.ends_with(".aiff") ||
-    lower.ends_with(".mp3") ||
-    lower.ends_with(".flac") ||
-    lower.ends_with(".ogg") ||
-    lower.ends_with(".m4a")
+    lower.ends_with(".wav")
+        || lower.ends_with(".aif")
+        || lower.ends_with(".aiff")
+        || lower.ends_with(".mp3")
+        || lower.ends_with(".flac")
+        || lower.ends_with(".ogg")
+        || lower.ends_with(".m4a")
 }
 
 /// Extract audio metadata from a file
 fn extract_audio_metadata(path: &PathBuf) -> (Option<u32>, Option<u32>, Option<u32>) {
-    let ext = path.extension()
+    let ext = path
+        .extension()
         .and_then(|e| e.to_str())
         .map(|s| s.to_lowercase());
 
@@ -202,15 +205,20 @@ fn extract_symphonia_metadata(path: &PathBuf) -> (Option<u32>, Option<u32>, Opti
     let format_opts = FormatOptions::default();
     let metadata_opts = MetadataOptions::default();
 
-    let probed = match symphonia::default::get_probe().format(&hint, mss, &format_opts, &metadata_opts) {
-        Ok(p) => p,
-        Err(_) => return (None, None, None),
-    };
+    let probed =
+        match symphonia::default::get_probe().format(&hint, mss, &format_opts, &metadata_opts) {
+            Ok(p) => p,
+            Err(_) => return (None, None, None),
+        };
 
     let mut format = probed.format;
 
     // Find the first audio track
-    let track = match format.tracks().iter().find(|t| t.codec_params.codec != CODEC_TYPE_NULL) {
+    let track = match format
+        .tracks()
+        .iter()
+        .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
+    {
         Some(t) => t.clone(),
         None => return (None, None, None),
     };
@@ -227,7 +235,8 @@ fn extract_symphonia_metadata(path: &PathBuf) -> (Option<u32>, Option<u32>, Opti
     } else {
         // Try to decode a frame to determine the output sample format
         let decoder_opts = DecoderOptions::default();
-        if let Ok(mut decoder) = symphonia::default::get_codecs().make(&codec_params, &decoder_opts) {
+        if let Ok(mut decoder) = symphonia::default::get_codecs().make(codec_params, &decoder_opts)
+        {
             // Try to decode the first packet to get sample format
             let mut detected_bits: Option<u32> = None;
             while let Ok(packet) = format.next_packet() {
@@ -260,7 +269,8 @@ const OCTATRACK_SAMPLE_RATE: u32 = 44100;
 
 /// Check if audio file needs conversion for Octatrack compatibility
 fn needs_conversion(path: &Path) -> bool {
-    let ext = path.extension()
+    let ext = path
+        .extension()
         .and_then(|e| e.to_str())
         .map(|s| s.to_lowercase());
 
@@ -270,9 +280,9 @@ fn needs_conversion(path: &Path) -> bool {
             if let Ok(reader) = hound::WavReader::open(path) {
                 let spec = reader.spec();
                 // Needs conversion if sample rate isn't 44.1kHz or bit depth is not 16/24
-                spec.sample_rate != OCTATRACK_SAMPLE_RATE ||
-                    spec.bits_per_sample < 16 ||
-                    spec.bits_per_sample > 24
+                spec.sample_rate != OCTATRACK_SAMPLE_RATE
+                    || spec.bits_per_sample < 16
+                    || spec.bits_per_sample > 24
             } else {
                 true // Can't read, try to convert anyway
             }
@@ -289,9 +299,8 @@ fn needs_conversion(path: &Path) -> bool {
                         _ => 0,
                     };
                     // Needs conversion if sample rate isn't 44.1kHz or bit depth is not 16/24
-                    (info.sample_rate as u32) != OCTATRACK_SAMPLE_RATE ||
-                        bit_depth < 16 ||
-                        bit_depth > 24
+                    (info.sample_rate as u32) != OCTATRACK_SAMPLE_RATE
+                        || !(16..=24).contains(&bit_depth)
                 } else {
                     true
                 }
@@ -330,8 +339,8 @@ where
 
     check_cancelled()?;
     // Open the source file
-    let file = fs::File::open(source_path)
-        .map_err(|e| format!("Failed to open source file: {}", e))?;
+    let file =
+        fs::File::open(source_path).map_err(|e| format!("Failed to open source file: {}", e))?;
 
     // Get file size for progress estimation
     let file_size = file.metadata().map(|m| m.len()).unwrap_or(0);
@@ -348,13 +357,19 @@ where
 
     // Probe the format
     let probed = symphonia::default::get_probe()
-        .format(&hint, mss, &FormatOptions::default(), &MetadataOptions::default())
+        .format(
+            &hint,
+            mss,
+            &FormatOptions::default(),
+            &MetadataOptions::default(),
+        )
         .map_err(|e| format!("Failed to probe audio format: {}", e))?;
 
     let mut format = probed.format;
 
     // Find the first audio track
-    let track = format.tracks()
+    let track = format
+        .tracks()
         .iter()
         .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
         .ok_or_else(|| "No audio track found".to_string())?;
@@ -362,9 +377,11 @@ where
     let track_id = track.id;
     let codec_params = track.codec_params.clone();
 
-    let source_sample_rate = codec_params.sample_rate
+    let source_sample_rate = codec_params
+        .sample_rate
         .ok_or_else(|| "Could not determine sample rate".to_string())?;
-    let channels = codec_params.channels
+    let channels = codec_params
+        .channels
         .ok_or_else(|| "Could not determine channel count".to_string())?
         .count();
 
@@ -413,7 +430,10 @@ where
         let packet = match format.next_packet() {
             Ok(p) => p,
             Err(symphonia::core::errors::Error::IoError(ref e))
-                if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
+                break
+            }
             Err(e) => return Err(format!("Error reading packet: {}", e)),
         };
 
@@ -428,7 +448,8 @@ where
             progress_callback("decoding", decode_progress);
         }
 
-        let decoded = decoder.decode(&packet)
+        let decoded = decoder
+            .decode(&packet)
             .map_err(|e| format!("Decode error: {}", e))?;
 
         // Convert to f32 samples per channel
@@ -440,17 +461,20 @@ where
             }
             AudioBufferRef::S32(buf) => {
                 for ch in 0..channels {
-                    all_samples[ch].extend(buf.chan(ch).iter().map(|&s| s as f32 / i32::MAX as f32));
+                    all_samples[ch]
+                        .extend(buf.chan(ch).iter().map(|&s| s as f32 / i32::MAX as f32));
                 }
             }
             AudioBufferRef::S16(buf) => {
                 for ch in 0..channels {
-                    all_samples[ch].extend(buf.chan(ch).iter().map(|&s| s as f32 / i16::MAX as f32));
+                    all_samples[ch]
+                        .extend(buf.chan(ch).iter().map(|&s| s as f32 / i16::MAX as f32));
                 }
             }
             AudioBufferRef::U8(buf) => {
                 for ch in 0..channels {
-                    all_samples[ch].extend(buf.chan(ch).iter().map(|&s| (s as f32 - 128.0) / 128.0));
+                    all_samples[ch]
+                        .extend(buf.chan(ch).iter().map(|&s| (s as f32 - 128.0) / 128.0));
                 }
             }
             AudioBufferRef::S24(buf) => {
@@ -465,17 +489,26 @@ where
             }
             AudioBufferRef::U16(buf) => {
                 for ch in 0..channels {
-                    all_samples[ch].extend(buf.chan(ch).iter().map(|&s| (s as f32 - 32768.0) / 32768.0));
+                    all_samples[ch]
+                        .extend(buf.chan(ch).iter().map(|&s| (s as f32 - 32768.0) / 32768.0));
                 }
             }
             AudioBufferRef::U24(buf) => {
                 for ch in 0..channels {
-                    all_samples[ch].extend(buf.chan(ch).iter().map(|s| (s.0 as f32 - 8388608.0) / 8388608.0));
+                    all_samples[ch].extend(
+                        buf.chan(ch)
+                            .iter()
+                            .map(|s| (s.0 as f32 - 8388608.0) / 8388608.0),
+                    );
                 }
             }
             AudioBufferRef::U32(buf) => {
                 for ch in 0..channels {
-                    all_samples[ch].extend(buf.chan(ch).iter().map(|&s| (s as f32 - 2147483648.0) / 2147483648.0));
+                    all_samples[ch].extend(
+                        buf.chan(ch)
+                            .iter()
+                            .map(|&s| (s as f32 - 2147483648.0) / 2147483648.0),
+                    );
                 }
             }
             AudioBufferRef::S8(buf) => {
@@ -499,11 +532,16 @@ where
     // Resample if necessary
     let resampled: Vec<Vec<f32>> = if needs_resampling {
         progress_callback("resampling", decode_end);
-        let result = resample_audio_with_progress(&all_samples, source_sample_rate, OCTATRACK_SAMPLE_RATE, cancel_token, |p| {
-            // Map resampling progress (0-1) to overall progress (decode_end to resample_end)
-            progress_callback("resampling", decode_end + p * resample_weight);
-        })?;
-        result
+        resample_audio_with_progress(
+            &all_samples,
+            source_sample_rate,
+            OCTATRACK_SAMPLE_RATE,
+            cancel_token,
+            |p| {
+                // Map resampling progress (0-1) to overall progress (decode_end to resample_end)
+                progress_callback("resampling", decode_end + p * resample_weight);
+            },
+        )?
     } else {
         all_samples
     };
@@ -513,10 +551,17 @@ where
 
     // Write to WAV file (resample_end to 1.0)
     progress_callback("writing", resample_end);
-    write_wav_file_with_progress(dest_path, &resampled, OCTATRACK_SAMPLE_RATE, target_bits, cancel_token, |p| {
-        // Map writing progress (0-1) to overall progress (resample_end to 1.0)
-        progress_callback("writing", resample_end + p * write_weight);
-    })?;
+    write_wav_file_with_progress(
+        dest_path,
+        &resampled,
+        OCTATRACK_SAMPLE_RATE,
+        target_bits,
+        cancel_token,
+        |p| {
+            // Map writing progress (0-1) to overall progress (resample_end to 1.0)
+            progress_callback("writing", resample_end + p * write_weight);
+        },
+    )?;
     progress_callback("complete", 1.0);
 
     Ok(())
@@ -558,7 +603,8 @@ where
         params,
         chunk_size,
         channels,
-    ).map_err(|e| format!("Failed to create resampler: {}", e))?;
+    )
+    .map_err(|e| format!("Failed to create resampler: {}", e))?;
 
     // Output buffers
     let mut output: Vec<Vec<f32>> = vec![Vec::new(); channels];
@@ -589,7 +635,8 @@ where
         }
 
         // Process chunk - None means all samples are valid
-        let resampled = resampler.process(&chunk, None)
+        let resampled = resampler
+            .process(&chunk, None)
             .map_err(|e| format!("Resampling failed at position {}: {}", pos, e))?;
 
         // Append to output
@@ -660,28 +707,40 @@ where
             match bits_per_sample {
                 16 => {
                     let s = (clamped * i16::MAX as f32) as i16;
-                    writer.write_sample(s).map_err(|e| format!("Write error: {}", e))?;
+                    writer
+                        .write_sample(s)
+                        .map_err(|e| format!("Write error: {}", e))?;
                 }
                 24 => {
                     let s = (clamped * 8388607.0) as i32;
-                    writer.write_sample(s).map_err(|e| format!("Write error: {}", e))?;
+                    writer
+                        .write_sample(s)
+                        .map_err(|e| format!("Write error: {}", e))?;
                 }
                 _ => {
                     let s = (clamped * i16::MAX as f32) as i16;
-                    writer.write_sample(s).map_err(|e| format!("Write error: {}", e))?;
+                    writer
+                        .write_sample(s)
+                        .map_err(|e| format!("Write error: {}", e))?;
                 }
             }
         }
     }
 
-    writer.finalize().map_err(|e| format!("Failed to finalize WAV: {}", e))?;
+    writer
+        .finalize()
+        .map_err(|e| format!("Failed to finalize WAV: {}", e))?;
     progress_callback(1.0);
 
     Ok(())
 }
 
 /// Copy and convert audio file to Octatrack-compatible format if needed
-fn copy_and_convert_audio(source_path: &Path, dest_dir: &Path, overwrite: bool) -> Result<PathBuf, String> {
+fn copy_and_convert_audio(
+    source_path: &Path,
+    dest_dir: &Path,
+    overwrite: bool,
+) -> Result<PathBuf, String> {
     copy_and_convert_audio_with_progress(source_path, dest_dir, overwrite, |_, _| {}, None)
 }
 
@@ -708,7 +767,8 @@ where
 
     check_cancelled()?;
 
-    let file_name = source_path.file_name()
+    let file_name = source_path
+        .file_name()
         .ok_or_else(|| format!("Invalid file name: {}", source_path.display()))?;
 
     let file_name_str = file_name.to_string_lossy();
@@ -722,15 +782,17 @@ where
         progress_callback("copying", 0.0);
         let dest_file = dest_dir.join(file_name);
         if dest_file.exists() && !overwrite {
-            return Err(format!("File already exists: {}", dest_file.to_string_lossy()));
+            return Err(format!(
+                "File already exists: {}",
+                dest_file.to_string_lossy()
+            ));
         }
         if dest_file.exists() && overwrite {
             fs::remove_file(&dest_file)
                 .map_err(|e| format!("Failed to remove existing file: {}", e))?;
         }
         check_cancelled()?;
-        fs::copy(source_path, &dest_file)
-            .map_err(|e| format!("Failed to copy file: {}", e))?;
+        fs::copy(source_path, &dest_file).map_err(|e| format!("Failed to copy file: {}", e))?;
         progress_callback("complete", 1.0);
         return Ok(dest_file);
     }
@@ -739,7 +801,8 @@ where
     let needs_conv = needs_conversion(source_path);
     let dest_file_name = if needs_conv {
         // Change extension to .wav for converted files
-        let stem = source_path.file_stem()
+        let stem = source_path
+            .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("audio");
         format!("{}.wav", stem)
@@ -751,7 +814,10 @@ where
 
     // Check if destination exists
     if dest_file.exists() && !overwrite {
-        return Err(format!("File already exists: {}", dest_file.to_string_lossy()));
+        return Err(format!(
+            "File already exists: {}",
+            dest_file.to_string_lossy()
+        ));
     }
 
     // Remove existing file if overwriting
@@ -765,7 +831,12 @@ where
     // Convert or copy based on needs_conversion
     if needs_conv {
         progress_callback("converting", 0.0);
-        let result = convert_to_octatrack_format_with_progress(source_path, &dest_file, &progress_callback, &cancel_token);
+        let result = convert_to_octatrack_format_with_progress(
+            source_path,
+            &dest_file,
+            &progress_callback,
+            &cancel_token,
+        );
 
         // If cancelled or errored, clean up partial file
         if result.is_err() {
@@ -778,8 +849,7 @@ where
         // File is already compatible, just copy
         progress_callback("copying", 0.0);
         check_cancelled()?;
-        fs::copy(source_path, &dest_file)
-            .map_err(|e| format!("Failed to copy file: {}", e))?;
+        fs::copy(source_path, &dest_file).map_err(|e| format!("Failed to copy file: {}", e))?;
         progress_callback("complete", 1.0);
     }
 
@@ -805,14 +875,23 @@ where
     }
 
     if !dest_dir.exists() {
-        return Err(format!("Destination directory does not exist: {}", destination_dir));
+        return Err(format!(
+            "Destination directory does not exist: {}",
+            destination_dir
+        ));
     }
 
     if source.is_dir() {
         return Err("Use copy_files_with_overwrite for directories".to_string());
     }
 
-    let result = copy_and_convert_audio_with_progress(source, dest_dir, overwrite, progress_callback, cancel_token)?;
+    let result = copy_and_convert_audio_with_progress(
+        source,
+        dest_dir,
+        overwrite,
+        progress_callback,
+        cancel_token,
+    )?;
     Ok(result.to_string_lossy().to_string())
 }
 
@@ -836,8 +915,7 @@ pub fn create_directory(path: &str, name: &str) -> Result<String, String> {
         return Err(format!("Directory already exists: {}", name));
     }
 
-    fs::create_dir(&new_dir)
-        .map_err(|e| format!("Failed to create directory: {}", e))?;
+    fs::create_dir(&new_dir).map_err(|e| format!("Failed to create directory: {}", e))?;
 
     Ok(new_dir.to_string_lossy().to_string())
 }
@@ -869,15 +947,25 @@ fn copy_dir_recursive_with_conversion(src: &Path, dst: &Path) -> Result<(), Stri
 
 /// Copy files from source to destination with optional overwrite
 /// Audio files are automatically converted to Octatrack-compatible format
-pub fn copy_files_with_overwrite(source_paths: Vec<String>, destination_dir: &str, overwrite: bool) -> Result<Vec<String>, String> {
+pub fn copy_files_with_overwrite(
+    source_paths: Vec<String>,
+    destination_dir: &str,
+    overwrite: bool,
+) -> Result<Vec<String>, String> {
     let dest_path = Path::new(destination_dir);
 
     if !dest_path.exists() {
-        return Err(format!("Destination directory does not exist: {}", destination_dir));
+        return Err(format!(
+            "Destination directory does not exist: {}",
+            destination_dir
+        ));
     }
 
     if !dest_path.is_dir() {
-        return Err(format!("Destination is not a directory: {}", destination_dir));
+        return Err(format!(
+            "Destination is not a directory: {}",
+            destination_dir
+        ));
     }
 
     let mut copied_files = Vec::new();
@@ -891,13 +979,17 @@ pub fn copy_files_with_overwrite(source_paths: Vec<String>, destination_dir: &st
 
         // Handle directory vs file copy
         if source_path.is_dir() {
-            let file_name = source_path.file_name()
+            let file_name = source_path
+                .file_name()
                 .ok_or_else(|| format!("Invalid file name: {}", source))?;
             let dest_file = dest_path.join(file_name);
 
             // Check if destination directory already exists
             if dest_file.exists() && !overwrite {
-                return Err(format!("Directory already exists: {}", dest_file.to_string_lossy()));
+                return Err(format!(
+                    "Directory already exists: {}",
+                    dest_file.to_string_lossy()
+                ));
             }
 
             // If overwriting, remove existing directory first
@@ -923,11 +1015,17 @@ pub fn move_files(source_paths: Vec<String>, destination_dir: &str) -> Result<Ve
     let dest_path = Path::new(destination_dir);
 
     if !dest_path.exists() {
-        return Err(format!("Destination directory does not exist: {}", destination_dir));
+        return Err(format!(
+            "Destination directory does not exist: {}",
+            destination_dir
+        ));
     }
 
     if !dest_path.is_dir() {
-        return Err(format!("Destination is not a directory: {}", destination_dir));
+        return Err(format!(
+            "Destination is not a directory: {}",
+            destination_dir
+        ));
     }
 
     let mut moved_files = Vec::new();
@@ -939,18 +1037,21 @@ pub fn move_files(source_paths: Vec<String>, destination_dir: &str) -> Result<Ve
             return Err(format!("Source file does not exist: {}", source));
         }
 
-        let file_name = source_path.file_name()
+        let file_name = source_path
+            .file_name()
             .ok_or_else(|| format!("Invalid file name: {}", source))?;
 
         let dest_file = dest_path.join(file_name);
 
         // Check if destination file already exists
         if dest_file.exists() {
-            return Err(format!("File already exists: {}", dest_file.to_string_lossy()));
+            return Err(format!(
+                "File already exists: {}",
+                dest_file.to_string_lossy()
+            ));
         }
 
-        fs::rename(&source_path, &dest_file)
-            .map_err(|e| format!("Failed to move file: {}", e))?;
+        fs::rename(source_path, &dest_file).map_err(|e| format!("Failed to move file: {}", e))?;
 
         moved_files.push(dest_file.to_string_lossy().to_string());
     }
@@ -970,11 +1071,10 @@ pub fn delete_files(file_paths: Vec<String>) -> Result<usize, String> {
         }
 
         if file_path.is_dir() {
-            fs::remove_dir_all(&file_path)
+            fs::remove_dir_all(file_path)
                 .map_err(|e| format!("Failed to delete directory: {}", e))?;
         } else {
-            fs::remove_file(&file_path)
-                .map_err(|e| format!("Failed to delete file: {}", e))?;
+            fs::remove_file(file_path).map_err(|e| format!("Failed to delete file: {}", e))?;
         }
 
         deleted_count += 1;
@@ -991,17 +1091,20 @@ pub fn rename_file(old_path: &str, new_name: &str) -> Result<String, String> {
         return Err(format!("File does not exist: {}", old_path.display()));
     }
 
-    let parent = old_path.parent()
+    let parent = old_path
+        .parent()
         .ok_or_else(|| "Cannot determine parent directory".to_string())?;
 
     let new_path = parent.join(new_name);
 
     if new_path.exists() {
-        return Err(format!("A file or folder with the name '{}' already exists", new_name));
+        return Err(format!(
+            "A file or folder with the name '{}' already exists",
+            new_name
+        ));
     }
 
-    fs::rename(&old_path, &new_path)
-        .map_err(|e| format!("Failed to rename: {}", e))?;
+    fs::rename(old_path, &new_path).map_err(|e| format!("Failed to rename: {}", e))?;
 
     Ok(new_path.to_string_lossy().to_string())
 }
@@ -1149,7 +1252,11 @@ mod tests {
         assert!(result.is_ok());
 
         let parent = result.unwrap();
-        assert!(parent.ends_with("level1"), "Should return parent: {}", parent);
+        assert!(
+            parent.ends_with("level1"),
+            "Should return parent: {}",
+            parent
+        );
     }
 
     #[test]
@@ -1190,7 +1297,11 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
 
         let result = create_directory(&temp_dir.path().to_string_lossy(), "mydir").unwrap();
-        assert!(result.ends_with("mydir"), "Should return full path: {}", result);
+        assert!(
+            result.ends_with("mydir"),
+            "Should return full path: {}",
+            result
+        );
     }
 
     // ==================== COPY FILES TESTS ====================
@@ -1207,7 +1318,7 @@ mod tests {
         let result = copy_files_with_overwrite(
             vec![source_file.to_string_lossy().to_string()],
             &dest_dir.path().to_string_lossy(),
-            false
+            false,
         );
         assert!(result.is_ok(), "Should copy file: {:?}", result);
 
@@ -1226,11 +1337,19 @@ mod tests {
 
         let result = copy_files_with_overwrite(
             vec![
-                source_dir.path().join("file1.txt").to_string_lossy().to_string(),
-                source_dir.path().join("file2.txt").to_string_lossy().to_string(),
+                source_dir
+                    .path()
+                    .join("file1.txt")
+                    .to_string_lossy()
+                    .to_string(),
+                source_dir
+                    .path()
+                    .join("file2.txt")
+                    .to_string_lossy()
+                    .to_string(),
             ],
             &dest_dir.path().to_string_lossy(),
-            false
+            false,
         );
         assert!(result.is_ok());
 
@@ -1251,7 +1370,7 @@ mod tests {
         let result = copy_files_with_overwrite(
             vec![source_file.to_string_lossy().to_string()],
             &dest_dir.path().to_string_lossy(),
-            false
+            false,
         );
         assert!(result.is_err(), "Should fail without overwrite");
     }
@@ -1269,7 +1388,7 @@ mod tests {
         let result = copy_files_with_overwrite(
             vec![source_file.to_string_lossy().to_string()],
             &dest_dir.path().to_string_lossy(),
-            true
+            true,
         );
         assert!(result.is_ok(), "Should succeed with overwrite");
 
@@ -1285,7 +1404,7 @@ mod tests {
         let result = copy_files_with_overwrite(
             vec!["/nonexistent/file.txt".to_string()],
             &dest_dir.path().to_string_lossy(),
-            false
+            false,
         );
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("does not exist"));
@@ -1300,7 +1419,7 @@ mod tests {
         let result = copy_files_with_overwrite(
             vec![source_file.to_string_lossy().to_string()],
             "/nonexistent/path",
-            false
+            false,
         );
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("does not exist"));
@@ -1319,7 +1438,7 @@ mod tests {
         let result = copy_files_with_overwrite(
             vec![subdir.to_string_lossy().to_string()],
             &dest_dir.path().to_string_lossy(),
-            false
+            false,
         );
         assert!(result.is_ok(), "Should copy directory: {:?}", result);
 
@@ -1340,13 +1459,16 @@ mod tests {
 
         let result = move_files(
             vec![source_file.to_string_lossy().to_string()],
-            &dest_dir.path().to_string_lossy()
+            &dest_dir.path().to_string_lossy(),
         );
         assert!(result.is_ok(), "Should move file: {:?}", result);
 
         // Source should not exist, dest should exist
         assert!(!source_file.exists(), "Source should be gone");
-        assert!(dest_dir.path().join("test.txt").exists(), "Dest should exist");
+        assert!(
+            dest_dir.path().join("test.txt").exists(),
+            "Dest should exist"
+        );
     }
 
     #[test]
@@ -1359,10 +1481,18 @@ mod tests {
 
         let result = move_files(
             vec![
-                source_dir.path().join("file1.txt").to_string_lossy().to_string(),
-                source_dir.path().join("file2.txt").to_string_lossy().to_string(),
+                source_dir
+                    .path()
+                    .join("file1.txt")
+                    .to_string_lossy()
+                    .to_string(),
+                source_dir
+                    .path()
+                    .join("file2.txt")
+                    .to_string_lossy()
+                    .to_string(),
             ],
-            &dest_dir.path().to_string_lossy()
+            &dest_dir.path().to_string_lossy(),
         );
         assert!(result.is_ok());
 
@@ -1381,7 +1511,7 @@ mod tests {
 
         let result = move_files(
             vec![source_file.to_string_lossy().to_string()],
-            &dest_dir.path().to_string_lossy()
+            &dest_dir.path().to_string_lossy(),
         );
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("already exists"));
@@ -1393,7 +1523,7 @@ mod tests {
 
         let result = move_files(
             vec!["/nonexistent/file.txt".to_string()],
-            &dest_dir.path().to_string_lossy()
+            &dest_dir.path().to_string_lossy(),
         );
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("does not exist"));
@@ -1417,11 +1547,13 @@ mod tests {
     fn test_delete_files_multiple() {
         let temp_dir = TempDir::new().unwrap();
 
-        let files: Vec<_> = (0..3).map(|i| {
-            let path = temp_dir.path().join(format!("file{}.txt", i));
-            fs::write(&path, "content").unwrap();
-            path.to_string_lossy().to_string()
-        }).collect();
+        let files: Vec<_> = (0..3)
+            .map(|i| {
+                let path = temp_dir.path().join(format!("file{}.txt", i));
+                fs::write(&path, "content").unwrap();
+                path.to_string_lossy().to_string()
+            })
+            .collect();
 
         let result = delete_files(files);
         assert!(result.is_ok());
@@ -1459,7 +1591,10 @@ mod tests {
         assert!(result.is_ok(), "Should rename file: {:?}", result);
 
         assert!(!old_path.exists(), "Old path should not exist");
-        assert!(temp_dir.path().join("new.txt").exists(), "New path should exist");
+        assert!(
+            temp_dir.path().join("new.txt").exists(),
+            "New path should exist"
+        );
     }
 
     #[test]
@@ -1469,7 +1604,11 @@ mod tests {
         fs::write(&old_path, "content").unwrap();
 
         let result = rename_file(&old_path.to_string_lossy(), "new.txt").unwrap();
-        assert!(result.ends_with("new.txt"), "Should return new path: {}", result);
+        assert!(
+            result.ends_with("new.txt"),
+            "Should return new path: {}",
+            result
+        );
     }
 
     #[test]
@@ -1510,7 +1649,10 @@ mod tests {
     #[test]
     fn test_register_cancellation_token() {
         let token = register_cancellation_token("test_transfer_1");
-        assert!(!is_cancelled(&token), "Token should not be cancelled initially");
+        assert!(
+            !is_cancelled(&token),
+            "Token should not be cancelled initially"
+        );
     }
 
     #[test]
@@ -1539,5 +1681,454 @@ mod tests {
         // After removal, cancel should return false
         let cancelled = cancel_transfer("test_transfer_3");
         assert!(!cancelled, "Token should be removed");
+    }
+
+    // =========================================================================
+    // needs_conversion tests
+    // =========================================================================
+
+    /// Helper to create a test WAV file with specific parameters
+    fn create_test_wav(path: &Path, sample_rate: u32, bits_per_sample: u16, num_samples: usize) {
+        let spec = hound::WavSpec {
+            channels: 2,
+            sample_rate,
+            bits_per_sample,
+            sample_format: hound::SampleFormat::Int,
+        };
+        let mut writer = hound::WavWriter::create(path, spec).unwrap();
+        for _ in 0..num_samples {
+            match bits_per_sample {
+                16 => {
+                    writer.write_sample(0i16).unwrap();
+                    writer.write_sample(0i16).unwrap();
+                }
+                24 => {
+                    writer.write_sample(0i32).unwrap();
+                    writer.write_sample(0i32).unwrap();
+                }
+                _ => {
+                    writer.write_sample(0i16).unwrap();
+                    writer.write_sample(0i16).unwrap();
+                }
+            }
+        }
+        writer.finalize().unwrap();
+    }
+
+    #[test]
+    fn test_needs_conversion_compatible_wav_44100_16bit() {
+        let temp_dir = TempDir::new().unwrap();
+        let wav_path = temp_dir.path().join("test.wav");
+        create_test_wav(&wav_path, 44100, 16, 100);
+
+        assert!(
+            !super::needs_conversion(&wav_path),
+            "44.1kHz 16-bit WAV should not need conversion"
+        );
+    }
+
+    #[test]
+    fn test_needs_conversion_compatible_wav_44100_24bit() {
+        let temp_dir = TempDir::new().unwrap();
+        let wav_path = temp_dir.path().join("test.wav");
+        create_test_wav(&wav_path, 44100, 24, 100);
+
+        assert!(
+            !super::needs_conversion(&wav_path),
+            "44.1kHz 24-bit WAV should not need conversion"
+        );
+    }
+
+    #[test]
+    fn test_needs_conversion_wrong_sample_rate() {
+        let temp_dir = TempDir::new().unwrap();
+        let wav_path = temp_dir.path().join("test.wav");
+        create_test_wav(&wav_path, 48000, 16, 100);
+
+        assert!(
+            super::needs_conversion(&wav_path),
+            "48kHz WAV should need conversion"
+        );
+    }
+
+    #[test]
+    fn test_needs_conversion_wrong_sample_rate_96khz() {
+        let temp_dir = TempDir::new().unwrap();
+        let wav_path = temp_dir.path().join("test.wav");
+        create_test_wav(&wav_path, 96000, 16, 100);
+
+        assert!(
+            super::needs_conversion(&wav_path),
+            "96kHz WAV should need conversion"
+        );
+    }
+
+    #[test]
+    fn test_needs_conversion_8bit_wav() {
+        // 8-bit is less than 16-bit, should need conversion
+        // Note: hound doesn't easily support 8-bit, so we test with the path logic
+        let temp_dir = TempDir::new().unwrap();
+        let wav_path = temp_dir.path().join("nonexistent.wav");
+        // Non-existent file should return true (needs conversion/can't read)
+        assert!(
+            super::needs_conversion(&wav_path),
+            "Unreadable WAV should need conversion"
+        );
+    }
+
+    #[test]
+    fn test_needs_conversion_mp3() {
+        let temp_dir = TempDir::new().unwrap();
+        let mp3_path = temp_dir.path().join("test.mp3");
+        fs::write(&mp3_path, b"fake mp3 data").unwrap();
+
+        assert!(
+            super::needs_conversion(&mp3_path),
+            "MP3 should always need conversion"
+        );
+    }
+
+    #[test]
+    fn test_needs_conversion_flac() {
+        let temp_dir = TempDir::new().unwrap();
+        let flac_path = temp_dir.path().join("test.flac");
+        fs::write(&flac_path, b"fake flac data").unwrap();
+
+        assert!(
+            super::needs_conversion(&flac_path),
+            "FLAC should always need conversion"
+        );
+    }
+
+    #[test]
+    fn test_needs_conversion_ogg() {
+        let temp_dir = TempDir::new().unwrap();
+        let ogg_path = temp_dir.path().join("test.ogg");
+        fs::write(&ogg_path, b"fake ogg data").unwrap();
+
+        assert!(
+            super::needs_conversion(&ogg_path),
+            "OGG should always need conversion"
+        );
+    }
+
+    #[test]
+    fn test_needs_conversion_non_audio_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let txt_path = temp_dir.path().join("test.txt");
+        fs::write(&txt_path, b"not an audio file").unwrap();
+
+        assert!(
+            !super::needs_conversion(&txt_path),
+            "Non-audio file should not need conversion (we don't handle it)"
+        );
+    }
+
+    #[test]
+    fn test_needs_conversion_no_extension() {
+        let temp_dir = TempDir::new().unwrap();
+        let path = temp_dir.path().join("noextension");
+        fs::write(&path, b"data").unwrap();
+
+        assert!(
+            !super::needs_conversion(&path),
+            "File without extension should not need conversion"
+        );
+    }
+
+    #[test]
+    fn test_needs_conversion_case_insensitive() {
+        let temp_dir = TempDir::new().unwrap();
+        let mp3_path = temp_dir.path().join("test.MP3");
+        fs::write(&mp3_path, b"fake mp3 data").unwrap();
+
+        assert!(
+            super::needs_conversion(&mp3_path),
+            "MP3 extension should be case-insensitive"
+        );
+    }
+
+    // =========================================================================
+    // is_cancelled tests
+    // =========================================================================
+
+    #[test]
+    fn test_is_cancelled_false_by_default() {
+        let token = Arc::new(AtomicBool::new(false));
+        assert!(
+            !super::is_cancelled(&token),
+            "Token should not be cancelled by default"
+        );
+    }
+
+    #[test]
+    fn test_is_cancelled_true_when_set() {
+        let token = Arc::new(AtomicBool::new(false));
+        token.store(true, Ordering::SeqCst);
+        assert!(
+            super::is_cancelled(&token),
+            "Token should be cancelled when set to true"
+        );
+    }
+
+    // =========================================================================
+    // copy_single_file_with_progress tests
+    // =========================================================================
+
+    #[test]
+    fn test_copy_single_file_compatible_wav() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_path = temp_dir.path().join("source.wav");
+        let dest_dir = temp_dir.path().join("dest");
+        fs::create_dir(&dest_dir).unwrap();
+
+        // Create a compatible WAV file (44.1kHz, 16-bit)
+        create_test_wav(&source_path, 44100, 16, 1000);
+
+        let cancel_token = Arc::new(AtomicBool::new(false));
+        let progress_calls = Arc::new(Mutex::new(Vec::new()));
+        let progress_calls_clone = Arc::clone(&progress_calls);
+
+        let result = copy_single_file_with_progress(
+            source_path.to_str().unwrap(),
+            dest_dir.to_str().unwrap(),
+            false, // overwrite
+            move |stage, progress| {
+                progress_calls_clone
+                    .lock()
+                    .unwrap()
+                    .push((stage.to_string(), progress));
+            },
+            Some(cancel_token),
+        );
+
+        assert!(result.is_ok(), "Copy should succeed: {:?}", result);
+        let dest_path = result.unwrap();
+        assert!(
+            Path::new(&dest_path).exists(),
+            "Destination file should exist"
+        );
+
+        // Check that progress was reported
+        let calls = progress_calls.lock().unwrap();
+        assert!(!calls.is_empty(), "Progress should have been reported");
+    }
+
+    #[test]
+    fn test_copy_single_file_source_not_exists() {
+        let temp_dir = TempDir::new().unwrap();
+        let dest_dir = temp_dir.path().join("dest");
+        fs::create_dir(&dest_dir).unwrap();
+
+        let result = copy_single_file_with_progress(
+            "/nonexistent/path/file.wav",
+            dest_dir.to_str().unwrap(),
+            false,
+            |_, _| {},
+            None,
+        );
+
+        assert!(result.is_err(), "Should fail for non-existent source");
+    }
+
+    #[test]
+    fn test_copy_single_file_dest_exists_no_overwrite() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_path = temp_dir.path().join("source.wav");
+        let dest_dir = temp_dir.path().join("dest");
+        fs::create_dir(&dest_dir).unwrap();
+
+        create_test_wav(&source_path, 44100, 16, 100);
+
+        // Create destination file
+        let dest_file = dest_dir.join("source.wav");
+        fs::write(&dest_file, b"existing").unwrap();
+
+        let result = copy_single_file_with_progress(
+            source_path.to_str().unwrap(),
+            dest_dir.to_str().unwrap(),
+            false, // no overwrite
+            |_, _| {},
+            None,
+        );
+
+        assert!(
+            result.is_err(),
+            "Should fail when destination exists and overwrite is false"
+        );
+        assert!(
+            result.unwrap_err().contains("already exists"),
+            "Error should mention file exists"
+        );
+    }
+
+    #[test]
+    fn test_copy_single_file_dest_exists_with_overwrite() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_path = temp_dir.path().join("source.wav");
+        let dest_dir = temp_dir.path().join("dest");
+        fs::create_dir(&dest_dir).unwrap();
+
+        create_test_wav(&source_path, 44100, 16, 100);
+
+        // Create destination file
+        let dest_file = dest_dir.join("source.wav");
+        fs::write(&dest_file, b"existing").unwrap();
+        let original_size = dest_file.metadata().unwrap().len();
+
+        let result = copy_single_file_with_progress(
+            source_path.to_str().unwrap(),
+            dest_dir.to_str().unwrap(),
+            true, // overwrite
+            |_, _| {},
+            None,
+        );
+
+        assert!(
+            result.is_ok(),
+            "Should succeed with overwrite: {:?}",
+            result
+        );
+
+        // Check that file was actually overwritten (size changed)
+        let new_size = dest_file.metadata().unwrap().len();
+        assert_ne!(original_size, new_size, "File should have been overwritten");
+    }
+
+    #[test]
+    fn test_copy_single_file_cancelled_before_start() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_path = temp_dir.path().join("source.wav");
+        let dest_dir = temp_dir.path().join("dest");
+        fs::create_dir(&dest_dir).unwrap();
+
+        create_test_wav(&source_path, 44100, 16, 100);
+
+        // Pre-cancel the token
+        let cancel_token = Arc::new(AtomicBool::new(true));
+
+        let result = copy_single_file_with_progress(
+            source_path.to_str().unwrap(),
+            dest_dir.to_str().unwrap(),
+            false,
+            |_, _| {},
+            Some(cancel_token),
+        );
+
+        assert!(result.is_err(), "Should fail when cancelled");
+        assert!(
+            result.unwrap_err().contains("cancelled"),
+            "Error should mention cancellation"
+        );
+    }
+
+    #[test]
+    fn test_copy_single_file_progress_range() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_path = temp_dir.path().join("source.wav");
+        let dest_dir = temp_dir.path().join("dest");
+        fs::create_dir(&dest_dir).unwrap();
+
+        // Create a compatible WAV file
+        create_test_wav(&source_path, 44100, 16, 1000);
+
+        let progress_values = Arc::new(Mutex::new(Vec::new()));
+        let progress_values_clone = Arc::clone(&progress_values);
+
+        let _ = copy_single_file_with_progress(
+            source_path.to_str().unwrap(),
+            dest_dir.to_str().unwrap(),
+            false,
+            move |_, progress| {
+                progress_values_clone.lock().unwrap().push(progress);
+            },
+            None,
+        );
+
+        let values = progress_values.lock().unwrap();
+        for &p in values.iter() {
+            assert!(
+                (0.0..=1.0).contains(&p),
+                "Progress {} should be between 0.0 and 1.0",
+                p
+            );
+        }
+    }
+
+    #[test]
+    fn test_copy_single_file_preserves_filename() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_path = temp_dir.path().join("my_sample.wav");
+        let dest_dir = temp_dir.path().join("dest");
+        fs::create_dir(&dest_dir).unwrap();
+
+        create_test_wav(&source_path, 44100, 16, 100);
+
+        let result = copy_single_file_with_progress(
+            source_path.to_str().unwrap(),
+            dest_dir.to_str().unwrap(),
+            false,
+            |_, _| {},
+            None,
+        );
+
+        assert!(result.is_ok());
+        let dest_path = result.unwrap();
+        assert!(
+            dest_path.ends_with("my_sample.wav"),
+            "Should preserve original filename"
+        );
+    }
+
+    // =========================================================================
+    // Audio conversion edge cases
+    // =========================================================================
+
+    #[test]
+    fn test_copy_converts_48khz_to_44100() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_path = temp_dir.path().join("source48k.wav");
+        let dest_dir = temp_dir.path().join("dest");
+        fs::create_dir(&dest_dir).unwrap();
+
+        // Create 48kHz WAV that needs conversion
+        create_test_wav(&source_path, 48000, 16, 1000);
+
+        let result = copy_single_file_with_progress(
+            source_path.to_str().unwrap(),
+            dest_dir.to_str().unwrap(),
+            false,
+            |_, _| {},
+            None,
+        );
+
+        assert!(result.is_ok(), "Conversion should succeed: {:?}", result);
+
+        // Verify the output is 44.1kHz
+        let dest_path = result.unwrap();
+        let reader = hound::WavReader::open(&dest_path).unwrap();
+        assert_eq!(reader.spec().sample_rate, 44100, "Output should be 44.1kHz");
+    }
+
+    #[test]
+    fn test_copy_single_file_empty_wav() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_path = temp_dir.path().join("empty.wav");
+        let dest_dir = temp_dir.path().join("dest");
+        fs::create_dir(&dest_dir).unwrap();
+
+        // Create an empty WAV (0 samples)
+        create_test_wav(&source_path, 44100, 16, 0);
+
+        let result = copy_single_file_with_progress(
+            source_path.to_str().unwrap(),
+            dest_dir.to_str().unwrap(),
+            false,
+            |_, _| {},
+            None,
+        );
+
+        // Empty file should still copy successfully
+        assert!(result.is_ok(), "Empty WAV should copy: {:?}", result);
     }
 }
