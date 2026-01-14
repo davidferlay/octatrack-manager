@@ -2742,8 +2742,23 @@ h1 {
   margin-bottom: 1.5rem;
 }
 
+.tools-section .tools-label {
+  display: none;
+}
+
 .tools-section .tools-select {
-  max-width: 300px;
+  display: block;
+  margin: 0 auto;
+  width: auto;
+  min-width: 220px;
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--elektron-medium-gray);
+  border-bottom: 3px solid var(--elektron-orange);
+  border-radius: 4px 4px 0 0;
+  background-color: var(--elektron-darker-gray);
+  color: var(--elektron-text-primary);
+  font-weight: 500;
+  font-size: 0.95rem;
 }
 
 .tools-label {
@@ -3003,8 +3018,10 @@ h1 {
 .tools-execute-btn {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.75rem;
   padding: 1rem 2.5rem;
+  width: 200px;
   font-size: 1.1rem;
   font-weight: 600;
   background-color: var(--elektron-orange);
@@ -3012,7 +3029,7 @@ h1 {
   border-radius: 8px;
   color: #000;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 0.2s, box-shadow 0.2s;
 }
 
 .tools-execute-btn:hover:not(:disabled) {
@@ -3031,13 +3048,20 @@ h1 {
   cursor: not-allowed;
 }
 
+.tools-execute-btn i,
+.tools-execute-btn .loading-spinner-small {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
 .tools-execute-btn i {
   font-size: 1rem;
 }
 
 .loading-spinner-small {
-  width: 18px;
-  height: 18px;
+  width: 1rem;
+  height: 1rem;
   border: 2px solid rgba(0, 0, 0, 0.2);
   border-top-color: #000;
   border-radius: 50%;
