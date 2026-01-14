@@ -778,7 +778,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 </div>
               </div>
               <div className="tools-field tools-checkbox">
-                <label>
+                <label title="Gain, loop mode, timestretch">
                   <input
                     type="checkbox"
                     checked={includeEditorSettings}
@@ -786,7 +786,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   />
                   Include Editor Settings
                 </label>
-                <span className="tools-hint">Gain, loop mode, timestretch</span>
               </div>
             </>
           )}
