@@ -627,6 +627,15 @@ h1 {
   white-space: nowrap;
 }
 
+/* Truncate long project names on detail pages (h1 following back button) */
+.project-header .back-button + h1 {
+  max-width: 25vw;
+  overflow: hidden;
+  text-overflow: clip;
+  mask-image: linear-gradient(to right, black 85%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
+}
+
 /* Write status indicator in project header */
 .save-status-indicator {
   font-size: 13px;
