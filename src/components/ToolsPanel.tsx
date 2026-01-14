@@ -84,6 +84,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices 
 
   // UI state
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
+  const [showProgress, setShowProgress] = useState<boolean>(false);
+  const [progressFading, setProgressFading] = useState<boolean>(false);
+  const [executingDetails, setExecutingDetails] = useState<string>("");
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [statusType, setStatusType] = useState<"success" | "error" | "info" | "">("");
 
@@ -175,9 +178,33 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices 
     setDestSampleIndices(Array.from({ length: count }, (_, i) => Math.min(127, start + i)));
   }, [sourceSampleIndices.length]);
 
+  // Helper to get operation details for display
+  function getExecutingDetails(): string {
+    switch (operation) {
+      case "copy_bank":
+        return `Copying Bank ${String.fromCharCode(65 + sourceBankIndex)}...`;
+      case "copy_parts":
+        return `Copying ${sourcePartIndices.length} part${sourcePartIndices.length > 1 ? 's' : ''}...`;
+      case "copy_patterns":
+        return `Copying ${sourcePatternIndices.length} pattern${sourcePatternIndices.length > 1 ? 's' : ''}...`;
+      case "copy_tracks":
+        return `Copying ${sourceTrackIndices.length} track${sourceTrackIndices.length > 1 ? 's' : ''}...`;
+      case "copy_sample_slots": {
+        const slotCount = sourceSampleIndices.length;
+        const audioInfo = audioMode === "copy" ? " + audio files" : audioMode === "move_to_pool" ? " + moving to pool" : "";
+        return `Copying ${slotCount} sample slot${slotCount > 1 ? 's' : ''}${audioInfo}...`;
+      }
+      default:
+        return "Processing...";
+    }
+  }
+
   // Execute operation
   async function executeOperation() {
     setIsExecuting(true);
+    setShowProgress(true);
+    setProgressFading(false);
+    setExecutingDetails(getExecutingDetails());
     setStatusMessage("");
     setStatusType("");
 
@@ -202,7 +229,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices 
             destBankIndex,
             destPartIndices,
           });
-          setStatusMessage(`Parts copied successfully`);
+          setStatusMessage(`${sourcePartIndices.length} part${sourcePartIndices.length > 1 ? 's' : ''} copied successfully`);
           break;
 
         case "copy_patterns":
@@ -218,7 +245,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices 
             trackMode,
             trackIndices: trackMode === "specific" ? sourceTrackIndices : null,
           });
-          setStatusMessage(`Patterns copied successfully`);
+          setStatusMessage(`${sourcePatternIndices.length} pattern${sourcePatternIndices.length > 1 ? 's' : ''} copied successfully`);
           break;
 
         case "copy_tracks":
@@ -233,7 +260,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices 
             destTrackIndices,
             mode: copyTrackMode,
           });
-          setStatusMessage(`Tracks copied successfully`);
+          setStatusMessage(`${sourceTrackIndices.length} track${sourceTrackIndices.length > 1 ? 's' : ''} copied successfully`);
           break;
 
         case "copy_sample_slots":
@@ -247,7 +274,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices 
             audioMode,
             includeEditorSettings,
           });
-          setStatusMessage(`Sample slots copied successfully`);
+          setStatusMessage(`${sourceSampleIndices.length} sample slot${sourceSampleIndices.length > 1 ? 's' : ''} copied successfully`);
           break;
       }
       setStatusType("success");
@@ -256,6 +283,12 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices 
       setStatusType("error");
     } finally {
       setIsExecuting(false);
+      setProgressFading(true);
+      setTimeout(() => {
+        setShowProgress(false);
+        setProgressFading(false);
+        setExecutingDetails("");
+      }, 300);
     }
   }
 
@@ -769,7 +802,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices 
           {isExecuting ? (
             <>
               <span className="loading-spinner-small"></span>
-              Executing...
+              Processing
             </>
           ) : (
             <>
@@ -778,6 +811,18 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices 
             </>
           )}
         </button>
+
+        {showProgress && (
+          <details className={`tools-progress-details ${progressFading ? 'fading-out' : ''}`} open>
+            <summary>Progress</summary>
+            <div className="tools-progress-content">
+              <div className="tools-progress-item">
+                <span className="loading-spinner-small"></span>
+                <span>{executingDetails}</span>
+              </div>
+            </div>
+          </details>
+        )}
       </div>
 
       {/* Status Modal */}
