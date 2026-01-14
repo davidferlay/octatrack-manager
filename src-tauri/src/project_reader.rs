@@ -3269,7 +3269,8 @@ pub fn get_audio_pool_status(project_path: &str) -> Result<AudioPoolStatus, Stri
         .parent()
         .ok_or_else(|| "Cannot determine parent directory".to_string())?;
 
-    let audio_pool_path = parent.join("AUDIO POOL");
+    // Octatrack uses "AUDIO" folder at the Set level for Audio Pool
+    let audio_pool_path = parent.join("AUDIO");
 
     if audio_pool_path.exists() && audio_pool_path.is_dir() {
         Ok(AudioPoolStatus {
@@ -3296,7 +3297,8 @@ pub fn create_audio_pool(project_path: &str) -> Result<String, String> {
         .parent()
         .ok_or_else(|| "Cannot determine parent directory".to_string())?;
 
-    let audio_pool_path = parent.join("AUDIO POOL");
+    // Octatrack uses "AUDIO" folder at the Set level for Audio Pool
+    let audio_pool_path = parent.join("AUDIO");
 
     if audio_pool_path.exists() {
         if audio_pool_path.is_dir() {
@@ -6540,7 +6542,7 @@ mod tests {
 
         #[test]
         fn test_get_audio_pool_status_no_pool() {
-            // Create a Set structure without AUDIO POOL
+            // Create a Set structure without AUDIO folder
             let set_dir = TempDir::new().unwrap();
             let project_path = set_dir.path().join("Project1");
             fs::create_dir(&project_path).unwrap();
@@ -6563,7 +6565,7 @@ mod tests {
 
         #[test]
         fn test_get_audio_pool_status_with_pool() {
-            // Create a Set with AUDIO POOL
+            // Create a Set with AUDIO folder (Octatrack Audio Pool)
             let set_dir = TempDir::new().unwrap();
             let project_path = set_dir.path().join("Project1");
             fs::create_dir(&project_path).unwrap();
@@ -6574,8 +6576,8 @@ mod tests {
                 .to_data_file(&project_path.join("project.work"))
                 .unwrap();
 
-            // Create AUDIO POOL
-            fs::create_dir(set_dir.path().join("AUDIO POOL")).unwrap();
+            // Create AUDIO folder (Audio Pool)
+            fs::create_dir(set_dir.path().join("AUDIO")).unwrap();
 
             let result = get_audio_pool_status(&project_path.to_string_lossy());
             assert!(result.is_ok());
@@ -6586,7 +6588,7 @@ mod tests {
 
         #[test]
         fn test_create_audio_pool_success() {
-            // Create a Set structure without AUDIO POOL
+            // Create a Set structure without AUDIO folder
             let set_dir = TempDir::new().unwrap();
             let project_path = set_dir.path().join("Project1");
             fs::create_dir(&project_path).unwrap();
@@ -6600,13 +6602,13 @@ mod tests {
             assert!(result.is_ok(), "Should create audio pool: {:?}", result);
 
             // Verify it was created
-            let pool_path = set_dir.path().join("AUDIO POOL");
-            assert!(pool_path.exists(), "AUDIO POOL directory should exist");
+            let pool_path = set_dir.path().join("AUDIO");
+            assert!(pool_path.exists(), "AUDIO directory should exist");
         }
 
         #[test]
         fn test_create_audio_pool_already_exists() {
-            // Create a Set with existing AUDIO POOL
+            // Create a Set with existing AUDIO folder
             let set_dir = TempDir::new().unwrap();
             let project_path = set_dir.path().join("Project1");
             fs::create_dir(&project_path).unwrap();
@@ -6616,8 +6618,8 @@ mod tests {
                 .to_data_file(&project_path.join("project.work"))
                 .unwrap();
 
-            // Pre-create AUDIO POOL
-            fs::create_dir(set_dir.path().join("AUDIO POOL")).unwrap();
+            // Pre-create AUDIO folder
+            fs::create_dir(set_dir.path().join("AUDIO")).unwrap();
 
             let result = create_audio_pool(&project_path.to_string_lossy());
             assert!(result.is_ok(), "Should succeed even if pool exists");

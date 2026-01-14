@@ -716,11 +716,32 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             <>
               <div className="tools-field">
                 <label>Slot Type</label>
-                <select value={slotType} onChange={(e) => setSlotType(e.target.value as SlotType)}>
-                  <option value="both">Static + Flex</option>
-                  <option value="static">Static Only</option>
-                  <option value="flex">Flex Only</option>
-                </select>
+                <div className="tools-toggle-group">
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn ${slotType === "both" ? "selected" : ""}`}
+                    onClick={() => setSlotType("both")}
+                    title="Copy both Static and Flex machine sample slots"
+                  >
+                    Static + Flex
+                  </button>
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn ${slotType === "static" ? "selected" : ""}`}
+                    onClick={() => setSlotType("static")}
+                    title="Copy only Static machine sample slots"
+                  >
+                    Static
+                  </button>
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn ${slotType === "flex" ? "selected" : ""}`}
+                    onClick={() => setSlotType("flex")}
+                    title="Copy only Flex machine sample slots"
+                  >
+                    Flex
+                  </button>
+                </div>
               </div>
               <div className="tools-field">
                 <label>Audio Files</label>
