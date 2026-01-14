@@ -1,3 +1,7 @@
+// Allow certain clippy lints - the separate if statements are clearer for complex logic
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::collapsible_match)]
+
 use ot_tools_io::{BankFile, HasChecksumField, OctatrackFileIO, ProjectFile};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -56,8 +60,8 @@ pub struct MemorySettings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MidiSettings {
     // MIDI Channels
-    pub trig_channels: Vec<i8>,     // 8 MIDI track channels (1-16 or -1 for disabled)
-    pub auto_channel: i8,           // Auto channel (1-16 or -1 for disabled)
+    pub trig_channels: Vec<i8>, // 8 MIDI track channels (1-16 or -1 for disabled)
+    pub auto_channel: i8,       // Auto channel (1-16 or -1 for disabled)
     // MIDI Sync
     pub clock_send: bool,
     pub clock_receive: bool,
@@ -65,7 +69,7 @@ pub struct MidiSettings {
     pub transport_receive: bool,
     // Program Change
     pub prog_change_send: bool,
-    pub prog_change_send_channel: i8,  // 1-16 or -1 for disabled
+    pub prog_change_send_channel: i8, // 1-16 or -1 for disabled
     pub prog_change_receive: bool,
     pub prog_change_receive_channel: i8, // 1-16 or -1 for disabled
 }
@@ -106,27 +110,27 @@ pub struct SampleSlot {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrigCounts {
-    pub trigger: u16,      // Standard trigger trigs
-    pub trigless: u16,     // Trigless trigs (p-locks without triggering)
-    pub plock: u16,        // Parameter lock trigs
-    pub oneshot: u16,      // One-shot trigs
-    pub swing: u16,        // Swing trigs
-    pub slide: u16,        // Parameter slide trigs
-    pub total: u16,        // Total of all trig types
+    pub trigger: u16,  // Standard trigger trigs
+    pub trigless: u16, // Trigless trigs (p-locks without triggering)
+    pub plock: u16,    // Parameter lock trigs
+    pub oneshot: u16,  // One-shot trigs
+    pub swing: u16,    // Swing trigs
+    pub slide: u16,    // Parameter slide trigs
+    pub total: u16,    // Total of all trig types
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerTrackSettings {
-    pub master_len: String,        // Master length in per-track mode (can be "INF")
-    pub master_scale: String,      // Master scale in per-track mode
+    pub master_len: String,   // Master length in per-track mode (can be "INF")
+    pub master_scale: String, // Master scale in per-track mode
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrackSettings {
     pub start_silent: bool,
     pub plays_free: bool,
-    pub trig_mode: String,         // "ONE", "ONE2", "HOLD"
-    pub trig_quant: String,        // Quantization setting
+    pub trig_mode: String,  // "ONE", "ONE2", "HOLD"
+    pub trig_quant: String, // Quantization setting
     pub oneshot_trk: bool,
 }
 
@@ -187,36 +191,36 @@ pub struct MidiParams {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrigStep {
-    pub step: u8,              // Step number (0-63)
-    pub trigger: bool,         // Has trigger trig
-    pub trigless: bool,        // Has trigless trig
-    pub plock: bool,           // Has parameter lock
-    pub oneshot: bool,         // Has oneshot trig (audio only)
-    pub swing: bool,           // Has swing trig
-    pub slide: bool,           // Has slide trig (audio only)
-    pub recorder: bool,        // Has recorder trig (audio only)
+    pub step: u8,                                  // Step number (0-63)
+    pub trigger: bool,                             // Has trigger trig
+    pub trigless: bool,                            // Has trigless trig
+    pub plock: bool,                               // Has parameter lock
+    pub oneshot: bool,                             // Has oneshot trig (audio only)
+    pub swing: bool,                               // Has swing trig
+    pub slide: bool,                               // Has slide trig (audio only)
+    pub recorder: bool,                            // Has recorder trig (audio only)
     pub trig_condition: Option<String>, // Trig condition (Fill, NotFill, Pre, percentages, etc.)
-    pub trig_repeats: u8,      // Number of trig repeats (0-7)
-    pub micro_timing: Option<String>,  // Micro-timing offset (e.g., "+1/32", "-1/64")
-    pub notes: Vec<u8>,        // MIDI note values (up to 4 notes for chords on MIDI tracks)
-    pub velocity: Option<u8>,  // Velocity/level value (0-127)
-    pub plock_count: u8,       // Number of parameter locks on this step
+    pub trig_repeats: u8,               // Number of trig repeats (0-7)
+    pub micro_timing: Option<String>,   // Micro-timing offset (e.g., "+1/32", "-1/64")
+    pub notes: Vec<u8>, // MIDI note values (up to 4 notes for chords on MIDI tracks)
+    pub velocity: Option<u8>, // Velocity/level value (0-127)
+    pub plock_count: u8, // Number of parameter locks on this step
     pub sample_slot: Option<u8>, // Sample slot ID if locked (audio tracks)
     pub audio_plocks: Option<AudioParameterLocks>, // Audio parameter locks (audio tracks only)
-    pub midi_plocks: Option<MidiParameterLocks>,   // MIDI parameter locks (MIDI tracks only)
+    pub midi_plocks: Option<MidiParameterLocks>, // MIDI parameter locks (MIDI tracks only)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrackInfo {
     pub track_id: u8,
-    pub track_type: String,        // "Audio" or "MIDI"
-    pub swing_amount: u8,          // 0-30 (50-80 on device)
-    pub per_track_len: Option<u8>, // Track length in per-track mode
+    pub track_type: String,              // "Audio" or "MIDI"
+    pub swing_amount: u8,                // 0-30 (50-80 on device)
+    pub per_track_len: Option<u8>,       // Track length in per-track mode
     pub per_track_scale: Option<String>, // Track scale in per-track mode
     pub pattern_settings: TrackSettings,
-    pub trig_counts: TrigCounts,   // Per-track trig statistics
-    pub steps: Vec<TrigStep>,      // Per-step trig information (64 steps)
-    pub default_note: Option<u8>,  // Default note for MIDI tracks (0-127)
+    pub trig_counts: TrigCounts,  // Per-track trig statistics
+    pub steps: Vec<TrigStep>,     // Per-step trig information (64 steps)
+    pub default_note: Option<u8>, // Default note for MIDI tracks (0-127)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -224,16 +228,16 @@ pub struct Pattern {
     pub id: u8,
     pub name: String,
     pub length: u16,
-    pub part_assignment: u8,       // Which part (0-3 for Parts 1-4) this pattern is assigned to
-    pub scale_mode: String,        // "Normal" or "Per Track"
-    pub master_scale: String,      // Playback speed multiplier (2x, 3/2x, 1x, 3/4x, 1/2x, 1/4x, 1/8x)
-    pub chain_mode: String,        // "Project" or "Pattern"
+    pub part_assignment: u8, // Which part (0-3 for Parts 1-4) this pattern is assigned to
+    pub scale_mode: String,  // "Normal" or "Per Track"
+    pub master_scale: String, // Playback speed multiplier (2x, 3/2x, 1x, 3/4x, 1/2x, 1/4x, 1/8x)
+    pub chain_mode: String,  // "Project" or "Pattern"
     pub tempo_info: Option<String>, // Pattern tempo if set, or None if using project tempo
-    pub active_tracks: u8,         // Number of tracks with at least one trigger trig
-    pub trig_counts: TrigCounts,   // Detailed trig statistics
+    pub active_tracks: u8,   // Number of tracks with at least one trigger trig
+    pub trig_counts: TrigCounts, // Detailed trig statistics
     pub per_track_settings: Option<PerTrackSettings>, // Settings for per-track mode
-    pub has_swing: bool,           // Whether pattern has any swing trigs
-    pub tracks: Vec<TrackInfo>,    // Per-track information
+    pub has_swing: bool,     // Whether pattern has any swing trigs
+    pub tracks: Vec<TrackInfo>, // Per-track information
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -253,8 +257,8 @@ pub struct Bank {
 // Parts machine parameter structures
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PartTrackMachine {
-    pub track_id: u8,              // 0-7 for audio tracks T1-T8
-    pub machine_type: String,      // "Static", "Flex", "Thru", "Neighbor", "Pickup"
+    pub track_id: u8,         // 0-7 for audio tracks T1-T8
+    pub machine_type: String, // "Static", "Flex", "Thru", "Neighbor", "Pickup"
     pub machine_params: MachineParamValues,
     pub machine_setup: MachineSetupValues,
 }
@@ -292,7 +296,7 @@ pub struct MachineSetupValues {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PartTrackAmp {
-    pub track_id: u8,              // 0-7 for audio tracks T1-T8
+    pub track_id: u8, // 0-7 for audio tracks T1-T8
     pub atk: u8,
     pub hold: u8,
     pub rel: u8,
@@ -300,46 +304,46 @@ pub struct PartTrackAmp {
     pub bal: u8,
     pub f: u8,
     // AMP SETUP parameters
-    pub amp_setup_amp: u8,         // Envelope type
-    pub amp_setup_sync: u8,        // Sync setting
-    pub amp_setup_atck: u8,        // Attack curve
-    pub amp_setup_fx1: u8,         // FX1 routing
-    pub amp_setup_fx2: u8,         // FX2 routing
+    pub amp_setup_amp: u8,  // Envelope type
+    pub amp_setup_sync: u8, // Sync setting
+    pub amp_setup_atck: u8, // Attack curve
+    pub amp_setup_fx1: u8,  // FX1 routing
+    pub amp_setup_fx2: u8,  // FX2 routing
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PartTrackLfo {
-    pub track_id: u8,              // 0-7 for audio tracks T1-T8
+    pub track_id: u8, // 0-7 for audio tracks T1-T8
     // MAIN LFO parameters
-    pub spd1: u8,                  // Speed of LFO 1
-    pub spd2: u8,                  // Speed of LFO 2
-    pub spd3: u8,                  // Speed of LFO 3
-    pub dep1: u8,                  // Depth of LFO 1
-    pub dep2: u8,                  // Depth of LFO 2
-    pub dep3: u8,                  // Depth of LFO 3
+    pub spd1: u8, // Speed of LFO 1
+    pub spd2: u8, // Speed of LFO 2
+    pub spd3: u8, // Speed of LFO 3
+    pub dep1: u8, // Depth of LFO 1
+    pub dep2: u8, // Depth of LFO 2
+    pub dep3: u8, // Depth of LFO 3
     // SETUP LFO parameters (Setup 1: Parameter Target & Wave)
-    pub lfo1_pmtr: u8,             // LFO 1 Parameter Target
-    pub lfo2_pmtr: u8,             // LFO 2 Parameter Target
-    pub lfo3_pmtr: u8,             // LFO 3 Parameter Target
-    pub lfo1_wave: u8,             // LFO 1 Waveform
-    pub lfo2_wave: u8,             // LFO 2 Waveform
-    pub lfo3_wave: u8,             // LFO 3 Waveform
+    pub lfo1_pmtr: u8, // LFO 1 Parameter Target
+    pub lfo2_pmtr: u8, // LFO 2 Parameter Target
+    pub lfo3_pmtr: u8, // LFO 3 Parameter Target
+    pub lfo1_wave: u8, // LFO 1 Waveform
+    pub lfo2_wave: u8, // LFO 2 Waveform
+    pub lfo3_wave: u8, // LFO 3 Waveform
     // SETUP LFO parameters (Setup 2: Multiplier & Trigger)
-    pub lfo1_mult: u8,             // LFO 1 Speed Multiplier
-    pub lfo2_mult: u8,             // LFO 2 Speed Multiplier
-    pub lfo3_mult: u8,             // LFO 3 Speed Multiplier
-    pub lfo1_trig: u8,             // LFO 1 Trigger Mode
-    pub lfo2_trig: u8,             // LFO 2 Trigger Mode
-    pub lfo3_trig: u8,             // LFO 3 Trigger Mode
+    pub lfo1_mult: u8, // LFO 1 Speed Multiplier
+    pub lfo2_mult: u8, // LFO 2 Speed Multiplier
+    pub lfo3_mult: u8, // LFO 3 Speed Multiplier
+    pub lfo1_trig: u8, // LFO 1 Trigger Mode
+    pub lfo2_trig: u8, // LFO 2 Trigger Mode
+    pub lfo3_trig: u8, // LFO 3 Trigger Mode
     // CUSTOM LFO Design (16-step waveform)
     pub custom_lfo_design: Vec<u8>, // 16 values (0-255) representing custom waveform shape
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PartTrackFx {
-    pub track_id: u8,              // 0-7 for audio tracks T1-T8
-    pub fx1_type: u8,              // FX1 effect type (0-24+)
-    pub fx2_type: u8,              // FX2 effect type (0-24+)
+    pub track_id: u8, // 0-7 for audio tracks T1-T8
+    pub fx1_type: u8, // FX1 effect type (0-24+)
+    pub fx2_type: u8, // FX2 effect type (0-24+)
     // FX1 main parameters (6 params)
     pub fx1_param1: u8,
     pub fx1_param2: u8,
@@ -373,7 +377,7 @@ pub struct PartTrackFx {
 // MIDI track parameter structures
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PartTrackMidiNote {
-    pub track_id: u8,              // 0-7 for MIDI tracks M1-M8
+    pub track_id: u8, // 0-7 for MIDI tracks M1-M8
     // NOTE MAIN parameters
     pub note: u8,
     pub vel: u8,
@@ -382,73 +386,73 @@ pub struct PartTrackMidiNote {
     pub not3: u8,
     pub not4: u8,
     // NOTE SETUP parameters
-    pub chan: u8,                  // MIDI channel
-    pub bank: u8,                  // Bank select
-    pub prog: u8,                  // Program change
-    pub sbnk: u8,                  // Sub bank
+    pub chan: u8, // MIDI channel
+    pub bank: u8, // Bank select
+    pub prog: u8, // Program change
+    pub sbnk: u8, // Sub bank
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PartTrackMidiArp {
-    pub track_id: u8,              // 0-7 for MIDI tracks M1-M8
+    pub track_id: u8, // 0-7 for MIDI tracks M1-M8
     // ARP MAIN parameters
-    pub tran: u8,                  // Transpose
-    pub leg: u8,                   // Legato
-    pub mode: u8,                  // Arpeggiator mode
-    pub spd: u8,                   // Speed
-    pub rnge: u8,                  // Range
-    pub nlen: u8,                  // Note length
+    pub tran: u8, // Transpose
+    pub leg: u8,  // Legato
+    pub mode: u8, // Arpeggiator mode
+    pub spd: u8,  // Speed
+    pub rnge: u8, // Range
+    pub nlen: u8, // Note length
     // ARP SETUP parameters
-    pub len: u8,                   // Arp sequence length
-    pub key: u8,                   // Scale/key setting
+    pub len: u8, // Arp sequence length
+    pub key: u8, // Scale/key setting
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PartTrackMidiCtrl1 {
-    pub track_id: u8,              // 0-7 for MIDI tracks M1-M8
+    pub track_id: u8, // 0-7 for MIDI tracks M1-M8
     // CTRL1 MAIN parameters
-    pub pb: u8,                    // Pitch bend
-    pub at: u8,                    // Aftertouch
-    pub cc1: u8,                   // CC1 value
-    pub cc2: u8,                   // CC2 value
-    pub cc3: u8,                   // CC3 value
-    pub cc4: u8,                   // CC4 value
+    pub pb: u8,  // Pitch bend
+    pub at: u8,  // Aftertouch
+    pub cc1: u8, // CC1 value
+    pub cc2: u8, // CC2 value
+    pub cc3: u8, // CC3 value
+    pub cc4: u8, // CC4 value
     // CTRL1 SETUP parameters (CC numbers, not values)
-    pub cc1_num: u8,               // CC1 number
-    pub cc2_num: u8,               // CC2 number
-    pub cc3_num: u8,               // CC3 number
-    pub cc4_num: u8,               // CC4 number
+    pub cc1_num: u8, // CC1 number
+    pub cc2_num: u8, // CC2 number
+    pub cc3_num: u8, // CC3 number
+    pub cc4_num: u8, // CC4 number
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PartTrackMidiCtrl2 {
-    pub track_id: u8,              // 0-7 for MIDI tracks M1-M8
+    pub track_id: u8, // 0-7 for MIDI tracks M1-M8
     // CTRL2 MAIN parameters
-    pub cc5: u8,                   // CC5 value
-    pub cc6: u8,                   // CC6 value
-    pub cc7: u8,                   // CC7 value
-    pub cc8: u8,                   // CC8 value
-    pub cc9: u8,                   // CC9 value
-    pub cc10: u8,                  // CC10 value
+    pub cc5: u8,  // CC5 value
+    pub cc6: u8,  // CC6 value
+    pub cc7: u8,  // CC7 value
+    pub cc8: u8,  // CC8 value
+    pub cc9: u8,  // CC9 value
+    pub cc10: u8, // CC10 value
     // CTRL2 SETUP parameters (CC numbers, not values)
-    pub cc5_num: u8,               // CC5 number
-    pub cc6_num: u8,               // CC6 number
-    pub cc7_num: u8,               // CC7 number
-    pub cc8_num: u8,               // CC8 number
-    pub cc9_num: u8,               // CC9 number
-    pub cc10_num: u8,              // CC10 number
+    pub cc5_num: u8,  // CC5 number
+    pub cc6_num: u8,  // CC6 number
+    pub cc7_num: u8,  // CC7 number
+    pub cc8_num: u8,  // CC8 number
+    pub cc9_num: u8,  // CC9 number
+    pub cc10_num: u8, // CC10 number
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PartData {
-    pub part_id: u8,               // 0-3 for Parts 1-4
-    pub machines: Vec<PartTrackMachine>,  // 8 audio tracks
-    pub amps: Vec<PartTrackAmp>,          // 8 audio tracks
-    pub lfos: Vec<PartTrackLfo>,          // 8 audio tracks (also used for MIDI LFOs)
-    pub fxs: Vec<PartTrackFx>,            // 8 audio tracks
-    pub midi_notes: Vec<PartTrackMidiNote>,  // 8 MIDI tracks
-    pub midi_arps: Vec<PartTrackMidiArp>,    // 8 MIDI tracks
-    pub midi_lfos: Vec<PartTrackLfo>,        // 8 MIDI tracks (reuses audio LFO structure)
+    pub part_id: u8,                          // 0-3 for Parts 1-4
+    pub machines: Vec<PartTrackMachine>,      // 8 audio tracks
+    pub amps: Vec<PartTrackAmp>,              // 8 audio tracks
+    pub lfos: Vec<PartTrackLfo>,              // 8 audio tracks (also used for MIDI LFOs)
+    pub fxs: Vec<PartTrackFx>,                // 8 audio tracks
+    pub midi_notes: Vec<PartTrackMidiNote>,   // 8 MIDI tracks
+    pub midi_arps: Vec<PartTrackMidiArp>,     // 8 MIDI tracks
+    pub midi_lfos: Vec<PartTrackLfo>,         // 8 MIDI tracks (reuses audio LFO structure)
     pub midi_ctrl1s: Vec<PartTrackMidiCtrl1>, // 8 MIDI tracks
     pub midi_ctrl2s: Vec<PartTrackMidiCtrl2>, // 8 MIDI tracks
 }
@@ -560,15 +564,21 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
 
             // Extract time signature
             let numerator = project.settings.control.metronome.metronome_time_signature + 1;
-            let denominator = 2u32.pow(project.settings.control.metronome.metronome_time_signature_denominator as u32);
+            let denominator = 2u32.pow(
+                project
+                    .settings
+                    .control
+                    .metronome
+                    .metronome_time_signature_denominator as u32,
+            );
             let time_signature = format!("{}/{}", numerator, denominator);
 
             // Extract current state
             let bank_letters = [
-                "A", "B", "C", "D", "E", "F", "G", "H",
-                "I", "J", "K", "L", "M", "N", "O", "P"
+                "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P",
             ];
-            let bank_name = bank_letters.get(project.states.bank as usize)
+            let bank_name = bank_letters
+                .get(project.states.bank as usize)
                 .unwrap_or(&"A")
                 .to_string();
 
@@ -669,8 +679,9 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                 pitch: metronome.metronome_pitch,
                 tonal: metronome.metronome_tonal,
                 preroll: metronome.metronome_preroll,
-                time_signature_numerator: metronome.metronome_time_signature + 1,  // 0-indexed to 1-indexed
-                time_signature_denominator: 2u8.pow(metronome.metronome_time_signature_denominator as u32),
+                time_signature_numerator: metronome.metronome_time_signature + 1, // 0-indexed to 1-indexed
+                time_signature_denominator: 2u8
+                    .pow(metronome.metronome_time_signature_denominator as u32),
             };
 
             // Extract sample slots - include all 128 slots (empty and filled)
@@ -680,8 +691,11 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                 if let Some(Some(slot)) = slot_opt {
                     if let Some(sample_path) = &slot.path {
                         let path_str = sample_path.to_string_lossy().to_string();
-                        let source_location = if path_str.contains("/AUDIO/") || path_str.contains("\\AUDIO\\") ||
-                                                  path_str.starts_with("AUDIO/") || path_str.starts_with("AUDIO\\") {
+                        let source_location = if path_str.contains("/AUDIO/")
+                            || path_str.contains("\\AUDIO\\")
+                            || path_str.starts_with("AUDIO/")
+                            || path_str.starts_with("AUDIO\\")
+                        {
                             Some("Audio Pool".to_string())
                         } else {
                             Some("Project".to_string())
@@ -758,8 +772,11 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                 if let Some(Some(slot)) = slot_opt {
                     if let Some(sample_path) = &slot.path {
                         let path_str = sample_path.to_string_lossy().to_string();
-                        let source_location = if path_str.contains("/AUDIO/") || path_str.contains("\\AUDIO\\") ||
-                                                  path_str.starts_with("AUDIO/") || path_str.starts_with("AUDIO\\") {
+                        let source_location = if path_str.contains("/AUDIO/")
+                            || path_str.contains("\\AUDIO\\")
+                            || path_str.starts_with("AUDIO/")
+                            || path_str.starts_with("AUDIO\\")
+                        {
                             Some("Audio Pool".to_string())
                         } else {
                             Some("Project".to_string())
@@ -887,8 +904,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
 }
 
 const BANK_LETTERS: [&str; 16] = [
-    "A", "B", "C", "D", "E", "F", "G", "H",
-    "I", "J", "K", "L", "M", "N", "O", "P"
+    "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P",
 ];
 
 /// Read a single bank by index (0-15, corresponding to banks A-P)
@@ -942,7 +958,10 @@ pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
     read_project_banks_internal(project_path, None)
 }
 
-fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>) -> Result<Vec<Bank>, String> {
+fn read_project_banks_internal(
+    project_path: &str,
+    target_bank_index: Option<u8>,
+) -> Result<Vec<Bank>, String> {
     let path = Path::new(project_path);
     let mut banks = Vec::new();
 
@@ -973,7 +992,10 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
         match BankFile::from_data_file(&bank_file_path) {
             Ok(bank_data) => {
                 // Debug print basic bank info
-                eprintln!("Bank {} loaded successfully, part_names: {:?}", bank_letter, bank_data.part_names);
+                eprintln!(
+                    "Bank {} loaded successfully, part_names: {:?}",
+                    bank_letter, bank_data.part_names
+                );
 
                 let mut parts = Vec::new();
 
@@ -981,8 +1003,12 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
                 for part_id in 0..4 {
                     // Extract part name from the byte array (stop at first null byte)
                     let part_name_bytes = &bank_data.part_names[part_id as usize];
-                    let null_pos = part_name_bytes.iter().position(|&b| b == 0).unwrap_or(part_name_bytes.len());
-                    let part_name = String::from_utf8_lossy(&part_name_bytes[..null_pos]).to_string();
+                    let null_pos = part_name_bytes
+                        .iter()
+                        .position(|&b| b == 0)
+                        .unwrap_or(part_name_bytes.len());
+                    let part_name =
+                        String::from_utf8_lossy(&part_name_bytes[..null_pos]).to_string();
                     let part_name = if part_name.is_empty() {
                         format!("Part {}", part_id + 1)
                     } else {
@@ -1019,7 +1045,8 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
                             5 => "1/4x",
                             6 => "1/8x",
                             _ => "1x",
-                        }.to_string();
+                        }
+                        .to_string();
 
                         // Extract chain mode
                         let chain_mode = if pattern.chain_behaviour.use_project_setting == 1 {
@@ -1164,7 +1191,7 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
 
                         // Helper function to parse micro-timing offset (simplified)
                         fn parse_micro_timing(bytes: [u8; 2]) -> Option<String> {
-                            let first = bytes[0] % 32;  // Remove trig repeat component
+                            let first = bytes[0] % 32; // Remove trig repeat component
                             let second_offset = bytes[1] >= 128;
 
                             // Simple micro-timing detection
@@ -1183,50 +1210,118 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
                                 (26, false) => Some("-1/32".to_string()),
                                 (29, false) => Some("-1/64".to_string()),
                                 (30, true) => Some("-1/128".to_string()),
-                                _ => Some(format!("{}{}",if first < 15 {"+"} else {"-"}, "μ")),
+                                _ => Some(format!("{}{}", if first < 15 { "+" } else { "-" }, "μ")),
                             }
                         }
 
                         // Helper function to count non-default parameter locks
-                        fn count_audio_plocks(plock: &ot_tools_io::patterns::AudioTrackParameterLocks) -> u8 {
+                        fn count_audio_plocks(
+                            plock: &ot_tools_io::patterns::AudioTrackParameterLocks,
+                        ) -> u8 {
                             let mut count = 0;
-                            if plock.machine.param1 != 255 { count += 1; }
-                            if plock.machine.param2 != 255 { count += 1; }
-                            if plock.machine.param3 != 255 { count += 1; }
-                            if plock.machine.param4 != 255 { count += 1; }
-                            if plock.machine.param5 != 255 { count += 1; }
-                            if plock.machine.param6 != 255 { count += 1; }
-                            if plock.lfo.spd1 != 255 { count += 1; }
-                            if plock.lfo.spd2 != 255 { count += 1; }
-                            if plock.lfo.spd3 != 255 { count += 1; }
-                            if plock.lfo.dep1 != 255 { count += 1; }
-                            if plock.lfo.dep2 != 255 { count += 1; }
-                            if plock.lfo.dep3 != 255 { count += 1; }
-                            if plock.amp.atk != 255 { count += 1; }
-                            if plock.amp.hold != 255 { count += 1; }
-                            if plock.amp.rel != 255 { count += 1; }
-                            if plock.amp.vol != 255 { count += 1; }
-                            if plock.amp.bal != 255 { count += 1; }
-                            if plock.amp.f != 255 { count += 1; }
-                            if plock.static_slot_id != 255 { count += 1; }
-                            if plock.flex_slot_id != 255 { count += 1; }
+                            if plock.machine.param1 != 255 {
+                                count += 1;
+                            }
+                            if plock.machine.param2 != 255 {
+                                count += 1;
+                            }
+                            if plock.machine.param3 != 255 {
+                                count += 1;
+                            }
+                            if plock.machine.param4 != 255 {
+                                count += 1;
+                            }
+                            if plock.machine.param5 != 255 {
+                                count += 1;
+                            }
+                            if plock.machine.param6 != 255 {
+                                count += 1;
+                            }
+                            if plock.lfo.spd1 != 255 {
+                                count += 1;
+                            }
+                            if plock.lfo.spd2 != 255 {
+                                count += 1;
+                            }
+                            if plock.lfo.spd3 != 255 {
+                                count += 1;
+                            }
+                            if plock.lfo.dep1 != 255 {
+                                count += 1;
+                            }
+                            if plock.lfo.dep2 != 255 {
+                                count += 1;
+                            }
+                            if plock.lfo.dep3 != 255 {
+                                count += 1;
+                            }
+                            if plock.amp.atk != 255 {
+                                count += 1;
+                            }
+                            if plock.amp.hold != 255 {
+                                count += 1;
+                            }
+                            if plock.amp.rel != 255 {
+                                count += 1;
+                            }
+                            if plock.amp.vol != 255 {
+                                count += 1;
+                            }
+                            if plock.amp.bal != 255 {
+                                count += 1;
+                            }
+                            if plock.amp.f != 255 {
+                                count += 1;
+                            }
+                            if plock.static_slot_id != 255 {
+                                count += 1;
+                            }
+                            if plock.flex_slot_id != 255 {
+                                count += 1;
+                            }
                             count
                         }
 
-                        fn count_midi_plocks(plock: &ot_tools_io::patterns::MidiTrackParameterLocks) -> u8 {
+                        fn count_midi_plocks(
+                            plock: &ot_tools_io::patterns::MidiTrackParameterLocks,
+                        ) -> u8 {
                             let mut count = 0;
-                            if plock.midi.note != 255 { count += 1; }
-                            if plock.midi.vel != 255 { count += 1; }
-                            if plock.midi.len != 255 { count += 1; }
-                            if plock.midi.not2 != 255 { count += 1; }
-                            if plock.midi.not3 != 255 { count += 1; }
-                            if plock.midi.not4 != 255 { count += 1; }
-                            if plock.lfo.spd1 != 255 { count += 1; }
-                            if plock.lfo.spd2 != 255 { count += 1; }
-                            if plock.lfo.spd3 != 255 { count += 1; }
-                            if plock.lfo.dep1 != 255 { count += 1; }
-                            if plock.lfo.dep2 != 255 { count += 1; }
-                            if plock.lfo.dep3 != 255 { count += 1; }
+                            if plock.midi.note != 255 {
+                                count += 1;
+                            }
+                            if plock.midi.vel != 255 {
+                                count += 1;
+                            }
+                            if plock.midi.len != 255 {
+                                count += 1;
+                            }
+                            if plock.midi.not2 != 255 {
+                                count += 1;
+                            }
+                            if plock.midi.not3 != 255 {
+                                count += 1;
+                            }
+                            if plock.midi.not4 != 255 {
+                                count += 1;
+                            }
+                            if plock.lfo.spd1 != 255 {
+                                count += 1;
+                            }
+                            if plock.lfo.spd2 != 255 {
+                                count += 1;
+                            }
+                            if plock.lfo.spd3 != 255 {
+                                count += 1;
+                            }
+                            if plock.lfo.dep1 != 255 {
+                                count += 1;
+                            }
+                            if plock.lfo.dep2 != 255 {
+                                count += 1;
+                            }
+                            if plock.lfo.dep3 != 255 {
+                                count += 1;
+                            }
                             count
                         }
 
@@ -1265,7 +1360,12 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
                             }
                         }
 
-                        let total_trigs = trigger_count + trigless_count + plock_count + oneshot_count + swing_count + slide_count;
+                        let total_trigs = trigger_count
+                            + trigless_count
+                            + plock_count
+                            + oneshot_count
+                            + swing_count
+                            + slide_count;
                         let has_swing = swing_count > 0;
 
                         let trig_counts = TrigCounts {
@@ -1283,7 +1383,8 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
                             // Calculate master length in per-track mode
                             // The multiplier is a range selector, not a multiplication factor:
                             // mult=0: 2-255, mult=1: 256-511, mult=2: 512-767, mult=3: 768-1023, mult=4: 1024, mult=255: INF
-                            let master_len = if pattern.scale.master_len_per_track_multiplier == 255 {
+                            let master_len = if pattern.scale.master_len_per_track_multiplier == 255
+                            {
                                 "INF".to_string()
                             } else if pattern.scale.master_len_per_track_multiplier == 4 {
                                 "1024".to_string()
@@ -1291,7 +1392,8 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
                                 let len = pattern.scale.master_len_per_track as u16;
                                 format!("{}", len)
                             } else {
-                                let len = (256 * pattern.scale.master_len_per_track_multiplier as u16)
+                                let len = (256
+                                    * pattern.scale.master_len_per_track_multiplier as u16)
                                     + pattern.scale.master_len_per_track as u16;
                                 format!("{}", len)
                             };
@@ -1305,7 +1407,8 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
                                 5 => "1/4x",
                                 6 => "1/8x",
                                 _ => "1x",
-                            }.to_string();
+                            }
+                            .to_string();
 
                             Some(PerTrackSettings {
                                 master_len,
@@ -1332,7 +1435,8 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
                         // Process audio tracks (0-7)
                         for (idx, audio_track) in pattern.audio_track_trigs.0.iter().enumerate() {
                             let track_trigger_count = count_trigs(&audio_track.trig_masks.trigger);
-                            let track_trigless_count = count_trigs(&audio_track.trig_masks.trigless);
+                            let track_trigless_count =
+                                count_trigs(&audio_track.trig_masks.trigless);
                             let track_plock_count = count_trigs(&audio_track.trig_masks.plock);
                             let track_oneshot_count = count_trigs(&audio_track.trig_masks.oneshot);
                             let track_swing_count = count_trigs(&audio_track.trig_masks.swing);
@@ -1343,7 +1447,8 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
                                 1 => "ONE2",
                                 2 => "HOLD",
                                 _ => "ONE",
-                            }.to_string();
+                            }
+                            .to_string();
 
                             let trig_quant = match audio_track.pattern_settings.trig_quant {
                                 0 => "TR.LEN",
@@ -1365,10 +1470,12 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
                                 16 => "256/16",
                                 255 => "DIRECT",
                                 _ => "TR.LEN",
-                            }.to_string();
+                            }
+                            .to_string();
 
-                            let (per_track_len, per_track_scale) = if pattern.scale.scale_mode == 1 {
-                                (
+                            let (per_track_len, per_track_scale) =
+                                if pattern.scale.scale_mode == 1 {
+                                    (
                                     Some(audio_track.scale_per_track_mode.per_track_len),
                                     Some(match audio_track.scale_per_track_mode.per_track_scale {
                                         0 => "2x",
@@ -1381,22 +1488,25 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
                                         _ => "1x",
                                     }.to_string())
                                 )
-                            } else {
-                                (None, None)
-                            };
+                                } else {
+                                    (None, None)
+                                };
 
                             // Decode trig masks to get per-step information
                             let trigger_steps = decode_trig_masks(&audio_track.trig_masks.trigger);
-                            let trigless_steps = decode_trig_masks(&audio_track.trig_masks.trigless);
+                            let trigless_steps =
+                                decode_trig_masks(&audio_track.trig_masks.trigless);
                             let plock_steps = decode_trig_masks(&audio_track.trig_masks.plock);
                             let oneshot_steps = decode_trig_masks(&audio_track.trig_masks.oneshot);
                             let swing_steps = decode_trig_masks(&audio_track.trig_masks.swing);
                             let slide_steps = decode_trig_masks(&audio_track.trig_masks.slide);
-                            let recorder_steps = decode_recorder_masks(&audio_track.trig_masks.recorder);
+                            let recorder_steps =
+                                decode_recorder_masks(&audio_track.trig_masks.recorder);
 
                             let mut steps = Vec::new();
                             for step in 0..64 {
-                                let offset_repeat_cond = audio_track.trig_offsets_repeats_conditions[step];
+                                let offset_repeat_cond =
+                                    audio_track.trig_offsets_repeats_conditions[step];
                                 let trig_repeats = get_trig_repeats(offset_repeat_cond[0]);
                                 let trig_condition = decode_trig_condition(offset_repeat_cond[1]);
                                 let micro_timing = parse_micro_timing(offset_repeat_cond);
@@ -1424,31 +1534,111 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
                                 let audio_plocks = if plock_count > 0 {
                                     Some(AudioParameterLocks {
                                         machine: MachineParams {
-                                            param1: if plock.machine.param1 != 255 { Some(plock.machine.param1) } else { None },
-                                            param2: if plock.machine.param2 != 255 { Some(plock.machine.param2) } else { None },
-                                            param3: if plock.machine.param3 != 255 { Some(plock.machine.param3) } else { None },
-                                            param4: if plock.machine.param4 != 255 { Some(plock.machine.param4) } else { None },
-                                            param5: if plock.machine.param5 != 255 { Some(plock.machine.param5) } else { None },
-                                            param6: if plock.machine.param6 != 255 { Some(plock.machine.param6) } else { None },
+                                            param1: if plock.machine.param1 != 255 {
+                                                Some(plock.machine.param1)
+                                            } else {
+                                                None
+                                            },
+                                            param2: if plock.machine.param2 != 255 {
+                                                Some(plock.machine.param2)
+                                            } else {
+                                                None
+                                            },
+                                            param3: if plock.machine.param3 != 255 {
+                                                Some(plock.machine.param3)
+                                            } else {
+                                                None
+                                            },
+                                            param4: if plock.machine.param4 != 255 {
+                                                Some(plock.machine.param4)
+                                            } else {
+                                                None
+                                            },
+                                            param5: if plock.machine.param5 != 255 {
+                                                Some(plock.machine.param5)
+                                            } else {
+                                                None
+                                            },
+                                            param6: if plock.machine.param6 != 255 {
+                                                Some(plock.machine.param6)
+                                            } else {
+                                                None
+                                            },
                                         },
                                         lfo: LfoParams {
-                                            spd1: if plock.lfo.spd1 != 255 { Some(plock.lfo.spd1) } else { None },
-                                            spd2: if plock.lfo.spd2 != 255 { Some(plock.lfo.spd2) } else { None },
-                                            spd3: if plock.lfo.spd3 != 255 { Some(plock.lfo.spd3) } else { None },
-                                            dep1: if plock.lfo.dep1 != 255 { Some(plock.lfo.dep1) } else { None },
-                                            dep2: if plock.lfo.dep2 != 255 { Some(plock.lfo.dep2) } else { None },
-                                            dep3: if plock.lfo.dep3 != 255 { Some(plock.lfo.dep3) } else { None },
+                                            spd1: if plock.lfo.spd1 != 255 {
+                                                Some(plock.lfo.spd1)
+                                            } else {
+                                                None
+                                            },
+                                            spd2: if plock.lfo.spd2 != 255 {
+                                                Some(plock.lfo.spd2)
+                                            } else {
+                                                None
+                                            },
+                                            spd3: if plock.lfo.spd3 != 255 {
+                                                Some(plock.lfo.spd3)
+                                            } else {
+                                                None
+                                            },
+                                            dep1: if plock.lfo.dep1 != 255 {
+                                                Some(plock.lfo.dep1)
+                                            } else {
+                                                None
+                                            },
+                                            dep2: if plock.lfo.dep2 != 255 {
+                                                Some(plock.lfo.dep2)
+                                            } else {
+                                                None
+                                            },
+                                            dep3: if plock.lfo.dep3 != 255 {
+                                                Some(plock.lfo.dep3)
+                                            } else {
+                                                None
+                                            },
                                         },
                                         amp: AmpParams {
-                                            atk: if plock.amp.atk != 255 { Some(plock.amp.atk) } else { None },
-                                            hold: if plock.amp.hold != 255 { Some(plock.amp.hold) } else { None },
-                                            rel: if plock.amp.rel != 255 { Some(plock.amp.rel) } else { None },
-                                            vol: if plock.amp.vol != 255 { Some(plock.amp.vol) } else { None },
-                                            bal: if plock.amp.bal != 255 { Some(plock.amp.bal) } else { None },
-                                            f: if plock.amp.f != 255 { Some(plock.amp.f) } else { None },
+                                            atk: if plock.amp.atk != 255 {
+                                                Some(plock.amp.atk)
+                                            } else {
+                                                None
+                                            },
+                                            hold: if plock.amp.hold != 255 {
+                                                Some(plock.amp.hold)
+                                            } else {
+                                                None
+                                            },
+                                            rel: if plock.amp.rel != 255 {
+                                                Some(plock.amp.rel)
+                                            } else {
+                                                None
+                                            },
+                                            vol: if plock.amp.vol != 255 {
+                                                Some(plock.amp.vol)
+                                            } else {
+                                                None
+                                            },
+                                            bal: if plock.amp.bal != 255 {
+                                                Some(plock.amp.bal)
+                                            } else {
+                                                None
+                                            },
+                                            f: if plock.amp.f != 255 {
+                                                Some(plock.amp.f)
+                                            } else {
+                                                None
+                                            },
                                         },
-                                        static_slot_id: if plock.static_slot_id != 255 { Some(plock.static_slot_id) } else { None },
-                                        flex_slot_id: if plock.flex_slot_id != 255 { Some(plock.flex_slot_id) } else { None },
+                                        static_slot_id: if plock.static_slot_id != 255 {
+                                            Some(plock.static_slot_id)
+                                        } else {
+                                            None
+                                        },
+                                        flex_slot_id: if plock.flex_slot_id != 255 {
+                                            Some(plock.flex_slot_id)
+                                        } else {
+                                            None
+                                        },
                                     })
                                 } else {
                                     None
@@ -1466,12 +1656,12 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
                                     trig_condition,
                                     trig_repeats,
                                     micro_timing,
-                                    notes: Vec::new(),  // No notes for audio tracks
+                                    notes: Vec::new(), // No notes for audio tracks
                                     velocity,
                                     plock_count,
                                     sample_slot,
                                     audio_plocks,
-                                    midi_plocks: None,  // No MIDI plocks for audio tracks
+                                    midi_plocks: None, // No MIDI plocks for audio tracks
                                 });
                             }
 
@@ -1495,17 +1685,25 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
                                     oneshot: track_oneshot_count,
                                     swing: track_swing_count,
                                     slide: track_slide_count,
-                                    total: track_trigger_count + track_trigless_count + track_plock_count + track_oneshot_count + track_swing_count + track_slide_count,
+                                    total: track_trigger_count
+                                        + track_trigless_count
+                                        + track_plock_count
+                                        + track_oneshot_count
+                                        + track_swing_count
+                                        + track_slide_count,
                                 },
                                 steps,
-                                default_note: None,  // Audio tracks don't have default notes
+                                default_note: None, // Audio tracks don't have default notes
                             });
                         }
 
                         // Process MIDI tracks (8-15)
                         for (idx, midi_track) in pattern.midi_track_trigs.0.iter().enumerate() {
                             // Get default note from BankFile's Part data for this MIDI track
-                            let track_default_note = bank_data.parts.unsaved[part_id as usize].midi_track_params_values[idx].midi.note;
+                            let track_default_note = bank_data.parts.unsaved[part_id as usize]
+                                .midi_track_params_values[idx]
+                                .midi
+                                .note;
 
                             let track_trigger_count = count_trigs(&midi_track.trig_masks.trigger);
                             let track_trigless_count = count_trigs(&midi_track.trig_masks.trigless);
@@ -1517,7 +1715,8 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
                                 1 => "ONE2",
                                 2 => "HOLD",
                                 _ => "ONE",
-                            }.to_string();
+                            }
+                            .to_string();
 
                             let trig_quant = match midi_track.pattern_settings.trig_quant {
                                 0 => "TR.LEN",
@@ -1539,21 +1738,26 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
                                 16 => "256/16",
                                 255 => "DIRECT",
                                 _ => "TR.LEN",
-                            }.to_string();
+                            }
+                            .to_string();
 
-                            let (per_track_len, per_track_scale) = if pattern.scale.scale_mode == 1 {
+                            let (per_track_len, per_track_scale) = if pattern.scale.scale_mode == 1
+                            {
                                 (
                                     Some(midi_track.scale_per_track_mode.per_track_len),
-                                    Some(match midi_track.scale_per_track_mode.per_track_scale {
-                                        0 => "2x",
-                                        1 => "3/2x",
-                                        2 => "1x",
-                                        3 => "3/4x",
-                                        4 => "1/2x",
-                                        5 => "1/4x",
-                                        6 => "1/8x",
-                                        _ => "1x",
-                                    }.to_string())
+                                    Some(
+                                        match midi_track.scale_per_track_mode.per_track_scale {
+                                            0 => "2x",
+                                            1 => "3/2x",
+                                            2 => "1x",
+                                            3 => "3/4x",
+                                            4 => "1/2x",
+                                            5 => "1/4x",
+                                            6 => "1/8x",
+                                            _ => "1x",
+                                        }
+                                        .to_string(),
+                                    ),
                                 )
                             } else {
                                 (None, None)
@@ -1567,7 +1771,8 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
 
                             let mut steps = Vec::new();
                             for step in 0..64 {
-                                let offset_repeat_cond = midi_track.trig_offsets_repeats_conditions[step];
+                                let offset_repeat_cond =
+                                    midi_track.trig_offsets_repeats_conditions[step];
                                 let trig_repeats = get_trig_repeats(offset_repeat_cond[0]);
                                 let trig_condition = decode_trig_condition(offset_repeat_cond[1]);
                                 let micro_timing = parse_micro_timing(offset_repeat_cond);
@@ -1588,8 +1793,14 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
 
                                 // Debug logging
                                 if plock_count > 0 {
-                                    eprintln!("DEBUG: Step {} - base_note={}, not2={}, not3={}, not4={}",
-                                        step, base_note, plock.midi.not2, plock.midi.not3, plock.midi.not4);
+                                    eprintln!(
+                                        "DEBUG: Step {} - base_note={}, not2={}, not3={}, not4={}",
+                                        step,
+                                        base_note,
+                                        plock.midi.not2,
+                                        plock.midi.not3,
+                                        plock.midi.not4
+                                    );
                                 }
 
                                 // Add NOTE1 if it's parameter-locked
@@ -1603,19 +1814,28 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
                                 if plock.midi.not2 != 255 {
                                     let offset = (plock.midi.not2 as i16) - 64;
                                     let note2 = ((base_note as i16) + offset).clamp(0, 127) as u8;
-                                    eprintln!("DEBUG: NOT2 calculation: {} + ({} - 64) = {} + {} = {}", base_note, plock.midi.not2, base_note, offset, note2);
+                                    eprintln!(
+                                        "DEBUG: NOT2 calculation: {} + ({} - 64) = {} + {} = {}",
+                                        base_note, plock.midi.not2, base_note, offset, note2
+                                    );
                                     notes.push(note2);
                                 }
                                 if plock.midi.not3 != 255 {
                                     let offset = (plock.midi.not3 as i16) - 64;
                                     let note3 = ((base_note as i16) + offset).clamp(0, 127) as u8;
-                                    eprintln!("DEBUG: NOT3 calculation: {} + ({} - 64) = {} + {} = {}", base_note, plock.midi.not3, base_note, offset, note3);
+                                    eprintln!(
+                                        "DEBUG: NOT3 calculation: {} + ({} - 64) = {} + {} = {}",
+                                        base_note, plock.midi.not3, base_note, offset, note3
+                                    );
                                     notes.push(note3);
                                 }
                                 if plock.midi.not4 != 255 {
                                     let offset = (plock.midi.not4 as i16) - 64;
                                     let note4 = ((base_note as i16) + offset).clamp(0, 127) as u8;
-                                    eprintln!("DEBUG: NOT4 calculation: {} + ({} - 64) = {} + {} = {}", base_note, plock.midi.not4, base_note, offset, note4);
+                                    eprintln!(
+                                        "DEBUG: NOT4 calculation: {} + ({} - 64) = {} + {} = {}",
+                                        base_note, plock.midi.not4, base_note, offset, note4
+                                    );
                                     notes.push(note4);
                                 }
 
@@ -1629,20 +1849,68 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
                                 let midi_plocks = if plock_count > 0 {
                                     Some(MidiParameterLocks {
                                         midi: MidiParams {
-                                            note: if plock.midi.note != 255 { Some(plock.midi.note) } else { None },
-                                            vel: if plock.midi.vel != 255 { Some(plock.midi.vel) } else { None },
-                                            len: if plock.midi.len != 255 { Some(plock.midi.len) } else { None },
-                                            not2: if plock.midi.not2 != 255 { Some(plock.midi.not2) } else { None },
-                                            not3: if plock.midi.not3 != 255 { Some(plock.midi.not3) } else { None },
-                                            not4: if plock.midi.not4 != 255 { Some(plock.midi.not4) } else { None },
+                                            note: if plock.midi.note != 255 {
+                                                Some(plock.midi.note)
+                                            } else {
+                                                None
+                                            },
+                                            vel: if plock.midi.vel != 255 {
+                                                Some(plock.midi.vel)
+                                            } else {
+                                                None
+                                            },
+                                            len: if plock.midi.len != 255 {
+                                                Some(plock.midi.len)
+                                            } else {
+                                                None
+                                            },
+                                            not2: if plock.midi.not2 != 255 {
+                                                Some(plock.midi.not2)
+                                            } else {
+                                                None
+                                            },
+                                            not3: if plock.midi.not3 != 255 {
+                                                Some(plock.midi.not3)
+                                            } else {
+                                                None
+                                            },
+                                            not4: if plock.midi.not4 != 255 {
+                                                Some(plock.midi.not4)
+                                            } else {
+                                                None
+                                            },
                                         },
                                         lfo: LfoParams {
-                                            spd1: if plock.lfo.spd1 != 255 { Some(plock.lfo.spd1) } else { None },
-                                            spd2: if plock.lfo.spd2 != 255 { Some(plock.lfo.spd2) } else { None },
-                                            spd3: if plock.lfo.spd3 != 255 { Some(plock.lfo.spd3) } else { None },
-                                            dep1: if plock.lfo.dep1 != 255 { Some(plock.lfo.dep1) } else { None },
-                                            dep2: if plock.lfo.dep2 != 255 { Some(plock.lfo.dep2) } else { None },
-                                            dep3: if plock.lfo.dep3 != 255 { Some(plock.lfo.dep3) } else { None },
+                                            spd1: if plock.lfo.spd1 != 255 {
+                                                Some(plock.lfo.spd1)
+                                            } else {
+                                                None
+                                            },
+                                            spd2: if plock.lfo.spd2 != 255 {
+                                                Some(plock.lfo.spd2)
+                                            } else {
+                                                None
+                                            },
+                                            spd3: if plock.lfo.spd3 != 255 {
+                                                Some(plock.lfo.spd3)
+                                            } else {
+                                                None
+                                            },
+                                            dep1: if plock.lfo.dep1 != 255 {
+                                                Some(plock.lfo.dep1)
+                                            } else {
+                                                None
+                                            },
+                                            dep2: if plock.lfo.dep2 != 255 {
+                                                Some(plock.lfo.dep2)
+                                            } else {
+                                                None
+                                            },
+                                            dep3: if plock.lfo.dep3 != 255 {
+                                                Some(plock.lfo.dep3)
+                                            } else {
+                                                None
+                                            },
                                         },
                                     })
                                 } else {
@@ -1654,10 +1922,10 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
                                     trigger: trigger_steps[step],
                                     trigless: trigless_steps[step],
                                     plock: plock_steps[step],
-                                    oneshot: false,  // MIDI tracks don't have oneshot trigs
+                                    oneshot: false, // MIDI tracks don't have oneshot trigs
                                     swing: swing_steps[step],
-                                    slide: false,     // MIDI tracks don't have slide trigs
-                                    recorder: false,  // MIDI tracks don't have recorder trigs
+                                    slide: false, // MIDI tracks don't have slide trigs
+                                    recorder: false, // MIDI tracks don't have recorder trigs
                                     trig_condition,
                                     trig_repeats,
                                     micro_timing,
@@ -1673,7 +1941,12 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
                             // Extract default note from BankFile's Part data for this MIDI track
                             let default_note = {
                                 let midi_track_idx = idx; // idx is already 0-7 for MIDI tracks
-                                Some(bank_data.parts.unsaved[part_id as usize].midi_track_params_values[midi_track_idx].midi.note)
+                                Some(
+                                    bank_data.parts.unsaved[part_id as usize]
+                                        .midi_track_params_values[midi_track_idx]
+                                        .midi
+                                        .note,
+                                )
                             };
 
                             tracks.push(TrackInfo {
@@ -1693,13 +1966,16 @@ fn read_project_banks_internal(project_path: &str, target_bank_index: Option<u8>
                                     trigger: track_trigger_count,
                                     trigless: track_trigless_count,
                                     plock: track_plock_count,
-                                    oneshot: 0,  // MIDI tracks don't have oneshot trigs
+                                    oneshot: 0, // MIDI tracks don't have oneshot trigs
                                     swing: track_swing_count,
-                                    slide: 0,    // MIDI tracks don't have slide trigs
-                                    total: track_trigger_count + track_trigless_count + track_plock_count + track_swing_count,
+                                    slide: 0, // MIDI tracks don't have slide trigs
+                                    total: track_trigger_count
+                                        + track_trigless_count
+                                        + track_plock_count
+                                        + track_swing_count,
                                 },
                                 steps,
-                                default_note,  // Default NOTE value from Part file
+                                default_note, // Default NOTE value from Part file
                             });
                         }
 
@@ -1753,11 +2029,11 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataRes
 
     // Convert bank letter (A-P) to bank number (1-16)
     let bank_letters = [
-        "A", "B", "C", "D", "E", "F", "G", "H",
-        "I", "J", "K", "L", "M", "N", "O", "P"
+        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P",
     ];
 
-    let bank_num = bank_letters.iter()
+    let bank_num = bank_letters
+        .iter()
         .position(|&letter| letter == bank_id)
         .map(|idx| idx + 1)
         .ok_or_else(|| format!("Invalid bank ID: {}", bank_id))?;
@@ -1801,7 +2077,8 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataRes
                 3 => "Neighbor",
                 4 => "Pickup",
                 _ => "Unknown",
-            }.to_string();
+            }
+            .to_string();
 
             // Get machine parameters (SRC page)
             let machine_params_values = &part.audio_track_machine_params[track_id as usize];
@@ -1826,7 +2103,7 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataRes
                         gain: None,
                         op: None,
                     }
-                },
+                }
                 2 => {
                     // Thru machine
                     let params_thru = &machine_params_values.thru_machine;
@@ -1845,7 +2122,7 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataRes
                         gain: None,
                         op: None,
                     }
-                },
+                }
                 4 => {
                     // Pickup machine
                     let params_pickup = &machine_params_values.pickup_machine;
@@ -1864,7 +2141,7 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataRes
                         gain: Some(params_pickup.gain),
                         op: Some(params_pickup.op),
                     }
-                },
+                }
                 _ => {
                     // Neighbor (type 3) or unknown - no parameters
                     MachineParamValues {
@@ -1897,7 +2174,7 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataRes
                         tstr: Some(setup_std.tstr),
                         tsns: Some(setup_std.tsns),
                     }
-                },
+                }
                 4 => {
                     // Pickup machine
                     let setup_pickup = &machine_params_setup.pickup_machine;
@@ -1909,7 +2186,7 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataRes
                         tstr: Some(setup_pickup.tstr),
                         tsns: Some(setup_pickup.tsns),
                     }
-                },
+                }
                 _ => {
                     // Thru (type 2), Neighbor (type 3), or unknown - no setup params
                     MachineSetupValues {
@@ -1955,7 +2232,9 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataRes
             let lfo_setup_2 = &part.audio_track_params_setup[track_id as usize].lfo_setup_2;
 
             // Get custom LFO design (16-step waveform)
-            let custom_lfo_design = part.audio_tracks_custom_lfo_designs[track_id as usize].0.to_vec();
+            let custom_lfo_design = part.audio_tracks_custom_lfo_designs[track_id as usize]
+                .0
+                .to_vec();
 
             lfos.push(PartTrackLfo {
                 track_id,
@@ -2181,16 +2460,20 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataRes
 }
 
 /// Save modified Parts data back to a bank file
-pub fn save_parts_data(project_path: &str, bank_id: &str, parts_data: Vec<PartData>) -> Result<(), String> {
+pub fn save_parts_data(
+    project_path: &str,
+    bank_id: &str,
+    parts_data: Vec<PartData>,
+) -> Result<(), String> {
     let path = Path::new(project_path);
 
     // Convert bank letter (A-P) to bank number (1-16)
     let bank_letters = [
-        "A", "B", "C", "D", "E", "F", "G", "H",
-        "I", "J", "K", "L", "M", "N", "O", "P"
+        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P",
     ];
 
-    let bank_num = bank_letters.iter()
+    let bank_num = bank_letters
+        .iter()
         .position(|&letter| letter == bank_id)
         .map(|idx| idx + 1)
         .ok_or_else(|| format!("Invalid bank ID: {}", bank_id))?;
@@ -2261,20 +2544,44 @@ pub fn save_parts_data(project_path: &str, bank_id: &str, parts_data: Vec<PartDa
                 part_unsaved.audio_track_params_values[track_id].lfo.dep3 = lfo.dep3;
 
                 // LFO Setup 1 (Parameter Target & Wave)
-                part_unsaved.audio_track_params_setup[track_id].lfo_setup_1.lfo1_pmtr = lfo.lfo1_pmtr;
-                part_unsaved.audio_track_params_setup[track_id].lfo_setup_1.lfo2_pmtr = lfo.lfo2_pmtr;
-                part_unsaved.audio_track_params_setup[track_id].lfo_setup_1.lfo3_pmtr = lfo.lfo3_pmtr;
-                part_unsaved.audio_track_params_setup[track_id].lfo_setup_1.lfo1_wave = lfo.lfo1_wave;
-                part_unsaved.audio_track_params_setup[track_id].lfo_setup_1.lfo2_wave = lfo.lfo2_wave;
-                part_unsaved.audio_track_params_setup[track_id].lfo_setup_1.lfo3_wave = lfo.lfo3_wave;
+                part_unsaved.audio_track_params_setup[track_id]
+                    .lfo_setup_1
+                    .lfo1_pmtr = lfo.lfo1_pmtr;
+                part_unsaved.audio_track_params_setup[track_id]
+                    .lfo_setup_1
+                    .lfo2_pmtr = lfo.lfo2_pmtr;
+                part_unsaved.audio_track_params_setup[track_id]
+                    .lfo_setup_1
+                    .lfo3_pmtr = lfo.lfo3_pmtr;
+                part_unsaved.audio_track_params_setup[track_id]
+                    .lfo_setup_1
+                    .lfo1_wave = lfo.lfo1_wave;
+                part_unsaved.audio_track_params_setup[track_id]
+                    .lfo_setup_1
+                    .lfo2_wave = lfo.lfo2_wave;
+                part_unsaved.audio_track_params_setup[track_id]
+                    .lfo_setup_1
+                    .lfo3_wave = lfo.lfo3_wave;
 
                 // LFO Setup 2 (Multiplier & Trigger)
-                part_unsaved.audio_track_params_setup[track_id].lfo_setup_2.lfo1_mult = lfo.lfo1_mult;
-                part_unsaved.audio_track_params_setup[track_id].lfo_setup_2.lfo2_mult = lfo.lfo2_mult;
-                part_unsaved.audio_track_params_setup[track_id].lfo_setup_2.lfo3_mult = lfo.lfo3_mult;
-                part_unsaved.audio_track_params_setup[track_id].lfo_setup_2.lfo1_trig = lfo.lfo1_trig;
-                part_unsaved.audio_track_params_setup[track_id].lfo_setup_2.lfo2_trig = lfo.lfo2_trig;
-                part_unsaved.audio_track_params_setup[track_id].lfo_setup_2.lfo3_trig = lfo.lfo3_trig;
+                part_unsaved.audio_track_params_setup[track_id]
+                    .lfo_setup_2
+                    .lfo1_mult = lfo.lfo1_mult;
+                part_unsaved.audio_track_params_setup[track_id]
+                    .lfo_setup_2
+                    .lfo2_mult = lfo.lfo2_mult;
+                part_unsaved.audio_track_params_setup[track_id]
+                    .lfo_setup_2
+                    .lfo3_mult = lfo.lfo3_mult;
+                part_unsaved.audio_track_params_setup[track_id]
+                    .lfo_setup_2
+                    .lfo1_trig = lfo.lfo1_trig;
+                part_unsaved.audio_track_params_setup[track_id]
+                    .lfo_setup_2
+                    .lfo2_trig = lfo.lfo2_trig;
+                part_unsaved.audio_track_params_setup[track_id]
+                    .lfo_setup_2
+                    .lfo3_trig = lfo.lfo3_trig;
 
                 // Custom LFO design
                 if lfo.custom_lfo_design.len() == 16 {
@@ -2331,77 +2638,119 @@ pub fn save_parts_data(project_path: &str, bank_id: &str, parts_data: Vec<PartDa
                     0 | 1 => {
                         // Static or Flex machine
                         if let Some(ptch) = machine.machine_params.ptch {
-                            part_unsaved.audio_track_machine_params[track_id].static_machine.ptch = ptch;
+                            part_unsaved.audio_track_machine_params[track_id]
+                                .static_machine
+                                .ptch = ptch;
                         }
                         if let Some(strt) = machine.machine_params.strt {
-                            part_unsaved.audio_track_machine_params[track_id].static_machine.strt = strt;
+                            part_unsaved.audio_track_machine_params[track_id]
+                                .static_machine
+                                .strt = strt;
                         }
                         if let Some(len) = machine.machine_params.len {
-                            part_unsaved.audio_track_machine_params[track_id].static_machine.len = len;
+                            part_unsaved.audio_track_machine_params[track_id]
+                                .static_machine
+                                .len = len;
                         }
                         if let Some(rate) = machine.machine_params.rate {
-                            part_unsaved.audio_track_machine_params[track_id].static_machine.rate = rate;
+                            part_unsaved.audio_track_machine_params[track_id]
+                                .static_machine
+                                .rate = rate;
                         }
                         if let Some(rtrg) = machine.machine_params.rtrg {
-                            part_unsaved.audio_track_machine_params[track_id].static_machine.rtrg = rtrg;
+                            part_unsaved.audio_track_machine_params[track_id]
+                                .static_machine
+                                .rtrg = rtrg;
                         }
                         if let Some(rtim) = machine.machine_params.rtim {
-                            part_unsaved.audio_track_machine_params[track_id].static_machine.rtim = rtim;
+                            part_unsaved.audio_track_machine_params[track_id]
+                                .static_machine
+                                .rtim = rtim;
                         }
 
                         // Machine setup
                         if let Some(xloop) = machine.machine_setup.xloop {
-                            part_unsaved.audio_track_machine_setup[track_id].static_machine.xloop = xloop;
+                            part_unsaved.audio_track_machine_setup[track_id]
+                                .static_machine
+                                .xloop = xloop;
                         }
                         if let Some(slic) = machine.machine_setup.slic {
-                            part_unsaved.audio_track_machine_setup[track_id].static_machine.slic = slic;
+                            part_unsaved.audio_track_machine_setup[track_id]
+                                .static_machine
+                                .slic = slic;
                         }
                         if let Some(len) = machine.machine_setup.len {
-                            part_unsaved.audio_track_machine_setup[track_id].static_machine.len = len;
+                            part_unsaved.audio_track_machine_setup[track_id]
+                                .static_machine
+                                .len = len;
                         }
                         if let Some(rate) = machine.machine_setup.rate {
-                            part_unsaved.audio_track_machine_setup[track_id].static_machine.rate = rate;
+                            part_unsaved.audio_track_machine_setup[track_id]
+                                .static_machine
+                                .rate = rate;
                         }
                         if let Some(tstr) = machine.machine_setup.tstr {
-                            part_unsaved.audio_track_machine_setup[track_id].static_machine.tstr = tstr;
+                            part_unsaved.audio_track_machine_setup[track_id]
+                                .static_machine
+                                .tstr = tstr;
                         }
                         if let Some(tsns) = machine.machine_setup.tsns {
-                            part_unsaved.audio_track_machine_setup[track_id].static_machine.tsns = tsns;
+                            part_unsaved.audio_track_machine_setup[track_id]
+                                .static_machine
+                                .tsns = tsns;
                         }
-                    },
+                    }
                     2 => {
                         // Thru machine
                         if let Some(in_ab) = machine.machine_params.in_ab {
-                            part_unsaved.audio_track_machine_params[track_id].thru_machine.in_ab = in_ab;
+                            part_unsaved.audio_track_machine_params[track_id]
+                                .thru_machine
+                                .in_ab = in_ab;
                         }
                         if let Some(vol_ab) = machine.machine_params.vol_ab {
-                            part_unsaved.audio_track_machine_params[track_id].thru_machine.vol_ab = vol_ab;
+                            part_unsaved.audio_track_machine_params[track_id]
+                                .thru_machine
+                                .vol_ab = vol_ab;
                         }
                         if let Some(in_cd) = machine.machine_params.in_cd {
-                            part_unsaved.audio_track_machine_params[track_id].thru_machine.in_cd = in_cd;
+                            part_unsaved.audio_track_machine_params[track_id]
+                                .thru_machine
+                                .in_cd = in_cd;
                         }
                         if let Some(vol_cd) = machine.machine_params.vol_cd {
-                            part_unsaved.audio_track_machine_params[track_id].thru_machine.vol_cd = vol_cd;
+                            part_unsaved.audio_track_machine_params[track_id]
+                                .thru_machine
+                                .vol_cd = vol_cd;
                         }
-                    },
+                    }
                     4 => {
                         // Pickup machine
                         if let Some(ptch) = machine.machine_params.ptch {
-                            part_unsaved.audio_track_machine_params[track_id].pickup_machine.ptch = ptch;
+                            part_unsaved.audio_track_machine_params[track_id]
+                                .pickup_machine
+                                .ptch = ptch;
                         }
                         if let Some(len) = machine.machine_params.len {
-                            part_unsaved.audio_track_machine_params[track_id].pickup_machine.len = len;
+                            part_unsaved.audio_track_machine_params[track_id]
+                                .pickup_machine
+                                .len = len;
                         }
                         if let Some(dir) = machine.machine_params.dir {
-                            part_unsaved.audio_track_machine_params[track_id].pickup_machine.dir = dir;
+                            part_unsaved.audio_track_machine_params[track_id]
+                                .pickup_machine
+                                .dir = dir;
                         }
                         if let Some(gain) = machine.machine_params.gain {
-                            part_unsaved.audio_track_machine_params[track_id].pickup_machine.gain = gain;
+                            part_unsaved.audio_track_machine_params[track_id]
+                                .pickup_machine
+                                .gain = gain;
                         }
                         if let Some(op) = machine.machine_params.op {
-                            part_unsaved.audio_track_machine_params[track_id].pickup_machine.op = op;
+                            part_unsaved.audio_track_machine_params[track_id]
+                                .pickup_machine
+                                .op = op;
                         }
-                    },
+                    }
                     _ => {
                         // Neighbor (type 3) or unknown - no parameters to update
                     }
@@ -2452,20 +2801,44 @@ pub fn save_parts_data(project_path: &str, bank_id: &str, parts_data: Vec<PartDa
                 part_unsaved.midi_track_params_values[track_id].lfo.dep3 = midi_lfo.dep3;
 
                 // LFO Setup 1 (Parameter Target & Wave)
-                part_unsaved.midi_track_params_setup[track_id].lfo1.lfo1_pmtr = midi_lfo.lfo1_pmtr;
-                part_unsaved.midi_track_params_setup[track_id].lfo1.lfo2_pmtr = midi_lfo.lfo2_pmtr;
-                part_unsaved.midi_track_params_setup[track_id].lfo1.lfo3_pmtr = midi_lfo.lfo3_pmtr;
-                part_unsaved.midi_track_params_setup[track_id].lfo1.lfo1_wave = midi_lfo.lfo1_wave;
-                part_unsaved.midi_track_params_setup[track_id].lfo1.lfo2_wave = midi_lfo.lfo2_wave;
-                part_unsaved.midi_track_params_setup[track_id].lfo1.lfo3_wave = midi_lfo.lfo3_wave;
+                part_unsaved.midi_track_params_setup[track_id]
+                    .lfo1
+                    .lfo1_pmtr = midi_lfo.lfo1_pmtr;
+                part_unsaved.midi_track_params_setup[track_id]
+                    .lfo1
+                    .lfo2_pmtr = midi_lfo.lfo2_pmtr;
+                part_unsaved.midi_track_params_setup[track_id]
+                    .lfo1
+                    .lfo3_pmtr = midi_lfo.lfo3_pmtr;
+                part_unsaved.midi_track_params_setup[track_id]
+                    .lfo1
+                    .lfo1_wave = midi_lfo.lfo1_wave;
+                part_unsaved.midi_track_params_setup[track_id]
+                    .lfo1
+                    .lfo2_wave = midi_lfo.lfo2_wave;
+                part_unsaved.midi_track_params_setup[track_id]
+                    .lfo1
+                    .lfo3_wave = midi_lfo.lfo3_wave;
 
                 // LFO Setup 2 (Multiplier & Trigger)
-                part_unsaved.midi_track_params_setup[track_id].lfo2.lfo1_mult = midi_lfo.lfo1_mult;
-                part_unsaved.midi_track_params_setup[track_id].lfo2.lfo2_mult = midi_lfo.lfo2_mult;
-                part_unsaved.midi_track_params_setup[track_id].lfo2.lfo3_mult = midi_lfo.lfo3_mult;
-                part_unsaved.midi_track_params_setup[track_id].lfo2.lfo1_trig = midi_lfo.lfo1_trig;
-                part_unsaved.midi_track_params_setup[track_id].lfo2.lfo2_trig = midi_lfo.lfo2_trig;
-                part_unsaved.midi_track_params_setup[track_id].lfo2.lfo3_trig = midi_lfo.lfo3_trig;
+                part_unsaved.midi_track_params_setup[track_id]
+                    .lfo2
+                    .lfo1_mult = midi_lfo.lfo1_mult;
+                part_unsaved.midi_track_params_setup[track_id]
+                    .lfo2
+                    .lfo2_mult = midi_lfo.lfo2_mult;
+                part_unsaved.midi_track_params_setup[track_id]
+                    .lfo2
+                    .lfo3_mult = midi_lfo.lfo3_mult;
+                part_unsaved.midi_track_params_setup[track_id]
+                    .lfo2
+                    .lfo1_trig = midi_lfo.lfo1_trig;
+                part_unsaved.midi_track_params_setup[track_id]
+                    .lfo2
+                    .lfo2_trig = midi_lfo.lfo2_trig;
+                part_unsaved.midi_track_params_setup[track_id]
+                    .lfo2
+                    .lfo3_trig = midi_lfo.lfo3_trig;
 
                 // Custom LFO design
                 if midi_lfo.custom_lfo_design.len() == 16 {
@@ -2522,42 +2895,73 @@ pub fn save_parts_data(project_path: &str, bank_id: &str, parts_data: Vec<PartDa
             // Don't touch parts_saved_state - we're editing, not saving/committing
         }
     }
-    println!("[DEBUG] parts_edited_bitmask after update: {}", bank_data.parts_edited_bitmask);
-    println!("[DEBUG] parts_saved_state unchanged: {:?}", bank_data.parts_saved_state);
+    println!(
+        "[DEBUG] parts_edited_bitmask after update: {}",
+        bank_data.parts_edited_bitmask
+    );
+    println!(
+        "[DEBUG] parts_saved_state unchanged: {:?}",
+        bank_data.parts_saved_state
+    );
 
     // Debug: Verify part headers and part_id values in both saved and unsaved
     for i in 0..4 {
         let unsaved = &bank_data.parts.unsaved.0[i];
         let saved = &bank_data.parts.saved.0[i];
-        println!("[DEBUG] Part {} - unsaved header: {:02X?}, part_id: {}", i, unsaved.header, unsaved.part_id);
-        println!("[DEBUG] Part {} - saved header: {:02X?}, part_id: {}", i, saved.header, saved.part_id);
+        println!(
+            "[DEBUG] Part {} - unsaved header: {:02X?}, part_id: {}",
+            i, unsaved.header, unsaved.part_id
+        );
+        println!(
+            "[DEBUG] Part {} - saved header: {:02X?}, part_id: {}",
+            i, saved.header, saved.part_id
+        );
         // Log ATK value for Track 0 as our test parameter
-        println!("[DEBUG] Part {} - unsaved ATK[0]: {}, saved ATK[0]: {}",
+        println!(
+            "[DEBUG] Part {} - unsaved ATK[0]: {}, saved ATK[0]: {}",
             i,
             unsaved.audio_track_params_values[0].amp.atk,
-            saved.audio_track_params_values[0].amp.atk);
+            saved.audio_track_params_values[0].amp.atk
+        );
     }
 
     // Recalculate checksum before saving
     let old_checksum = bank_data.checksum;
-    bank_data.checksum = bank_data.calculate_checksum()
+    bank_data.checksum = bank_data
+        .calculate_checksum()
         .map_err(|e| format!("Failed to calculate checksum: {:?}", e))?;
-    println!("[DEBUG] Checksum: old={}, new={}", old_checksum, bank_data.checksum);
+    println!(
+        "[DEBUG] Checksum: old={}, new={}",
+        old_checksum, bank_data.checksum
+    );
 
     // Write the modified bank file back
-    bank_data.to_data_file(&bank_file_path)
+    bank_data
+        .to_data_file(&bank_file_path)
         .map_err(|e| format!("Failed to write bank file: {:?}", e))?;
     println!("[DEBUG] Bank file written successfully");
 
     // VERIFICATION: Read the file back and verify the data persisted correctly
     let verify_bank = BankFile::from_data_file(&bank_file_path)
         .map_err(|e| format!("Failed to verify bank file: {:?}", e))?;
-    println!("[DEBUG VERIFY] parts_saved_state after re-read: {:?}", verify_bank.parts_saved_state);
-    println!("[DEBUG VERIFY] parts_edited_bitmask after re-read: {}", verify_bank.parts_edited_bitmask);
-    println!("[DEBUG VERIFY] checksum after re-read: {}", verify_bank.checksum);
+    println!(
+        "[DEBUG VERIFY] parts_saved_state after re-read: {:?}",
+        verify_bank.parts_saved_state
+    );
+    println!(
+        "[DEBUG VERIFY] parts_edited_bitmask after re-read: {}",
+        verify_bank.parts_edited_bitmask
+    );
+    println!(
+        "[DEBUG VERIFY] checksum after re-read: {}",
+        verify_bank.checksum
+    );
     for i in 0..4 {
         let saved = &verify_bank.parts.saved.0[i];
-        println!("[DEBUG VERIFY] Part {} saved ATK[0]: {}", i, saved.audio_track_params_values[0].amp.atk);
+        println!(
+            "[DEBUG VERIFY] Part {} saved ATK[0]: {}",
+            i, saved.audio_track_params_values[0].amp.atk
+        );
     }
 
     Ok(())
@@ -2570,11 +2974,11 @@ pub fn commit_part_data(project_path: &str, bank_id: &str, part_id: u8) -> Resul
 
     // Convert bank letter (A-P) to bank number (1-16)
     let bank_letters = [
-        "A", "B", "C", "D", "E", "F", "G", "H",
-        "I", "J", "K", "L", "M", "N", "O", "P"
+        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P",
     ];
 
-    let bank_num = bank_letters.iter()
+    let bank_num = bank_letters
+        .iter()
         .position(|&letter| letter == bank_id)
         .map(|idx| idx + 1)
         .ok_or_else(|| format!("Invalid bank ID: {}", bank_id))?;
@@ -2599,7 +3003,10 @@ pub fn commit_part_data(project_path: &str, bank_id: &str, part_id: u8) -> Resul
         return Err(format!("Invalid part ID: {} (must be 0-3)", part_id));
     }
 
-    println!("[DEBUG] Committing part {} (copying unsaved to saved)", part_idx);
+    println!(
+        "[DEBUG] Committing part {} (copying unsaved to saved)",
+        part_idx
+    );
 
     // Copy the unsaved part to saved part (deep copy)
     // This is what the Octatrack's "SAVE" command does
@@ -2611,15 +3018,23 @@ pub fn commit_part_data(project_path: &str, bank_id: &str, part_id: u8) -> Resul
     // Clear the edited bit for this part since we just committed its changes
     bank_data.parts_edited_bitmask &= !(1 << part_idx);
 
-    println!("[DEBUG] parts_edited_bitmask after commit: {}", bank_data.parts_edited_bitmask);
-    println!("[DEBUG] parts_saved_state after commit: {:?}", bank_data.parts_saved_state);
+    println!(
+        "[DEBUG] parts_edited_bitmask after commit: {}",
+        bank_data.parts_edited_bitmask
+    );
+    println!(
+        "[DEBUG] parts_saved_state after commit: {:?}",
+        bank_data.parts_saved_state
+    );
 
     // Recalculate checksum
-    bank_data.checksum = bank_data.calculate_checksum()
+    bank_data.checksum = bank_data
+        .calculate_checksum()
         .map_err(|e| format!("Failed to calculate checksum: {:?}", e))?;
 
     // Write the modified bank file back
-    bank_data.to_data_file(&bank_file_path)
+    bank_data
+        .to_data_file(&bank_file_path)
         .map_err(|e| format!("Failed to write bank file: {:?}", e))?;
 
     println!("[DEBUG] Part {} committed successfully", part_idx);
@@ -2632,11 +3047,11 @@ pub fn commit_all_parts_data(project_path: &str, bank_id: &str) -> Result<(), St
     let path = Path::new(project_path);
 
     let bank_letters = [
-        "A", "B", "C", "D", "E", "F", "G", "H",
-        "I", "J", "K", "L", "M", "N", "O", "P"
+        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P",
     ];
 
-    let bank_num = bank_letters.iter()
+    let bank_num = bank_letters
+        .iter()
         .position(|&letter| letter == bank_id)
         .map(|idx| idx + 1)
         .ok_or_else(|| format!("Invalid bank ID: {}", bank_id))?;
@@ -2666,13 +3081,21 @@ pub fn commit_all_parts_data(project_path: &str, bank_id: &str) -> Result<(), St
     // Clear all edited bits
     bank_data.parts_edited_bitmask = 0;
 
-    println!("[DEBUG] parts_edited_bitmask after commit all: {}", bank_data.parts_edited_bitmask);
-    println!("[DEBUG] parts_saved_state after commit all: {:?}", bank_data.parts_saved_state);
+    println!(
+        "[DEBUG] parts_edited_bitmask after commit all: {}",
+        bank_data.parts_edited_bitmask
+    );
+    println!(
+        "[DEBUG] parts_saved_state after commit all: {:?}",
+        bank_data.parts_saved_state
+    );
 
-    bank_data.checksum = bank_data.calculate_checksum()
+    bank_data.checksum = bank_data
+        .calculate_checksum()
         .map_err(|e| format!("Failed to calculate checksum: {:?}", e))?;
 
-    bank_data.to_data_file(&bank_file_path)
+    bank_data
+        .to_data_file(&bank_file_path)
         .map_err(|e| format!("Failed to write bank file: {:?}", e))?;
 
     println!("[DEBUG] All parts committed successfully");
@@ -2682,15 +3105,19 @@ pub fn commit_all_parts_data(project_path: &str, bank_id: &str) -> Result<(), St
 
 /// Reload a single part: copy parts.saved back to parts.unsaved (like Octatrack's "RELOAD" command)
 /// Returns the reloaded part data so the frontend can update its state.
-pub fn reload_part_data(project_path: &str, bank_id: &str, part_id: u8) -> Result<PartData, String> {
+pub fn reload_part_data(
+    project_path: &str,
+    bank_id: &str,
+    part_id: u8,
+) -> Result<PartData, String> {
     let path = Path::new(project_path);
 
     let bank_letters = [
-        "A", "B", "C", "D", "E", "F", "G", "H",
-        "I", "J", "K", "L", "M", "N", "O", "P"
+        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P",
     ];
 
-    let bank_num = bank_letters.iter()
+    let bank_num = bank_letters
+        .iter()
         .position(|&letter| letter == bank_id)
         .map(|idx| idx + 1)
         .ok_or_else(|| format!("Invalid bank ID: {}", bank_id))?;
@@ -2719,7 +3146,10 @@ pub fn reload_part_data(project_path: &str, bank_id: &str, part_id: u8) -> Resul
         return Err("SAVE PART FIRST".to_string());
     }
 
-    println!("[DEBUG] Reloading part {} (copying saved to unsaved)", part_idx);
+    println!(
+        "[DEBUG] Reloading part {} (copying saved to unsaved)",
+        part_idx
+    );
 
     // Copy the saved part back to unsaved part
     bank_data.parts.unsaved.0[part_idx] = bank_data.parts.saved.0[part_idx].clone();
@@ -2727,19 +3157,26 @@ pub fn reload_part_data(project_path: &str, bank_id: &str, part_id: u8) -> Resul
     // Clear the edited bit for this part since we just reloaded it
     bank_data.parts_edited_bitmask &= !(1 << part_idx);
 
-    println!("[DEBUG] parts_edited_bitmask after reload: {}", bank_data.parts_edited_bitmask);
+    println!(
+        "[DEBUG] parts_edited_bitmask after reload: {}",
+        bank_data.parts_edited_bitmask
+    );
 
-    bank_data.checksum = bank_data.calculate_checksum()
+    bank_data.checksum = bank_data
+        .calculate_checksum()
         .map_err(|e| format!("Failed to calculate checksum: {:?}", e))?;
 
-    bank_data.to_data_file(&bank_file_path)
+    bank_data
+        .to_data_file(&bank_file_path)
         .map_err(|e| format!("Failed to write bank file: {:?}", e))?;
 
     println!("[DEBUG] Part {} reloaded successfully", part_idx);
 
     // Read all parts data and return the specific part
     let response = read_parts_data(project_path, bank_id)?;
-    response.parts.into_iter()
+    response
+        .parts
+        .into_iter()
         .find(|p| p.part_id == part_id)
         .ok_or_else(|| format!("Failed to find reloaded part {}", part_id))
 }
@@ -2764,7 +3201,8 @@ pub fn is_project_in_set(project_path: &str) -> Result<bool, String> {
     let path = Path::new(project_path);
 
     // Get the parent directory (the potential Set folder)
-    let parent = path.parent()
+    let parent = path
+        .parent()
         .ok_or_else(|| "Cannot determine parent directory".to_string())?;
 
     // Check if AUDIO POOL exists in parent
@@ -2803,15 +3241,19 @@ pub fn are_projects_in_same_set(project1: &str, project2: &str) -> Result<bool, 
     let path1 = Path::new(project1);
     let path2 = Path::new(project2);
 
-    let parent1 = path1.parent()
+    let parent1 = path1
+        .parent()
         .ok_or_else(|| "Cannot determine parent directory of project 1".to_string())?;
-    let parent2 = path2.parent()
+    let parent2 = path2
+        .parent()
         .ok_or_else(|| "Cannot determine parent directory of project 2".to_string())?;
 
     // Canonicalize to handle symlinks and relative paths
-    let canonical1 = parent1.canonicalize()
+    let canonical1 = parent1
+        .canonicalize()
         .map_err(|e| format!("Failed to resolve project 1 path: {}", e))?;
-    let canonical2 = parent2.canonicalize()
+    let canonical2 = parent2
+        .canonicalize()
         .map_err(|e| format!("Failed to resolve project 2 path: {}", e))?;
 
     Ok(canonical1 == canonical2)
@@ -2823,7 +3265,8 @@ pub fn get_audio_pool_status(project_path: &str) -> Result<AudioPoolStatus, Stri
     let path = Path::new(project_path);
 
     // Get the parent directory (the Set folder)
-    let parent = path.parent()
+    let parent = path
+        .parent()
         .ok_or_else(|| "Cannot determine parent directory".to_string())?;
 
     let audio_pool_path = parent.join("AUDIO POOL");
@@ -2849,7 +3292,8 @@ pub fn create_audio_pool(project_path: &str) -> Result<String, String> {
     let path = Path::new(project_path);
 
     // Get the parent directory (the Set folder)
-    let parent = path.parent()
+    let parent = path
+        .parent()
         .ok_or_else(|| "Cannot determine parent directory".to_string())?;
 
     let audio_pool_path = parent.join("AUDIO POOL");
@@ -2915,7 +3359,8 @@ pub fn copy_bank(
     // Note: Bank name/ID is determined by the file name, not a field in the data
 
     // Recalculate checksum
-    bank_data.checksum = bank_data.calculate_checksum()
+    bank_data.checksum = bank_data
+        .calculate_checksum()
         .map_err(|e| format!("Failed to calculate checksum: {:?}", e))?;
 
     // Build destination bank file path (always write to .work)
@@ -2924,11 +3369,14 @@ pub fn copy_bank(
     let dest_bank_path = dest_path.join(&dest_bank_file);
 
     // Write the bank to destination
-    bank_data.to_data_file(&dest_bank_path)
+    bank_data
+        .to_data_file(&dest_bank_path)
         .map_err(|e| format!("Failed to write destination bank: {:?}", e))?;
 
-    println!("[DEBUG] Copied bank {} from {} to bank {} in {}",
-        source_bank_index, source_project, dest_bank_index, dest_project);
+    println!(
+        "[DEBUG] Copied bank {} from {} to bank {} in {}",
+        source_bank_index, source_project, dest_bank_index, dest_project
+    );
 
     Ok(())
 }
@@ -3000,8 +3448,8 @@ pub fn copy_parts(
 
     // Copy each part
     for (src_idx, dest_idx) in source_part_indices.iter().zip(dest_part_indices.iter()) {
-        let src_part = src_idx.clone() as usize;
-        let dst_part = dest_idx.clone() as usize;
+        let src_part = *src_idx as usize;
+        let dst_part = *dest_idx as usize;
 
         // Copy the unsaved part data
         dest_bank.parts.unsaved.0[dst_part] = source_bank.parts.unsaved.0[src_part].clone();
@@ -3009,19 +3457,29 @@ pub fn copy_parts(
         // Mark the destination part as edited
         dest_bank.parts_edited_bitmask |= 1 << dst_part;
 
-        println!("[DEBUG] Copied Part {} to Part {}", src_part + 1, dst_part + 1);
+        println!(
+            "[DEBUG] Copied Part {} to Part {}",
+            src_part + 1,
+            dst_part + 1
+        );
     }
 
     // Recalculate checksum
-    dest_bank.checksum = dest_bank.calculate_checksum()
+    dest_bank.checksum = dest_bank
+        .calculate_checksum()
         .map_err(|e| format!("Failed to calculate checksum: {:?}", e))?;
 
     // Write the destination bank
-    dest_bank.to_data_file(&dest_bank_path)
+    dest_bank
+        .to_data_file(&dest_bank_path)
         .map_err(|e| format!("Failed to write destination bank: {:?}", e))?;
 
-    println!("[DEBUG] Copied {} parts from bank {} to bank {}",
-        source_part_indices.len(), source_bank_index, dest_bank_index);
+    println!(
+        "[DEBUG] Copied {} parts from bank {} to bank {}",
+        source_part_indices.len(),
+        source_bank_index,
+        dest_bank_index
+    );
 
     Ok(())
 }
@@ -3065,7 +3523,9 @@ pub fn copy_patterns(
     }
 
     if part_assignment_mode == "select_specific" && dest_part.is_none() {
-        return Err("dest_part is required when part_assignment_mode is 'select_specific'".to_string());
+        return Err(
+            "dest_part is required when part_assignment_mode is 'select_specific'".to_string(),
+        );
     }
 
     if let Some(ref indices) = track_indices {
@@ -3126,9 +3586,14 @@ pub fn copy_patterns(
             "copy_source_part" => {
                 parts_to_copy.insert(source_part_assignment);
                 source_part_assignment
-            },
+            }
             "select_specific" => dest_part.unwrap(),
-            _ => return Err(format!("Invalid part_assignment_mode: {}", part_assignment_mode)),
+            _ => {
+                return Err(format!(
+                    "Invalid part_assignment_mode: {}",
+                    part_assignment_mode
+                ))
+            }
         };
 
         // Copy the pattern
@@ -3139,12 +3604,15 @@ pub fn copy_patterns(
             dest_bank.patterns.0[dest_pattern_idx].part_assignment = new_part_assignment;
         } else if track_mode == "specific" {
             // Copy only specific tracks
-            let indices = track_indices.as_ref().ok_or("track_indices required for specific mode")?;
+            let indices = track_indices
+                .as_ref()
+                .ok_or("track_indices required for specific mode")?;
 
             for &track_idx in indices {
                 if track_idx < 8 {
                     // Audio track (0-7)
-                    dest_bank.patterns.0[dest_pattern_idx].audio_track_trigs.0[track_idx as usize] =
+                    dest_bank.patterns.0[dest_pattern_idx].audio_track_trigs.0
+                        [track_idx as usize] =
                         src_pattern.audio_track_trigs.0[track_idx as usize].clone();
                 } else {
                     // MIDI track (8-15 maps to 0-7 in midi_track_trigs)
@@ -3157,8 +3625,12 @@ pub fn copy_patterns(
             dest_bank.patterns.0[dest_pattern_idx].part_assignment = new_part_assignment;
         }
 
-        println!("[DEBUG] Copied pattern {} to pattern {} (part assignment: {})",
-            src_pattern_idx + 1, dest_pattern_idx + 1, new_part_assignment + 1);
+        println!(
+            "[DEBUG] Copied pattern {} to pattern {} (part assignment: {})",
+            src_pattern_idx + 1,
+            dest_pattern_idx + 1,
+            new_part_assignment + 1
+        );
     }
 
     // If copy_source_part mode, also copy the parts
@@ -3167,20 +3639,29 @@ pub fn copy_patterns(
             dest_bank.parts.unsaved.0[part_id as usize] =
                 source_bank.parts.unsaved.0[part_id as usize].clone();
             dest_bank.parts_edited_bitmask |= 1 << part_id;
-            println!("[DEBUG] Also copied Part {} along with patterns", part_id + 1);
+            println!(
+                "[DEBUG] Also copied Part {} along with patterns",
+                part_id + 1
+            );
         }
     }
 
     // Recalculate checksum
-    dest_bank.checksum = dest_bank.calculate_checksum()
+    dest_bank.checksum = dest_bank
+        .calculate_checksum()
         .map_err(|e| format!("Failed to calculate checksum: {:?}", e))?;
 
     // Write the destination bank
-    dest_bank.to_data_file(&dest_bank_path)
+    dest_bank
+        .to_data_file(&dest_bank_path)
         .map_err(|e| format!("Failed to write destination bank: {:?}", e))?;
 
-    println!("[DEBUG] Copied {} patterns from bank {} to bank {}",
-        source_pattern_indices.len(), source_bank_index, dest_bank_index);
+    println!(
+        "[DEBUG] Copied {} patterns from bank {} to bank {}",
+        source_pattern_indices.len(),
+        source_bank_index,
+        dest_bank_index
+    );
 
     Ok(())
 }
@@ -3235,11 +3716,16 @@ pub fn copy_tracks(
     let dest_has_midi = dest_track_indices.iter().any(|&i| i >= 8);
 
     if (source_has_audio && dest_has_midi) || (source_has_midi && dest_has_audio) {
-        return Err("Cannot mix audio tracks (0-7) and MIDI tracks (8-15) in copy operation".to_string());
+        return Err(
+            "Cannot mix audio tracks (0-7) and MIDI tracks (8-15) in copy operation".to_string(),
+        );
     }
 
     if !["part_params", "pattern_triggers", "both"].contains(&mode) {
-        return Err(format!("Invalid mode: {}. Must be 'part_params', 'pattern_triggers', or 'both'", mode));
+        return Err(format!(
+            "Invalid mode: {}. Must be 'part_params', 'pattern_triggers', or 'both'",
+            mode
+        ));
     }
 
     let source_path = Path::new(source_project);
@@ -3281,7 +3767,9 @@ pub fn copy_tracks(
     let dst_part = dest_part_index as usize;
 
     // Copy each track
-    for (&src_track_idx, &dst_track_idx) in source_track_indices.iter().zip(dest_track_indices.iter()) {
+    for (&src_track_idx, &dst_track_idx) in
+        source_track_indices.iter().zip(dest_track_indices.iter())
+    {
         let is_audio = src_track_idx < 8;
 
         if mode == "part_params" || mode == "both" {
@@ -3292,17 +3780,21 @@ pub fn copy_tracks(
 
                 // Copy audio track params values
                 dest_bank.parts.unsaved.0[dst_part].audio_track_params_values[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].audio_track_params_values[src_idx].clone();
+                    source_bank.parts.unsaved.0[src_part].audio_track_params_values[src_idx];
 
                 // Copy audio track params setup
                 dest_bank.parts.unsaved.0[dst_part].audio_track_params_setup[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].audio_track_params_setup[src_idx].clone();
+                    source_bank.parts.unsaved.0[src_part].audio_track_params_setup[src_idx];
 
                 // Copy audio track machine setup
                 dest_bank.parts.unsaved.0[dst_part].audio_track_machine_setup[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].audio_track_machine_setup[src_idx].clone();
+                    source_bank.parts.unsaved.0[src_part].audio_track_machine_setup[src_idx];
 
-                println!("[DEBUG] Copied audio track {} Part params to track {}", src_idx + 1, dst_idx + 1);
+                println!(
+                    "[DEBUG] Copied audio track {} Part params to track {}",
+                    src_idx + 1,
+                    dst_idx + 1
+                );
             } else {
                 // MIDI track (8-15 maps to 0-7)
                 let src_idx = (src_track_idx - 8) as usize;
@@ -3310,13 +3802,17 @@ pub fn copy_tracks(
 
                 // Copy MIDI track params values
                 dest_bank.parts.unsaved.0[dst_part].midi_track_params_values[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].midi_track_params_values[src_idx].clone();
+                    source_bank.parts.unsaved.0[src_part].midi_track_params_values[src_idx];
 
                 // Copy MIDI track params setup
                 dest_bank.parts.unsaved.0[dst_part].midi_track_params_setup[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].midi_track_params_setup[src_idx].clone();
+                    source_bank.parts.unsaved.0[src_part].midi_track_params_setup[src_idx];
 
-                println!("[DEBUG] Copied MIDI track {} Part params to track {}", src_idx + 1, dst_idx + 1);
+                println!(
+                    "[DEBUG] Copied MIDI track {} Part params to track {}",
+                    src_idx + 1,
+                    dst_idx + 1
+                );
             }
         }
 
@@ -3337,8 +3833,11 @@ pub fn copy_tracks(
                         source_bank.patterns.0[pattern_idx].midi_track_trigs.0[src_idx].clone();
                 }
             }
-            println!("[DEBUG] Copied track {} triggers (all 16 patterns) to track {}",
-                src_track_idx + 1, dst_track_idx + 1);
+            println!(
+                "[DEBUG] Copied track {} triggers (all 16 patterns) to track {}",
+                src_track_idx + 1,
+                dst_track_idx + 1
+            );
         }
     }
 
@@ -3348,16 +3847,24 @@ pub fn copy_tracks(
     }
 
     // Recalculate checksum
-    dest_bank.checksum = dest_bank.calculate_checksum()
+    dest_bank.checksum = dest_bank
+        .calculate_checksum()
         .map_err(|e| format!("Failed to calculate checksum: {:?}", e))?;
 
     // Write the destination bank
-    dest_bank.to_data_file(&dest_bank_path)
+    dest_bank
+        .to_data_file(&dest_bank_path)
         .map_err(|e| format!("Failed to write destination bank: {:?}", e))?;
 
-    println!("[DEBUG] Copied {} tracks from bank {} Part {} to bank {} Part {} (mode: {})",
-        source_track_indices.len(), source_bank_index, source_part_index + 1,
-        dest_bank_index, dest_part_index + 1, mode);
+    println!(
+        "[DEBUG] Copied {} tracks from bank {} Part {} to bank {} Part {} (mode: {})",
+        source_track_indices.len(),
+        source_bank_index,
+        source_part_index + 1,
+        dest_bank_index,
+        dest_part_index + 1,
+        mode
+    );
 
     Ok(())
 }
@@ -3388,16 +3895,24 @@ pub fn copy_sample_slots(
         return Err("Source and destination indices must have the same length".to_string());
     }
 
-    if source_indices.iter().any(|&i| i < 1 || i > 128) || dest_indices.iter().any(|&i| i < 1 || i > 128) {
+    if source_indices.iter().any(|&i| !(1..=128).contains(&i))
+        || dest_indices.iter().any(|&i| !(1..=128).contains(&i))
+    {
         return Err("Slot indices must be between 1 and 128".to_string());
     }
 
     if !["static", "flex", "both"].contains(&slot_type) {
-        return Err(format!("Invalid slot_type: {}. Must be 'static', 'flex', or 'both'", slot_type));
+        return Err(format!(
+            "Invalid slot_type: {}. Must be 'static', 'flex', or 'both'",
+            slot_type
+        ));
     }
 
     if !["none", "copy", "move_to_pool"].contains(&audio_mode) {
-        return Err(format!("Invalid audio_mode: {}. Must be 'none', 'copy', or 'move_to_pool'", audio_mode));
+        return Err(format!(
+            "Invalid audio_mode: {}. Must be 'none', 'copy', or 'move_to_pool'",
+            audio_mode
+        ));
     }
 
     // For move_to_pool mode, verify projects are in the same Set
@@ -3482,13 +3997,16 @@ pub fn copy_sample_slots(
                                     let _ = std::fs::copy(&src_full_path, &dest_full_path);
                                     println!("[DEBUG] Copied audio file: {}", sample_path_str);
                                 }
-                            },
+                            }
                             "move_to_pool" => {
                                 // Move file to Audio Pool and update path
                                 if let Some(ref pool_path) = audio_pool_path {
                                     let src_full_path = source_path.join(&sample_path_str);
-                                    if src_full_path.exists() && !sample_path_str.starts_with("../AUDIO") {
-                                        let file_name = src_full_path.file_name()
+                                    if src_full_path.exists()
+                                        && !sample_path_str.starts_with("../AUDIO")
+                                    {
+                                        let file_name = src_full_path
+                                            .file_name()
                                             .map(|n| n.to_string_lossy().to_string())
                                             .unwrap_or_default();
                                         let pool_dest = Path::new(pool_path).join(&file_name);
@@ -3498,12 +4016,15 @@ pub fn copy_sample_slots(
 
                                         // Update path to reference Audio Pool
                                         // Audio Pool is at ../AUDIO POOL relative to project
-                                        new_slot.path = Some(std::path::PathBuf::from(format!("../AUDIO POOL/{}", file_name)));
+                                        new_slot.path = Some(std::path::PathBuf::from(format!(
+                                            "../AUDIO POOL/{}",
+                                            file_name
+                                        )));
 
                                         println!("[DEBUG] Moved to Audio Pool: {}", file_name);
                                     }
                                 }
-                            },
+                            }
                             _ => {} // "none" - just copy slot data
                         }
                     }
@@ -3511,13 +4032,16 @@ pub fn copy_sample_slots(
                     // Optionally clear editor settings
                     if !include_editor_settings {
                         new_slot.gain = 64; // Default gain
-                        // Loop mode and timestretch stay as is (they might affect playback)
+                                            // Loop mode and timestretch stay as is (they might affect playback)
                     }
 
                     // Static slots are a fixed-size array (128 slots)
                     if dest_idx < 128 {
                         dest_project_data.slots.static_slots[dest_idx] = Some(new_slot);
-                        println!("[DEBUG] Copied Static slot {} to slot {}", src_slot_id, dest_slot_id);
+                        println!(
+                            "[DEBUG] Copied Static slot {} to slot {}",
+                            src_slot_id, dest_slot_id
+                        );
                     }
                 }
             }
@@ -3545,23 +4069,29 @@ pub fn copy_sample_slots(
                                     let _ = std::fs::copy(&src_full_path, &dest_full_path);
                                     println!("[DEBUG] Copied audio file: {}", sample_path_str);
                                 }
-                            },
+                            }
                             "move_to_pool" => {
                                 if let Some(ref pool_path) = audio_pool_path {
                                     let src_full_path = source_path.join(&sample_path_str);
-                                    if src_full_path.exists() && !sample_path_str.starts_with("../AUDIO") {
-                                        let file_name = src_full_path.file_name()
+                                    if src_full_path.exists()
+                                        && !sample_path_str.starts_with("../AUDIO")
+                                    {
+                                        let file_name = src_full_path
+                                            .file_name()
                                             .map(|n| n.to_string_lossy().to_string())
                                             .unwrap_or_default();
                                         let pool_dest = Path::new(pool_path).join(&file_name);
 
                                         let _ = std::fs::copy(&src_full_path, &pool_dest);
-                                        new_slot.path = Some(std::path::PathBuf::from(format!("../AUDIO POOL/{}", file_name)));
+                                        new_slot.path = Some(std::path::PathBuf::from(format!(
+                                            "../AUDIO POOL/{}",
+                                            file_name
+                                        )));
 
                                         println!("[DEBUG] Moved to Audio Pool: {}", file_name);
                                     }
                                 }
-                            },
+                            }
                             _ => {}
                         }
                     }
@@ -3573,7 +4103,10 @@ pub fn copy_sample_slots(
                     // Flex slots are a fixed-size array (128 slots - though internal array is 136)
                     if dest_idx < dest_project_data.slots.flex_slots.len() {
                         dest_project_data.slots.flex_slots[dest_idx] = Some(new_slot);
-                        println!("[DEBUG] Copied Flex slot {} to slot {}", src_slot_id, dest_slot_id);
+                        println!(
+                            "[DEBUG] Copied Flex slot {} to slot {}",
+                            src_slot_id, dest_slot_id
+                        );
                     }
                 }
             }
@@ -3583,7 +4116,8 @@ pub fn copy_sample_slots(
     // Write the destination project file (always write to .work)
     // Note: ProjectFile handles its own checksum internally via to_data_file
     let dest_final_path = dest_path.join("project.work");
-    dest_project_data.to_data_file(&dest_final_path)
+    dest_project_data
+        .to_data_file(&dest_final_path)
         .map_err(|e| format!("Failed to write destination project: {:?}", e))?;
 
     // If move_to_pool mode, also update source project paths
@@ -3595,12 +4129,17 @@ pub fn copy_sample_slots(
             let src_idx = (src_slot_id - 1) as usize;
 
             if slot_type == "static" || slot_type == "both" {
-                if let Some(Some(ref mut slot)) = source_project_data_mut.slots.static_slots.get_mut(src_idx) {
+                if let Some(Some(ref mut slot)) =
+                    source_project_data_mut.slots.static_slots.get_mut(src_idx)
+                {
                     if let Some(ref sample_path) = slot.path.clone() {
                         let sample_path_str = sample_path.to_string_lossy().to_string();
                         if !sample_path_str.starts_with("../AUDIO") {
                             if let Some(file_name) = sample_path.file_name() {
-                                slot.path = Some(std::path::PathBuf::from(format!("../AUDIO POOL/{}", file_name.to_string_lossy())));
+                                slot.path = Some(std::path::PathBuf::from(format!(
+                                    "../AUDIO POOL/{}",
+                                    file_name.to_string_lossy()
+                                )));
                             }
                         }
                     }
@@ -3608,12 +4147,17 @@ pub fn copy_sample_slots(
             }
 
             if slot_type == "flex" || slot_type == "both" {
-                if let Some(Some(ref mut slot)) = source_project_data_mut.slots.flex_slots.get_mut(src_idx) {
+                if let Some(Some(ref mut slot)) =
+                    source_project_data_mut.slots.flex_slots.get_mut(src_idx)
+                {
                     if let Some(ref sample_path) = slot.path.clone() {
                         let sample_path_str = sample_path.to_string_lossy().to_string();
                         if !sample_path_str.starts_with("../AUDIO") {
                             if let Some(file_name) = sample_path.file_name() {
-                                slot.path = Some(std::path::PathBuf::from(format!("../AUDIO POOL/{}", file_name.to_string_lossy())));
+                                slot.path = Some(std::path::PathBuf::from(format!(
+                                    "../AUDIO POOL/{}",
+                                    file_name.to_string_lossy()
+                                )));
                             }
                         }
                     }
@@ -3623,12 +4167,17 @@ pub fn copy_sample_slots(
 
         // Write the updated source project (checksum handled internally by to_data_file)
         let source_final_path = source_path.join("project.work");
-        source_project_data_mut.to_data_file(&source_final_path)
+        source_project_data_mut
+            .to_data_file(&source_final_path)
             .map_err(|e| format!("Failed to write source project: {:?}", e))?;
     }
 
-    println!("[DEBUG] Copied {} sample slots from {} to {}",
-        source_indices.len(), source_project, dest_project);
+    println!(
+        "[DEBUG] Copied {} sample slots from {} to {}",
+        source_indices.len(),
+        source_project,
+        dest_project
+    );
 
     Ok(())
 }
@@ -3636,9 +4185,9 @@ pub fn copy_sample_slots(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ot_tools_io::{BankFile, ProjectFile, OctatrackFileIO};
-    use tempfile::TempDir;
+    use ot_tools_io::{BankFile, OctatrackFileIO, ProjectFile};
     use std::fs;
+    use tempfile::TempDir;
 
     /// Helper struct to manage test project fixtures
     struct TestProject {
@@ -3655,14 +4204,16 @@ mod tests {
             // Create default project.work file
             let project_file = ProjectFile::default();
             let project_path = temp_dir.path().join("project.work");
-            project_file.to_data_file(&project_path)
+            project_file
+                .to_data_file(&project_path)
                 .expect("Failed to create project.work");
 
             // Create default bank files (bank01.work through bank16.work)
             for bank_num in 1..=16 {
                 let bank_file = BankFile::default();
                 let bank_path = temp_dir.path().join(format!("bank{:02}.work", bank_num));
-                bank_file.to_data_file(&bank_path)
+                bank_file
+                    .to_data_file(&bank_path)
                     .expect(&format!("Failed to create bank{:02}.work", bank_num));
             }
 
@@ -3679,13 +4230,13 @@ mod tests {
             // Read the bank, modify it, and write back
             let bank_num = bank_index + 1;
             let bank_path = Path::new(&project.path).join(format!("bank{:02}.work", bank_num));
-            let mut bank = BankFile::from_data_file(&bank_path)
-                .expect("Failed to read bank file");
+            let mut bank = BankFile::from_data_file(&bank_path).expect("Failed to read bank file");
 
             modifier(&mut bank);
 
             // Recalculate checksum
-            bank.checksum = bank.calculate_checksum()
+            bank.checksum = bank
+                .calculate_checksum()
                 .expect("Failed to calculate checksum");
 
             bank.to_data_file(&bank_path)
@@ -3714,8 +4265,10 @@ mod tests {
             // Verify the destination bank now has the same edited bitmask
             let dest_bank_path = Path::new(&project.path).join("bank02.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
-            assert_eq!(dest_bank.parts_edited_bitmask, 0b0001,
-                "Destination bank should have copied parts_edited_bitmask");
+            assert_eq!(
+                dest_bank.parts_edited_bitmask, 0b0001,
+                "Destination bank should have copied parts_edited_bitmask"
+            );
         }
 
         #[test]
@@ -3727,7 +4280,11 @@ mod tests {
             let dest_project = TestProject::new();
 
             let result = copy_bank(&source_project.path, 0, &dest_project.path, 0);
-            assert!(result.is_ok(), "Cross-project copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Cross-project copy should succeed: {:?}",
+                result
+            );
 
             // Verify destination has the copied data
             let dest_bank_path = Path::new(&dest_project.path).join("bank01.work");
@@ -3760,7 +4317,9 @@ mod tests {
 
             let result = copy_bank(&project.path, 16, &project.path, 0);
             assert!(result.is_err(), "Bank index 16 should be invalid");
-            assert!(result.unwrap_err().contains("Bank index must be between 0 and 15"));
+            assert!(result
+                .unwrap_err()
+                .contains("Bank index must be between 0 and 15"));
         }
 
         #[test]
@@ -3769,7 +4328,9 @@ mod tests {
 
             let result = copy_bank(&project.path, 0, &project.path, 16);
             assert!(result.is_err(), "Bank index 16 should be invalid");
-            assert!(result.unwrap_err().contains("Bank index must be between 0 and 15"));
+            assert!(result
+                .unwrap_err()
+                .contains("Bank index must be between 0 and 15"));
         }
 
         #[test]
@@ -3792,7 +4353,12 @@ mod tests {
 
             for i in 0..16u8 {
                 let result = copy_bank(&source.path, i, &dest.path, i);
-                assert!(result.is_ok(), "Copy bank {} should succeed: {:?}", i, result);
+                assert!(
+                    result.is_ok(),
+                    "Copy bank {} should succeed: {:?}",
+                    i,
+                    result
+                );
             }
         }
     }
@@ -3809,7 +4375,11 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_parts(&source.path, 0, vec![0], &dest.path, 0, vec![0]);
-            assert!(result.is_ok(), "Single part copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Single part copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -3818,13 +4388,12 @@ mod tests {
             let source = TestProject::new();
             let dest = TestProject::new();
 
-            let result = copy_parts(
-                &source.path, 0,
-                vec![0, 1, 2],
-                &dest.path, 0,
-                vec![1, 2, 3]
+            let result = copy_parts(&source.path, 0, vec![0, 1, 2], &dest.path, 0, vec![1, 2, 3]);
+            assert!(
+                result.is_ok(),
+                "Multiple parts copy should succeed: {:?}",
+                result
             );
-            assert!(result.is_ok(), "Multiple parts copy should succeed: {:?}", result);
         }
 
         #[test]
@@ -3834,12 +4403,18 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_parts(
-                &source.path, 0,
+                &source.path,
+                0,
                 vec![0, 1, 2, 3],
-                &dest.path, 0,
-                vec![0, 1, 2, 3]
+                &dest.path,
+                0,
+                vec![0, 1, 2, 3],
             );
-            assert!(result.is_ok(), "All parts copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "All parts copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -3848,7 +4423,11 @@ mod tests {
             let source = TestProject::new();
 
             let result = copy_parts(&source.path, 0, vec![0], &source.path, 1, vec![0]);
-            assert!(result.is_ok(), "Cross-bank part copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Cross-bank part copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -3858,7 +4437,11 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_parts(&source.path, 0, vec![0], &dest.path, 0, vec![0]);
-            assert!(result.is_ok(), "Cross-project part copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Cross-project part copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -3868,10 +4451,12 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_parts(
-                &source.path, 0,
+                &source.path,
+                0,
                 vec![0, 1],
-                &dest.path, 0,
-                vec![0, 1, 2]  // 3 dest parts but only 2 source
+                &dest.path,
+                0,
+                vec![0, 1, 2], // 3 dest parts but only 2 source
             );
             assert!(result.is_err(), "Mismatched part count should fail");
             assert!(result.unwrap_err().contains("same length"));
@@ -3884,7 +4469,9 @@ mod tests {
 
             let result = copy_parts(&source.path, 0, vec![4], &dest.path, 0, vec![0]);
             assert!(result.is_err(), "Part index 4 should be invalid");
-            assert!(result.unwrap_err().contains("Part indices must be between 0 and 3"));
+            assert!(result
+                .unwrap_err()
+                .contains("Part indices must be between 0 and 3"));
         }
 
         #[test]
@@ -3894,7 +4481,9 @@ mod tests {
 
             let result = copy_parts(&source.path, 16, vec![0], &dest.path, 0, vec![0]);
             assert!(result.is_err());
-            assert!(result.unwrap_err().contains("Bank index must be between 0 and 15"));
+            assert!(result
+                .unwrap_err()
+                .contains("Bank index must be between 0 and 15"));
         }
 
         #[test]
@@ -3908,8 +4497,10 @@ mod tests {
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
             // Part 2 (index 2) should be marked as edited
-            assert!((dest_bank.parts_edited_bitmask & (1 << 2)) != 0,
-                "Destination part should be marked as edited");
+            assert!(
+                (dest_bank.parts_edited_bitmask & (1 << 2)) != 0,
+                "Destination part should be marked as edited"
+            );
         }
     }
 
@@ -3925,16 +4516,22 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_patterns(
-                &source.path, 0,
+                &source.path,
+                0,
                 vec![0],
-                &dest.path, 0,
+                &dest.path,
+                0,
                 0,
                 "keep_original",
                 None,
                 "all",
-                None
+                None,
             );
-            assert!(result.is_ok(), "Single pattern copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Single pattern copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -3944,16 +4541,22 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_patterns(
-                &source.path, 0,
+                &source.path,
+                0,
                 vec![0, 1, 2, 3],
-                &dest.path, 0,
-                4,  // Start at pattern 5 (index 4)
+                &dest.path,
+                0,
+                4, // Start at pattern 5 (index 4)
                 "keep_original",
                 None,
                 "all",
-                None
+                None,
             );
-            assert!(result.is_ok(), "Multiple patterns copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Multiple patterns copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -3963,16 +4566,22 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_patterns(
-                &source.path, 0,
+                &source.path,
+                0,
                 (0..16).collect(),
-                &dest.path, 0,
+                &dest.path,
+                0,
                 0,
                 "keep_original",
                 None,
                 "all",
-                None
+                None,
             );
-            assert!(result.is_ok(), "All 16 patterns copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "All 16 patterns copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -3981,16 +4590,22 @@ mod tests {
             let source = TestProject::new();
 
             let result = copy_patterns(
-                &source.path, 0,
+                &source.path,
+                0,
                 vec![0],
-                &source.path, 1,  // Different bank
+                &source.path,
+                1, // Different bank
                 0,
                 "keep_original",
                 None,
                 "all",
-                None
+                None,
             );
-            assert!(result.is_ok(), "Cross-bank pattern copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Cross-bank pattern copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -4000,16 +4615,22 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_patterns(
-                &source.path, 0,
+                &source.path,
+                0,
                 vec![0, 1],
-                &dest.path, 0,
+                &dest.path,
+                0,
                 0,
                 "keep_original",
                 None,
                 "all",
-                None
+                None,
             );
-            assert!(result.is_ok(), "Cross-project pattern copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Cross-project pattern copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -4022,20 +4643,25 @@ mod tests {
             let dest = TestProject::new();
 
             copy_patterns(
-                &source.path, 0,
+                &source.path,
+                0,
                 vec![0],
-                &dest.path, 0,
+                &dest.path,
+                0,
                 5,
                 "keep_original",
                 None,
                 "all",
-                None
-            ).unwrap();
+                None,
+            )
+            .unwrap();
 
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
-            assert_eq!(dest_bank.patterns.0[5].part_assignment, 2,
-                "Should keep original part assignment");
+            assert_eq!(
+                dest_bank.patterns.0[5].part_assignment, 2,
+                "Should keep original part assignment"
+            );
         }
 
         #[test]
@@ -4045,15 +4671,18 @@ mod tests {
             let dest = TestProject::new();
 
             copy_patterns(
-                &source.path, 0,
+                &source.path,
+                0,
                 vec![0, 1, 2],
-                &dest.path, 0,
+                &dest.path,
+                0,
                 0,
                 "select_specific",
-                Some(3),  // Assign all to Part 4 (index 3)
+                Some(3), // Assign all to Part 4 (index 3)
                 "all",
-                None
-            ).unwrap();
+                None,
+            )
+            .unwrap();
 
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
@@ -4069,16 +4698,22 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_patterns(
-                &source.path, 0,
+                &source.path,
+                0,
                 vec![0],
-                &dest.path, 0,
+                &dest.path,
+                0,
                 0,
                 "keep_original",
                 None,
                 "specific",
-                Some(vec![0, 1, 2])  // Only tracks T1, T2, T3
+                Some(vec![0, 1, 2]), // Only tracks T1, T2, T3
             );
-            assert!(result.is_ok(), "Specific tracks copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Specific tracks copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -4088,16 +4723,22 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_patterns(
-                &source.path, 0,
+                &source.path,
+                0,
                 vec![0],
-                &dest.path, 0,
+                &dest.path,
+                0,
                 0,
                 "keep_original",
                 None,
                 "specific",
-                Some(vec![8, 9])  // MIDI tracks M1, M2 (indices 8-15)
+                Some(vec![8, 9]), // MIDI tracks M1, M2 (indices 8-15)
             );
-            assert!(result.is_ok(), "MIDI tracks copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "MIDI tracks copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -4107,16 +4748,22 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_patterns(
-                &source.path, 0,
+                &source.path,
+                0,
                 vec![0],
-                &dest.path, 0,
+                &dest.path,
+                0,
                 0,
                 "keep_original",
                 None,
                 "specific",
-                Some(vec![0, 1, 8, 9])  // T1, T2, M1, M2
+                Some(vec![0, 1, 8, 9]), // T1, T2, M1, M2
             );
-            assert!(result.is_ok(), "Mixed tracks copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Mixed tracks copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -4126,14 +4773,16 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_patterns(
-                &source.path, 0,
-                vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],  // 10 patterns
-                &dest.path, 0,
-                10,  // Starting at 10 would overflow (10 + 10 = 20 > 16)
+                &source.path,
+                0,
+                vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9], // 10 patterns
+                &dest.path,
+                0,
+                10, // Starting at 10 would overflow (10 + 10 = 20 > 16)
                 "keep_original",
                 None,
                 "all",
-                None
+                None,
             );
             assert!(result.is_err(), "Pattern overflow should fail");
             assert!(result.unwrap_err().contains("exceeds bank capacity"));
@@ -4145,17 +4794,21 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_patterns(
-                &source.path, 0,
-                vec![16],  // Invalid pattern index
-                &dest.path, 0,
+                &source.path,
+                0,
+                vec![16], // Invalid pattern index
+                &dest.path,
+                0,
                 0,
                 "keep_original",
                 None,
                 "all",
-                None
+                None,
             );
             assert!(result.is_err());
-            assert!(result.unwrap_err().contains("Pattern indices must be between 0 and 15"));
+            assert!(result
+                .unwrap_err()
+                .contains("Pattern indices must be between 0 and 15"));
         }
 
         #[test]
@@ -4164,17 +4817,21 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_patterns(
-                &source.path, 0,
+                &source.path,
+                0,
                 vec![0],
-                &dest.path, 0,
+                &dest.path,
+                0,
                 0,
                 "keep_original",
                 None,
                 "specific",
-                Some(vec![16])  // Invalid track index
+                Some(vec![16]), // Invalid track index
             );
             assert!(result.is_err());
-            assert!(result.unwrap_err().contains("Track indices must be between 0 and 15"));
+            assert!(result
+                .unwrap_err()
+                .contains("Track indices must be between 0 and 15"));
         }
 
         #[test]
@@ -4183,14 +4840,16 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_patterns(
-                &source.path, 0,
+                &source.path,
+                0,
                 vec![0],
-                &dest.path, 0,
+                &dest.path,
+                0,
                 0,
                 "select_specific",
-                None,  // Missing dest_part for select_specific mode
+                None, // Missing dest_part for select_specific mode
                 "all",
-                None
+                None,
             );
             assert!(result.is_err());
             assert!(result.unwrap_err().contains("dest_part is required"));
@@ -4202,14 +4861,16 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_patterns(
-                &source.path, 0,
+                &source.path,
+                0,
                 vec![0],
-                &dest.path, 0,
+                &dest.path,
+                0,
                 0,
                 "invalid_mode",
                 None,
                 "all",
-                None
+                None,
             );
             assert!(result.is_err());
             assert!(result.unwrap_err().contains("Invalid part_assignment_mode"));
@@ -4228,13 +4889,21 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_tracks(
-                &source.path, 0, 0,
+                &source.path,
+                0,
+                0,
                 vec![0],
-                &dest.path, 0, 0,
+                &dest.path,
+                0,
+                0,
                 vec![0],
-                "both"
+                "both",
             );
-            assert!(result.is_ok(), "Single track copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Single track copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -4244,13 +4913,21 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_tracks(
-                &source.path, 0, 0,
+                &source.path,
+                0,
+                0,
                 vec![0, 1, 2, 3],
-                &dest.path, 0, 0,
+                &dest.path,
+                0,
+                0,
                 vec![4, 5, 6, 7],
-                "both"
+                "both",
             );
-            assert!(result.is_ok(), "Multiple tracks copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Multiple tracks copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -4260,13 +4937,21 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_tracks(
-                &source.path, 0, 0,
-                vec![8],  // MIDI track M1
-                &dest.path, 0, 0,
+                &source.path,
+                0,
+                0,
+                vec![8], // MIDI track M1
+                &dest.path,
+                0,
+                0,
                 vec![8],
-                "both"
+                "both",
             );
-            assert!(result.is_ok(), "MIDI track copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "MIDI track copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -4276,13 +4961,21 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_tracks(
-                &source.path, 0, 0,
+                &source.path,
+                0,
+                0,
                 vec![0, 1, 2, 3, 4, 5, 6, 7],
-                &dest.path, 0, 0,
+                &dest.path,
+                0,
+                0,
                 vec![0, 1, 2, 3, 4, 5, 6, 7],
-                "both"
+                "both",
             );
-            assert!(result.is_ok(), "All audio tracks copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "All audio tracks copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -4291,13 +4984,21 @@ mod tests {
             let source = TestProject::new();
 
             let result = copy_tracks(
-                &source.path, 0, 0,  // Part 1
+                &source.path,
+                0,
+                0, // Part 1
                 vec![0],
-                &source.path, 0, 1,  // Part 2
+                &source.path,
+                0,
+                1, // Part 2
                 vec![0],
-                "both"
+                "both",
             );
-            assert!(result.is_ok(), "Cross-part track copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Cross-part track copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -4306,13 +5007,21 @@ mod tests {
             let source = TestProject::new();
 
             let result = copy_tracks(
-                &source.path, 0, 0,  // Bank A
+                &source.path,
+                0,
+                0, // Bank A
                 vec![0],
-                &source.path, 1, 0,  // Bank B
+                &source.path,
+                1,
+                0, // Bank B
                 vec![0],
-                "both"
+                "both",
             );
-            assert!(result.is_ok(), "Cross-bank track copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Cross-bank track copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -4322,13 +5031,21 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_tracks(
-                &source.path, 0, 0,
+                &source.path,
+                0,
+                0,
                 vec![0],
-                &dest.path, 0, 0,
+                &dest.path,
+                0,
+                0,
                 vec![0],
-                "both"
+                "both",
             );
-            assert!(result.is_ok(), "Cross-project track copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Cross-project track copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -4338,11 +5055,15 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_tracks(
-                &source.path, 0, 0,
+                &source.path,
+                0,
+                0,
                 vec![0],
-                &dest.path, 0, 0,
+                &dest.path,
+                0,
+                0,
                 vec![0],
-                "both"
+                "both",
             );
             assert!(result.is_ok(), "Both mode should succeed: {:?}", result);
         }
@@ -4354,13 +5075,21 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_tracks(
-                &source.path, 0, 0,
+                &source.path,
+                0,
+                0,
                 vec![0],
-                &dest.path, 0, 0,
+                &dest.path,
+                0,
+                0,
                 vec![0],
-                "part_params"
+                "part_params",
             );
-            assert!(result.is_ok(), "Part params only should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Part params only should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -4370,13 +5099,21 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_tracks(
-                &source.path, 0, 0,
+                &source.path,
+                0,
+                0,
                 vec![0],
-                &dest.path, 0, 0,
+                &dest.path,
+                0,
+                0,
                 vec![0],
-                "pattern_triggers"
+                "pattern_triggers",
             );
-            assert!(result.is_ok(), "Pattern triggers only should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Pattern triggers only should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -4386,11 +5123,15 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_tracks(
-                &source.path, 0, 0,
-                vec![0, 1, 2],  // 3 source tracks
-                &dest.path, 0, 0,
-                vec![0, 1],    // 2 dest tracks
-                "both"
+                &source.path,
+                0,
+                0,
+                vec![0, 1, 2], // 3 source tracks
+                &dest.path,
+                0,
+                0,
+                vec![0, 1], // 2 dest tracks
+                "both",
             );
             assert!(result.is_err());
             assert!(result.unwrap_err().contains("same length"));
@@ -4403,11 +5144,15 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_tracks(
-                &source.path, 0, 0,
-                vec![0],   // Audio track
-                &dest.path, 0, 0,
-                vec![8],   // MIDI track
-                "both"
+                &source.path,
+                0,
+                0,
+                vec![0], // Audio track
+                &dest.path,
+                0,
+                0,
+                vec![8], // MIDI track
+                "both",
             );
             assert!(result.is_err(), "Audio to MIDI mixing should fail");
             assert!(result.unwrap_err().contains("Cannot mix audio tracks"));
@@ -4419,11 +5164,15 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_tracks(
-                &source.path, 0, 0,
-                vec![8],   // MIDI track
-                &dest.path, 0, 0,
-                vec![0],   // Audio track
-                "both"
+                &source.path,
+                0,
+                0,
+                vec![8], // MIDI track
+                &dest.path,
+                0,
+                0,
+                vec![0], // Audio track
+                "both",
             );
             assert!(result.is_err(), "MIDI to audio mixing should fail");
             assert!(result.unwrap_err().contains("Cannot mix audio tracks"));
@@ -4435,11 +5184,15 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_tracks(
-                &source.path, 0, 0,
+                &source.path,
+                0,
+                0,
                 vec![0],
-                &dest.path, 0, 0,
+                &dest.path,
+                0,
+                0,
                 vec![0],
-                "invalid_mode"
+                "invalid_mode",
             );
             assert!(result.is_err());
             assert!(result.unwrap_err().contains("Invalid mode"));
@@ -4451,14 +5204,20 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_tracks(
-                &source.path, 0, 0,
-                vec![16],  // Invalid
-                &dest.path, 0, 0,
+                &source.path,
+                0,
+                0,
+                vec![16], // Invalid
+                &dest.path,
+                0,
+                0,
                 vec![0],
-                "both"
+                "both",
             );
             assert!(result.is_err());
-            assert!(result.unwrap_err().contains("Track indices must be between 0 and 15"));
+            assert!(result
+                .unwrap_err()
+                .contains("Track indices must be between 0 and 15"));
         }
 
         #[test]
@@ -4467,14 +5226,20 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_tracks(
-                &source.path, 0, 4,  // Invalid part index
+                &source.path,
+                0,
+                4, // Invalid part index
                 vec![0],
-                &dest.path, 0, 0,
+                &dest.path,
+                0,
+                0,
                 vec![0],
-                "both"
+                "both",
             );
             assert!(result.is_err());
-            assert!(result.unwrap_err().contains("Part index must be between 0 and 3"));
+            assert!(result
+                .unwrap_err()
+                .contains("Part index must be between 0 and 3"));
         }
 
         #[test]
@@ -4484,17 +5249,24 @@ mod tests {
             let dest = TestProject::new();
 
             copy_tracks(
-                &source.path, 0, 0,
+                &source.path,
+                0,
+                0,
                 vec![0],
-                &dest.path, 0, 2,  // Dest part 3 (index 2)
+                &dest.path,
+                0,
+                2, // Dest part 3 (index 2)
                 vec![0],
-                "part_params"
-            ).unwrap();
+                "part_params",
+            )
+            .unwrap();
 
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
-            assert!((dest_bank.parts_edited_bitmask & (1 << 2)) != 0,
-                "Part 3 should be marked as edited");
+            assert!(
+                (dest_bank.parts_edited_bitmask & (1 << 2)) != 0,
+                "Part 3 should be marked as edited"
+            );
         }
     }
 
@@ -4516,9 +5288,13 @@ mod tests {
                 vec![1],
                 vec![1],
                 "none",
-                true
+                true,
             );
-            assert!(result.is_ok(), "Single slot copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Single slot copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -4534,9 +5310,13 @@ mod tests {
                 (1..=10).collect(),
                 (1..=10).collect(),
                 "none",
-                true
+                true,
             );
-            assert!(result.is_ok(), "Slot range copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Slot range copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -4552,9 +5332,13 @@ mod tests {
                 (1..=128).collect(),
                 (1..=128).collect(),
                 "none",
-                true
+                true,
             );
-            assert!(result.is_ok(), "All 128 slots copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "All 128 slots copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -4570,9 +5354,13 @@ mod tests {
                 (1..=10).collect(),
                 (50..=59).collect(),
                 "none",
-                true
+                true,
             );
-            assert!(result.is_ok(), "Offset slot copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Offset slot copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -4588,9 +5376,13 @@ mod tests {
                 vec![1, 2, 3],
                 vec![1, 2, 3],
                 "none",
-                true
+                true,
             );
-            assert!(result.is_ok(), "Cross-project slot copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Cross-project slot copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -4606,7 +5398,7 @@ mod tests {
                 vec![1],
                 vec![1],
                 "none",
-                true
+                true,
             );
             assert!(result.is_ok(), "Static only should succeed: {:?}", result);
         }
@@ -4624,7 +5416,7 @@ mod tests {
                 vec![1],
                 vec![1],
                 "none",
-                true
+                true,
             );
             assert!(result.is_ok(), "Flex only should succeed: {:?}", result);
         }
@@ -4642,7 +5434,7 @@ mod tests {
                 vec![1],
                 vec![1],
                 "none",
-                true
+                true,
             );
             assert!(result.is_ok(), "Both types should succeed: {:?}", result);
         }
@@ -4660,9 +5452,13 @@ mod tests {
                 vec![1],
                 vec![1],
                 "none",
-                true
+                true,
             );
-            assert!(result.is_ok(), "Audio mode none should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Audio mode none should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -4678,9 +5474,13 @@ mod tests {
                 vec![1],
                 vec![1],
                 "copy",
-                true
+                true,
             );
-            assert!(result.is_ok(), "Audio mode copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Audio mode copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -4696,7 +5496,7 @@ mod tests {
                 vec![1],
                 vec![1],
                 "none",
-                true
+                true,
             );
             assert!(result.is_ok());
         }
@@ -4714,7 +5514,7 @@ mod tests {
                 vec![1],
                 vec![1],
                 "none",
-                false
+                false,
             );
             assert!(result.is_ok());
         }
@@ -4729,9 +5529,9 @@ mod tests {
                 &dest.path,
                 "both",
                 vec![1, 2, 3],
-                vec![1, 2],  // Mismatch
+                vec![1, 2], // Mismatch
                 "none",
-                true
+                true,
             );
             assert!(result.is_err());
             assert!(result.unwrap_err().contains("same length"));
@@ -4746,13 +5546,15 @@ mod tests {
                 &source.path,
                 &dest.path,
                 "both",
-                vec![0],  // Invalid - slots are 1-128
+                vec![0], // Invalid - slots are 1-128
                 vec![1],
                 "none",
-                true
+                true,
             );
             assert!(result.is_err());
-            assert!(result.unwrap_err().contains("Slot indices must be between 1 and 128"));
+            assert!(result
+                .unwrap_err()
+                .contains("Slot indices must be between 1 and 128"));
         }
 
         #[test]
@@ -4764,13 +5566,15 @@ mod tests {
                 &source.path,
                 &dest.path,
                 "both",
-                vec![129],  // Invalid
+                vec![129], // Invalid
                 vec![1],
                 "none",
-                true
+                true,
             );
             assert!(result.is_err());
-            assert!(result.unwrap_err().contains("Slot indices must be between 1 and 128"));
+            assert!(result
+                .unwrap_err()
+                .contains("Slot indices must be between 1 and 128"));
         }
 
         #[test]
@@ -4785,7 +5589,7 @@ mod tests {
                 vec![1],
                 vec![1],
                 "none",
-                true
+                true,
             );
             assert!(result.is_err());
             assert!(result.unwrap_err().contains("Invalid slot_type"));
@@ -4803,7 +5607,7 @@ mod tests {
                 vec![1],
                 vec![1],
                 "invalid_mode",
-                true
+                true,
             );
             assert!(result.is_err());
             assert!(result.unwrap_err().contains("Invalid audio_mode"));
@@ -4824,8 +5628,12 @@ mod tests {
 
             // Create project files in each
             let project_file = ProjectFile::default();
-            project_file.to_data_file(&project1_path.join("project.work")).unwrap();
-            project_file.to_data_file(&project2_path.join("project.work")).unwrap();
+            project_file
+                .to_data_file(&project1_path.join("project.work"))
+                .unwrap();
+            project_file
+                .to_data_file(&project2_path.join("project.work"))
+                .unwrap();
 
             let result = copy_sample_slots(
                 &project1_path.to_string_lossy(),
@@ -4834,9 +5642,12 @@ mod tests {
                 vec![1],
                 vec![1],
                 "move_to_pool",
-                true
+                true,
             );
-            assert!(result.is_err(), "Should fail when projects are in different Sets");
+            assert!(
+                result.is_err(),
+                "Should fail when projects are in different Sets"
+            );
             assert!(result.unwrap_err().contains("same Set"));
         }
     }
@@ -4875,14 +5686,16 @@ mod tests {
             // All indices 0-15 should be valid
             for i in 0..=15u8 {
                 let result = copy_patterns(
-                    &project.path, 0,
+                    &project.path,
+                    0,
                     vec![i],
-                    &project.path, 0,
+                    &project.path,
+                    0,
                     i,
                     "keep_original",
                     None,
                     "all",
-                    None
+                    None,
                 );
                 assert!(result.is_ok(), "Pattern index {} should be valid", i);
             }
@@ -4895,11 +5708,15 @@ mod tests {
             // Audio tracks 0-7
             for i in 0..=7u8 {
                 let result = copy_tracks(
-                    &project.path, 0, 0,
+                    &project.path,
+                    0,
+                    0,
                     vec![i],
-                    &project.path, 0, 0,
+                    &project.path,
+                    0,
+                    0,
                     vec![i],
-                    "both"
+                    "both",
                 );
                 assert!(result.is_ok(), "Audio track index {} should be valid", i);
             }
@@ -4907,11 +5724,15 @@ mod tests {
             // MIDI tracks 8-15
             for i in 8..=15u8 {
                 let result = copy_tracks(
-                    &project.path, 0, 0,
+                    &project.path,
+                    0,
+                    0,
                     vec![i],
-                    &project.path, 0, 0,
+                    &project.path,
+                    0,
+                    0,
                     vec![i],
-                    "both"
+                    "both",
                 );
                 assert!(result.is_ok(), "MIDI track index {} should be valid", i);
             }
@@ -4930,7 +5751,7 @@ mod tests {
                 vec![1, 128],
                 vec![1, 128],
                 "none",
-                true
+                true,
             );
             assert!(result.is_ok(), "Slot indices 1 and 128 should be valid");
         }
@@ -4948,14 +5769,16 @@ mod tests {
             let project = TestProject::new();
 
             let result = copy_patterns(
-                &project.path, 0,
+                &project.path,
+                0,
                 vec![],
-                &project.path, 0,
+                &project.path,
+                0,
                 0,
                 "keep_original",
                 None,
                 "all",
-                None
+                None,
             );
             assert!(result.is_ok(), "Empty patterns copy should succeed (no-op)");
         }
@@ -4965,11 +5788,15 @@ mod tests {
             let project = TestProject::new();
 
             let result = copy_tracks(
-                &project.path, 0, 0,
+                &project.path,
+                0,
+                0,
                 vec![],
-                &project.path, 0, 0,
+                &project.path,
+                0,
+                0,
                 vec![],
-                "both"
+                "both",
             );
             assert!(result.is_ok(), "Empty tracks copy should succeed (no-op)");
         }
@@ -4986,7 +5813,7 @@ mod tests {
                 vec![],
                 vec![],
                 "none",
-                true
+                true,
             );
             assert!(result.is_ok(), "Empty slots copy should succeed (no-op)");
         }
@@ -5010,8 +5837,10 @@ mod tests {
 
             let dest_bank_path = Path::new(&dest.path).join("bank02.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
-            assert_eq!(dest_bank.patterns.0[5].part_assignment, 3,
-                "Pattern 5's part assignment should be preserved");
+            assert_eq!(
+                dest_bank.patterns.0[5].part_assignment, 3,
+                "Pattern 5's part assignment should be preserved"
+            );
         }
 
         #[test]
@@ -5024,15 +5853,18 @@ mod tests {
             let dest = TestProject::new();
 
             copy_patterns(
-                &source.path, 0,
+                &source.path,
+                0,
                 vec![0, 1],
-                &dest.path, 0,
+                &dest.path,
+                0,
                 5,
                 "keep_original",
                 None,
                 "all",
-                None
-            ).unwrap();
+                None,
+            )
+            .unwrap();
 
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
@@ -5096,22 +5928,30 @@ mod tests {
             copy_bank(&project.path, 0, &dest.path, 1).unwrap();
             copy_parts(&project.path, 0, vec![0, 1], &project.path, 1, vec![2, 3]).unwrap();
             copy_patterns(
-                &project.path, 0,
+                &project.path,
+                0,
                 vec![0, 1, 2],
-                &dest.path, 0,
+                &dest.path,
+                0,
                 0,
                 "keep_original",
                 None,
                 "all",
-                None
-            ).unwrap();
+                None,
+            )
+            .unwrap();
             copy_tracks(
-                &project.path, 0, 0,
+                &project.path,
+                0,
+                0,
                 vec![0, 1],
-                &dest.path, 0, 0,
+                &dest.path,
+                0,
+                0,
                 vec![2, 3],
-                "both"
-            ).unwrap();
+                "both",
+            )
+            .unwrap();
             copy_sample_slots(
                 &project.path,
                 &dest.path,
@@ -5119,8 +5959,9 @@ mod tests {
                 vec![1, 2, 3],
                 vec![1, 2, 3],
                 "none",
-                true
-            ).unwrap();
+                true,
+            )
+            .unwrap();
 
             // All operations should have succeeded
         }
@@ -5135,7 +5976,11 @@ mod tests {
         fn test_read_project_metadata_success() {
             let project = TestProject::new();
             let result = read_project_metadata(&project.path);
-            assert!(result.is_ok(), "Should read metadata from valid project: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Should read metadata from valid project: {:?}",
+                result
+            );
 
             let metadata = result.unwrap();
             // Default tempo should be set
@@ -5159,9 +6004,15 @@ mod tests {
 
             // Current state should have valid values
             assert!(metadata.current_state.bank <= 15, "Bank should be 0-15");
-            assert!(metadata.current_state.pattern <= 15, "Pattern should be 0-15");
+            assert!(
+                metadata.current_state.pattern <= 15,
+                "Pattern should be 0-15"
+            );
             assert!(metadata.current_state.part <= 3, "Part should be 0-3");
-            assert!(!metadata.current_state.bank_name.is_empty(), "Bank name should be set");
+            assert!(
+                !metadata.current_state.bank_name.is_empty(),
+                "Bank name should be set"
+            );
         }
 
         #[test]
@@ -5170,8 +6021,14 @@ mod tests {
             let metadata = read_project_metadata(&project.path).unwrap();
 
             // Mixer settings should have valid default values (u8 fields exist and are readable)
-            assert!(metadata.mixer_settings.main_level <= 127, "Main level should be within MIDI range");
-            assert!(metadata.mixer_settings.cue_level <= 127, "Cue level should be within MIDI range");
+            assert!(
+                metadata.mixer_settings.main_level <= 127,
+                "Main level should be within MIDI range"
+            );
+            assert!(
+                metadata.mixer_settings.cue_level <= 127,
+                "Cue level should be within MIDI range"
+            );
         }
 
         #[test]
@@ -5180,10 +6037,14 @@ mod tests {
             let metadata = read_project_metadata(&project.path).unwrap();
 
             // Sample slots should be initialized
-            assert!(metadata.sample_slots.static_slots.len() == 128,
-                "Should have 128 static slots");
-            assert!(metadata.sample_slots.flex_slots.len() == 128,
-                "Should have 128 flex slots");
+            assert!(
+                metadata.sample_slots.static_slots.len() == 128,
+                "Should have 128 static slots"
+            );
+            assert!(
+                metadata.sample_slots.flex_slots.len() == 128,
+                "Should have 128 flex slots"
+            );
         }
 
         #[test]
@@ -5192,8 +6053,10 @@ mod tests {
             let metadata = read_project_metadata(&project.path).unwrap();
 
             // Time signature should be in format "X/Y"
-            assert!(metadata.time_signature.contains('/'),
-                "Time signature should be in X/Y format");
+            assert!(
+                metadata.time_signature.contains('/'),
+                "Time signature should be in X/Y format"
+            );
         }
     }
 
@@ -5247,7 +6110,11 @@ mod tests {
             let project = TestProject::new();
             let result = read_single_bank(&project.path, 0);
 
-            assert!(result.is_ok(), "Should read bank successfully: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Should read bank successfully: {:?}",
+                result
+            );
             let bank = result.unwrap();
             assert!(bank.is_some(), "Bank should exist");
         }
@@ -5267,7 +6134,10 @@ mod tests {
             let result = read_single_bank(&temp_dir.path().to_string_lossy(), 0);
 
             assert!(result.is_ok());
-            assert!(result.unwrap().is_none(), "Non-existent bank should return None");
+            assert!(
+                result.unwrap().is_none(),
+                "Non-existent bank should return None"
+            );
         }
 
         #[test]
@@ -5306,8 +6176,7 @@ mod tests {
             for bank in banks {
                 // Each part should have patterns
                 for part in &bank.parts {
-                    assert_eq!(part.patterns.len(), 16,
-                        "Each part should have 16 patterns");
+                    assert_eq!(part.patterns.len(), 16, "Each part should have 16 patterns");
                 }
             }
         }
@@ -5331,12 +6200,18 @@ mod tests {
         #[test]
         fn test_read_parts_data_all_banks() {
             let project = TestProject::new();
-            let bank_ids = ["A", "B", "C", "D", "E", "F", "G", "H",
-                          "I", "J", "K", "L", "M", "N", "O", "P"];
+            let bank_ids = [
+                "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P",
+            ];
 
             for bank_id in bank_ids {
                 let result = read_parts_data(&project.path, bank_id);
-                assert!(result.is_ok(), "Should read parts for bank {}: {:?}", bank_id, result);
+                assert!(
+                    result.is_ok(),
+                    "Should read parts for bank {}: {:?}",
+                    bank_id,
+                    result
+                );
             }
         }
 
@@ -5355,7 +6230,11 @@ mod tests {
             let parts_response = read_parts_data(&project.path, "A").unwrap();
 
             for part in &parts_response.parts {
-                assert_eq!(part.machines.len(), 8, "Each part should have 8 audio track machines");
+                assert_eq!(
+                    part.machines.len(),
+                    8,
+                    "Each part should have 8 audio track machines"
+                );
             }
         }
 
@@ -5395,8 +6274,16 @@ mod tests {
             let parts_response = read_parts_data(&project.path, "A").unwrap();
 
             for part in &parts_response.parts {
-                assert_eq!(part.midi_notes.len(), 8, "Each part should have 8 MIDI note settings");
-                assert_eq!(part.midi_arps.len(), 8, "Each part should have 8 MIDI arp settings");
+                assert_eq!(
+                    part.midi_notes.len(),
+                    8,
+                    "Each part should have 8 MIDI note settings"
+                );
+                assert_eq!(
+                    part.midi_arps.len(),
+                    8,
+                    "Each part should have 8 MIDI arp settings"
+                );
             }
         }
 
@@ -5445,7 +6332,12 @@ mod tests {
 
             for part_id in 0..4u8 {
                 let result = commit_part_data(&project.path, "A", part_id);
-                assert!(result.is_ok(), "Should commit part {}: {:?}", part_id, result);
+                assert!(
+                    result.is_ok(),
+                    "Should commit part {}: {:?}",
+                    part_id,
+                    result
+                );
             }
         }
 
@@ -5477,12 +6369,18 @@ mod tests {
         #[test]
         fn test_commit_all_parts_data_all_banks() {
             let project = TestProject::new();
-            let bank_ids = ["A", "B", "C", "D", "E", "F", "G", "H",
-                          "I", "J", "K", "L", "M", "N", "O", "P"];
+            let bank_ids = [
+                "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P",
+            ];
 
             for bank_id in bank_ids {
                 let result = commit_all_parts_data(&project.path, bank_id);
-                assert!(result.is_ok(), "Should commit all parts for bank {}: {:?}", bank_id, result);
+                assert!(
+                    result.is_ok(),
+                    "Should commit all parts for bank {}: {:?}",
+                    bank_id,
+                    result
+                );
             }
         }
 
@@ -5554,14 +6452,19 @@ mod tests {
 
             // Create project files
             let project_file = ProjectFile::default();
-            project_file.to_data_file(&project_path.join("project.work")).unwrap();
+            project_file
+                .to_data_file(&project_path.join("project.work"))
+                .unwrap();
 
             // Create AUDIO POOL directory
             fs::create_dir(set_dir.path().join("AUDIO POOL")).unwrap();
 
             let result = is_project_in_set(&project_path.to_string_lossy());
             assert!(result.is_ok());
-            assert!(result.unwrap(), "Project with AUDIO POOL sibling should be in a Set");
+            assert!(
+                result.unwrap(),
+                "Project with AUDIO POOL sibling should be in a Set"
+            );
         }
 
         #[test]
@@ -5577,12 +6480,19 @@ mod tests {
 
             // Create project files in both
             let project_file = ProjectFile::default();
-            project_file.to_data_file(&project1_path.join("project.work")).unwrap();
-            project_file.to_data_file(&project2_path.join("project.work")).unwrap();
+            project_file
+                .to_data_file(&project1_path.join("project.work"))
+                .unwrap();
+            project_file
+                .to_data_file(&project2_path.join("project.work"))
+                .unwrap();
 
             let result = is_project_in_set(&project1_path.to_string_lossy());
             assert!(result.is_ok());
-            assert!(result.unwrap(), "Project with sibling projects should be in a Set");
+            assert!(
+                result.unwrap(),
+                "Project with sibling projects should be in a Set"
+            );
         }
 
         #[test]
@@ -5597,10 +6507,13 @@ mod tests {
 
             let result = are_projects_in_same_set(
                 &project1_path.to_string_lossy(),
-                &project2_path.to_string_lossy()
+                &project2_path.to_string_lossy(),
             );
             assert!(result.is_ok());
-            assert!(result.unwrap(), "Projects in same parent should be in same Set");
+            assert!(
+                result.unwrap(),
+                "Projects in same parent should be in same Set"
+            );
         }
 
         #[test]
@@ -5616,10 +6529,13 @@ mod tests {
 
             let result = are_projects_in_same_set(
                 &project1_path.to_string_lossy(),
-                &project2_path.to_string_lossy()
+                &project2_path.to_string_lossy(),
             );
             assert!(result.is_ok());
-            assert!(!result.unwrap(), "Projects in different parents should not be in same Set");
+            assert!(
+                !result.unwrap(),
+                "Projects in different parents should not be in same Set"
+            );
         }
 
         #[test]
@@ -5631,13 +6547,18 @@ mod tests {
 
             // Create project file
             let project_file = ProjectFile::default();
-            project_file.to_data_file(&project_path.join("project.work")).unwrap();
+            project_file
+                .to_data_file(&project_path.join("project.work"))
+                .unwrap();
 
             let result = get_audio_pool_status(&project_path.to_string_lossy());
 
             assert!(result.is_ok());
             let status = result.unwrap();
-            assert!(!status.exists, "Audio pool should not exist for new project");
+            assert!(
+                !status.exists,
+                "Audio pool should not exist for new project"
+            );
         }
 
         #[test]
@@ -5649,7 +6570,9 @@ mod tests {
 
             // Create project file
             let project_file = ProjectFile::default();
-            project_file.to_data_file(&project_path.join("project.work")).unwrap();
+            project_file
+                .to_data_file(&project_path.join("project.work"))
+                .unwrap();
 
             // Create AUDIO POOL
             fs::create_dir(set_dir.path().join("AUDIO POOL")).unwrap();
@@ -5669,7 +6592,9 @@ mod tests {
             fs::create_dir(&project_path).unwrap();
 
             let project_file = ProjectFile::default();
-            project_file.to_data_file(&project_path.join("project.work")).unwrap();
+            project_file
+                .to_data_file(&project_path.join("project.work"))
+                .unwrap();
 
             let result = create_audio_pool(&project_path.to_string_lossy());
             assert!(result.is_ok(), "Should create audio pool: {:?}", result);
@@ -5687,7 +6612,9 @@ mod tests {
             fs::create_dir(&project_path).unwrap();
 
             let project_file = ProjectFile::default();
-            project_file.to_data_file(&project_path.join("project.work")).unwrap();
+            project_file
+                .to_data_file(&project_path.join("project.work"))
+                .unwrap();
 
             // Pre-create AUDIO POOL
             fs::create_dir(set_dir.path().join("AUDIO POOL")).unwrap();
