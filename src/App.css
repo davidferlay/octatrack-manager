@@ -2987,6 +2987,19 @@ h1 {
   color: #ff9800;
 }
 
+.tools-label-with-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tools-hint-inline {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--elektron-orange);
+  font-style: italic;
+}
+
 .tools-checkbox {
   display: flex;
   flex-direction: column;
