@@ -744,7 +744,12 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 </div>
               </div>
               <div className="tools-field">
-                <label>Audio Files</label>
+                <label className="tools-label-with-hint">
+                  Audio Files
+                  {audioMode === "move_to_pool" && !audioPoolStatus?.exists && (
+                    <span className="tools-hint-inline">Pool will be created</span>
+                  )}
+                </label>
                 <div className="tools-toggle-group">
                   <button
                     type="button"
@@ -775,9 +780,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     Don't Copy
                   </button>
                 </div>
-                {audioMode === "move_to_pool" && !audioPoolStatus?.exists && (
-                  <span className="tools-hint">Audio Pool will be created</span>
-                )}
               </div>
               <div className="tools-field tools-checkbox">
                 <label>
