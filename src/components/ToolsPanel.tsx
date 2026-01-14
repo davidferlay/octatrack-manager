@@ -5,6 +5,8 @@ import type { Bank } from "../context/ProjectsContext";
 import { formatBankName } from "./BankSelector";
 import "../App.css";
 
+const TOOLS_STORAGE_KEY = "octatrack-tools-settings";
+
 // Operation types
 type OperationType = "copy_bank" | "copy_parts" | "copy_patterns" | "copy_tracks" | "copy_sample_slots";
 
@@ -42,11 +44,44 @@ interface ProjectOption {
   path: string;
 }
 
+interface ToolsSettings {
+  operation: OperationType;
+  partAssignmentMode: PartAssignmentMode;
+  trackMode: TrackMode;
+  copyTrackMode: CopyTrackMode;
+  slotType: SlotType;
+  audioMode: AudioMode;
+  includeEditorSettings: boolean;
+}
+
+function loadToolsSettings(): Partial<ToolsSettings> {
+  try {
+    const stored = localStorage.getItem(TOOLS_STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (error) {
+    console.error("Error loading tools settings:", error);
+  }
+  return {};
+}
+
+function saveToolsSettings(settings: ToolsSettings): void {
+  try {
+    localStorage.setItem(TOOLS_STORAGE_KEY, JSON.stringify(settings));
+  } catch (error) {
+    console.error("Error saving tools settings:", error);
+  }
+}
+
 export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices, onBankUpdated }: ToolsPanelProps) {
   const { locations, standaloneProjects } = useProjects();
 
+  // Load saved settings
+  const savedSettings = loadToolsSettings();
+
   // Operation selection
-  const [operation, setOperation] = useState<OperationType>("copy_bank");
+  const [operation, setOperation] = useState<OperationType>(savedSettings.operation || "copy_bank");
 
   // Source selection (current project only)
   const [sourceBankIndex, setSourceBankIndex] = useState<number>(0);
@@ -65,19 +100,19 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
 
   // Operation-specific options
   // Copy Patterns options
-  const [partAssignmentMode, setPartAssignmentMode] = useState<PartAssignmentMode>("keep_original");
+  const [partAssignmentMode, setPartAssignmentMode] = useState<PartAssignmentMode>(savedSettings.partAssignmentMode || "keep_original");
   const [destPart, setDestPart] = useState<number>(0);
-  const [trackMode, setTrackMode] = useState<TrackMode>("all");
+  const [trackMode, setTrackMode] = useState<TrackMode>(savedSettings.trackMode || "all");
 
   // Copy Tracks options
-  const [copyTrackMode, setCopyTrackMode] = useState<CopyTrackMode>("both");
+  const [copyTrackMode, setCopyTrackMode] = useState<CopyTrackMode>(savedSettings.copyTrackMode || "both");
   const [sourcePartIndex, setSourcePartIndex] = useState<number>(0);
   const [destPartIndex, setDestPartIndex] = useState<number>(0);
 
   // Copy Sample Slots options
-  const [slotType, setSlotType] = useState<SlotType>("both");
-  const [audioMode, setAudioMode] = useState<AudioMode>("none");
-  const [includeEditorSettings, setIncludeEditorSettings] = useState<boolean>(true);
+  const [slotType, setSlotType] = useState<SlotType>(savedSettings.slotType || "both");
+  const [audioMode, setAudioMode] = useState<AudioMode>(savedSettings.audioMode || "none");
+  const [includeEditorSettings, setIncludeEditorSettings] = useState<boolean>(savedSettings.includeEditorSettings ?? true);
 
   // Audio Pool status
   const [audioPoolStatus, setAudioPoolStatus] = useState<AudioPoolStatus | null>(null);
@@ -93,6 +128,19 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
 
   // Available destination banks for the destination project
   const [destBanks, setDestBanks] = useState<number[]>([]);
+
+  // Save settings to localStorage when they change
+  useEffect(() => {
+    saveToolsSettings({
+      operation,
+      partAssignmentMode,
+      trackMode,
+      copyTrackMode,
+      slotType,
+      audioMode,
+      includeEditorSettings,
+    });
+  }, [operation, partAssignmentMode, trackMode, copyTrackMode, slotType, audioMode, includeEditorSettings]);
 
   // Collect all available projects from context
   const availableProjects: ProjectOption[] = [];
