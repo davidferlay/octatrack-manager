@@ -5125,4 +5125,575 @@ mod tests {
             // All operations should have succeeded
         }
     }
+
+    // ==================== PROJECT METADATA TESTS ====================
+
+    mod project_metadata_tests {
+        use super::*;
+
+        #[test]
+        fn test_read_project_metadata_success() {
+            let project = TestProject::new();
+            let result = read_project_metadata(&project.path);
+            assert!(result.is_ok(), "Should read metadata from valid project: {:?}", result);
+
+            let metadata = result.unwrap();
+            // Default tempo should be set
+            assert!(metadata.tempo > 0.0, "Tempo should be positive");
+        }
+
+        #[test]
+        fn test_read_project_metadata_no_project_file() {
+            let temp_dir = TempDir::new().unwrap();
+            let empty_path = temp_dir.path().to_string_lossy().to_string();
+
+            let result = read_project_metadata(&empty_path);
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("No project file found"));
+        }
+
+        #[test]
+        fn test_read_project_metadata_has_current_state() {
+            let project = TestProject::new();
+            let metadata = read_project_metadata(&project.path).unwrap();
+
+            // Current state should have valid values
+            assert!(metadata.current_state.bank <= 15, "Bank should be 0-15");
+            assert!(metadata.current_state.pattern <= 15, "Pattern should be 0-15");
+            assert!(metadata.current_state.part <= 3, "Part should be 0-3");
+            assert!(!metadata.current_state.bank_name.is_empty(), "Bank name should be set");
+        }
+
+        #[test]
+        fn test_read_project_metadata_has_mixer_settings() {
+            let project = TestProject::new();
+            let metadata = read_project_metadata(&project.path).unwrap();
+
+            // Mixer settings should have valid default values (u8 fields exist and are readable)
+            assert!(metadata.mixer_settings.main_level <= 127, "Main level should be within MIDI range");
+            assert!(metadata.mixer_settings.cue_level <= 127, "Cue level should be within MIDI range");
+        }
+
+        #[test]
+        fn test_read_project_metadata_has_sample_slots() {
+            let project = TestProject::new();
+            let metadata = read_project_metadata(&project.path).unwrap();
+
+            // Sample slots should be initialized
+            assert!(metadata.sample_slots.static_slots.len() == 128,
+                "Should have 128 static slots");
+            assert!(metadata.sample_slots.flex_slots.len() == 128,
+                "Should have 128 flex slots");
+        }
+
+        #[test]
+        fn test_read_project_metadata_time_signature_format() {
+            let project = TestProject::new();
+            let metadata = read_project_metadata(&project.path).unwrap();
+
+            // Time signature should be in format "X/Y"
+            assert!(metadata.time_signature.contains('/'),
+                "Time signature should be in X/Y format");
+        }
+    }
+
+    // ==================== BANK READING TESTS ====================
+
+    mod bank_reading_tests {
+        use super::*;
+
+        #[test]
+        fn test_get_existing_bank_indices_all_banks() {
+            let project = TestProject::new();
+            let indices = get_existing_bank_indices(&project.path);
+
+            // TestProject creates all 16 banks
+            assert_eq!(indices.len(), 16, "Should find all 16 banks");
+            for i in 0..16u8 {
+                assert!(indices.contains(&i), "Should contain bank index {}", i);
+            }
+        }
+
+        #[test]
+        fn test_get_existing_bank_indices_empty_project() {
+            let temp_dir = TempDir::new().unwrap();
+            let empty_path = temp_dir.path().to_string_lossy().to_string();
+
+            let indices = get_existing_bank_indices(&empty_path);
+            assert!(indices.is_empty(), "Empty directory should have no banks");
+        }
+
+        #[test]
+        fn test_get_existing_bank_indices_partial_banks() {
+            let temp_dir = TempDir::new().unwrap();
+            let path = temp_dir.path();
+
+            // Create only banks 1, 5, and 10
+            for bank_num in [1, 5, 10] {
+                let bank_file = BankFile::default();
+                let bank_path = path.join(format!("bank{:02}.work", bank_num));
+                bank_file.to_data_file(&bank_path).unwrap();
+            }
+
+            let indices = get_existing_bank_indices(&path.to_string_lossy());
+            assert_eq!(indices.len(), 3, "Should find exactly 3 banks");
+            assert!(indices.contains(&0), "Should contain index 0 (bank01)");
+            assert!(indices.contains(&4), "Should contain index 4 (bank05)");
+            assert!(indices.contains(&9), "Should contain index 9 (bank10)");
+        }
+
+        #[test]
+        fn test_read_single_bank_success() {
+            let project = TestProject::new();
+            let result = read_single_bank(&project.path, 0);
+
+            assert!(result.is_ok(), "Should read bank successfully: {:?}", result);
+            let bank = result.unwrap();
+            assert!(bank.is_some(), "Bank should exist");
+        }
+
+        #[test]
+        fn test_read_single_bank_invalid_index() {
+            let project = TestProject::new();
+            let result = read_single_bank(&project.path, 16);
+
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("Invalid bank index"));
+        }
+
+        #[test]
+        fn test_read_single_bank_nonexistent() {
+            let temp_dir = TempDir::new().unwrap();
+            let result = read_single_bank(&temp_dir.path().to_string_lossy(), 0);
+
+            assert!(result.is_ok());
+            assert!(result.unwrap().is_none(), "Non-existent bank should return None");
+        }
+
+        #[test]
+        fn test_read_single_bank_has_parts() {
+            let project = TestProject::new();
+            let bank = read_single_bank(&project.path, 0).unwrap().unwrap();
+
+            assert_eq!(bank.parts.len(), 4, "Bank should have 4 parts");
+        }
+
+        #[test]
+        fn test_read_project_banks_success() {
+            let project = TestProject::new();
+            let result = read_project_banks(&project.path);
+
+            assert!(result.is_ok(), "Should read all banks: {:?}", result);
+            let banks = result.unwrap();
+            assert_eq!(banks.len(), 16, "Should read all 16 banks");
+        }
+
+        #[test]
+        fn test_read_project_banks_empty_project() {
+            let temp_dir = TempDir::new().unwrap();
+            let result = read_project_banks(&temp_dir.path().to_string_lossy());
+
+            assert!(result.is_ok());
+            let banks = result.unwrap();
+            assert!(banks.is_empty(), "Empty project should have no banks");
+        }
+
+        #[test]
+        fn test_read_project_banks_has_patterns() {
+            let project = TestProject::new();
+            let banks = read_project_banks(&project.path).unwrap();
+
+            for bank in banks {
+                // Each part should have patterns
+                for part in &bank.parts {
+                    assert_eq!(part.patterns.len(), 16,
+                        "Each part should have 16 patterns");
+                }
+            }
+        }
+    }
+
+    // ==================== PARTS DATA TESTS ====================
+
+    mod parts_data_tests {
+        use super::*;
+
+        #[test]
+        fn test_read_parts_data_success() {
+            let project = TestProject::new();
+            let result = read_parts_data(&project.path, "A");
+
+            assert!(result.is_ok(), "Should read parts data: {:?}", result);
+            let parts_response = result.unwrap();
+            assert_eq!(parts_response.parts.len(), 4, "Should have 4 parts");
+        }
+
+        #[test]
+        fn test_read_parts_data_all_banks() {
+            let project = TestProject::new();
+            let bank_ids = ["A", "B", "C", "D", "E", "F", "G", "H",
+                          "I", "J", "K", "L", "M", "N", "O", "P"];
+
+            for bank_id in bank_ids {
+                let result = read_parts_data(&project.path, bank_id);
+                assert!(result.is_ok(), "Should read parts for bank {}: {:?}", bank_id, result);
+            }
+        }
+
+        #[test]
+        fn test_read_parts_data_invalid_bank() {
+            let project = TestProject::new();
+            let result = read_parts_data(&project.path, "Z");
+
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("Invalid bank"));
+        }
+
+        #[test]
+        fn test_read_parts_data_has_machines() {
+            let project = TestProject::new();
+            let parts_response = read_parts_data(&project.path, "A").unwrap();
+
+            for part in &parts_response.parts {
+                assert_eq!(part.machines.len(), 8, "Each part should have 8 audio track machines");
+            }
+        }
+
+        #[test]
+        fn test_read_parts_data_has_amps() {
+            let project = TestProject::new();
+            let parts_response = read_parts_data(&project.path, "A").unwrap();
+
+            for part in &parts_response.parts {
+                assert_eq!(part.amps.len(), 8, "Each part should have 8 amp settings");
+            }
+        }
+
+        #[test]
+        fn test_read_parts_data_has_lfos() {
+            let project = TestProject::new();
+            let parts_response = read_parts_data(&project.path, "A").unwrap();
+
+            for part in &parts_response.parts {
+                assert_eq!(part.lfos.len(), 8, "Each part should have 8 LFO settings");
+            }
+        }
+
+        #[test]
+        fn test_read_parts_data_has_fx() {
+            let project = TestProject::new();
+            let parts_response = read_parts_data(&project.path, "A").unwrap();
+
+            for part in &parts_response.parts {
+                assert_eq!(part.fxs.len(), 8, "Each part should have 8 FX settings");
+            }
+        }
+
+        #[test]
+        fn test_read_parts_data_has_midi_tracks() {
+            let project = TestProject::new();
+            let parts_response = read_parts_data(&project.path, "A").unwrap();
+
+            for part in &parts_response.parts {
+                assert_eq!(part.midi_notes.len(), 8, "Each part should have 8 MIDI note settings");
+                assert_eq!(part.midi_arps.len(), 8, "Each part should have 8 MIDI arp settings");
+            }
+        }
+
+        #[test]
+        fn test_save_parts_data_roundtrip() {
+            let project = TestProject::new();
+
+            // Read parts data
+            let original_parts = read_parts_data(&project.path, "A").unwrap();
+
+            // Save the same data back
+            let result = save_parts_data(&project.path, "A", original_parts.parts.clone());
+            assert!(result.is_ok(), "Should save parts data: {:?}", result);
+
+            // Read again and verify
+            let reloaded_parts = read_parts_data(&project.path, "A").unwrap();
+            assert_eq!(reloaded_parts.parts.len(), original_parts.parts.len());
+        }
+
+        #[test]
+        fn test_save_parts_data_invalid_bank() {
+            let project = TestProject::new();
+            let parts = read_parts_data(&project.path, "A").unwrap();
+
+            let result = save_parts_data(&project.path, "Z", parts.parts);
+            assert!(result.is_err());
+        }
+    }
+
+    // ==================== COMMIT/RELOAD PARTS TESTS ====================
+
+    mod commit_reload_tests {
+        use super::*;
+
+        #[test]
+        fn test_commit_part_data_success() {
+            let project = TestProject::new();
+            let result = commit_part_data(&project.path, "A", 0);
+
+            assert!(result.is_ok(), "Should commit part data: {:?}", result);
+        }
+
+        #[test]
+        fn test_commit_part_data_all_parts() {
+            let project = TestProject::new();
+
+            for part_id in 0..4u8 {
+                let result = commit_part_data(&project.path, "A", part_id);
+                assert!(result.is_ok(), "Should commit part {}: {:?}", part_id, result);
+            }
+        }
+
+        #[test]
+        fn test_commit_part_data_invalid_part() {
+            let project = TestProject::new();
+            let result = commit_part_data(&project.path, "A", 4);
+
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("Invalid part ID"));
+        }
+
+        #[test]
+        fn test_commit_part_data_invalid_bank() {
+            let project = TestProject::new();
+            let result = commit_part_data(&project.path, "Z", 0);
+
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_commit_all_parts_data_success() {
+            let project = TestProject::new();
+            let result = commit_all_parts_data(&project.path, "A");
+
+            assert!(result.is_ok(), "Should commit all parts: {:?}", result);
+        }
+
+        #[test]
+        fn test_commit_all_parts_data_all_banks() {
+            let project = TestProject::new();
+            let bank_ids = ["A", "B", "C", "D", "E", "F", "G", "H",
+                          "I", "J", "K", "L", "M", "N", "O", "P"];
+
+            for bank_id in bank_ids {
+                let result = commit_all_parts_data(&project.path, bank_id);
+                assert!(result.is_ok(), "Should commit all parts for bank {}: {:?}", bank_id, result);
+            }
+        }
+
+        #[test]
+        fn test_reload_part_data_success() {
+            let project = TestProject::new();
+
+            // Must commit the part first before it can be reloaded
+            commit_part_data(&project.path, "A", 0).unwrap();
+
+            let result = reload_part_data(&project.path, "A", 0);
+            assert!(result.is_ok(), "Should reload part data: {:?}", result);
+        }
+
+        #[test]
+        fn test_reload_part_data_returns_part_data() {
+            let project = TestProject::new();
+
+            // Must commit the part first before it can be reloaded
+            commit_part_data(&project.path, "A", 0).unwrap();
+
+            let part_data = reload_part_data(&project.path, "A", 0).unwrap();
+            assert_eq!(part_data.part_id, 0, "Should return correct part ID");
+            assert_eq!(part_data.machines.len(), 8, "Should have 8 machines");
+        }
+
+        #[test]
+        fn test_reload_part_data_requires_saved_state() {
+            // Reload requires the part to have been saved first
+            let project = TestProject::new();
+            let result = reload_part_data(&project.path, "A", 0);
+
+            // Should fail because part hasn't been committed/saved
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("SAVE PART FIRST"));
+        }
+
+        #[test]
+        fn test_reload_part_data_invalid_part() {
+            let project = TestProject::new();
+            commit_part_data(&project.path, "A", 0).unwrap();
+
+            let result = reload_part_data(&project.path, "A", 4);
+            assert!(result.is_err());
+        }
+    }
+
+    // ==================== SET AND AUDIO POOL TESTS ====================
+
+    mod set_audio_pool_tests {
+        use super::*;
+
+        #[test]
+        fn test_is_project_in_set_standalone() {
+            // A project in its own temp directory is not in a set
+            let project = TestProject::new();
+            let result = is_project_in_set(&project.path);
+
+            assert!(result.is_ok());
+            // Temp directory with single project is not considered a Set
+        }
+
+        #[test]
+        fn test_is_project_in_set_with_audio_pool() {
+            // Create a Set structure with AUDIO POOL
+            let set_dir = TempDir::new().unwrap();
+            let project_path = set_dir.path().join("Project1");
+            fs::create_dir(&project_path).unwrap();
+
+            // Create project files
+            let project_file = ProjectFile::default();
+            project_file.to_data_file(&project_path.join("project.work")).unwrap();
+
+            // Create AUDIO POOL directory
+            fs::create_dir(set_dir.path().join("AUDIO POOL")).unwrap();
+
+            let result = is_project_in_set(&project_path.to_string_lossy());
+            assert!(result.is_ok());
+            assert!(result.unwrap(), "Project with AUDIO POOL sibling should be in a Set");
+        }
+
+        #[test]
+        fn test_is_project_in_set_multiple_projects() {
+            // Create a Set structure with multiple projects
+            let set_dir = TempDir::new().unwrap();
+
+            // Create two project directories
+            let project1_path = set_dir.path().join("Project1");
+            let project2_path = set_dir.path().join("Project2");
+            fs::create_dir(&project1_path).unwrap();
+            fs::create_dir(&project2_path).unwrap();
+
+            // Create project files in both
+            let project_file = ProjectFile::default();
+            project_file.to_data_file(&project1_path.join("project.work")).unwrap();
+            project_file.to_data_file(&project2_path.join("project.work")).unwrap();
+
+            let result = is_project_in_set(&project1_path.to_string_lossy());
+            assert!(result.is_ok());
+            assert!(result.unwrap(), "Project with sibling projects should be in a Set");
+        }
+
+        #[test]
+        fn test_are_projects_in_same_set_true() {
+            // Create two projects in the same Set
+            let set_dir = TempDir::new().unwrap();
+
+            let project1_path = set_dir.path().join("Project1");
+            let project2_path = set_dir.path().join("Project2");
+            fs::create_dir(&project1_path).unwrap();
+            fs::create_dir(&project2_path).unwrap();
+
+            let result = are_projects_in_same_set(
+                &project1_path.to_string_lossy(),
+                &project2_path.to_string_lossy()
+            );
+            assert!(result.is_ok());
+            assert!(result.unwrap(), "Projects in same parent should be in same Set");
+        }
+
+        #[test]
+        fn test_are_projects_in_same_set_false() {
+            // Create two projects in different Sets
+            let set1_dir = TempDir::new().unwrap();
+            let set2_dir = TempDir::new().unwrap();
+
+            let project1_path = set1_dir.path().join("Project1");
+            let project2_path = set2_dir.path().join("Project2");
+            fs::create_dir(&project1_path).unwrap();
+            fs::create_dir(&project2_path).unwrap();
+
+            let result = are_projects_in_same_set(
+                &project1_path.to_string_lossy(),
+                &project2_path.to_string_lossy()
+            );
+            assert!(result.is_ok());
+            assert!(!result.unwrap(), "Projects in different parents should not be in same Set");
+        }
+
+        #[test]
+        fn test_get_audio_pool_status_no_pool() {
+            // Create a Set structure without AUDIO POOL
+            let set_dir = TempDir::new().unwrap();
+            let project_path = set_dir.path().join("Project1");
+            fs::create_dir(&project_path).unwrap();
+
+            // Create project file
+            let project_file = ProjectFile::default();
+            project_file.to_data_file(&project_path.join("project.work")).unwrap();
+
+            let result = get_audio_pool_status(&project_path.to_string_lossy());
+
+            assert!(result.is_ok());
+            let status = result.unwrap();
+            assert!(!status.exists, "Audio pool should not exist for new project");
+        }
+
+        #[test]
+        fn test_get_audio_pool_status_with_pool() {
+            // Create a Set with AUDIO POOL
+            let set_dir = TempDir::new().unwrap();
+            let project_path = set_dir.path().join("Project1");
+            fs::create_dir(&project_path).unwrap();
+
+            // Create project file
+            let project_file = ProjectFile::default();
+            project_file.to_data_file(&project_path.join("project.work")).unwrap();
+
+            // Create AUDIO POOL
+            fs::create_dir(set_dir.path().join("AUDIO POOL")).unwrap();
+
+            let result = get_audio_pool_status(&project_path.to_string_lossy());
+            assert!(result.is_ok());
+            let status = result.unwrap();
+            assert!(status.exists, "Audio pool should exist");
+            assert!(status.path.is_some(), "Audio pool path should be set");
+        }
+
+        #[test]
+        fn test_create_audio_pool_success() {
+            // Create a Set structure without AUDIO POOL
+            let set_dir = TempDir::new().unwrap();
+            let project_path = set_dir.path().join("Project1");
+            fs::create_dir(&project_path).unwrap();
+
+            let project_file = ProjectFile::default();
+            project_file.to_data_file(&project_path.join("project.work")).unwrap();
+
+            let result = create_audio_pool(&project_path.to_string_lossy());
+            assert!(result.is_ok(), "Should create audio pool: {:?}", result);
+
+            // Verify it was created
+            let pool_path = set_dir.path().join("AUDIO POOL");
+            assert!(pool_path.exists(), "AUDIO POOL directory should exist");
+        }
+
+        #[test]
+        fn test_create_audio_pool_already_exists() {
+            // Create a Set with existing AUDIO POOL
+            let set_dir = TempDir::new().unwrap();
+            let project_path = set_dir.path().join("Project1");
+            fs::create_dir(&project_path).unwrap();
+
+            let project_file = ProjectFile::default();
+            project_file.to_data_file(&project_path.join("project.work")).unwrap();
+
+            // Pre-create AUDIO POOL
+            fs::create_dir(set_dir.path().join("AUDIO POOL")).unwrap();
+
+            let result = create_audio_pool(&project_path.to_string_lossy());
+            assert!(result.is_ok(), "Should succeed even if pool exists");
+        }
+    }
 }
