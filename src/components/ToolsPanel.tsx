@@ -584,39 +584,42 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     All
                   </button>
                 </div>
-                <div className="tools-slot-sliders">
-                  <div className="tools-slot-slider-group">
-                    <span className="tools-slot-label">From</span>
-                    <input
-                      type="range"
-                      min="1"
-                      max="128"
-                      value={sourceSampleIndices[0] + 1}
-                      onChange={(e) => {
-                        const start = Math.max(0, Math.min(127, Number(e.target.value) - 1));
-                        const end = sourceSampleIndices[sourceSampleIndices.length - 1];
-                        if (start <= end) {
-                          setSourceSampleIndices(Array.from({ length: end - start + 1 }, (_, i) => start + i));
-                        }
-                      }}
-                    />
-                  </div>
-                  <div className="tools-slot-slider-group">
-                    <span className="tools-slot-label">To</span>
-                    <input
-                      type="range"
-                      min="1"
-                      max="128"
-                      value={sourceSampleIndices[sourceSampleIndices.length - 1] + 1}
-                      onChange={(e) => {
-                        const end = Math.max(0, Math.min(127, Number(e.target.value) - 1));
-                        const start = sourceSampleIndices[0];
-                        if (end >= start) {
-                          setSourceSampleIndices(Array.from({ length: end - start + 1 }, (_, i) => start + i));
-                        }
-                      }}
-                    />
-                  </div>
+                <div className="tools-dual-range-slider">
+                  <div
+                    className="tools-dual-range-track-fill"
+                    style={{
+                      left: `${((sourceSampleIndices[0]) / 127) * 100}%`,
+                      width: `${((sourceSampleIndices[sourceSampleIndices.length - 1] - sourceSampleIndices[0]) / 127) * 100}%`
+                    }}
+                  />
+                  <input
+                    type="range"
+                    className="tools-dual-range-input tools-dual-range-min"
+                    min="1"
+                    max="128"
+                    value={sourceSampleIndices[0] + 1}
+                    onChange={(e) => {
+                      const start = Math.max(0, Math.min(127, Number(e.target.value) - 1));
+                      const end = sourceSampleIndices[sourceSampleIndices.length - 1];
+                      if (start <= end) {
+                        setSourceSampleIndices(Array.from({ length: end - start + 1 }, (_, i) => start + i));
+                      }
+                    }}
+                  />
+                  <input
+                    type="range"
+                    className="tools-dual-range-input tools-dual-range-max"
+                    min="1"
+                    max="128"
+                    value={sourceSampleIndices[sourceSampleIndices.length - 1] + 1}
+                    onChange={(e) => {
+                      const end = Math.max(0, Math.min(127, Number(e.target.value) - 1));
+                      const start = sourceSampleIndices[0];
+                      if (end >= start) {
+                        setSourceSampleIndices(Array.from({ length: end - start + 1 }, (_, i) => start + i));
+                      }
+                    }}
+                  />
                 </div>
               </div>
             </div>
@@ -990,21 +993,19 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     Reset
                   </button>
                 </div>
-                <div className="tools-slot-sliders">
-                  <div className="tools-slot-slider-group">
-                    <span className="tools-slot-label">Start</span>
-                    <input
-                      type="range"
-                      min="1"
-                      max="128"
-                      value={destSampleIndices[0] + 1}
-                      onChange={(e) => {
-                        const start = Math.max(0, Math.min(127, Number(e.target.value) - 1));
-                        const count = sourceSampleIndices.length;
-                        setDestSampleIndices(Array.from({ length: count }, (_, i) => Math.min(127, start + i)));
-                      }}
-                    />
-                  </div>
+                <div className="tools-dual-range-slider tools-single-range">
+                  <input
+                    type="range"
+                    className="tools-dual-range-input"
+                    min="1"
+                    max="128"
+                    value={destSampleIndices[0] + 1}
+                    onChange={(e) => {
+                      const start = Math.max(0, Math.min(127, Number(e.target.value) - 1));
+                      const count = sourceSampleIndices.length;
+                      setDestSampleIndices(Array.from({ length: count }, (_, i) => Math.min(127, start + i)));
+                    }}
+                  />
                 </div>
                 {sourceSampleIndices.length + destSampleIndices[0] > 128 && (
                   <span className="tools-warning">
