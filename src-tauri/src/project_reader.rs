@@ -3632,3 +3632,1497 @@ pub fn copy_sample_slots(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ot_tools_io::{BankFile, ProjectFile, OctatrackFileIO};
+    use tempfile::TempDir;
+    use std::fs;
+
+    /// Helper struct to manage test project fixtures
+    struct TestProject {
+        _temp_dir: TempDir,
+        path: String,
+    }
+
+    impl TestProject {
+        /// Create a new test project with default bank and project files
+        fn new() -> Self {
+            let temp_dir = TempDir::new().expect("Failed to create temp directory");
+            let path = temp_dir.path().to_string_lossy().to_string();
+
+            // Create default project.work file
+            let project_file = ProjectFile::default();
+            let project_path = temp_dir.path().join("project.work");
+            project_file.to_data_file(&project_path)
+                .expect("Failed to create project.work");
+
+            // Create default bank files (bank01.work through bank16.work)
+            for bank_num in 1..=16 {
+                let bank_file = BankFile::default();
+                let bank_path = temp_dir.path().join(format!("bank{:02}.work", bank_num));
+                bank_file.to_data_file(&bank_path)
+                    .expect(&format!("Failed to create bank{:02}.work", bank_num));
+            }
+
+            TestProject {
+                _temp_dir: temp_dir,
+                path,
+            }
+        }
+
+        /// Create a test project with modified bank data for testing copy operations
+        fn with_modified_bank(bank_index: u8, modifier: impl FnOnce(&mut BankFile)) -> Self {
+            let project = Self::new();
+
+            // Read the bank, modify it, and write back
+            let bank_num = bank_index + 1;
+            let bank_path = Path::new(&project.path).join(format!("bank{:02}.work", bank_num));
+            let mut bank = BankFile::from_data_file(&bank_path)
+                .expect("Failed to read bank file");
+
+            modifier(&mut bank);
+
+            // Recalculate checksum
+            bank.checksum = bank.calculate_checksum()
+                .expect("Failed to calculate checksum");
+
+            bank.to_data_file(&bank_path)
+                .expect("Failed to write modified bank");
+
+            project
+        }
+    }
+
+    // ==================== COPY BANK TESTS ====================
+
+    mod copy_bank_tests {
+        use super::*;
+
+        #[test]
+        fn test_copy_bank_same_project() {
+            // CB-01: Copy bank to same project
+            let project = TestProject::with_modified_bank(0, |bank| {
+                // Mark part 0 as edited to distinguish from default
+                bank.parts_edited_bitmask = 0b0001;
+            });
+
+            let result = copy_bank(&project.path, 0, &project.path, 1);
+            assert!(result.is_ok(), "copy_bank should succeed: {:?}", result);
+
+            // Verify the destination bank now has the same edited bitmask
+            let dest_bank_path = Path::new(&project.path).join("bank02.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+            assert_eq!(dest_bank.parts_edited_bitmask, 0b0001,
+                "Destination bank should have copied parts_edited_bitmask");
+        }
+
+        #[test]
+        fn test_copy_bank_cross_project() {
+            // CB-02: Copy bank to different project
+            let source_project = TestProject::with_modified_bank(0, |bank| {
+                bank.parts_edited_bitmask = 0b1111;
+            });
+            let dest_project = TestProject::new();
+
+            let result = copy_bank(&source_project.path, 0, &dest_project.path, 0);
+            assert!(result.is_ok(), "Cross-project copy should succeed: {:?}", result);
+
+            // Verify destination has the copied data
+            let dest_bank_path = Path::new(&dest_project.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+            assert_eq!(dest_bank.parts_edited_bitmask, 0b1111);
+        }
+
+        #[test]
+        fn test_copy_bank_overwrites_existing() {
+            // CB-03: Copy bank overwrites existing data
+            let source_project = TestProject::with_modified_bank(0, |bank| {
+                bank.parts_edited_bitmask = 0b1010;
+            });
+            let dest_project = TestProject::with_modified_bank(0, |bank| {
+                bank.parts_edited_bitmask = 0b0101;
+            });
+
+            let result = copy_bank(&source_project.path, 0, &dest_project.path, 0);
+            assert!(result.is_ok());
+
+            let dest_bank_path = Path::new(&dest_project.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+            // Should have source value, not original dest value
+            assert_eq!(dest_bank.parts_edited_bitmask, 0b1010);
+        }
+
+        #[test]
+        fn test_copy_bank_invalid_source_index() {
+            let project = TestProject::new();
+
+            let result = copy_bank(&project.path, 16, &project.path, 0);
+            assert!(result.is_err(), "Bank index 16 should be invalid");
+            assert!(result.unwrap_err().contains("Bank index must be between 0 and 15"));
+        }
+
+        #[test]
+        fn test_copy_bank_invalid_dest_index() {
+            let project = TestProject::new();
+
+            let result = copy_bank(&project.path, 0, &project.path, 16);
+            assert!(result.is_err(), "Bank index 16 should be invalid");
+            assert!(result.unwrap_err().contains("Bank index must be between 0 and 15"));
+        }
+
+        #[test]
+        fn test_copy_bank_nonexistent_source() {
+            // CB-04: Copy non-existent bank
+            let temp_dir = TempDir::new().unwrap();
+            let empty_path = temp_dir.path().to_string_lossy().to_string();
+            let dest_project = TestProject::new();
+
+            let result = copy_bank(&empty_path, 0, &dest_project.path, 0);
+            assert!(result.is_err(), "Should fail for non-existent source bank");
+            assert!(result.unwrap_err().contains("Source bank"));
+        }
+
+        #[test]
+        fn test_copy_bank_all_indices() {
+            // Test all valid bank indices (0-15)
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            for i in 0..16u8 {
+                let result = copy_bank(&source.path, i, &dest.path, i);
+                assert!(result.is_ok(), "Copy bank {} should succeed: {:?}", i, result);
+            }
+        }
+    }
+
+    // ==================== COPY PARTS TESTS ====================
+
+    mod copy_parts_tests {
+        use super::*;
+
+        #[test]
+        fn test_copy_single_part() {
+            // CP-01: Copy single Part
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_parts(&source.path, 0, vec![0], &dest.path, 0, vec![0]);
+            assert!(result.is_ok(), "Single part copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_multiple_parts() {
+            // CP-02: Copy multiple Parts
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_parts(
+                &source.path, 0,
+                vec![0, 1, 2],
+                &dest.path, 0,
+                vec![1, 2, 3]
+            );
+            assert!(result.is_ok(), "Multiple parts copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_all_parts() {
+            // CP-03: Copy all Parts
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_parts(
+                &source.path, 0,
+                vec![0, 1, 2, 3],
+                &dest.path, 0,
+                vec![0, 1, 2, 3]
+            );
+            assert!(result.is_ok(), "All parts copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_part_different_bank() {
+            // CP-04: Copy Part to different bank
+            let source = TestProject::new();
+
+            let result = copy_parts(&source.path, 0, vec![0], &source.path, 1, vec![0]);
+            assert!(result.is_ok(), "Cross-bank part copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_part_different_project() {
+            // CP-05: Copy Part to different project
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_parts(&source.path, 0, vec![0], &dest.path, 0, vec![0]);
+            assert!(result.is_ok(), "Cross-project part copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_parts_mismatched_count() {
+            // CP-06: Mismatched Part count
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_parts(
+                &source.path, 0,
+                vec![0, 1],
+                &dest.path, 0,
+                vec![0, 1, 2]  // 3 dest parts but only 2 source
+            );
+            assert!(result.is_err(), "Mismatched part count should fail");
+            assert!(result.unwrap_err().contains("same length"));
+        }
+
+        #[test]
+        fn test_copy_parts_invalid_index() {
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_parts(&source.path, 0, vec![4], &dest.path, 0, vec![0]);
+            assert!(result.is_err(), "Part index 4 should be invalid");
+            assert!(result.unwrap_err().contains("Part indices must be between 0 and 3"));
+        }
+
+        #[test]
+        fn test_copy_parts_invalid_bank_index() {
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_parts(&source.path, 16, vec![0], &dest.path, 0, vec![0]);
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("Bank index must be between 0 and 15"));
+        }
+
+        #[test]
+        fn test_copy_parts_marks_edited() {
+            // Verify that copying a part marks it as edited
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            copy_parts(&source.path, 0, vec![0], &dest.path, 0, vec![2]).unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+            // Part 2 (index 2) should be marked as edited
+            assert!((dest_bank.parts_edited_bitmask & (1 << 2)) != 0,
+                "Destination part should be marked as edited");
+        }
+    }
+
+    // ==================== COPY PATTERNS TESTS ====================
+
+    mod copy_patterns_tests {
+        use super::*;
+
+        #[test]
+        fn test_copy_single_pattern() {
+            // CPT-01: Copy single pattern
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_patterns(
+                &source.path, 0,
+                vec![0],
+                &dest.path, 0,
+                0,
+                "keep_original",
+                None,
+                "all",
+                None
+            );
+            assert!(result.is_ok(), "Single pattern copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_multiple_patterns() {
+            // CPT-02: Copy multiple patterns
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_patterns(
+                &source.path, 0,
+                vec![0, 1, 2, 3],
+                &dest.path, 0,
+                4,  // Start at pattern 5 (index 4)
+                "keep_original",
+                None,
+                "all",
+                None
+            );
+            assert!(result.is_ok(), "Multiple patterns copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_all_patterns() {
+            // CPT-03: Copy all 16 patterns
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_patterns(
+                &source.path, 0,
+                (0..16).collect(),
+                &dest.path, 0,
+                0,
+                "keep_original",
+                None,
+                "all",
+                None
+            );
+            assert!(result.is_ok(), "All 16 patterns copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_patterns_different_bank() {
+            // CPT-04: Copy patterns to different bank
+            let source = TestProject::new();
+
+            let result = copy_patterns(
+                &source.path, 0,
+                vec![0],
+                &source.path, 1,  // Different bank
+                0,
+                "keep_original",
+                None,
+                "all",
+                None
+            );
+            assert!(result.is_ok(), "Cross-bank pattern copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_patterns_different_project() {
+            // CPT-05: Copy patterns to different project
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_patterns(
+                &source.path, 0,
+                vec![0, 1],
+                &dest.path, 0,
+                0,
+                "keep_original",
+                None,
+                "all",
+                None
+            );
+            assert!(result.is_ok(), "Cross-project pattern copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_patterns_keep_original_assignment() {
+            // CPT-06: Keep Original assignment
+            let source = TestProject::with_modified_bank(0, |bank| {
+                // Set pattern 0 to use part 2
+                bank.patterns.0[0].part_assignment = 2;
+            });
+            let dest = TestProject::new();
+
+            copy_patterns(
+                &source.path, 0,
+                vec![0],
+                &dest.path, 0,
+                5,
+                "keep_original",
+                None,
+                "all",
+                None
+            ).unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+            assert_eq!(dest_bank.patterns.0[5].part_assignment, 2,
+                "Should keep original part assignment");
+        }
+
+        #[test]
+        fn test_copy_patterns_select_specific_part() {
+            // CPT-08: Assign to Specific Part
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            copy_patterns(
+                &source.path, 0,
+                vec![0, 1, 2],
+                &dest.path, 0,
+                0,
+                "select_specific",
+                Some(3),  // Assign all to Part 4 (index 3)
+                "all",
+                None
+            ).unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+            assert_eq!(dest_bank.patterns.0[0].part_assignment, 3);
+            assert_eq!(dest_bank.patterns.0[1].part_assignment, 3);
+            assert_eq!(dest_bank.patterns.0[2].part_assignment, 3);
+        }
+
+        #[test]
+        fn test_copy_patterns_specific_tracks() {
+            // CPT-10: Copy specific audio tracks
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_patterns(
+                &source.path, 0,
+                vec![0],
+                &dest.path, 0,
+                0,
+                "keep_original",
+                None,
+                "specific",
+                Some(vec![0, 1, 2])  // Only tracks T1, T2, T3
+            );
+            assert!(result.is_ok(), "Specific tracks copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_patterns_specific_midi_tracks() {
+            // CPT-11: Copy specific MIDI tracks
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_patterns(
+                &source.path, 0,
+                vec![0],
+                &dest.path, 0,
+                0,
+                "keep_original",
+                None,
+                "specific",
+                Some(vec![8, 9])  // MIDI tracks M1, M2 (indices 8-15)
+            );
+            assert!(result.is_ok(), "MIDI tracks copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_patterns_mixed_tracks() {
+            // CPT-12: Copy mixed audio and MIDI tracks
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_patterns(
+                &source.path, 0,
+                vec![0],
+                &dest.path, 0,
+                0,
+                "keep_original",
+                None,
+                "specific",
+                Some(vec![0, 1, 8, 9])  // T1, T2, M1, M2
+            );
+            assert!(result.is_ok(), "Mixed tracks copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_patterns_overflow() {
+            // CPT-13: Pattern overflow
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_patterns(
+                &source.path, 0,
+                vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],  // 10 patterns
+                &dest.path, 0,
+                10,  // Starting at 10 would overflow (10 + 10 = 20 > 16)
+                "keep_original",
+                None,
+                "all",
+                None
+            );
+            assert!(result.is_err(), "Pattern overflow should fail");
+            assert!(result.unwrap_err().contains("exceeds bank capacity"));
+        }
+
+        #[test]
+        fn test_copy_patterns_invalid_pattern_index() {
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_patterns(
+                &source.path, 0,
+                vec![16],  // Invalid pattern index
+                &dest.path, 0,
+                0,
+                "keep_original",
+                None,
+                "all",
+                None
+            );
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("Pattern indices must be between 0 and 15"));
+        }
+
+        #[test]
+        fn test_copy_patterns_invalid_track_index() {
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_patterns(
+                &source.path, 0,
+                vec![0],
+                &dest.path, 0,
+                0,
+                "keep_original",
+                None,
+                "specific",
+                Some(vec![16])  // Invalid track index
+            );
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("Track indices must be between 0 and 15"));
+        }
+
+        #[test]
+        fn test_copy_patterns_missing_dest_part() {
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_patterns(
+                &source.path, 0,
+                vec![0],
+                &dest.path, 0,
+                0,
+                "select_specific",
+                None,  // Missing dest_part for select_specific mode
+                "all",
+                None
+            );
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("dest_part is required"));
+        }
+
+        #[test]
+        fn test_copy_patterns_invalid_mode() {
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_patterns(
+                &source.path, 0,
+                vec![0],
+                &dest.path, 0,
+                0,
+                "invalid_mode",
+                None,
+                "all",
+                None
+            );
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("Invalid part_assignment_mode"));
+        }
+    }
+
+    // ==================== COPY TRACKS TESTS ====================
+
+    mod copy_tracks_tests {
+        use super::*;
+
+        #[test]
+        fn test_copy_single_audio_track() {
+            // CT-01: Copy single audio track
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_tracks(
+                &source.path, 0, 0,
+                vec![0],
+                &dest.path, 0, 0,
+                vec![0],
+                "both"
+            );
+            assert!(result.is_ok(), "Single track copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_multiple_audio_tracks() {
+            // CT-02: Copy multiple audio tracks
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_tracks(
+                &source.path, 0, 0,
+                vec![0, 1, 2, 3],
+                &dest.path, 0, 0,
+                vec![4, 5, 6, 7],
+                "both"
+            );
+            assert!(result.is_ok(), "Multiple tracks copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_single_midi_track() {
+            // CT-03: Copy single MIDI track
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_tracks(
+                &source.path, 0, 0,
+                vec![8],  // MIDI track M1
+                &dest.path, 0, 0,
+                vec![8],
+                "both"
+            );
+            assert!(result.is_ok(), "MIDI track copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_all_audio_tracks() {
+            // CT-04: Copy all audio tracks
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_tracks(
+                &source.path, 0, 0,
+                vec![0, 1, 2, 3, 4, 5, 6, 7],
+                &dest.path, 0, 0,
+                vec![0, 1, 2, 3, 4, 5, 6, 7],
+                "both"
+            );
+            assert!(result.is_ok(), "All audio tracks copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_track_different_part() {
+            // CT-05: Copy track to different Part
+            let source = TestProject::new();
+
+            let result = copy_tracks(
+                &source.path, 0, 0,  // Part 1
+                vec![0],
+                &source.path, 0, 1,  // Part 2
+                vec![0],
+                "both"
+            );
+            assert!(result.is_ok(), "Cross-part track copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_track_different_bank() {
+            // CT-06: Copy track to different bank
+            let source = TestProject::new();
+
+            let result = copy_tracks(
+                &source.path, 0, 0,  // Bank A
+                vec![0],
+                &source.path, 1, 0,  // Bank B
+                vec![0],
+                "both"
+            );
+            assert!(result.is_ok(), "Cross-bank track copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_track_different_project() {
+            // CT-07: Copy track to different project
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_tracks(
+                &source.path, 0, 0,
+                vec![0],
+                &dest.path, 0, 0,
+                vec![0],
+                "both"
+            );
+            assert!(result.is_ok(), "Cross-project track copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_tracks_both_mode() {
+            // CT-08: Part Params + Pattern Triggers
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_tracks(
+                &source.path, 0, 0,
+                vec![0],
+                &dest.path, 0, 0,
+                vec![0],
+                "both"
+            );
+            assert!(result.is_ok(), "Both mode should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_tracks_part_params_only() {
+            // CT-09: Part Params Only
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_tracks(
+                &source.path, 0, 0,
+                vec![0],
+                &dest.path, 0, 0,
+                vec![0],
+                "part_params"
+            );
+            assert!(result.is_ok(), "Part params only should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_tracks_pattern_triggers_only() {
+            // CT-10: Pattern Triggers Only
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_tracks(
+                &source.path, 0, 0,
+                vec![0],
+                &dest.path, 0, 0,
+                vec![0],
+                "pattern_triggers"
+            );
+            assert!(result.is_ok(), "Pattern triggers only should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_tracks_mismatched_count() {
+            // CT-11: Mismatched track count
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_tracks(
+                &source.path, 0, 0,
+                vec![0, 1, 2],  // 3 source tracks
+                &dest.path, 0, 0,
+                vec![0, 1],    // 2 dest tracks
+                "both"
+            );
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("same length"));
+        }
+
+        #[test]
+        fn test_copy_tracks_no_audio_midi_mixing() {
+            // CT-12: Prevent audio to MIDI copy
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_tracks(
+                &source.path, 0, 0,
+                vec![0],   // Audio track
+                &dest.path, 0, 0,
+                vec![8],   // MIDI track
+                "both"
+            );
+            assert!(result.is_err(), "Audio to MIDI mixing should fail");
+            assert!(result.unwrap_err().contains("Cannot mix audio tracks"));
+        }
+
+        #[test]
+        fn test_copy_tracks_no_midi_audio_mixing() {
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_tracks(
+                &source.path, 0, 0,
+                vec![8],   // MIDI track
+                &dest.path, 0, 0,
+                vec![0],   // Audio track
+                "both"
+            );
+            assert!(result.is_err(), "MIDI to audio mixing should fail");
+            assert!(result.unwrap_err().contains("Cannot mix audio tracks"));
+        }
+
+        #[test]
+        fn test_copy_tracks_invalid_mode() {
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_tracks(
+                &source.path, 0, 0,
+                vec![0],
+                &dest.path, 0, 0,
+                vec![0],
+                "invalid_mode"
+            );
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("Invalid mode"));
+        }
+
+        #[test]
+        fn test_copy_tracks_invalid_track_index() {
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_tracks(
+                &source.path, 0, 0,
+                vec![16],  // Invalid
+                &dest.path, 0, 0,
+                vec![0],
+                "both"
+            );
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("Track indices must be between 0 and 15"));
+        }
+
+        #[test]
+        fn test_copy_tracks_invalid_part_index() {
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_tracks(
+                &source.path, 0, 4,  // Invalid part index
+                vec![0],
+                &dest.path, 0, 0,
+                vec![0],
+                "both"
+            );
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("Part index must be between 0 and 3"));
+        }
+
+        #[test]
+        fn test_copy_tracks_marks_part_edited() {
+            // Verify that copying part_params marks the part as edited
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            copy_tracks(
+                &source.path, 0, 0,
+                vec![0],
+                &dest.path, 0, 2,  // Dest part 3 (index 2)
+                vec![0],
+                "part_params"
+            ).unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+            assert!((dest_bank.parts_edited_bitmask & (1 << 2)) != 0,
+                "Part 3 should be marked as edited");
+        }
+    }
+
+    // ==================== COPY SAMPLE SLOTS TESTS ====================
+
+    mod copy_sample_slots_tests {
+        use super::*;
+
+        #[test]
+        fn test_copy_single_slot() {
+            // CSS-01: Copy single slot
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "both",
+                vec![1],
+                vec![1],
+                "none",
+                true
+            );
+            assert!(result.is_ok(), "Single slot copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_slot_range() {
+            // CSS-02: Copy slot range
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "both",
+                (1..=10).collect(),
+                (1..=10).collect(),
+                "none",
+                true
+            );
+            assert!(result.is_ok(), "Slot range copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_all_slots() {
+            // CSS-03: Copy all 128 slots
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "both",
+                (1..=128).collect(),
+                (1..=128).collect(),
+                "none",
+                true
+            );
+            assert!(result.is_ok(), "All 128 slots copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_slots_to_offset() {
+            // CSS-04: Copy to different starting slot
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "both",
+                (1..=10).collect(),
+                (50..=59).collect(),
+                "none",
+                true
+            );
+            assert!(result.is_ok(), "Offset slot copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_slots_different_project() {
+            // CSS-05: Copy to different project
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "both",
+                vec![1, 2, 3],
+                vec![1, 2, 3],
+                "none",
+                true
+            );
+            assert!(result.is_ok(), "Cross-project slot copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_slots_static_only() {
+            // CSS-07: Static Only
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "static",
+                vec![1],
+                vec![1],
+                "none",
+                true
+            );
+            assert!(result.is_ok(), "Static only should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_slots_flex_only() {
+            // CSS-08: Flex Only
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "flex",
+                vec![1],
+                vec![1],
+                "none",
+                true
+            );
+            assert!(result.is_ok(), "Flex only should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_slots_both_types() {
+            // CSS-06: Static + Flex
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "both",
+                vec![1],
+                vec![1],
+                "none",
+                true
+            );
+            assert!(result.is_ok(), "Both types should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_slots_audio_mode_none() {
+            // CSS-09: Don't Copy Audio
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "both",
+                vec![1],
+                vec![1],
+                "none",
+                true
+            );
+            assert!(result.is_ok(), "Audio mode none should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_slots_audio_mode_copy() {
+            // CSS-10: Copy to Destination
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "both",
+                vec![1],
+                vec![1],
+                "copy",
+                true
+            );
+            assert!(result.is_ok(), "Audio mode copy should succeed: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_slots_include_editor_settings_on() {
+            // CSS-14: Include Editor Settings ON
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "both",
+                vec![1],
+                vec![1],
+                "none",
+                true
+            );
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_copy_slots_include_editor_settings_off() {
+            // CSS-15: Include Editor Settings OFF
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "both",
+                vec![1],
+                vec![1],
+                "none",
+                false
+            );
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_copy_slots_mismatched_count() {
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "both",
+                vec![1, 2, 3],
+                vec![1, 2],  // Mismatch
+                "none",
+                true
+            );
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("same length"));
+        }
+
+        #[test]
+        fn test_copy_slots_invalid_slot_index_zero() {
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "both",
+                vec![0],  // Invalid - slots are 1-128
+                vec![1],
+                "none",
+                true
+            );
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("Slot indices must be between 1 and 128"));
+        }
+
+        #[test]
+        fn test_copy_slots_invalid_slot_index_too_high() {
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "both",
+                vec![129],  // Invalid
+                vec![1],
+                "none",
+                true
+            );
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("Slot indices must be between 1 and 128"));
+        }
+
+        #[test]
+        fn test_copy_slots_invalid_slot_type() {
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "invalid_type",
+                vec![1],
+                vec![1],
+                "none",
+                true
+            );
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("Invalid slot_type"));
+        }
+
+        #[test]
+        fn test_copy_slots_invalid_audio_mode() {
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "both",
+                vec![1],
+                vec![1],
+                "invalid_mode",
+                true
+            );
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("Invalid audio_mode"));
+        }
+
+        #[test]
+        fn test_copy_slots_move_to_pool_requires_same_set() {
+            // Create projects in different parent directories (different "Sets")
+            // to test that move_to_pool requires projects to be in the same Set
+            let set1_dir = TempDir::new().unwrap();
+            let set2_dir = TempDir::new().unwrap();
+
+            // Create project directories inside each "Set"
+            let project1_path = set1_dir.path().join("Project1");
+            let project2_path = set2_dir.path().join("Project2");
+            fs::create_dir(&project1_path).unwrap();
+            fs::create_dir(&project2_path).unwrap();
+
+            // Create project files in each
+            let project_file = ProjectFile::default();
+            project_file.to_data_file(&project1_path.join("project.work")).unwrap();
+            project_file.to_data_file(&project2_path.join("project.work")).unwrap();
+
+            let result = copy_sample_slots(
+                &project1_path.to_string_lossy(),
+                &project2_path.to_string_lossy(),
+                "both",
+                vec![1],
+                vec![1],
+                "move_to_pool",
+                true
+            );
+            assert!(result.is_err(), "Should fail when projects are in different Sets");
+            assert!(result.unwrap_err().contains("same Set"));
+        }
+    }
+
+    // ==================== VALIDATION EDGE CASE TESTS ====================
+
+    mod validation_tests {
+        use super::*;
+
+        #[test]
+        fn test_all_bank_indices_valid() {
+            let project = TestProject::new();
+
+            // All indices 0-15 should be valid
+            for i in 0..=15u8 {
+                let result = copy_bank(&project.path, i, &project.path, 15 - i);
+                assert!(result.is_ok(), "Bank index {} should be valid", i);
+            }
+        }
+
+        #[test]
+        fn test_all_part_indices_valid() {
+            let project = TestProject::new();
+
+            // All indices 0-3 should be valid
+            for i in 0..=3u8 {
+                let result = copy_parts(&project.path, 0, vec![i], &project.path, 0, vec![(3 - i)]);
+                assert!(result.is_ok(), "Part index {} should be valid", i);
+            }
+        }
+
+        #[test]
+        fn test_all_pattern_indices_valid() {
+            let project = TestProject::new();
+
+            // All indices 0-15 should be valid
+            for i in 0..=15u8 {
+                let result = copy_patterns(
+                    &project.path, 0,
+                    vec![i],
+                    &project.path, 0,
+                    i,
+                    "keep_original",
+                    None,
+                    "all",
+                    None
+                );
+                assert!(result.is_ok(), "Pattern index {} should be valid", i);
+            }
+        }
+
+        #[test]
+        fn test_all_track_indices_valid() {
+            let project = TestProject::new();
+
+            // Audio tracks 0-7
+            for i in 0..=7u8 {
+                let result = copy_tracks(
+                    &project.path, 0, 0,
+                    vec![i],
+                    &project.path, 0, 0,
+                    vec![i],
+                    "both"
+                );
+                assert!(result.is_ok(), "Audio track index {} should be valid", i);
+            }
+
+            // MIDI tracks 8-15
+            for i in 8..=15u8 {
+                let result = copy_tracks(
+                    &project.path, 0, 0,
+                    vec![i],
+                    &project.path, 0, 0,
+                    vec![i],
+                    "both"
+                );
+                assert!(result.is_ok(), "MIDI track index {} should be valid", i);
+            }
+        }
+
+        #[test]
+        fn test_all_slot_indices_valid() {
+            let project = TestProject::new();
+            let dest = TestProject::new();
+
+            // Test boundary values 1 and 128
+            let result = copy_sample_slots(
+                &project.path,
+                &dest.path,
+                "both",
+                vec![1, 128],
+                vec![1, 128],
+                "none",
+                true
+            );
+            assert!(result.is_ok(), "Slot indices 1 and 128 should be valid");
+        }
+
+        #[test]
+        fn test_empty_indices_copy_parts() {
+            let project = TestProject::new();
+
+            let result = copy_parts(&project.path, 0, vec![], &project.path, 0, vec![]);
+            assert!(result.is_ok(), "Empty parts copy should succeed (no-op)");
+        }
+
+        #[test]
+        fn test_empty_indices_copy_patterns() {
+            let project = TestProject::new();
+
+            let result = copy_patterns(
+                &project.path, 0,
+                vec![],
+                &project.path, 0,
+                0,
+                "keep_original",
+                None,
+                "all",
+                None
+            );
+            assert!(result.is_ok(), "Empty patterns copy should succeed (no-op)");
+        }
+
+        #[test]
+        fn test_empty_indices_copy_tracks() {
+            let project = TestProject::new();
+
+            let result = copy_tracks(
+                &project.path, 0, 0,
+                vec![],
+                &project.path, 0, 0,
+                vec![],
+                "both"
+            );
+            assert!(result.is_ok(), "Empty tracks copy should succeed (no-op)");
+        }
+
+        #[test]
+        fn test_empty_indices_copy_sample_slots() {
+            let project = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_sample_slots(
+                &project.path,
+                &dest.path,
+                "both",
+                vec![],
+                vec![],
+                "none",
+                true
+            );
+            assert!(result.is_ok(), "Empty slots copy should succeed (no-op)");
+        }
+    }
+
+    // ==================== DATA INTEGRITY TESTS ====================
+
+    mod data_integrity_tests {
+        use super::*;
+
+        #[test]
+        fn test_copy_bank_preserves_patterns() {
+            // CB-06: Verify all 16 Patterns copied
+            let source = TestProject::with_modified_bank(0, |bank| {
+                // Modify pattern 5 to have a distinctive part assignment
+                bank.patterns.0[5].part_assignment = 3;
+            });
+            let dest = TestProject::new();
+
+            copy_bank(&source.path, 0, &dest.path, 1).unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank02.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+            assert_eq!(dest_bank.patterns.0[5].part_assignment, 3,
+                "Pattern 5's part assignment should be preserved");
+        }
+
+        #[test]
+        fn test_copy_patterns_preserves_part_assignment() {
+            // CB-07: Verify Part assignments preserved
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.patterns.0[0].part_assignment = 2;
+                bank.patterns.0[1].part_assignment = 3;
+            });
+            let dest = TestProject::new();
+
+            copy_patterns(
+                &source.path, 0,
+                vec![0, 1],
+                &dest.path, 0,
+                5,
+                "keep_original",
+                None,
+                "all",
+                None
+            ).unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+            assert_eq!(dest_bank.patterns.0[5].part_assignment, 2);
+            assert_eq!(dest_bank.patterns.0[6].part_assignment, 3);
+        }
+
+        #[test]
+        fn test_copy_parts_sound_design_preserved() {
+            // This is a structural test - the data should be copied exactly
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            // Read original source data
+            let source_bank_path = Path::new(&source.path).join("bank01.work");
+            let source_bank = BankFile::from_data_file(&source_bank_path).unwrap();
+            let original_part = source_bank.parts.unsaved.0[0].clone();
+
+            copy_parts(&source.path, 0, vec![0], &dest.path, 0, vec![2]).unwrap();
+
+            // Verify the part data matches
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+
+            // Compare the cloned part data (structural equality)
+            assert_eq!(
+                dest_bank.parts.unsaved.0[2].audio_track_params_values,
+                original_part.audio_track_params_values,
+                "Audio track params values should match"
+            );
+        }
+    }
+
+    // ==================== ERROR RECOVERY TESTS ====================
+
+    mod error_recovery_tests {
+        use super::*;
+
+        #[test]
+        fn test_retry_after_error() {
+            // ERR-10: Error recovery - operation can be retried
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            // First, cause an error with invalid input
+            let result1 = copy_parts(&source.path, 16, vec![0], &dest.path, 0, vec![0]);
+            assert!(result1.is_err());
+
+            // Then retry with valid input - should succeed
+            let result2 = copy_parts(&source.path, 0, vec![0], &dest.path, 0, vec![0]);
+            assert!(result2.is_ok(), "Retry should succeed after error");
+        }
+
+        #[test]
+        fn test_multiple_sequential_operations() {
+            // REG-04: Multiple operations in sequence
+            let project = TestProject::new();
+            let dest = TestProject::new();
+
+            // Perform multiple operations in sequence
+            copy_bank(&project.path, 0, &dest.path, 1).unwrap();
+            copy_parts(&project.path, 0, vec![0, 1], &project.path, 1, vec![2, 3]).unwrap();
+            copy_patterns(
+                &project.path, 0,
+                vec![0, 1, 2],
+                &dest.path, 0,
+                0,
+                "keep_original",
+                None,
+                "all",
+                None
+            ).unwrap();
+            copy_tracks(
+                &project.path, 0, 0,
+                vec![0, 1],
+                &dest.path, 0, 0,
+                vec![2, 3],
+                "both"
+            ).unwrap();
+            copy_sample_slots(
+                &project.path,
+                &dest.path,
+                "both",
+                vec![1, 2, 3],
+                vec![1, 2, 3],
+                "none",
+                true
+            ).unwrap();
+
+            // All operations should have succeeded
+        }
+    }
+}
