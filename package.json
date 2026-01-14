@@ -12,7 +12,9 @@
     "tauri:dev": "PATH=\"$HOME/.cargo/bin:$PATH\" tauri dev",
     "tauri:build": "NO_STRIP=1 PATH=\"$HOME/.cargo/bin:$PATH\" tauri build",
     "prepare": "husky",
-    "test": "npm run typecheck && npm run test:rust",
+    "test": "npm run typecheck && npm run test:frontend && npm run test:rust",
+    "test:frontend": "vitest run",
+    "test:e2e": "playwright test",
     "test:rust": "cd src-tauri && cargo fmt --check && cargo clippy -- -D warnings && cargo test"
   },
   "dependencies": {
@@ -27,13 +29,19 @@
     "react-router-dom": "^7.9.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.57.0",
     "@tauri-apps/cli": "^2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.1",
+    "@testing-library/user-event": "^14.6.1",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
     "baseline-browser-mapping": "^2.9.14",
     "husky": "^9.1.7",
+    "jsdom": "^27.4.0",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^4.0.17"
   }
 }
