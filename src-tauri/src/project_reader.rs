@@ -2743,3 +2743,892 @@ pub fn reload_part_data(project_path: &str, bank_id: &str, part_id: u8) -> Resul
         .find(|p| p.part_id == part_id)
         .ok_or_else(|| format!("Failed to find reloaded part {}", part_id))
 }
+
+// ============================================================================
+// Set and Audio Pool Helper Functions
+// ============================================================================
+
+/// Response structure for Audio Pool status
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioPoolStatus {
+    pub exists: bool,
+    pub path: Option<String>,
+    pub set_path: Option<String>,
+}
+
+/// Check if a project is part of a Set.
+/// A project is considered part of a Set if:
+/// - Its parent directory contains an "AUDIO POOL" folder, OR
+/// - Its parent directory contains other Octatrack project directories
+pub fn is_project_in_set(project_path: &str) -> Result<bool, String> {
+    let path = Path::new(project_path);
+
+    // Get the parent directory (the potential Set folder)
+    let parent = path.parent()
+        .ok_or_else(|| "Cannot determine parent directory".to_string())?;
+
+    // Check if AUDIO POOL exists in parent
+    let audio_pool_path = parent.join("AUDIO POOL");
+    if audio_pool_path.exists() && audio_pool_path.is_dir() {
+        return Ok(true);
+    }
+
+    // Check if there are other project directories in the parent
+    // (projects have a project.work or project.strd file)
+    if let Ok(entries) = std::fs::read_dir(parent) {
+        let mut project_count = 0;
+        for entry in entries.flatten() {
+            let entry_path = entry.path();
+            if entry_path.is_dir() {
+                // Check for project.work or project.strd file
+                let project_work = entry_path.join("project.work");
+                let project_strd = entry_path.join("project.strd");
+                if project_work.exists() || project_strd.exists() {
+                    project_count += 1;
+                    if project_count >= 2 {
+                        // More than one project in the same directory = Set
+                        return Ok(true);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(false)
+}
+
+/// Check if two projects are in the same Set.
+/// Two projects are in the same Set if they share the same parent directory.
+pub fn are_projects_in_same_set(project1: &str, project2: &str) -> Result<bool, String> {
+    let path1 = Path::new(project1);
+    let path2 = Path::new(project2);
+
+    let parent1 = path1.parent()
+        .ok_or_else(|| "Cannot determine parent directory of project 1".to_string())?;
+    let parent2 = path2.parent()
+        .ok_or_else(|| "Cannot determine parent directory of project 2".to_string())?;
+
+    // Canonicalize to handle symlinks and relative paths
+    let canonical1 = parent1.canonicalize()
+        .map_err(|e| format!("Failed to resolve project 1 path: {}", e))?;
+    let canonical2 = parent2.canonicalize()
+        .map_err(|e| format!("Failed to resolve project 2 path: {}", e))?;
+
+    Ok(canonical1 == canonical2)
+}
+
+/// Get the Audio Pool status for the Set containing the given project.
+/// Returns information about whether an Audio Pool exists and its path.
+pub fn get_audio_pool_status(project_path: &str) -> Result<AudioPoolStatus, String> {
+    let path = Path::new(project_path);
+
+    // Get the parent directory (the Set folder)
+    let parent = path.parent()
+        .ok_or_else(|| "Cannot determine parent directory".to_string())?;
+
+    let audio_pool_path = parent.join("AUDIO POOL");
+
+    if audio_pool_path.exists() && audio_pool_path.is_dir() {
+        Ok(AudioPoolStatus {
+            exists: true,
+            path: Some(audio_pool_path.to_string_lossy().to_string()),
+            set_path: Some(parent.to_string_lossy().to_string()),
+        })
+    } else {
+        Ok(AudioPoolStatus {
+            exists: false,
+            path: None,
+            set_path: Some(parent.to_string_lossy().to_string()),
+        })
+    }
+}
+
+/// Create an Audio Pool directory in the Set containing the given project.
+/// Returns the path to the created Audio Pool directory.
+pub fn create_audio_pool(project_path: &str) -> Result<String, String> {
+    let path = Path::new(project_path);
+
+    // Get the parent directory (the Set folder)
+    let parent = path.parent()
+        .ok_or_else(|| "Cannot determine parent directory".to_string())?;
+
+    let audio_pool_path = parent.join("AUDIO POOL");
+
+    if audio_pool_path.exists() {
+        if audio_pool_path.is_dir() {
+            // Already exists, return the path
+            return Ok(audio_pool_path.to_string_lossy().to_string());
+        } else {
+            return Err("AUDIO POOL exists but is not a directory".to_string());
+        }
+    }
+
+    // Create the Audio Pool directory
+    std::fs::create_dir(&audio_pool_path)
+        .map_err(|e| format!("Failed to create Audio Pool directory: {}", e))?;
+
+    Ok(audio_pool_path.to_string_lossy().to_string())
+}
+
+// ============================================================================
+// Copy Operations
+// ============================================================================
+
+/// Copy an entire bank from the current project to a destination project/bank.
+/// This copies all 4 Parts and their 16 Patterns each.
+///
+/// # Arguments
+/// * `source_project` - Path to the source (current) project
+/// * `source_bank_index` - Source bank index (0-15 for banks A-P)
+/// * `dest_project` - Path to the destination project
+/// * `dest_bank_index` - Destination bank index (0-15 for banks A-P)
+pub fn copy_bank(
+    source_project: &str,
+    source_bank_index: u8,
+    dest_project: &str,
+    dest_bank_index: u8,
+) -> Result<(), String> {
+    if source_bank_index > 15 || dest_bank_index > 15 {
+        return Err("Bank index must be between 0 and 15".to_string());
+    }
+
+    let source_path = Path::new(source_project);
+    let dest_path = Path::new(dest_project);
+
+    // Build source bank file path (try .work first, then .strd)
+    let source_bank_num = source_bank_index + 1;
+    let source_work_file = format!("bank{:02}.work", source_bank_num);
+    let source_strd_file = format!("bank{:02}.strd", source_bank_num);
+
+    let source_bank_path = if source_path.join(&source_work_file).exists() {
+        source_path.join(&source_work_file)
+    } else if source_path.join(&source_strd_file).exists() {
+        source_path.join(&source_strd_file)
+    } else {
+        return Err(format!("Source bank {} not found", source_bank_index));
+    };
+
+    // Read the source bank
+    let mut bank_data = BankFile::from_data_file(&source_bank_path)
+        .map_err(|e| format!("Failed to read source bank: {:?}", e))?;
+
+    // Note: Bank name/ID is determined by the file name, not a field in the data
+
+    // Recalculate checksum
+    bank_data.checksum = bank_data.calculate_checksum()
+        .map_err(|e| format!("Failed to calculate checksum: {:?}", e))?;
+
+    // Build destination bank file path (always write to .work)
+    let dest_bank_num = dest_bank_index + 1;
+    let dest_bank_file = format!("bank{:02}.work", dest_bank_num);
+    let dest_bank_path = dest_path.join(&dest_bank_file);
+
+    // Write the bank to destination
+    bank_data.to_data_file(&dest_bank_path)
+        .map_err(|e| format!("Failed to write destination bank: {:?}", e))?;
+
+    println!("[DEBUG] Copied bank {} from {} to bank {} in {}",
+        source_bank_index, source_project, dest_bank_index, dest_project);
+
+    Ok(())
+}
+
+/// Copy specific Parts from one bank to another.
+/// Parts contain all track sound design parameters (machines, amps, LFOs, FX).
+///
+/// # Arguments
+/// * `source_project` - Path to the source (current) project
+/// * `source_bank_index` - Source bank index (0-15)
+/// * `source_part_indices` - Which Parts to copy (0-3 for Parts 1-4)
+/// * `dest_project` - Path to the destination project
+/// * `dest_bank_index` - Destination bank index (0-15)
+/// * `dest_part_indices` - Where to place them (must match length of source_part_indices)
+pub fn copy_parts(
+    source_project: &str,
+    source_bank_index: u8,
+    source_part_indices: Vec<u8>,
+    dest_project: &str,
+    dest_bank_index: u8,
+    dest_part_indices: Vec<u8>,
+) -> Result<(), String> {
+    if source_bank_index > 15 || dest_bank_index > 15 {
+        return Err("Bank index must be between 0 and 15".to_string());
+    }
+
+    if source_part_indices.len() != dest_part_indices.len() {
+        return Err("Source and destination part indices must have the same length".to_string());
+    }
+
+    if source_part_indices.iter().any(|&i| i > 3) || dest_part_indices.iter().any(|&i| i > 3) {
+        return Err("Part indices must be between 0 and 3".to_string());
+    }
+
+    let source_path = Path::new(source_project);
+    let dest_path = Path::new(dest_project);
+
+    // Read source bank
+    let source_bank_num = source_bank_index + 1;
+    let source_work_file = format!("bank{:02}.work", source_bank_num);
+    let source_strd_file = format!("bank{:02}.strd", source_bank_num);
+
+    let source_bank_path = if source_path.join(&source_work_file).exists() {
+        source_path.join(&source_work_file)
+    } else if source_path.join(&source_strd_file).exists() {
+        source_path.join(&source_strd_file)
+    } else {
+        return Err(format!("Source bank {} not found", source_bank_index));
+    };
+
+    let source_bank = BankFile::from_data_file(&source_bank_path)
+        .map_err(|e| format!("Failed to read source bank: {:?}", e))?;
+
+    // Read or create destination bank
+    let dest_bank_num = dest_bank_index + 1;
+    let dest_work_file = format!("bank{:02}.work", dest_bank_num);
+    let dest_strd_file = format!("bank{:02}.strd", dest_bank_num);
+    let dest_bank_path = dest_path.join(&dest_work_file);
+
+    let mut dest_bank = if dest_bank_path.exists() {
+        BankFile::from_data_file(&dest_bank_path)
+            .map_err(|e| format!("Failed to read destination bank: {:?}", e))?
+    } else if dest_path.join(&dest_strd_file).exists() {
+        BankFile::from_data_file(&dest_path.join(&dest_strd_file))
+            .map_err(|e| format!("Failed to read destination bank: {:?}", e))?
+    } else {
+        return Err(format!("Destination bank {} not found", dest_bank_index));
+    };
+
+    // Copy each part
+    for (src_idx, dest_idx) in source_part_indices.iter().zip(dest_part_indices.iter()) {
+        let src_part = src_idx.clone() as usize;
+        let dst_part = dest_idx.clone() as usize;
+
+        // Copy the unsaved part data
+        dest_bank.parts.unsaved.0[dst_part] = source_bank.parts.unsaved.0[src_part].clone();
+
+        // Mark the destination part as edited
+        dest_bank.parts_edited_bitmask |= 1 << dst_part;
+
+        println!("[DEBUG] Copied Part {} to Part {}", src_part + 1, dst_part + 1);
+    }
+
+    // Recalculate checksum
+    dest_bank.checksum = dest_bank.calculate_checksum()
+        .map_err(|e| format!("Failed to calculate checksum: {:?}", e))?;
+
+    // Write the destination bank
+    dest_bank.to_data_file(&dest_bank_path)
+        .map_err(|e| format!("Failed to write destination bank: {:?}", e))?;
+
+    println!("[DEBUG] Copied {} parts from bank {} to bank {}",
+        source_part_indices.len(), source_bank_index, dest_bank_index);
+
+    Ok(())
+}
+
+/// Copy patterns from one bank to another with various options.
+///
+/// # Arguments
+/// * `source_project` - Path to the source (current) project
+/// * `source_bank_index` - Source bank index (0-15)
+/// * `source_pattern_indices` - Which patterns to copy (0-15)
+/// * `dest_project` - Path to the destination project
+/// * `dest_bank_index` - Destination bank index (0-15)
+/// * `dest_pattern_start` - Starting pattern index in destination (0-15)
+/// * `part_assignment_mode` - "keep_original", "copy_source_part", or "select_specific"
+/// * `dest_part` - Required if select_specific mode (0-3 for Parts 1-4)
+/// * `track_mode` - "all" or "specific"
+/// * `track_indices` - Required if specific mode (0-7 for audio, 8-15 for MIDI)
+pub fn copy_patterns(
+    source_project: &str,
+    source_bank_index: u8,
+    source_pattern_indices: Vec<u8>,
+    dest_project: &str,
+    dest_bank_index: u8,
+    dest_pattern_start: u8,
+    part_assignment_mode: &str,
+    dest_part: Option<u8>,
+    track_mode: &str,
+    track_indices: Option<Vec<u8>>,
+) -> Result<(), String> {
+    // Validate inputs
+    if source_bank_index > 15 || dest_bank_index > 15 {
+        return Err("Bank index must be between 0 and 15".to_string());
+    }
+
+    if source_pattern_indices.iter().any(|&i| i > 15) {
+        return Err("Pattern indices must be between 0 and 15".to_string());
+    }
+
+    if dest_pattern_start as usize + source_pattern_indices.len() > 16 {
+        return Err("Destination pattern range exceeds bank capacity (16 patterns)".to_string());
+    }
+
+    if part_assignment_mode == "select_specific" && dest_part.is_none() {
+        return Err("dest_part is required when part_assignment_mode is 'select_specific'".to_string());
+    }
+
+    if let Some(ref indices) = track_indices {
+        if indices.iter().any(|&i| i > 15) {
+            return Err("Track indices must be between 0 and 15".to_string());
+        }
+    }
+
+    let source_path = Path::new(source_project);
+    let dest_path = Path::new(dest_project);
+
+    // Read source bank
+    let source_bank_num = source_bank_index + 1;
+    let source_work_file = format!("bank{:02}.work", source_bank_num);
+    let source_strd_file = format!("bank{:02}.strd", source_bank_num);
+
+    let source_bank_path = if source_path.join(&source_work_file).exists() {
+        source_path.join(&source_work_file)
+    } else if source_path.join(&source_strd_file).exists() {
+        source_path.join(&source_strd_file)
+    } else {
+        return Err(format!("Source bank {} not found", source_bank_index));
+    };
+
+    let source_bank = BankFile::from_data_file(&source_bank_path)
+        .map_err(|e| format!("Failed to read source bank: {:?}", e))?;
+
+    // Read destination bank
+    let dest_bank_num = dest_bank_index + 1;
+    let dest_work_file = format!("bank{:02}.work", dest_bank_num);
+    let dest_strd_file = format!("bank{:02}.strd", dest_bank_num);
+    let dest_bank_path = dest_path.join(&dest_work_file);
+
+    let mut dest_bank = if dest_bank_path.exists() {
+        BankFile::from_data_file(&dest_bank_path)
+            .map_err(|e| format!("Failed to read destination bank: {:?}", e))?
+    } else if dest_path.join(&dest_strd_file).exists() {
+        BankFile::from_data_file(&dest_path.join(&dest_strd_file))
+            .map_err(|e| format!("Failed to read destination bank: {:?}", e))?
+    } else {
+        return Err(format!("Destination bank {} not found", dest_bank_index));
+    };
+
+    // Track which source parts we need to copy (for copy_source_part mode)
+    let mut parts_to_copy: std::collections::HashSet<u8> = std::collections::HashSet::new();
+
+    // Copy each pattern
+    for (offset, &src_pattern_idx) in source_pattern_indices.iter().enumerate() {
+        let dest_pattern_idx = dest_pattern_start as usize + offset;
+        let src_pattern = &source_bank.patterns.0[src_pattern_idx as usize];
+
+        // Get the source pattern's part assignment
+        let source_part_assignment = src_pattern.part_assignment;
+
+        // Determine the new part assignment
+        let new_part_assignment = match part_assignment_mode {
+            "keep_original" => source_part_assignment,
+            "copy_source_part" => {
+                parts_to_copy.insert(source_part_assignment);
+                source_part_assignment
+            },
+            "select_specific" => dest_part.unwrap(),
+            _ => return Err(format!("Invalid part_assignment_mode: {}", part_assignment_mode)),
+        };
+
+        // Copy the pattern
+        if track_mode == "all" {
+            // Copy entire pattern
+            dest_bank.patterns.0[dest_pattern_idx] = src_pattern.clone();
+            // Update part assignment
+            dest_bank.patterns.0[dest_pattern_idx].part_assignment = new_part_assignment;
+        } else if track_mode == "specific" {
+            // Copy only specific tracks
+            let indices = track_indices.as_ref().ok_or("track_indices required for specific mode")?;
+
+            for &track_idx in indices {
+                if track_idx < 8 {
+                    // Audio track (0-7)
+                    dest_bank.patterns.0[dest_pattern_idx].audio_track_trigs.0[track_idx as usize] =
+                        src_pattern.audio_track_trigs.0[track_idx as usize].clone();
+                } else {
+                    // MIDI track (8-15 maps to 0-7 in midi_track_trigs)
+                    let midi_idx = (track_idx - 8) as usize;
+                    dest_bank.patterns.0[dest_pattern_idx].midi_track_trigs.0[midi_idx] =
+                        src_pattern.midi_track_trigs.0[midi_idx].clone();
+                }
+            }
+            // Update part assignment
+            dest_bank.patterns.0[dest_pattern_idx].part_assignment = new_part_assignment;
+        }
+
+        println!("[DEBUG] Copied pattern {} to pattern {} (part assignment: {})",
+            src_pattern_idx + 1, dest_pattern_idx + 1, new_part_assignment + 1);
+    }
+
+    // If copy_source_part mode, also copy the parts
+    if part_assignment_mode == "copy_source_part" {
+        for part_id in parts_to_copy {
+            dest_bank.parts.unsaved.0[part_id as usize] =
+                source_bank.parts.unsaved.0[part_id as usize].clone();
+            dest_bank.parts_edited_bitmask |= 1 << part_id;
+            println!("[DEBUG] Also copied Part {} along with patterns", part_id + 1);
+        }
+    }
+
+    // Recalculate checksum
+    dest_bank.checksum = dest_bank.calculate_checksum()
+        .map_err(|e| format!("Failed to calculate checksum: {:?}", e))?;
+
+    // Write the destination bank
+    dest_bank.to_data_file(&dest_bank_path)
+        .map_err(|e| format!("Failed to write destination bank: {:?}", e))?;
+
+    println!("[DEBUG] Copied {} patterns from bank {} to bank {}",
+        source_pattern_indices.len(), source_bank_index, dest_bank_index);
+
+    Ok(())
+}
+
+/// Copy tracks from one bank to another with mode selection.
+/// Tracks have two components:
+/// - Part-level parameters (sound design: machines, amps, LFOs, FX)
+/// - Pattern-level triggers (for all 16 patterns in the bank)
+///
+/// # Arguments
+/// * `source_project` - Path to the source (current) project
+/// * `source_bank_index` - Source bank index (0-15)
+/// * `source_part_index` - Source Part index (0-3 for Parts 1-4)
+/// * `source_track_indices` - Source track indices (0-7 for audio, 8-15 for MIDI)
+/// * `dest_project` - Path to the destination project
+/// * `dest_bank_index` - Destination bank index (0-15)
+/// * `dest_part_index` - Destination Part index (0-3)
+/// * `dest_track_indices` - Destination track indices (must match length of source)
+/// * `mode` - "part_params", "pattern_triggers", or "both"
+pub fn copy_tracks(
+    source_project: &str,
+    source_bank_index: u8,
+    source_part_index: u8,
+    source_track_indices: Vec<u8>,
+    dest_project: &str,
+    dest_bank_index: u8,
+    dest_part_index: u8,
+    dest_track_indices: Vec<u8>,
+    mode: &str,
+) -> Result<(), String> {
+    // Validate inputs
+    if source_bank_index > 15 || dest_bank_index > 15 {
+        return Err("Bank index must be between 0 and 15".to_string());
+    }
+
+    if source_part_index > 3 || dest_part_index > 3 {
+        return Err("Part index must be between 0 and 3".to_string());
+    }
+
+    if source_track_indices.len() != dest_track_indices.len() {
+        return Err("Source and destination track indices must have the same length".to_string());
+    }
+
+    if source_track_indices.iter().any(|&i| i > 15) || dest_track_indices.iter().any(|&i| i > 15) {
+        return Err("Track indices must be between 0 and 15".to_string());
+    }
+
+    // Check that we're not mixing audio and MIDI tracks
+    let source_has_audio = source_track_indices.iter().any(|&i| i < 8);
+    let source_has_midi = source_track_indices.iter().any(|&i| i >= 8);
+    let dest_has_audio = dest_track_indices.iter().any(|&i| i < 8);
+    let dest_has_midi = dest_track_indices.iter().any(|&i| i >= 8);
+
+    if (source_has_audio && dest_has_midi) || (source_has_midi && dest_has_audio) {
+        return Err("Cannot mix audio tracks (0-7) and MIDI tracks (8-15) in copy operation".to_string());
+    }
+
+    if !["part_params", "pattern_triggers", "both"].contains(&mode) {
+        return Err(format!("Invalid mode: {}. Must be 'part_params', 'pattern_triggers', or 'both'", mode));
+    }
+
+    let source_path = Path::new(source_project);
+    let dest_path = Path::new(dest_project);
+
+    // Read source bank
+    let source_bank_num = source_bank_index + 1;
+    let source_work_file = format!("bank{:02}.work", source_bank_num);
+    let source_strd_file = format!("bank{:02}.strd", source_bank_num);
+
+    let source_bank_path = if source_path.join(&source_work_file).exists() {
+        source_path.join(&source_work_file)
+    } else if source_path.join(&source_strd_file).exists() {
+        source_path.join(&source_strd_file)
+    } else {
+        return Err(format!("Source bank {} not found", source_bank_index));
+    };
+
+    let source_bank = BankFile::from_data_file(&source_bank_path)
+        .map_err(|e| format!("Failed to read source bank: {:?}", e))?;
+
+    // Read destination bank
+    let dest_bank_num = dest_bank_index + 1;
+    let dest_work_file = format!("bank{:02}.work", dest_bank_num);
+    let dest_strd_file = format!("bank{:02}.strd", dest_bank_num);
+    let dest_bank_path = dest_path.join(&dest_work_file);
+
+    let mut dest_bank = if dest_bank_path.exists() {
+        BankFile::from_data_file(&dest_bank_path)
+            .map_err(|e| format!("Failed to read destination bank: {:?}", e))?
+    } else if dest_path.join(&dest_strd_file).exists() {
+        BankFile::from_data_file(&dest_path.join(&dest_strd_file))
+            .map_err(|e| format!("Failed to read destination bank: {:?}", e))?
+    } else {
+        return Err(format!("Destination bank {} not found", dest_bank_index));
+    };
+
+    let src_part = source_part_index as usize;
+    let dst_part = dest_part_index as usize;
+
+    // Copy each track
+    for (&src_track_idx, &dst_track_idx) in source_track_indices.iter().zip(dest_track_indices.iter()) {
+        let is_audio = src_track_idx < 8;
+
+        if mode == "part_params" || mode == "both" {
+            // Copy Part-level parameters (sound design)
+            if is_audio {
+                let src_idx = src_track_idx as usize;
+                let dst_idx = dst_track_idx as usize;
+
+                // Copy audio track params values
+                dest_bank.parts.unsaved.0[dst_part].audio_track_params_values[dst_idx] =
+                    source_bank.parts.unsaved.0[src_part].audio_track_params_values[src_idx].clone();
+
+                // Copy audio track params setup
+                dest_bank.parts.unsaved.0[dst_part].audio_track_params_setup[dst_idx] =
+                    source_bank.parts.unsaved.0[src_part].audio_track_params_setup[src_idx].clone();
+
+                // Copy audio track machine setup
+                dest_bank.parts.unsaved.0[dst_part].audio_track_machine_setup[dst_idx] =
+                    source_bank.parts.unsaved.0[src_part].audio_track_machine_setup[src_idx].clone();
+
+                println!("[DEBUG] Copied audio track {} Part params to track {}", src_idx + 1, dst_idx + 1);
+            } else {
+                // MIDI track (8-15 maps to 0-7)
+                let src_idx = (src_track_idx - 8) as usize;
+                let dst_idx = (dst_track_idx - 8) as usize;
+
+                // Copy MIDI track params values
+                dest_bank.parts.unsaved.0[dst_part].midi_track_params_values[dst_idx] =
+                    source_bank.parts.unsaved.0[src_part].midi_track_params_values[src_idx].clone();
+
+                // Copy MIDI track params setup
+                dest_bank.parts.unsaved.0[dst_part].midi_track_params_setup[dst_idx] =
+                    source_bank.parts.unsaved.0[src_part].midi_track_params_setup[src_idx].clone();
+
+                println!("[DEBUG] Copied MIDI track {} Part params to track {}", src_idx + 1, dst_idx + 1);
+            }
+        }
+
+        if mode == "pattern_triggers" || mode == "both" {
+            // Copy Pattern-level triggers for all 16 patterns
+            for pattern_idx in 0..16 {
+                if is_audio {
+                    let src_idx = src_track_idx as usize;
+                    let dst_idx = dst_track_idx as usize;
+
+                    dest_bank.patterns.0[pattern_idx].audio_track_trigs.0[dst_idx] =
+                        source_bank.patterns.0[pattern_idx].audio_track_trigs.0[src_idx].clone();
+                } else {
+                    let src_idx = (src_track_idx - 8) as usize;
+                    let dst_idx = (dst_track_idx - 8) as usize;
+
+                    dest_bank.patterns.0[pattern_idx].midi_track_trigs.0[dst_idx] =
+                        source_bank.patterns.0[pattern_idx].midi_track_trigs.0[src_idx].clone();
+                }
+            }
+            println!("[DEBUG] Copied track {} triggers (all 16 patterns) to track {}",
+                src_track_idx + 1, dst_track_idx + 1);
+        }
+    }
+
+    // Mark destination part as edited (if we copied part params)
+    if mode == "part_params" || mode == "both" {
+        dest_bank.parts_edited_bitmask |= 1 << dst_part;
+    }
+
+    // Recalculate checksum
+    dest_bank.checksum = dest_bank.calculate_checksum()
+        .map_err(|e| format!("Failed to calculate checksum: {:?}", e))?;
+
+    // Write the destination bank
+    dest_bank.to_data_file(&dest_bank_path)
+        .map_err(|e| format!("Failed to write destination bank: {:?}", e))?;
+
+    println!("[DEBUG] Copied {} tracks from bank {} Part {} to bank {} Part {} (mode: {})",
+        source_track_indices.len(), source_bank_index, source_part_index + 1,
+        dest_bank_index, dest_part_index + 1, mode);
+
+    Ok(())
+}
+
+/// Copy sample slots from the current project to a destination project.
+///
+/// # Arguments
+/// * `source_project` - Path to the source (current) project
+/// * `dest_project` - Path to the destination project
+/// * `slot_type` - "static", "flex", or "both"
+/// * `source_indices` - Source slot indices (1-128)
+/// * `dest_indices` - Destination slot indices (must match length of source_indices)
+/// * `audio_mode` - "none", "copy", or "move_to_pool"
+/// * `include_editor_settings` - Whether to copy Gain, loop mode, timestretch settings
+///
+/// Note: For "move_to_pool" mode, both projects must be in the same Set.
+pub fn copy_sample_slots(
+    source_project: &str,
+    dest_project: &str,
+    slot_type: &str,
+    source_indices: Vec<u8>,
+    dest_indices: Vec<u8>,
+    audio_mode: &str,
+    include_editor_settings: bool,
+) -> Result<(), String> {
+    // Validate inputs
+    if source_indices.len() != dest_indices.len() {
+        return Err("Source and destination indices must have the same length".to_string());
+    }
+
+    if source_indices.iter().any(|&i| i < 1 || i > 128) || dest_indices.iter().any(|&i| i < 1 || i > 128) {
+        return Err("Slot indices must be between 1 and 128".to_string());
+    }
+
+    if !["static", "flex", "both"].contains(&slot_type) {
+        return Err(format!("Invalid slot_type: {}. Must be 'static', 'flex', or 'both'", slot_type));
+    }
+
+    if !["none", "copy", "move_to_pool"].contains(&audio_mode) {
+        return Err(format!("Invalid audio_mode: {}. Must be 'none', 'copy', or 'move_to_pool'", audio_mode));
+    }
+
+    // For move_to_pool mode, verify projects are in the same Set
+    if audio_mode == "move_to_pool" {
+        if !are_projects_in_same_set(source_project, dest_project)? {
+            return Err("Projects must be in the same Set for 'move_to_pool' mode".to_string());
+        }
+    }
+
+    let source_path = Path::new(source_project);
+    let dest_path = Path::new(dest_project);
+
+    // Read source project file
+    let source_project_work = source_path.join("project.work");
+    let source_project_strd = source_path.join("project.strd");
+
+    let source_project_file_path = if source_project_work.exists() {
+        source_project_work
+    } else if source_project_strd.exists() {
+        source_project_strd
+    } else {
+        return Err("Source project file not found".to_string());
+    };
+
+    let source_project_data = ProjectFile::from_data_file(&source_project_file_path)
+        .map_err(|e| format!("Failed to read source project: {:?}", e))?;
+
+    // Read destination project file
+    let dest_project_work = dest_path.join("project.work");
+    let dest_project_strd = dest_path.join("project.strd");
+
+    let dest_project_file_path = if dest_project_work.exists() {
+        dest_project_work.clone()
+    } else if dest_project_strd.exists() {
+        dest_project_strd
+    } else {
+        return Err("Destination project file not found".to_string());
+    };
+
+    let mut dest_project_data = ProjectFile::from_data_file(&dest_project_file_path)
+        .map_err(|e| format!("Failed to read destination project: {:?}", e))?;
+
+    // Get Audio Pool path for move_to_pool mode
+    let audio_pool_path = if audio_mode == "move_to_pool" {
+        let status = get_audio_pool_status(source_project)?;
+        if !status.exists {
+            // Create Audio Pool if it doesn't exist
+            Some(create_audio_pool(source_project)?)
+        } else {
+            status.path
+        }
+    } else {
+        None
+    };
+
+    // Process each slot
+    for (&src_slot_id, &dest_slot_id) in source_indices.iter().zip(dest_indices.iter()) {
+        let src_idx = (src_slot_id - 1) as usize;
+        let dest_idx = (dest_slot_id - 1) as usize;
+
+        // Copy Static slots
+        if slot_type == "static" || slot_type == "both" {
+            if let Some(src_slot) = source_project_data.slots.static_slots.get(src_idx) {
+                if let Some(ref src_slot_data) = src_slot {
+                    // Clone the slot
+                    let mut new_slot = src_slot_data.clone();
+
+                    // Handle audio file based on mode
+                    if let Some(ref sample_path) = new_slot.path {
+                        let sample_path_str = sample_path.to_string_lossy().to_string();
+
+                        match audio_mode {
+                            "copy" => {
+                                // Copy audio file to destination project
+                                let src_full_path = source_path.join(&sample_path_str);
+                                if src_full_path.exists() {
+                                    let dest_full_path = dest_path.join(&sample_path_str);
+                                    // Ensure destination directory exists
+                                    if let Some(parent) = dest_full_path.parent() {
+                                        let _ = std::fs::create_dir_all(parent);
+                                    }
+                                    let _ = std::fs::copy(&src_full_path, &dest_full_path);
+                                    println!("[DEBUG] Copied audio file: {}", sample_path_str);
+                                }
+                            },
+                            "move_to_pool" => {
+                                // Move file to Audio Pool and update path
+                                if let Some(ref pool_path) = audio_pool_path {
+                                    let src_full_path = source_path.join(&sample_path_str);
+                                    if src_full_path.exists() && !sample_path_str.starts_with("../AUDIO") {
+                                        let file_name = src_full_path.file_name()
+                                            .map(|n| n.to_string_lossy().to_string())
+                                            .unwrap_or_default();
+                                        let pool_dest = Path::new(pool_path).join(&file_name);
+
+                                        // Copy to Audio Pool
+                                        let _ = std::fs::copy(&src_full_path, &pool_dest);
+
+                                        // Update path to reference Audio Pool
+                                        // Audio Pool is at ../AUDIO POOL relative to project
+                                        new_slot.path = Some(std::path::PathBuf::from(format!("../AUDIO POOL/{}", file_name)));
+
+                                        println!("[DEBUG] Moved to Audio Pool: {}", file_name);
+                                    }
+                                }
+                            },
+                            _ => {} // "none" - just copy slot data
+                        }
+                    }
+
+                    // Optionally clear editor settings
+                    if !include_editor_settings {
+                        new_slot.gain = 64; // Default gain
+                        // Loop mode and timestretch stay as is (they might affect playback)
+                    }
+
+                    // Static slots are a fixed-size array (128 slots)
+                    if dest_idx < 128 {
+                        dest_project_data.slots.static_slots[dest_idx] = Some(new_slot);
+                        println!("[DEBUG] Copied Static slot {} to slot {}", src_slot_id, dest_slot_id);
+                    }
+                }
+            }
+        }
+
+        // Copy Flex slots
+        if slot_type == "flex" || slot_type == "both" {
+            if let Some(src_slot) = source_project_data.slots.flex_slots.get(src_idx) {
+                if let Some(ref src_slot_data) = src_slot {
+                    // Clone the slot
+                    let mut new_slot = src_slot_data.clone();
+
+                    // Handle audio file based on mode (same as above)
+                    if let Some(ref sample_path) = new_slot.path {
+                        let sample_path_str = sample_path.to_string_lossy().to_string();
+
+                        match audio_mode {
+                            "copy" => {
+                                let src_full_path = source_path.join(&sample_path_str);
+                                if src_full_path.exists() {
+                                    let dest_full_path = dest_path.join(&sample_path_str);
+                                    if let Some(parent) = dest_full_path.parent() {
+                                        let _ = std::fs::create_dir_all(parent);
+                                    }
+                                    let _ = std::fs::copy(&src_full_path, &dest_full_path);
+                                    println!("[DEBUG] Copied audio file: {}", sample_path_str);
+                                }
+                            },
+                            "move_to_pool" => {
+                                if let Some(ref pool_path) = audio_pool_path {
+                                    let src_full_path = source_path.join(&sample_path_str);
+                                    if src_full_path.exists() && !sample_path_str.starts_with("../AUDIO") {
+                                        let file_name = src_full_path.file_name()
+                                            .map(|n| n.to_string_lossy().to_string())
+                                            .unwrap_or_default();
+                                        let pool_dest = Path::new(pool_path).join(&file_name);
+
+                                        let _ = std::fs::copy(&src_full_path, &pool_dest);
+                                        new_slot.path = Some(std::path::PathBuf::from(format!("../AUDIO POOL/{}", file_name)));
+
+                                        println!("[DEBUG] Moved to Audio Pool: {}", file_name);
+                                    }
+                                }
+                            },
+                            _ => {}
+                        }
+                    }
+
+                    if !include_editor_settings {
+                        new_slot.gain = 64;
+                    }
+
+                    // Flex slots are a fixed-size array (128 slots - though internal array is 136)
+                    if dest_idx < dest_project_data.slots.flex_slots.len() {
+                        dest_project_data.slots.flex_slots[dest_idx] = Some(new_slot);
+                        println!("[DEBUG] Copied Flex slot {} to slot {}", src_slot_id, dest_slot_id);
+                    }
+                }
+            }
+        }
+    }
+
+    // Write the destination project file (always write to .work)
+    // Note: ProjectFile handles its own checksum internally via to_data_file
+    let dest_final_path = dest_path.join("project.work");
+    dest_project_data.to_data_file(&dest_final_path)
+        .map_err(|e| format!("Failed to write destination project: {:?}", e))?;
+
+    // If move_to_pool mode, also update source project paths
+    if audio_mode == "move_to_pool" {
+        // Update source project with new Audio Pool paths
+        let mut source_project_data_mut = source_project_data;
+
+        for &src_slot_id in &source_indices {
+            let src_idx = (src_slot_id - 1) as usize;
+
+            if slot_type == "static" || slot_type == "both" {
+                if let Some(Some(ref mut slot)) = source_project_data_mut.slots.static_slots.get_mut(src_idx) {
+                    if let Some(ref sample_path) = slot.path.clone() {
+                        let sample_path_str = sample_path.to_string_lossy().to_string();
+                        if !sample_path_str.starts_with("../AUDIO") {
+                            if let Some(file_name) = sample_path.file_name() {
+                                slot.path = Some(std::path::PathBuf::from(format!("../AUDIO POOL/{}", file_name.to_string_lossy())));
+                            }
+                        }
+                    }
+                }
+            }
+
+            if slot_type == "flex" || slot_type == "both" {
+                if let Some(Some(ref mut slot)) = source_project_data_mut.slots.flex_slots.get_mut(src_idx) {
+                    if let Some(ref sample_path) = slot.path.clone() {
+                        let sample_path_str = sample_path.to_string_lossy().to_string();
+                        if !sample_path_str.starts_with("../AUDIO") {
+                            if let Some(file_name) = sample_path.file_name() {
+                                slot.path = Some(std::path::PathBuf::from(format!("../AUDIO POOL/{}", file_name.to_string_lossy())));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Write the updated source project (checksum handled internally by to_data_file)
+        let source_final_path = source_path.join("project.work");
+        source_project_data_mut.to_data_file(&source_final_path)
+            .map_err(|e| format!("Failed to write source project: {:?}", e))?;
+    }
+
+    println!("[DEBUG] Copied {} sample slots from {} to {}",
+        source_indices.len(), source_project, dest_project);
+
+    Ok(())
+}

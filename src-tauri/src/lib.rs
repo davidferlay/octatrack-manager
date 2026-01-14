@@ -3,7 +3,18 @@ mod project_reader;
 mod audio_pool;
 
 use device_detection::{discover_devices, scan_directory, ScanResult};
-use project_reader::{read_project_metadata, read_project_banks, read_single_bank, get_existing_bank_indices, read_parts_data, save_parts_data, commit_part_data, commit_all_parts_data, reload_part_data, ProjectMetadata, Bank, PartData, PartsDataResponse};
+use project_reader::{
+    read_project_metadata, read_project_banks, read_single_bank, get_existing_bank_indices,
+    read_parts_data, save_parts_data, commit_part_data, commit_all_parts_data, reload_part_data,
+    // Set and Audio Pool helpers
+    is_project_in_set, are_projects_in_same_set, get_audio_pool_status as get_audio_pool_status_impl,
+    create_audio_pool as create_audio_pool_impl,
+    // Copy operations
+    copy_bank as copy_bank_impl, copy_parts as copy_parts_impl, copy_patterns as copy_patterns_impl,
+    copy_tracks as copy_tracks_impl, copy_sample_slots as copy_sample_slots_impl,
+    // Types
+    ProjectMetadata, Bank, PartData, PartsDataResponse, AudioPoolStatus,
+};
 use audio_pool::{list_directory, get_parent_directory, create_directory, copy_files_with_overwrite, copy_single_file_with_progress, move_files, delete_files, rename_file as rename_file_impl, AudioFileInfo, register_cancellation_token, cancel_transfer, remove_cancellation_token};
 use tauri::{AppHandle, Emitter};
 use serde::Serialize;
@@ -246,6 +257,128 @@ fn get_system_resources() -> SystemResources {
     }
 }
 
+// ============================================================================
+// Tools Tab - Set and Audio Pool Commands
+// ============================================================================
+
+#[tauri::command]
+async fn check_project_in_set(project_path: String) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        is_project_in_set(&project_path)
+    }).await.unwrap()
+}
+
+#[tauri::command]
+async fn check_projects_in_same_set(project1: String, project2: String) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        are_projects_in_same_set(&project1, &project2)
+    }).await.unwrap()
+}
+
+#[tauri::command]
+async fn get_audio_pool_status(project_path: String) -> Result<AudioPoolStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        get_audio_pool_status_impl(&project_path)
+    }).await.unwrap()
+}
+
+#[tauri::command]
+async fn create_audio_pool(project_path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        create_audio_pool_impl(&project_path)
+    }).await.unwrap()
+}
+
+// ============================================================================
+// Tools Tab - Copy Operations Commands
+// ============================================================================
+
+#[tauri::command]
+async fn copy_bank(
+    source_project: String,
+    source_bank_index: u8,
+    dest_project: String,
+    dest_bank_index: u8,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        copy_bank_impl(&source_project, source_bank_index, &dest_project, dest_bank_index)
+    }).await.unwrap()
+}
+
+#[tauri::command]
+async fn copy_parts(
+    source_project: String,
+    source_bank_index: u8,
+    source_part_indices: Vec<u8>,
+    dest_project: String,
+    dest_bank_index: u8,
+    dest_part_indices: Vec<u8>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        copy_parts_impl(&source_project, source_bank_index, source_part_indices, &dest_project, dest_bank_index, dest_part_indices)
+    }).await.unwrap()
+}
+
+#[tauri::command]
+async fn copy_patterns(
+    source_project: String,
+    source_bank_index: u8,
+    source_pattern_indices: Vec<u8>,
+    dest_project: String,
+    dest_bank_index: u8,
+    dest_pattern_start: u8,
+    part_assignment_mode: String,
+    dest_part: Option<u8>,
+    track_mode: String,
+    track_indices: Option<Vec<u8>>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        copy_patterns_impl(
+            &source_project, source_bank_index, source_pattern_indices,
+            &dest_project, dest_bank_index, dest_pattern_start,
+            &part_assignment_mode, dest_part, &track_mode, track_indices
+        )
+    }).await.unwrap()
+}
+
+#[tauri::command]
+async fn copy_tracks(
+    source_project: String,
+    source_bank_index: u8,
+    source_part_index: u8,
+    source_track_indices: Vec<u8>,
+    dest_project: String,
+    dest_bank_index: u8,
+    dest_part_index: u8,
+    dest_track_indices: Vec<u8>,
+    mode: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        copy_tracks_impl(
+            &source_project, source_bank_index, source_part_index, source_track_indices,
+            &dest_project, dest_bank_index, dest_part_index, dest_track_indices, &mode
+        )
+    }).await.unwrap()
+}
+
+#[tauri::command]
+async fn copy_sample_slots(
+    source_project: String,
+    dest_project: String,
+    slot_type: String,
+    source_indices: Vec<u8>,
+    dest_indices: Vec<u8>,
+    audio_mode: String,
+    include_editor_settings: bool,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        copy_sample_slots_impl(
+            &source_project, &dest_project, &slot_type,
+            source_indices, dest_indices, &audio_mode, include_editor_settings
+        )
+    }).await.unwrap()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -278,7 +411,18 @@ pub fn run() {
             rename_file,
             delete_file,
             open_in_file_manager,
-            get_system_resources
+            get_system_resources,
+            // Tools Tab - Set and Audio Pool
+            check_project_in_set,
+            check_projects_in_same_set,
+            get_audio_pool_status,
+            create_audio_pool,
+            // Tools Tab - Copy Operations
+            copy_bank,
+            copy_parts,
+            copy_patterns,
+            copy_tracks,
+            copy_sample_slots
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -7,6 +7,7 @@ import { TrackSelector, ALL_AUDIO_TRACKS, ALL_MIDI_TRACKS } from "../components/
 import { PatternSelector, ALL_PATTERNS } from "../components/PatternSelector";
 import { SampleSlotsTable } from "../components/SampleSlotsTable";
 import PartsPanel from "../components/PartsPanel";
+import ToolsPanel from "../components/ToolsPanel";
 import { WriteStatus, IDLE_STATUS } from "../types/writeStatus";
 import { TrackBadge } from "../components/TrackBadge";
 import { ScrollToTop } from "../components/ScrollToTop";
@@ -86,7 +87,7 @@ interface TrigStep {
 
 // TrackInfo, Pattern, Part, and Bank interfaces are imported from ProjectsContext via Bank type
 
-type TabType = "overview" | "parts" | "patterns" | "tracks" | "static-slots" | "flex-slots";
+type TabType = "overview" | "parts" | "patterns" | "tracks" | "static-slots" | "flex-slots" | "tools";
 
 // Helper function to calculate the display denominator for length fraction
 function getLengthDenominator(length: number): number {
@@ -388,6 +389,12 @@ export function ProjectDetail() {
                 onClick={() => setActiveTab("static-slots")}
               >
                 Static ({metadata.sample_slots.static_slots.filter(slot => slot.path).length})
+              </button>
+              <button
+                className={`header-tab ${activeTab === "tools" ? "active" : ""}`}
+                onClick={() => setActiveTab("tools")}
+              >
+                Tools
               </button>
             </div>
           )}
@@ -1365,6 +1372,15 @@ export function ProjectDetail() {
 
             {activeTab === "static-slots" && (
               <SampleSlotsTable slots={metadata.sample_slots.static_slots} slotPrefix="S" tableType="static" projectPath={projectPath} />
+            )}
+
+            {activeTab === "tools" && projectPath && (
+              <ToolsPanel
+                projectPath={projectPath}
+                projectName={projectName || ""}
+                banks={banks}
+                loadedBankIndices={loadedBankIndices}
+              />
             )}
 
           </div>
