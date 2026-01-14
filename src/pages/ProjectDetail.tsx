@@ -143,6 +143,26 @@ export function ProjectDetail() {
     setPartsWriteStatus(status);
   }, []);
 
+  // Reload a specific bank (used after copy operations in Tools panel)
+  const reloadBank = useCallback(async (bankIndex: number) => {
+    if (!projectPath) return;
+    try {
+      const bank = await invoke<Bank | null>("load_single_bank", {
+        path: projectPath,
+        bankIndex
+      });
+      if (bank) {
+        setBanks(prev => {
+          const newBanks = [...prev];
+          newBanks[bankIndex] = bank;
+          return newBanks;
+        });
+      }
+    } catch (err) {
+      console.error(`Failed to reload bank ${bankIndex}:`, err);
+    }
+  }, [projectPath]);
+
   useEffect(() => {
     if (!projectPath) return;
 
@@ -1380,6 +1400,7 @@ export function ProjectDetail() {
                 projectName={projectName || ""}
                 banks={banks}
                 loadedBankIndices={loadedBankIndices}
+                onBankUpdated={reloadBank}
               />
             )}
 
