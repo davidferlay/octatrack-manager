@@ -1009,6 +1009,7 @@ pub fn rename_file(old_path: &str, new_name: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
 
     #[test]
     fn test_is_audio_file() {
@@ -1018,5 +1019,525 @@ mod tests {
         assert!(is_audio_file("test.AIFF"));
         assert!(!is_audio_file("test.txt"));
         assert!(!is_audio_file("test.pdf"));
+    }
+
+    #[test]
+    fn test_is_audio_file_all_formats() {
+        // All supported audio formats
+        assert!(is_audio_file("test.wav"));
+        assert!(is_audio_file("test.aif"));
+        assert!(is_audio_file("test.aiff"));
+        assert!(is_audio_file("test.mp3"));
+        assert!(is_audio_file("test.flac"));
+        assert!(is_audio_file("test.ogg"));
+        assert!(is_audio_file("test.m4a"));
+    }
+
+    #[test]
+    fn test_is_audio_file_case_insensitive() {
+        assert!(is_audio_file("test.WAV"));
+        assert!(is_audio_file("test.Wav"));
+        assert!(is_audio_file("test.MP3"));
+        assert!(is_audio_file("test.Mp3"));
+        assert!(is_audio_file("test.FLAC"));
+    }
+
+    // ==================== LIST DIRECTORY TESTS ====================
+
+    #[test]
+    fn test_list_directory_success() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create some test files
+        fs::write(temp_dir.path().join("test1.txt"), "content").unwrap();
+        fs::write(temp_dir.path().join("test2.txt"), "content").unwrap();
+        fs::create_dir(temp_dir.path().join("subdir")).unwrap();
+
+        let result = list_directory(&temp_dir.path().to_string_lossy());
+        assert!(result.is_ok(), "Should list directory: {:?}", result);
+
+        let files = result.unwrap();
+        assert_eq!(files.len(), 3, "Should find 3 items");
+    }
+
+    #[test]
+    fn test_list_directory_empty() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let result = list_directory(&temp_dir.path().to_string_lossy());
+        assert!(result.is_ok());
+
+        let files = result.unwrap();
+        assert!(files.is_empty(), "Empty directory should have no files");
+    }
+
+    #[test]
+    fn test_list_directory_nonexistent() {
+        let result = list_directory("/nonexistent/path/12345");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("does not exist"));
+    }
+
+    #[test]
+    fn test_list_directory_not_a_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("file.txt");
+        fs::write(&file_path, "content").unwrap();
+
+        let result = list_directory(&file_path.to_string_lossy());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not a directory"));
+    }
+
+    #[test]
+    fn test_list_directory_skips_hidden_files() {
+        let temp_dir = TempDir::new().unwrap();
+
+        fs::write(temp_dir.path().join(".hidden"), "content").unwrap();
+        fs::write(temp_dir.path().join("visible.txt"), "content").unwrap();
+
+        let files = list_directory(&temp_dir.path().to_string_lossy()).unwrap();
+        assert_eq!(files.len(), 1, "Should skip hidden files");
+        assert_eq!(files[0].name, "visible.txt");
+    }
+
+    #[test]
+    fn test_list_directory_identifies_directories() {
+        let temp_dir = TempDir::new().unwrap();
+
+        fs::write(temp_dir.path().join("file.txt"), "content").unwrap();
+        fs::create_dir(temp_dir.path().join("subdir")).unwrap();
+
+        let files = list_directory(&temp_dir.path().to_string_lossy()).unwrap();
+
+        let dir_entry = files.iter().find(|f| f.name == "subdir").unwrap();
+        assert!(dir_entry.is_directory, "Should identify directory");
+
+        let file_entry = files.iter().find(|f| f.name == "file.txt").unwrap();
+        assert!(!file_entry.is_directory, "Should identify file");
+    }
+
+    #[test]
+    fn test_list_directory_reports_file_size() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let content = "Hello, World!";
+        fs::write(temp_dir.path().join("file.txt"), content).unwrap();
+
+        let files = list_directory(&temp_dir.path().to_string_lossy()).unwrap();
+        let file_entry = files.iter().find(|f| f.name == "file.txt").unwrap();
+
+        assert_eq!(file_entry.size, content.len() as u64);
+    }
+
+    // ==================== GET PARENT DIRECTORY TESTS ====================
+
+    #[test]
+    fn test_get_parent_directory_success() {
+        let result = get_parent_directory("/home/user/documents");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "/home/user");
+    }
+
+    #[test]
+    fn test_get_parent_directory_nested() {
+        let temp_dir = TempDir::new().unwrap();
+        let nested = temp_dir.path().join("level1").join("level2");
+        fs::create_dir_all(&nested).unwrap();
+
+        let result = get_parent_directory(&nested.to_string_lossy());
+        assert!(result.is_ok());
+
+        let parent = result.unwrap();
+        assert!(parent.ends_with("level1"), "Should return parent: {}", parent);
+    }
+
+    #[test]
+    fn test_get_parent_directory_at_root() {
+        let result = get_parent_directory("/");
+        // Root has no parent
+        assert!(result.is_err() || result.unwrap().is_empty());
+    }
+
+    // ==================== CREATE DIRECTORY TESTS ====================
+
+    #[test]
+    fn test_create_directory_success() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let result = create_directory(&temp_dir.path().to_string_lossy(), "newdir");
+        assert!(result.is_ok(), "Should create directory: {:?}", result);
+
+        let new_path = temp_dir.path().join("newdir");
+        assert!(new_path.exists(), "Directory should exist");
+        assert!(new_path.is_dir(), "Should be a directory");
+    }
+
+    #[test]
+    fn test_create_directory_already_exists() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Pre-create the directory
+        fs::create_dir(temp_dir.path().join("existing")).unwrap();
+
+        let result = create_directory(&temp_dir.path().to_string_lossy(), "existing");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("already exists"));
+    }
+
+    #[test]
+    fn test_create_directory_returns_path() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let result = create_directory(&temp_dir.path().to_string_lossy(), "mydir").unwrap();
+        assert!(result.ends_with("mydir"), "Should return full path: {}", result);
+    }
+
+    // ==================== COPY FILES TESTS ====================
+
+    #[test]
+    fn test_copy_files_success() {
+        let source_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        // Create source file
+        let source_file = source_dir.path().join("test.txt");
+        fs::write(&source_file, "content").unwrap();
+
+        let result = copy_files_with_overwrite(
+            vec![source_file.to_string_lossy().to_string()],
+            &dest_dir.path().to_string_lossy(),
+            false
+        );
+        assert!(result.is_ok(), "Should copy file: {:?}", result);
+
+        // Verify copied
+        assert!(dest_dir.path().join("test.txt").exists());
+    }
+
+    #[test]
+    fn test_copy_files_multiple() {
+        let source_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        // Create multiple source files
+        fs::write(source_dir.path().join("file1.txt"), "content1").unwrap();
+        fs::write(source_dir.path().join("file2.txt"), "content2").unwrap();
+
+        let result = copy_files_with_overwrite(
+            vec![
+                source_dir.path().join("file1.txt").to_string_lossy().to_string(),
+                source_dir.path().join("file2.txt").to_string_lossy().to_string(),
+            ],
+            &dest_dir.path().to_string_lossy(),
+            false
+        );
+        assert!(result.is_ok());
+
+        let copied = result.unwrap();
+        assert_eq!(copied.len(), 2);
+    }
+
+    #[test]
+    fn test_copy_files_no_overwrite_fails() {
+        let source_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        // Create source and destination with same name
+        let source_file = source_dir.path().join("test.txt");
+        fs::write(&source_file, "source content").unwrap();
+        fs::write(dest_dir.path().join("test.txt"), "dest content").unwrap();
+
+        let result = copy_files_with_overwrite(
+            vec![source_file.to_string_lossy().to_string()],
+            &dest_dir.path().to_string_lossy(),
+            false
+        );
+        assert!(result.is_err(), "Should fail without overwrite");
+    }
+
+    #[test]
+    fn test_copy_files_with_overwrite() {
+        let source_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        // Create source and destination with same name
+        let source_file = source_dir.path().join("test.txt");
+        fs::write(&source_file, "new content").unwrap();
+        fs::write(dest_dir.path().join("test.txt"), "old content").unwrap();
+
+        let result = copy_files_with_overwrite(
+            vec![source_file.to_string_lossy().to_string()],
+            &dest_dir.path().to_string_lossy(),
+            true
+        );
+        assert!(result.is_ok(), "Should succeed with overwrite");
+
+        // Verify content was overwritten
+        let content = fs::read_to_string(dest_dir.path().join("test.txt")).unwrap();
+        assert_eq!(content, "new content");
+    }
+
+    #[test]
+    fn test_copy_files_source_not_exists() {
+        let dest_dir = TempDir::new().unwrap();
+
+        let result = copy_files_with_overwrite(
+            vec!["/nonexistent/file.txt".to_string()],
+            &dest_dir.path().to_string_lossy(),
+            false
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("does not exist"));
+    }
+
+    #[test]
+    fn test_copy_files_dest_not_exists() {
+        let source_dir = TempDir::new().unwrap();
+        let source_file = source_dir.path().join("test.txt");
+        fs::write(&source_file, "content").unwrap();
+
+        let result = copy_files_with_overwrite(
+            vec![source_file.to_string_lossy().to_string()],
+            "/nonexistent/path",
+            false
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("does not exist"));
+    }
+
+    #[test]
+    fn test_copy_directory() {
+        let source_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        // Create a directory with files
+        let subdir = source_dir.path().join("subdir");
+        fs::create_dir(&subdir).unwrap();
+        fs::write(subdir.join("file.txt"), "content").unwrap();
+
+        let result = copy_files_with_overwrite(
+            vec![subdir.to_string_lossy().to_string()],
+            &dest_dir.path().to_string_lossy(),
+            false
+        );
+        assert!(result.is_ok(), "Should copy directory: {:?}", result);
+
+        // Verify structure
+        assert!(dest_dir.path().join("subdir").exists());
+        assert!(dest_dir.path().join("subdir/file.txt").exists());
+    }
+
+    // ==================== MOVE FILES TESTS ====================
+
+    #[test]
+    fn test_move_files_success() {
+        let source_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        let source_file = source_dir.path().join("test.txt");
+        fs::write(&source_file, "content").unwrap();
+
+        let result = move_files(
+            vec![source_file.to_string_lossy().to_string()],
+            &dest_dir.path().to_string_lossy()
+        );
+        assert!(result.is_ok(), "Should move file: {:?}", result);
+
+        // Source should not exist, dest should exist
+        assert!(!source_file.exists(), "Source should be gone");
+        assert!(dest_dir.path().join("test.txt").exists(), "Dest should exist");
+    }
+
+    #[test]
+    fn test_move_files_multiple() {
+        let source_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        fs::write(source_dir.path().join("file1.txt"), "1").unwrap();
+        fs::write(source_dir.path().join("file2.txt"), "2").unwrap();
+
+        let result = move_files(
+            vec![
+                source_dir.path().join("file1.txt").to_string_lossy().to_string(),
+                source_dir.path().join("file2.txt").to_string_lossy().to_string(),
+            ],
+            &dest_dir.path().to_string_lossy()
+        );
+        assert!(result.is_ok());
+
+        let moved = result.unwrap();
+        assert_eq!(moved.len(), 2);
+    }
+
+    #[test]
+    fn test_move_files_dest_exists_fails() {
+        let source_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        let source_file = source_dir.path().join("test.txt");
+        fs::write(&source_file, "source").unwrap();
+        fs::write(dest_dir.path().join("test.txt"), "dest").unwrap();
+
+        let result = move_files(
+            vec![source_file.to_string_lossy().to_string()],
+            &dest_dir.path().to_string_lossy()
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("already exists"));
+    }
+
+    #[test]
+    fn test_move_files_source_not_exists() {
+        let dest_dir = TempDir::new().unwrap();
+
+        let result = move_files(
+            vec!["/nonexistent/file.txt".to_string()],
+            &dest_dir.path().to_string_lossy()
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("does not exist"));
+    }
+
+    // ==================== DELETE FILES TESTS ====================
+
+    #[test]
+    fn test_delete_files_success() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.txt");
+        fs::write(&file_path, "content").unwrap();
+
+        let result = delete_files(vec![file_path.to_string_lossy().to_string()]);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 1, "Should delete 1 file");
+        assert!(!file_path.exists(), "File should be deleted");
+    }
+
+    #[test]
+    fn test_delete_files_multiple() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let files: Vec<_> = (0..3).map(|i| {
+            let path = temp_dir.path().join(format!("file{}.txt", i));
+            fs::write(&path, "content").unwrap();
+            path.to_string_lossy().to_string()
+        }).collect();
+
+        let result = delete_files(files);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 3, "Should delete 3 files");
+    }
+
+    #[test]
+    fn test_delete_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let subdir = temp_dir.path().join("subdir");
+        fs::create_dir(&subdir).unwrap();
+        fs::write(subdir.join("file.txt"), "content").unwrap();
+
+        let result = delete_files(vec![subdir.to_string_lossy().to_string()]);
+        assert!(result.is_ok());
+        assert!(!subdir.exists(), "Directory should be deleted");
+    }
+
+    #[test]
+    fn test_delete_files_not_exists() {
+        let result = delete_files(vec!["/nonexistent/file.txt".to_string()]);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("does not exist"));
+    }
+
+    // ==================== RENAME FILE TESTS ====================
+
+    #[test]
+    fn test_rename_file_success() {
+        let temp_dir = TempDir::new().unwrap();
+        let old_path = temp_dir.path().join("old.txt");
+        fs::write(&old_path, "content").unwrap();
+
+        let result = rename_file(&old_path.to_string_lossy(), "new.txt");
+        assert!(result.is_ok(), "Should rename file: {:?}", result);
+
+        assert!(!old_path.exists(), "Old path should not exist");
+        assert!(temp_dir.path().join("new.txt").exists(), "New path should exist");
+    }
+
+    #[test]
+    fn test_rename_file_returns_new_path() {
+        let temp_dir = TempDir::new().unwrap();
+        let old_path = temp_dir.path().join("old.txt");
+        fs::write(&old_path, "content").unwrap();
+
+        let result = rename_file(&old_path.to_string_lossy(), "new.txt").unwrap();
+        assert!(result.ends_with("new.txt"), "Should return new path: {}", result);
+    }
+
+    #[test]
+    fn test_rename_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let old_dir = temp_dir.path().join("olddir");
+        fs::create_dir(&old_dir).unwrap();
+
+        let result = rename_file(&old_dir.to_string_lossy(), "newdir");
+        assert!(result.is_ok());
+
+        assert!(!old_dir.exists());
+        assert!(temp_dir.path().join("newdir").exists());
+    }
+
+    #[test]
+    fn test_rename_file_not_exists() {
+        let result = rename_file("/nonexistent/file.txt", "new.txt");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("does not exist"));
+    }
+
+    #[test]
+    fn test_rename_file_dest_exists() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let old_path = temp_dir.path().join("old.txt");
+        fs::write(&old_path, "old").unwrap();
+        fs::write(temp_dir.path().join("existing.txt"), "existing").unwrap();
+
+        let result = rename_file(&old_path.to_string_lossy(), "existing.txt");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("already exists"));
+    }
+
+    // ==================== CANCELLATION TOKEN TESTS ====================
+
+    #[test]
+    fn test_register_cancellation_token() {
+        let token = register_cancellation_token("test_transfer_1");
+        assert!(!is_cancelled(&token), "Token should not be cancelled initially");
+    }
+
+    #[test]
+    fn test_cancel_transfer() {
+        let token = register_cancellation_token("test_transfer_2");
+
+        let cancelled = cancel_transfer("test_transfer_2");
+        assert!(cancelled, "Should return true for existing token");
+        assert!(is_cancelled(&token), "Token should be cancelled");
+
+        // Cleanup
+        remove_cancellation_token("test_transfer_2");
+    }
+
+    #[test]
+    fn test_cancel_nonexistent_transfer() {
+        let cancelled = cancel_transfer("nonexistent_transfer");
+        assert!(!cancelled, "Should return false for non-existent token");
+    }
+
+    #[test]
+    fn test_remove_cancellation_token() {
+        register_cancellation_token("test_transfer_3");
+        remove_cancellation_token("test_transfer_3");
+
+        // After removal, cancel should return false
+        let cancelled = cancel_transfer("test_transfer_3");
+        assert!(!cancelled, "Token should be removed");
     }
 }
