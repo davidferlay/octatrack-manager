@@ -125,6 +125,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [executingDetails, setExecutingDetails] = useState<string>("");
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [statusType, setStatusType] = useState<"success" | "error" | "info" | "">("");
+  const [showProjectSelector, setShowProjectSelector] = useState<boolean>(false);
 
   // Available destination banks for the destination project
   const [destBanks, setDestBanks] = useState<number[]>([]);
@@ -165,6 +166,30 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
       availableProjects.push({ name: project.name, path: project.path });
     }
   });
+
+  // Helper to get display info for selected destination project
+  function getDestProjectInfo(): { name: string; setName?: string; isCurrentProject: boolean } {
+    if (destProject === projectPath) {
+      return { name: projectName, isCurrentProject: true };
+    }
+    // Check in locations
+    for (const location of locations) {
+      for (const set of location.sets) {
+        const project = set.projects.find(p => p.path === destProject);
+        if (project) {
+          return { name: project.name, setName: set.name, isCurrentProject: false };
+        }
+      }
+    }
+    // Check in standalone projects
+    const standalone = standaloneProjects.find(p => p.path === destProject);
+    if (standalone) {
+      return { name: standalone.name, isCurrentProject: false };
+    }
+    return { name: "Unknown", isCurrentProject: false };
+  }
+
+  const destProjectInfo = getDestProjectInfo();
 
   // Check audio pool status when destination project changes
   useEffect(() => {
@@ -812,13 +837,20 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           {/* Project selector */}
           <div className="tools-field">
             <label>Project</label>
-            <select value={destProject} onChange={(e) => setDestProject(e.target.value)}>
-              {availableProjects.map((proj) => (
-                <option key={proj.path} value={proj.path}>
-                  {proj.name}
-                </option>
-              ))}
-            </select>
+            <button
+              type="button"
+              className="tools-project-selector-btn"
+              onClick={() => setShowProjectSelector(true)}
+            >
+              <span className="tools-project-selector-name">
+                {destProjectInfo.name}
+                {destProjectInfo.isCurrentProject && <span className="tools-project-selector-current">(Current)</span>}
+              </span>
+              {destProjectInfo.setName && (
+                <span className="tools-project-selector-set">{destProjectInfo.setName}</span>
+              )}
+              <i className="fas fa-folder-open"></i>
+            </button>
           </div>
 
           {/* Bank selector */}
@@ -1063,6 +1095,90 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             </div>
             <div className="modal-body">
               <p>{statusMessage}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Project Selector Modal */}
+      {showProjectSelector && (
+        <div className="modal-overlay" onClick={() => setShowProjectSelector(false)}>
+          <div className="modal-content project-selector-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Select Destination Project</h3>
+              <button className="modal-close" onClick={() => setShowProjectSelector(false)}>×</button>
+            </div>
+            <div className="modal-body project-selector-body">
+              {/* Current Project */}
+              <div className="project-selector-section">
+                <h4>Current Project</h4>
+                <div
+                  className={`project-selector-item ${destProject === projectPath ? 'selected' : ''}`}
+                  onClick={() => {
+                    setDestProject(projectPath);
+                    setShowProjectSelector(false);
+                  }}
+                >
+                  <div className="project-selector-item-name">{projectName}</div>
+                  <div className="project-selector-item-path">{projectPath}</div>
+                </div>
+              </div>
+
+              {/* Projects from Locations/Sets */}
+              {locations.map((location, locIdx) => (
+                location.sets.some(set => set.projects.some(p => p.path !== projectPath && p.has_project_file)) && (
+                  <div key={locIdx} className="project-selector-section">
+                    <h4>{location.name}</h4>
+                    {location.sets.map((set, setIdx) => {
+                      const validProjects = set.projects.filter(p => p.path !== projectPath && p.has_project_file);
+                      if (validProjects.length === 0) return null;
+                      return (
+                        <div key={setIdx} className="project-selector-set">
+                          <div className="project-selector-set-header">
+                            <span className="project-selector-set-name">{set.name}</span>
+                            {set.has_audio_pool && <span className="project-selector-set-pool">Audio Pool</span>}
+                          </div>
+                          {validProjects.map((project, projIdx) => (
+                            <div
+                              key={projIdx}
+                              className={`project-selector-item ${destProject === project.path ? 'selected' : ''}`}
+                              onClick={() => {
+                                setDestProject(project.path);
+                                setShowProjectSelector(false);
+                              }}
+                            >
+                              <div className="project-selector-item-name">{project.name}</div>
+                              <div className="project-selector-item-path">{project.path}</div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
+              ))}
+
+              {/* Standalone Projects */}
+              {standaloneProjects.some(p => p.path !== projectPath && p.has_project_file) && (
+                <div className="project-selector-section">
+                  <h4>Individual Projects</h4>
+                  {standaloneProjects
+                    .filter(p => p.path !== projectPath && p.has_project_file)
+                    .map((project, projIdx) => (
+                      <div
+                        key={projIdx}
+                        className={`project-selector-item ${destProject === project.path ? 'selected' : ''}`}
+                        onClick={() => {
+                          setDestProject(project.path);
+                          setShowProjectSelector(false);
+                        }}
+                      >
+                        <div className="project-selector-item-name">{project.name}</div>
+                        <div className="project-selector-item-path">{project.path}</div>
+                      </div>
+                    ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
