@@ -373,10 +373,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
 
   return (
     <div className="tools-panel">
-      <div className="tools-header">
-        <h2>Tools</h2>
-      </div>
-
       {/* Operation Selector */}
       <div className="tools-section">
         <label className="tools-label">Operation</label>
