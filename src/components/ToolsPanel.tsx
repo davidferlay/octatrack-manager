@@ -34,6 +34,7 @@ interface ToolsPanelProps {
   projectName: string;
   banks: Bank[];
   loadedBankIndices: Set<number>;
+  onBankUpdated?: (bankIndex: number) => void;
 }
 
 interface ProjectOption {
@@ -41,7 +42,7 @@ interface ProjectOption {
   path: string;
 }
 
-export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices }: ToolsPanelProps) {
+export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices, onBankUpdated }: ToolsPanelProps) {
   const { locations, standaloneProjects } = useProjects();
 
   // Operation selection
@@ -218,6 +219,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices 
             destBankIndex,
           });
           setStatusMessage(`Bank ${String.fromCharCode(65 + sourceBankIndex)} copied successfully`);
+          if (destProject === projectPath && onBankUpdated) {
+            onBankUpdated(destBankIndex);
+          }
           break;
 
         case "copy_parts":
@@ -230,6 +234,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices 
             destPartIndices,
           });
           setStatusMessage(`${sourcePartIndices.length} part${sourcePartIndices.length > 1 ? 's' : ''} copied successfully`);
+          if (destProject === projectPath && onBankUpdated) {
+            onBankUpdated(destBankIndex);
+          }
           break;
 
         case "copy_patterns":
@@ -246,6 +253,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices 
             trackIndices: trackMode === "specific" ? sourceTrackIndices : null,
           });
           setStatusMessage(`${sourcePatternIndices.length} pattern${sourcePatternIndices.length > 1 ? 's' : ''} copied successfully`);
+          if (destProject === projectPath && onBankUpdated) {
+            onBankUpdated(destBankIndex);
+          }
           break;
 
         case "copy_tracks":
@@ -261,6 +271,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices 
             mode: copyTrackMode,
           });
           setStatusMessage(`${sourceTrackIndices.length} track${sourceTrackIndices.length > 1 ? 's' : ''} copied successfully`);
+          if (destProject === projectPath && onBankUpdated) {
+            onBankUpdated(destBankIndex);
+          }
           break;
 
         case "copy_sample_slots":
