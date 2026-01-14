@@ -567,6 +567,7 @@ h1 {
   cursor: pointer;
   transition: all 0.15s ease;
   margin-left: -1.3rem;
+  white-space: nowrap;
 }
 
 .back-button:hover {
@@ -863,6 +864,7 @@ h1 {
   border-radius: 3px;
   text-transform: uppercase;
   letter-spacing: 0.3px;
+  white-space: nowrap;
 }
 
 .header-tab:hover {
