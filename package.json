@@ -11,7 +11,9 @@
     "tauri": "tauri",
     "tauri:dev": "PATH=\"$HOME/.cargo/bin:$PATH\" tauri dev",
     "tauri:build": "NO_STRIP=1 PATH=\"$HOME/.cargo/bin:$PATH\" tauri build",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test": "npm run typecheck && npm run test:rust",
+    "test:rust": "cd src-tauri && cargo fmt --check && cargo clippy -- -D warnings && cargo test"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.1.0",
