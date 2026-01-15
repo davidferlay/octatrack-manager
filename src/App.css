@@ -3144,6 +3144,12 @@ h1 {
   margin-bottom: 0;
 }
 
+.project-selector-left-group {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+
 .project-selector-current {
   flex: 1;
 }
@@ -3154,6 +3160,20 @@ h1 {
 }
 
 .project-selector-current .project-card {
+  min-width: 200px;
+  max-width: 200px;
+}
+
+.project-selector-manual {
+  flex-shrink: 0;
+}
+
+.project-selector-manual .projects-grid {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.project-selector-manual .project-card {
   min-width: 200px;
   max-width: 200px;
 }

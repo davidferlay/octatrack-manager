@@ -194,11 +194,44 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         title: "Select Octatrack Project Folder",
       });
       if (selected && typeof selected === 'string') {
-        // Extract project name from path
-        const name = selected.split('/').pop() || selected.split('\\').pop() || 'Unknown';
-        setBrowsedProject({ name, path: selected });
-        setDestProject(selected);
-        setShowProjectSelector(false);
+        // Validate that the selected folder is a valid Octatrack project
+        try {
+          const result = await invoke<ScanResult>("scan_custom_directory", { path: selected });
+
+          // Check if the selected path is a valid project
+          let validProject: OctatrackProject | null = null;
+
+          // Check standalone projects
+          validProject = result.standalone_projects.find(p => p.path === selected && p.has_project_file) || null;
+
+          // Check projects in locations/sets
+          if (!validProject) {
+            for (const location of result.locations) {
+              for (const set of location.sets) {
+                const found = set.projects.find(p => p.path === selected && p.has_project_file);
+                if (found) {
+                  validProject = found;
+                  break;
+                }
+              }
+              if (validProject) break;
+            }
+          }
+
+          if (validProject) {
+            setBrowsedProject({ name: validProject.name, path: validProject.path });
+            setDestProject(validProject.path);
+            setShowProjectSelector(false);
+          } else {
+            setShowProjectSelector(false);
+            setStatusMessage("Selected folder is not a valid Octatrack project. Please select a folder containing a project.oct file.");
+            setStatusType("error");
+          }
+        } catch (err) {
+          setShowProjectSelector(false);
+          setStatusMessage("Failed to validate project folder: " + String(err));
+          setStatusType("error");
+        }
       }
     } catch (error) {
       console.error("Error browsing for project:", error);
@@ -1185,34 +1218,41 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               <button className="modal-close" onClick={() => setShowProjectSelector(false)}>×</button>
             </div>
             <div className="modal-body project-selector-body">
-              {/* Header row with Current Project and Actions */}
+              {/* Header row with Current Project, Manual Selection, and Actions */}
               <div className="project-selector-header-row">
-                <div className="project-selector-section project-selector-current">
-                  <h4>Current Project</h4>
-                  <div className="projects-grid">
-                    <div
-                      className={`project-card project-selector-card ${destProject === projectPath ? 'selected' : ''}`}
-                      onClick={() => {
-                        setDestProject(projectPath);
-                        setShowProjectSelector(false);
-                      }}
-                    >
-                      <div className="project-name">{projectName}</div>
-                    </div>
-                    {/* Browsed Project */}
-                    {browsedProject && browsedProject.path !== projectPath && (
+                <div className="project-selector-left-group">
+                  <div className="project-selector-section project-selector-current">
+                    <h4>Current Project</h4>
+                    <div className="projects-grid">
                       <div
-                        className={`project-card project-selector-card ${destProject === browsedProject.path ? 'selected' : ''}`}
+                        className={`project-card project-selector-card ${destProject === projectPath ? 'selected' : ''}`}
                         onClick={() => {
-                          setDestProject(browsedProject.path);
+                          setDestProject(projectPath);
                           setShowProjectSelector(false);
                         }}
-                        title={browsedProject.path}
                       >
-                        <div className="project-name">{browsedProject.name}</div>
+                        <div className="project-name">{projectName}</div>
                       </div>
-                    )}
+                    </div>
                   </div>
+                  {/* Manual Selection */}
+                  {browsedProject && browsedProject.path !== projectPath && (
+                    <div className="project-selector-section project-selector-manual">
+                      <h4>Manual Selection</h4>
+                      <div className="projects-grid">
+                        <div
+                          className={`project-card project-selector-card ${destProject === browsedProject.path ? 'selected' : ''}`}
+                          onClick={() => {
+                            setDestProject(browsedProject.path);
+                            setShowProjectSelector(false);
+                          }}
+                          title={browsedProject.path}
+                        >
+                          <div className="project-name">{browsedProject.name}</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="project-selector-section project-selector-actions-section">
                   <h4>Actions</h4>
