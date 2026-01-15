@@ -238,7 +238,7 @@ export function HomePage() {
                 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
               >
                 <span>{isIndividualProjectsOpen ? '▼' : '▶'}</span>
-                Found {standaloneProjects.length} individual project{standaloneProjects.length > 1 ? 's' : ''}
+                {standaloneProjects.length} Individual Project{standaloneProjects.length > 1 ? 's' : ''}
               </h2>
               <div className={`sets-section ${isIndividualProjectsOpen ? 'open' : 'closed'}`}>
                 <div className="sets-section-content">
@@ -279,7 +279,7 @@ export function HomePage() {
                 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
               >
                 <span>{isLocationsOpen ? '▼' : '▶'}</span>
-                Found {locations.length} location{locations.length > 1 ? 's' : ''}
+                {locations.length} Location{locations.length > 1 ? 's' : ''}
               </h2>
               <div className={`sets-section ${isLocationsOpen ? 'open' : 'closed'}`}>
                 <div className="sets-section-content">
