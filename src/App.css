@@ -163,7 +163,7 @@ h1 {
   background-color: var(--elektron-dark-gray);
   border: 1px solid var(--elektron-border-gray);
   border-left: 3px solid var(--elektron-orange);
-  padding: 1rem 1.5rem 0 1.5rem;
+  padding: 1rem 1.5rem 1rem 1.5rem;
   margin-bottom: 1.5rem;
 }
 
@@ -309,8 +309,6 @@ h1 {
 .sets-section-content {
   overflow: hidden;
   min-height: 0;
-  border-top: 1px solid var(--elektron-border-gray);
-  padding-top: 1rem;
 }
 
 .sets-section h4 {
@@ -332,7 +330,7 @@ h1 {
 .set-card {
   background-color: var(--elektron-medium-gray);
   border: 1px solid var(--elektron-border-gray);
-  padding: 1rem 1rem 0 1rem;
+  padding: 1rem 1rem 1rem 1rem;
   margin-bottom: 1rem;
   transition: all 0.15s ease;
   position: relative;
@@ -374,7 +372,6 @@ h1 {
 .set-info {
   display: flex;
   gap: 0.5rem;
-  margin-bottom: 0.75rem;
 }
 
 .set-info span {
@@ -3259,7 +3256,7 @@ h1 {
 
 .project-selector-section .set-card {
   margin-bottom: 0.75rem;
-  padding: 1rem 1rem 0 1rem;
+  padding: 1rem 1rem 1rem 1rem;
 }
 
 .project-selector-section .set-header.clickable {
@@ -3294,9 +3291,6 @@ h1 {
   padding-bottom: 0.5rem;
 }
 
-.project-selector-section .set-card .sets-section-content {
-  padding-top: 0.5rem;
-}
 
 .sets-section-content .projects-grid {
   padding-bottom: 0;
