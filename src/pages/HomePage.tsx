@@ -208,7 +208,7 @@ export function HomePage() {
           disabled={isScanning}
           className="scan-button"
         >
-          {isScanning ? "Scanning..." : "Scan for Devices"}
+          {isScanning ? "Scanning..." : "Scan for Projects"}
         </button>
         <button
           onClick={browseDirectory}
