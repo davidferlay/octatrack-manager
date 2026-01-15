@@ -629,9 +629,13 @@ h1 {
 
 /* Truncate long project names on detail pages (h1 following back button) */
 .project-header .back-button + h1 {
-  max-width: 25vw;
+  max-width: 11vw;
   overflow: hidden;
   text-overflow: clip;
+}
+
+/* Only show fade effect when title is actually truncated */
+.project-header h1.truncated {
   mask-image: linear-gradient(to right, black 85%, transparent 100%);
   -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
 }

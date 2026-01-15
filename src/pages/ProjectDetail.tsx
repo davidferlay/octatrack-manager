@@ -1,4 +1,4 @@
-import { useState, useEffect, useTransition, useCallback } from "react";
+import { useState, useEffect, useTransition, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import type { ProjectMetadata, Bank } from "../context/ProjectsContext";
@@ -129,6 +129,8 @@ export function ProjectDetail() {
   const [isEditMode, setIsEditMode] = useState<boolean>(false); // Global edit mode toggle
   const [showBankWarning, setShowBankWarning] = useState<boolean>(false); // Show failed banks warning
   const [showBankWarningModal, setShowBankWarningModal] = useState<boolean>(false); // Show modal with details
+  const [isTitleTruncated, setIsTitleTruncated] = useState<boolean>(false); // Track if project title is truncated
+  const titleRef = useRef<HTMLHeadingElement>(null); // Ref for project title h1
 
   // Wrapper to capture last message before going idle (for fade-out effect)
   const handleWriteStatusChange = useCallback((status: WriteStatus) => {
@@ -185,6 +187,19 @@ export function ProjectDetail() {
       setShowBankWarning(false);
     }
   }, [partsWriteStatus.state]);
+
+  // Detect if project title is truncated (for conditional fade effect)
+  useEffect(() => {
+    const checkTruncation = () => {
+      if (titleRef.current) {
+        const isTruncated = titleRef.current.scrollWidth > titleRef.current.clientWidth;
+        setIsTitleTruncated(isTruncated);
+      }
+    };
+    checkTruncation();
+    window.addEventListener('resize', checkTruncation);
+    return () => window.removeEventListener('resize', checkTruncation);
+  }, [projectName]);
 
   async function loadProjectData() {
     setIsLoading(true);
@@ -339,7 +354,7 @@ export function ProjectDetail() {
           <button onClick={() => navigate("/")} className="back-button">
             ← Back
           </button>
-          <h1 title={projectPath || ''}>{projectName}</h1>
+          <h1 ref={titleRef} className={isTitleTruncated ? 'truncated' : ''} title={projectPath || ''}>{projectName}</h1>
           {/* View/Edit mode toggle - hidden during loading */}
           {!isLoading && (
             <div className="mode-toggle" onClick={() => setIsEditMode(!isEditMode)}>
