@@ -163,7 +163,13 @@ function App() {
                 <div className={`sets-section ${isOpen ? 'open' : 'closed'}`}>
                   <div className="sets-section-content">
                     <h4>Sets ({location.sets.length})</h4>
-                    {location.sets.map((set, setIdx) => (
+                    {[...location.sets].sort((a, b) => {
+                      const aIsPresets = a.name.toLowerCase() === 'presets';
+                      const bIsPresets = b.name.toLowerCase() === 'presets';
+                      if (aIsPresets && !bIsPresets) return 1;
+                      if (!aIsPresets && bIsPresets) return -1;
+                      return 0;
+                    }).map((set, setIdx) => (
                       <div key={setIdx} className="set-card">
                       <div className="set-header">
                         <div className="set-name">{set.name}</div>
