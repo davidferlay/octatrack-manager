@@ -295,7 +295,6 @@ h1 {
 .sets-section.open {
   grid-template-rows: 1fr;
   margin-top: 1rem;
-  padding-bottom: 1rem;
   opacity: 1;
 }
 
@@ -334,6 +333,10 @@ h1 {
   margin-bottom: 1rem;
   transition: all 0.15s ease;
   position: relative;
+}
+
+.set-card:last-child {
+  margin-bottom: 0.6rem;
 }
 
 .set-card::before {
@@ -3288,7 +3291,6 @@ h1 {
 
 .project-selector-section .set-card .sets-section.open {
   margin-top: 0.5rem;
-  padding-bottom: 0.5rem;
 }
 
 
