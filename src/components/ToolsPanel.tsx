@@ -5,7 +5,7 @@ import type { Bank } from "../context/ProjectsContext";
 import { formatBankName } from "./BankSelector";
 import "../App.css";
 
-const TOOLS_STORAGE_KEY = "octatrack-tools-settings";
+const TOOLS_STORAGE_KEY_PREFIX = "octatrack-tools-settings-";
 
 // Operation types
 type OperationType = "copy_bank" | "copy_parts" | "copy_patterns" | "copy_tracks" | "copy_sample_slots";
@@ -54,9 +54,10 @@ interface ToolsSettings {
   includeEditorSettings: boolean;
 }
 
-function loadToolsSettings(): Partial<ToolsSettings> {
+function loadToolsSettings(projectPath: string): Partial<ToolsSettings> {
   try {
-    const stored = localStorage.getItem(TOOLS_STORAGE_KEY);
+    const key = TOOLS_STORAGE_KEY_PREFIX + projectPath;
+    const stored = sessionStorage.getItem(key);
     if (stored) {
       return JSON.parse(stored);
     }
@@ -66,9 +67,10 @@ function loadToolsSettings(): Partial<ToolsSettings> {
   return {};
 }
 
-function saveToolsSettings(settings: ToolsSettings): void {
+function saveToolsSettings(projectPath: string, settings: ToolsSettings): void {
   try {
-    localStorage.setItem(TOOLS_STORAGE_KEY, JSON.stringify(settings));
+    const key = TOOLS_STORAGE_KEY_PREFIX + projectPath;
+    sessionStorage.setItem(key, JSON.stringify(settings));
   } catch (error) {
     console.error("Error saving tools settings:", error);
   }
@@ -77,8 +79,8 @@ function saveToolsSettings(settings: ToolsSettings): void {
 export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices, onBankUpdated }: ToolsPanelProps) {
   const { locations, standaloneProjects } = useProjects();
 
-  // Load saved settings
-  const savedSettings = loadToolsSettings();
+  // Load saved settings (per-project, session-only)
+  const savedSettings = loadToolsSettings(projectPath);
 
   // Operation selection
   const [operation, setOperation] = useState<OperationType>(savedSettings.operation || "copy_bank");
@@ -130,9 +132,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   // Available destination banks for the destination project
   const [destBanks, setDestBanks] = useState<number[]>([]);
 
-  // Save settings to localStorage when they change
+  // Save settings to sessionStorage when they change (per-project, session-only)
   useEffect(() => {
-    saveToolsSettings({
+    saveToolsSettings(projectPath, {
       operation,
       partAssignmentMode,
       trackMode,
@@ -141,7 +143,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
       audioMode,
       includeEditorSettings,
     });
-  }, [operation, partAssignmentMode, trackMode, copyTrackMode, slotType, audioMode, includeEditorSettings]);
+  }, [projectPath, operation, partAssignmentMode, trackMode, copyTrackMode, slotType, audioMode, includeEditorSettings]);
 
   // Collect all available projects from context
   const availableProjects: ProjectOption[] = [];
