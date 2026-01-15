@@ -916,6 +916,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               type="button"
               className="tools-project-selector-btn"
               onClick={() => setShowProjectSelector(true)}
+              title={destProject}
             >
               <span className="tools-project-selector-name">
                 {destProjectInfo.name}
