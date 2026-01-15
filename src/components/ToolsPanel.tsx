@@ -128,6 +128,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [statusType, setStatusType] = useState<"success" | "error" | "info" | "">("");
   const [showProjectSelector, setShowProjectSelector] = useState<boolean>(false);
+  const [openSetsInModal, setOpenSetsInModal] = useState<Set<string>>(new Set()); // Track which sets are open in modal
 
   // Available destination banks for the destination project
   const [destBanks, setDestBanks] = useState<number[]>([]);
@@ -1114,15 +1115,16 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               {/* Current Project */}
               <div className="project-selector-section">
                 <h4>Current Project</h4>
-                <div
-                  className={`project-selector-item ${destProject === projectPath ? 'selected' : ''}`}
-                  onClick={() => {
-                    setDestProject(projectPath);
-                    setShowProjectSelector(false);
-                  }}
-                >
-                  <div className="project-selector-item-name">{projectName}</div>
-                  <div className="project-selector-item-path">{projectPath}</div>
+                <div className="projects-grid">
+                  <div
+                    className={`project-card project-selector-card ${destProject === projectPath ? 'selected' : ''}`}
+                    onClick={() => {
+                      setDestProject(projectPath);
+                      setShowProjectSelector(false);
+                    }}
+                  >
+                    <div className="project-name">{projectName}</div>
+                  </div>
                 </div>
               </div>
 
@@ -1131,28 +1133,60 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 location.sets.some(set => set.projects.some(p => p.path !== projectPath && p.has_project_file)) && (
                   <div key={locIdx} className="project-selector-section">
                     <h4>{location.name}</h4>
+                    <p className="location-path"><strong>Path:</strong> {location.path}</p>
                     {location.sets.map((set, setIdx) => {
                       const validProjects = set.projects.filter(p => p.path !== projectPath && p.has_project_file);
                       if (validProjects.length === 0) return null;
+                      const setKey = `${locIdx}-${setIdx}`;
+                      const isSetOpen = openSetsInModal.has(setKey);
                       return (
-                        <div key={setIdx} className="project-selector-set">
-                          <div className="project-selector-set-header">
-                            <span className="project-selector-set-name">{set.name}</span>
-                            {set.has_audio_pool && <span className="project-selector-set-pool">Audio Pool</span>}
-                          </div>
-                          {validProjects.map((project, projIdx) => (
-                            <div
-                              key={projIdx}
-                              className={`project-selector-item ${destProject === project.path ? 'selected' : ''}`}
-                              onClick={() => {
-                                setDestProject(project.path);
-                                setShowProjectSelector(false);
-                              }}
-                            >
-                              <div className="project-selector-item-name">{project.name}</div>
-                              <div className="project-selector-item-path">{project.path}</div>
+                        <div key={setIdx} className="set-card">
+                          <div
+                            className="set-header clickable"
+                            onClick={() => {
+                              setOpenSetsInModal(prev => {
+                                const newSet = new Set(prev);
+                                if (newSet.has(setKey)) {
+                                  newSet.delete(setKey);
+                                } else {
+                                  newSet.add(setKey);
+                                }
+                                return newSet;
+                              });
+                            }}
+                          >
+                            <div className="set-name">
+                              <span className="collapse-indicator">{isSetOpen ? '▼' : '▶'}</span>
+                              {set.name}
                             </div>
-                          ))}
+                            <div className="set-info">
+                              <span className={set.has_audio_pool ? "status-audio-pool" : "status-audio-pool-empty"}>
+                                {set.has_audio_pool ? "✓ Audio Pool" : "✗ Audio Pool"}
+                              </span>
+                              <span className="project-count">
+                                {validProjects.length} Project{validProjects.length !== 1 ? 's' : ''}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="set-path">{set.path}</div>
+                          <div className={`sets-section ${isSetOpen ? 'open' : 'closed'}`}>
+                            <div className="sets-section-content">
+                              <div className="projects-grid">
+                                {validProjects.map((project, projIdx) => (
+                                  <div
+                                    key={projIdx}
+                                    className={`project-card project-selector-card ${destProject === project.path ? 'selected' : ''}`}
+                                    onClick={() => {
+                                      setDestProject(project.path);
+                                      setShowProjectSelector(false);
+                                    }}
+                                  >
+                                    <div className="project-name">{project.name}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       );
                     })}
@@ -1164,21 +1198,22 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               {standaloneProjects.some(p => p.path !== projectPath && p.has_project_file) && (
                 <div className="project-selector-section">
                   <h4>Individual Projects</h4>
-                  {standaloneProjects
-                    .filter(p => p.path !== projectPath && p.has_project_file)
-                    .map((project, projIdx) => (
-                      <div
-                        key={projIdx}
-                        className={`project-selector-item ${destProject === project.path ? 'selected' : ''}`}
-                        onClick={() => {
-                          setDestProject(project.path);
-                          setShowProjectSelector(false);
-                        }}
-                      >
-                        <div className="project-selector-item-name">{project.name}</div>
-                        <div className="project-selector-item-path">{project.path}</div>
-                      </div>
-                    ))}
+                  <div className="projects-grid">
+                    {standaloneProjects
+                      .filter(p => p.path !== projectPath && p.has_project_file)
+                      .map((project, projIdx) => (
+                        <div
+                          key={projIdx}
+                          className={`project-card project-selector-card ${destProject === project.path ? 'selected' : ''}`}
+                          onClick={() => {
+                            setDestProject(project.path);
+                            setShowProjectSelector(false);
+                          }}
+                        >
+                          <div className="project-name">{project.name}</div>
+                        </div>
+                      ))}
+                  </div>
                 </div>
               )}
             </div>
