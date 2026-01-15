@@ -1360,10 +1360,16 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
 
                       <div className={`sets-section ${isLocationOpen ? 'open' : 'closed'}`}>
                         <div className="sets-section-content">
-                          {location.sets.map((set, setIdx) => {
+                          {[...location.sets].sort((a, b) => {
+                            const aIsPresets = a.name.toLowerCase() === 'presets';
+                            const bIsPresets = b.name.toLowerCase() === 'presets';
+                            if (aIsPresets && !bIsPresets) return 1;
+                            if (!aIsPresets && bIsPresets) return -1;
+                            return 0;
+                          }).map((set, setIdx) => {
                             const validProjects = set.projects.filter(p => p.path !== projectPath && p.has_project_file);
                             if (validProjects.length === 0) return null;
-                            const setKey = `${locIdx}-${setIdx}`;
+                            const setKey = `${locIdx}-${set.name}`;
                             const isSetOpen = openSetsInModal.has(setKey);
                             return (
                               <div key={setIdx} className="set-card" title={set.path}>
