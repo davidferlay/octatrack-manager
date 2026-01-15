@@ -296,13 +296,15 @@ export function HomePage() {
                             <h3>{location.name || "Untitled Location"}</h3>
                             <span className="location-path-inline">{location.path}</span>
                           </div>
-                          <span className="device-type">{getDeviceTypeLabel(location.device_type)}</span>
+                          <div className="location-header-right">
+                            <span className="device-type">{getDeviceTypeLabel(location.device_type)}</span>
+                            <span className="sets-count">{location.sets.length} Set{location.sets.length !== 1 ? 's' : ''}</span>
+                          </div>
                         </div>
 
                         {location.sets.length > 0 && (
                           <div className={`sets-section ${isOpen ? 'open' : 'closed'}`}>
                             <div className="sets-section-content">
-                              <h4>Sets ({location.sets.length})</h4>
                               {location.sets.map((set, setIdx) => (
                                 <div key={setIdx} className="set-card" title={set.path}>
                                   <div className="set-header">

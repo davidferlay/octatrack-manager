@@ -227,6 +227,23 @@ h1 {
   color: var(--elektron-text-primary);
 }
 
+.location-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sets-count {
+  background-color: transparent;
+  color: var(--elektron-text-secondary);
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border: 1px solid var(--elektron-border-gray);
+}
+
 .device-type {
   background-color: var(--elektron-medium-gray);
   color: var(--elektron-orange);
@@ -261,6 +278,7 @@ h1 {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  align-self: flex-end;
 }
 
 /* Sets Section */
