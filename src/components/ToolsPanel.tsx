@@ -158,6 +158,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [openSetsInModal, setOpenSetsInModal] = useState<Set<string>>(new Set()); // Track which sets are open in modal
   const [openLocationsInModal, setOpenLocationsInModal] = useState<Set<number>>(new Set()); // Track which locations are open in modal
   const [isIndividualProjectsOpenInModal, setIsIndividualProjectsOpenInModal] = useState<boolean>(false);
+  const [isLocationsOpenInModal, setIsLocationsOpenInModal] = useState<boolean>(false);
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [browsedProject, setBrowsedProject] = useState<{ name: string; path: string } | null>(null);
 
@@ -1309,12 +1310,24 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               )}
 
               {/* Locations (collapsible, each containing sets) */}
+              {locations.filter(loc => loc.sets.some(set => set.projects.some(p => p.path !== projectPath && p.has_project_file))).length > 0 && (
+                <div className="project-selector-section">
+                  <h4
+                    className="clickable"
+                    onClick={() => setIsLocationsOpenInModal(!isLocationsOpenInModal)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
+                  >
+                    <span className="collapse-indicator">{isLocationsOpenInModal ? '▼' : '▶'}</span>
+                    {locations.filter(loc => loc.sets.some(set => set.projects.some(p => p.path !== projectPath && p.has_project_file))).length} Location{locations.filter(loc => loc.sets.some(set => set.projects.some(p => p.path !== projectPath && p.has_project_file))).length !== 1 ? 's' : ''}
+                  </h4>
+                  <div className={`sets-section ${isLocationsOpenInModal ? 'open' : 'closed'}`}>
+                    <div className="sets-section-content">
               {locations.map((location, locIdx) => {
                 const hasValidProjects = location.sets.some(set => set.projects.some(p => p.path !== projectPath && p.has_project_file));
                 if (!hasValidProjects) return null;
                 const isLocationOpen = openLocationsInModal.has(locIdx);
                 return (
-                  <div key={locIdx} className="project-selector-section">
+                  <div key={locIdx} className="project-selector-location">
                     <div className={`location-card location-type-${location.device_type.toLowerCase()}`}>
                       <div
                         className="location-header clickable"
@@ -1408,6 +1421,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   </div>
                 );
               })}
+                      </div>
+                    </div>
+                  </div>
+                )}
             </div>
           </div>
         </div>
