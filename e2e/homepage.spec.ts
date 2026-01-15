@@ -11,7 +11,7 @@ test.describe('HomePage', () => {
   })
 
   test('has scan button', async ({ page }) => {
-    const scanButton = page.getByRole('button', { name: 'Scan for Devices' })
+    const scanButton = page.getByRole('button', { name: 'Scan for Projects' })
     await expect(scanButton).toBeVisible()
     await expect(scanButton).toBeEnabled()
   })
@@ -34,7 +34,7 @@ test.describe('HomePage', () => {
   })
 
   test('scan button shows scanning state when clicked', async ({ page }) => {
-    const scanButton = page.getByRole('button', { name: 'Scan for Devices' })
+    const scanButton = page.getByRole('button', { name: 'Scan for Projects' })
 
     // Click and check for loading state (will quickly fail since Tauri isn't available)
     await scanButton.click()
