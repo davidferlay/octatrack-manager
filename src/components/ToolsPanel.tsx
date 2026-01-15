@@ -1335,16 +1335,18 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                           <h3>{location.name}</h3>
                           <span className="location-path-inline">{location.path}</span>
                         </div>
-                        <span className="device-type">
-                          {location.device_type === 'CompactFlash' ? 'CF Card' :
-                           location.device_type === 'LocalCopy' ? 'Local Copy' :
-                           location.device_type === 'Usb' ? 'USB' : location.device_type}
-                        </span>
+                        <div className="location-header-right">
+                          <span className="device-type">
+                            {location.device_type === 'CompactFlash' ? 'CF Card' :
+                             location.device_type === 'LocalCopy' ? 'Local Copy' :
+                             location.device_type === 'Usb' ? 'USB' : location.device_type}
+                          </span>
+                          <span className="sets-count">{location.sets.filter(set => set.projects.some(p => p.path !== projectPath && p.has_project_file)).length} Set{location.sets.filter(set => set.projects.some(p => p.path !== projectPath && p.has_project_file)).length !== 1 ? 's' : ''}</span>
+                        </div>
                       </div>
 
                       <div className={`sets-section ${isLocationOpen ? 'open' : 'closed'}`}>
                         <div className="sets-section-content">
-                          <h4>Sets ({location.sets.filter(set => set.projects.some(p => p.path !== projectPath && p.has_project_file)).length})</h4>
                           {location.sets.map((set, setIdx) => {
                             const validProjects = set.projects.filter(p => p.path !== projectPath && p.has_project_file);
                             if (validProjects.length === 0) return null;
