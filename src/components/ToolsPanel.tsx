@@ -1221,7 +1221,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       disabled={isScanning}
                       className="scan-button browse-button"
                     >
-                      {isScanning ? "Scanning..." : "Rescan for Devices"}
+                      {isScanning ? "Scanning..." : "Rescan for Projects"}
                     </button>
                     <button
                       onClick={handleBrowse}
