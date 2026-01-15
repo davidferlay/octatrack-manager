@@ -294,19 +294,17 @@ export function HomePage() {
                           <div className="location-header-left">
                             <span className="collapse-indicator">{isOpen ? '▼' : '▶'}</span>
                             <h3>{location.name || "Untitled Location"}</h3>
+                            <span className="location-path-inline">{location.path}</span>
                           </div>
                           <span className="device-type">{getDeviceTypeLabel(location.device_type)}</span>
                         </div>
-                        <p className="location-path">
-                          <strong>Path:</strong> {location.path}
-                        </p>
 
                         {location.sets.length > 0 && (
                           <div className={`sets-section ${isOpen ? 'open' : 'closed'}`}>
                             <div className="sets-section-content">
                               <h4>Sets ({location.sets.length})</h4>
                               {location.sets.map((set, setIdx) => (
-                                <div key={setIdx} className="set-card">
+                                <div key={setIdx} className="set-card" title={set.path}>
                                   <div className="set-header">
                                     <div className="set-name">{set.name}</div>
                                     <div className="set-info">
@@ -318,7 +316,6 @@ export function HomePage() {
                                       </span>
                                     </div>
                                   </div>
-                                  <div className="set-path">{set.path}</div>
 
                                   {set.projects.length > 0 && (
                                     <div className="projects-grid">

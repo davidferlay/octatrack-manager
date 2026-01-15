@@ -163,7 +163,7 @@ h1 {
   background-color: var(--elektron-dark-gray);
   border: 1px solid var(--elektron-border-gray);
   border-left: 3px solid var(--elektron-orange);
-  padding: 1.5rem;
+  padding: 1rem 1.5rem 0 1.5rem;
   margin-bottom: 1.5rem;
 }
 
@@ -189,9 +189,6 @@ h1 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--elektron-border-gray);
 }
 
 .location-header.clickable {
@@ -208,6 +205,12 @@ h1 {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.location-header-left h3 {
+  flex-shrink: 0;
 }
 
 .collapse-indicator {
@@ -250,6 +253,16 @@ h1 {
   letter-spacing: 0.5px;
 }
 
+.location-path-inline {
+  color: var(--elektron-text-dim);
+  font-size: 0.75rem;
+  font-family: 'Courier New', monospace;
+  margin-left: 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Sets Section */
 .sets-section {
   display: grid;
@@ -263,19 +276,23 @@ h1 {
 
 .sets-section.open {
   grid-template-rows: 1fr;
-  margin-top: 1.5rem;
+  margin-top: 1rem;
+  padding-bottom: 1rem;
   opacity: 1;
 }
 
 .sets-section.closed {
   grid-template-rows: 0fr;
   margin-top: 0;
+  margin-bottom: 0;
   opacity: 0;
 }
 
 .sets-section-content {
   overflow: hidden;
   min-height: 0;
+  border-top: 1px solid var(--elektron-border-gray);
+  padding-top: 1rem;
 }
 
 .sets-section h4 {
@@ -297,7 +314,7 @@ h1 {
 .set-card {
   background-color: var(--elektron-medium-gray);
   border: 1px solid var(--elektron-border-gray);
-  padding: 1rem;
+  padding: 1rem 1rem 0 1rem;
   margin-bottom: 1rem;
   transition: all 0.15s ease;
   position: relative;
@@ -327,9 +344,6 @@ h1 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.75rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid var(--elektron-border-gray);
 }
 
 .set-name {
@@ -405,6 +419,7 @@ h1 {
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 0.75rem;
   margin-top: 0.75rem;
+  padding-bottom: 1rem;
 }
 
 .project-card {
@@ -3223,14 +3238,10 @@ h1 {
   color: var(--elektron-text-secondary);
 }
 
-.project-selector-section .location-path {
-  margin: 0 0 1rem 0;
-  font-size: 0.75rem;
-  color: var(--elektron-text-dim);
-}
 
 .project-selector-section .set-card {
   margin-bottom: 0.75rem;
+  padding: 1rem 1rem 0 1rem;
 }
 
 .project-selector-section .set-header.clickable {
@@ -3253,7 +3264,24 @@ h1 {
 }
 
 .project-selector-section .sets-section.open {
-  margin-top: 0.75rem;
+  margin-top: 1rem;
+}
+
+.project-selector-section .set-card .sets-section {
+  margin-top: 0;
+}
+
+.project-selector-section .set-card .sets-section.open {
+  margin-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.project-selector-section .set-card .sets-section-content {
+  padding-top: 0.5rem;
+}
+
+.sets-section-content .projects-grid {
+  padding-bottom: 0;
 }
 
 .project-selector-card {

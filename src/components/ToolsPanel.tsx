@@ -1333,6 +1333,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         <div className="location-header-left">
                           <span className="collapse-indicator">{isLocationOpen ? '▼' : '▶'}</span>
                           <h3>{location.name}</h3>
+                          <span className="location-path-inline">{location.path}</span>
                         </div>
                         <span className="device-type">
                           {location.device_type === 'CompactFlash' ? 'CF Card' :
@@ -1340,7 +1341,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                            location.device_type === 'Usb' ? 'USB' : location.device_type}
                         </span>
                       </div>
-                      <p className="location-path"><strong>Path:</strong> {location.path}</p>
 
                       <div className={`sets-section ${isLocationOpen ? 'open' : 'closed'}`}>
                         <div className="sets-section-content">
@@ -1351,7 +1351,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                             const setKey = `${locIdx}-${setIdx}`;
                             const isSetOpen = openSetsInModal.has(setKey);
                             return (
-                              <div key={setIdx} className="set-card">
+                              <div key={setIdx} className="set-card" title={set.path}>
                                 <div
                                   className="set-header clickable"
                                   onClick={() => {
@@ -1379,7 +1379,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                                     </span>
                                   </div>
                                 </div>
-                                <div className="set-path">{set.path}</div>
                                 <div className={`sets-section ${isSetOpen ? 'open' : 'closed'}`}>
                                   <div className="sets-section-content">
                                     <div className="projects-grid">
