@@ -514,8 +514,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         <div className="tools-source-panel">
           <h3>Source</h3>
 
-          {/* Bank selector for bank-related operations */}
-          {(operation === "copy_bank" || operation === "copy_parts" || operation === "copy_patterns" || operation === "copy_tracks") && (
+          {/* Bank selector for bank-related operations (except copy_tracks) */}
+          {(operation === "copy_bank" || operation === "copy_parts" || operation === "copy_patterns") && (
             <div className="tools-field">
               <label>Bank</label>
               <div className="tools-multi-select banks-inline">
@@ -627,31 +627,62 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             </div>
           )}
 
-          {/* Track and Part selector for copy_tracks */}
+          {/* Bank, Track and Part selector for copy_tracks */}
           {operation === "copy_tracks" && (
             <>
               <div className="tools-field">
+                <label>Bank</label>
+                <div className="tools-multi-select banks-stacked">
+                  <div className="tools-track-row-buttons">
+                    {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className={`tools-multi-btn bank-btn ${sourceBankIndex === idx ? "selected" : ""} ${!loadedBankIndices.has(idx) ? "disabled" : ""}`}
+                        onClick={() => loadedBankIndices.has(idx) && setSourceBankIndex(idx)}
+                        disabled={!loadedBankIndices.has(idx)}
+                        title={loadedBankIndices.has(idx) ? (banks[idx] ? formatBankName(banks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`) : "Bank not loaded"}
+                      >
+                        {String.fromCharCode(65 + idx)}
+                      </button>
+                    ))}
+                    {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className={`tools-multi-btn bank-btn ${sourceBankIndex === idx ? "selected" : ""} ${!loadedBankIndices.has(idx) ? "disabled" : ""}`}
+                        onClick={() => loadedBankIndices.has(idx) && setSourceBankIndex(idx)}
+                        disabled={!loadedBankIndices.has(idx)}
+                        title={loadedBankIndices.has(idx) ? (banks[idx] ? formatBankName(banks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`) : "Bank not loaded"}
+                      >
+                        {String.fromCharCode(65 + idx)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="tools-field">
                 <label>Tracks</label>
-                <div className="tools-multi-select tracks-inline">
-                  <div className="tools-track-row">
-                    <span className="tools-track-label">Audio:</span>
+                <div className="tools-multi-select tracks-stacked">
+                  <div className="tools-track-row-buttons">
                     {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
                       <button
                         key={idx}
                         className={`tools-multi-btn track-btn ${sourceTrackIndices.includes(idx) ? "selected" : ""}`}
                         onClick={() => toggleIndex(sourceTrackIndices, idx, setSourceTrackIndices)}
+                        title={`Audio Track ${idx + 1}`}
                       >
                         T{idx + 1}
                       </button>
                     ))}
                   </div>
-                  <div className="tools-track-row">
-                    <span className="tools-track-label">MIDI:</span>
+                  <div className="tools-track-row-buttons">
                     {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
                       <button
                         key={idx}
                         className={`tools-multi-btn track-btn ${sourceTrackIndices.includes(idx) ? "selected" : ""}`}
                         onClick={() => toggleIndex(sourceTrackIndices, idx, setSourceTrackIndices)}
+                        title={`MIDI Track ${idx - 7}`}
                       >
                         M{idx - 7}
                       </button>
@@ -1111,8 +1142,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             </button>
           </div>
 
-          {/* Bank selector */}
-          {(operation === "copy_bank" || operation === "copy_parts" || operation === "copy_patterns" || operation === "copy_tracks") && (
+          {/* Bank selector (except copy_tracks) */}
+          {(operation === "copy_bank" || operation === "copy_parts" || operation === "copy_patterns") && (
             <div className="tools-field">
               <label>Bank</label>
               <div className="tools-multi-select banks-inline">
@@ -1223,31 +1254,60 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             </div>
           )}
 
-          {/* Track and Part selector for copy_tracks */}
+          {/* Bank, Track and Part selector for copy_tracks */}
           {operation === "copy_tracks" && (
             <>
               <div className="tools-field">
+                <label>Bank</label>
+                <div className="tools-multi-select banks-stacked">
+                  <div className="tools-track-row-buttons">
+                    {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className={`tools-multi-btn bank-btn ${destBankIndex === idx ? "selected" : ""}`}
+                        onClick={() => setDestBankIndex(idx)}
+                        title={`Bank ${String.fromCharCode(65 + idx)}`}
+                      >
+                        {String.fromCharCode(65 + idx)}
+                      </button>
+                    ))}
+                    {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className={`tools-multi-btn bank-btn ${destBankIndex === idx ? "selected" : ""}`}
+                        onClick={() => setDestBankIndex(idx)}
+                        title={`Bank ${String.fromCharCode(65 + idx)}`}
+                      >
+                        {String.fromCharCode(65 + idx)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="tools-field">
                 <label>Tracks</label>
-                <div className="tools-multi-select tracks-inline">
-                  <div className="tools-track-row">
-                    <span className="tools-track-label">Audio:</span>
+                <div className="tools-multi-select tracks-stacked">
+                  <div className="tools-track-row-buttons">
                     {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
                       <button
                         key={idx}
                         className={`tools-multi-btn track-btn ${destTrackIndices.includes(idx) ? "selected" : ""}`}
                         onClick={() => toggleIndex(destTrackIndices, idx, setDestTrackIndices)}
+                        title={`Audio Track ${idx + 1}`}
                       >
                         T{idx + 1}
                       </button>
                     ))}
                   </div>
-                  <div className="tools-track-row">
-                    <span className="tools-track-label">MIDI:</span>
+                  <div className="tools-track-row-buttons">
                     {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
                       <button
                         key={idx}
                         className={`tools-multi-btn track-btn ${destTrackIndices.includes(idx) ? "selected" : ""}`}
                         onClick={() => toggleIndex(destTrackIndices, idx, setDestTrackIndices)}
+                        title={`MIDI Track ${idx - 7}`}
                       >
                         M{idx - 7}
                       </button>
