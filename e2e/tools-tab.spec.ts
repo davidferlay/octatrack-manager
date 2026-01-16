@@ -1,0 +1,448 @@
+import { test, expect, Page } from '@playwright/test'
+
+/**
+ * Tools Tab E2E Tests
+ *
+ * These tests use mock Tauri responses to test the Tools tab UI without the full Tauri backend.
+ * The mock data simulates a loaded Octatrack project with banks, patterns, and sample slots.
+ */
+
+// Helper to inject Tauri mocks before page load
+async function setupTauriMocks(page: Page) {
+  await page.addInitScript(() => {
+    // Mock Tauri internals
+    (window as any).__TAURI_INTERNALS__ = {
+      invoke: async (cmd: string, args?: any) => {
+        console.log('Mock Tauri invoke:', cmd, args)
+
+        switch (cmd) {
+          case 'load_project_metadata':
+            return {
+              name: 'TestProject',
+              tempo: 120.0,
+              time_signature: '4/4',
+              pattern_length: 16,
+              os_version: '1.40F',
+              current_state: {
+                bank: 0,
+                bank_name: 'BANK A',
+                pattern: 0,
+                part: 0,
+                track: 0,
+                muted_tracks: [],
+                soloed_tracks: [],
+                midi_mode: 0,
+                track_othermode: 0,
+                audio_muted_tracks: [],
+                audio_cued_tracks: [],
+                midi_muted_tracks: [],
+              },
+              mixer_settings: {
+                gain_ab: 0,
+                gain_cd: 0,
+                dir_ab: 0,
+                dir_cd: 0,
+                phones_mix: 0,
+                main_level: 100,
+                cue_level: 100,
+              },
+              memory_settings: {
+                load_24bit_flex: false,
+                dynamic_recorders: false,
+                record_24bit: false,
+                reserved_recorder_count: 8,
+                reserved_recorder_length: 16,
+              },
+              midi_settings: {
+                trig_channels: [1, 2, 3, 4, 5, 6, 7, 8],
+                auto_channel: 10,
+                clock_send: true,
+                clock_receive: true,
+                transport_send: true,
+                transport_receive: true,
+                prog_change_send: false,
+                prog_change_send_channel: 1,
+                prog_change_receive: false,
+                prog_change_receive_channel: 1,
+              },
+              metronome_settings: {
+                enabled: false,
+                main_volume: 64,
+                cue_volume: 64,
+                pitch: 64,
+                tonal: false,
+                preroll: 0,
+                time_signature_numerator: 4,
+                time_signature_denominator: 4,
+              },
+              sample_slots: {
+                flex_slots: Array(128).fill(null).map((_, i) => ({
+                  slot_id: i,
+                  slot_type: 'Flex',
+                  path: i < 10 ? `/samples/flex_${i}.wav` : null,
+                  gain: i < 10 ? 0 : null,
+                  loop_mode: null,
+                  timestretch_mode: null,
+                  source_location: null,
+                  file_exists: i < 10,
+                  compatibility: null,
+                  file_format: null,
+                  bit_depth: null,
+                  sample_rate: null,
+                })),
+                static_slots: Array(128).fill(null).map((_, i) => ({
+                  slot_id: i,
+                  slot_type: 'Static',
+                  path: i < 5 ? `/samples/static_${i}.wav` : null,
+                  gain: i < 5 ? 0 : null,
+                  loop_mode: null,
+                  timestretch_mode: null,
+                  source_location: null,
+                  file_exists: i < 5,
+                  compatibility: null,
+                  file_format: null,
+                  bit_depth: null,
+                  sample_rate: null,
+                })),
+              },
+            }
+
+          case 'load_project_banks':
+            return Array(16).fill(null).map((_, i) => ({
+              name: `BANK ${String.fromCharCode(65 + i)}`,
+              index: i,
+              parts: [
+                { name: 'PART 1', patterns: Array(16).fill(null).map((_, j) => ({
+                  name: `Pattern ${j + 1}`,
+                  part_assignment: 0,
+                  length: 16,
+                  scale_mode: 'Normal',
+                  master_scale: '1x',
+                  chain_mode: 'OFF',
+                  tracks: Array(16).fill(null).map((_, k) => ({
+                    track_id: k < 8 ? `T${k + 1}` : `M${k - 7}`,
+                    track_type: k < 8 ? 'Audio' : 'MIDI',
+                    steps: [],
+                    swing_amount: 0,
+                    pattern_settings: { trig_mode: 'ONE', trig_quant: 'DIRECT', start_silent: false, plays_free: false, oneshot_trk: false },
+                  }))
+                })) },
+                { name: 'PART 2', patterns: [] },
+                { name: 'PART 3', patterns: [] },
+                { name: 'PART 4', patterns: [] },
+              ],
+            }))
+
+          case 'get_existing_banks':
+            return [0, 1, 2, 3] // Banks A, B, C, D exist
+
+          case 'scan_devices':
+            return { locations: [], standalone_projects: [] }
+
+          case 'check_project_in_set':
+            return true
+
+          case 'check_projects_in_same_set':
+            return true
+
+          case 'get_audio_pool_status':
+            return { exists: false, path: null, set_path: '/test/set' }
+
+          case 'get_system_resources':
+            return { cpu_cores: 4, available_memory_mb: 8000, recommended_concurrency: 4 }
+
+          case 'plugin:app|version':
+            return '1.0.0'
+
+          case 'load_single_bank': {
+            const bankIndex = args?.bankIndex ?? 0
+            return {
+              name: `BANK ${String.fromCharCode(65 + bankIndex)}`,
+              index: bankIndex,
+              metadata: {
+                load_24bit_flex: false,
+                export_chain_parts: false,
+                quantized_length: 'Default',
+                trig_modes: Array(8).fill('One'),
+              },
+              parts: [
+                {
+                  name: 'PART 1',
+                  patterns: Array(16).fill(null).map((_, j) => ({
+                    name: `Pattern ${j + 1}`,
+                    part_assignment: 0,
+                    length: 16,
+                    scale_mode: 'Normal',
+                    master_scale: '1x',
+                    chain_mode: 'OFF',
+                    tracks: Array(16).fill(null).map((_, k) => ({
+                      track_id: k < 8 ? `T${k + 1}` : `M${k - 7}`,
+                      track_type: k < 8 ? 'Audio' : 'MIDI',
+                      steps: [],
+                      swing_amount: 0,
+                      pattern_settings: { trig_mode: 'ONE', trig_quant: 'DIRECT', start_silent: false, plays_free: false, oneshot_trk: false },
+                    }))
+                  }))
+                },
+                { name: 'PART 2', patterns: [] },
+                { name: 'PART 3', patterns: [] },
+                { name: 'PART 4', patterns: [] },
+              ],
+            }
+          }
+
+          default:
+            console.warn('Unhandled mock invoke:', cmd)
+            return null
+        }
+      },
+      transformCallback: () => {},
+    }
+
+    // Also set up window.__TAURI__ for compatibility
+    ;(window as any).__TAURI__ = {
+      invoke: (window as any).__TAURI_INTERNALS__.invoke,
+    }
+  })
+}
+
+test.describe('Tools Tab - UI Tests', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    // Wait for React to render with mock data
+    await page.waitForTimeout(2000)
+  })
+
+  test('Tools tab is visible in project header', async ({ page }) => {
+    const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
+    await expect(toolsTab).toBeVisible({ timeout: 10000 })
+  })
+
+  test('clicking Tools tab shows Tools panel', async ({ page }) => {
+    const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
+    await toolsTab.click()
+
+    // Tools panel should be visible with operation selector
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await expect(operationSelect).toBeVisible({ timeout: 5000 })
+  })
+})
+
+test.describe('Tools Tab - Operation Selector', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
+    await toolsTab.click()
+    await page.waitForTimeout(500)
+  })
+
+  test('operation selector has all 5 copy operations', async ({ page }) => {
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await expect(operationSelect).toBeVisible()
+
+    // Check all options are present
+    await expect(operationSelect.locator('option[value="copy_bank"]')).toHaveText('Copy Bank')
+    await expect(operationSelect.locator('option[value="copy_parts"]')).toHaveText('Copy Parts')
+    await expect(operationSelect.locator('option[value="copy_patterns"]')).toHaveText('Copy Patterns')
+    await expect(operationSelect.locator('option[value="copy_tracks"]')).toHaveText('Copy Tracks')
+    await expect(operationSelect.locator('option[value="copy_sample_slots"]')).toHaveText('Copy Sample Slots')
+  })
+
+  test('switching operations updates the UI', async ({ page }) => {
+    const operationSelect = page.locator('.tools-section .tools-select')
+
+    // Switch to Copy Sample Slots
+    await operationSelect.selectOption('copy_sample_slots')
+    await page.waitForTimeout(300)
+
+    // Should show Slot Type options
+    await expect(page.getByText('Slot Type')).toBeVisible()
+    await expect(page.getByText('Audio Files')).toBeVisible()
+
+    // Switch to Copy Patterns
+    await operationSelect.selectOption('copy_patterns')
+    await page.waitForTimeout(300)
+
+    // Should show Part Assignment options
+    await expect(page.getByText('Part Assignment')).toBeVisible()
+  })
+})
+
+test.describe('Tools Tab - Copy Sample Slots Options', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
+    await toolsTab.click()
+    await page.waitForTimeout(500)
+
+    // Select Copy Sample Slots operation
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('copy_sample_slots')
+    await page.waitForTimeout(300)
+  })
+
+  test('Slot Type has three toggle buttons', async ({ page }) => {
+    const slotTypeLabel = page.getByText('Slot Type')
+    await expect(slotTypeLabel).toBeVisible()
+
+    // Find toggle buttons near the Slot Type label
+    const toggleButtons = page.locator('.tools-toggle-btn')
+    const slotTypeButtons = toggleButtons.filter({ hasText: /Flex|Static/ })
+    await expect(slotTypeButtons).toHaveCount(3)
+  })
+
+  test('Static + Flex is selected by default', async ({ page }) => {
+    const staticFlexBtn = page.locator('.tools-toggle-btn', { hasText: 'Static + Flex' })
+    await expect(staticFlexBtn).toHaveClass(/selected/)
+  })
+
+  test('clicking Slot Type button changes selection', async ({ page }) => {
+    const flexBtn = page.locator('.tools-toggle-btn').filter({ hasText: /^Flex$/ })
+    const staticFlexBtn = page.locator('.tools-toggle-btn', { hasText: 'Static + Flex' })
+
+    await flexBtn.click()
+    await page.waitForTimeout(200)
+
+    await expect(flexBtn).toHaveClass(/selected/)
+    await expect(staticFlexBtn).not.toHaveClass(/selected/)
+  })
+
+  test('Audio Files has three toggle buttons', async ({ page }) => {
+    await expect(page.getByText('Audio Files')).toBeVisible()
+
+    const copyBtn = page.locator('.tools-toggle-btn', { hasText: /^Copy$/ })
+    const moveToPoolBtn = page.locator('.tools-toggle-btn', { hasText: 'Move to Pool' })
+    const dontCopyBtn = page.locator('.tools-toggle-btn', { hasText: "Don't Copy" })
+
+    await expect(copyBtn).toBeVisible()
+    await expect(moveToPoolBtn).toBeVisible()
+    await expect(dontCopyBtn).toBeVisible()
+  })
+
+  test('Move to Pool is selected by default when projects are in same Set', async ({ page }) => {
+    // Our mock returns check_projects_in_same_set = true
+    const moveToPoolBtn = page.locator('.tools-toggle-btn', { hasText: 'Move to Pool' })
+    await expect(moveToPoolBtn).toHaveClass(/selected/)
+  })
+
+  test('Include Editor Settings checkbox is visible and checked by default', async ({ page }) => {
+    const label = page.getByText('Include Editor Settings')
+    await expect(label).toBeVisible()
+
+    const checkbox = page.locator('.tools-checkbox input[type="checkbox"]')
+    await expect(checkbox).toBeChecked()
+  })
+})
+
+test.describe('Tools Tab - Copy Patterns Options', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
+    await toolsTab.click()
+    await page.waitForTimeout(500)
+
+    // Select Copy Patterns operation
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('copy_patterns')
+    await page.waitForTimeout(300)
+  })
+
+  test('Part Assignment selector is visible', async ({ page }) => {
+    await expect(page.getByText('Part Assignment')).toBeVisible()
+  })
+
+  test('Part Assignment has three options', async ({ page }) => {
+    const partAssignmentField = page.locator('.tools-field').filter({ hasText: 'Part Assignment' })
+    const select = partAssignmentField.locator('select')
+
+    await expect(select.locator('option[value="keep_original"]')).toHaveText('Keep Original')
+    await expect(select.locator('option[value="copy_source_part"]')).toHaveText('Copy Source Part')
+    await expect(select.locator('option[value="select_specific"]')).toHaveText('Assign to Specific Part')
+  })
+
+  test('Track Scope selector is visible', async ({ page }) => {
+    await expect(page.getByText('Track Scope')).toBeVisible()
+  })
+})
+
+test.describe('Tools Tab - Copy Tracks Options', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
+    await toolsTab.click()
+    await page.waitForTimeout(500)
+
+    // Select Copy Tracks operation
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('copy_tracks')
+    await page.waitForTimeout(300)
+  })
+
+  test('Copy Mode selector is visible', async ({ page }) => {
+    await expect(page.getByText('Copy Mode')).toBeVisible()
+  })
+
+  test('Copy Mode has three options', async ({ page }) => {
+    const copyModeField = page.locator('.tools-field').filter({ hasText: 'Copy Mode' })
+    const select = copyModeField.locator('select')
+
+    // Options inside a closed select are hidden, so check count instead
+    await expect(select.locator('option[value="both"]')).toHaveCount(1)
+    await expect(select.locator('option[value="part_params"]')).toHaveCount(1)
+    await expect(select.locator('option[value="pattern_triggers"]')).toHaveCount(1)
+  })
+})
+
+test.describe('Tools Tab - Destination Panel', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
+    await toolsTab.click()
+    await page.waitForTimeout(500)
+  })
+
+  test('Destination panel is visible', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    await expect(destPanel).toBeVisible()
+  })
+
+  test('Destination header is visible', async ({ page }) => {
+    await expect(page.locator('.tools-dest-panel h3')).toHaveText('Destination')
+  })
+
+  test('Project selector is visible', async ({ page }) => {
+    await expect(page.locator('.tools-project-selector-btn')).toBeVisible()
+  })
+})
+
+test.describe('Tools Tab - Execute Button', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
+    await toolsTab.click()
+    await page.waitForTimeout(500)
+  })
+
+  test('Execute button is visible', async ({ page }) => {
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeVisible()
+  })
+
+  test('Execute button has correct text', async ({ page }) => {
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toContainText('Execute')
+  })
+})
