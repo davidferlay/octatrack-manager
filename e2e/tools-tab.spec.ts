@@ -428,6 +428,19 @@ test.describe('Tools Tab - Copy Patterns Options', () => {
     await expect(executeBtn).toBeDisabled()
   })
 
+  test('Destination Part buttons have correct tooltips', async ({ page }) => {
+    const userSelectionBtn = page.locator('.tools-toggle-btn', { hasText: 'User Selection' })
+    await userSelectionBtn.click()
+    await page.waitForTimeout(200)
+
+    const partCross = page.locator('.tools-options-panel .tools-part-cross')
+
+    await expect(partCross.locator('.tools-toggle-btn.part-btn', { hasText: /^1$/ })).toHaveAttribute('title', 'Part 1')
+    await expect(partCross.locator('.tools-toggle-btn.part-btn', { hasText: /^2$/ })).toHaveAttribute('title', 'Part 2')
+    await expect(partCross.locator('.tools-toggle-btn.part-btn', { hasText: /^3$/ })).toHaveAttribute('title', 'Part 3')
+    await expect(partCross.locator('.tools-toggle-btn.part-btn', { hasText: /^4$/ })).toHaveAttribute('title', 'Part 4')
+  })
+
   test('Specific Tracks shows track buttons in stacked layout', async ({ page }) => {
     const specificTracksBtn = page.locator('.tools-toggle-btn', { hasText: 'Specific Tracks' })
     await specificTracksBtn.click()
@@ -1002,10 +1015,45 @@ test.describe('Tools Tab - Copy Banks Options', () => {
     await page.waitForTimeout(300)
   })
 
+  test('Source panel has Bank label (singular) for single-select', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const bankLabel = sourcePanel.locator('.tools-field label', { hasText: 'Bank' })
+    await expect(bankLabel).toBeVisible()
+  })
+
   test('Destination panel has Banks label (plural) for multi-select', async ({ page }) => {
     const destPanel = page.locator('.tools-dest-panel')
     const banksLabel = destPanel.locator('.tools-field label', { hasText: 'Banks' })
     await expect(banksLabel).toBeVisible()
+  })
+
+  test('Default source bank is Bank A', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const bankA = sourcePanel.locator('.tools-multi-btn.bank-btn', { hasText: /^A$/ })
+    await expect(bankA).toHaveClass(/selected/)
+  })
+
+  test('Default destination bank is Bank A', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const bankA = destPanel.locator('.tools-multi-btn.bank-btn', { hasText: /^A$/ })
+    await expect(bankA).toHaveClass(/selected/)
+  })
+
+  test('Source bank is single-select (clicking another bank switches selection)', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const bankA = sourcePanel.locator('.tools-multi-btn.bank-btn', { hasText: /^A$/ })
+    const bankB = sourcePanel.locator('.tools-multi-btn.bank-btn', { hasText: /^B$/ })
+
+    // Bank A should be selected by default
+    await expect(bankA).toHaveClass(/selected/)
+
+    // Click Bank B to switch selection
+    await bankB.click()
+    await page.waitForTimeout(200)
+
+    // Only Bank B should be selected
+    await expect(bankA).not.toHaveClass(/selected/)
+    await expect(bankB).toHaveClass(/selected/)
   })
 
   test('Source bank can be deselected by clicking it again', async ({ page }) => {
@@ -1058,6 +1106,30 @@ test.describe('Tools Tab - Copy Banks Options', () => {
     // All 16 banks should be selected (exclude All/None buttons)
     const selectedBanks = destPanel.locator('.tools-multi-btn.bank-btn.selected:not(.tools-select-all)')
     await expect(selectedBanks).toHaveCount(16)
+
+    // All button should show selected styling
+    await expect(allButton).toHaveClass(/selected/)
+  })
+
+  test('Destination All button is toggleable (clicking again deselects all)', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const allButton = destPanel.locator('.tools-multi-btn.tools-select-all', { hasText: 'All' })
+
+    // Click All button to select all
+    await allButton.click()
+    await page.waitForTimeout(200)
+    await expect(allButton).toHaveClass(/selected/)
+
+    // Click All button again to deselect all
+    await allButton.click()
+    await page.waitForTimeout(200)
+
+    // No banks should be selected
+    const selectedBanks = destPanel.locator('.tools-multi-btn.bank-btn.selected:not(.tools-select-all)')
+    await expect(selectedBanks).toHaveCount(0)
+
+    // All button should not be selected
+    await expect(allButton).not.toHaveClass(/selected/)
   })
 
   test('Destination banks has None button to deselect all banks', async ({ page }) => {
@@ -1098,6 +1170,18 @@ test.describe('Tools Tab - Copy Banks Options', () => {
     const executeBtn = page.locator('.tools-execute-btn')
     await expect(executeBtn).toBeDisabled()
   })
+
+  test('Destination All button has correct tooltip', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const allButton = destPanel.locator('.tools-multi-btn.tools-select-all', { hasText: 'All' })
+    await expect(allButton).toHaveAttribute('title', 'Select all banks')
+  })
+
+  test('Destination None button has correct tooltip', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const noneButton = destPanel.locator('.tools-multi-btn.tools-select-all', { hasText: 'None' })
+    await expect(noneButton).toHaveAttribute('title', 'Deselect all banks')
+  })
 })
 
 test.describe('Tools Tab - Copy Parts Options', () => {
@@ -1113,6 +1197,60 @@ test.describe('Tools Tab - Copy Parts Options', () => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_parts')
     await page.waitForTimeout(300)
+  })
+
+  test('Default source Part is Part 1', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const part1 = sourcePanel.locator('.tools-toggle-btn.part-btn', { hasText: /^1$/ })
+    await expect(part1).toHaveClass(/selected/)
+  })
+
+  test('Default destination Part is Part 1', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const part1 = destPanel.locator('.tools-toggle-btn.part-btn', { hasText: /^1$/ })
+    await expect(part1).toHaveClass(/selected/)
+  })
+
+  test('Default source Bank is Bank A', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const bankA = sourcePanel.locator('.tools-multi-btn.bank-btn', { hasText: /^A$/ })
+    await expect(bankA).toHaveClass(/selected/)
+  })
+
+  test('Default destination Bank is Bank A', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const bankA = destPanel.locator('.tools-multi-btn.bank-btn', { hasText: /^A$/ })
+    await expect(bankA).toHaveClass(/selected/)
+  })
+
+  test('Part buttons have correct tooltips', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+
+    const part1 = sourcePanel.locator('.tools-toggle-btn.part-btn', { hasText: /^1$/ })
+    await expect(part1).toHaveAttribute('title', 'Part 1')
+
+    const part2 = sourcePanel.locator('.tools-toggle-btn.part-btn', { hasText: /^2$/ })
+    await expect(part2).toHaveAttribute('title', 'Part 2')
+  })
+
+  test('All button has correct tooltip', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const allBtn = sourcePanel.locator('.tools-toggle-btn.part-btn.part-all')
+    await expect(allBtn).toHaveAttribute('title', 'Select all Parts')
+  })
+
+  test('Destination Parts show sync tooltip when source All is selected', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+    const sourceAll = sourcePanel.locator('.tools-toggle-btn.part-btn.part-all')
+
+    // Click source All
+    await sourceAll.click()
+    await page.waitForTimeout(200)
+
+    // Destination part should show sync tooltip
+    const destPart1 = destPanel.locator('.tools-toggle-btn.part-btn', { hasText: /^1$/ })
+    await expect(destPart1).toHaveAttribute('title', 'Synced with source All selection')
   })
 
   test('Source part is single-select (clicking another part switches selection)', async ({ page }) => {
@@ -1331,6 +1469,30 @@ test.describe('Tools Tab - Copy Patterns Selection', () => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_patterns')
     await page.waitForTimeout(300)
+  })
+
+  test('Default source Pattern is Pattern 1', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const pattern1 = sourcePanel.locator('.tools-multi-btn.pattern-btn', { hasText: /^1$/ })
+    await expect(pattern1).toHaveClass(/selected/)
+  })
+
+  test('Default destination Pattern is Pattern 1', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const pattern1 = destPanel.locator('.tools-multi-btn.pattern-btn', { hasText: /^1$/ })
+    await expect(pattern1).toHaveClass(/selected/)
+  })
+
+  test('Default source Bank is Bank A', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const bankA = sourcePanel.locator('.tools-multi-btn.bank-btn', { hasText: /^A$/ })
+    await expect(bankA).toHaveClass(/selected/)
+  })
+
+  test('Default destination Bank is Bank A', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const bankA = destPanel.locator('.tools-multi-btn.bank-btn', { hasText: /^A$/ })
+    await expect(bankA).toHaveClass(/selected/)
   })
 
   test('Source pattern is single-select (clicking another pattern switches selection)', async ({ page }) => {
@@ -1564,6 +1726,24 @@ test.describe('Tools Tab - Copy Patterns Selection', () => {
     // Execute button should be disabled
     const executeBtn = page.locator('.tools-execute-btn')
     await expect(executeBtn).toBeDisabled()
+  })
+
+  test('Source All button has correct tooltip', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const sourceAll = sourcePanel.locator('.tools-multi-btn.pattern-btn.tools-select-all')
+    await expect(sourceAll).toHaveAttribute('title', 'Select all patterns')
+  })
+
+  test('Destination All button has correct tooltip', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const destAll = destPanel.locator('.tools-multi-btn.pattern-btn.tools-select-all', { hasText: 'All' })
+    await expect(destAll).toHaveAttribute('title', 'Select all patterns')
+  })
+
+  test('Destination None button has correct tooltip', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const destNone = destPanel.locator('.tools-multi-btn.pattern-btn.tools-select-all', { hasText: 'None' })
+    await expect(destNone).toHaveAttribute('title', 'Deselect all patterns')
   })
 })
 

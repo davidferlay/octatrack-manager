@@ -614,6 +614,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         setSourcePartIndices([0]);
                       }
                     }}
+                    title="Part 1"
                   >
                     1
                   </button>
@@ -629,6 +630,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         setSourcePartIndices([3]);
                       }
                     }}
+                    title="Part 4"
                   >
                     4
                   </button>
@@ -644,6 +646,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         setDestPartIndices([0, 1, 2, 3]);
                       }
                     }}
+                    title="Select all Parts"
                   >
                     All
                   </button>
@@ -657,6 +660,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         setSourcePartIndices([1]);
                       }
                     }}
+                    title="Part 2"
                   >
                     2
                   </button>
@@ -672,6 +676,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         setSourcePartIndices([2]);
                       }
                     }}
+                    title="Part 3"
                   >
                     3
                   </button>
@@ -733,6 +738,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         setDestPatternIndices(Array.from({ length: 16 }, (_, i) => i));
                       }
                     }}
+                    title="Select all patterns"
                   >
                     All
                   </button>
@@ -1129,6 +1135,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         type="button"
                         className={`tools-toggle-btn part-btn ${destPart === 0 ? "selected" : ""}`}
                         onClick={() => setDestPart(destPart === 0 ? -1 : 0)}
+                        title="Part 1"
                       >
                         1
                       </button>
@@ -1138,6 +1145,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         type="button"
                         className={`tools-toggle-btn part-btn ${destPart === 3 ? "selected" : ""}`}
                         onClick={() => setDestPart(destPart === 3 ? -1 : 3)}
+                        title="Part 4"
                       >
                         4
                       </button>
@@ -1146,6 +1154,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         type="button"
                         className={`tools-toggle-btn part-btn ${destPart === 1 ? "selected" : ""}`}
                         onClick={() => setDestPart(destPart === 1 ? -1 : 1)}
+                        title="Part 2"
                       >
                         2
                       </button>
@@ -1155,6 +1164,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         type="button"
                         className={`tools-toggle-btn part-btn ${destPart === 2 ? "selected" : ""}`}
                         onClick={() => setDestPart(destPart === 2 ? -1 : 2)}
+                        title="Part 3"
                       >
                         3
                       </button>
@@ -1419,12 +1429,14 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   <button
                     className="tools-multi-btn bank-btn tools-select-all"
                     onClick={() => setDestBankIndices([])}
+                    title="Deselect all banks"
                   >
                     None
                   </button>
                   <button
                     className={`tools-multi-btn bank-btn tools-select-all ${destBankIndices.length === 16 ? "selected" : ""}`}
                     onClick={() => destBankIndices.length === 16 ? setDestBankIndices([]) : selectAllIndices(16, setDestBankIndices)}
+                    title="Select all banks"
                   >
                     All
                   </button>
@@ -1517,7 +1529,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       : setDestPartIndices([...destPartIndices, 0].sort((a, b) => a - b))
                     )}
                     disabled={sourcePartIndices.length === 4}
-                    title={sourcePartIndices.length === 4 ? "Synced with source All selection" : undefined}
+                    title={sourcePartIndices.length === 4 ? "Synced with source All selection" : "Part 1"}
                   >
                     1
                   </button>
@@ -1531,7 +1543,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       : setDestPartIndices([...destPartIndices, 3].sort((a, b) => a - b))
                     )}
                     disabled={sourcePartIndices.length === 4}
-                    title={sourcePartIndices.length === 4 ? "Synced with source All selection" : undefined}
+                    title={sourcePartIndices.length === 4 ? "Synced with source All selection" : "Part 4"}
                   >
                     4
                   </button>
@@ -1543,7 +1555,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       : setDestPartIndices([0, 1, 2, 3])
                     )}
                     disabled={sourcePartIndices.length === 4}
-                    title={sourcePartIndices.length === 4 ? "Synced with source All selection" : undefined}
+                    title={sourcePartIndices.length === 4 ? "Synced with source All selection" : "Select all Parts"}
                   >
                     All
                   </button>
@@ -1555,7 +1567,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       : setDestPartIndices([...destPartIndices, 1].sort((a, b) => a - b))
                     )}
                     disabled={sourcePartIndices.length === 4}
-                    title={sourcePartIndices.length === 4 ? "Synced with source All selection" : undefined}
+                    title={sourcePartIndices.length === 4 ? "Synced with source All selection" : "Part 2"}
                   >
                     2
                   </button>
@@ -1569,7 +1581,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       : setDestPartIndices([...destPartIndices, 2].sort((a, b) => a - b))
                     )}
                     disabled={sourcePartIndices.length === 4}
-                    title={sourcePartIndices.length === 4 ? "Synced with source All selection" : undefined}
+                    title={sourcePartIndices.length === 4 ? "Synced with source All selection" : "Part 3"}
                   >
                     3
                   </button>
