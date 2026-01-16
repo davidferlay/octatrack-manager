@@ -1,4 +1,4 @@
-# Tools Tab - QA Test Cases
+# Tools Tab - Functional Test Cases
 
 ---
 
@@ -9,15 +9,15 @@ Run these 10 tests first for rapid validation of core functionality.
 | # | Operation | Test | Steps | Pass Criteria |
 |---|-----------|------|-------|---------------|
 | 1 | **Copy Bank** | Cross-project copy | Copy Bank A from Project1 to Bank B in Project2 | Success message. Open Project2, verify Bank B has copied data |
-| 2 | **Copy Parts** | Multi-part copy | Copy Parts 1,2 to Parts 3,4 in same bank | Success message. Parts tab shows copied Part data in new positions |
-| 3 | **Copy Patterns** | With Part assignment | Copy Patterns 1-4 with "Assign to Specific Part" = Part 2 | Success message. All copied patterns show "→ Part 2" |
-| 4 | **Copy Patterns** | Specific tracks only | Copy Pattern 1 with Track Scope = "Specific", select T1,T2 only | Success message. Only T1,T2 have triggers, other tracks empty |
-| 5 | **Copy Tracks** | Part params only | Copy T1 with mode "Part Params Only" | Success message. Machine/Amp/LFO/FX copied, pattern triggers unchanged |
+| 2 | **Copy Parts** | Multi-part copy | Click Source "All", verify destination syncs. Execute. | Success message. All 4 Parts copied |
+| 3 | **Copy Patterns** | With Part assignment | Copy Patterns 1-4 with "User Selection" Part = Part 2 | Success message. All copied patterns show "→ Part 2" |
+| 4 | **Copy Patterns** | Specific tracks only | Copy Pattern 1 with Track Scope = "Specific Tracks", select T1,T2 only | Success message. Only T1,T2 have triggers, other tracks empty |
+| 5 | **Copy Tracks** | Part Parameters only | Select T1 source and dest, mode "Part Parameters". Execute. | Success message. Machine/Amp/LFO/FX copied, pattern triggers unchanged |
 | 6 | **Copy Sample Slots** | Full range both types | Copy slots 1-128, Static+Flex, "Don't Copy" audio | Success message. All slot assignments copied |
 | 7 | **Copy Sample Slots** | With Move to Pool | Copy slots 1-10 with "Move to Pool" (same Set) | Success message. Audio files in AUDIO POOL, paths updated |
 | 8 | **Copy Sample Slots** | Default values | Select Copy Sample Slots, dest in same Set | "Static + Flex" and "Move to Pool" selected by default |
-| 9 | **Validation** | Part count mismatch | Select 2 source Parts, 3 destination Parts | Execute button disabled, warning message shown |
-| 10 | **UI** | Operation switching | Switch between all 5 operations | UI updates correctly, no errors, appropriate fields shown |
+| 9 | **Validation** | No selection | Copy Tracks with no source/dest tracks selected | Execute button disabled, warning message shown |
+| 10 | **General** | Operation switching | Switch between all 5 operations | Correct fields shown for each operation |
 
 **Estimated time:** 15-20 minutes
 
@@ -31,317 +31,344 @@ Run these 10 tests first for rapid validation of core functionality.
 
 ---
 
-## 1. Copy Bank
+## 1. Copy Banks
 
-### 1.1 Basic Functionality
+### 1.1 Default Values
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| CB-01 | Copy bank to same project | Select Bank A as source, same project as dest, Bank B as dest bank. Execute. | Bank B contains exact copy of Bank A data |
-| CB-02 | Copy bank to different project | Select Bank A, different project, Bank A. Execute. | Destination project Bank A updated with source data |
-| CB-03 | Copy bank overwrites existing | Copy to a bank that already has data | Existing data replaced, no merge |
-| CB-04 | Copy non-existent bank | Select a bank that doesn't exist (no .work file) | Error message displayed |
+| CB-D-01 | Default source bank | Open Copy Banks | Bank A selected |
+| CB-D-02 | Default destination bank | Open Copy Banks | Bank A selected |
 
-### 1.2 Data Integrity
+### 1.2 Source Selection
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| CB-05 | Verify all 4 Parts copied | Copy bank, check Parts tab in dest | All 4 Parts match source |
-| CB-06 | Verify all 16 Patterns copied | Copy bank, check Patterns tab | All 16 patterns match source |
-| CB-07 | Verify Part assignments preserved | Check pattern Part assignments after copy | Part assignments (1-4) match source |
-| CB-08 | Verify parameter locks copied | Check pattern steps with P-locks | All P-lock data preserved |
+| CB-S-01 | Source is single-select | Click Bank A, then Bank B | Only Bank B selected |
+| CB-S-02 | Source can be deselected | Click selected Bank A | Bank A deselected |
+| CB-S-03 | Execute disabled without source | Deselect source bank | Execute button disabled with message |
+
+### 1.3 Destination Selection
+| ID | Test Case | Steps | Expected Result |
+|----|-----------|-------|-----------------|
+| CB-D-03 | Destination is multi-select | Click Bank A, then Bank B | Both A and B selected |
+| CB-D-04 | Destination can be deselected | Click selected Bank A | Bank A deselected |
+| CB-D-05 | All button selects all 16 banks | Click "All" button | All 16 banks selected |
+| CB-D-06 | All button is toggleable | Click "All" when selected | All banks deselected |
+| CB-D-07 | None button deselects all | Click "None" button | All banks deselected |
+| CB-D-08 | Execute disabled without dest | Deselect all destination banks | Execute button disabled with message |
+
+### 1.4 Data Integrity
+| ID | Test Case | Steps | Expected Result |
+|----|-----------|-------|-----------------|
+| CB-I-01 | Verify all 4 Parts copied | Copy bank, check Parts tab in dest | All 4 Parts match source |
+| CB-I-02 | Verify all 16 Patterns copied | Copy bank, check Patterns tab | All 16 patterns match source |
+| CB-I-03 | Verify Part assignments preserved | Check pattern Part assignments after copy | Part assignments (1-4) match source |
+| CB-I-04 | Verify parameter locks copied | Check pattern steps with P-locks | All P-lock data preserved |
 
 ---
 
 ## 2. Copy Parts
 
-### 2.1 Basic Functionality
+### 2.1 Default Values
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| CP-01 | Copy single Part | Select Part 1 source, Part 1 dest. Execute. | Part 1 copied successfully |
-| CP-02 | Copy multiple Parts | Select Parts 1,2,3 source, Parts 2,3,4 dest. Execute. | Parts copied to new positions |
-| CP-03 | Copy all Parts | Click "All" button, select matching dest Parts. Execute. | All 4 Parts copied |
-| CP-04 | Copy Part to different bank | Source Bank A Part 1 to Bank B Part 3 | Part copied across banks |
-| CP-05 | Copy Part to different project | Copy Part to another project | Part copied across projects |
+| CP-D-01 | Default source bank | Open Copy Parts | Bank A selected |
+| CP-D-02 | Default source part | Open Copy Parts | Part 1 selected |
+| CP-D-03 | Default destination bank | Open Copy Parts | Bank A selected |
+| CP-D-04 | Default destination part | Open Copy Parts | Part 1 selected |
 
-### 2.2 Validation
+### 2.2 Source Part Selection
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| CP-06 | Mismatched Part count | Select 2 source Parts but 3 dest Parts | Execute button disabled, warning shown |
-| CP-07 | Same source and dest Part | Copy Part 1 to Part 1 in same bank | Operation completes (no-op or refresh) |
+| CP-S-01 | Source Part is single-select | Click Part 1, then Part 2 | Only Part 2 selected |
+| CP-S-02 | Source Part can be deselected | Click selected Part 1 | Part 1 deselected |
+| CP-S-03 | Source All selects all 4 Parts | Click "All" button | All 4 Parts selected |
+| CP-S-04 | Source All syncs destination | Click source "All" | Destination also shows All selected |
+| CP-S-05 | Deselect All clears both | Click source "All" when selected | Both source and destination cleared |
+| CP-S-06 | Click single Part exits All mode | When All selected, click Part 2 | Only Part 2 selected, destination re-enabled |
 
-### 2.3 Data Integrity
+### 2.3 Destination Part Selection
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| CP-08 | Verify Machine settings | Check all 8 audio track machines after copy | Machine types and params match |
-| CP-09 | Verify Amp settings | Check ATK, HOLD, REL, VOL, BAL values | All Amp params match |
-| CP-10 | Verify LFO settings | Check LFO speeds, depths, waveforms | All LFO params match |
-| CP-11 | Verify FX settings | Check FX1/FX2 types and all params | All FX params match |
-| CP-12 | Verify MIDI track settings | Check MIDI tracks NOTE, ARP, CTRL params | All MIDI params match |
+| CP-D-05 | Destination is multi-select (single source) | With single source, click Part 1, Part 2 | Both Parts selected |
+| CP-D-06 | Destination can be deselected | Click selected Part 1 | Part 1 deselected |
+| CP-D-07 | Destination disabled when source All | Click source "All" | All destination buttons disabled |
+| CP-D-08 | Destination All selects all 4 | Click destination "All" (single source) | All 4 Parts selected |
+
+### 2.4 Bank Selection
+| ID | Test Case | Steps | Expected Result |
+|----|-----------|-------|-----------------|
+| CP-B-01 | Source bank single-select | Click Bank A, then Bank B | Only Bank B selected |
+| CP-B-02 | Source bank can be deselected | Click selected Bank A | Bank A deselected |
+| CP-B-03 | Destination bank single-select | Click Bank A, then Bank B | Only Bank B selected |
+| CP-B-04 | Destination bank can be deselected | Click selected Bank A | Bank A deselected |
+
+### 2.5 Validation
+| ID | Test Case | Steps | Expected Result |
+|----|-----------|-------|-----------------|
+| CP-V-01 | No source Part | Deselect source Part | Execute disabled with message |
+| CP-V-02 | No destination Part | Deselect destination Part | Execute disabled with message |
+| CP-V-03 | No source bank | Deselect source bank | Execute disabled with message |
+| CP-V-04 | No destination bank | Deselect destination bank | Execute disabled with message |
 
 ---
 
 ## 3. Copy Patterns
 
-### 3.1 Basic Functionality
+### 3.1 Default Values
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| CPT-01 | Copy single pattern | Select Pattern 1, dest Pattern 1. Execute. | Pattern copied |
-| CPT-02 | Copy multiple patterns | Select Patterns 1-4, starting at Pattern 5. Execute. | Patterns copied to 5-8 |
-| CPT-03 | Copy all 16 patterns | Select all patterns, starting at 1. Execute. | All patterns copied |
-| CPT-04 | Copy patterns to different bank | Copy Pattern 1 from Bank A to Bank B | Pattern copied across banks |
-| CPT-05 | Copy patterns to different project | Copy patterns to another project | Patterns copied across projects |
+| CPT-D-01 | Default source bank | Open Copy Patterns | Bank A selected |
+| CPT-D-02 | Default source pattern | Open Copy Patterns | Pattern 1 selected |
+| CPT-D-03 | Default destination bank | Open Copy Patterns | Bank A selected |
+| CPT-D-04 | Default destination pattern | Open Copy Patterns | Pattern 1 selected |
+| CPT-D-05 | Default Part Assignment | Open Copy Patterns | "Keep Original" selected |
+| CPT-D-06 | Default Track Scope | Open Copy Patterns | "All Tracks" selected |
 
-### 3.2 Part Assignment Options
+### 3.2 Source Pattern Selection
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| CPT-06 | Keep Original assignment | Select "Keep Original" mode | Patterns keep their original Part numbers |
-| CPT-07 | Copy Source Part | Select "Copy Source Part" mode | Part data also copied, patterns reference it |
-| CPT-08 | Assign to Specific Part | Select "Assign to Specific Part", choose Part 3 | All copied patterns assigned to Part 3 |
+| CPT-S-01 | Source is single-select | Click Pattern 1, then Pattern 2 | Only Pattern 2 selected |
+| CPT-S-02 | Source can be deselected | Click selected Pattern 1 | Pattern 1 deselected |
+| CPT-S-03 | Source All selects all 16 | Click "All" button | All 16 patterns selected |
+| CPT-S-04 | Source All syncs destination | Click source "All" | Destination also shows All selected |
+| CPT-S-05 | Deselect All clears both | Click source "All" when selected | Both source and destination cleared |
+| CPT-S-06 | Click single Pattern exits All mode | When All selected, click Pattern 5 | Only Pattern 5 selected |
 
-### 3.3 Track Scope Options
+### 3.3 Destination Pattern Selection
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| CPT-09 | Copy all tracks | Select "All Tracks" | All 8 audio + 8 MIDI tracks copied |
-| CPT-10 | Copy specific audio tracks | Select "Specific Tracks", choose T1, T2, T3 | Only selected audio tracks copied |
-| CPT-11 | Copy specific MIDI tracks | Select M1, M2 only | Only MIDI track data copied |
-| CPT-12 | Copy mixed tracks | Select T1, T2, M1, M2 | Both audio and MIDI tracks copied |
+| CPT-D-07 | Destination is multi-select (single source) | With single source, click Patterns 1, 2, 3 | All three selected |
+| CPT-D-08 | Destination can be deselected | Click selected Pattern 1 | Pattern 1 deselected |
+| CPT-D-09 | Destination disabled when source All | Click source "All" | All destination buttons disabled |
+| CPT-D-10 | Destination All selects all 16 | Click destination "All" (single source) | All 16 patterns selected |
+| CPT-D-11 | Destination None deselects all | Click destination "None" | All patterns deselected |
 
-### 3.4 Edge Cases
+### 3.4 Part Assignment Options
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| CPT-13 | Pattern overflow | Copy 10 patterns starting at Pattern 10 | Warning shown (overflow), or only 6 patterns copied |
-| CPT-14 | Empty pattern copy | Copy pattern with no triggers | Empty pattern copied successfully |
-| CPT-15 | Pattern with complex P-locks | Copy pattern with many P-locks per step | All P-locks preserved |
+| CPT-PA-01 | Keep Original mode | Execute with "Keep Original" | Patterns keep their original Part numbers |
+| CPT-PA-02 | Copy Source Part mode | Select "Copy Source" and execute | Part data also copied, patterns reference it |
+| CPT-PA-03 | User Selection shows Part selector | Click "User Selection" | Part selector appears |
+| CPT-PA-04 | Destination Part single-select | Click Part 1, then Part 2 | Only Part 2 selected |
+| CPT-PA-05 | Destination Part can be deselected | Click selected Part 1 | Part 1 deselected |
+| CPT-PA-06 | Execute disabled without Part (User Selection) | Deselect Part in User Selection mode | Execute disabled |
 
-### 3.5 Data Integrity
+### 3.5 Track Scope Options
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| CPT-16 | Verify pattern length | Check pattern length after copy | Length matches source |
-| CPT-17 | Verify scale mode | Check Normal/Per-Track mode | Scale mode preserved |
-| CPT-18 | Verify master scale | Check speed multiplier | Master scale preserved |
-| CPT-19 | Verify chain mode | Check chain after setting | Chain mode preserved |
-| CPT-20 | Verify all trigger types | Check trig, trigless, oneshot, swing, slide, recorder | All trigger types preserved |
-| CPT-21 | Verify trig conditions | Check Fill, Pre, percentage conditions | Conditions preserved |
-| CPT-22 | Verify micro-timing | Check step micro-timing offsets | Micro-timing preserved |
+| CPT-TS-01 | Specific Tracks shows track buttons | Click "Specific Tracks" | Track buttons appear (T1-T8, M1-M8) |
+| CPT-TS-02 | No tracks selected by default | Switch to "Specific Tracks" | No tracks selected, Execute disabled |
+| CPT-TS-03 | Tracks are multi-select | Click T1, T2, M1 | All three selected |
+| CPT-TS-04 | Track can be deselected | Click selected T1 | T1 deselected |
+| CPT-TS-05 | All button selects all 16 tracks | Click "All" | All 16 tracks selected |
+| CPT-TS-06 | None button deselects all | Click "None" | All tracks deselected |
+
+### 3.6 Bank Selection
+| ID | Test Case | Steps | Expected Result |
+|----|-----------|-------|-----------------|
+| CPT-B-01 | Source bank single-select | Click Bank A, then Bank B | Only Bank B selected |
+| CPT-B-02 | Source bank can be deselected | Click selected Bank A | Bank A deselected |
+| CPT-B-03 | Destination bank single-select | Click Bank A, then Bank B | Only Bank B selected |
+| CPT-B-04 | Destination bank can be deselected | Click selected Bank A | Bank A deselected |
 
 ---
 
 ## 4. Copy Tracks
 
-### 4.1 Basic Functionality
+### 4.1 Default Values
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| CT-01 | Copy single audio track | Select T1 source, T1 dest. Execute. | Track copied |
-| CT-02 | Copy multiple audio tracks | Select T1-T4, dest T5-T8. Execute. | 4 tracks copied |
-| CT-03 | Copy single MIDI track | Select M1 source, M1 dest. Execute. | MIDI track copied |
-| CT-04 | Copy all audio tracks | Select T1-T8 | All 8 audio tracks copied |
-| CT-05 | Copy track to different Part | Source Part 1 T1 to Part 2 T1 | Track copied across Parts |
-| CT-06 | Copy track to different bank | Copy track across banks | Track copied across banks |
-| CT-07 | Copy track to different project | Copy track to another project | Track copied across projects |
+| CT-D-01 | Default Copy Mode | Open Copy Tracks | "Part Parameters" selected |
+| CT-D-02 | No default source tracks | Open Copy Tracks | No tracks selected |
+| CT-D-03 | No default destination tracks | Open Copy Tracks | No tracks selected |
+| CT-D-04 | Default source Part | Open Copy Tracks | Part 1 selected |
+| CT-D-05 | Default destination Part | Open Copy Tracks | Part 1 selected |
 
-### 4.2 Copy Mode Options
+### 4.2 Source Track Selection
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| CT-08 | Part Params + Pattern Triggers | Select "Both" mode | Machine, Amp, LFO, FX AND pattern steps copied |
-| CT-09 | Part Params Only | Select "Part Params Only" | Only sound design copied, no pattern data |
-| CT-10 | Pattern Triggers Only | Select "Pattern Triggers Only" | Only step data copied, no sound design |
+| CT-S-01 | Source is single-select | Click T1, then T2 | Only T2 selected |
+| CT-S-02 | Source can be deselected | Click selected T1 | T1 deselected |
 
-### 4.3 Validation
+### 4.3 Track Type Locking
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| CT-11 | Mismatched track count | Select 3 source tracks, 2 dest tracks | Execute disabled, warning shown |
-| CT-12 | Copy audio to MIDI slot | Select T1 source, M1 dest | Operation completes (may have limited utility) |
+| CT-TL-01 | Select Audio disables MIDI (via dest) | Select dest MIDI track first | Source Audio tracks disabled |
+| CT-TL-02 | Select MIDI disables Audio (via dest) | Select dest Audio track first | Source MIDI tracks disabled |
+| CT-TL-03 | Dest MIDI disabled when source Audio | Select source T1 | Destination MIDI tracks disabled |
+| CT-TL-04 | Dest Audio disabled when source MIDI | Select source M1 | Destination Audio tracks disabled |
 
-### 4.4 Data Integrity
+### 4.4 All Audio / All MIDI Buttons
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| CT-13 | Verify track swing | Check swing amount after copy | Swing preserved |
-| CT-14 | Verify per-track length | Check per-track length setting | Length preserved |
-| CT-15 | Verify per-track scale | Check per-track speed | Scale preserved |
-| CT-16 | Verify trig mode | Check trig mode setting | Trig mode preserved |
-| CT-17 | Verify trig quantization | Check quantize setting | Quantization preserved |
+| CT-AA-01 | All Audio selects 8 Audio tracks | Click "All Audio" | All T1-T8 selected |
+| CT-AA-02 | All MIDI selects 8 MIDI tracks | Click "All MIDI" | All M1-M8 selected |
+| CT-AA-03 | All Audio syncs destination | Click source "All Audio" | Destination also has all Audio tracks selected |
+| CT-AA-04 | All MIDI syncs destination | Click source "All MIDI" | Destination also has all MIDI tracks selected |
+| CT-AA-05 | Deselect All Audio clears both | Click "All Audio" when selected | Both source and destination tracks cleared |
+| CT-AA-06 | All Audio disabled when dest has MIDI | Select dest MIDI track first | "All Audio" button disabled |
+| CT-AA-07 | All MIDI disabled when dest has Audio | Select dest Audio track first | "All MIDI" button disabled |
+| CT-AA-08 | Click single track exits All mode | When All Audio selected, click T1 | Only T1 selected |
+
+### 4.5 Destination Track Selection
+| ID | Test Case | Steps | Expected Result |
+|----|-----------|-------|-----------------|
+| CT-D-06 | Destination is multi-select (single source) | With T1 source, click T1, T2, T3 | All three selected |
+| CT-D-07 | Destination can be deselected | Click selected T1 | T1 deselected |
+| CT-D-08 | Destination disabled when source All | Click source "All Audio" | All destination track buttons disabled |
+| CT-D-09 | Destination All Audio | Click dest "All Audio" (single source) | All 8 Audio tracks selected |
+| CT-D-10 | Destination All MIDI | Click dest "All MIDI" (single source MIDI) | All 8 MIDI tracks selected |
+| CT-D-11 | Destination None deselects all | Click "None" | All tracks deselected |
+
+### 4.6 Part Selection
+| ID | Test Case | Steps | Expected Result |
+|----|-----------|-------|-----------------|
+| CT-P-01 | Source Part single-select | Click Part 1, then Part 2 | Only Part 2 selected |
+| CT-P-02 | Source Part can be deselected | Click selected Part 1 | Part 1 deselected |
+| CT-P-03 | Source All syncs destination | Click source Part "All" | Destination Part also shows All selected |
+| CT-P-04 | Deselect Part All clears both | Click source "All" when selected | Both source and destination Parts cleared |
+| CT-P-05 | Destination Parts disabled when source All | Click source Part "All" | Destination Part buttons disabled |
+
+### 4.7 Copy Mode Behavior
+| ID | Test Case | Steps | Expected Result |
+|----|-----------|-------|-----------------|
+| CT-M-01 | Part Parameters mode | Select "Part Parameters" and execute | Only sound design copied (Machine, Amp, LFO, FX) |
+| CT-M-02 | Both mode | Select "Both" and execute | Sound design AND pattern triggers copied |
+| CT-M-03 | Pattern Triggers mode | Select "Pattern Triggers" and execute | Only step data copied (trigs, plocks) |
+
+### 4.8 Validation
+| ID | Test Case | Steps | Expected Result |
+|----|-----------|-------|-----------------|
+| CT-V-01 | No tracks selected | Don't select any tracks | Execute disabled with message |
+| CT-V-02 | No source tracks | Only select destination | Execute disabled with message |
+| CT-V-03 | No destination tracks | Only select source | Execute disabled with message |
 
 ---
 
 ## 5. Copy Sample Slots
 
-### 5.1 Basic Functionality
+### 5.1 Default Values
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| CSS-01 | Copy single slot | Select slot 1 to 1. Execute. | Slot assignment copied |
-| CSS-02 | Copy slot range | Select slots 1-10 to 1-10. Execute. | 10 slots copied |
-| CSS-03 | Copy all 128 slots | Select slots 1-128. Execute. | All slots copied |
-| CSS-04 | Copy to different starting slot | Slots 1-10 to slots 50-59. Execute. | Slots copied to offset position |
-| CSS-05 | Copy to different project | Copy slots to another project | Slots copied across projects |
+| CSS-D-01 | Default Slot Type | Open Copy Sample Slots | "Static + Flex" selected |
+| CSS-D-02 | Default Audio Files (same Set) | Dest project in same Set | "Move to Pool" selected |
+| CSS-D-03 | Default Editor Settings | Open Copy Sample Slots | Checkbox checked |
 
 ### 5.2 Slot Type Options
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| CSS-06 | Default is Static + Flex | Open Copy Sample Slots | "Static + Flex" button selected by default |
-| CSS-07 | Flex Only | Click "Flex" button | Only Flex slots copied |
-| CSS-08 | Static + Flex | Click "Static + Flex" button | Both slot types copied |
-| CSS-09 | Static Only | Click "Static" button | Only Static slots copied |
+| CSS-ST-01 | Flex Only | Click "Flex" and execute | Only Flex slots copied |
+| CSS-ST-02 | Static + Flex | Click "Static + Flex" and execute | Both slot types copied |
+| CSS-ST-03 | Static Only | Click "Static" and execute | Only Static slots copied |
 
 ### 5.3 Audio File Options
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| CSS-10 | Default is Move to Pool (same Set) | Select dest project in same Set | "Move to Pool" selected by default |
-| CSS-11 | Move to Pool option | Both projects in same Set, "Move to Pool" selected | Files moved to AUDIO POOL, paths updated in both projects |
-| CSS-12 | Copy option | Click "Copy" button | Audio files copied to dest project's sample folder |
-| CSS-13 | Don't Copy option | Click "Don't Copy" button | Only slot assignments copied, no files moved/copied |
-| CSS-14 | Move to Pool disabled (different Sets) | Projects NOT in same Set | "Move to Pool" button disabled with tooltip |
-| CSS-15 | Auto-switch to Copy when not same Set | Select dest project NOT in same Set | Automatically switches from "Move to Pool" to "Copy" |
-| CSS-16 | Auto-switch back to Move to Pool | Change dest to project in same Set (no manual selection made) | Automatically switches back to "Move to Pool" |
-| CSS-17 | Manual selection preserved | Manually select "Copy", then change dest to same-Set project | "Copy" remains selected (user choice preserved) |
-| CSS-18 | Pool will be created hint | Same Set, "Move to Pool" selected, no AUDIO POOL exists | "Pool will be created" hint visible with tooltip |
-| CSS-19 | Create Audio Pool | Audio Pool doesn't exist, execute with "Move to Pool" | Audio Pool directory created automatically |
+| CSS-AF-01 | Copy option | Select "Copy" and execute | Audio files copied to dest project's sample folder |
+| CSS-AF-02 | Move to Pool option | Select "Move to Pool" (same Set) and execute | Files moved to AUDIO POOL, paths updated |
+| CSS-AF-03 | Don't Copy option | Select "Don't Copy" and execute | Only slot assignments copied, no files |
+| CSS-AF-04 | Move to Pool disabled (different Sets) | Projects NOT in same Set | "Move to Pool" disabled |
+| CSS-AF-05 | Auto-switch to Copy | Select dest NOT in same Set | Switches from "Move to Pool" to "Copy" |
+| CSS-AF-06 | Auto-switch back to Move to Pool | Change dest to same-Set project | Switches back to "Move to Pool" (if no manual choice) |
+| CSS-AF-07 | Manual selection preserved | Manually select "Copy", change dest | "Copy" remains selected |
 
 ### 5.4 Editor Settings Option
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| CSS-20 | Include Editor Settings ON (default) | Check "Include Editor Settings" checkbox | Gain, loop mode, timestretch copied |
-| CSS-21 | Include Editor Settings OFF | Uncheck option | Only path copied, default settings used |
-
-### 5.5 Validation
-| ID | Test Case | Steps | Expected Result |
-|----|-----------|-------|-----------------|
-| CSS-22 | Slot overflow | 100 slots starting at slot 50 | Warning shown (overflow to 149) |
-| CSS-23 | Empty slot copy | Copy slot with no sample assigned | Empty slot copied (clears dest) |
-| CSS-24 | Missing source file | Slot references non-existent file | Warning or error shown |
-
-### 5.6 Data Integrity
-| ID | Test Case | Steps | Expected Result |
-|----|-----------|-------|-----------------|
-| CSS-25 | Verify file path | Check slot path after copy | Correct path set |
-| CSS-26 | Verify gain setting | Check gain value | Gain preserved |
-| CSS-27 | Verify loop mode | Check loop setting | Loop mode preserved |
-| CSS-28 | Verify timestretch | Check timestretch mode | Timestretch preserved |
+| CSS-ES-01 | Include Editor Settings ON | Checkbox checked, execute | Gain, loop mode, timestretch copied |
+| CSS-ES-02 | Include Editor Settings OFF | Uncheck, execute | Only path copied |
 
 ---
 
-## 6. UI/UX Tests
+## 6. Error Handling
 
-### 6.1 General UI
+### 6.1 Validation Errors
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| UI-01 | Tab visibility | Open project, check header tabs | "Tools" tab visible |
-| UI-02 | Tab switching | Click Tools tab | Tools panel displayed |
-| UI-03 | Operation dropdown | Click operation selector | All 5 operations listed |
-| UI-04 | Panel layout | View Tools panel | 3 columns: Source, Options, Destination |
-| UI-05 | Responsive layout | Resize window narrow | Panels stack vertically |
+| ERR-01 | No source selection | Don't select source | Execute disabled with message |
+| ERR-02 | No destination selection | Don't select destination | Execute disabled with message |
 
-### 6.2 Select Styling
+### 6.2 File System Errors
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| UI-06 | Select appearance | View any select dropdown | Dark background, custom arrow |
-| UI-07 | Select hover state | Hover over select | Border turns orange, arrow turns orange |
-| UI-08 | Select focus state | Focus on select | Orange border with glow |
-| UI-09 | Option styling | Open select dropdown | Options have dark background |
-
-### 6.3 Multi-Select Buttons
-| ID | Test Case | Steps | Expected Result |
-|----|-----------|-------|-----------------|
-| UI-10 | Part buttons | View Part selection buttons | 4 buttons (1-4) + All button |
-| UI-11 | Pattern buttons | View Pattern selection | 16 buttons in grid + All |
-| UI-12 | Track buttons | View Track selection | Audio (T1-T8) and MIDI (M1-M8) groups |
-| UI-13 | Button selection | Click button | Turns orange when selected |
-| UI-14 | Button deselection | Click selected button | Returns to gray (if not last selected) |
-| UI-15 | All button | Click "All" | All items selected |
-
-### 6.4 Toggle Button Groups
-| ID | Test Case | Steps | Expected Result |
-|----|-----------|-------|-----------------|
-| UI-16 | Slot Type buttons | View Copy Sample Slots | 3 buttons: Flex, Static + Flex (selected), Static |
-| UI-17 | Audio Files buttons | View Copy Sample Slots (same Set dest) | 3 buttons: Copy, Move to Pool (selected), Don't Copy |
-| UI-18 | Audio Files buttons (different Set) | Select dest NOT in same Set | "Move to Pool" button disabled |
-| UI-19 | Toggle selection | Click different toggle option | Previous deselected, new selected (orange) |
-| UI-20 | Disabled toggle button | Hover on disabled "Move to Pool" | Tooltip explains why disabled |
-
-### 6.5 Status Feedback
-| ID | Test Case | Steps | Expected Result |
-|----|-----------|-------|-----------------|
-| UI-21 | Execute button | View execute button | Orange button with icon |
-| UI-22 | Loading state | Execute operation | Button shows spinner, "Executing..." |
-| UI-23 | Success message | Complete operation | Green success message appears |
-| UI-24 | Error message | Trigger error | Red error message appears |
-| UI-25 | Warning messages | Trigger validation warning | Orange warning text below field |
-| UI-26 | Pool will be created hint | Same Set, "Move to Pool", no AUDIO POOL | "Pool will be created" hint right-aligned |
-| UI-27 | Pool hint tooltip | Hover on "Pool will be created" | Tooltip explains pool creation |
-
-### 6.6 Dynamic UI Updates
-| ID | Test Case | Steps | Expected Result |
-|----|-----------|-------|-----------------|
-| UI-28 | Operation change | Switch operation type | Source/Options/Dest panels update |
-| UI-29 | Project change | Select different dest project | Bank list updates for that project |
-| UI-30 | Conditional options | Copy Patterns: select "Assign to Specific Part" | Part selector appears |
-| UI-31 | Conditional options | Copy Patterns: select "Specific Tracks" | Track selector appears |
-| UI-32 | Audio mode auto-switch | Change dest from same-Set to different-Set | Audio mode switches from "Move to Pool" to "Copy" |
+| ERR-03 | Source project not found | Remove source project during operation | Error message displayed |
+| ERR-04 | Dest project not found | Invalid dest project path | Error message displayed |
+| ERR-05 | Permission denied | Read-only destination | Error message displayed |
 
 ---
 
-## 7. Error Handling
+## 7. E2E Test Coverage (119 tests)
 
-### 7.1 Validation Errors
-| ID | Test Case | Steps | Expected Result |
-|----|-----------|-------|-----------------|
-| ERR-01 | Bank index out of range | (internal) Send bank index > 15 | Error message displayed |
-| ERR-02 | Part count mismatch | Different source/dest Part counts | Execute disabled |
-| ERR-03 | Track count mismatch | Different source/dest Track counts | Execute disabled |
-| ERR-04 | Slot index out of range | (internal) Send slot > 128 | Error message displayed |
+The following functional tests are automated in `e2e/tools-tab.spec.ts`:
 
-### 7.2 File System Errors
-| ID | Test Case | Steps | Expected Result |
-|----|-----------|-------|-----------------|
-| ERR-05 | Source project not found | Remove source project during operation | Error: project not found |
-| ERR-06 | Dest project not found | Invalid dest project path | Error: project not found |
-| ERR-07 | Source bank not found | Bank file missing | Error: bank not found |
-| ERR-08 | Permission denied | Read-only destination | Error: permission denied |
-| ERR-09 | Disk full | Fill disk, attempt copy with audio | Error: disk full |
+### Copy Banks (14 tests)
+- Default source/destination bank is Bank A
+- Source bank is single-select
+- Source bank can be deselected
+- Destination banks allow multiple selection
+- Destination All button selects all banks
+- Destination All button is toggleable
+- Destination None button deselects all banks
+- Destination bank can be deselected
 
-### 7.3 Recovery
-| ID | Test Case | Steps | Expected Result |
-|----|-----------|-------|-----------------|
-| ERR-10 | Error recovery | After error, retry operation | Operation can be retried |
-| ERR-11 | Partial failure | Multi-item copy partially fails | Clear error message, partial state indicated |
+### Copy Parts (17 tests)
+- Default source/destination Part is Part 1
+- Default source/destination Bank is Bank A
+- Source part is single-select
+- Source part can be deselected
+- Source All button selects all parts and syncs destination
+- Source All button deselects all when clicked again
+- Destination parts allow multi-select when source is single
+- Destination part can be deselected
+- Destination parts disabled when source All is selected
+- Source/Destination bank can be deselected
+- Clicking single source part when All is selected exits All mode
 
----
+### Copy Patterns (32 tests)
+- Default source/destination Pattern is Pattern 1
+- Default source/destination Bank is Bank A
+- Default Part Assignment is "Keep Original"
+- Default Track Scope is "All Tracks"
+- Source pattern is single-select
+- Source pattern can be deselected
+- Source All button selects all patterns and syncs destination
+- Source All button deselects all when clicked again
+- Destination patterns allow multi-select when source is single
+- Destination pattern can be deselected
+- Destination patterns disabled when source All is selected
+- Destination All/None button behaviors
+- User Selection shows Destination Part selector
+- Destination Part supports click-to-deselect
+- Specific Tracks shows track buttons
+- Track buttons are multi-select with click-to-deselect
 
-## 8. Cross-Project Tests
+### Copy Tracks (32 tests)
+- Default Copy Mode is "Part Parameters"
+- No default source/destination tracks
+- Default source/destination Part is Part 1
+- Execute button disabled when no tracks selected
+- Source track selection is single-select
+- Source track can be deselected
+- Track type locking (Audio/MIDI mutual exclusivity)
+- All Audio/All MIDI buttons select all tracks of type
+- All Audio/All MIDI sync destination
+- Deselecting All clears both source and destination
+- All Audio disabled when dest has MIDI tracks (and vice versa)
+- Destination tracks allow multi-select when source is single
+- Destination disabled when source All is selected
+- Destination All Audio/All MIDI/None buttons
+- Part selection with All sync behavior
 
-### 8.1 Same Set Operations
-| ID | Test Case | Steps | Expected Result |
-|----|-----------|-------|-----------------|
-| XP-01 | Same Set detection | Two projects in same Set | "Move to Audio Pool" available |
-| XP-02 | Different Set detection | Projects in different Sets | "Move to Audio Pool" not available |
-| XP-03 | Standalone project | Project not in any Set | "Move to Audio Pool" not available |
+### Copy Sample Slots (6 tests)
+- Default Slot Type is "Static + Flex"
+- Default Audio Files is "Move to Pool" when projects in same Set
+- Default Editor Settings is checked
+- Slot Type selection changes
 
-### 8.2 Audio Pool Operations
-| ID | Test Case | Steps | Expected Result |
-|----|-----------|-------|-----------------|
-| XP-04 | Audio Pool exists | Set has AUDIO POOL folder | Status shows exists |
-| XP-05 | Audio Pool creation | Set has no AUDIO POOL | Created when "Move to Pool" used |
-| XP-06 | Audio Pool path update | Move files to pool | Source project paths updated |
-
----
-
-## 9. Performance Tests
-
-| ID | Test Case | Steps | Expected Result |
-|----|-----------|-------|-----------------|
-| PERF-01 | Large bank copy | Copy bank with max data | Completes in reasonable time |
-| PERF-02 | All patterns copy | Copy all 16 patterns | Completes in reasonable time |
-| PERF-03 | All sample slots | Copy 128 slots with audio files | Completes, shows progress |
-| PERF-04 | UI responsiveness | Execute long operation | UI remains responsive |
-
----
-
-## 10. Regression Tests
-
-| ID | Test Case | Steps | Expected Result |
-|----|-----------|-------|-----------------|
-| REG-01 | Other tabs unaffected | Use Tools, switch to Parts tab | Parts tab works normally |
-| REG-02 | Project reload | After copy, refresh project | Changes visible after reload |
-| REG-03 | Edit mode compatibility | Tools operations in Edit mode | No interference |
-| REG-04 | Multiple operations | Execute multiple operations in sequence | All complete successfully |
+### General (10 tests)
+- Operation selector has all 5 operations
+- Switching operations updates correctly
+- Execute button functionality
 
 ---
 
