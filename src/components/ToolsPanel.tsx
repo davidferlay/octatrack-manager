@@ -607,46 +607,81 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             </div>
           )}
 
-          {/* Part and Track selector for copy_tracks */}
+          {/* Track and Part selector for copy_tracks */}
           {operation === "copy_tracks" && (
             <>
               <div className="tools-field">
-                <label>Part</label>
-                <select
-                  value={sourcePartIndex}
-                  onChange={(e) => setSourcePartIndex(Number(e.target.value))}
-                >
-                  {[0, 1, 2, 3].map((idx) => (
-                    <option key={idx} value={idx}>Part {idx + 1}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="tools-field">
                 <label>Tracks</label>
-                <div className="tools-multi-select tracks">
-                  <div className="tools-track-group">
+                <div className="tools-multi-select tracks-inline">
+                  <div className="tools-track-row">
                     <span className="tools-track-label">Audio:</span>
                     {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
                       <button
                         key={idx}
-                        className={`tools-multi-btn ${sourceTrackIndices.includes(idx) ? "selected" : ""}`}
+                        className={`tools-multi-btn track-btn ${sourceTrackIndices.includes(idx) ? "selected" : ""}`}
                         onClick={() => toggleIndex(sourceTrackIndices, idx, setSourceTrackIndices)}
                       >
                         T{idx + 1}
                       </button>
                     ))}
                   </div>
-                  <div className="tools-track-group">
+                  <div className="tools-track-row">
                     <span className="tools-track-label">MIDI:</span>
                     {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
                       <button
                         key={idx}
-                        className={`tools-multi-btn ${sourceTrackIndices.includes(idx) ? "selected" : ""}`}
+                        className={`tools-multi-btn track-btn ${sourceTrackIndices.includes(idx) ? "selected" : ""}`}
                         onClick={() => toggleIndex(sourceTrackIndices, idx, setSourceTrackIndices)}
                       >
                         M{idx - 7}
                       </button>
                     ))}
+                  </div>
+                </div>
+              </div>
+              <div className="tools-field">
+                <label>Part</label>
+                <div className="tools-part-cross">
+                  <div className="tools-part-cross-row">
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn part-btn ${sourcePartIndex === 0 ? "selected" : ""}`}
+                      onClick={() => setSourcePartIndex(0)}
+                    >
+                      1
+                    </button>
+                  </div>
+                  <div className="tools-part-cross-row">
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn part-btn ${sourcePartIndex === 3 ? "selected" : ""}`}
+                      onClick={() => setSourcePartIndex(3)}
+                    >
+                      4
+                    </button>
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn part-btn part-all ${sourcePartIndex === -1 ? "selected" : ""}`}
+                      onClick={() => setSourcePartIndex(-1)}
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn part-btn ${sourcePartIndex === 1 ? "selected" : ""}`}
+                      onClick={() => setSourcePartIndex(1)}
+                    >
+                      2
+                    </button>
+                  </div>
+                  <div className="tools-part-cross-row">
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn part-btn ${sourcePartIndex === 2 ? "selected" : ""}`}
+                      onClick={() => setSourcePartIndex(2)}
+                    >
+                      3
+                    </button>
                   </div>
                 </div>
               </div>
@@ -777,31 +812,70 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             <>
               <div className="tools-field">
                 <label>Part Assignment</label>
-                <select
-                  value={partAssignmentMode}
-                  onChange={(e) => setPartAssignmentMode(e.target.value as PartAssignmentMode)}
-                >
-                  <option value="keep_original">Keep Original</option>
-                  <option value="copy_source_part">Copy Source Part</option>
-                  <option value="select_specific">Assign to Specific Part</option>
-                </select>
+                <div className="tools-toggle-group">
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn ${partAssignmentMode === "keep_original" ? "selected" : ""}`}
+                    onClick={() => setPartAssignmentMode("keep_original")}
+                    title="Keep the same Part assignment as in the source patterns"
+                  >
+                    Keep Original
+                  </button>
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn ${partAssignmentMode === "copy_source_part" ? "selected" : ""}`}
+                    onClick={() => setPartAssignmentMode("copy_source_part")}
+                    title="Copy the source Part data along with the patterns"
+                  >
+                    Copy Source Part
+                  </button>
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn ${partAssignmentMode === "select_specific" ? "selected" : ""}`}
+                    onClick={() => setPartAssignmentMode("select_specific")}
+                    title="Assign all copied patterns to a specific Part at destination"
+                  >
+                    Specific Part
+                  </button>
+                </div>
               </div>
               {partAssignmentMode === "select_specific" && (
                 <div className="tools-field">
                   <label>Destination Part</label>
-                  <select value={destPart} onChange={(e) => setDestPart(Number(e.target.value))}>
+                  <div className="tools-toggle-group">
                     {[0, 1, 2, 3].map((idx) => (
-                      <option key={idx} value={idx}>Part {idx + 1}</option>
+                      <button
+                        key={idx}
+                        type="button"
+                        className={`tools-toggle-btn ${destPart === idx ? "selected" : ""}`}
+                        onClick={() => setDestPart(idx)}
+                      >
+                        Part {idx + 1}
+                      </button>
                     ))}
-                  </select>
+                  </div>
                 </div>
               )}
               <div className="tools-field">
                 <label>Track Scope</label>
-                <select value={trackMode} onChange={(e) => setTrackMode(e.target.value as TrackMode)}>
-                  <option value="all">All Tracks</option>
-                  <option value="specific">Specific Tracks</option>
-                </select>
+                <div className="tools-toggle-group">
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn ${trackMode === "all" ? "selected" : ""}`}
+                    onClick={() => setTrackMode("all")}
+                    title="Copy all track data from the source patterns"
+                  >
+                    All Tracks
+                  </button>
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn ${trackMode === "specific" ? "selected" : ""}`}
+                    onClick={() => setTrackMode("specific")}
+                    title="Copy only specific tracks from the source patterns"
+                  >
+                    Specific Tracks
+                  </button>
+                </div>
               </div>
               {trackMode === "specific" && (
                 <div className="tools-field">
@@ -841,14 +915,32 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           {operation === "copy_tracks" && (
             <div className="tools-field">
               <label>Copy Mode</label>
-              <select
-                value={copyTrackMode}
-                onChange={(e) => setCopyTrackMode(e.target.value as CopyTrackMode)}
-              >
-                <option value="both">Part Params + Pattern Triggers</option>
-                <option value="part_params">Part Params Only</option>
-                <option value="pattern_triggers">Pattern Triggers Only</option>
-              </select>
+              <div className="tools-toggle-group">
+                <button
+                  type="button"
+                  className={`tools-toggle-btn ${copyTrackMode === "part_params" ? "selected" : ""}`}
+                  onClick={() => setCopyTrackMode("part_params")}
+                  title="Copy only Part parameters: machines, amplifier, LFOs, effects settings"
+                >
+                  Part Params
+                </button>
+                <button
+                  type="button"
+                  className={`tools-toggle-btn ${copyTrackMode === "both" ? "selected" : ""}`}
+                  onClick={() => setCopyTrackMode("both")}
+                  title="Copy both Part parameters (machines, amps, LFOs, FX) and Pattern triggers (trigs, plocks)"
+                >
+                  Both
+                </button>
+                <button
+                  type="button"
+                  className={`tools-toggle-btn ${copyTrackMode === "pattern_triggers" ? "selected" : ""}`}
+                  onClick={() => setCopyTrackMode("pattern_triggers")}
+                  title="Copy only Pattern triggers: trigs, trigless, parameter locks, swing"
+                >
+                  Pattern Triggers
+                </button>
+              </div>
             </div>
           )}
 
@@ -1045,41 +1137,30 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             </div>
           )}
 
-          {/* Part and Track selector for copy_tracks */}
+          {/* Track and Part selector for copy_tracks */}
           {operation === "copy_tracks" && (
             <>
               <div className="tools-field">
-                <label>Part</label>
-                <select
-                  value={destPartIndex}
-                  onChange={(e) => setDestPartIndex(Number(e.target.value))}
-                >
-                  {[0, 1, 2, 3].map((idx) => (
-                    <option key={idx} value={idx}>Part {idx + 1}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="tools-field">
                 <label>Tracks</label>
-                <div className="tools-multi-select tracks">
-                  <div className="tools-track-group">
+                <div className="tools-multi-select tracks-inline">
+                  <div className="tools-track-row">
                     <span className="tools-track-label">Audio:</span>
                     {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
                       <button
                         key={idx}
-                        className={`tools-multi-btn ${destTrackIndices.includes(idx) ? "selected" : ""}`}
+                        className={`tools-multi-btn track-btn ${destTrackIndices.includes(idx) ? "selected" : ""}`}
                         onClick={() => toggleIndex(destTrackIndices, idx, setDestTrackIndices)}
                       >
                         T{idx + 1}
                       </button>
                     ))}
                   </div>
-                  <div className="tools-track-group">
+                  <div className="tools-track-row">
                     <span className="tools-track-label">MIDI:</span>
                     {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
                       <button
                         key={idx}
-                        className={`tools-multi-btn ${destTrackIndices.includes(idx) ? "selected" : ""}`}
+                        className={`tools-multi-btn track-btn ${destTrackIndices.includes(idx) ? "selected" : ""}`}
                         onClick={() => toggleIndex(destTrackIndices, idx, setDestTrackIndices)}
                       >
                         M{idx - 7}
@@ -1092,6 +1173,52 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     Source and destination track count must match
                   </span>
                 )}
+              </div>
+              <div className="tools-field">
+                <label>Part</label>
+                <div className="tools-part-cross">
+                  <div className="tools-part-cross-row">
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn part-btn ${destPartIndex === 0 ? "selected" : ""}`}
+                      onClick={() => setDestPartIndex(0)}
+                    >
+                      1
+                    </button>
+                  </div>
+                  <div className="tools-part-cross-row">
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn part-btn ${destPartIndex === 3 ? "selected" : ""}`}
+                      onClick={() => setDestPartIndex(3)}
+                    >
+                      4
+                    </button>
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn part-btn part-all ${destPartIndex === -1 ? "selected" : ""}`}
+                      onClick={() => setDestPartIndex(-1)}
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn part-btn ${destPartIndex === 1 ? "selected" : ""}`}
+                      onClick={() => setDestPartIndex(1)}
+                    >
+                      2
+                    </button>
+                  </div>
+                  <div className="tools-part-cross-row">
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn part-btn ${destPartIndex === 2 ? "selected" : ""}`}
+                      onClick={() => setDestPartIndex(2)}
+                    >
+                      3
+                    </button>
+                  </div>
+                </div>
               </div>
             </>
           )}

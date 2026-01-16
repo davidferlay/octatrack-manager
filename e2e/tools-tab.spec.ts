@@ -358,17 +358,35 @@ test.describe('Tools Tab - Copy Patterns Options', () => {
     await expect(page.getByText('Part Assignment')).toBeVisible()
   })
 
-  test('Part Assignment has three options', async ({ page }) => {
+  test('Part Assignment has three toggle buttons', async ({ page }) => {
     const partAssignmentField = page.locator('.tools-field').filter({ hasText: 'Part Assignment' })
-    const select = partAssignmentField.locator('select')
+    const toggleGroup = partAssignmentField.locator('.tools-toggle-group')
 
-    await expect(select.locator('option[value="keep_original"]')).toHaveText('Keep Original')
-    await expect(select.locator('option[value="copy_source_part"]')).toHaveText('Copy Source Part')
-    await expect(select.locator('option[value="select_specific"]')).toHaveText('Assign to Specific Part')
+    await expect(toggleGroup.locator('.tools-toggle-btn', { hasText: 'Keep Original' })).toBeVisible()
+    await expect(toggleGroup.locator('.tools-toggle-btn', { hasText: 'Copy Source Part' })).toBeVisible()
+    await expect(toggleGroup.locator('.tools-toggle-btn', { hasText: 'Specific Part' })).toBeVisible()
+  })
+
+  test('Keep Original is selected by default', async ({ page }) => {
+    const keepOriginalBtn = page.locator('.tools-toggle-btn', { hasText: 'Keep Original' })
+    await expect(keepOriginalBtn).toHaveClass(/selected/)
   })
 
   test('Track Scope selector is visible', async ({ page }) => {
     await expect(page.getByText('Track Scope')).toBeVisible()
+  })
+
+  test('Track Scope has two toggle buttons', async ({ page }) => {
+    const trackScopeField = page.locator('.tools-field').filter({ hasText: 'Track Scope' })
+    const toggleGroup = trackScopeField.locator('.tools-toggle-group')
+
+    await expect(toggleGroup.locator('.tools-toggle-btn', { hasText: 'All Tracks' })).toBeVisible()
+    await expect(toggleGroup.locator('.tools-toggle-btn', { hasText: 'Specific Tracks' })).toBeVisible()
+  })
+
+  test('All Tracks is selected by default', async ({ page }) => {
+    const allTracksBtn = page.locator('.tools-toggle-btn', { hasText: 'All Tracks' })
+    await expect(allTracksBtn).toHaveClass(/selected/)
   })
 })
 
@@ -391,14 +409,20 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
     await expect(page.getByText('Copy Mode')).toBeVisible()
   })
 
-  test('Copy Mode has three options', async ({ page }) => {
+  test('Copy Mode has three toggle buttons in correct order', async ({ page }) => {
     const copyModeField = page.locator('.tools-field').filter({ hasText: 'Copy Mode' })
-    const select = copyModeField.locator('select')
+    const toggleGroup = copyModeField.locator('.tools-toggle-group')
+    const buttons = toggleGroup.locator('.tools-toggle-btn')
 
-    // Options inside a closed select are hidden, so check count instead
-    await expect(select.locator('option[value="both"]')).toHaveCount(1)
-    await expect(select.locator('option[value="part_params"]')).toHaveCount(1)
-    await expect(select.locator('option[value="pattern_triggers"]')).toHaveCount(1)
+    // Verify order: Part Params, Both, Pattern Triggers
+    await expect(buttons.nth(0)).toHaveText('Part Params')
+    await expect(buttons.nth(1)).toHaveText('Both')
+    await expect(buttons.nth(2)).toHaveText('Pattern Triggers')
+  })
+
+  test('Both is selected by default', async ({ page }) => {
+    const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
+    await expect(bothBtn).toHaveClass(/selected/)
   })
 })
 

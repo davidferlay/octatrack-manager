@@ -2965,6 +2965,60 @@ h1 {
   min-width: 45px;
 }
 
+.tools-multi-select.tracks-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.tools-multi-select.tracks-inline .tools-track-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.tools-multi-select.tracks-inline .tools-track-label {
+  min-width: 42px;
+  font-size: 0.75rem;
+}
+
+.tools-multi-btn.track-btn {
+  min-width: 30px;
+  width: 30px;
+  padding: 0.4rem 0.25rem;
+  font-size: 0.8rem;
+}
+
+/* Part cross layout */
+.tools-part-cross {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.tools-part-cross-row {
+  display: flex;
+  justify-content: center;
+  gap: 0.2rem;
+}
+
+.tools-toggle-btn.part-btn {
+  min-width: 32px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.tools-toggle-btn.part-btn.part-all {
+  width: auto;
+  min-width: 36px;
+  padding: 0 0.5rem;
+  font-size: 0.75rem;
+}
+
 .tools-multi-btn {
   padding: 0.4rem 0.6rem;
   font-size: 0.85rem;
