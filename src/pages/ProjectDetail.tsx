@@ -122,6 +122,8 @@ export function ProjectDetail() {
   // Pattern display settings
   const [hideEmptyPatterns, setHideEmptyPatterns] = useState<boolean>(false); // Hide patterns with no trigs
   const [hideEmptyPatternsVisual, setHideEmptyPatternsVisual] = useState<boolean>(false); // Immediate visual state for toggle
+  const [showTrackSettings, setShowTrackSettings] = useState<boolean>(false); // Show track settings in patterns tab
+  const [showTrackSettingsVisual, setShowTrackSettingsVisual] = useState<boolean>(false); // Immediate visual state for toggle
   const [isPending, startTransition] = useTransition(); // For smooth UI updates
   const [isSpinning, setIsSpinning] = useState<boolean>(false); // For refresh button animation
   const [partsWriteStatus, setPartsWriteStatus] = useState<WriteStatus>(IDLE_STATUS); // Parts write status
@@ -406,12 +408,6 @@ export function ProjectDetail() {
                 onClick={() => setActiveTab("patterns")}
               >
                 Patterns
-              </button>
-              <button
-                className={`header-tab ${activeTab === "tracks" ? "active" : ""}`}
-                onClick={() => setActiveTab("tracks")}
-              >
-                Tracks
               </button>
               <button
                 className={`header-tab ${activeTab === "flex-slots" ? "active" : ""}`}
@@ -869,6 +865,24 @@ export function ProjectDetail() {
                     </div>
                   </label>
 
+                  <label className={`toggle-switch ${isPending ? 'pending' : ''}`}>
+                    <span className="toggle-label">Track settings</span>
+                    <div className="toggle-slider-container">
+                      <input
+                        type="checkbox"
+                        checked={showTrackSettingsVisual}
+                        onChange={(e) => {
+                          const newValue = e.target.checked;
+                          setShowTrackSettingsVisual(newValue);
+                          startTransition(() => {
+                            setShowTrackSettings(newValue);
+                          });
+                        }}
+                      />
+                      <span className="toggle-slider"></span>
+                    </div>
+                  </label>
+
                   <TrackSelector
                     id="patterns-track-select"
                     value={selectedTrackIndex}
@@ -905,6 +919,60 @@ export function ProjectDetail() {
                               currentPattern={metadata?.current_state.pattern}
                             />
                           </div>
+                          {/* Track Settings Section */}
+                          {showTrackSettings && (() => {
+                            // Get pattern 0 for track settings (they're the same across patterns)
+                            const pattern0 = bank.parts[0]?.patterns[0];
+                            if (!pattern0) return null;
+
+                            // Determine which tracks to display
+                            let tracksForSettings: number[];
+                            if (selectedTrackIndex === ALL_AUDIO_TRACKS) {
+                              tracksForSettings = [0, 1, 2, 3, 4, 5, 6, 7];
+                            } else if (selectedTrackIndex === ALL_MIDI_TRACKS) {
+                              tracksForSettings = [8, 9, 10, 11, 12, 13, 14, 15];
+                            } else {
+                              tracksForSettings = [selectedTrackIndex];
+                            }
+
+                            return tracksForSettings.map((trackIndex) => {
+                              const trackData = pattern0.tracks[trackIndex];
+                              return (
+                                <div key={`track-settings-${bankIndex}-${trackIndex}`} className="track-settings-card">
+                                  <div className="track-settings-header">
+                                    <span className="track-settings-title">Track Settings</span>
+                                    <TrackBadge trackId={trackData.track_id} />
+                                  </div>
+                                  <div className="pattern-detail-group track-settings-row">
+                                    <div className="pattern-detail-item">
+                                      <span className="pattern-detail-label">Swing:</span>
+                                      <span className="pattern-detail-value">{trackData.swing_amount > 0 ? `${trackData.swing_amount + 50}%` : '50% (Off)'}</span>
+                                    </div>
+                                    <div className="pattern-detail-item">
+                                      <span className="pattern-detail-label">Trig Mode:</span>
+                                      <span className="pattern-detail-value">{trackData.pattern_settings.trig_mode}</span>
+                                    </div>
+                                    <div className="pattern-detail-item">
+                                      <span className="pattern-detail-label">Trig Quantization:</span>
+                                      <span className="pattern-detail-value">{trackData.pattern_settings.trig_quant}</span>
+                                    </div>
+                                    <div className="pattern-detail-item">
+                                      <span className="pattern-detail-label">Start Silent:</span>
+                                      <span className="pattern-detail-value">{trackData.pattern_settings.start_silent ? 'Yes' : 'No'}</span>
+                                    </div>
+                                    <div className="pattern-detail-item">
+                                      <span className="pattern-detail-label">Plays Free:</span>
+                                      <span className="pattern-detail-value">{trackData.pattern_settings.plays_free ? 'Yes' : 'No'}</span>
+                                    </div>
+                                    <div className="pattern-detail-item">
+                                      <span className="pattern-detail-label">One-Shot Track:</span>
+                                      <span className="pattern-detail-value">{trackData.pattern_settings.oneshot_trk ? 'Yes' : 'No'}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            });
+                          })()}
                           <div className="patterns-list">
                             {(() => {
                               // Determine which patterns to display
@@ -1299,107 +1367,6 @@ export function ProjectDetail() {
                 )}
     </div>
   )}
-
-            {activeTab === "tracks" && (
-              <div className="tracks-tab">
-                <div className="bank-selector-section">
-                  <BankSelector
-                    id="track-bank-select"
-                    banks={banks}
-                    value={selectedBankIndex}
-                    onChange={setSelectedBankIndex}
-                    currentBank={metadata?.current_state.bank}
-                    loadedBankIndices={loadedBankIndices}
-                    failedBankIndices={failedBankIndices}
-                    allBanksLoaded={allBanksLoaded}
-                  />
-
-                  <TrackSelector
-                    id="track-track-select"
-                    value={selectedTrackIndex}
-                    onChange={setSelectedTrackIndex}
-                    currentTrack={metadata?.current_state.track}
-                  />
-                </div>
-
-                {loadedBankIndices.size === 0 ? (
-                  <div className="loading-section">
-                    <div className="loading-spinner"></div>
-                    <p>Loading banks...</p>
-                  </div>
-                ) : (
-                <section className="tracks-section">
-                  {(() => {
-                    // Determine which banks to display (only show loaded banks)
-                    const banksToDisplay = selectedBankIndex === ALL_BANKS
-                      ? Array.from(loadedBankIndices).sort((a, b) => a - b)
-                      : loadedBankIndices.has(selectedBankIndex) ? [selectedBankIndex] : [];
-
-                    return banksToDisplay.map((bankIndex) => {
-                      const bank = banks[bankIndex];
-                      if (!bank) return null;
-
-                      // For track settings, use pattern 0 if ALL_PATTERNS is selected
-                      const patternIndexToUse = selectedPatternIndex === ALL_PATTERNS ? 0 : selectedPatternIndex;
-                      const pattern = bank.parts[0]?.patterns[patternIndexToUse];
-                      if (!pattern) return null;
-
-                      // Determine which tracks to display
-                      let tracksToDisplay: number[];
-                      if (selectedTrackIndex === ALL_AUDIO_TRACKS) {
-                        tracksToDisplay = [0, 1, 2, 3, 4, 5, 6, 7];
-                      } else if (selectedTrackIndex === ALL_MIDI_TRACKS) {
-                        tracksToDisplay = [8, 9, 10, 11, 12, 13, 14, 15];
-                      } else {
-                        tracksToDisplay = [selectedTrackIndex];
-                      }
-
-                      // Render track settings for each track
-                      return tracksToDisplay.map((trackIndex) => {
-                        const trackData = pattern.tracks[trackIndex];
-
-                        return (
-                        <div key={`bank-${bankIndex}-track-settings-${trackIndex}`} className="bank-card">
-                          <h3>
-                            {formatBankName(bank.name, bankIndex)} - <TrackBadge trackId={trackData.track_id} />
-                          </h3>
-                          <div className="pattern-details">
-                            <div className="pattern-detail-group track-settings-row">
-                              <div className="pattern-detail-item">
-                                <span className="pattern-detail-label">Swing:</span>
-                                <span className="pattern-detail-value">{trackData.swing_amount > 0 ? `${trackData.swing_amount + 50}%` : '50% (Off)'}</span>
-                              </div>
-                              <div className="pattern-detail-item">
-                                <span className="pattern-detail-label">Trig Mode:</span>
-                                <span className="pattern-detail-value">{trackData.pattern_settings.trig_mode}</span>
-                              </div>
-                              <div className="pattern-detail-item">
-                                <span className="pattern-detail-label">Trig Quantization:</span>
-                                <span className="pattern-detail-value">{trackData.pattern_settings.trig_quant}</span>
-                              </div>
-                              <div className="pattern-detail-item">
-                                <span className="pattern-detail-label">Start Silent:</span>
-                                <span className="pattern-detail-value">{trackData.pattern_settings.start_silent ? 'Yes' : 'No'}</span>
-                              </div>
-                              <div className="pattern-detail-item">
-                                <span className="pattern-detail-label">Plays Free:</span>
-                                <span className="pattern-detail-value">{trackData.pattern_settings.plays_free ? 'Yes' : 'No'}</span>
-                              </div>
-                              <div className="pattern-detail-item">
-                                <span className="pattern-detail-label">One-Shot Track:</span>
-                                <span className="pattern-detail-value">{trackData.pattern_settings.oneshot_trk ? 'Yes' : 'No'}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        );
-                      });
-                    });
-                  })()}
-                </section>
-                )}
-              </div>
-            )}
 
             {activeTab === "flex-slots" && (
               <SampleSlotsTable slots={metadata.sample_slots.flex_slots} slotPrefix="F" tableType="flex" projectPath={projectPath} />
