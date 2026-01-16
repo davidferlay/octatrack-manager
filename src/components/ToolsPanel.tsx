@@ -116,7 +116,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [sourceBankIndex, setSourceBankIndex] = useState<number>(0);
   const [sourcePartIndices, setSourcePartIndices] = useState<number[]>([0]);
   const [sourcePatternIndices, setSourcePatternIndices] = useState<number[]>([0]);
-  const [sourceTrackIndices, setSourceTrackIndices] = useState<number[]>([0]);
+  const [sourceTrackIndices, setSourceTrackIndices] = useState<number[]>([]);
   const [sourceSampleIndices, setSourceSampleIndices] = useState<number[]>(Array.from({ length: 128 }, (_, i) => i));
 
   // Destination selection
@@ -125,7 +125,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [destBankIndices, setDestBankIndices] = useState<number[]>([0]); // For copy_bank multi-select
   const [destPartIndices, setDestPartIndices] = useState<number[]>([0]);
   const [destPatternIndices, setDestPatternIndices] = useState<number[]>([0]); // For copy_patterns multi-select
-  const [destTrackIndices, setDestTrackIndices] = useState<number[]>([0]);
+  const [destTrackIndices, setDestTrackIndices] = useState<number[]>([]);
   const [destSampleIndices, setDestSampleIndices] = useState<number[]>(Array.from({ length: 128 }, (_, i) => i));
 
   // Operation-specific options
@@ -135,9 +135,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [trackMode, setTrackMode] = useState<TrackMode>(savedSettings.trackMode || "all");
 
   // Copy Tracks options
-  const [copyTrackMode, setCopyTrackMode] = useState<CopyTrackMode>(savedSettings.copyTrackMode || "both");
-  const [sourcePartIndex, setSourcePartIndex] = useState<number>(-1); // -1 = All parts
-  const [destPartIndex, setDestPartIndex] = useState<number>(-1); // -1 = All parts
+  const [copyTrackMode, setCopyTrackMode] = useState<CopyTrackMode>(savedSettings.copyTrackMode || "part_params");
+  const [sourcePartIndex, setSourcePartIndex] = useState<number>(0); // 0 = Part 1, -1 = All parts, -2 = no selection
+  const [destPartIndex, setDestPartIndex] = useState<number>(0); // 0 = Part 1, -1 = All parts, -2 = no selection
 
   // Copy Sample Slots options
   const [slotType, setSlotType] = useState<SlotType>(savedSettings.slotType || "both");
@@ -351,6 +351,17 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     setDestSampleIndices(Array.from({ length: count }, (_, i) => Math.min(127, start + i)));
   }, [sourceSampleIndices.length]);
 
+  // Auto-sync destination tracks when source "All Audio" or "All MIDI" is selected
+  useEffect(() => {
+    const isAllAudio = sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i < 8);
+    const isAllMidi = sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i >= 8);
+    if (isAllAudio) {
+      setDestTrackIndices([0, 1, 2, 3, 4, 5, 6, 7]);
+    } else if (isAllMidi) {
+      setDestTrackIndices([8, 9, 10, 11, 12, 13, 14, 15]);
+    }
+  }, [sourceTrackIndices]);
+
   // Helper to get operation details for display
   function getExecutingDetails(): string {
     switch (operation) {
@@ -483,17 +494,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         setProgressFading(false);
         setExecutingDetails("");
       }, 300);
-    }
-  }
-
-  // Multi-select helpers
-  function toggleIndex(indices: number[], index: number, setIndices: (arr: number[]) => void) {
-    if (indices.includes(index)) {
-      if (indices.length > 1) {
-        setIndices(indices.filter((i) => i !== index));
-      }
-    } else {
-      setIndices([...indices, index].sort((a, b) => a - b));
     }
   }
 
@@ -753,7 +753,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         key={idx}
                         type="button"
                         className={`tools-multi-btn bank-btn ${sourceBankIndex === idx ? "selected" : ""} ${!loadedBankIndices.has(idx) ? "disabled" : ""}`}
-                        onClick={() => loadedBankIndices.has(idx) && setSourceBankIndex(idx)}
+                        onClick={() => loadedBankIndices.has(idx) && setSourceBankIndex(sourceBankIndex === idx ? -1 : idx)}
                         disabled={!loadedBankIndices.has(idx)}
                         title={loadedBankIndices.has(idx) ? (banks[idx] ? formatBankName(banks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`) : "Bank not loaded"}
                       >
@@ -767,7 +767,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         key={idx}
                         type="button"
                         className={`tools-multi-btn bank-btn ${sourceBankIndex === idx ? "selected" : ""} ${!loadedBankIndices.has(idx) ? "disabled" : ""}`}
-                        onClick={() => loadedBankIndices.has(idx) && setSourceBankIndex(idx)}
+                        onClick={() => loadedBankIndices.has(idx) && setSourceBankIndex(sourceBankIndex === idx ? -1 : idx)}
                         disabled={!loadedBankIndices.has(idx)}
                         title={loadedBankIndices.has(idx) ? (banks[idx] ? formatBankName(banks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`) : "Bank not loaded"}
                       >
@@ -779,30 +779,96 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               </div>
               <div className="tools-field">
                 <label>Tracks</label>
-                <div className="tools-multi-select tracks-stacked">
+                <div className={`tools-multi-select tracks-stacked ${(sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i < 8)) || (sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i >= 8)) ? "disabled" : ""}`}>
                   <div className="tools-track-row-buttons">
-                    {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
-                      <button
-                        key={idx}
-                        className={`tools-multi-btn track-btn ${sourceTrackIndices.includes(idx) ? "selected" : ""}`}
-                        onClick={() => toggleIndex(sourceTrackIndices, idx, setSourceTrackIndices)}
-                        title={`Audio Track ${idx + 1}`}
-                      >
-                        T{idx + 1}
-                      </button>
-                    ))}
+                    {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => {
+                      const isAllAudioMode = sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i < 8);
+                      const isAllMidiMode = sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i >= 8);
+                      const destHasMidi = destTrackIndices.some(i => i >= 8);
+                      const isDisabled = isAllAudioMode || isAllMidiMode || destHasMidi;
+                      return (
+                        <button
+                          key={idx}
+                          className={`tools-multi-btn track-btn ${sourceTrackIndices.includes(idx) ? "selected" : ""} ${isDisabled && !isAllAudioMode ? "disabled" : ""}`}
+                          onClick={() => {
+                            if (isDisabled) return;
+                            if (sourceTrackIndices.includes(idx)) {
+                              setSourceTrackIndices([]);
+                            } else {
+                              // Single selection only - replace any existing selection
+                              setSourceTrackIndices([idx]);
+                            }
+                          }}
+                          title={destHasMidi ? "Destination has MIDI tracks selected" : `Audio Track ${idx + 1}`}
+                        >
+                          T{idx + 1}
+                        </button>
+                      );
+                    })}
                   </div>
                   <div className="tools-track-row-buttons">
-                    {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
-                      <button
-                        key={idx}
-                        className={`tools-multi-btn track-btn ${sourceTrackIndices.includes(idx) ? "selected" : ""}`}
-                        onClick={() => toggleIndex(sourceTrackIndices, idx, setSourceTrackIndices)}
-                        title={`MIDI Track ${idx - 7}`}
-                      >
-                        M{idx - 7}
-                      </button>
-                    ))}
+                    {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => {
+                      const isAllAudioMode = sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i < 8);
+                      const isAllMidiMode = sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i >= 8);
+                      const destHasAudio = destTrackIndices.some(i => i < 8);
+                      const isDisabled = isAllAudioMode || isAllMidiMode || destHasAudio;
+                      return (
+                        <button
+                          key={idx}
+                          className={`tools-multi-btn track-btn ${sourceTrackIndices.includes(idx) ? "selected" : ""} ${isDisabled && !isAllMidiMode ? "disabled" : ""}`}
+                          onClick={() => {
+                            if (isDisabled) return;
+                            if (sourceTrackIndices.includes(idx)) {
+                              setSourceTrackIndices([]);
+                            } else {
+                              // Single selection only - replace any existing selection
+                              setSourceTrackIndices([idx]);
+                            }
+                          }}
+                          title={destHasAudio ? "Destination has Audio tracks selected" : `MIDI Track ${idx - 7}`}
+                        >
+                          M{idx - 7}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="tools-select-actions">
+                    <button
+                      type="button"
+                      className={`tools-multi-btn track-btn tools-select-all ${sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i < 8) ? "selected" : ""} ${destTrackIndices.some(i => i >= 8) ? "disabled" : ""}`}
+                      onClick={() => {
+                        if (destTrackIndices.some(i => i >= 8)) return;
+                        const isAllAudio = sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i < 8);
+                        if (isAllAudio) {
+                          setSourceTrackIndices([]);
+                          setDestTrackIndices([]);
+                        } else {
+                          setSourceTrackIndices([0, 1, 2, 3, 4, 5, 6, 7]);
+                        }
+                      }}
+                      disabled={destTrackIndices.some(i => i >= 8)}
+                      title={destTrackIndices.some(i => i >= 8) ? "Destination has MIDI tracks selected" : "Select all Audio tracks"}
+                    >
+                      All Audio
+                    </button>
+                    <button
+                      type="button"
+                      className={`tools-multi-btn track-btn tools-select-all ${sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i >= 8) ? "selected" : ""} ${destTrackIndices.some(i => i < 8) ? "disabled" : ""}`}
+                      onClick={() => {
+                        if (destTrackIndices.some(i => i < 8)) return;
+                        const isAllMidi = sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i >= 8);
+                        if (isAllMidi) {
+                          setSourceTrackIndices([]);
+                          setDestTrackIndices([]);
+                        } else {
+                          setSourceTrackIndices([8, 9, 10, 11, 12, 13, 14, 15]);
+                        }
+                      }}
+                      disabled={destTrackIndices.some(i => i < 8)}
+                      title={destTrackIndices.some(i => i < 8) ? "Destination has Audio tracks selected" : "Select all MIDI tracks"}
+                    >
+                      All MIDI
+                    </button>
                   </div>
                 </div>
               </div>
@@ -812,8 +878,15 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   <div className="tools-part-cross-row">
                     <button
                       type="button"
-                      className={`tools-toggle-btn part-btn ${sourcePartIndex === 0 ? "selected" : ""}`}
-                      onClick={() => setSourcePartIndex(0)}
+                      className={`tools-toggle-btn part-btn ${sourcePartIndex === 0 || sourcePartIndex === -1 ? "selected" : ""}`}
+                      onClick={() => {
+                        if (sourcePartIndex === 0) {
+                          setSourcePartIndex(-2);
+                        } else {
+                          setSourcePartIndex(0);
+                        }
+                      }}
+                      title="Part 1"
                     >
                       1
                     </button>
@@ -821,22 +894,45 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   <div className="tools-part-cross-row">
                     <button
                       type="button"
-                      className={`tools-toggle-btn part-btn ${sourcePartIndex === 3 ? "selected" : ""}`}
-                      onClick={() => setSourcePartIndex(3)}
+                      className={`tools-toggle-btn part-btn ${sourcePartIndex === 3 || sourcePartIndex === -1 ? "selected" : ""}`}
+                      onClick={() => {
+                        if (sourcePartIndex === 3) {
+                          setSourcePartIndex(-2);
+                        } else {
+                          setSourcePartIndex(3);
+                        }
+                      }}
+                      title="Part 4"
                     >
                       4
                     </button>
                     <button
                       type="button"
                       className={`tools-toggle-btn part-btn part-all ${sourcePartIndex === -1 ? "selected" : ""}`}
-                      onClick={() => setSourcePartIndex(-1)}
+                      onClick={() => {
+                        if (sourcePartIndex === -1) {
+                          setSourcePartIndex(-2);
+                          setDestPartIndex(-2);
+                        } else {
+                          setSourcePartIndex(-1);
+                          setDestPartIndex(-1);
+                        }
+                      }}
+                      title="Select all Parts"
                     >
                       All
                     </button>
                     <button
                       type="button"
-                      className={`tools-toggle-btn part-btn ${sourcePartIndex === 1 ? "selected" : ""}`}
-                      onClick={() => setSourcePartIndex(1)}
+                      className={`tools-toggle-btn part-btn ${sourcePartIndex === 1 || sourcePartIndex === -1 ? "selected" : ""}`}
+                      onClick={() => {
+                        if (sourcePartIndex === 1) {
+                          setSourcePartIndex(-2);
+                        } else {
+                          setSourcePartIndex(1);
+                        }
+                      }}
+                      title="Part 2"
                     >
                       2
                     </button>
@@ -844,8 +940,15 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   <div className="tools-part-cross-row">
                     <button
                       type="button"
-                      className={`tools-toggle-btn part-btn ${sourcePartIndex === 2 ? "selected" : ""}`}
-                      onClick={() => setSourcePartIndex(2)}
+                      className={`tools-toggle-btn part-btn ${sourcePartIndex === 2 || sourcePartIndex === -1 ? "selected" : ""}`}
+                      onClick={() => {
+                        if (sourcePartIndex === 2) {
+                          setSourcePartIndex(-2);
+                        } else {
+                          setSourcePartIndex(2);
+                        }
+                      }}
+                      title="Part 3"
                     >
                       3
                     </button>
@@ -1131,7 +1234,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   onClick={() => setCopyTrackMode("part_params")}
                   title="Copy only Part parameters: machines, amplifier, LFOs, effects settings"
                 >
-                  Part Params
+                  Part Parameters
                 </button>
                 <button
                   type="button"
@@ -1320,8 +1423,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     None
                   </button>
                   <button
-                    className="tools-multi-btn bank-btn tools-select-all"
-                    onClick={() => selectAllIndices(16, setDestBankIndices)}
+                    className={`tools-multi-btn bank-btn tools-select-all ${destBankIndices.length === 16 ? "selected" : ""}`}
+                    onClick={() => destBankIndices.length === 16 ? setDestBankIndices([]) : selectAllIndices(16, setDestBankIndices)}
                   >
                     All
                   </button>
@@ -1551,7 +1654,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         key={idx}
                         type="button"
                         className={`tools-multi-btn bank-btn ${destBankIndex === idx ? "selected" : ""}`}
-                        onClick={() => setDestBankIndex(idx)}
+                        onClick={() => setDestBankIndex(destBankIndex === idx ? -1 : idx)}
                         title={`Bank ${String.fromCharCode(65 + idx)}`}
                       >
                         {String.fromCharCode(65 + idx)}
@@ -1564,7 +1667,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         key={idx}
                         type="button"
                         className={`tools-multi-btn bank-btn ${destBankIndex === idx ? "selected" : ""}`}
-                        onClick={() => setDestBankIndex(idx)}
+                        onClick={() => setDestBankIndex(destBankIndex === idx ? -1 : idx)}
                         title={`Bank ${String.fromCharCode(65 + idx)}`}
                       >
                         {String.fromCharCode(65 + idx)}
@@ -1575,46 +1678,126 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               </div>
               <div className="tools-field">
                 <label>Tracks</label>
-                <div className="tools-multi-select tracks-stacked">
+                <div className={`tools-multi-select tracks-stacked ${(sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i < 8)) || (sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i >= 8)) ? "disabled" : ""}`}>
                   <div className="tools-track-row-buttons">
-                    {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
-                      <button
-                        key={idx}
-                        className={`tools-multi-btn track-btn ${destTrackIndices.includes(idx) ? "selected" : ""}`}
-                        onClick={() => toggleIndex(destTrackIndices, idx, setDestTrackIndices)}
-                        title={`Audio Track ${idx + 1}`}
-                      >
-                        T{idx + 1}
-                      </button>
-                    ))}
+                    {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => {
+                      const isSourceAllAudio = sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i < 8);
+                      const isSourceAllMidi = sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i >= 8);
+                      const sourceIsMidi = sourceTrackIndices.length === 1 && sourceTrackIndices[0] >= 8;
+                      const isDisabled = isSourceAllAudio || isSourceAllMidi || sourceIsMidi;
+                      return (
+                        <button
+                          key={idx}
+                          className={`tools-multi-btn track-btn ${destTrackIndices.includes(idx) ? "selected" : ""} ${isDisabled ? "disabled" : ""}`}
+                          onClick={() => {
+                            if (isDisabled) return;
+                            if (destTrackIndices.includes(idx)) {
+                              setDestTrackIndices(destTrackIndices.filter(i => i !== idx));
+                            } else {
+                              // Only allow audio tracks when source is audio
+                              setDestTrackIndices([...destTrackIndices.filter(i => i < 8), idx].sort((a, b) => a - b));
+                            }
+                          }}
+                          title={isSourceAllAudio || isSourceAllMidi ? "Synced with source All selection" : sourceIsMidi ? "Source is a MIDI track" : `Audio Track ${idx + 1}`}
+                        >
+                          T{idx + 1}
+                        </button>
+                      );
+                    })}
                   </div>
                   <div className="tools-track-row-buttons">
-                    {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
-                      <button
-                        key={idx}
-                        className={`tools-multi-btn track-btn ${destTrackIndices.includes(idx) ? "selected" : ""}`}
-                        onClick={() => toggleIndex(destTrackIndices, idx, setDestTrackIndices)}
-                        title={`MIDI Track ${idx - 7}`}
-                      >
-                        M{idx - 7}
-                      </button>
-                    ))}
+                    {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => {
+                      const isSourceAllAudio = sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i < 8);
+                      const isSourceAllMidi = sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i >= 8);
+                      const sourceIsAudio = sourceTrackIndices.length === 1 && sourceTrackIndices[0] < 8;
+                      const isDisabled = isSourceAllAudio || isSourceAllMidi || sourceIsAudio;
+                      return (
+                        <button
+                          key={idx}
+                          className={`tools-multi-btn track-btn ${destTrackIndices.includes(idx) ? "selected" : ""} ${isDisabled ? "disabled" : ""}`}
+                          onClick={() => {
+                            if (isDisabled) return;
+                            if (destTrackIndices.includes(idx)) {
+                              setDestTrackIndices(destTrackIndices.filter(i => i !== idx));
+                            } else {
+                              // Only allow MIDI tracks when source is MIDI
+                              setDestTrackIndices([...destTrackIndices.filter(i => i >= 8), idx].sort((a, b) => a - b));
+                            }
+                          }}
+                          title={isSourceAllAudio || isSourceAllMidi ? "Synced with source All selection" : sourceIsAudio ? "Source is an Audio track" : `MIDI Track ${idx - 7}`}
+                        >
+                          M{idx - 7}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="tools-select-actions">
+                    <button
+                      type="button"
+                      className={`tools-multi-btn track-btn tools-select-all ${destTrackIndices.length === 8 && destTrackIndices.every(i => i < 8) ? "selected" : ""} ${(sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i < 8)) || (sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i >= 8)) || (sourceTrackIndices.length === 1 && sourceTrackIndices[0] >= 8) ? "disabled" : ""}`}
+                      onClick={() => {
+                        const isSourceAllAudio = sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i < 8);
+                        const isSourceAllMidi = sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i >= 8);
+                        const sourceIsMidi = sourceTrackIndices.length === 1 && sourceTrackIndices[0] >= 8;
+                        if (isSourceAllAudio || isSourceAllMidi || sourceIsMidi) return;
+                        const isAllAudio = destTrackIndices.length === 8 && destTrackIndices.every(i => i < 8);
+                        if (isAllAudio) {
+                          setDestTrackIndices([]);
+                        } else {
+                          setDestTrackIndices([0, 1, 2, 3, 4, 5, 6, 7]);
+                        }
+                      }}
+                      disabled={(sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i < 8)) || (sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i >= 8)) || (sourceTrackIndices.length === 1 && sourceTrackIndices[0] >= 8)}
+                      title={(sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i < 8)) || (sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i >= 8)) ? "Synced with source All selection" : (sourceTrackIndices.length === 1 && sourceTrackIndices[0] >= 8) ? "Source is a MIDI track" : "Select all Audio tracks"}
+                    >
+                      All Audio
+                    </button>
+                    <button
+                      className={`tools-multi-btn track-btn tools-select-all ${(sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i < 8)) || (sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i >= 8)) ? "disabled" : ""}`}
+                      onClick={() => {
+                        const isSourceAllAudio = sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i < 8);
+                        const isSourceAllMidi = sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i >= 8);
+                        if (isSourceAllAudio || isSourceAllMidi) return;
+                        setDestTrackIndices([]);
+                      }}
+                      disabled={(sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i < 8)) || (sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i >= 8))}
+                      title={(sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i < 8)) || (sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i >= 8)) ? "Synced with source All selection" : "Deselect all tracks"}
+                    >
+                      None
+                    </button>
+                    <button
+                      type="button"
+                      className={`tools-multi-btn track-btn tools-select-all ${destTrackIndices.length === 8 && destTrackIndices.every(i => i >= 8) ? "selected" : ""} ${(sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i < 8)) || (sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i >= 8)) || (sourceTrackIndices.length === 1 && sourceTrackIndices[0] < 8) ? "disabled" : ""}`}
+                      onClick={() => {
+                        const isSourceAllAudio = sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i < 8);
+                        const isSourceAllMidi = sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i >= 8);
+                        const sourceIsAudio = sourceTrackIndices.length === 1 && sourceTrackIndices[0] < 8;
+                        if (isSourceAllAudio || isSourceAllMidi || sourceIsAudio) return;
+                        const isAllMidi = destTrackIndices.length === 8 && destTrackIndices.every(i => i >= 8);
+                        if (isAllMidi) {
+                          setDestTrackIndices([]);
+                        } else {
+                          setDestTrackIndices([8, 9, 10, 11, 12, 13, 14, 15]);
+                        }
+                      }}
+                      disabled={(sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i < 8)) || (sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i >= 8)) || (sourceTrackIndices.length === 1 && sourceTrackIndices[0] < 8)}
+                      title={(sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i < 8)) || (sourceTrackIndices.length === 8 && sourceTrackIndices.every(i => i >= 8)) ? "Synced with source All selection" : (sourceTrackIndices.length === 1 && sourceTrackIndices[0] < 8) ? "Source is an Audio track" : "Select all MIDI tracks"}
+                    >
+                      All MIDI
+                    </button>
                   </div>
                 </div>
-                {sourceTrackIndices.length !== destTrackIndices.length && (
-                  <span className="tools-warning">
-                    Source and destination track count must match
-                  </span>
-                )}
               </div>
               <div className="tools-field">
                 <label>Part</label>
-                <div className="tools-part-cross">
+                <div className={`tools-part-cross ${sourcePartIndex === -1 ? "disabled" : ""}`}>
                   <div className="tools-part-cross-row">
                     <button
                       type="button"
-                      className={`tools-toggle-btn part-btn ${destPartIndex === 0 ? "selected" : ""}`}
-                      onClick={() => setDestPartIndex(0)}
+                      className={`tools-toggle-btn part-btn ${destPartIndex === 0 || destPartIndex === -1 ? "selected" : ""}`}
+                      onClick={() => sourcePartIndex !== -1 && setDestPartIndex(destPartIndex === 0 ? -2 : 0)}
+                      disabled={sourcePartIndex === -1}
+                      title={sourcePartIndex === -1 ? "Synced with source All selection" : "Part 1"}
                     >
                       1
                     </button>
@@ -1622,22 +1805,28 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   <div className="tools-part-cross-row">
                     <button
                       type="button"
-                      className={`tools-toggle-btn part-btn ${destPartIndex === 3 ? "selected" : ""}`}
-                      onClick={() => setDestPartIndex(3)}
+                      className={`tools-toggle-btn part-btn ${destPartIndex === 3 || destPartIndex === -1 ? "selected" : ""}`}
+                      onClick={() => sourcePartIndex !== -1 && setDestPartIndex(destPartIndex === 3 ? -2 : 3)}
+                      disabled={sourcePartIndex === -1}
+                      title={sourcePartIndex === -1 ? "Synced with source All selection" : "Part 4"}
                     >
                       4
                     </button>
                     <button
                       type="button"
                       className={`tools-toggle-btn part-btn part-all ${destPartIndex === -1 ? "selected" : ""}`}
-                      onClick={() => setDestPartIndex(-1)}
+                      onClick={() => sourcePartIndex !== -1 && setDestPartIndex(destPartIndex === -1 ? -2 : -1)}
+                      disabled={sourcePartIndex === -1}
+                      title={sourcePartIndex === -1 ? "Synced with source All selection" : "Select all Parts"}
                     >
                       All
                     </button>
                     <button
                       type="button"
-                      className={`tools-toggle-btn part-btn ${destPartIndex === 1 ? "selected" : ""}`}
-                      onClick={() => setDestPartIndex(1)}
+                      className={`tools-toggle-btn part-btn ${destPartIndex === 1 || destPartIndex === -1 ? "selected" : ""}`}
+                      onClick={() => sourcePartIndex !== -1 && setDestPartIndex(destPartIndex === 1 ? -2 : 1)}
+                      disabled={sourcePartIndex === -1}
+                      title={sourcePartIndex === -1 ? "Synced with source All selection" : "Part 2"}
                     >
                       2
                     </button>
@@ -1645,8 +1834,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   <div className="tools-part-cross-row">
                     <button
                       type="button"
-                      className={`tools-toggle-btn part-btn ${destPartIndex === 2 ? "selected" : ""}`}
-                      onClick={() => setDestPartIndex(2)}
+                      className={`tools-toggle-btn part-btn ${destPartIndex === 2 || destPartIndex === -1 ? "selected" : ""}`}
+                      onClick={() => sourcePartIndex !== -1 && setDestPartIndex(destPartIndex === 2 ? -2 : 2)}
+                      disabled={sourcePartIndex === -1}
+                      title={sourcePartIndex === -1 ? "Synced with source All selection" : "Part 3"}
                     >
                       3
                     </button>
@@ -1740,7 +1931,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         <button
           className="tools-execute-btn"
           onClick={executeOperation}
-          disabled={isExecuting || (operation === "copy_bank" && sourceBankIndex === -1) || (operation === "copy_bank" && destBankIndices.length === 0) || (operation === "copy_parts" && sourceBankIndex === -1) || (operation === "copy_parts" && destBankIndex === -1) || (operation === "copy_parts" && sourcePartIndices.length === 0) || (operation === "copy_parts" && destPartIndices.length === 0) || (operation === "copy_tracks" && sourceTrackIndices.length !== destTrackIndices.length) || (operation === "copy_patterns" && sourceBankIndex === -1) || (operation === "copy_patterns" && sourcePatternIndices.length === 0) || (operation === "copy_patterns" && destBankIndex === -1) || (operation === "copy_patterns" && destPatternIndices.length === 0) || (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1) || (operation === "copy_patterns" && trackMode === "specific" && sourceTrackIndices.length === 0)}
+          disabled={isExecuting || (operation === "copy_bank" && sourceBankIndex === -1) || (operation === "copy_bank" && destBankIndices.length === 0) || (operation === "copy_parts" && sourceBankIndex === -1) || (operation === "copy_parts" && destBankIndex === -1) || (operation === "copy_parts" && sourcePartIndices.length === 0) || (operation === "copy_parts" && destPartIndices.length === 0) || (operation === "copy_tracks" && sourceBankIndex === -1) || (operation === "copy_tracks" && sourceTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex === -2) || (operation === "copy_tracks" && destBankIndex === -1) || (operation === "copy_tracks" && destTrackIndices.length === 0) || (operation === "copy_tracks" && destPartIndex === -2) || (operation === "copy_tracks" && sourceTrackIndices.length > 1 && sourceTrackIndices.length < 8) || (operation === "copy_patterns" && sourceBankIndex === -1) || (operation === "copy_patterns" && sourcePatternIndices.length === 0) || (operation === "copy_patterns" && destBankIndex === -1) || (operation === "copy_patterns" && destPatternIndices.length === 0) || (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1) || (operation === "copy_patterns" && trackMode === "specific" && sourceTrackIndices.length === 0)}
           title={
             isExecuting ? "Operation in progress..." :
             (operation === "copy_bank" && sourceBankIndex === -1 && destBankIndices.length === 0) ? "Select source and destination banks" :
@@ -1752,7 +1943,16 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             (operation === "copy_parts" && sourcePartIndices.length === 0 && destPartIndices.length === 0) ? "Select source and destination parts" :
             (operation === "copy_parts" && sourcePartIndices.length === 0) ? "Select a source part" :
             (operation === "copy_parts" && destPartIndices.length === 0) ? "Select at least one destination part" :
-            (operation === "copy_tracks" && sourceTrackIndices.length !== destTrackIndices.length) ? "Source and destination track count must match" :
+            (operation === "copy_tracks" && sourceBankIndex === -1 && destBankIndex === -1) ? "Select source and destination banks" :
+            (operation === "copy_tracks" && sourceBankIndex === -1) ? "Select a source bank" :
+            (operation === "copy_tracks" && destBankIndex === -1) ? "Select a destination bank" :
+            (operation === "copy_tracks" && sourceTrackIndices.length === 0 && destTrackIndices.length === 0) ? "Select source and destination tracks" :
+            (operation === "copy_tracks" && sourceTrackIndices.length === 0) ? "Select at least one source track" :
+            (operation === "copy_tracks" && destTrackIndices.length === 0) ? "Select at least one destination track" :
+            (operation === "copy_tracks" && sourcePartIndex === -2 && destPartIndex === -2) ? "Select source and destination parts" :
+            (operation === "copy_tracks" && sourcePartIndex === -2) ? "Select a source part" :
+            (operation === "copy_tracks" && destPartIndex === -2) ? "Select a destination part" :
+            (operation === "copy_tracks" && sourceTrackIndices.length > 1 && sourceTrackIndices.length < 8) ? "Select one track or use All button" :
             (operation === "copy_patterns" && sourceBankIndex === -1 && destBankIndex === -1) ? "Select source and destination banks" :
             (operation === "copy_patterns" && sourceBankIndex === -1) ? "Select a source bank" :
             (operation === "copy_patterns" && destBankIndex === -1) ? "Select a destination bank" :
