@@ -781,6 +781,255 @@ test.describe('Tools Tab - Copy Parts Options', () => {
   })
 })
 
+test.describe('Tools Tab - Copy Patterns Selection', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
+    await toolsTab.click()
+    await page.waitForTimeout(500)
+
+    // Select Copy Patterns operation
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('copy_patterns')
+    await page.waitForTimeout(300)
+  })
+
+  test('Source pattern is single-select (clicking another pattern switches selection)', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const pattern1 = sourcePanel.locator('.tools-multi-btn.pattern-btn', { hasText: /^1$/ })
+    const pattern2 = sourcePanel.locator('.tools-multi-btn.pattern-btn', { hasText: /^2$/ })
+
+    // Pattern 1 should be selected by default
+    await expect(pattern1).toHaveClass(/selected/)
+
+    // Click pattern 2 to switch selection
+    await pattern2.click()
+    await page.waitForTimeout(200)
+
+    // Only pattern 2 should be selected
+    await expect(pattern1).not.toHaveClass(/selected/)
+    await expect(pattern2).toHaveClass(/selected/)
+  })
+
+  test('Source pattern can be deselected by clicking it again', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const pattern1 = sourcePanel.locator('.tools-multi-btn.pattern-btn', { hasText: /^1$/ })
+
+    // Pattern 1 should be selected by default
+    await expect(pattern1).toHaveClass(/selected/)
+
+    // Click pattern 1 to deselect
+    await pattern1.click()
+    await page.waitForTimeout(200)
+
+    // Pattern 1 should no longer be selected
+    await expect(pattern1).not.toHaveClass(/selected/)
+
+    // Execute button should be disabled (no source pattern)
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+  })
+
+  test('Source All button selects all patterns and syncs destination', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+    const sourceAll = sourcePanel.locator('.tools-multi-btn.pattern-btn.tools-select-all')
+
+    // Click All button
+    await sourceAll.click()
+    await page.waitForTimeout(200)
+
+    // All source patterns should be selected (16 pattern buttons + All button)
+    const sourceSelectedPatterns = sourcePanel.locator('.tools-multi-btn.pattern-btn.selected')
+    await expect(sourceSelectedPatterns).toHaveCount(17)
+
+    // All destination patterns should also be selected (16 pattern buttons + All button)
+    const destSelectedPatterns = destPanel.locator('.tools-multi-btn.pattern-btn.selected')
+    await expect(destSelectedPatterns).toHaveCount(17)
+  })
+
+  test('Source All button deselects all patterns when clicked again', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+    const sourceAll = sourcePanel.locator('.tools-multi-btn.pattern-btn.tools-select-all')
+
+    // Click All button to select all
+    await sourceAll.click()
+    await page.waitForTimeout(200)
+
+    // Click All button again to deselect
+    await sourceAll.click()
+    await page.waitForTimeout(200)
+
+    // No source patterns should be selected
+    const sourceSelectedPatterns = sourcePanel.locator('.tools-multi-btn.pattern-btn.selected')
+    await expect(sourceSelectedPatterns).toHaveCount(0)
+
+    // No destination patterns should be selected
+    const destSelectedPatterns = destPanel.locator('.tools-multi-btn.pattern-btn.selected')
+    await expect(destSelectedPatterns).toHaveCount(0)
+
+    // Execute button should be disabled
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+  })
+
+  test('Destination patterns allow multi-select when source is single pattern', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const destPattern1 = destPanel.locator('.tools-multi-btn.pattern-btn', { hasText: /^1$/ })
+    const destPattern2 = destPanel.locator('.tools-multi-btn.pattern-btn', { hasText: /^2$/ })
+    const destPattern3 = destPanel.locator('.tools-multi-btn.pattern-btn', { hasText: /^3$/ })
+
+    // Pattern 1 should be selected by default
+    await expect(destPattern1).toHaveClass(/selected/)
+
+    // Click pattern 2 and 3 to add them
+    await destPattern2.click()
+    await page.waitForTimeout(200)
+    await destPattern3.click()
+    await page.waitForTimeout(200)
+
+    // Patterns 1, 2, and 3 should all be selected
+    await expect(destPattern1).toHaveClass(/selected/)
+    await expect(destPattern2).toHaveClass(/selected/)
+    await expect(destPattern3).toHaveClass(/selected/)
+  })
+
+  test('Destination pattern can be deselected by clicking it', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const destPattern1 = destPanel.locator('.tools-multi-btn.pattern-btn', { hasText: /^1$/ })
+
+    // Pattern 1 should be selected by default
+    await expect(destPattern1).toHaveClass(/selected/)
+
+    // Click pattern 1 to deselect
+    await destPattern1.click()
+    await page.waitForTimeout(200)
+
+    // Pattern 1 should no longer be selected
+    await expect(destPattern1).not.toHaveClass(/selected/)
+
+    // Execute button should be disabled (no destination pattern)
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+  })
+
+  test('Destination patterns are disabled when source All is selected', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+    const sourceAll = sourcePanel.locator('.tools-multi-btn.pattern-btn.tools-select-all')
+    const destPattern1 = destPanel.locator('.tools-multi-btn.pattern-btn', { hasText: /^1$/ })
+
+    // Click source All button
+    await sourceAll.click()
+    await page.waitForTimeout(200)
+
+    // Destination pattern buttons should be disabled
+    await expect(destPattern1).toBeDisabled()
+
+    // Find the pattern field specifically and check its multi-select has disabled class
+    const patternField = destPanel.locator('.tools-field').filter({ hasText: 'Patterns' })
+    const destMultiSelect = patternField.locator('.tools-multi-select.banks-stacked')
+    await expect(destMultiSelect).toHaveClass(/disabled/)
+  })
+
+  test('Source bank can be deselected', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const bankA = sourcePanel.locator('.tools-multi-btn.bank-btn', { hasText: /^A$/ })
+
+    // Bank A should be selected by default
+    await expect(bankA).toHaveClass(/selected/)
+
+    // Click bank A to deselect
+    await bankA.click()
+    await page.waitForTimeout(200)
+
+    // Bank A should no longer be selected
+    await expect(bankA).not.toHaveClass(/selected/)
+
+    // Execute button should be disabled
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+  })
+
+  test('Destination bank can be deselected', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const bankA = destPanel.locator('.tools-multi-btn.bank-btn', { hasText: /^A$/ })
+
+    // Bank A should be selected by default
+    await expect(bankA).toHaveClass(/selected/)
+
+    // Click bank A to deselect
+    await bankA.click()
+    await page.waitForTimeout(200)
+
+    // Bank A should no longer be selected
+    await expect(bankA).not.toHaveClass(/selected/)
+
+    // Execute button should be disabled
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+  })
+
+  test('Clicking single source pattern when All is selected switches to single mode', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+    const sourceAll = sourcePanel.locator('.tools-multi-btn.pattern-btn.tools-select-all')
+    const sourcePattern5 = sourcePanel.locator('.tools-multi-btn.pattern-btn', { hasText: /^5$/ })
+
+    // First select All
+    await sourceAll.click()
+    await page.waitForTimeout(200)
+
+    // All should be selected
+    await expect(sourceAll).toHaveClass(/selected/)
+
+    // Click pattern 5 to switch to single mode
+    await sourcePattern5.click()
+    await page.waitForTimeout(200)
+
+    // Only pattern 5 should be selected, All should be deselected
+    await expect(sourcePattern5).toHaveClass(/selected/)
+    await expect(sourceAll).not.toHaveClass(/selected/)
+
+    // Destination patterns should no longer be disabled
+    const destPattern1 = destPanel.locator('.tools-multi-btn.pattern-btn', { hasText: /^1$/ })
+    await expect(destPattern1).not.toBeDisabled()
+  })
+
+  test('Destination All button selects all patterns when source is single', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const destAll = destPanel.locator('.tools-multi-btn.pattern-btn.tools-select-all', { hasText: 'All' })
+
+    // Click destination All button
+    await destAll.click()
+    await page.waitForTimeout(200)
+
+    // All destination patterns should be selected (16 pattern buttons + All button)
+    const destSelectedPatterns = destPanel.locator('.tools-multi-btn.pattern-btn.selected')
+    await expect(destSelectedPatterns).toHaveCount(17)
+  })
+
+  test('Destination None button deselects all patterns', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const destNone = destPanel.locator('.tools-multi-btn.pattern-btn.tools-select-all', { hasText: 'None' })
+
+    // Click destination None button
+    await destNone.click()
+    await page.waitForTimeout(200)
+
+    // No destination patterns should be selected
+    const destSelectedPatterns = destPanel.locator('.tools-multi-btn.pattern-btn.selected')
+    await expect(destSelectedPatterns).toHaveCount(0)
+
+    // Execute button should be disabled
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+  })
+})
+
 test.describe('Tools Tab - Execute Button', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)

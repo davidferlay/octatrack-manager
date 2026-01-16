@@ -3099,6 +3099,23 @@ h1 {
   color: #000;
 }
 
+.tools-multi-select.disabled .tools-multi-btn.pattern-btn {
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.tools-multi-select.disabled .tools-multi-btn.pattern-btn.selected {
+  background-color: var(--elektron-orange);
+  border-color: var(--elektron-orange);
+  color: #000;
+}
+
+.tools-multi-select.disabled .tools-multi-btn.pattern-btn:hover {
+  background-color: var(--elektron-orange);
+  border-color: var(--elektron-orange);
+  color: #000;
+}
+
 .tools-part-cross-spacer {
   display: inline-block;
   min-width: 36px;
