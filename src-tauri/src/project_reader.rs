@@ -3320,22 +3320,28 @@ pub fn create_audio_pool(project_path: &str) -> Result<String, String> {
 // Copy Operations
 // ============================================================================
 
-/// Copy an entire bank from the current project to a destination project/bank.
+/// Copy an entire bank from the current project to multiple destination banks.
 /// This copies all 4 Parts and their 16 Patterns each.
 ///
 /// # Arguments
 /// * `source_project` - Path to the source (current) project
 /// * `source_bank_index` - Source bank index (0-15 for banks A-P)
 /// * `dest_project` - Path to the destination project
-/// * `dest_bank_index` - Destination bank index (0-15 for banks A-P)
+/// * `dest_bank_indices` - Destination bank indices (0-15 for banks A-P)
 pub fn copy_bank(
     source_project: &str,
     source_bank_index: u8,
     dest_project: &str,
-    dest_bank_index: u8,
+    dest_bank_indices: &[u8],
 ) -> Result<(), String> {
-    if source_bank_index > 15 || dest_bank_index > 15 {
-        return Err("Bank index must be between 0 and 15".to_string());
+    if source_bank_index > 15 {
+        return Err("Source bank index must be between 0 and 15".to_string());
+    }
+
+    for &dest_bank_index in dest_bank_indices {
+        if dest_bank_index > 15 {
+            return Err(format!("Destination bank index {} must be between 0 and 15", dest_bank_index));
+        }
     }
 
     let source_path = Path::new(source_project);
@@ -3354,7 +3360,7 @@ pub fn copy_bank(
         return Err(format!("Source bank {} not found", source_bank_index));
     };
 
-    // Read the source bank
+    // Read the source bank once
     let mut bank_data = BankFile::from_data_file(&source_bank_path)
         .map_err(|e| format!("Failed to read source bank: {:?}", e))?;
 
@@ -3365,20 +3371,22 @@ pub fn copy_bank(
         .calculate_checksum()
         .map_err(|e| format!("Failed to calculate checksum: {:?}", e))?;
 
-    // Build destination bank file path (always write to .work)
-    let dest_bank_num = dest_bank_index + 1;
-    let dest_bank_file = format!("bank{:02}.work", dest_bank_num);
-    let dest_bank_path = dest_path.join(&dest_bank_file);
+    // Write to each destination bank
+    for &dest_bank_index in dest_bank_indices {
+        let dest_bank_num = dest_bank_index + 1;
+        let dest_bank_file = format!("bank{:02}.work", dest_bank_num);
+        let dest_bank_path = dest_path.join(&dest_bank_file);
 
-    // Write the bank to destination
-    bank_data
-        .to_data_file(&dest_bank_path)
-        .map_err(|e| format!("Failed to write destination bank: {:?}", e))?;
+        // Write the bank to destination
+        bank_data
+            .to_data_file(&dest_bank_path)
+            .map_err(|e| format!("Failed to write destination bank {}: {:?}", dest_bank_index, e))?;
 
-    println!(
-        "[DEBUG] Copied bank {} from {} to bank {} in {}",
-        source_bank_index, source_project, dest_bank_index, dest_project
-    );
+        println!(
+            "[DEBUG] Copied bank {} from {} to bank {} in {}",
+            source_bank_index, source_project, dest_bank_index, dest_project
+        );
+    }
 
     Ok(())
 }
