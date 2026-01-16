@@ -642,18 +642,33 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           {operation === "copy_patterns" && (
             <div className="tools-field">
               <label>Patterns</label>
-              <div className="tools-multi-select patterns">
-                {Array.from({ length: 16 }, (_, idx) => (
-                  <button
-                    key={idx}
-                    className={`tools-multi-btn ${sourcePatternIndices.includes(idx) ? "selected" : ""}`}
-                    onClick={() => toggleIndex(sourcePatternIndices, idx, setSourcePatternIndices)}
-                  >
-                    {idx + 1}
-                  </button>
-                ))}
+              <div className="tools-multi-select banks-stacked">
+                <div className="tools-track-row-buttons">
+                  {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
+                    <button
+                      key={idx}
+                      className={`tools-multi-btn pattern-btn ${sourcePatternIndices.includes(idx) ? "selected" : ""}`}
+                      onClick={() => toggleIndex(sourcePatternIndices, idx, setSourcePatternIndices)}
+                      title={`Pattern ${idx + 1}`}
+                    >
+                      {idx + 1}
+                    </button>
+                  ))}
+                </div>
+                <div className="tools-track-row-buttons">
+                  {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
+                    <button
+                      key={idx}
+                      className={`tools-multi-btn pattern-btn ${sourcePatternIndices.includes(idx) ? "selected" : ""}`}
+                      onClick={() => toggleIndex(sourcePatternIndices, idx, setSourcePatternIndices)}
+                      title={`Pattern ${idx + 1}`}
+                    >
+                      {idx + 1}
+                    </button>
+                  ))}
+                </div>
                 <button
-                  className="tools-multi-btn tools-select-all"
+                  className="tools-multi-btn pattern-btn tools-select-all"
                   onClick={() => selectAllIndices(16, setSourcePatternIndices)}
                 >
                   All
@@ -681,6 +696,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         {String.fromCharCode(65 + idx)}
                       </button>
                     ))}
+                  </div>
+                  <div className="tools-track-row-buttons">
                     {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
                       <button
                         key={idx}
@@ -1365,6 +1382,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         {String.fromCharCode(65 + idx)}
                       </button>
                     ))}
+                  </div>
+                  <div className="tools-track-row-buttons">
                     {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
                       <button
                         key={idx}
