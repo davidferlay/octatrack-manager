@@ -464,6 +464,31 @@ test.describe('Tools Tab - Copy Patterns Options', () => {
     const m1Button = trackButtons.locator('.tools-multi-btn.track-btn', { hasText: 'M1' })
     await expect(m1Button).toHaveAttribute('title', 'MIDI Track 1')
   })
+
+  test('Track buttons support click-to-deselect and Execute disabled when none selected', async ({ page }) => {
+    const specificTracksBtn = page.locator('.tools-toggle-btn', { hasText: 'Specific Tracks' })
+    await specificTracksBtn.click()
+    await page.waitForTimeout(200)
+
+    const trackButtons = page.locator('.tools-options-panel .tools-multi-select.tracks-stacked')
+
+    // T1 should be selected by default
+    const t1Button = trackButtons.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })
+    await expect(t1Button).toHaveClass(/selected/)
+
+    // Deselect T1
+    await t1Button.click()
+    await page.waitForTimeout(200)
+    await expect(t1Button).not.toHaveClass(/selected/)
+
+    // No tracks should be selected now
+    const selectedTracks = trackButtons.locator('.tools-multi-btn.track-btn.selected')
+    await expect(selectedTracks).toHaveCount(0)
+
+    // Execute button should be disabled
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+  })
 })
 
 test.describe('Tools Tab - Copy Tracks Options', () => {
