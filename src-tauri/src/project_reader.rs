@@ -3609,9 +3609,6 @@ pub fn copy_patterns(
         return Err(format!("Destination bank {} not found", dest_bank_index));
     };
 
-    // Track which source parts we need to copy (for copy_source_part mode)
-    let mut parts_to_copy: std::collections::HashSet<u8> = std::collections::HashSet::new();
-
     // Copy each pattern
     // If 1 source pattern, copy to all destinations (1-to-many)
     // Otherwise, copy source[i] to dest[i] (1-to-1)
@@ -3628,13 +3625,13 @@ pub fn copy_patterns(
         // Get the source pattern's part assignment
         let source_part_assignment = src_pattern.part_assignment;
 
+        // Get the destination pattern's current part assignment (before overwriting)
+        let dest_part_assignment = dest_bank.patterns.0[dest_pattern_idx as usize].part_assignment;
+
         // Determine the new part assignment
         let new_part_assignment = match part_assignment_mode {
-            "keep_original" => source_part_assignment,
-            "copy_source_part" => {
-                parts_to_copy.insert(source_part_assignment);
-                source_part_assignment
-            }
+            "keep_original" => dest_part_assignment,
+            "copy_source_part" => source_part_assignment,
             "select_specific" => dest_part.unwrap(),
             _ => {
                 return Err(format!(
@@ -3679,19 +3676,6 @@ pub fn copy_patterns(
             dest_pattern_idx + 1,
             new_part_assignment + 1
         );
-    }
-
-    // If copy_source_part mode, also copy the parts
-    if part_assignment_mode == "copy_source_part" {
-        for part_id in parts_to_copy {
-            dest_bank.parts.unsaved.0[part_id as usize] =
-                source_bank.parts.unsaved.0[part_id as usize].clone();
-            dest_bank.parts_edited_bitmask |= 1 << part_id;
-            println!(
-                "[DEBUG] Also copied Part {} along with patterns",
-                part_id + 1
-            );
-        }
     }
 
     // Recalculate checksum
