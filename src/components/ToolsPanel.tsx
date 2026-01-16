@@ -135,8 +135,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
 
   // Copy Tracks options
   const [copyTrackMode, setCopyTrackMode] = useState<CopyTrackMode>(savedSettings.copyTrackMode || "both");
-  const [sourcePartIndex, setSourcePartIndex] = useState<number>(0);
-  const [destPartIndex, setDestPartIndex] = useState<number>(0);
+  const [sourcePartIndex, setSourcePartIndex] = useState<number>(-1); // -1 = All parts
+  const [destPartIndex, setDestPartIndex] = useState<number>(-1); // -1 = All parts
 
   // Copy Sample Slots options
   const [slotType, setSlotType] = useState<SlotType>(savedSettings.slotType || "both");
@@ -455,11 +455,11 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           await invoke("copy_tracks", {
             sourceProject: projectPath,
             sourceBankIndex,
-            sourcePartIndex,
+            sourcePartIndex: sourcePartIndex === -1 ? null : sourcePartIndex, // null = all parts
             sourceTrackIndices,
             destProject,
             destBankIndex,
-            destPartIndex,
+            destPartIndex: destPartIndex === -1 ? null : destPartIndex, // null = all parts
             destTrackIndices,
             mode: copyTrackMode,
           });
@@ -1057,7 +1057,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             >
               <span className="tools-project-selector-name">
                 {destProjectInfo.name}
-                {destProjectInfo.isCurrentProject && <span className="tools-project-selector-current">(Current)</span>}
+                {destProjectInfo.isCurrentProject && <span className="tools-project-selector-current">Current</span>}
               </span>
               {destProjectInfo.setName && (
                 <span className="tools-project-selector-set">{destProjectInfo.setName}</span>

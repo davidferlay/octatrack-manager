@@ -3212,6 +3212,7 @@ h1 {
 .tools-project-selector-name {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
   font-weight: 500;
   flex: 1;
@@ -3221,9 +3222,14 @@ h1 {
 }
 
 .tools-project-selector-current {
-  font-weight: 400;
-  color: var(--elektron-text-secondary);
-  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--elektron-orange);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background-color: rgba(255, 102, 0, 0.15);
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
 }
 
 .tools-project-selector-set {
