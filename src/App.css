@@ -3025,10 +3025,11 @@ h1 {
   color: #ff9800;
 }
 
-.tools-label-with-hint {
+.tools-field label.tools-label-with-hint {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: space-between;
+  width: 100%;
 }
 
 .tools-hint-inline {
@@ -3036,6 +3037,7 @@ h1 {
   font-weight: 400;
   color: var(--elektron-orange);
   font-style: italic;
+  margin-left: auto;
 }
 
 .tools-checkbox {
