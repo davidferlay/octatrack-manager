@@ -40,7 +40,7 @@ use project_reader::{
     ProjectMetadata,
 };
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 #[derive(Clone, Serialize)]
 struct CopyProgressEvent {
@@ -479,6 +479,16 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .setup(|app| {
+            // Clear WebView session storage in the background on app startup
+            let window = app.get_webview_window("main").unwrap();
+            std::thread::spawn(move || {
+                // Small delay to ensure WebView is ready
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                let _ = window.eval("sessionStorage.clear()");
+            });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             greet,
             scan_devices,
