@@ -1090,7 +1090,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               <div className="tools-field">
                 <label className="tools-label-with-hint">
                   Audio Files
-                  {audioMode === "move_to_pool" && sameSetStatus && !audioPoolStatus?.exists && (
+                  {audioMode === "move_to_pool" && sameSetStatus && !audioPoolStatus?.exists && destProject !== projectPath && (
                     <span className="tools-hint-inline" title="Both Source and Destination projects seem to be in the same Set but the Audio Pool folder doesn't exist yet: It will be created automatically when the operation runs.">Pool will be created</span>
                   )}
                 </label>
