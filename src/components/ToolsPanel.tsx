@@ -1230,7 +1230,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               <button className="modal-close" onClick={() => setShowProjectSelector(false)}>×</button>
             </div>
             <div className="modal-body project-selector-body">
-              {/* Header row with Current Project, Manual Selection, and Actions */}
+              {/* Header row with Current Project, Manual Browse, and Actions */}
               <div className="project-selector-header-row">
                 <div className="project-selector-left-group">
                   <div className="project-selector-section project-selector-current">
@@ -1247,10 +1247,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       </div>
                     </div>
                   </div>
-                  {/* Manual Selection */}
+                  {/* Manual Browse */}
                   {browsedProject && browsedProject.path !== projectPath && (
                     <div className="project-selector-section project-selector-manual">
-                      <h4>Manual Selection</h4>
+                      <h4>Manual Browse</h4>
                       <div className="projects-grid">
                         <div
                           className={`project-card project-selector-card ${destProject === browsedProject.path ? 'selected' : ''}`}
