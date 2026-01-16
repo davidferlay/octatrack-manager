@@ -422,26 +422,50 @@ async fn copy_patterns(
 async fn copy_tracks(
     source_project: String,
     source_bank_index: u8,
-    source_part_index: u8,
+    source_part_index: Option<u8>,  // None = all parts (0-3)
     source_track_indices: Vec<u8>,
     dest_project: String,
     dest_bank_index: u8,
-    dest_part_index: u8,
+    dest_part_index: Option<u8>,  // None = all parts (0-3)
     dest_track_indices: Vec<u8>,
     mode: String,
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        copy_tracks_impl(
-            &source_project,
-            source_bank_index,
-            source_part_index,
-            source_track_indices,
-            &dest_project,
-            dest_bank_index,
-            dest_part_index,
-            dest_track_indices,
-            &mode,
-        )
+        // If part indices are None, copy to all 4 parts (1-to-1 mapping)
+        match (source_part_index, dest_part_index) {
+            (None, None) => {
+                // Copy tracks across all 4 parts
+                for part_idx in 0..4u8 {
+                    copy_tracks_impl(
+                        &source_project,
+                        source_bank_index,
+                        part_idx,
+                        source_track_indices.clone(),
+                        &dest_project,
+                        dest_bank_index,
+                        part_idx,
+                        dest_track_indices.clone(),
+                        &mode,
+                    )?;
+                }
+                Ok(())
+            }
+            (Some(src), Some(dst)) => {
+                // Copy tracks for specific parts
+                copy_tracks_impl(
+                    &source_project,
+                    source_bank_index,
+                    src,
+                    source_track_indices,
+                    &dest_project,
+                    dest_bank_index,
+                    dst,
+                    dest_track_indices,
+                    &mode,
+                )
+            }
+            _ => Err("Both source and destination part indices must be specified or both must be None (all parts)".to_string())
+        }
     })
     .await
     .unwrap()
