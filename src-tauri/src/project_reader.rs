@@ -3630,8 +3630,8 @@ pub fn copy_patterns(
 
         // Determine the new part assignment
         let new_part_assignment = match part_assignment_mode {
-            "keep_original" => dest_part_assignment,
-            "copy_source_part" => source_part_assignment,
+            "keep_original" => source_part_assignment, // Keep the source pattern's original part assignment
+            "copy_source_part" => source_part_assignment, // Same as keep_original (for compatibility)
             "select_specific" => dest_part.unwrap(),
             _ => {
                 return Err(format!(
@@ -4292,7 +4292,7 @@ mod tests {
                 bank.parts_edited_bitmask = 0b0001;
             });
 
-            let result = copy_bank(&project.path, 0, &project.path, 1);
+            let result = copy_bank(&project.path, 0, &project.path, &[1]);
             assert!(result.is_ok(), "copy_bank should succeed: {:?}", result);
 
             // Verify the destination bank now has the same edited bitmask
@@ -4312,7 +4312,7 @@ mod tests {
             });
             let dest_project = TestProject::new();
 
-            let result = copy_bank(&source_project.path, 0, &dest_project.path, 0);
+            let result = copy_bank(&source_project.path, 0, &dest_project.path, &[0]);
             assert!(
                 result.is_ok(),
                 "Cross-project copy should succeed: {:?}",
@@ -4335,7 +4335,7 @@ mod tests {
                 bank.parts_edited_bitmask = 0b0101;
             });
 
-            let result = copy_bank(&source_project.path, 0, &dest_project.path, 0);
+            let result = copy_bank(&source_project.path, 0, &dest_project.path, &[0]);
             assert!(result.is_ok());
 
             let dest_bank_path = Path::new(&dest_project.path).join("bank01.work");
@@ -4348,22 +4348,22 @@ mod tests {
         fn test_copy_bank_invalid_source_index() {
             let project = TestProject::new();
 
-            let result = copy_bank(&project.path, 16, &project.path, 0);
+            let result = copy_bank(&project.path, 16, &project.path, &[0]);
             assert!(result.is_err(), "Bank index 16 should be invalid");
             assert!(result
                 .unwrap_err()
-                .contains("Bank index must be between 0 and 15"));
+                .contains("Source bank index must be between 0 and 15"));
         }
 
         #[test]
         fn test_copy_bank_invalid_dest_index() {
             let project = TestProject::new();
 
-            let result = copy_bank(&project.path, 0, &project.path, 16);
+            let result = copy_bank(&project.path, 0, &project.path, &[16]);
             assert!(result.is_err(), "Bank index 16 should be invalid");
             assert!(result
                 .unwrap_err()
-                .contains("Bank index must be between 0 and 15"));
+                .contains("Destination bank index 16 must be between 0 and 15"));
         }
 
         #[test]
@@ -4373,7 +4373,7 @@ mod tests {
             let empty_path = temp_dir.path().to_string_lossy().to_string();
             let dest_project = TestProject::new();
 
-            let result = copy_bank(&empty_path, 0, &dest_project.path, 0);
+            let result = copy_bank(&empty_path, 0, &dest_project.path, &[0]);
             assert!(result.is_err(), "Should fail for non-existent source bank");
             assert!(result.unwrap_err().contains("Source bank"));
         }
@@ -4385,7 +4385,7 @@ mod tests {
             let dest = TestProject::new();
 
             for i in 0..16u8 {
-                let result = copy_bank(&source.path, i, &dest.path, i);
+                let result = copy_bank(&source.path, i, &dest.path, &[i]);
                 assert!(
                     result.is_ok(),
                     "Copy bank {} should succeed: {:?}",
@@ -4417,11 +4417,11 @@ mod tests {
 
         #[test]
         fn test_copy_multiple_parts() {
-            // CP-02: Copy multiple Parts
+            // CP-02: Copy all 4 Parts (copy_parts only allows 1 or 4 source parts)
             let source = TestProject::new();
             let dest = TestProject::new();
 
-            let result = copy_parts(&source.path, 0, vec![0, 1, 2], &dest.path, 0, vec![1, 2, 3]);
+            let result = copy_parts(&source.path, 0, vec![0, 1, 2, 3], &dest.path, 0, vec![0, 1, 2, 3]);
             assert!(
                 result.is_ok(),
                 "Multiple parts copy should succeed: {:?}",
@@ -4486,13 +4486,13 @@ mod tests {
             let result = copy_parts(
                 &source.path,
                 0,
-                vec![0, 1],
+                vec![0, 1, 2, 3], // 4 source parts
                 &dest.path,
                 0,
-                vec![0, 1, 2], // 3 dest parts but only 2 source
+                vec![0, 1, 2], // 3 dest parts - mismatched count
             );
             assert!(result.is_err(), "Mismatched part count should fail");
-            assert!(result.unwrap_err().contains("same length"));
+            assert!(result.unwrap_err().contains("destination must also be all 4 parts"));
         }
 
         #[test]
@@ -4554,7 +4554,7 @@ mod tests {
                 vec![0],
                 &dest.path,
                 0,
-                0,
+                vec![0],
                 "keep_original",
                 None,
                 "all",
@@ -4579,7 +4579,7 @@ mod tests {
                 vec![0, 1, 2, 3],
                 &dest.path,
                 0,
-                4, // Start at pattern 5 (index 4)
+                vec![4, 5, 6, 7], // Start at pattern 5 (index 4)
                 "keep_original",
                 None,
                 "all",
@@ -4604,7 +4604,7 @@ mod tests {
                 (0..16).collect(),
                 &dest.path,
                 0,
-                0,
+                (0..16).collect(),
                 "keep_original",
                 None,
                 "all",
@@ -4628,7 +4628,7 @@ mod tests {
                 vec![0],
                 &source.path,
                 1, // Different bank
-                0,
+                vec![0],
                 "keep_original",
                 None,
                 "all",
@@ -4653,7 +4653,7 @@ mod tests {
                 vec![0, 1],
                 &dest.path,
                 0,
-                0,
+                vec![0, 1],
                 "keep_original",
                 None,
                 "all",
@@ -4681,7 +4681,7 @@ mod tests {
                 vec![0],
                 &dest.path,
                 0,
-                5,
+                vec![5],
                 "keep_original",
                 None,
                 "all",
@@ -4709,7 +4709,7 @@ mod tests {
                 vec![0, 1, 2],
                 &dest.path,
                 0,
-                0,
+                vec![0, 1, 2],
                 "select_specific",
                 Some(3), // Assign all to Part 4 (index 3)
                 "all",
@@ -4736,7 +4736,7 @@ mod tests {
                 vec![0],
                 &dest.path,
                 0,
-                0,
+                vec![0],
                 "keep_original",
                 None,
                 "specific",
@@ -4761,7 +4761,7 @@ mod tests {
                 vec![0],
                 &dest.path,
                 0,
-                0,
+                vec![0],
                 "keep_original",
                 None,
                 "specific",
@@ -4786,7 +4786,7 @@ mod tests {
                 vec![0],
                 &dest.path,
                 0,
-                0,
+                vec![0],
                 "keep_original",
                 None,
                 "specific",
@@ -4811,14 +4811,14 @@ mod tests {
                 vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9], // 10 patterns
                 &dest.path,
                 0,
-                10, // Starting at 10 would overflow (10 + 10 = 20 > 16)
+                vec![10, 11, 12, 13, 14, 15, 16, 17, 18, 19], // Overflow: indices 16-19 are invalid
                 "keep_original",
                 None,
                 "all",
                 None,
             );
             assert!(result.is_err(), "Pattern overflow should fail");
-            assert!(result.unwrap_err().contains("exceeds bank capacity"));
+            assert!(result.unwrap_err().contains("Destination pattern indices must be between 0 and 15"));
         }
 
         #[test]
@@ -4832,7 +4832,7 @@ mod tests {
                 vec![16], // Invalid pattern index
                 &dest.path,
                 0,
-                0,
+                vec![0],
                 "keep_original",
                 None,
                 "all",
@@ -4855,7 +4855,7 @@ mod tests {
                 vec![0],
                 &dest.path,
                 0,
-                0,
+                vec![0],
                 "keep_original",
                 None,
                 "specific",
@@ -4878,7 +4878,7 @@ mod tests {
                 vec![0],
                 &dest.path,
                 0,
-                0,
+                vec![0],
                 "select_specific",
                 None, // Missing dest_part for select_specific mode
                 "all",
@@ -4899,7 +4899,7 @@ mod tests {
                 vec![0],
                 &dest.path,
                 0,
-                0,
+                vec![0],
                 "invalid_mode",
                 None,
                 "all",
@@ -5696,7 +5696,7 @@ mod tests {
 
             // All indices 0-15 should be valid
             for i in 0..=15u8 {
-                let result = copy_bank(&project.path, i, &project.path, 15 - i);
+                let result = copy_bank(&project.path, i, &project.path, &[15 - i]);
                 assert!(result.is_ok(), "Bank index {} should be valid", i);
             }
         }
@@ -5724,7 +5724,7 @@ mod tests {
                     vec![i],
                     &project.path,
                     0,
-                    i,
+                    vec![i],
                     "keep_original",
                     None,
                     "all",
@@ -5794,7 +5794,9 @@ mod tests {
             let project = TestProject::new();
 
             let result = copy_parts(&project.path, 0, vec![], &project.path, 0, vec![]);
-            assert!(result.is_ok(), "Empty parts copy should succeed (no-op)");
+            // copy_parts requires source to be 1 or 4 parts, so empty is an error
+            assert!(result.is_err(), "Empty parts should fail validation");
+            assert!(result.unwrap_err().contains("Source must be either 1 part or all 4 parts"));
         }
 
         #[test]
@@ -5807,7 +5809,7 @@ mod tests {
                 vec![],
                 &project.path,
                 0,
-                0,
+                vec![],
                 "keep_original",
                 None,
                 "all",
@@ -5866,7 +5868,7 @@ mod tests {
             });
             let dest = TestProject::new();
 
-            copy_bank(&source.path, 0, &dest.path, 1).unwrap();
+            copy_bank(&source.path, 0, &dest.path, &[1]).unwrap();
 
             let dest_bank_path = Path::new(&dest.path).join("bank02.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
@@ -5891,7 +5893,7 @@ mod tests {
                 vec![0, 1],
                 &dest.path,
                 0,
-                5,
+                vec![5, 6],
                 "keep_original",
                 None,
                 "all",
@@ -5958,15 +5960,15 @@ mod tests {
             let dest = TestProject::new();
 
             // Perform multiple operations in sequence
-            copy_bank(&project.path, 0, &dest.path, 1).unwrap();
-            copy_parts(&project.path, 0, vec![0, 1], &project.path, 1, vec![2, 3]).unwrap();
+            copy_bank(&project.path, 0, &dest.path, &[1]).unwrap();
+            copy_parts(&project.path, 0, vec![0], &project.path, 1, vec![2]).unwrap();
             copy_patterns(
                 &project.path,
                 0,
                 vec![0, 1, 2],
                 &dest.path,
                 0,
-                0,
+                vec![0, 1, 2],
                 "keep_original",
                 None,
                 "all",
