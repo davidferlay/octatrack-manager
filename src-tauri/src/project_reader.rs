@@ -3626,7 +3626,7 @@ pub fn copy_patterns(
         let source_part_assignment = src_pattern.part_assignment;
 
         // Get the destination pattern's current part assignment (before overwriting)
-        let dest_part_assignment = dest_bank.patterns.0[dest_pattern_idx as usize].part_assignment;
+        let _dest_part_assignment = dest_bank.patterns.0[dest_pattern_idx as usize].part_assignment;
 
         // Determine the new part assignment
         let new_part_assignment = match part_assignment_mode {
@@ -3668,6 +3668,11 @@ pub fn copy_patterns(
             }
             // Update part assignment
             dest_bank.patterns.0[dest_pattern_idx as usize].part_assignment = new_part_assignment;
+        } else {
+            return Err(format!(
+                "Invalid track_mode '{}'. Must be 'all' or 'specific'",
+                track_mode
+            ));
         }
 
         println!(
@@ -4394,6 +4399,64 @@ mod tests {
                 );
             }
         }
+
+        #[test]
+        fn test_copy_bank_to_multiple_destinations() {
+            // CB-08: Copy bank to multiple destinations at once
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.parts_edited_bitmask = 0b1111;
+            });
+            let dest = TestProject::new();
+
+            // Copy bank 0 to banks 2, 5, and 12 in one call
+            let result = copy_bank(&source.path, 0, &dest.path, &[2, 5, 12]);
+            assert!(result.is_ok(), "Multi-destination copy should succeed: {:?}", result);
+
+            // Verify all 3 destination banks have the copied data
+            for dest_idx in [2, 5, 12] {
+                let dest_bank_path = Path::new(&dest.path).join(format!("bank{:02}.work", dest_idx + 1));
+                let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+                assert_eq!(
+                    dest_bank.parts_edited_bitmask, 0b1111,
+                    "Destination bank {} should have copied parts_edited_bitmask",
+                    dest_idx
+                );
+            }
+        }
+
+        #[test]
+        fn test_copy_bank_to_all_other_destinations() {
+            // CB-09: Copy bank 0 to all other banks (1-15)
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.parts_edited_bitmask = 0b0101;
+            });
+            let dest = TestProject::new();
+
+            let dest_indices: Vec<u8> = (1..16).collect();
+            let result = copy_bank(&source.path, 0, &dest.path, &dest_indices);
+            assert!(result.is_ok(), "Copy to all other banks should succeed: {:?}", result);
+
+            // Verify all destination banks have the copied data
+            for dest_idx in 1..16u8 {
+                let dest_bank_path = Path::new(&dest.path).join(format!("bank{:02}.work", dest_idx + 1));
+                let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+                assert_eq!(
+                    dest_bank.parts_edited_bitmask, 0b0101,
+                    "Destination bank {} should have copied parts_edited_bitmask",
+                    dest_idx
+                );
+            }
+        }
+
+        #[test]
+        fn test_copy_bank_empty_destinations() {
+            // CB-10: Empty destination array should succeed (no-op)
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_bank(&source.path, 0, &dest.path, &[]);
+            assert!(result.is_ok(), "Empty destinations should succeed as no-op: {:?}", result);
+        }
     }
 
     // ==================== COPY PARTS TESTS ====================
@@ -4533,6 +4596,44 @@ mod tests {
             assert!(
                 (dest_bank.parts_edited_bitmask & (1 << 2)) != 0,
                 "Destination part should be marked as edited"
+            );
+        }
+
+        #[test]
+        fn test_copy_single_part_to_multiple_destinations() {
+            // CP-07: Copy 1 part to multiple destinations (1-to-many)
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            // Copy part 0 to parts 1, 2, and 3
+            let result = copy_parts(&source.path, 0, vec![0], &dest.path, 0, vec![1, 2, 3]);
+            assert!(result.is_ok(), "1-to-many part copy should succeed: {:?}", result);
+
+            // Verify all destination parts are marked as edited
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+            assert!(
+                (dest_bank.parts_edited_bitmask & 0b1110) == 0b1110,
+                "All destination parts (1, 2, 3) should be marked as edited"
+            );
+        }
+
+        #[test]
+        fn test_copy_single_part_to_all_parts() {
+            // CP-08: Copy 1 part to all 4 destinations
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            // Copy part 0 to all 4 parts
+            let result = copy_parts(&source.path, 0, vec![0], &dest.path, 0, vec![0, 1, 2, 3]);
+            assert!(result.is_ok(), "1-to-all part copy should succeed: {:?}", result);
+
+            // Verify all destination parts are marked as edited
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+            assert_eq!(
+                dest_bank.parts_edited_bitmask & 0b1111, 0b1111,
+                "All 4 destination parts should be marked as edited"
             );
         }
     }
@@ -4907,6 +5008,141 @@ mod tests {
             );
             assert!(result.is_err());
             assert!(result.unwrap_err().contains("Invalid part_assignment_mode"));
+        }
+
+        #[test]
+        fn test_copy_single_pattern_to_multiple_destinations() {
+            // CPT-14: Copy 1 pattern to multiple destinations (1-to-many)
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.patterns.0[0].part_assignment = 2;
+            });
+            let dest = TestProject::new();
+
+            // Copy pattern 0 to patterns 5, 10, 15
+            let result = copy_patterns(
+                &source.path,
+                0,
+                vec![0],
+                &dest.path,
+                0,
+                vec![5, 10, 15],
+                "keep_original",
+                None,
+                "all",
+                None,
+            );
+            assert!(result.is_ok(), "1-to-many pattern copy should succeed: {:?}", result);
+
+            // Verify all destination patterns have the copied part assignment
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+            for dest_idx in [5, 10, 15] {
+                assert_eq!(
+                    dest_bank.patterns.0[dest_idx].part_assignment, 2,
+                    "Pattern {} should have copied part assignment",
+                    dest_idx
+                );
+            }
+        }
+
+        #[test]
+        fn test_copy_single_pattern_to_all_patterns() {
+            // CPT-15: Copy 1 pattern to all 16 destinations
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.patterns.0[0].part_assignment = 3;
+            });
+            let dest = TestProject::new();
+
+            // Copy pattern 0 to all 16 patterns
+            let result = copy_patterns(
+                &source.path,
+                0,
+                vec![0],
+                &dest.path,
+                0,
+                (0..16).collect(),
+                "keep_original",
+                None,
+                "all",
+                None,
+            );
+            assert!(result.is_ok(), "1-to-all pattern copy should succeed: {:?}", result);
+
+            // Verify all 16 destination patterns have the copied part assignment
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+            for i in 0..16 {
+                assert_eq!(
+                    dest_bank.patterns.0[i].part_assignment, 3,
+                    "Pattern {} should have copied part assignment",
+                    i
+                );
+            }
+        }
+
+        #[test]
+        fn test_copy_patterns_source_dest_count_mismatch() {
+            // CPT-16: Error when N source patterns don't match N dest patterns
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            // 5 source patterns to 4 dest patterns - should fail
+            let result = copy_patterns(
+                &source.path,
+                0,
+                vec![0, 1, 2, 3, 4],
+                &dest.path,
+                0,
+                vec![0, 1, 2, 3],
+                "keep_original",
+                None,
+                "all",
+                None,
+            );
+            assert!(result.is_err(), "Mismatched pattern count should fail");
+            assert!(result.unwrap_err().contains("destination count must match source count"));
+        }
+
+        #[test]
+        fn test_copy_patterns_empty_source() {
+            // CPT-17: Empty source patterns should succeed (no-op)
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_patterns(
+                &source.path,
+                0,
+                vec![],
+                &dest.path,
+                0,
+                vec![],
+                "keep_original",
+                None,
+                "all",
+                None,
+            );
+            assert!(result.is_ok(), "Empty patterns should succeed as no-op: {:?}", result);
+        }
+
+        #[test]
+        fn test_copy_patterns_invalid_track_mode() {
+            // CPT-18: Invalid track mode should fail
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let result = copy_patterns(
+                &source.path,
+                0,
+                vec![0],
+                &dest.path,
+                0,
+                vec![0],
+                "keep_original",
+                None,
+                "invalid_track_mode",
+                None,
+            );
+            assert!(result.is_err(), "Invalid track mode should fail");
         }
     }
 
