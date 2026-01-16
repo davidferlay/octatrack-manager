@@ -995,7 +995,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     type="button"
                     className={`tools-toggle-btn ${partAssignmentMode === "keep_original" ? "selected" : ""}`}
                     onClick={() => setPartAssignmentMode("keep_original")}
-                    title="Keep the same Part assignment as in the source patterns"
+                    title="Keep the destination pattern's current Part assignment"
                   >
                     Keep Original
                   </button>
@@ -1003,17 +1003,17 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     type="button"
                     className={`tools-toggle-btn ${partAssignmentMode === "copy_source_part" ? "selected" : ""}`}
                     onClick={() => setPartAssignmentMode("copy_source_part")}
-                    title="Copy the source Part data along with the patterns"
+                    title="Use the same Part assignment as the source pattern"
                   >
-                    Copy Source Part
+                    Copy Source
                   </button>
                   <button
                     type="button"
                     className={`tools-toggle-btn ${partAssignmentMode === "select_specific" ? "selected" : ""}`}
                     onClick={() => setPartAssignmentMode("select_specific")}
-                    title="Assign all copied patterns to a specific Part at destination"
+                    title="Assign copied pattern to a Part you select"
                   >
-                    Specific Part
+                    User Selection
                   </button>
                 </div>
               </div>

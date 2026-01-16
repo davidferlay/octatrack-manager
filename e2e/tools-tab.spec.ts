@@ -363,8 +363,8 @@ test.describe('Tools Tab - Copy Patterns Options', () => {
     const toggleGroup = partAssignmentField.locator('.tools-toggle-group')
 
     await expect(toggleGroup.locator('.tools-toggle-btn', { hasText: 'Keep Original' })).toBeVisible()
-    await expect(toggleGroup.locator('.tools-toggle-btn', { hasText: 'Copy Source Part' })).toBeVisible()
-    await expect(toggleGroup.locator('.tools-toggle-btn', { hasText: 'Specific Part' })).toBeVisible()
+    await expect(toggleGroup.locator('.tools-toggle-btn', { hasText: 'Copy Source' })).toBeVisible()
+    await expect(toggleGroup.locator('.tools-toggle-btn', { hasText: 'User Selection' })).toBeVisible()
   })
 
   test('Keep Original is selected by default', async ({ page }) => {
