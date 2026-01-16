@@ -805,6 +805,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       className="tools-slot-value-input"
                       defaultValue={sourceSampleIndices[0] + 1}
                       key={`from-${sourceSampleIndices[0]}`}
+                      title="First slot to copy"
                       onBlur={(e) => {
                         let val = parseInt(e.target.value, 10);
                         if (isNaN(val) || val < 1) val = 1;
@@ -832,6 +833,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       className="tools-slot-value-input"
                       defaultValue={sourceSampleIndices[sourceSampleIndices.length - 1] + 1}
                       key={`to-${sourceSampleIndices[sourceSampleIndices.length - 1]}`}
+                      title="Last slot to copy"
                       onBlur={(e) => {
                         let val = parseInt(e.target.value, 10);
                         if (isNaN(val) || val < 1) val = 1;
@@ -852,14 +854,23 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       }}
                     />
                   </div>
-                  <div className="tools-slot-count">
+                  <div className="tools-slot-count" title="Number of slots selected">
                     <span className="tools-slot-count-number">{sourceSampleIndices.length}</span>
                     <span className="tools-slot-count-label">slot{sourceSampleIndices.length !== 1 ? 's' : ''}</span>
                   </div>
                   <button
                     type="button"
                     className="tools-slot-all-btn"
+                    onClick={() => setSourceSampleIndices([sourceSampleIndices[0]])}
+                    title="Select only the first slot"
+                  >
+                    One
+                  </button>
+                  <button
+                    type="button"
+                    className="tools-slot-all-btn"
                     onClick={() => setSourceSampleIndices(Array.from({ length: 128 }, (_, i) => i))}
+                    title="Select all 128 slots"
                   >
                     All
                   </button>
@@ -1505,6 +1516,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       className="tools-slot-value-input"
                       defaultValue={destSampleIndices[0] + 1}
                       key={`dest-from-${destSampleIndices[0]}`}
+                      title="Starting destination slot"
                       onBlur={(e) => {
                         let val = parseInt(e.target.value, 10);
                         if (isNaN(val) || val < 1) val = 1;
@@ -1521,11 +1533,11 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       }}
                     />
                     <span className="tools-slot-separator">–</span>
-                    <span className="tools-slot-value-display">{Math.min(128, destSampleIndices[0] + sourceSampleIndices.length)}</span>
+                    <span className="tools-slot-value-display" title="Ending destination slot (based on source count)">{Math.min(128, destSampleIndices[0] + sourceSampleIndices.length)}</span>
                   </div>
-                  <div className="tools-slot-count">
-                    <span className="tools-slot-count-number">{sourceSampleIndices.length}</span>
-                    <span className="tools-slot-count-label">slot{sourceSampleIndices.length !== 1 ? 's' : ''}</span>
+                  <div className="tools-slot-count" title={`Effective slots to copy${Math.min(sourceSampleIndices.length, 128 - destSampleIndices[0]) < sourceSampleIndices.length ? ` (${sourceSampleIndices.length - Math.min(sourceSampleIndices.length, 128 - destSampleIndices[0])} will overflow)` : ''}`}>
+                    <span className="tools-slot-count-number">{Math.min(sourceSampleIndices.length, 128 - destSampleIndices[0])}</span>
+                    <span className="tools-slot-count-label">slot{Math.min(sourceSampleIndices.length, 128 - destSampleIndices[0]) !== 1 ? 's' : ''}</span>
                   </div>
                   <button
                     type="button"
@@ -1534,6 +1546,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       const count = sourceSampleIndices.length;
                       setDestSampleIndices(Array.from({ length: count }, (_, i) => i));
                     }}
+                    title="Reset destination to start at slot 1"
                   >
                     Reset
                   </button>
