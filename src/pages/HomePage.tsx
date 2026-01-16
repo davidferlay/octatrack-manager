@@ -316,7 +316,10 @@ export function HomePage() {
                                   <div className="set-header">
                                     <div className="set-name">{set.name}</div>
                                     <div className="set-info">
-                                      <span className={set.has_audio_pool ? "status-audio-pool" : "status-audio-pool-empty"}>
+                                      <span
+                                        className={set.has_audio_pool ? "status-audio-pool" : "status-audio-pool-empty"}
+                                        title={set.has_audio_pool ? "Audio Pool folder contains samples" : "Audio Pool folder is empty or missing"}
+                                      >
                                         {set.has_audio_pool ? "✓ Audio Pool" : "✗ Audio Pool"}
                                       </span>
                                       <span className="project-count">
