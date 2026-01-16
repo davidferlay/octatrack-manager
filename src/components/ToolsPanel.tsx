@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useProjects } from "../context/ProjectsContext";
@@ -347,11 +347,15 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     loadDestBanks();
   }, [destProject, projectPath, loadedBankIndices]);
 
-  // Reset audio mode if move_to_pool is selected but projects aren't in same set
+  // Track previous sameSetStatus to detect transitions
+  const prevSameSetStatus = useRef<boolean | null>(null);
+
+  // Reset audio mode only when sameSetStatus transitions from true to false
   useEffect(() => {
-    if (audioMode === "move_to_pool" && !sameSetStatus) {
+    if (prevSameSetStatus.current === true && !sameSetStatus && audioMode === "move_to_pool") {
       setAudioMode("copy");
     }
+    prevSameSetStatus.current = sameSetStatus;
   }, [audioMode, sameSetStatus]);
 
   // Sync destination sample indices with source sample indices count
