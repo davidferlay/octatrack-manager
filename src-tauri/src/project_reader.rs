@@ -3525,7 +3525,7 @@ pub fn copy_parts(
 /// * `source_pattern_indices` - Which patterns to copy (0-15)
 /// * `dest_project` - Path to the destination project
 /// * `dest_bank_index` - Destination bank index (0-15)
-/// * `dest_pattern_start` - Starting pattern index in destination (0-15)
+/// * `dest_pattern_indices` - Destination pattern indices (0-15). When source is 1 pattern, copies to all dest patterns. When source is all patterns, must match count.
 /// * `part_assignment_mode` - "keep_original", "copy_source_part", or "select_specific"
 /// * `dest_part` - Required if select_specific mode (0-3 for Parts 1-4)
 /// * `track_mode` - "all" or "specific"
@@ -3536,7 +3536,7 @@ pub fn copy_patterns(
     source_pattern_indices: Vec<u8>,
     dest_project: &str,
     dest_bank_index: u8,
-    dest_pattern_start: u8,
+    dest_pattern_indices: Vec<u8>,
     part_assignment_mode: &str,
     dest_part: Option<u8>,
     track_mode: &str,
@@ -3551,8 +3551,15 @@ pub fn copy_patterns(
         return Err("Pattern indices must be between 0 and 15".to_string());
     }
 
-    if dest_pattern_start as usize + source_pattern_indices.len() > 16 {
-        return Err("Destination pattern range exceeds bank capacity (16 patterns)".to_string());
+    if dest_pattern_indices.iter().any(|&i| i > 15) {
+        return Err("Destination pattern indices must be between 0 and 15".to_string());
+    }
+
+    // Validate source/dest pattern count relationship
+    // Either: 1 source to many dest (1-to-many copy)
+    // Or: N source to N dest (1-to-1 copy, typically all 16)
+    if source_pattern_indices.len() != 1 && source_pattern_indices.len() != dest_pattern_indices.len() {
+        return Err("When copying multiple source patterns, destination count must match source count".to_string());
     }
 
     if part_assignment_mode == "select_specific" && dest_part.is_none() {
@@ -3606,8 +3613,16 @@ pub fn copy_patterns(
     let mut parts_to_copy: std::collections::HashSet<u8> = std::collections::HashSet::new();
 
     // Copy each pattern
-    for (offset, &src_pattern_idx) in source_pattern_indices.iter().enumerate() {
-        let dest_pattern_idx = dest_pattern_start as usize + offset;
+    // If 1 source pattern, copy to all destinations (1-to-many)
+    // Otherwise, copy source[i] to dest[i] (1-to-1)
+    let is_one_to_many = source_pattern_indices.len() == 1;
+
+    for (dest_offset, &dest_pattern_idx) in dest_pattern_indices.iter().enumerate() {
+        let src_pattern_idx = if is_one_to_many {
+            source_pattern_indices[0]
+        } else {
+            source_pattern_indices[dest_offset]
+        };
         let src_pattern = &source_bank.patterns.0[src_pattern_idx as usize];
 
         // Get the source pattern's part assignment
@@ -3632,9 +3647,9 @@ pub fn copy_patterns(
         // Copy the pattern
         if track_mode == "all" {
             // Copy entire pattern
-            dest_bank.patterns.0[dest_pattern_idx] = src_pattern.clone();
+            dest_bank.patterns.0[dest_pattern_idx as usize] = src_pattern.clone();
             // Update part assignment
-            dest_bank.patterns.0[dest_pattern_idx].part_assignment = new_part_assignment;
+            dest_bank.patterns.0[dest_pattern_idx as usize].part_assignment = new_part_assignment;
         } else if track_mode == "specific" {
             // Copy only specific tracks
             let indices = track_indices
@@ -3644,18 +3659,18 @@ pub fn copy_patterns(
             for &track_idx in indices {
                 if track_idx < 8 {
                     // Audio track (0-7)
-                    dest_bank.patterns.0[dest_pattern_idx].audio_track_trigs.0
+                    dest_bank.patterns.0[dest_pattern_idx as usize].audio_track_trigs.0
                         [track_idx as usize] =
                         src_pattern.audio_track_trigs.0[track_idx as usize].clone();
                 } else {
                     // MIDI track (8-15 maps to 0-7 in midi_track_trigs)
                     let midi_idx = (track_idx - 8) as usize;
-                    dest_bank.patterns.0[dest_pattern_idx].midi_track_trigs.0[midi_idx] =
+                    dest_bank.patterns.0[dest_pattern_idx as usize].midi_track_trigs.0[midi_idx] =
                         src_pattern.midi_track_trigs.0[midi_idx].clone();
                 }
             }
             // Update part assignment
-            dest_bank.patterns.0[dest_pattern_idx].part_assignment = new_part_assignment;
+            dest_bank.patterns.0[dest_pattern_idx as usize].part_assignment = new_part_assignment;
         }
 
         println!(
