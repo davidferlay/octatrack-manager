@@ -3017,6 +3017,15 @@ h1 {
   padding: 0.4rem 0.5rem;
 }
 
+.tools-select-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.tools-select-actions .tools-multi-btn.tools-select-all {
+  flex: 1;
+}
+
 /* Parts inline layout (Copy Parts) */
 .tools-multi-select.parts-inline {
   display: flex;
@@ -3612,7 +3621,7 @@ h1 {
   background-color: transparent;
   border-color: var(--elektron-medium-gray);
   color: var(--elektron-text-secondary);
-  cursor: not-allowed;
+  cursor: default;
 }
 
 .tools-execute-btn i,

@@ -122,6 +122,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   // Destination selection
   const [destProject, setDestProject] = useState<string>(projectPath);
   const [destBankIndex, setDestBankIndex] = useState<number>(0);
+  const [destBankIndices, setDestBankIndices] = useState<number[]>([0]); // For copy_bank multi-select
   const [destPartIndices, setDestPartIndices] = useState<number[]>([0]);
   const [destPatternStart, setDestPatternStart] = useState<number>(0);
   const [destTrackIndices, setDestTrackIndices] = useState<number[]>([0]);
@@ -354,7 +355,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   function getExecutingDetails(): string {
     switch (operation) {
       case "copy_bank":
-        return `Copying Bank ${String.fromCharCode(65 + sourceBankIndex)}...`;
+        return `Copying Bank ${String.fromCharCode(65 + sourceBankIndex)} to ${destBankIndices.length} bank${destBankIndices.length > 1 ? 's' : ''}...`;
       case "copy_parts":
         return `Copying ${sourcePartIndices.length} part${sourcePartIndices.length > 1 ? 's' : ''}...`;
       case "copy_patterns":
@@ -387,11 +388,11 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             sourceProject: projectPath,
             sourceBankIndex,
             destProject,
-            destBankIndex,
+            destBankIndices,
           });
-          setStatusMessage(`Bank ${String.fromCharCode(65 + sourceBankIndex)} copied successfully`);
+          setStatusMessage(`Bank ${String.fromCharCode(65 + sourceBankIndex)} copied to ${destBankIndices.length} bank${destBankIndices.length > 1 ? 's' : ''} successfully`);
           if (destProject === projectPath && onBankUpdated) {
-            onBankUpdated(destBankIndex);
+            destBankIndices.forEach(idx => onBankUpdated(idx));
           }
           break;
 
@@ -525,7 +526,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       key={idx}
                       type="button"
                       className={`tools-multi-btn bank-btn ${sourceBankIndex === idx ? "selected" : ""} ${!loadedBankIndices.has(idx) ? "disabled" : ""}`}
-                      onClick={() => loadedBankIndices.has(idx) && setSourceBankIndex(idx)}
+                      onClick={() => loadedBankIndices.has(idx) && setSourceBankIndex(sourceBankIndex === idx ? -1 : idx)}
                       disabled={!loadedBankIndices.has(idx)}
                       title={loadedBankIndices.has(idx) ? (banks[idx] ? formatBankName(banks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`) : "Bank not loaded"}
                     >
@@ -539,7 +540,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       key={idx}
                       type="button"
                       className={`tools-multi-btn bank-btn ${sourceBankIndex === idx ? "selected" : ""} ${!loadedBankIndices.has(idx) ? "disabled" : ""}`}
-                      onClick={() => loadedBankIndices.has(idx) && setSourceBankIndex(idx)}
+                      onClick={() => loadedBankIndices.has(idx) && setSourceBankIndex(sourceBankIndex === idx ? -1 : idx)}
                       disabled={!loadedBankIndices.has(idx)}
                       title={loadedBankIndices.has(idx) ? (banks[idx] ? formatBankName(banks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`) : "Bank not loaded"}
                     >
@@ -1205,8 +1206,63 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             </button>
           </div>
 
-          {/* Bank selector (except copy_tracks) */}
-          {(operation === "copy_bank" || operation === "copy_parts") && (
+          {/* Bank selector for copy_bank - multi-select */}
+          {operation === "copy_bank" && (
+            <div className="tools-field">
+              <label>Banks</label>
+              <div className="tools-multi-select banks-stacked">
+                <div className="tools-track-row-buttons">
+                  {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className={`tools-multi-btn bank-btn ${destBankIndices.includes(idx) ? "selected" : ""}`}
+                      onClick={() => destBankIndices.includes(idx)
+                        ? setDestBankIndices(destBankIndices.filter(i => i !== idx))
+                        : setDestBankIndices([...destBankIndices, idx].sort((a, b) => a - b))
+                      }
+                      title={`Bank ${String.fromCharCode(65 + idx)}`}
+                    >
+                      {String.fromCharCode(65 + idx)}
+                    </button>
+                  ))}
+                </div>
+                <div className="tools-track-row-buttons">
+                  {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className={`tools-multi-btn bank-btn ${destBankIndices.includes(idx) ? "selected" : ""}`}
+                      onClick={() => destBankIndices.includes(idx)
+                        ? setDestBankIndices(destBankIndices.filter(i => i !== idx))
+                        : setDestBankIndices([...destBankIndices, idx].sort((a, b) => a - b))
+                      }
+                      title={`Bank ${String.fromCharCode(65 + idx)}`}
+                    >
+                      {String.fromCharCode(65 + idx)}
+                    </button>
+                  ))}
+                </div>
+                <div className="tools-select-actions">
+                  <button
+                    className="tools-multi-btn bank-btn tools-select-all"
+                    onClick={() => setDestBankIndices([])}
+                  >
+                    None
+                  </button>
+                  <button
+                    className="tools-multi-btn bank-btn tools-select-all"
+                    onClick={() => selectAllIndices(16, setDestBankIndices)}
+                  >
+                    All
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Bank selector for copy_parts - single select */}
+          {operation === "copy_parts" && (
             <div className="tools-field">
               <label>Bank</label>
               <div className="tools-multi-select banks-stacked">
@@ -1576,7 +1632,17 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         <button
           className="tools-execute-btn"
           onClick={executeOperation}
-          disabled={isExecuting || (operation === "copy_parts" && sourcePartIndices.length !== destPartIndices.length) || (operation === "copy_tracks" && sourceTrackIndices.length !== destTrackIndices.length) || (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1)}
+          disabled={isExecuting || (operation === "copy_bank" && sourceBankIndex === -1) || (operation === "copy_bank" && destBankIndices.length === 0) || (operation === "copy_parts" && sourcePartIndices.length !== destPartIndices.length) || (operation === "copy_tracks" && sourceTrackIndices.length !== destTrackIndices.length) || (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1)}
+          title={
+            isExecuting ? "Operation in progress..." :
+            (operation === "copy_bank" && sourceBankIndex === -1 && destBankIndices.length === 0) ? "Select source and destination banks" :
+            (operation === "copy_bank" && sourceBankIndex === -1) ? "Select a source bank" :
+            (operation === "copy_bank" && destBankIndices.length === 0) ? "Select at least one destination bank" :
+            (operation === "copy_parts" && sourcePartIndices.length !== destPartIndices.length) ? "Source and destination part count must match" :
+            (operation === "copy_tracks" && sourceTrackIndices.length !== destTrackIndices.length) ? "Source and destination track count must match" :
+            (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1) ? "Select a destination part" :
+            undefined
+          }
         >
           {isExecuting ? (
             <>

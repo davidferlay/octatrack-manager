@@ -450,6 +450,119 @@ test.describe('Tools Tab - Destination Panel', () => {
   })
 })
 
+test.describe('Tools Tab - Copy Banks Options', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
+    await toolsTab.click()
+    await page.waitForTimeout(500)
+
+    // Copy Banks is selected by default, but ensure it
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('copy_bank')
+    await page.waitForTimeout(300)
+  })
+
+  test('Destination panel has Banks label (plural) for multi-select', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const banksLabel = destPanel.locator('.tools-field label', { hasText: 'Banks' })
+    await expect(banksLabel).toBeVisible()
+  })
+
+  test('Source bank can be deselected by clicking it again', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+
+    // Bank A should be selected by default (first loaded bank)
+    const bankA = sourcePanel.locator('.tools-multi-btn.bank-btn', { hasText: /^A$/ })
+    await expect(bankA).toHaveClass(/selected/)
+
+    // Click bank A to deselect it
+    await bankA.click()
+    await page.waitForTimeout(200)
+
+    // Bank A should no longer be selected
+    await expect(bankA).not.toHaveClass(/selected/)
+
+    // Execute button should be disabled
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+  })
+
+  test('Destination banks selector allows multiple selection', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+
+    // Use exact text match to avoid matching "All" button
+    const bankA = destPanel.locator('.tools-multi-btn.bank-btn', { hasText: /^A$/ })
+    const bankB = destPanel.locator('.tools-multi-btn.bank-btn', { hasText: /^B$/ })
+
+    // Bank A should be selected by default
+    await expect(bankA).toHaveClass(/selected/)
+
+    // Click bank B to add it to selection
+    await bankB.click()
+    await page.waitForTimeout(200)
+
+    // Both A and B should be selected
+    await expect(bankA).toHaveClass(/selected/)
+    await expect(bankB).toHaveClass(/selected/)
+  })
+
+  test('Destination banks has All button to select all banks', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const allButton = destPanel.locator('.tools-multi-btn.tools-select-all', { hasText: 'All' })
+    await expect(allButton).toBeVisible()
+
+    // Click All button
+    await allButton.click()
+    await page.waitForTimeout(200)
+
+    // All 16 banks should be selected
+    const selectedBanks = destPanel.locator('.tools-multi-btn.bank-btn.selected')
+    await expect(selectedBanks).toHaveCount(16)
+  })
+
+  test('Destination banks has None button to deselect all banks', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const noneButton = destPanel.locator('.tools-multi-btn.tools-select-all', { hasText: 'None' })
+    await expect(noneButton).toBeVisible()
+
+    // Click None button
+    await noneButton.click()
+    await page.waitForTimeout(200)
+
+    // No banks should be selected
+    const selectedBanks = destPanel.locator('.tools-multi-btn.bank-btn.selected')
+    await expect(selectedBanks).toHaveCount(0)
+
+    // Execute button should be disabled
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+  })
+
+  test('Clicking selected destination bank deselects it', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+
+    // Use exact text match to avoid matching "All" or "None" buttons
+    const bankA = destPanel.locator('.tools-multi-btn.bank-btn', { hasText: /^A$/ })
+
+    // Bank A should be selected by default
+    await expect(bankA).toHaveClass(/selected/)
+
+    // Click bank A to deselect it
+    await bankA.click()
+    await page.waitForTimeout(200)
+
+    // Bank A should no longer be selected
+    await expect(bankA).not.toHaveClass(/selected/)
+
+    // Execute button should be disabled (no destination banks selected)
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+  })
+})
+
 test.describe('Tools Tab - Execute Button', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)

@@ -350,14 +350,14 @@ async fn copy_bank(
     source_project: String,
     source_bank_index: u8,
     dest_project: String,
-    dest_bank_index: u8,
+    dest_bank_indices: Vec<u8>,
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         copy_bank_impl(
             &source_project,
             source_bank_index,
             &dest_project,
-            dest_bank_index,
+            &dest_bank_indices,
         )
     })
     .await
