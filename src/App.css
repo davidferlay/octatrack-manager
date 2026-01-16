@@ -2989,6 +2989,28 @@ h1 {
   font-size: 0.8rem;
 }
 
+/* Stacked layout for Copy Tracks */
+.tools-multi-select.tracks-stacked,
+.tools-multi-select.banks-stacked {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.tools-track-row-buttons {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 0.25rem;
+}
+
+.tools-multi-select.tracks-stacked .tools-multi-btn.track-btn,
+.tools-multi-select.banks-stacked .tools-multi-btn.bank-btn {
+  width: 100%;
+  min-width: unset;
+  padding: 0.5rem 0.25rem;
+  font-size: 0.85rem;
+}
+
 /* Parts inline layout (Copy Parts) */
 .tools-multi-select.parts-inline {
   display: flex;
