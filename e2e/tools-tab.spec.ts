@@ -472,8 +472,17 @@ test.describe('Tools Tab - Copy Patterns Options', () => {
 
     const trackButtons = page.locator('.tools-options-panel .tools-multi-select.tracks-stacked')
 
-    // T1 should be selected by default
+    // No tracks selected by default
     const t1Button = trackButtons.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })
+    await expect(t1Button).not.toHaveClass(/selected/)
+
+    // Execute button should be disabled (no tracks selected)
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+
+    // Select T1
+    await t1Button.click()
+    await page.waitForTimeout(200)
     await expect(t1Button).toHaveClass(/selected/)
 
     // Deselect T1
@@ -486,7 +495,6 @@ test.describe('Tools Tab - Copy Patterns Options', () => {
     await expect(selectedTracks).toHaveCount(0)
 
     // Execute button should be disabled
-    const executeBtn = page.locator('.tools-execute-btn')
     await expect(executeBtn).toBeDisabled()
   })
 })
@@ -515,15 +523,443 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
     const toggleGroup = copyModeField.locator('.tools-toggle-group')
     const buttons = toggleGroup.locator('.tools-toggle-btn')
 
-    // Verify order: Part Params, Both, Pattern Triggers
-    await expect(buttons.nth(0)).toHaveText('Part Params')
+    // Verify order: Part Parameters, Both, Pattern Triggers
+    await expect(buttons.nth(0)).toHaveText('Part Parameters')
     await expect(buttons.nth(1)).toHaveText('Both')
     await expect(buttons.nth(2)).toHaveText('Pattern Triggers')
   })
 
-  test('Both is selected by default', async ({ page }) => {
-    const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
-    await expect(bothBtn).toHaveClass(/selected/)
+  test('Part Parameters is selected by default', async ({ page }) => {
+    const partParamsBtn = page.locator('.tools-toggle-btn', { hasText: 'Part Parameters' })
+    await expect(partParamsBtn).toHaveClass(/selected/)
+  })
+
+  test('No source tracks selected by default', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const selectedTracks = sourcePanel.locator('.tools-multi-btn.track-btn.selected')
+    await expect(selectedTracks).toHaveCount(0)
+  })
+
+  test('No destination tracks selected by default', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const selectedTracks = destPanel.locator('.tools-multi-btn.track-btn.selected')
+    await expect(selectedTracks).toHaveCount(0)
+  })
+
+  test('Source Part 1 is selected by default', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const part1 = sourcePanel.locator('.tools-toggle-btn.part-btn', { hasText: /^1$/ })
+    await expect(part1).toHaveClass(/selected/)
+  })
+
+  test('Destination Part 1 is selected by default', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const part1 = destPanel.locator('.tools-toggle-btn.part-btn', { hasText: /^1$/ })
+    await expect(part1).toHaveClass(/selected/)
+  })
+
+  test('Execute button disabled when no tracks selected', async ({ page }) => {
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+  })
+
+  test('Source track selection is single-select', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const t1 = sourcePanel.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })
+    const t2 = sourcePanel.locator('.tools-multi-btn.track-btn', { hasText: 'T2' })
+
+    // Click T1 to select it
+    await t1.click()
+    await page.waitForTimeout(200)
+    await expect(t1).toHaveClass(/selected/)
+
+    // Click T2 - should switch selection
+    await t2.click()
+    await page.waitForTimeout(200)
+    await expect(t2).toHaveClass(/selected/)
+    await expect(t1).not.toHaveClass(/selected/)
+  })
+
+  test('Source track can be deselected by clicking it again', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const t1 = sourcePanel.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })
+
+    // Click T1 to select it
+    await t1.click()
+    await page.waitForTimeout(200)
+    await expect(t1).toHaveClass(/selected/)
+
+    // Click T1 again to deselect
+    await t1.click()
+    await page.waitForTimeout(200)
+    await expect(t1).not.toHaveClass(/selected/)
+  })
+
+  test('Selecting Audio source track disables MIDI source tracks', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const t1 = sourcePanel.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })
+
+    // First select destination MIDI track to lock source type
+    const destPanel = page.locator('.tools-dest-panel')
+    const destM1 = destPanel.locator('.tools-multi-btn.track-btn', { hasText: 'M1' })
+    await destM1.click()
+    await page.waitForTimeout(200)
+
+    // Source Audio tracks should be disabled
+    await expect(t1).toHaveClass(/disabled/)
+  })
+
+  test('Selecting MIDI source track disables Audio source tracks', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const m1 = sourcePanel.locator('.tools-multi-btn.track-btn', { hasText: 'M1' })
+
+    // First select destination Audio track to lock source type
+    const destPanel = page.locator('.tools-dest-panel')
+    const destT1 = destPanel.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })
+    await destT1.click()
+    await page.waitForTimeout(200)
+
+    // Source MIDI tracks should be disabled
+    await expect(m1).toHaveClass(/disabled/)
+  })
+
+  test('Destination tracks allow multi-select when source is single track', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+
+    // Select source T1
+    const sourceT1 = sourcePanel.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })
+    await sourceT1.click()
+    await page.waitForTimeout(200)
+
+    // Select multiple destination Audio tracks
+    const destT1 = destPanel.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })
+    const destT2 = destPanel.locator('.tools-multi-btn.track-btn', { hasText: 'T2' })
+    const destT3 = destPanel.locator('.tools-multi-btn.track-btn', { hasText: 'T3' })
+
+    await destT1.click()
+    await page.waitForTimeout(200)
+    await destT2.click()
+    await page.waitForTimeout(200)
+    await destT3.click()
+    await page.waitForTimeout(200)
+
+    // All three should be selected
+    await expect(destT1).toHaveClass(/selected/)
+    await expect(destT2).toHaveClass(/selected/)
+    await expect(destT3).toHaveClass(/selected/)
+  })
+
+  test('Destination MIDI tracks disabled when source Audio track selected', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+
+    // Select source T1 (Audio)
+    const sourceT1 = sourcePanel.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })
+    await sourceT1.click()
+    await page.waitForTimeout(200)
+
+    // Destination MIDI tracks should be disabled
+    const destM1 = destPanel.locator('.tools-multi-btn.track-btn', { hasText: 'M1' })
+    await expect(destM1).toHaveClass(/disabled/)
+  })
+
+  test('Destination Audio tracks disabled when source MIDI track selected', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+
+    // Select source M1 (MIDI)
+    const sourceM1 = sourcePanel.locator('.tools-multi-btn.track-btn', { hasText: 'M1' })
+    await sourceM1.click()
+    await page.waitForTimeout(200)
+
+    // Destination Audio tracks should be disabled
+    const destT1 = destPanel.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })
+    await expect(destT1).toHaveClass(/disabled/)
+  })
+
+  test('Source All Audio button selects all 8 Audio tracks', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const allAudioBtn = sourcePanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'All Audio' })
+
+    await allAudioBtn.click()
+    await page.waitForTimeout(200)
+
+    // All 8 audio tracks should be selected
+    const selectedAudio = sourcePanel.locator('.tools-multi-btn.track-btn.selected').filter({ hasText: /^T[1-8]$/ })
+    await expect(selectedAudio).toHaveCount(8)
+  })
+
+  test('Source All MIDI button selects all 8 MIDI tracks', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const allMidiBtn = sourcePanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'All MIDI' })
+
+    await allMidiBtn.click()
+    await page.waitForTimeout(200)
+
+    // All 8 MIDI tracks should be selected
+    const selectedMidi = sourcePanel.locator('.tools-multi-btn.track-btn.selected').filter({ hasText: /^M[1-8]$/ })
+    await expect(selectedMidi).toHaveCount(8)
+  })
+
+  test('Source All Audio syncs destination to All Audio', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+    const sourceAllAudio = sourcePanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'All Audio' })
+
+    await sourceAllAudio.click()
+    await page.waitForTimeout(200)
+
+    // Destination should also have all 8 Audio tracks selected
+    const destSelectedAudio = destPanel.locator('.tools-multi-btn.track-btn.selected').filter({ hasText: /^T[1-8]$/ })
+    await expect(destSelectedAudio).toHaveCount(8)
+  })
+
+  test('Source All MIDI syncs destination to All MIDI', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+    const sourceAllMidi = sourcePanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'All MIDI' })
+
+    await sourceAllMidi.click()
+    await page.waitForTimeout(200)
+
+    // Destination should also have all 8 MIDI tracks selected
+    const destSelectedMidi = destPanel.locator('.tools-multi-btn.track-btn.selected').filter({ hasText: /^M[1-8]$/ })
+    await expect(destSelectedMidi).toHaveCount(8)
+  })
+
+  test('Deselecting source All Audio clears both source and destination', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+    const sourceAllAudio = sourcePanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'All Audio' })
+
+    // Select All Audio
+    await sourceAllAudio.click()
+    await page.waitForTimeout(200)
+
+    // Deselect by clicking again
+    await sourceAllAudio.click()
+    await page.waitForTimeout(200)
+
+    // No source tracks should be selected
+    const sourceSelected = sourcePanel.locator('.tools-multi-btn.track-btn.selected').filter({ hasText: /^[TM][1-8]$/ })
+    await expect(sourceSelected).toHaveCount(0)
+
+    // No destination tracks should be selected
+    const destSelected = destPanel.locator('.tools-multi-btn.track-btn.selected').filter({ hasText: /^[TM][1-8]$/ })
+    await expect(destSelected).toHaveCount(0)
+  })
+
+  test('Destination tracks are disabled when source All Audio is selected', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+    const sourceAllAudio = sourcePanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'All Audio' })
+
+    await sourceAllAudio.click()
+    await page.waitForTimeout(200)
+
+    // Destination track buttons should have disabled class
+    const destT1 = destPanel.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })
+    await expect(destT1).toHaveClass(/disabled/)
+
+    // Destination tracks container should have disabled class
+    const destTracksContainer = destPanel.locator('.tools-multi-select.tracks-stacked')
+    await expect(destTracksContainer).toHaveClass(/disabled/)
+  })
+
+  test('Destination All Audio and All MIDI buttons are disabled when source All is selected', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+    const sourceAllAudio = sourcePanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'All Audio' })
+
+    await sourceAllAudio.click()
+    await page.waitForTimeout(200)
+
+    const destAllAudio = destPanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'All Audio' })
+    const destAllMidi = destPanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'All MIDI' })
+    const destNone = destPanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'None' })
+
+    await expect(destAllAudio).toBeDisabled()
+    await expect(destAllMidi).toBeDisabled()
+    await expect(destNone).toBeDisabled()
+  })
+
+  test('Source All Audio button is disabled when destination has MIDI tracks', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+
+    // First select a source MIDI track, then a destination MIDI track
+    const sourceM1 = sourcePanel.locator('.tools-multi-btn.track-btn', { hasText: 'M1' })
+    await sourceM1.click()
+    await page.waitForTimeout(200)
+
+    const destM1 = destPanel.locator('.tools-multi-btn.track-btn', { hasText: 'M1' })
+    await destM1.click()
+    await page.waitForTimeout(200)
+
+    // Deselect source to make All buttons available
+    await sourceM1.click()
+    await page.waitForTimeout(200)
+
+    // All Audio should be disabled because dest has MIDI
+    const sourceAllAudio = sourcePanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'All Audio' })
+    await expect(sourceAllAudio).toBeDisabled()
+  })
+
+  test('Destination None button deselects all tracks', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+
+    // Select source T1
+    const sourceT1 = sourcePanel.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })
+    await sourceT1.click()
+    await page.waitForTimeout(200)
+
+    // Select multiple destination tracks
+    const destT1 = destPanel.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })
+    const destT2 = destPanel.locator('.tools-multi-btn.track-btn', { hasText: 'T2' })
+    await destT1.click()
+    await page.waitForTimeout(200)
+    await destT2.click()
+    await page.waitForTimeout(200)
+
+    // Click None button
+    const destNone = destPanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'None' })
+    await destNone.click()
+    await page.waitForTimeout(200)
+
+    // No destination tracks should be selected
+    const destSelected = destPanel.locator('.tools-multi-btn.track-btn.selected').filter({ hasText: /^[TM][1-8]$/ })
+    await expect(destSelected).toHaveCount(0)
+  })
+
+  test('Source Part All button syncs destination to All', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+    const sourceAllPart = sourcePanel.locator('.tools-toggle-btn.part-btn.part-all')
+
+    await sourceAllPart.click()
+    await page.waitForTimeout(200)
+
+    // Source All should be selected
+    await expect(sourceAllPart).toHaveClass(/selected/)
+
+    // Destination All should also be selected
+    const destAllPart = destPanel.locator('.tools-toggle-btn.part-btn.part-all')
+    await expect(destAllPart).toHaveClass(/selected/)
+  })
+
+  test('Destination Parts are disabled when source All is selected', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+    const sourceAllPart = sourcePanel.locator('.tools-toggle-btn.part-btn.part-all')
+
+    await sourceAllPart.click()
+    await page.waitForTimeout(200)
+
+    // Destination part buttons should be disabled
+    const destPart1 = destPanel.locator('.tools-toggle-btn.part-btn', { hasText: /^1$/ })
+    await expect(destPart1).toBeDisabled()
+
+    // Destination part cross should have disabled class
+    const destPartCross = destPanel.locator('.tools-part-cross')
+    await expect(destPartCross).toHaveClass(/disabled/)
+  })
+
+  test('Deselecting source All Part clears both source and destination parts', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+    const sourceAllPart = sourcePanel.locator('.tools-toggle-btn.part-btn.part-all')
+
+    // Select All
+    await sourceAllPart.click()
+    await page.waitForTimeout(200)
+
+    // Deselect by clicking again
+    await sourceAllPart.click()
+    await page.waitForTimeout(200)
+
+    // No source parts should be selected
+    const sourceSelectedParts = sourcePanel.locator('.tools-toggle-btn.part-btn.selected')
+    await expect(sourceSelectedParts).toHaveCount(0)
+
+    // No destination parts should be selected
+    const destSelectedParts = destPanel.locator('.tools-toggle-btn.part-btn.selected')
+    await expect(destSelectedParts).toHaveCount(0)
+  })
+
+  test('Track buttons have correct tooltips', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+
+    // Check audio track tooltip
+    const t1Button = sourcePanel.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })
+    await expect(t1Button).toHaveAttribute('title', 'Audio Track 1')
+
+    // Check MIDI track tooltip
+    const m1Button = sourcePanel.locator('.tools-multi-btn.track-btn', { hasText: 'M1' })
+    await expect(m1Button).toHaveAttribute('title', 'MIDI Track 1')
+  })
+
+  test('Part buttons have correct tooltips', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+
+    // Check part 1 tooltip
+    const part1 = sourcePanel.locator('.tools-toggle-btn.part-btn', { hasText: /^1$/ })
+    await expect(part1).toHaveAttribute('title', 'Part 1')
+
+    // Check All button tooltip
+    const allPart = sourcePanel.locator('.tools-toggle-btn.part-btn.part-all')
+    await expect(allPart).toHaveAttribute('title', 'Select all Parts')
+  })
+
+  test('Destination Part buttons show sync tooltip when source All is selected', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+    const sourceAllPart = sourcePanel.locator('.tools-toggle-btn.part-btn.part-all')
+
+    await sourceAllPart.click()
+    await page.waitForTimeout(200)
+
+    // Destination part buttons should show sync tooltip
+    const destPart1 = destPanel.locator('.tools-toggle-btn.part-btn', { hasText: /^1$/ })
+    await expect(destPart1).toHaveAttribute('title', 'Synced with source All selection')
+  })
+
+  test('Clicking single source Part when All is selected switches to single mode', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+    const sourceAllPart = sourcePanel.locator('.tools-toggle-btn.part-btn.part-all')
+    const sourcePart2 = sourcePanel.locator('.tools-toggle-btn.part-btn', { hasText: /^2$/ })
+
+    // First select All
+    await sourceAllPart.click()
+    await page.waitForTimeout(200)
+
+    // All should be selected
+    await expect(sourceAllPart).toHaveClass(/selected/)
+
+    // Click part 2 to switch to single mode
+    await sourcePart2.click()
+    await page.waitForTimeout(200)
+
+    // Only part 2 should be selected, All should be deselected
+    await expect(sourcePart2).toHaveClass(/selected/)
+    await expect(sourceAllPart).not.toHaveClass(/selected/)
+
+    // Destination parts should no longer be disabled
+    const destPart1 = destPanel.locator('.tools-toggle-btn.part-btn', { hasText: /^1$/ })
+    await expect(destPart1).not.toBeDisabled()
+  })
+
+  test('Selected All Audio/MIDI buttons have correct styling (solid orange)', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const sourceAllAudio = sourcePanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'All Audio' })
+
+    await sourceAllAudio.click()
+    await page.waitForTimeout(200)
+
+    // All Audio button should have selected class
+    await expect(sourceAllAudio).toHaveClass(/selected/)
   })
 })
 
@@ -619,8 +1055,8 @@ test.describe('Tools Tab - Copy Banks Options', () => {
     await allButton.click()
     await page.waitForTimeout(200)
 
-    // All 16 banks should be selected
-    const selectedBanks = destPanel.locator('.tools-multi-btn.bank-btn.selected')
+    // All 16 banks should be selected (exclude All/None buttons)
+    const selectedBanks = destPanel.locator('.tools-multi-btn.bank-btn.selected:not(.tools-select-all)')
     await expect(selectedBanks).toHaveCount(16)
   })
 
