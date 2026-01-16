@@ -1025,7 +1025,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       <button
                         type="button"
                         className={`tools-toggle-btn part-btn ${destPart === 0 ? "selected" : ""}`}
-                        onClick={() => setDestPart(0)}
+                        onClick={() => setDestPart(destPart === 0 ? -1 : 0)}
                       >
                         1
                       </button>
@@ -1034,7 +1034,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       <button
                         type="button"
                         className={`tools-toggle-btn part-btn ${destPart === 3 ? "selected" : ""}`}
-                        onClick={() => setDestPart(3)}
+                        onClick={() => setDestPart(destPart === 3 ? -1 : 3)}
                       >
                         4
                       </button>
@@ -1042,7 +1042,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       <button
                         type="button"
                         className={`tools-toggle-btn part-btn ${destPart === 1 ? "selected" : ""}`}
-                        onClick={() => setDestPart(1)}
+                        onClick={() => setDestPart(destPart === 1 ? -1 : 1)}
                       >
                         2
                       </button>
@@ -1051,7 +1051,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       <button
                         type="button"
                         className={`tools-toggle-btn part-btn ${destPart === 2 ? "selected" : ""}`}
-                        onClick={() => setDestPart(2)}
+                        onClick={() => setDestPart(destPart === 2 ? -1 : 2)}
                       >
                         3
                       </button>
@@ -1083,26 +1083,26 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               {trackMode === "specific" && (
                 <div className="tools-field">
                   <label>Tracks</label>
-                  <div className="tools-multi-select tracks-inline">
-                    <div className="tools-track-row">
-                      <span className="tools-track-label">Audio:</span>
+                  <div className="tools-multi-select tracks-stacked">
+                    <div className="tools-track-row-buttons">
                       {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
                         <button
                           key={idx}
                           className={`tools-multi-btn track-btn ${sourceTrackIndices.includes(idx) ? "selected" : ""}`}
                           onClick={() => toggleIndex(sourceTrackIndices, idx, setSourceTrackIndices)}
+                          title={`Audio Track ${idx + 1}`}
                         >
                           T{idx + 1}
                         </button>
                       ))}
                     </div>
-                    <div className="tools-track-row">
-                      <span className="tools-track-label">MIDI:</span>
+                    <div className="tools-track-row-buttons">
                       {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
                         <button
                           key={idx}
                           className={`tools-multi-btn track-btn ${sourceTrackIndices.includes(idx) ? "selected" : ""}`}
                           onClick={() => toggleIndex(sourceTrackIndices, idx, setSourceTrackIndices)}
+                          title={`MIDI Track ${idx - 7}`}
                         >
                           M{idx - 7}
                         </button>
