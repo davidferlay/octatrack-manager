@@ -3433,10 +3433,10 @@ h1 {
 .project-selector-header-row {
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 2rem;
   margin-bottom: 1.5rem;
-  padding-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--elektron-border-gray);
 }
 
@@ -3447,7 +3447,7 @@ h1 {
 .project-selector-left-group {
   display: flex;
   gap: 0.75rem;
-  align-items: flex-end;
+  align-items: flex-start;
 }
 
 .project-selector-current {
