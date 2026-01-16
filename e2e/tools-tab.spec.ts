@@ -244,7 +244,7 @@ test.describe('Tools Tab - Operation Selector', () => {
     await expect(operationSelect).toBeVisible()
 
     // Check all options are present
-    await expect(operationSelect.locator('option[value="copy_bank"]')).toHaveText('Copy Bank')
+    await expect(operationSelect.locator('option[value="copy_bank"]')).toHaveText('Copy Banks')
     await expect(operationSelect.locator('option[value="copy_parts"]')).toHaveText('Copy Parts')
     await expect(operationSelect.locator('option[value="copy_patterns"]')).toHaveText('Copy Patterns')
     await expect(operationSelect.locator('option[value="copy_tracks"]')).toHaveText('Copy Tracks')

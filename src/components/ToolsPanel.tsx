@@ -501,7 +501,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           value={operation}
           onChange={(e) => setOperation(e.target.value as OperationType)}
         >
-          <option value="copy_bank">Copy Bank</option>
+          <option value="copy_bank">Copy Banks</option>
           <option value="copy_parts">Copy Parts</option>
           <option value="copy_patterns">Copy Patterns</option>
           <option value="copy_tracks">Copy Tracks</option>
@@ -518,9 +518,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           {(operation === "copy_bank" || operation === "copy_parts") && (
             <div className="tools-field">
               <label>Bank</label>
-              <div className="tools-multi-select banks-inline">
-                <div className="tools-bank-row">
-                  <span className="tools-track-label">Bank:</span>
+              <div className="tools-multi-select banks-stacked">
+                <div className="tools-track-row-buttons">
                   {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
                     <button
                       key={idx}
@@ -534,8 +533,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     </button>
                   ))}
                 </div>
-                <div className="tools-bank-row">
-                  <span className="tools-track-label"></span>
+                <div className="tools-track-row-buttons">
                   {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
                     <button
                       key={idx}
@@ -1140,7 +1138,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             </>
           )}
 
-          {/* Copy Bank - no extra options */}
+          {/* Copy Banks - no extra options */}
           {operation === "copy_bank" && (
             <div className="tools-info">
               <p>Copies entire bank including all 4 Parts and 16 Patterns.</p>
@@ -1183,28 +1181,28 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           {(operation === "copy_bank" || operation === "copy_parts") && (
             <div className="tools-field">
               <label>Bank</label>
-              <div className="tools-multi-select banks-inline">
-                <div className="tools-bank-row">
-                  <span className="tools-track-label">Banks:</span>
+              <div className="tools-multi-select banks-stacked">
+                <div className="tools-track-row-buttons">
                   {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
                     <button
                       key={idx}
                       type="button"
                       className={`tools-multi-btn bank-btn ${destBankIndex === idx ? "selected" : ""}`}
                       onClick={() => setDestBankIndex(idx)}
+                      title={`Bank ${String.fromCharCode(65 + idx)}`}
                     >
                       {String.fromCharCode(65 + idx)}
                     </button>
                   ))}
                 </div>
-                <div className="tools-bank-row">
-                  <span className="tools-track-label"></span>
+                <div className="tools-track-row-buttons">
                   {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
                     <button
                       key={idx}
                       type="button"
                       className={`tools-multi-btn bank-btn ${destBankIndex === idx ? "selected" : ""}`}
                       onClick={() => setDestBankIndex(idx)}
+                      title={`Bank ${String.fromCharCode(65 + idx)}`}
                     >
                       {String.fromCharCode(65 + idx)}
                     </button>
