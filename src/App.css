@@ -3024,6 +3024,7 @@ h1 {
 
 .tools-select-actions .tools-multi-btn.tools-select-all {
   flex: 1;
+  height: 32px;
 }
 
 /* Parts inline layout (Copy Parts) */
@@ -3116,6 +3117,36 @@ h1 {
   color: #000;
 }
 
+/* Disabled track buttons when All mode is active */
+.tools-multi-select.tracks-stacked.disabled .tools-track-row-buttons .tools-multi-btn.track-btn {
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.tools-multi-select.tracks-stacked.disabled .tools-track-row-buttons .tools-multi-btn.track-btn.selected {
+  background-color: var(--elektron-orange);
+  border-color: var(--elektron-orange);
+  color: #000;
+}
+
+.tools-multi-select.tracks-stacked.disabled .tools-track-row-buttons .tools-multi-btn.track-btn:hover {
+  background-color: var(--elektron-orange);
+  border-color: var(--elektron-orange);
+  color: #000;
+}
+
+.tools-multi-btn.track-btn.disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.tools-multi-btn.track-btn.disabled.selected {
+  opacity: 1;
+  background-color: var(--elektron-orange);
+  border-color: var(--elektron-orange);
+  color: #000;
+}
+
 .tools-part-cross-spacer {
   display: inline-block;
   min-width: 36px;
@@ -3184,6 +3215,19 @@ h1 {
   background-color: rgba(255, 138, 0, 0.1);
   border-color: var(--elektron-orange);
   color: var(--elektron-orange);
+}
+
+.tools-multi-btn.tools-select-all.selected {
+  background-color: var(--elektron-orange);
+  border-color: var(--elektron-orange);
+  border-style: solid;
+  color: #000;
+}
+
+.tools-multi-btn.tools-select-all.selected:hover {
+  background-color: var(--elektron-orange);
+  border-color: var(--elektron-orange);
+  color: #000;
 }
 
 .tools-slot-range {
