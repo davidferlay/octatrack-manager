@@ -3702,6 +3702,7 @@ h1 {
   display: flex;
   align-items: baseline;
   gap: 0.25rem;
+  margin-left: 0.5rem;
 }
 
 .tools-slot-count-number {
@@ -3709,11 +3710,15 @@ h1 {
   font-weight: 700;
   color: var(--elektron-text-primary);
   font-family: 'Courier New', monospace;
+  min-width: 2.2rem;
+  text-align: right;
 }
 
 .tools-slot-count-label {
-  font-size: 0.75rem;
-  color: var(--elektron-text-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--elektron-text-primary);
+  text-transform: lowercase;
 }
 
 .tools-slot-all-btn {
@@ -3726,6 +3731,10 @@ h1 {
   color: var(--elektron-text-secondary);
   cursor: pointer;
   transition: all 0.15s;
+}
+
+.tools-slot-header .tools-slot-all-btn:first-of-type {
+  margin-left: auto;
 }
 
 .tools-slot-all-btn:hover {
