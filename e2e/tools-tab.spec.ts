@@ -388,6 +388,82 @@ test.describe('Tools Tab - Copy Patterns Options', () => {
     const allTracksBtn = page.locator('.tools-toggle-btn', { hasText: 'All Tracks' })
     await expect(allTracksBtn).toHaveClass(/selected/)
   })
+
+  test('User Selection shows Destination Part selector', async ({ page }) => {
+    const userSelectionBtn = page.locator('.tools-toggle-btn', { hasText: 'User Selection' })
+    await userSelectionBtn.click()
+    await page.waitForTimeout(200)
+
+    // Destination Part selector should be visible
+    await expect(page.getByText('Destination Part')).toBeVisible()
+
+    // Part buttons should be visible
+    const partCross = page.locator('.tools-options-panel .tools-part-cross')
+    await expect(partCross.locator('.tools-toggle-btn.part-btn', { hasText: /^1$/ })).toBeVisible()
+    await expect(partCross.locator('.tools-toggle-btn.part-btn', { hasText: /^2$/ })).toBeVisible()
+    await expect(partCross.locator('.tools-toggle-btn.part-btn', { hasText: /^3$/ })).toBeVisible()
+    await expect(partCross.locator('.tools-toggle-btn.part-btn', { hasText: /^4$/ })).toBeVisible()
+  })
+
+  test('Destination Part supports click-to-deselect', async ({ page }) => {
+    const userSelectionBtn = page.locator('.tools-toggle-btn', { hasText: 'User Selection' })
+    await userSelectionBtn.click()
+    await page.waitForTimeout(200)
+
+    const partCross = page.locator('.tools-options-panel .tools-part-cross')
+    const part1 = partCross.locator('.tools-toggle-btn.part-btn', { hasText: /^1$/ })
+
+    // Click part 1 to select it
+    await part1.click()
+    await page.waitForTimeout(200)
+    await expect(part1).toHaveClass(/selected/)
+
+    // Click part 1 again to deselect
+    await part1.click()
+    await page.waitForTimeout(200)
+    await expect(part1).not.toHaveClass(/selected/)
+
+    // Execute button should be disabled (no destination part selected)
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+  })
+
+  test('Specific Tracks shows track buttons in stacked layout', async ({ page }) => {
+    const specificTracksBtn = page.locator('.tools-toggle-btn', { hasText: 'Specific Tracks' })
+    await specificTracksBtn.click()
+    await page.waitForTimeout(200)
+
+    // Tracks field label should be visible
+    await expect(page.locator('.tools-options-panel .tools-field label', { hasText: /^Tracks$/ })).toBeVisible()
+
+    // Track buttons should be in stacked layout
+    const trackButtons = page.locator('.tools-options-panel .tools-multi-select.tracks-stacked')
+    await expect(trackButtons).toBeVisible()
+
+    // Audio tracks T1-T8 should be visible
+    await expect(trackButtons.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })).toBeVisible()
+    await expect(trackButtons.locator('.tools-multi-btn.track-btn', { hasText: 'T8' })).toBeVisible()
+
+    // MIDI tracks M1-M8 should be visible
+    await expect(trackButtons.locator('.tools-multi-btn.track-btn', { hasText: 'M1' })).toBeVisible()
+    await expect(trackButtons.locator('.tools-multi-btn.track-btn', { hasText: 'M8' })).toBeVisible()
+  })
+
+  test('Track buttons have correct tooltips', async ({ page }) => {
+    const specificTracksBtn = page.locator('.tools-toggle-btn', { hasText: 'Specific Tracks' })
+    await specificTracksBtn.click()
+    await page.waitForTimeout(200)
+
+    const trackButtons = page.locator('.tools-options-panel .tools-multi-select.tracks-stacked')
+
+    // Check audio track tooltip
+    const t1Button = trackButtons.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })
+    await expect(t1Button).toHaveAttribute('title', 'Audio Track 1')
+
+    // Check MIDI track tooltip
+    const m1Button = trackButtons.locator('.tools-multi-btn.track-btn', { hasText: 'M1' })
+    await expect(m1Button).toHaveAttribute('title', 'MIDI Track 1')
+  })
 })
 
 test.describe('Tools Tab - Copy Tracks Options', () => {
