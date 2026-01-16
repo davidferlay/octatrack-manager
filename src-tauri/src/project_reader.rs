@@ -3340,7 +3340,10 @@ pub fn copy_bank(
 
     for &dest_bank_index in dest_bank_indices {
         if dest_bank_index > 15 {
-            return Err(format!("Destination bank index {} must be between 0 and 15", dest_bank_index));
+            return Err(format!(
+                "Destination bank index {} must be between 0 and 15",
+                dest_bank_index
+            ));
         }
     }
 
@@ -3378,9 +3381,12 @@ pub fn copy_bank(
         let dest_bank_path = dest_path.join(&dest_bank_file);
 
         // Write the bank to destination
-        bank_data
-            .to_data_file(&dest_bank_path)
-            .map_err(|e| format!("Failed to write destination bank {}: {:?}", dest_bank_index, e))?;
+        bank_data.to_data_file(&dest_bank_path).map_err(|e| {
+            format!(
+                "Failed to write destination bank {}: {:?}",
+                dest_bank_index, e
+            )
+        })?;
 
         println!(
             "[DEBUG] Copied bank {} from {} to bank {} in {}",
@@ -3401,7 +3407,7 @@ pub fn copy_bank(
 /// * `dest_project` - Path to the destination project
 /// * `dest_bank_index` - Destination bank index (0-15)
 /// * `dest_part_indices` - Where to place them. If source is 1 part, dest can be multiple (1-to-many).
-///                         If source is all 4 parts, dest must also be all 4 (1-to-1 mapping).
+///   If source is all 4 parts, dest must also be all 4 (1-to-1 mapping).
 pub fn copy_parts(
     source_project: &str,
     source_bank_index: u8,
@@ -3415,7 +3421,9 @@ pub fn copy_parts(
     }
 
     // Validate: source must be either 1 part or all 4 parts
-    if source_part_indices.is_empty() || (source_part_indices.len() != 1 && source_part_indices.len() != 4) {
+    if source_part_indices.is_empty()
+        || (source_part_indices.len() != 1 && source_part_indices.len() != 4)
+    {
         return Err("Source must be either 1 part or all 4 parts".to_string());
     }
 
@@ -3558,8 +3566,13 @@ pub fn copy_patterns(
     // Validate source/dest pattern count relationship
     // Either: 1 source to many dest (1-to-many copy)
     // Or: N source to N dest (1-to-1 copy, typically all 16)
-    if source_pattern_indices.len() != 1 && source_pattern_indices.len() != dest_pattern_indices.len() {
-        return Err("When copying multiple source patterns, destination count must match source count".to_string());
+    if source_pattern_indices.len() != 1
+        && source_pattern_indices.len() != dest_pattern_indices.len()
+    {
+        return Err(
+            "When copying multiple source patterns, destination count must match source count"
+                .to_string(),
+        );
     }
 
     if part_assignment_mode == "select_specific" && dest_part.is_none() {
@@ -3656,14 +3669,16 @@ pub fn copy_patterns(
             for &track_idx in indices {
                 if track_idx < 8 {
                     // Audio track (0-7)
-                    dest_bank.patterns.0[dest_pattern_idx as usize].audio_track_trigs.0
-                        [track_idx as usize] =
+                    dest_bank.patterns.0[dest_pattern_idx as usize]
+                        .audio_track_trigs
+                        .0[track_idx as usize] =
                         src_pattern.audio_track_trigs.0[track_idx as usize].clone();
                 } else {
                     // MIDI track (8-15 maps to 0-7 in midi_track_trigs)
                     let midi_idx = (track_idx - 8) as usize;
-                    dest_bank.patterns.0[dest_pattern_idx as usize].midi_track_trigs.0[midi_idx] =
-                        src_pattern.midi_track_trigs.0[midi_idx].clone();
+                    dest_bank.patterns.0[dest_pattern_idx as usize]
+                        .midi_track_trigs
+                        .0[midi_idx] = src_pattern.midi_track_trigs.0[midi_idx].clone();
                 }
             }
             // Update part assignment
@@ -4410,11 +4425,16 @@ mod tests {
 
             // Copy bank 0 to banks 2, 5, and 12 in one call
             let result = copy_bank(&source.path, 0, &dest.path, &[2, 5, 12]);
-            assert!(result.is_ok(), "Multi-destination copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Multi-destination copy should succeed: {:?}",
+                result
+            );
 
             // Verify all 3 destination banks have the copied data
             for dest_idx in [2, 5, 12] {
-                let dest_bank_path = Path::new(&dest.path).join(format!("bank{:02}.work", dest_idx + 1));
+                let dest_bank_path =
+                    Path::new(&dest.path).join(format!("bank{:02}.work", dest_idx + 1));
                 let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
                 assert_eq!(
                     dest_bank.parts_edited_bitmask, 0b1111,
@@ -4434,11 +4454,16 @@ mod tests {
 
             let dest_indices: Vec<u8> = (1..16).collect();
             let result = copy_bank(&source.path, 0, &dest.path, &dest_indices);
-            assert!(result.is_ok(), "Copy to all other banks should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Copy to all other banks should succeed: {:?}",
+                result
+            );
 
             // Verify all destination banks have the copied data
             for dest_idx in 1..16u8 {
-                let dest_bank_path = Path::new(&dest.path).join(format!("bank{:02}.work", dest_idx + 1));
+                let dest_bank_path =
+                    Path::new(&dest.path).join(format!("bank{:02}.work", dest_idx + 1));
                 let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
                 assert_eq!(
                     dest_bank.parts_edited_bitmask, 0b0101,
@@ -4455,7 +4480,11 @@ mod tests {
             let dest = TestProject::new();
 
             let result = copy_bank(&source.path, 0, &dest.path, &[]);
-            assert!(result.is_ok(), "Empty destinations should succeed as no-op: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Empty destinations should succeed as no-op: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -4491,7 +4520,10 @@ mod tests {
             // Verify data is still intact
             let bank_path = Path::new(&project.path).join("bank01.work");
             let bank = BankFile::from_data_file(&bank_path).unwrap();
-            assert_eq!(bank.parts_edited_bitmask, 0b1010, "Data should be preserved after self-copy");
+            assert_eq!(
+                bank.parts_edited_bitmask, 0b1010,
+                "Data should be preserved after self-copy"
+            );
         }
 
         #[test]
@@ -4504,14 +4536,19 @@ mod tests {
 
             let all_banks: Vec<u8> = (0..16).collect();
             let result = copy_bank(&source.path, 0, &dest.path, &all_banks);
-            assert!(result.is_ok(), "Copy to all 16 banks should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Copy to all 16 banks should succeed: {:?}",
+                result
+            );
 
             // Verify all 16 banks have the copied data
             for bank_idx in 0..16u8 {
                 let bank_path = Path::new(&dest.path).join(format!("bank{:02}.work", bank_idx + 1));
                 let bank = BankFile::from_data_file(&bank_path).unwrap();
                 assert_eq!(
-                    bank.parts_edited_bitmask, 0b1111,
+                    bank.parts_edited_bitmask,
+                    0b1111,
                     "Bank {} should have copied data",
                     bank_idx + 1
                 );
@@ -4544,7 +4581,14 @@ mod tests {
             let source = TestProject::new();
             let dest = TestProject::new();
 
-            let result = copy_parts(&source.path, 0, vec![0, 1, 2, 3], &dest.path, 0, vec![0, 1, 2, 3]);
+            let result = copy_parts(
+                &source.path,
+                0,
+                vec![0, 1, 2, 3],
+                &dest.path,
+                0,
+                vec![0, 1, 2, 3],
+            );
             assert!(
                 result.is_ok(),
                 "Multiple parts copy should succeed: {:?}",
@@ -4615,7 +4659,9 @@ mod tests {
                 vec![0, 1, 2], // 3 dest parts - mismatched count
             );
             assert!(result.is_err(), "Mismatched part count should fail");
-            assert!(result.unwrap_err().contains("destination must also be all 4 parts"));
+            assert!(result
+                .unwrap_err()
+                .contains("destination must also be all 4 parts"));
         }
 
         #[test]
@@ -4667,7 +4713,11 @@ mod tests {
 
             // Copy part 0 to parts 1, 2, and 3
             let result = copy_parts(&source.path, 0, vec![0], &dest.path, 0, vec![1, 2, 3]);
-            assert!(result.is_ok(), "1-to-many part copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "1-to-many part copy should succeed: {:?}",
+                result
+            );
 
             // Verify all destination parts are marked as edited
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
@@ -4686,13 +4736,18 @@ mod tests {
 
             // Copy part 0 to all 4 parts
             let result = copy_parts(&source.path, 0, vec![0], &dest.path, 0, vec![0, 1, 2, 3]);
-            assert!(result.is_ok(), "1-to-all part copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "1-to-all part copy should succeed: {:?}",
+                result
+            );
 
             // Verify all destination parts are marked as edited
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
             assert_eq!(
-                dest_bank.parts_edited_bitmask & 0b1111, 0b1111,
+                dest_bank.parts_edited_bitmask & 0b1111,
+                0b1111,
                 "All 4 destination parts should be marked as edited"
             );
         }
@@ -4706,7 +4761,9 @@ mod tests {
             let result = copy_parts(&source.path, 0, vec![0, 1], &dest.path, 0, vec![0, 1]);
             assert!(result.is_err(), "2 source parts should be rejected");
             assert!(
-                result.unwrap_err().contains("must be either 1 part or all 4"),
+                result
+                    .unwrap_err()
+                    .contains("must be either 1 part or all 4"),
                 "Error message should mention valid part counts"
             );
         }
@@ -4720,7 +4777,9 @@ mod tests {
             let result = copy_parts(&source.path, 0, vec![0, 1, 2], &dest.path, 0, vec![0, 1, 2]);
             assert!(result.is_err(), "3 source parts should be rejected");
             assert!(
-                result.unwrap_err().contains("must be either 1 part or all 4"),
+                result
+                    .unwrap_err()
+                    .contains("must be either 1 part or all 4"),
                 "Error message should mention valid part counts"
             );
         }
@@ -5044,7 +5103,9 @@ mod tests {
                 None,
             );
             assert!(result.is_err(), "Pattern overflow should fail");
-            assert!(result.unwrap_err().contains("Destination pattern indices must be between 0 and 15"));
+            assert!(result
+                .unwrap_err()
+                .contains("Destination pattern indices must be between 0 and 15"));
         }
 
         #[test]
@@ -5156,7 +5217,11 @@ mod tests {
                 "all",
                 None,
             );
-            assert!(result.is_ok(), "1-to-many pattern copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "1-to-many pattern copy should succeed: {:?}",
+                result
+            );
 
             // Verify all destination patterns have the copied part assignment
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
@@ -5191,7 +5256,11 @@ mod tests {
                 "all",
                 None,
             );
-            assert!(result.is_ok(), "1-to-all pattern copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "1-to-all pattern copy should succeed: {:?}",
+                result
+            );
 
             // Verify all 16 destination patterns have the copied part assignment
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
@@ -5225,7 +5294,9 @@ mod tests {
                 None,
             );
             assert!(result.is_err(), "Mismatched pattern count should fail");
-            assert!(result.unwrap_err().contains("destination count must match source count"));
+            assert!(result
+                .unwrap_err()
+                .contains("destination count must match source count"));
         }
 
         #[test]
@@ -5246,7 +5317,11 @@ mod tests {
                 "all",
                 None,
             );
-            assert!(result.is_ok(), "Empty patterns should succeed as no-op: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Empty patterns should succeed as no-op: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -5369,7 +5444,11 @@ mod tests {
                 "specific",
                 Some(vec![0, 1, 2, 3, 4, 5, 6, 7]), // All audio tracks
             );
-            assert!(result.is_ok(), "Copy all audio tracks should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Copy all audio tracks should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -5390,7 +5469,11 @@ mod tests {
                 "specific",
                 Some(vec![8, 9, 10, 11, 12, 13, 14, 15]), // All MIDI tracks
             );
-            assert!(result.is_ok(), "Copy all MIDI tracks should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Copy all MIDI tracks should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -5419,7 +5502,8 @@ mod tests {
             // All 16 patterns should be assigned to part 3
             for i in 0..16 {
                 assert_eq!(
-                    dest_bank.patterns.0[i].part_assignment, 3,
+                    dest_bank.patterns.0[i].part_assignment,
+                    3,
                     "Pattern {} should be assigned to part 4 (index 3)",
                     i + 1
                 );
@@ -5435,7 +5519,7 @@ mod tests {
             let result = copy_patterns(
                 &source.path,
                 0,
-                vec![0, 1],     // 2 patterns
+                vec![0, 1], // 2 patterns
                 &dest.path,
                 0,
                 vec![0, 1, 2], // 3 patterns - mismatch
@@ -5902,14 +5986,18 @@ mod tests {
                 &source.path,
                 0,
                 0,
-                vec![0, 1, 2],  // Tracks T1, T2, T3
+                vec![0, 1, 2], // Tracks T1, T2, T3
                 &dest.path,
                 0,
                 0,
-                vec![5, 6, 7],  // Tracks T6, T7, T8
+                vec![5, 6, 7], // Tracks T6, T7, T8
                 "part_params",
             );
-            assert!(result.is_ok(), "Multi-track copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Multi-track copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -5922,14 +6010,18 @@ mod tests {
                 &source.path,
                 0,
                 0,
-                vec![8, 9, 10],  // Tracks M1, M2, M3
+                vec![8, 9, 10], // Tracks M1, M2, M3
                 &dest.path,
                 0,
                 0,
-                vec![13, 14, 15],  // Tracks M6, M7, M8
+                vec![13, 14, 15], // Tracks M6, M7, M8
                 "part_params",
             );
-            assert!(result.is_ok(), "Multi-MIDI-track copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Multi-MIDI-track copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -5942,11 +6034,11 @@ mod tests {
                 &source.path,
                 0,
                 0,
-                vec![0],  // Audio track T1
+                vec![0], // Audio track T1
                 &dest.path,
                 0,
                 0,
-                vec![8],  // MIDI track M1
+                vec![8], // MIDI track M1
                 "part_params",
             );
             assert!(result.is_err(), "Audio to MIDI should fail");
@@ -5966,11 +6058,11 @@ mod tests {
                 &source.path,
                 0,
                 0,
-                vec![8],  // MIDI track M1
+                vec![8], // MIDI track M1
                 &dest.path,
                 0,
                 0,
-                vec![0],  // Audio track T1
+                vec![0], // Audio track T1
                 "part_params",
             );
             assert!(result.is_err(), "MIDI to audio should fail");
@@ -6017,7 +6109,11 @@ mod tests {
                 vec![1],
                 "pattern_triggers",
             );
-            assert!(result.is_ok(), "Pattern triggers mode should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Pattern triggers mode should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -6030,7 +6126,7 @@ mod tests {
                 &source.path,
                 0,
                 0,
-                vec![],  // Empty source tracks
+                vec![], // Empty source tracks
                 &dest.path,
                 0,
                 0,
@@ -6436,7 +6532,11 @@ mod tests {
                 "none",
                 false,
             );
-            assert!(result.is_ok(), "Self-project copy should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Self-project copy should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -6516,7 +6616,11 @@ mod tests {
                 "none",
                 false,
             );
-            assert!(result.is_ok(), "Copy both types should succeed: {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Copy both types should succeed: {:?}",
+                result
+            );
         }
 
         #[test]
@@ -6529,7 +6633,7 @@ mod tests {
                 &source.path,
                 &dest.path,
                 "static",
-                vec![],  // Empty source
+                vec![], // Empty source
                 vec![1],
                 "none",
                 false,
@@ -6547,12 +6651,15 @@ mod tests {
                 &source.path,
                 &dest.path,
                 "static",
-                vec![1, 2],  // 2 sources
-                vec![1, 2, 3],  // 3 destinations
+                vec![1, 2],    // 2 sources
+                vec![1, 2, 3], // 3 destinations
                 "none",
                 false,
             );
-            assert!(result.is_err(), "Mismatched counts should fail (unless 1-to-many)");
+            assert!(
+                result.is_err(),
+                "Mismatched counts should fail (unless 1-to-many)"
+            );
         }
 
         #[test]
@@ -6565,12 +6672,15 @@ mod tests {
                 &source.path,
                 &dest.path,
                 "static",
-                vec![1],  // 1 source
-                vec![1, 2, 3, 4, 5],  // 5 destinations - mismatched
+                vec![1],             // 1 source
+                vec![1, 2, 3, 4, 5], // 5 destinations - mismatched
                 "none",
                 false,
             );
-            assert!(result.is_err(), "1-to-many copy should fail (requires same length)");
+            assert!(
+                result.is_err(),
+                "1-to-many copy should fail (requires same length)"
+            );
             assert!(
                 result.unwrap_err().contains("same length"),
                 "Error message should mention length requirement"
@@ -6689,7 +6799,9 @@ mod tests {
             let result = copy_parts(&project.path, 0, vec![], &project.path, 0, vec![]);
             // copy_parts requires source to be 1 or 4 parts, so empty is an error
             assert!(result.is_err(), "Empty parts should fail validation");
-            assert!(result.unwrap_err().contains("Source must be either 1 part or all 4 parts"));
+            assert!(result
+                .unwrap_err()
+                .contains("Source must be either 1 part or all 4 parts"));
         }
 
         #[test]

@@ -422,11 +422,11 @@ async fn copy_patterns(
 async fn copy_tracks(
     source_project: String,
     source_bank_index: u8,
-    source_part_index: Option<u8>,  // None = all parts (0-3)
+    source_part_index: Option<u8>, // None = all parts (0-3)
     source_track_indices: Vec<u8>,
     dest_project: String,
     dest_bank_index: u8,
-    dest_part_index: Option<u8>,  // None = all parts (0-3)
+    dest_part_index: Option<u8>, // None = all parts (0-3)
     dest_track_indices: Vec<u8>,
     mode: String,
 ) -> Result<(), String> {
