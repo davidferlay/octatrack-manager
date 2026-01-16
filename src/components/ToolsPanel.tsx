@@ -1312,7 +1312,17 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           {/* Sample slot destination for copy_sample_slots */}
           {operation === "copy_sample_slots" && (
             <div className="tools-field">
-              <label>Slots</label>
+              <label className="tools-label-with-warning">
+                Slots
+                {sourceSampleIndices.length + destSampleIndices[0] > 128 && (
+                  <span
+                    className="tools-warning-badge"
+                    title="The selected slot range exceeds the maximum of 128 slots. Some slots will not be copied."
+                  >
+                    Some slots will overflow
+                  </span>
+                )}
+              </label>
               <div className="tools-slot-selector">
                 <div className="tools-slot-header">
                   <div className="tools-slot-range-display">
@@ -1370,11 +1380,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     }}
                   />
                 </div>
-                {sourceSampleIndices.length + destSampleIndices[0] > 128 && (
-                  <span className="tools-warning">
-                    Some slots will overflow (max 128)
-                  </span>
-                )}
               </div>
             </div>
           )}

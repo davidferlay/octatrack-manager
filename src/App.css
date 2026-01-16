@@ -3160,6 +3160,17 @@ h1 {
   color: #ff9800;
 }
 
+.tools-field label.tools-label-with-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tools-warning-badge {
+  color: var(--elektron-orange);
+  font-size: 0.75rem;
+}
+
 .tools-field label.tools-label-with-hint {
   display: flex;
   align-items: center;
@@ -3169,9 +3180,7 @@ h1 {
 
 .tools-hint-inline {
   font-size: 0.75rem;
-  font-weight: 400;
   color: var(--elektron-orange);
-  font-style: italic;
   margin-left: auto;
 }
 
