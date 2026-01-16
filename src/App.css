@@ -3019,6 +3019,32 @@ h1 {
   font-size: 0.75rem;
 }
 
+/* Bank buttons layout */
+.tools-multi-select.banks-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.tools-bank-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.tools-multi-select.banks-inline .tools-track-label {
+  min-width: 42px;
+  font-size: 0.75rem;
+}
+
+.tools-multi-btn.bank-btn {
+  min-width: 30px;
+  width: 30px;
+  padding: 0.4rem 0.25rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
 .tools-multi-btn {
   padding: 0.4rem 0.6rem;
   font-size: 0.85rem;
