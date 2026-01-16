@@ -130,7 +130,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   // Operation-specific options
   // Copy Patterns options
   const [partAssignmentMode, setPartAssignmentMode] = useState<PartAssignmentMode>(savedSettings.partAssignmentMode || "keep_original");
-  const [destPart, setDestPart] = useState<number>(0);
+  const [destPart, setDestPart] = useState<number>(-1); // -1 = no selection
   const [trackMode, setTrackMode] = useState<TrackMode>(savedSettings.trackMode || "all");
 
   // Copy Tracks options
@@ -557,22 +557,48 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           {operation === "copy_parts" && (
             <div className="tools-field">
               <label>Parts</label>
-              <div className="tools-multi-select">
-                {[0, 1, 2, 3].map((idx) => (
+              <div className="tools-part-cross">
+                <div className="tools-part-cross-row">
                   <button
-                    key={idx}
-                    className={`tools-multi-btn ${sourcePartIndices.includes(idx) ? "selected" : ""}`}
-                    onClick={() => toggleIndex(sourcePartIndices, idx, setSourcePartIndices)}
+                    type="button"
+                    className={`tools-toggle-btn part-btn ${sourcePartIndices.includes(0) ? "selected" : ""}`}
+                    onClick={() => toggleIndex(sourcePartIndices, 0, setSourcePartIndices)}
                   >
-                    {idx + 1}
+                    1
                   </button>
-                ))}
-                <button
-                  className="tools-multi-btn tools-select-all"
-                  onClick={() => selectAllIndices(4, setSourcePartIndices)}
-                >
-                  All
-                </button>
+                </div>
+                <div className="tools-part-cross-row">
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn part-btn ${sourcePartIndices.includes(3) ? "selected" : ""}`}
+                    onClick={() => toggleIndex(sourcePartIndices, 3, setSourcePartIndices)}
+                  >
+                    4
+                  </button>
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn part-btn part-all ${sourcePartIndices.length === 4 ? "selected" : ""}`}
+                    onClick={() => selectAllIndices(4, setSourcePartIndices)}
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn part-btn ${sourcePartIndices.includes(1) ? "selected" : ""}`}
+                    onClick={() => toggleIndex(sourcePartIndices, 1, setSourcePartIndices)}
+                  >
+                    2
+                  </button>
+                </div>
+                <div className="tools-part-cross-row">
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn part-btn ${sourcePartIndices.includes(2) ? "selected" : ""}`}
+                    onClick={() => toggleIndex(sourcePartIndices, 2, setSourcePartIndices)}
+                  >
+                    3
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -836,17 +862,42 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               {partAssignmentMode === "select_specific" && (
                 <div className="tools-field">
                   <label>Destination Part</label>
-                  <div className="tools-toggle-group">
-                    {[0, 1, 2, 3].map((idx) => (
+                  <div className="tools-part-cross">
+                    <div className="tools-part-cross-row">
                       <button
-                        key={idx}
                         type="button"
-                        className={`tools-toggle-btn ${destPart === idx ? "selected" : ""}`}
-                        onClick={() => setDestPart(idx)}
+                        className={`tools-toggle-btn part-btn ${destPart === 0 ? "selected" : ""}`}
+                        onClick={() => setDestPart(0)}
                       >
-                        Part {idx + 1}
+                        1
                       </button>
-                    ))}
+                    </div>
+                    <div className="tools-part-cross-row">
+                      <button
+                        type="button"
+                        className={`tools-toggle-btn part-btn ${destPart === 3 ? "selected" : ""}`}
+                        onClick={() => setDestPart(3)}
+                      >
+                        4
+                      </button>
+                      <span className="tools-part-cross-spacer"></span>
+                      <button
+                        type="button"
+                        className={`tools-toggle-btn part-btn ${destPart === 1 ? "selected" : ""}`}
+                        onClick={() => setDestPart(1)}
+                      >
+                        2
+                      </button>
+                    </div>
+                    <div className="tools-part-cross-row">
+                      <button
+                        type="button"
+                        className={`tools-toggle-btn part-btn ${destPart === 2 ? "selected" : ""}`}
+                        onClick={() => setDestPart(2)}
+                      >
+                        3
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -874,25 +925,25 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               {trackMode === "specific" && (
                 <div className="tools-field">
                   <label>Tracks</label>
-                  <div className="tools-multi-select tracks">
-                    <div className="tools-track-group">
+                  <div className="tools-multi-select tracks-inline">
+                    <div className="tools-track-row">
                       <span className="tools-track-label">Audio:</span>
                       {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
                         <button
                           key={idx}
-                          className={`tools-multi-btn ${sourceTrackIndices.includes(idx) ? "selected" : ""}`}
+                          className={`tools-multi-btn track-btn ${sourceTrackIndices.includes(idx) ? "selected" : ""}`}
                           onClick={() => toggleIndex(sourceTrackIndices, idx, setSourceTrackIndices)}
                         >
                           T{idx + 1}
                         </button>
                       ))}
                     </div>
-                    <div className="tools-track-group">
+                    <div className="tools-track-row">
                       <span className="tools-track-label">MIDI:</span>
                       {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
                         <button
                           key={idx}
-                          className={`tools-multi-btn ${sourceTrackIndices.includes(idx) ? "selected" : ""}`}
+                          className={`tools-multi-btn track-btn ${sourceTrackIndices.includes(idx) ? "selected" : ""}`}
                           onClick={() => toggleIndex(sourceTrackIndices, idx, setSourceTrackIndices)}
                         >
                           M{idx - 7}
@@ -1099,16 +1150,48 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           {operation === "copy_parts" && (
             <div className="tools-field">
               <label>Parts</label>
-              <div className="tools-multi-select">
-                {[0, 1, 2, 3].map((idx) => (
+              <div className="tools-part-cross">
+                <div className="tools-part-cross-row">
                   <button
-                    key={idx}
-                    className={`tools-multi-btn ${destPartIndices.includes(idx) ? "selected" : ""}`}
-                    onClick={() => toggleIndex(destPartIndices, idx, setDestPartIndices)}
+                    type="button"
+                    className={`tools-toggle-btn part-btn ${destPartIndices.includes(0) ? "selected" : ""}`}
+                    onClick={() => toggleIndex(destPartIndices, 0, setDestPartIndices)}
                   >
-                    {idx + 1}
+                    1
                   </button>
-                ))}
+                </div>
+                <div className="tools-part-cross-row">
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn part-btn ${destPartIndices.includes(3) ? "selected" : ""}`}
+                    onClick={() => toggleIndex(destPartIndices, 3, setDestPartIndices)}
+                  >
+                    4
+                  </button>
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn part-btn part-all ${destPartIndices.length === 4 ? "selected" : ""}`}
+                    onClick={() => selectAllIndices(4, setDestPartIndices)}
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn part-btn ${destPartIndices.includes(1) ? "selected" : ""}`}
+                    onClick={() => toggleIndex(destPartIndices, 1, setDestPartIndices)}
+                  >
+                    2
+                  </button>
+                </div>
+                <div className="tools-part-cross-row">
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn part-btn ${destPartIndices.includes(2) ? "selected" : ""}`}
+                    onClick={() => toggleIndex(destPartIndices, 2, setDestPartIndices)}
+                  >
+                    3
+                  </button>
+                </div>
               </div>
               {sourcePartIndices.length !== destPartIndices.length && (
                 <span className="tools-warning">
@@ -1303,7 +1386,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         <button
           className="tools-execute-btn"
           onClick={executeOperation}
-          disabled={isExecuting || (operation === "copy_parts" && sourcePartIndices.length !== destPartIndices.length) || (operation === "copy_tracks" && sourceTrackIndices.length !== destTrackIndices.length)}
+          disabled={isExecuting || (operation === "copy_parts" && sourcePartIndices.length !== destPartIndices.length) || (operation === "copy_tracks" && sourceTrackIndices.length !== destTrackIndices.length) || (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1)}
         >
           {isExecuting ? (
             <>
