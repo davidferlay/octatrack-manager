@@ -515,7 +515,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           <h3>Source</h3>
 
           {/* Bank selector for bank-related operations (except copy_tracks) */}
-          {(operation === "copy_bank" || operation === "copy_parts" || operation === "copy_patterns") && (
+          {(operation === "copy_bank" || operation === "copy_parts") && (
             <div className="tools-field">
               <label>Bank</label>
               <div className="tools-multi-select banks-inline">
@@ -536,6 +536,43 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 </div>
                 <div className="tools-bank-row">
                   <span className="tools-track-label"></span>
+                  {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className={`tools-multi-btn bank-btn ${sourceBankIndex === idx ? "selected" : ""} ${!loadedBankIndices.has(idx) ? "disabled" : ""}`}
+                      onClick={() => loadedBankIndices.has(idx) && setSourceBankIndex(idx)}
+                      disabled={!loadedBankIndices.has(idx)}
+                      title={loadedBankIndices.has(idx) ? (banks[idx] ? formatBankName(banks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`) : "Bank not loaded"}
+                    >
+                      {String.fromCharCode(65 + idx)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Bank selector for copy_patterns - stacked layout */}
+          {operation === "copy_patterns" && (
+            <div className="tools-field">
+              <label>Bank</label>
+              <div className="tools-multi-select banks-stacked">
+                <div className="tools-track-row-buttons">
+                  {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className={`tools-multi-btn bank-btn ${sourceBankIndex === idx ? "selected" : ""} ${!loadedBankIndices.has(idx) ? "disabled" : ""}`}
+                      onClick={() => loadedBankIndices.has(idx) && setSourceBankIndex(idx)}
+                      disabled={!loadedBankIndices.has(idx)}
+                      title={loadedBankIndices.has(idx) ? (banks[idx] ? formatBankName(banks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`) : "Bank not loaded"}
+                    >
+                      {String.fromCharCode(65 + idx)}
+                    </button>
+                  ))}
+                </div>
+                <div className="tools-track-row-buttons">
                   {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
                     <button
                       key={idx}
@@ -1143,7 +1180,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           </div>
 
           {/* Bank selector (except copy_tracks) */}
-          {(operation === "copy_bank" || operation === "copy_parts" || operation === "copy_patterns") && (
+          {(operation === "copy_bank" || operation === "copy_parts") && (
             <div className="tools-field">
               <label>Bank</label>
               <div className="tools-multi-select banks-inline">
@@ -1168,6 +1205,41 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       type="button"
                       className={`tools-multi-btn bank-btn ${destBankIndex === idx ? "selected" : ""}`}
                       onClick={() => setDestBankIndex(idx)}
+                    >
+                      {String.fromCharCode(65 + idx)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Bank selector for copy_patterns - stacked layout */}
+          {operation === "copy_patterns" && (
+            <div className="tools-field">
+              <label>Bank</label>
+              <div className="tools-multi-select banks-stacked">
+                <div className="tools-track-row-buttons">
+                  {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className={`tools-multi-btn bank-btn ${destBankIndex === idx ? "selected" : ""}`}
+                      onClick={() => setDestBankIndex(idx)}
+                      title={`Bank ${String.fromCharCode(65 + idx)}`}
+                    >
+                      {String.fromCharCode(65 + idx)}
+                    </button>
+                  ))}
+                </div>
+                <div className="tools-track-row-buttons">
+                  {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className={`tools-multi-btn bank-btn ${destBankIndex === idx ? "selected" : ""}`}
+                      onClick={() => setDestBankIndex(idx)}
+                      title={`Bank ${String.fromCharCode(65 + idx)}`}
                     >
                       {String.fromCharCode(65 + idx)}
                     </button>
@@ -1235,22 +1307,45 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           {/* Pattern start for copy_patterns */}
           {operation === "copy_patterns" && (
             <div className="tools-field">
-              <label>Starting at Pattern</label>
-              <select
-                value={destPatternStart}
-                onChange={(e) => setDestPatternStart(Number(e.target.value))}
-              >
-                {Array.from({ length: 16 }, (_, idx) => (
-                  <option key={idx} value={idx}>
-                    Pattern {idx + 1}
-                  </option>
-                ))}
-              </select>
-              {sourcePatternIndices.length + destPatternStart > 16 && (
-                <span className="tools-warning">
-                  Some patterns will overflow (max 16)
-                </span>
-              )}
+              <label className="tools-label-with-warning">
+                Starting at Pattern
+                {sourcePatternIndices.length + destPatternStart > 16 && (
+                  <span
+                    className="tools-warning-badge"
+                    title="The selected pattern range exceeds the maximum of 16 patterns. Some patterns will not be copied."
+                  >
+                    Some patterns will overflow
+                  </span>
+                )}
+              </label>
+              <div className="tools-multi-select banks-stacked">
+                <div className="tools-track-row-buttons">
+                  {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className={`tools-multi-btn pattern-btn ${destPatternStart === idx ? "selected" : ""}`}
+                      onClick={() => setDestPatternStart(idx)}
+                      title={`Pattern ${idx + 1}`}
+                    >
+                      {idx + 1}
+                    </button>
+                  ))}
+                </div>
+                <div className="tools-track-row-buttons">
+                  {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className={`tools-multi-btn pattern-btn ${destPatternStart === idx ? "selected" : ""}`}
+                      onClick={() => setDestPatternStart(idx)}
+                      title={`Pattern ${idx + 1}`}
+                    >
+                      {idx + 1}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 

@@ -3004,7 +3004,8 @@ h1 {
 }
 
 .tools-multi-select.tracks-stacked .tools-multi-btn.track-btn,
-.tools-multi-select.banks-stacked .tools-multi-btn.bank-btn {
+.tools-multi-select.banks-stacked .tools-multi-btn.bank-btn,
+.tools-multi-select.banks-stacked .tools-multi-btn.pattern-btn {
   width: 100%;
   min-width: unset;
   padding: 0.5rem 0.25rem;
