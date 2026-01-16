@@ -3397,10 +3397,11 @@ pub fn copy_bank(
 /// # Arguments
 /// * `source_project` - Path to the source (current) project
 /// * `source_bank_index` - Source bank index (0-15)
-/// * `source_part_indices` - Which Parts to copy (0-3 for Parts 1-4)
+/// * `source_part_indices` - Which Parts to copy (0-3 for Parts 1-4). Either 1 part or all 4.
 /// * `dest_project` - Path to the destination project
 /// * `dest_bank_index` - Destination bank index (0-15)
-/// * `dest_part_indices` - Where to place them (must match length of source_part_indices)
+/// * `dest_part_indices` - Where to place them. If source is 1 part, dest can be multiple (1-to-many).
+///                         If source is all 4 parts, dest must also be all 4 (1-to-1 mapping).
 pub fn copy_parts(
     source_project: &str,
     source_bank_index: u8,
@@ -3413,8 +3414,14 @@ pub fn copy_parts(
         return Err("Bank index must be between 0 and 15".to_string());
     }
 
-    if source_part_indices.len() != dest_part_indices.len() {
-        return Err("Source and destination part indices must have the same length".to_string());
+    // Validate: source must be either 1 part or all 4 parts
+    if source_part_indices.is_empty() || (source_part_indices.len() != 1 && source_part_indices.len() != 4) {
+        return Err("Source must be either 1 part or all 4 parts".to_string());
+    }
+
+    // Validate: if source is all 4, dest must also be all 4
+    if source_part_indices.len() == 4 && dest_part_indices.len() != 4 {
+        return Err("When copying all parts, destination must also be all 4 parts".to_string());
     }
 
     if source_part_indices.iter().any(|&i| i > 3) || dest_part_indices.iter().any(|&i| i > 3) {
@@ -3456,22 +3463,37 @@ pub fn copy_parts(
         return Err(format!("Destination bank {} not found", dest_bank_index));
     };
 
-    // Copy each part
-    for (src_idx, dest_idx) in source_part_indices.iter().zip(dest_part_indices.iter()) {
-        let src_part = *src_idx as usize;
-        let dst_part = *dest_idx as usize;
+    // Copy parts based on mode
+    if source_part_indices.len() == 4 {
+        // All parts mode: 1-to-1 mapping
+        for (src_idx, dest_idx) in source_part_indices.iter().zip(dest_part_indices.iter()) {
+            let src_part = *src_idx as usize;
+            let dst_part = *dest_idx as usize;
 
-        // Copy the unsaved part data
-        dest_bank.parts.unsaved.0[dst_part] = source_bank.parts.unsaved.0[src_part].clone();
+            dest_bank.parts.unsaved.0[dst_part] = source_bank.parts.unsaved.0[src_part].clone();
+            dest_bank.parts_edited_bitmask |= 1 << dst_part;
 
-        // Mark the destination part as edited
-        dest_bank.parts_edited_bitmask |= 1 << dst_part;
+            println!(
+                "[DEBUG] Copied Part {} to Part {}",
+                src_part + 1,
+                dst_part + 1
+            );
+        }
+    } else {
+        // Single part mode: 1-to-many mapping
+        let src_part = source_part_indices[0] as usize;
+        for dest_idx in &dest_part_indices {
+            let dst_part = *dest_idx as usize;
 
-        println!(
-            "[DEBUG] Copied Part {} to Part {}",
-            src_part + 1,
-            dst_part + 1
-        );
+            dest_bank.parts.unsaved.0[dst_part] = source_bank.parts.unsaved.0[src_part].clone();
+            dest_bank.parts_edited_bitmask |= 1 << dst_part;
+
+            println!(
+                "[DEBUG] Copied Part {} to Part {}",
+                src_part + 1,
+                dst_part + 1
+            );
+        }
     }
 
     // Recalculate checksum
@@ -3485,8 +3507,9 @@ pub fn copy_parts(
         .map_err(|e| format!("Failed to write destination bank: {:?}", e))?;
 
     println!(
-        "[DEBUG] Copied {} parts from bank {} to bank {}",
+        "[DEBUG] Copied {} source part(s) to {} destination part(s) from bank {} to bank {}",
         source_part_indices.len(),
+        dest_part_indices.len(),
         source_bank_index,
         dest_bank_index
     );

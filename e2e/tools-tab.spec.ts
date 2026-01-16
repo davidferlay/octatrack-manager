@@ -563,6 +563,224 @@ test.describe('Tools Tab - Copy Banks Options', () => {
   })
 })
 
+test.describe('Tools Tab - Copy Parts Options', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
+    await toolsTab.click()
+    await page.waitForTimeout(500)
+
+    // Select Copy Parts operation
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('copy_parts')
+    await page.waitForTimeout(300)
+  })
+
+  test('Source part is single-select (clicking another part switches selection)', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const part1 = sourcePanel.locator('.tools-toggle-btn.part-btn', { hasText: /^1$/ })
+    const part2 = sourcePanel.locator('.tools-toggle-btn.part-btn', { hasText: /^2$/ })
+
+    // Part 1 should be selected by default
+    await expect(part1).toHaveClass(/selected/)
+
+    // Click part 2 to switch selection
+    await part2.click()
+    await page.waitForTimeout(200)
+
+    // Only part 2 should be selected
+    await expect(part1).not.toHaveClass(/selected/)
+    await expect(part2).toHaveClass(/selected/)
+  })
+
+  test('Source part can be deselected by clicking it again', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const part1 = sourcePanel.locator('.tools-toggle-btn.part-btn', { hasText: /^1$/ })
+
+    // Part 1 should be selected by default
+    await expect(part1).toHaveClass(/selected/)
+
+    // Click part 1 to deselect
+    await part1.click()
+    await page.waitForTimeout(200)
+
+    // Part 1 should no longer be selected
+    await expect(part1).not.toHaveClass(/selected/)
+
+    // Execute button should be disabled (no source part)
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+  })
+
+  test('Source All button selects all parts and syncs destination', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+    const sourceAll = sourcePanel.locator('.tools-toggle-btn.part-btn.part-all')
+
+    // Click All button
+    await sourceAll.click()
+    await page.waitForTimeout(200)
+
+    // All source parts should be selected
+    const sourceSelectedParts = sourcePanel.locator('.tools-toggle-btn.part-btn.selected')
+    await expect(sourceSelectedParts).toHaveCount(5) // 4 parts + All button
+
+    // All destination parts should also be selected
+    const destSelectedParts = destPanel.locator('.tools-toggle-btn.part-btn.selected')
+    await expect(destSelectedParts).toHaveCount(5) // 4 parts + All button
+  })
+
+  test('Source All button deselects all parts when clicked again', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+    const sourceAll = sourcePanel.locator('.tools-toggle-btn.part-btn.part-all')
+
+    // Click All button to select all
+    await sourceAll.click()
+    await page.waitForTimeout(200)
+
+    // Click All button again to deselect
+    await sourceAll.click()
+    await page.waitForTimeout(200)
+
+    // No source parts should be selected
+    const sourceSelectedParts = sourcePanel.locator('.tools-toggle-btn.part-btn.selected')
+    await expect(sourceSelectedParts).toHaveCount(0)
+
+    // No destination parts should be selected
+    const destSelectedParts = destPanel.locator('.tools-toggle-btn.part-btn.selected')
+    await expect(destSelectedParts).toHaveCount(0)
+
+    // Execute button should be disabled
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+  })
+
+  test('Destination parts allow multi-select when source is single part', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const destPart1 = destPanel.locator('.tools-toggle-btn.part-btn', { hasText: /^1$/ })
+    const destPart2 = destPanel.locator('.tools-toggle-btn.part-btn', { hasText: /^2$/ })
+    const destPart3 = destPanel.locator('.tools-toggle-btn.part-btn', { hasText: /^3$/ })
+
+    // Part 1 should be selected by default
+    await expect(destPart1).toHaveClass(/selected/)
+
+    // Click part 2 and 3 to add them
+    await destPart2.click()
+    await page.waitForTimeout(200)
+    await destPart3.click()
+    await page.waitForTimeout(200)
+
+    // Parts 1, 2, and 3 should all be selected
+    await expect(destPart1).toHaveClass(/selected/)
+    await expect(destPart2).toHaveClass(/selected/)
+    await expect(destPart3).toHaveClass(/selected/)
+  })
+
+  test('Destination part can be deselected by clicking it', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const destPart1 = destPanel.locator('.tools-toggle-btn.part-btn', { hasText: /^1$/ })
+
+    // Part 1 should be selected by default
+    await expect(destPart1).toHaveClass(/selected/)
+
+    // Click part 1 to deselect
+    await destPart1.click()
+    await page.waitForTimeout(200)
+
+    // Part 1 should no longer be selected
+    await expect(destPart1).not.toHaveClass(/selected/)
+
+    // Execute button should be disabled (no destination part)
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+  })
+
+  test('Destination parts are disabled when source All is selected', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+    const sourceAll = sourcePanel.locator('.tools-toggle-btn.part-btn.part-all')
+    const destPart1 = destPanel.locator('.tools-toggle-btn.part-btn', { hasText: /^1$/ })
+
+    // Click source All button
+    await sourceAll.click()
+    await page.waitForTimeout(200)
+
+    // Destination part buttons should be disabled
+    await expect(destPart1).toBeDisabled()
+
+    // Destination cross should have disabled class
+    const destCross = destPanel.locator('.tools-part-cross')
+    await expect(destCross).toHaveClass(/disabled/)
+  })
+
+  test('Source bank can be deselected', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const bankA = sourcePanel.locator('.tools-multi-btn.bank-btn', { hasText: /^A$/ })
+
+    // Bank A should be selected by default
+    await expect(bankA).toHaveClass(/selected/)
+
+    // Click bank A to deselect
+    await bankA.click()
+    await page.waitForTimeout(200)
+
+    // Bank A should no longer be selected
+    await expect(bankA).not.toHaveClass(/selected/)
+
+    // Execute button should be disabled
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+  })
+
+  test('Destination bank can be deselected', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const bankA = destPanel.locator('.tools-multi-btn.bank-btn', { hasText: /^A$/ })
+
+    // Bank A should be selected by default
+    await expect(bankA).toHaveClass(/selected/)
+
+    // Click bank A to deselect
+    await bankA.click()
+    await page.waitForTimeout(200)
+
+    // Bank A should no longer be selected
+    await expect(bankA).not.toHaveClass(/selected/)
+
+    // Execute button should be disabled
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+  })
+
+  test('Clicking single source part when All is selected switches to single mode', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const destPanel = page.locator('.tools-dest-panel')
+    const sourceAll = sourcePanel.locator('.tools-toggle-btn.part-btn.part-all')
+    const sourcePart2 = sourcePanel.locator('.tools-toggle-btn.part-btn', { hasText: /^2$/ })
+
+    // First select All
+    await sourceAll.click()
+    await page.waitForTimeout(200)
+
+    // All should be selected
+    await expect(sourceAll).toHaveClass(/selected/)
+
+    // Click part 2 to switch to single mode
+    await sourcePart2.click()
+    await page.waitForTimeout(200)
+
+    // Only part 2 should be selected, All should be deselected
+    await expect(sourcePart2).toHaveClass(/selected/)
+    await expect(sourceAll).not.toHaveClass(/selected/)
+
+    // Destination parts should no longer be disabled
+    const destPart1 = destPanel.locator('.tools-toggle-btn.part-btn', { hasText: /^1$/ })
+    await expect(destPart1).not.toBeDisabled()
+  })
+})
+
 test.describe('Tools Tab - Execute Button', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)

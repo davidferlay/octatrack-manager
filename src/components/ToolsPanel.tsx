@@ -357,7 +357,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
       case "copy_bank":
         return `Copying Bank ${String.fromCharCode(65 + sourceBankIndex)} to ${destBankIndices.length} bank${destBankIndices.length > 1 ? 's' : ''}...`;
       case "copy_parts":
-        return `Copying ${sourcePartIndices.length} part${sourcePartIndices.length > 1 ? 's' : ''}...`;
+        return sourcePartIndices.length === 4
+          ? "Copying all parts..."
+          : `Copying part to ${destPartIndices.length} destination${destPartIndices.length > 1 ? 's' : ''}...`;
       case "copy_patterns":
         return `Copying ${sourcePatternIndices.length} pattern${sourcePatternIndices.length > 1 ? 's' : ''}...`;
       case "copy_tracks":
@@ -405,7 +407,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             destBankIndex,
             destPartIndices,
           });
-          setStatusMessage(`${sourcePartIndices.length} part${sourcePartIndices.length > 1 ? 's' : ''} copied successfully`);
+          setStatusMessage(sourcePartIndices.length === 4
+            ? "All parts copied successfully"
+            : `Part copied to ${destPartIndices.length} destination${destPartIndices.length > 1 ? 's' : ''} successfully`);
           if (destProject === projectPath && onBankUpdated) {
             onBankUpdated(destBankIndex);
           }
@@ -589,16 +593,22 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             </div>
           )}
 
-          {/* Part selector for copy_parts */}
+          {/* Part selector for copy_parts - single select or All */}
           {operation === "copy_parts" && (
             <div className="tools-field">
-              <label>Parts</label>
+              <label>Part</label>
               <div className="tools-part-cross">
                 <div className="tools-part-cross-row">
                   <button
                     type="button"
-                    className={`tools-toggle-btn part-btn ${sourcePartIndices.includes(0) ? "selected" : ""}`}
-                    onClick={() => toggleIndex(sourcePartIndices, 0, setSourcePartIndices)}
+                    className={`tools-toggle-btn part-btn ${(sourcePartIndices.length === 1 && sourcePartIndices.includes(0)) || sourcePartIndices.length === 4 ? "selected" : ""}`}
+                    onClick={() => {
+                      if (sourcePartIndices.length === 1 && sourcePartIndices.includes(0)) {
+                        setSourcePartIndices([]);
+                      } else {
+                        setSourcePartIndices([0]);
+                      }
+                    }}
                   >
                     1
                   </button>
@@ -606,22 +616,42 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 <div className="tools-part-cross-row">
                   <button
                     type="button"
-                    className={`tools-toggle-btn part-btn ${sourcePartIndices.includes(3) ? "selected" : ""}`}
-                    onClick={() => toggleIndex(sourcePartIndices, 3, setSourcePartIndices)}
+                    className={`tools-toggle-btn part-btn ${(sourcePartIndices.length === 1 && sourcePartIndices.includes(3)) || sourcePartIndices.length === 4 ? "selected" : ""}`}
+                    onClick={() => {
+                      if (sourcePartIndices.length === 1 && sourcePartIndices.includes(3)) {
+                        setSourcePartIndices([]);
+                      } else {
+                        setSourcePartIndices([3]);
+                      }
+                    }}
                   >
                     4
                   </button>
                   <button
                     type="button"
                     className={`tools-toggle-btn part-btn part-all ${sourcePartIndices.length === 4 ? "selected" : ""}`}
-                    onClick={() => selectAllIndices(4, setSourcePartIndices)}
+                    onClick={() => {
+                      if (sourcePartIndices.length === 4) {
+                        setSourcePartIndices([]);
+                        setDestPartIndices([]);
+                      } else {
+                        setSourcePartIndices([0, 1, 2, 3]);
+                        setDestPartIndices([0, 1, 2, 3]);
+                      }
+                    }}
                   >
                     All
                   </button>
                   <button
                     type="button"
-                    className={`tools-toggle-btn part-btn ${sourcePartIndices.includes(1) ? "selected" : ""}`}
-                    onClick={() => toggleIndex(sourcePartIndices, 1, setSourcePartIndices)}
+                    className={`tools-toggle-btn part-btn ${(sourcePartIndices.length === 1 && sourcePartIndices.includes(1)) || sourcePartIndices.length === 4 ? "selected" : ""}`}
+                    onClick={() => {
+                      if (sourcePartIndices.length === 1 && sourcePartIndices.includes(1)) {
+                        setSourcePartIndices([]);
+                      } else {
+                        setSourcePartIndices([1]);
+                      }
+                    }}
                   >
                     2
                   </button>
@@ -629,8 +659,14 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 <div className="tools-part-cross-row">
                   <button
                     type="button"
-                    className={`tools-toggle-btn part-btn ${sourcePartIndices.includes(2) ? "selected" : ""}`}
-                    onClick={() => toggleIndex(sourcePartIndices, 2, setSourcePartIndices)}
+                    className={`tools-toggle-btn part-btn ${(sourcePartIndices.length === 1 && sourcePartIndices.includes(2)) || sourcePartIndices.length === 4 ? "selected" : ""}`}
+                    onClick={() => {
+                      if (sourcePartIndices.length === 1 && sourcePartIndices.includes(2)) {
+                        setSourcePartIndices([]);
+                      } else {
+                        setSourcePartIndices([2]);
+                      }
+                    }}
                   >
                     3
                   </button>
@@ -1261,7 +1297,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             </div>
           )}
 
-          {/* Bank selector for copy_parts - single select */}
+          {/* Bank selector for copy_parts - click-to-deselect */}
           {operation === "copy_parts" && (
             <div className="tools-field">
               <label>Bank</label>
@@ -1272,7 +1308,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       key={idx}
                       type="button"
                       className={`tools-multi-btn bank-btn ${destBankIndex === idx ? "selected" : ""}`}
-                      onClick={() => setDestBankIndex(idx)}
+                      onClick={() => setDestBankIndex(destBankIndex === idx ? -1 : idx)}
                       title={`Bank ${String.fromCharCode(65 + idx)}`}
                     >
                       {String.fromCharCode(65 + idx)}
@@ -1285,7 +1321,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       key={idx}
                       type="button"
                       className={`tools-multi-btn bank-btn ${destBankIndex === idx ? "selected" : ""}`}
-                      onClick={() => setDestBankIndex(idx)}
+                      onClick={() => setDestBankIndex(destBankIndex === idx ? -1 : idx)}
                       title={`Bank ${String.fromCharCode(65 + idx)}`}
                     >
                       {String.fromCharCode(65 + idx)}
@@ -1331,16 +1367,21 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             </div>
           )}
 
-          {/* Part selector for copy_parts */}
+          {/* Part selector for copy_parts - multi-select, disabled when source All is selected */}
           {operation === "copy_parts" && (
             <div className="tools-field">
               <label>Parts</label>
-              <div className="tools-part-cross">
+              <div className={`tools-part-cross ${sourcePartIndices.length === 4 ? "disabled" : ""}`}>
                 <div className="tools-part-cross-row">
                   <button
                     type="button"
                     className={`tools-toggle-btn part-btn ${destPartIndices.includes(0) ? "selected" : ""}`}
-                    onClick={() => toggleIndex(destPartIndices, 0, setDestPartIndices)}
+                    onClick={() => sourcePartIndices.length !== 4 && (destPartIndices.includes(0)
+                      ? setDestPartIndices(destPartIndices.filter(i => i !== 0))
+                      : setDestPartIndices([...destPartIndices, 0].sort((a, b) => a - b))
+                    )}
+                    disabled={sourcePartIndices.length === 4}
+                    title={sourcePartIndices.length === 4 ? "Synced with source All selection" : undefined}
                   >
                     1
                   </button>
@@ -1349,21 +1390,36 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   <button
                     type="button"
                     className={`tools-toggle-btn part-btn ${destPartIndices.includes(3) ? "selected" : ""}`}
-                    onClick={() => toggleIndex(destPartIndices, 3, setDestPartIndices)}
+                    onClick={() => sourcePartIndices.length !== 4 && (destPartIndices.includes(3)
+                      ? setDestPartIndices(destPartIndices.filter(i => i !== 3))
+                      : setDestPartIndices([...destPartIndices, 3].sort((a, b) => a - b))
+                    )}
+                    disabled={sourcePartIndices.length === 4}
+                    title={sourcePartIndices.length === 4 ? "Synced with source All selection" : undefined}
                   >
                     4
                   </button>
                   <button
                     type="button"
                     className={`tools-toggle-btn part-btn part-all ${destPartIndices.length === 4 ? "selected" : ""}`}
-                    onClick={() => selectAllIndices(4, setDestPartIndices)}
+                    onClick={() => sourcePartIndices.length !== 4 && (destPartIndices.length === 4
+                      ? setDestPartIndices([])
+                      : setDestPartIndices([0, 1, 2, 3])
+                    )}
+                    disabled={sourcePartIndices.length === 4}
+                    title={sourcePartIndices.length === 4 ? "Synced with source All selection" : undefined}
                   >
                     All
                   </button>
                   <button
                     type="button"
                     className={`tools-toggle-btn part-btn ${destPartIndices.includes(1) ? "selected" : ""}`}
-                    onClick={() => toggleIndex(destPartIndices, 1, setDestPartIndices)}
+                    onClick={() => sourcePartIndices.length !== 4 && (destPartIndices.includes(1)
+                      ? setDestPartIndices(destPartIndices.filter(i => i !== 1))
+                      : setDestPartIndices([...destPartIndices, 1].sort((a, b) => a - b))
+                    )}
+                    disabled={sourcePartIndices.length === 4}
+                    title={sourcePartIndices.length === 4 ? "Synced with source All selection" : undefined}
                   >
                     2
                   </button>
@@ -1372,17 +1428,17 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   <button
                     type="button"
                     className={`tools-toggle-btn part-btn ${destPartIndices.includes(2) ? "selected" : ""}`}
-                    onClick={() => toggleIndex(destPartIndices, 2, setDestPartIndices)}
+                    onClick={() => sourcePartIndices.length !== 4 && (destPartIndices.includes(2)
+                      ? setDestPartIndices(destPartIndices.filter(i => i !== 2))
+                      : setDestPartIndices([...destPartIndices, 2].sort((a, b) => a - b))
+                    )}
+                    disabled={sourcePartIndices.length === 4}
+                    title={sourcePartIndices.length === 4 ? "Synced with source All selection" : undefined}
                   >
                     3
                   </button>
                 </div>
               </div>
-              {sourcePartIndices.length !== destPartIndices.length && (
-                <span className="tools-warning">
-                  Source and destination part count must match
-                </span>
-              )}
             </div>
           )}
 
@@ -1632,13 +1688,18 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         <button
           className="tools-execute-btn"
           onClick={executeOperation}
-          disabled={isExecuting || (operation === "copy_bank" && sourceBankIndex === -1) || (operation === "copy_bank" && destBankIndices.length === 0) || (operation === "copy_parts" && sourcePartIndices.length !== destPartIndices.length) || (operation === "copy_tracks" && sourceTrackIndices.length !== destTrackIndices.length) || (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1)}
+          disabled={isExecuting || (operation === "copy_bank" && sourceBankIndex === -1) || (operation === "copy_bank" && destBankIndices.length === 0) || (operation === "copy_parts" && sourceBankIndex === -1) || (operation === "copy_parts" && destBankIndex === -1) || (operation === "copy_parts" && sourcePartIndices.length === 0) || (operation === "copy_parts" && destPartIndices.length === 0) || (operation === "copy_tracks" && sourceTrackIndices.length !== destTrackIndices.length) || (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1)}
           title={
             isExecuting ? "Operation in progress..." :
             (operation === "copy_bank" && sourceBankIndex === -1 && destBankIndices.length === 0) ? "Select source and destination banks" :
             (operation === "copy_bank" && sourceBankIndex === -1) ? "Select a source bank" :
             (operation === "copy_bank" && destBankIndices.length === 0) ? "Select at least one destination bank" :
-            (operation === "copy_parts" && sourcePartIndices.length !== destPartIndices.length) ? "Source and destination part count must match" :
+            (operation === "copy_parts" && sourceBankIndex === -1 && destBankIndex === -1) ? "Select source and destination banks" :
+            (operation === "copy_parts" && sourceBankIndex === -1) ? "Select a source bank" :
+            (operation === "copy_parts" && destBankIndex === -1) ? "Select a destination bank" :
+            (operation === "copy_parts" && sourcePartIndices.length === 0 && destPartIndices.length === 0) ? "Select source and destination parts" :
+            (operation === "copy_parts" && sourcePartIndices.length === 0) ? "Select a source part" :
+            (operation === "copy_parts" && destPartIndices.length === 0) ? "Select at least one destination part" :
             (operation === "copy_tracks" && sourceTrackIndices.length !== destTrackIndices.length) ? "Source and destination track count must match" :
             (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1) ? "Select a destination part" :
             undefined

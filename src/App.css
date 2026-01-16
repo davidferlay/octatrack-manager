@@ -3082,6 +3082,23 @@ h1 {
   font-size: 0.75rem;
 }
 
+.tools-part-cross.disabled .tools-toggle-btn.part-btn {
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.tools-part-cross.disabled .tools-toggle-btn.part-btn.selected {
+  background-color: var(--elektron-orange);
+  border-color: var(--elektron-orange);
+  color: #000;
+}
+
+.tools-part-cross.disabled .tools-toggle-btn.part-btn:hover {
+  background-color: var(--elektron-orange);
+  border-color: var(--elektron-orange);
+  color: #000;
+}
+
 .tools-part-cross-spacer {
   display: inline-block;
   min-width: 36px;
