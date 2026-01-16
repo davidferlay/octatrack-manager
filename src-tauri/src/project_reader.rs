@@ -3957,8 +3957,9 @@ pub fn copy_sample_slots(
     let mut dest_project_data = ProjectFile::from_data_file(&dest_project_file_path)
         .map_err(|e| format!("Failed to read destination project: {:?}", e))?;
 
-    // Get Audio Pool path for move_to_pool mode
-    let audio_pool_path = if audio_mode == "move_to_pool" {
+    // Get Audio Pool path for move_to_pool mode (only when copying between different projects)
+    let same_project = source_project == dest_project;
+    let audio_pool_path = if audio_mode == "move_to_pool" && !same_project {
         let status = get_audio_pool_status(source_project)?;
         if !status.exists {
             // Create Audio Pool if it doesn't exist
