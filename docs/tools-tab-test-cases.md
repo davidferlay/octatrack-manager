@@ -13,11 +13,11 @@ Run these 10 tests first for rapid validation of core functionality.
 | 3 | **Copy Patterns** | With Part assignment | Copy Patterns 1-4 with "Assign to Specific Part" = Part 2 | Success message. All copied patterns show "→ Part 2" |
 | 4 | **Copy Patterns** | Specific tracks only | Copy Pattern 1 with Track Scope = "Specific", select T1,T2 only | Success message. Only T1,T2 have triggers, other tracks empty |
 | 5 | **Copy Tracks** | Part params only | Copy T1 with mode "Part Params Only" | Success message. Machine/Amp/LFO/FX copied, pattern triggers unchanged |
-| 6 | **Copy Sample Slots** | Full range both types | Copy slots 1-128, Static+Flex, "Don't Copy Audio" | Success message. All slot assignments copied |
-| 7 | **Copy Sample Slots** | With audio copy | Copy slots 1-10 with "Copy to Destination" | Success message. Audio files exist in destination project folder |
-| 8 | **Validation** | Part count mismatch | Select 2 source Parts, 3 destination Parts | Execute button disabled, warning message shown |
-| 9 | **UI** | Operation switching | Switch between all 5 operations | UI updates correctly, no errors, appropriate fields shown |
-| 10 | **Error Recovery** | After error, retry | Trigger any error, then fix input and retry | Operation succeeds on retry |
+| 6 | **Copy Sample Slots** | Full range both types | Copy slots 1-128, Static+Flex, "Don't Copy" audio | Success message. All slot assignments copied |
+| 7 | **Copy Sample Slots** | With Move to Pool | Copy slots 1-10 with "Move to Pool" (same Set) | Success message. Audio files in AUDIO POOL, paths updated |
+| 8 | **Copy Sample Slots** | Default values | Select Copy Sample Slots, dest in same Set | "Static + Flex" and "Move to Pool" selected by default |
+| 9 | **Validation** | Part count mismatch | Select 2 source Parts, 3 destination Parts | Execute button disabled, warning message shown |
+| 10 | **UI** | Operation switching | Switch between all 5 operations | UI updates correctly, no errors, appropriate fields shown |
 
 **Estimated time:** 15-20 minutes
 
@@ -176,39 +176,45 @@ Run these 10 tests first for rapid validation of core functionality.
 ### 5.2 Slot Type Options
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| CSS-06 | Static + Flex | Select "Static + Flex" | Both slot types copied |
-| CSS-07 | Static Only | Select "Static Only" | Only Static slots copied |
-| CSS-08 | Flex Only | Select "Flex Only" | Only Flex slots copied |
+| CSS-06 | Default is Static + Flex | Open Copy Sample Slots | "Static + Flex" button selected by default |
+| CSS-07 | Flex Only | Click "Flex" button | Only Flex slots copied |
+| CSS-08 | Static + Flex | Click "Static + Flex" button | Both slot types copied |
+| CSS-09 | Static Only | Click "Static" button | Only Static slots copied |
 
 ### 5.3 Audio File Options
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| CSS-09 | Don't Copy Audio | Select "Don't Copy Audio" | Only slot assignments copied, no files |
-| CSS-10 | Copy to Destination | Select "Copy to Destination" | Audio files copied to dest project folder |
-| CSS-11 | Move to Audio Pool (same Set) | Both projects in same Set, select "Move to Audio Pool" | Files moved to AUDIO POOL, paths updated |
-| CSS-12 | Audio Pool not available | Projects NOT in same Set | "Move to Audio Pool" option not shown |
-| CSS-13 | Create Audio Pool | Audio Pool doesn't exist, select move option | Audio Pool directory created |
+| CSS-10 | Default is Move to Pool (same Set) | Select dest project in same Set | "Move to Pool" selected by default |
+| CSS-11 | Move to Pool option | Both projects in same Set, "Move to Pool" selected | Files moved to AUDIO POOL, paths updated in both projects |
+| CSS-12 | Copy option | Click "Copy" button | Audio files copied to dest project's sample folder |
+| CSS-13 | Don't Copy option | Click "Don't Copy" button | Only slot assignments copied, no files moved/copied |
+| CSS-14 | Move to Pool disabled (different Sets) | Projects NOT in same Set | "Move to Pool" button disabled with tooltip |
+| CSS-15 | Auto-switch to Copy when not same Set | Select dest project NOT in same Set | Automatically switches from "Move to Pool" to "Copy" |
+| CSS-16 | Auto-switch back to Move to Pool | Change dest to project in same Set (no manual selection made) | Automatically switches back to "Move to Pool" |
+| CSS-17 | Manual selection preserved | Manually select "Copy", then change dest to same-Set project | "Copy" remains selected (user choice preserved) |
+| CSS-18 | Pool will be created hint | Same Set, "Move to Pool" selected, no AUDIO POOL exists | "Pool will be created" hint visible with tooltip |
+| CSS-19 | Create Audio Pool | Audio Pool doesn't exist, execute with "Move to Pool" | Audio Pool directory created automatically |
 
 ### 5.4 Editor Settings Option
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| CSS-14 | Include Editor Settings ON | Check "Include Editor Settings" | Gain, loop mode, timestretch copied |
-| CSS-15 | Include Editor Settings OFF | Uncheck option | Only path copied, default settings used |
+| CSS-20 | Include Editor Settings ON (default) | Check "Include Editor Settings" checkbox | Gain, loop mode, timestretch copied |
+| CSS-21 | Include Editor Settings OFF | Uncheck option | Only path copied, default settings used |
 
 ### 5.5 Validation
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| CSS-16 | Slot overflow | 100 slots starting at slot 50 | Warning shown (overflow to 149) |
-| CSS-17 | Empty slot copy | Copy slot with no sample assigned | Empty slot copied (clears dest) |
-| CSS-18 | Missing source file | Slot references non-existent file | Warning or error shown |
+| CSS-22 | Slot overflow | 100 slots starting at slot 50 | Warning shown (overflow to 149) |
+| CSS-23 | Empty slot copy | Copy slot with no sample assigned | Empty slot copied (clears dest) |
+| CSS-24 | Missing source file | Slot references non-existent file | Warning or error shown |
 
 ### 5.6 Data Integrity
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| CSS-19 | Verify file path | Check slot path after copy | Correct path set |
-| CSS-20 | Verify gain setting | Check gain value | Gain preserved |
-| CSS-21 | Verify loop mode | Check loop setting | Loop mode preserved |
-| CSS-22 | Verify timestretch | Check timestretch mode | Timestretch preserved |
+| CSS-25 | Verify file path | Check slot path after copy | Correct path set |
+| CSS-26 | Verify gain setting | Check gain value | Gain preserved |
+| CSS-27 | Verify loop mode | Check loop setting | Loop mode preserved |
+| CSS-28 | Verify timestretch | Check timestretch mode | Timestretch preserved |
 
 ---
 
@@ -241,22 +247,34 @@ Run these 10 tests first for rapid validation of core functionality.
 | UI-14 | Button deselection | Click selected button | Returns to gray (if not last selected) |
 | UI-15 | All button | Click "All" | All items selected |
 
-### 6.4 Status Feedback
+### 6.4 Toggle Button Groups
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| UI-16 | Execute button | View execute button | Orange button with icon |
-| UI-17 | Loading state | Execute operation | Button shows spinner, "Executing..." |
-| UI-18 | Success message | Complete operation | Green success message appears |
-| UI-19 | Error message | Trigger error | Red error message appears |
-| UI-20 | Warning messages | Trigger validation warning | Orange warning text below field |
+| UI-16 | Slot Type buttons | View Copy Sample Slots | 3 buttons: Flex, Static + Flex (selected), Static |
+| UI-17 | Audio Files buttons | View Copy Sample Slots (same Set dest) | 3 buttons: Copy, Move to Pool (selected), Don't Copy |
+| UI-18 | Audio Files buttons (different Set) | Select dest NOT in same Set | "Move to Pool" button disabled |
+| UI-19 | Toggle selection | Click different toggle option | Previous deselected, new selected (orange) |
+| UI-20 | Disabled toggle button | Hover on disabled "Move to Pool" | Tooltip explains why disabled |
 
-### 6.5 Dynamic UI Updates
+### 6.5 Status Feedback
 | ID | Test Case | Steps | Expected Result |
 |----|-----------|-------|-----------------|
-| UI-21 | Operation change | Switch operation type | Source/Options/Dest panels update |
-| UI-22 | Project change | Select different dest project | Bank list updates for that project |
-| UI-23 | Conditional options | Copy Patterns: select "Assign to Specific Part" | Part selector appears |
-| UI-24 | Conditional options | Copy Patterns: select "Specific Tracks" | Track selector appears |
+| UI-21 | Execute button | View execute button | Orange button with icon |
+| UI-22 | Loading state | Execute operation | Button shows spinner, "Executing..." |
+| UI-23 | Success message | Complete operation | Green success message appears |
+| UI-24 | Error message | Trigger error | Red error message appears |
+| UI-25 | Warning messages | Trigger validation warning | Orange warning text below field |
+| UI-26 | Pool will be created hint | Same Set, "Move to Pool", no AUDIO POOL | "Pool will be created" hint right-aligned |
+| UI-27 | Pool hint tooltip | Hover on "Pool will be created" | Tooltip explains pool creation |
+
+### 6.6 Dynamic UI Updates
+| ID | Test Case | Steps | Expected Result |
+|----|-----------|-------|-----------------|
+| UI-28 | Operation change | Switch operation type | Source/Options/Dest panels update |
+| UI-29 | Project change | Select different dest project | Bank list updates for that project |
+| UI-30 | Conditional options | Copy Patterns: select "Assign to Specific Part" | Part selector appears |
+| UI-31 | Conditional options | Copy Patterns: select "Specific Tracks" | Track selector appears |
+| UI-32 | Audio mode auto-switch | Change dest from same-Set to different-Set | Audio mode switches from "Move to Pool" to "Copy" |
 
 ---
 
