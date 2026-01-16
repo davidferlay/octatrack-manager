@@ -2989,6 +2989,32 @@ h1 {
   font-size: 0.8rem;
 }
 
+/* Parts inline layout (Copy Parts) */
+.tools-multi-select.parts-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.tools-multi-select.parts-inline .tools-parts-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.tools-multi-btn.part-btn {
+  min-width: 30px;
+  width: 30px;
+  padding: 0.4rem 0.25rem;
+  font-size: 0.8rem;
+}
+
+.tools-multi-btn.part-btn.tools-select-all {
+  width: auto;
+  min-width: 36px;
+  padding: 0.4rem 0.5rem;
+}
+
 /* Part cross layout */
 .tools-part-cross {
   display: flex;
@@ -3017,6 +3043,13 @@ h1 {
   min-width: 36px;
   padding: 0 0.5rem;
   font-size: 0.75rem;
+}
+
+.tools-part-cross-spacer {
+  display: inline-block;
+  min-width: 36px;
+  width: 36px;
+  height: 32px;
 }
 
 /* Bank buttons layout */
