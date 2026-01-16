@@ -159,7 +159,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [openSetsInModal, setOpenSetsInModal] = useState<Set<string>>(new Set()); // Track which sets are open in modal
   const [openLocationsInModal, setOpenLocationsInModal] = useState<Set<number>>(new Set()); // Track which locations are open in modal
   const [isIndividualProjectsOpenInModal, setIsIndividualProjectsOpenInModal] = useState<boolean>(false);
-  const [isLocationsOpenInModal, setIsLocationsOpenInModal] = useState<boolean>(false);
+  const [isLocationsOpenInModal, setIsLocationsOpenInModal] = useState<boolean>(true);
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [browsedProject, setBrowsedProject] = useState<{ name: string; path: string } | null>(null);
 
