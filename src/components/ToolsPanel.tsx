@@ -163,8 +163,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [browsedProject, setBrowsedProject] = useState<{ name: string; path: string } | null>(null);
 
-  // Available destination banks for the destination project
-  const [destBanks, setDestBanks] = useState<number[]>([]);
 
   // Rescan for devices
   async function handleRescan() {
@@ -327,26 +325,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     }
     checkAudioPool();
   }, [destProject, projectPath, operation]);
-
-  // Load destination banks when destination project changes
-  useEffect(() => {
-    async function loadDestBanks() {
-      if (destProject === projectPath) {
-        // Use currently loaded banks
-        setDestBanks(Array.from(loadedBankIndices).sort((a, b) => a - b));
-      } else {
-        // Load bank indices from the destination project
-        try {
-          const indices = await invoke<number[]>("get_existing_banks", { path: destProject });
-          setDestBanks(indices);
-        } catch (err) {
-          console.error("Error loading destination banks:", err);
-          setDestBanks([]);
-        }
-      }
-    }
-    loadDestBanks();
-  }, [destProject, projectPath, loadedBankIndices]);
 
   // Track previous sameSetStatus to detect transitions
   const prevSameSetStatus = useRef<boolean | null>(null);
@@ -513,9 +491,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     setIndices(Array.from({ length: max }, (_, i) => i));
   }
 
-  // Get available source bank indices
-  const availableSourceBanks = Array.from(loadedBankIndices).sort((a, b) => a - b);
-
   return (
     <div className="tools-panel">
       {/* Operation Selector */}
@@ -543,19 +518,38 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           {(operation === "copy_bank" || operation === "copy_parts" || operation === "copy_patterns" || operation === "copy_tracks") && (
             <div className="tools-field">
               <label>Bank</label>
-              <select
-                value={sourceBankIndex}
-                onChange={(e) => setSourceBankIndex(Number(e.target.value))}
-              >
-                {availableSourceBanks.map((idx) => {
-                  const bank = banks[idx];
-                  return (
-                    <option key={idx} value={idx}>
-                      {bank ? formatBankName(bank.name, idx) : `Bank ${String.fromCharCode(65 + idx)}`}
-                    </option>
-                  );
-                })}
-              </select>
+              <div className="tools-multi-select banks-inline">
+                <div className="tools-bank-row">
+                  <span className="tools-track-label">Bank:</span>
+                  {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className={`tools-multi-btn bank-btn ${sourceBankIndex === idx ? "selected" : ""} ${!loadedBankIndices.has(idx) ? "disabled" : ""}`}
+                      onClick={() => loadedBankIndices.has(idx) && setSourceBankIndex(idx)}
+                      disabled={!loadedBankIndices.has(idx)}
+                      title={loadedBankIndices.has(idx) ? (banks[idx] ? formatBankName(banks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`) : "Bank not loaded"}
+                    >
+                      {String.fromCharCode(65 + idx)}
+                    </button>
+                  ))}
+                </div>
+                <div className="tools-bank-row">
+                  <span className="tools-track-label"></span>
+                  {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className={`tools-multi-btn bank-btn ${sourceBankIndex === idx ? "selected" : ""} ${!loadedBankIndices.has(idx) ? "disabled" : ""}`}
+                      onClick={() => loadedBankIndices.has(idx) && setSourceBankIndex(idx)}
+                      disabled={!loadedBankIndices.has(idx)}
+                      title={loadedBankIndices.has(idx) ? (banks[idx] ? formatBankName(banks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`) : "Bank not loaded"}
+                    >
+                      {String.fromCharCode(65 + idx)}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
@@ -1070,25 +1064,34 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           {(operation === "copy_bank" || operation === "copy_parts" || operation === "copy_patterns" || operation === "copy_tracks") && (
             <div className="tools-field">
               <label>Bank</label>
-              <select
-                value={destBankIndex}
-                onChange={(e) => setDestBankIndex(Number(e.target.value))}
-              >
-                {destBanks.length > 0 ? (
-                  destBanks.map((idx) => (
-                    <option key={idx} value={idx}>
-                      Bank {String.fromCharCode(65 + idx)}
-                    </option>
-                  ))
-                ) : (
-                  // Show all banks if none loaded yet
-                  Array.from({ length: 16 }, (_, idx) => (
-                    <option key={idx} value={idx}>
-                      Bank {String.fromCharCode(65 + idx)}
-                    </option>
-                  ))
-                )}
-              </select>
+              <div className="tools-multi-select banks-inline">
+                <div className="tools-bank-row">
+                  <span className="tools-track-label">Banks:</span>
+                  {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className={`tools-multi-btn bank-btn ${destBankIndex === idx ? "selected" : ""}`}
+                      onClick={() => setDestBankIndex(idx)}
+                    >
+                      {String.fromCharCode(65 + idx)}
+                    </button>
+                  ))}
+                </div>
+                <div className="tools-bank-row">
+                  <span className="tools-track-label"></span>
+                  {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className={`tools-multi-btn bank-btn ${destBankIndex === idx ? "selected" : ""}`}
+                      onClick={() => setDestBankIndex(idx)}
+                    >
+                      {String.fromCharCode(65 + idx)}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
