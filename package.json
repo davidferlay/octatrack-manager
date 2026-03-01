@@ -15,7 +15,8 @@
     "test": "npm run typecheck && npm run test:frontend && npm run test:rust",
     "test:frontend": "vitest run",
     "test:e2e": "playwright test",
-    "test:rust": "cd src-tauri && cargo fmt --check && cargo clippy -- -D warnings && cargo test"
+    "test:rust": "cd src-tauri && cargo fmt --check && cargo clippy -- -D warnings && cargo test",
+    "docs:watch": "npm --prefix website run start"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.1.0",

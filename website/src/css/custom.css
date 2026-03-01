@@ -1,0 +1,92 @@
+/**
+ * Custom CSS for Octatrack Manager Documentation
+ */
+
+:root {
+  --ifm-color-primary: #e85d04;
+  --ifm-color-primary-dark: #d15403;
+  --ifm-color-primary-darker: #c44f03;
+  --ifm-color-primary-darkest: #a24202;
+  --ifm-color-primary-light: #ff6b1a;
+  --ifm-color-primary-lighter: #ff7529;
+  --ifm-color-primary-lightest: #ff9152;
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #ff8c42;
+  --ifm-color-primary-dark: #ff7a28;
+  --ifm-color-primary-darker: #ff711b;
+  --ifm-color-primary-darkest: #f55e00;
+  --ifm-color-primary-light: #ff9e5c;
+  --ifm-color-primary-lighter: #ffa769;
+  --ifm-color-primary-lightest: #ffbf8f;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+}
+
+/* Admonition styling for tips and notes */
+.alert--tip {
+  border-left-color: var(--ifm-color-primary);
+}
+
+/* Keyboard key styling */
+kbd {
+  background-color: var(--ifm-color-emphasis-200);
+  border: 1px solid var(--ifm-color-emphasis-400);
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.85em;
+  padding: 2px 6px;
+}
+
+/* Feature grid on home page */
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+.feature-card {
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 8px;
+  padding: 1.5rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.feature-card:hover {
+  border-color: var(--ifm-color-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Step indicators */
+.step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: var(--ifm-color-primary);
+  color: white;
+  font-weight: bold;
+  font-size: 0.85rem;
+  margin-right: 0.5rem;
+  flex-shrink: 0;
+}
+
+/* Compatibility table improvements */
+.compatibility-table th {
+  white-space: nowrap;
+}
+
+/* Screenshot images */
+.screenshot {
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  max-width: 100%;
+  margin: 1rem 0;
+}

@@ -4,8 +4,8 @@ A desktop application for managing Elektron Octatrack projects, built with Tauri
 
 <p align="center">
   <img
-    src="public/octatrack-manager-osx.jpg"
-    alt="Octatrack Manager screnshot on OSX.jpg"
+    src="screenshots/Project discovery.png"
+    alt="Octatrack Manager - Project discovery"
     style="width:80%; height:auto;"
   />
 </p>
@@ -13,7 +13,7 @@ A desktop application for managing Elektron Octatrack projects, built with Tauri
   <a href="https://www.buymeacoffee.com/octatrackmanager" target="_blank">
     <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 47px; width: 150px;">
   </a>
-  <a href="https://www.elektronauts.com/t/file-manager-for-octatrack" target="_blank">
+  <a href="https://www.elektronauts.com/t/project-manager-for-octatrack/" target="_blank">
     <img src="public/contribute-on-elektraunauts-bg.png" alt="Contribute on Elektronauts" style="height: 50px;">
   </a>
 </p>
@@ -22,18 +22,10 @@ A desktop application for managing Elektron Octatrack projects, built with Tauri
 
 ## Features
 
-- **Device Discovery**: Automatically scan for Octatrack CF cards and local backups
-- **Set Management**: Browse Octatrack Sets with audio pool and project information
-- **Individual Projects**: Discover standalone projects without audio pools
-- **Project Details**: View comprehensive project information including:
-  - Tempo, time signature, and OS version
-  - Current state (bank, pattern, part, track)
-  - Mixer settings (gain, direct, levels)
-  - All banks with parts and patterns
-  - Sample slots (static and flex) with paths and settings
-- **Custom Directory Scanning**: Browse and add custom directories to scan
+- **Sets Discovery**: Automatically scan for Octatrack CF cards and local backups
+- **Project Management**: Browse and edit Octatrack Sets with audio pool and project information
+- **Audio Pool**: Browse, convert and mmanage the shared sample libraries
 - **Cross-Platform**: Works on Linux, macOS, and Windows
-- **Modern UI**: Clean, responsive interface built with React and TypeScript
 
 ## Compatibility
 
@@ -74,67 +66,6 @@ Download the latest release for your platform from the [Releases page](https://g
 4. Now you can open the app normally
 
 
-## Usage
-
-1. **Scan for Devices**: Click "Scan for Devices" to discover:
-   - Mounted Octatrack CF cards
-   - Local backups in common directories (Documents, Music, Downloads, etc.)
-2. **Browse Custom Directories**: Use "Browse..." to add any directory to scan
-3. **View Sets**: Explore Sets grouped by location with:
-   - Audio pool status (✓/✗)
-   - Number of projects in each Set
-   - Device type (CF Card, USB, Local Copy)
-4. **Individual Projects**: Projects without Sets appear in a dedicated "Individual Projects" section
-5. **Project Details**: Click any project to view:
-   - Complete metadata (tempo, time signature, current state)
-   - Mixer settings
-   - All 16 banks with their parts and patterns
-   - Sample slots with assignment details
-
-
-## How It Works
-
-The application automatically scans for Octatrack content in these locations:
-
-**Removable Drives:**
-- CF cards and USB drives (when mounted)
-
-**Home Directory:**
-- `~/Documents`
-- `~/Music`
-- `~/Desktop`
-- `~/Downloads`
-- `~/octatrack`, `~/Octatrack`, or `~/OCTATRACK`
-
-
-### Sets vs Individual Projects
-
-The scanner distinguishes between two types of Octatrack content:
-
-**Sets** (directories with an `AUDIO/` folder):
-- Must contain an `AUDIO/` directory (even if empty)
-- Must have at least one project subdirectory with `.work` files
-- Audio pool status indicates if the `AUDIO/` folder contains valid WAV/AIFF samples
-- Displayed grouped by location
-
-**Individual Projects** (standalone):
-- Directories containing `.work` files directly
-- No parent `AUDIO/` directory
-- All individual projects are collected in a single top-level "Individual Projects" section
-- Useful for managing single projects or backups without full Set structure
-
-
-### Project File Parsing
-
-When you click on a project, the app parses the `project.work` and `bank*.work` files to display:
-- Project metadata (tempo, time signature, OS version)
-- Current state (active bank, pattern, part, track, muted/soloed tracks)
-- Mixer settings (gains, direct outputs, levels)
-- All 16 banks (A-P) with their 4 parts each
-- Pattern names and lengths for each part
-- Sample slot assignments (static and flex) with paths and settings
-
-
 
 ## Development
 
@@ -161,8 +92,8 @@ npm run tauri:dev
 
 ## Contributing
 
-Contributions and feedbacks are welcome! Please feel free to submit issues and pull requests.
-
+- Feedbacks are welcome! Feel free to drop comments, ideas, feature requests to Elektronauts thread and shape the future of this project !
+    - https://www.elektronauts.com/t/project-manager-for-octatrack/
 
 ## Credits
 
