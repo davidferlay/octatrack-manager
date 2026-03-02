@@ -88,11 +88,7 @@ The editor is organized into pages, accessible via tabs within each part. Audio 
 
 ## Track selector
 
-![Parts editor — bank selector](/img/screenshots/parts-editor-bank-selector.png)
-
-![Parts editor — track selector](/img/screenshots/parts-editor-track-selector.png)
-
-Use the **Track Selector** (T1–T8 for audio, M1–M8 for MIDI) to choose which track's parameters are displayed in the editor. Multi-select is supported — selecting multiple tracks shows parameters that are shared or useful for comparison.
+Use the **Track Selector** to choose which track's parameters are displayed in the editor. See [Navigation](./navigation.md#track-selector) for full details.
 
 ## Parameter reference
 

@@ -4,7 +4,7 @@ sidebar_position: 4
 
 # Patterns
 
-A **pattern** is the fundamental sequencing unit of the Octatrack. It holds up to 16 steps of trigger data and parameter locks for all 8 audio tracks and 8 MIDI tracks. Each of the 16 banks (A–P) contains 4 parts, and each part holds 16 patterns — giving a total of 1,024 patterns per project.
+A **pattern** is the fundamental sequencing unit of the Octatrack. It holds up to 16 steps of trigger data and parameter locks for all 8 audio tracks and 8 MIDI tracks. Each of the 16 banks (A–P) contains 4 parts and 16 patterns — giving a total of 256 patterns per project.
 
 ![Pattern detail view](/img/screenshots/patterns-details.png)
 
@@ -16,18 +16,14 @@ Patterns are accessible from the **Project Detail** page once a bank is selected
 
 ### Pattern Selector
 
-The Pattern Selector displays all 16 patterns in the currently selected part as numbered buttons (1–16):
+The Pattern Selector displays all 16 patterns in the currently selected bank as numbered buttons (1–16):
 
 - The **active pattern** (last active when the project was saved) is highlighted
 - Click any pattern button to select it and display its data below
 
-### Selecting a bank and part first
+### Selecting a bank first
 
-Patterns are always viewed in the context of a bank and a part:
-
-1. Select a bank (A–P) using the **Bank Selector**
-2. Select a part (Part 1–4) using the **Parts** tabs
-3. The Pattern Selector then shows the 16 patterns belonging to that part
+Select a bank (A–P) using the **Bank Selector** — the Pattern Selector then shows the 16 patterns for that bank.
 
 ## Pattern data
 

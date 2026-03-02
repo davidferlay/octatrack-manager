@@ -21,8 +21,8 @@ Select an operation using the radio buttons at the top of the Tools panel:
 
 | Operation | What it copies |
 |-----------|----------------|
-| [Copy Bank](./copy-bank.md) | All 4 parts, all 16 patterns × 4 parts, all triggers and parameter locks |
-| [Copy Parts](./copy-parts.md) | Selected parts and their pattern data within a bank |
+| [Copy Bank](./copy-bank.md) | All 4 parts, all 16 patterns, all triggers and parameter locks |
+| [Copy Parts](./copy-parts.md) | Selected parts and their sound design settings within a bank |
 | [Copy Patterns](./copy-patterns.md) | Selected patterns (triggers and parameter locks) with configurable track and part scope |
 | [Copy Tracks](./copy-tracks.md) | Track sound design (machine/amp/LFO/FX) and/or pattern trigger data |
 | [Copy Sample Slots](./copy-sample-slots.md) | Static and/or flex slot assignments, optionally with audio files |
@@ -46,18 +46,6 @@ Within the modal you can:
 - Click **Browse...** to add a custom directory
 
 The destination can be the **same project** as the source (useful for copying within a project).
-
-## Audio pool status
-
-When both a source and destination project are selected, the Tools tab shows an audio pool status summary:
-
-| Status | Meaning |
-|--------|---------|
-| Source in Set | Whether the source project is part of a Set |
-| Destination in Set | Whether the destination project is part of a Set |
-| Same Set | Whether both projects share the same `AUDIO/` folder |
-
-The **Same Set** status determines whether the **Move to Pool** audio option is available in [Copy Sample Slots](./copy-sample-slots.md).
 
 ## Executing an operation
 

@@ -6,12 +6,12 @@ sidebar_position: 2
 
 ![Copy Bank](/img/screenshots/tools-copy-bank.png)
 
-The **Copy Bank** operation duplicates an entire bank — all 4 parts, all 64 patterns (16 patterns × 4 parts), their triggers, and all parameter locks — from a source project to one or more destination banks.
+The **Copy Bank** operation duplicates an entire bank — all 4 parts, all 16 patterns, their triggers, and all parameter locks — from a source project to one or more destination banks.
 
 ## What gets copied
 
 - All 4 parts of the source bank
-- All 16 patterns for each part (64 patterns total)
+- All 16 patterns
 - All step triggers in each pattern
 - All parameter locks (plocks) for every step
 - Part settings (machine assignments, amp, LFO, FX settings)

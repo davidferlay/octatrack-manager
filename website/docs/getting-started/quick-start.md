@@ -32,22 +32,33 @@ The [Project Detail](../features/project-detail.md) view shows:
 - **Metadata** — Tempo, time signature, OS version
 - **Current state** — Active bank, pattern, part, track, muted/soloed tracks
 - **Mixer settings** — Gains, levels, and cue settings
-- **Banks panel** — Navigate all 16 banks (A–P), 4 parts per bank, 16 patterns per part
+- **Banks panel** — Navigate all 16 banks (A–P), 4 parts per bank, 16 patterns per bank
 - **Sample slots** — All 128 static and 128 flex slots with file paths and settings
 
 Use the **Bank Selector** at the top to switch between banks. Use **Parts** tabs to switch between parts within a bank.
 
-## 4. Manage your audio pool
+## 4. Edit parts
+
+The [Parts Editor](../features/parts-editor.md) lets you modify sound design parameters for each part directly on your computer. Open it from the **Parts panel** on the Project Detail page: select a bank, click a **Part** tab (Part 1–4), then enable **Edit mode** using the toggle in the panel header.
+
+From there you can edit machine parameters, effects, LFOs, and MIDI settings for all 8 audio and 8 MIDI tracks — including a dedicated **LFO Designer** where you can draw custom waveforms freely with the mouse.
+
+:::warning
+Always back up your project before editing any parameters. The Parts Editor writes directly to your project files on disk.
+:::
+
+## 5. Manage your audio pool
 
 Click **Audio Pool** in a project to browse the shared sample library for that Set. From there you can:
 
 - Browse and filter audio files
 - Copy or move files into the pool
 - Delete unused samples
+- Automatically convert incompatible formats (MP3, FLAC, OGG, M4A) to WAV on import, and resample files not at 44.1 kHz
 
 See the [Audio Pool](../features/audio-pool.md) guide for details.
 
-## 5. Copy content between projects *(work in progress — coming soon)*
+## 6. Copy content between projects *(work in progress — coming soon)*
 
 :::caution Work in progress — coming soon
 This feature is currently under active development and is **not yet available in the latest release**. It will be included in an upcoming version of Octatrack Manager.

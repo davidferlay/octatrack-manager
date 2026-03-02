@@ -14,7 +14,7 @@ The **Copy Tracks** operation copies track-level data from a source track to one
 Machine parameters, amplitude settings (attack, hold, release, volume, balance, filter), all three LFO configurations, and FX slot parameters. This is the "voice" of the track — how it sounds.
 
 ### Pattern triggers (sequencer data)
-Step triggers and parameter locks (plocks) for all patterns in the selected part. This is the "rhythm" of the track — what it plays.
+Step triggers and parameter locks (plocks) for all patterns in the selected bank. This is the "rhythm" of the track — what it plays.
 
 ### Both
 Copies both sound design and trigger data in a single operation.

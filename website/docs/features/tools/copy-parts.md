@@ -6,14 +6,11 @@ sidebar_position: 3
 
 ![Copy Parts](/img/screenshots/tools-copy-parts.png)
 
-The **Copy Parts** operation copies one or more parts — including all their pattern data, triggers, and parameter locks — from a source bank to a destination bank.
+The **Copy Parts** operation copies one or more parts — including all their sound design settings — from a source bank to a destination bank.
 
 ## What gets copied
 
 - Part settings (machine assignments, amp, LFO, FX parameters for all tracks)
-- All 16 patterns within the part
-- All step triggers in each pattern
-- All parameter locks (plocks) in each pattern
 - Sample slot assignments within the part
 
 ## Configuration

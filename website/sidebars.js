@@ -17,10 +17,12 @@ const sidebars = {
       label: 'Features',
       items: [
         'features/project-discovery',
-        'features/project-detail',
         'features/audio-pool',
-        'features/patterns',
+        'features/project-detail',
+        'features/navigation',
         'features/parts-editor',
+        'features/patterns',
+        'features/sample-slots',
         {
           type: 'category',
           label: 'Tools',
@@ -43,6 +45,7 @@ const sidebars = {
         'reference/compatibility',
       ],
     },
+    'contributing',
   ],
 };
 
