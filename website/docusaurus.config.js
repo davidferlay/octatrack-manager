@@ -64,7 +64,7 @@ const config = {
             position: 'right',
           },
           {
-            href: 'https://github.com/davidferlay/octatrack-manager/releases',
+            href: 'https://github.com/davidferlay/octatrack-manager/releases/latest',
             label: 'Download',
             position: 'right',
           },
@@ -96,7 +96,7 @@ const config = {
             items: [
               {
                 label: 'Elektronauts Forum',
-                href: 'https://www.elektronauts.com/t/file-manager-for-octatrack',
+                href: 'https://www.elektronauts.com/t/project-manager-for-octatrack/233672',
               },
               {
                 label: 'GitHub Issues',
@@ -113,16 +113,11 @@ const config = {
               },
               {
                 label: 'Releases',
-                href: 'https://github.com/davidferlay/octatrack-manager/releases',
-              },
-              {
-                label: 'Buy Me a Coffee',
-                href: 'https://www.buymeacoffee.com/octatrackmanager',
+                href: 'https://github.com/davidferlay/octatrack-manager/releases/latest',
               },
             ],
           },
         ],
-        copyright: `Copyright © ${new Date().getFullYear()} Octatrack Manager. Built with Docusaurus.`,
       },
       prism: {
         theme: prismThemes.github,
