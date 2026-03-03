@@ -28,3 +28,15 @@ Helpful resources:
 * [Creating a signing certificate](https://tauri.app/distribute/sign/macos/#creating-a-signing-certificate)
 * [Signing in CI/CD platforms](https://tauri.app/distribute/sign/macos/#signing-in-cicd-platforms)
 
+
+## Support the project
+
+Octatrack Manager is a free, open-source project developed in my spare time. If you find the app useful and would like to support its ongoing development, you can do so by buying me a coffee.
+
+Your support keeps the project alive and free for everyone.
+
+<p align="center">
+  <a href="https://www.buymeacoffee.com/octatrackmanager" target="_blank">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style={{height: '55px', width: '217px'}} />
+  </a>
+</p>

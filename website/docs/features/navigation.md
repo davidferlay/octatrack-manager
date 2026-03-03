@@ -49,7 +49,7 @@ In the **Parts** tab, you can navigate between the four snapshots (kits) availab
 In the **Patterns** tab, you can choose which sequences to inspect.
 
 - Use the **Pattern Selector** to focus on a single pattern (1 through 16).
-- Use the **"All Patterns"** option to see every sequence in the bank simultaneously. This helps you visualize how your music evolves across patterns.
+- Use the **"All Patterns"** option to see every sequence in the bank simultaneously. This helps you visualize how your track evolves across patterns.
 - Use the **"Hide Empty"** toggle in the header to filter out patterns that contain no triggers or data.
 
 ---

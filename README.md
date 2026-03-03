@@ -1,6 +1,6 @@
 # Octatrack Manager
 
-**Octatrack Manager** is a task-oriented desktop application designed to simplify the management of your Elektron Octatrack projects. It provides a powerful and intuitive interface for browsing, inspecting, and editing your music away from the hardware.
+**Octatrack Manager** is a task-oriented desktop application designed to simplify the management of your Elektron Octatrack projects. It provides a powerful and intuitive interface for browsing, inspecting, and editing your projects away from the hardware.
 
 <p align="center">
   <img
@@ -36,13 +36,11 @@
 - **Bulk Operations:** Powerful tools for copying banks, parts, patterns, and sample slots between projects.
 
 
-## 🛠 Active Development
+## Active Development
 
 Octatrack Manager is currently a **work in progress**. While the core inspection and audio management features are stable, the project is under active development, and new functionalities are being added regularly to expand its capabilities.
 
-:::caution
 Editing features should be used with care. **Always back up your project files** before making changes, as the application modifies your binary project files directly.
-:::
 
 We are constantly working to improve the application and add more power-user features. Your feedback and bug reports are essential to the project's growth.
 
@@ -56,7 +54,7 @@ For detailed instructions, troubleshooting, and feature explanations, please vis
 
 ## Installation
 
-1. Download the latest release for your platform (Windows, macOS, or Linux) from the [Releases page](https://github.com/davidferlay/octatrack-manager/releases).
+1. Download the latest release for your platform (Windows, macOS, or Linux) from the [Releases page](https://github.com/davidferlay/octatrack-manager/releases/latest).
 2. Follow the [Installation Guide](https://davidferlay.github.io/octatrack-manager/docs/getting-started/installation) for platform-specific steps, especially for **macOS Gatekeeper** bypass.
 
 
