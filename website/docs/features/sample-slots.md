@@ -1,73 +1,66 @@
 ---
-sidebar_position: 5
+sidebar_position: 7
 ---
 
 # Sample Slots
 
-Each Octatrack project has two sets of sample slots, shown side by side in the Project Detail view:
+The Sample Slots tabs (**Flex** and **Static**) allow you to browse and manage the 256 samples assigned to your project. This is a powerful view for finding specific sounds and understanding how your project's memory is organized.
 
-- **Static Slots** (S1–S128) — samples loaded into RAM
-- **Flex Slots** (F1–F128) — samples streamed from the CF card
+![Sample Slots - Flex Table](/img/screenshots/sample-slots-flex.png)
 
-![Static sample slots list](/img/screenshots/sample-slots-static.png)
+## Static vs. Flex Slots
 
-![Flex sample slots list](/img/screenshots/sample-slots-flex.png)
+The Octatrack manages memory in two distinct ways:
 
-:::info Roadmap
-The Sample Slots view is planned to become a fully interactive sample management interface, with the Audio Pool integrated directly alongside it. Planned capabilities include:
+- **Static Slots (128):** Samples are streamed directly from the CF card. Use these for long recordings, backing tracks, or large sample libraries.
+- **Flex Slots (128):** Samples are loaded into the Octatrack's RAM. Use these for real-time manipulation, slicing, and intensive sound design.
 
-- **Assign samples to slots** — browse the Audio Pool and assign files to any slot directly from the interface
-- **Fix missing or moved samples** — automatically resolve broken references for samples that are still present in the Audio Pool but were moved or renamed
-:::
+---
 
-## Table columns
+## Exploring the Table
 
-| Column | Description |
-|--------|-------------|
-| **Slot** | Slot identifier (e.g., S1, F42) |
-| **Sample** | Filename of the assigned sample |
-| **Status** | ✓ file found on disk / ✗ file missing |
-| **Source** | Where the sample is referenced from (pool, slot path) |
-| **Gain** | Playback gain (0–127) |
-| **Timestretch** | Time-stretching mode: Off, Normal, or Beat |
-| **Loop** | Loop mode: Off or Normal |
-| **Compatibility** | Whether the sample is compatible with the Octatrack |
-| **Format** | Audio format (WAV, AIFF, etc.) |
-| **Bit depth** | Sample bit depth (16, 24, 32-bit) |
-| **Sample rate** | Sample rate in Hz (e.g., 44100, 48000) |
+Every row in the table represents a slot (S1–S128 or F1–F128). The table provides several pieces of information:
 
-## Compatibility values
+| Column | What it shows |
+|--------|----------------|
+| **Slot** | The slot number (prefixed with S or F). |
+| **Name** | The filename of the sample. Empty slots are clearly labeled. |
+| **Path** | The full directory path within your `AUDIO/` folder. |
+| **Gain** | The gain setting for that sample slot. |
+| **Loop** | Shows whether the sample is set to loop (Off, Normal). |
+| **Timestretch** | Shows the timestretch mode (Off, Normal, Beat). |
+| **BPM** | The detected or set BPM for the sample. |
 
-| Value | Meaning |
-|-------|---------|
-| `compatible` | File is natively supported by the Octatrack |
-| `wrong_rate` | Correct format but unsupported sample rate |
-| `incompatible` | File format not supported by the Octatrack |
+---
 
-## Filtering and sorting
+## Managing Your Slots
 
-Each table has a full set of filters accessible via the filter toolbar:
+### Filtering and Sorting
+The table includes a powerful toolbar to help you find what you need:
+- **Search:** Type a name to filter the list instantly.
+- **Hide Empty:** Toggle the switch to focus only on slots that have a sample assigned.
+- **Sort:** Click on any column header to sort the slots by name, path, or gain.
 
-![Sample slots — filter toolbar](/img/screenshots/sample-slots-flex-filters.png)
+![Sample Slots - Filters](/img/screenshots/sample-slots-flex-filters.png)
 
-![Sample slots — filter toolbar (additional filters)](/img/screenshots/sample-slots-flex-filters-bis.png)
+### Column Preferences
+You can customize which columns are visible. Right-click any column header to toggle visibility. These preferences are remembered across sessions.
 
-- **Search** — filter rows by filename
-- **Compatibility** — show only compatible / wrong_rate / incompatible
-- **Status** — show only slots with a sample / show only empty slots
-- **Source** — filter by source location
-- **Gain, Timestretch, Loop, Format, Bit depth, Sample rate** — filter by any of these attributes
+---
 
-Click any column header to sort ascending or descending. Click again to reverse the sort direction.
+## Using Slot Data in Tools
 
-## Column visibility
+The data from your sample slots can be used in several cross-project operations.
 
-Click **Columns** to open the column visibility menu and show/hide individual columns. Your preferences are saved across sessions.
+- **Copy Sample Slots:** Use the [Tools Overview](./tools/index.md) to copy your slot assignments (and even the audio files themselves) from one project to another.
+- **Move to Pool:** If you are working on a project that has samples scattered in its project folder, the **Move to Pool** tool can gather them all into your Set's `AUDIO/` folder automatically.
 
-## Hide empty slots
+---
 
-Toggle **Hide empty slots** to remove rows where no sample is assigned. Useful for quickly seeing only the slots that are in use.
+## Technical Details
 
-## Copy filename
+### BPM Calculation
+The Octatrack stores BPM information in a specific format. Octatrack Manager decodes this automatically and displays it as a standard BPM value.
 
-Hover over a sample filename and click the copy icon to copy the filename to the clipboard.
+### Sample Paths
+The app handles both relative and absolute paths within your Set. If a sample is missing from your `AUDIO/` folder, the name will appear, but you may see a warning indicator.

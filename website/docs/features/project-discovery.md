@@ -4,72 +4,67 @@ sidebar_position: 1
 
 # Project Discovery
 
-The Home page is the starting point for finding and opening your Octatrack content.
+The Home page is your starting point for browsing and organizing your Octatrack work.
 
-![Project discovery — home page](/img/screenshots/project-discovery.png)
+![Project discovery — Home page](/img/screenshots/project-discovery.png)
 
-## Automatic scanning
+## Finding Your Projects
 
-Click **Scan for Devices** to trigger an automatic discovery pass. The app searches the following locations:
+When you open Octatrack Manager, the first step is to locate your projects. You can do this in two ways:
 
-### Removable drives
-- Mounted CF cards
-- Mounted USB drives
+### 1. Automatic Scanning
+Click **Scan for Projects** to trigger a comprehensive search across your system. The app searches:
 
-### Home directory
-| Path | Description |
-|------|-------------|
-| `~/Documents` | Documents folder |
-| `~/Music` | Music folder |
-| `~/Desktop` | Desktop |
-| `~/Downloads` | Downloads folder |
-| `~/octatrack` | Common Octatrack backup path |
-| `~/Octatrack` | Alternative capitalisation |
-| `~/OCTATRACK` | All-caps variant |
+- **Removable Drives:** All mounted CompactFlash (CF) cards and USB drives.
+- **System Folders:** Common locations like `~/Documents`, `~/Music`, `~/Downloads`, and `~/Desktop`.
+- **Octatrack Folders:** Any folder on your home directory named `octatrack` (in any capitalization).
 
-Click **Refresh** (↻) at any time to rescan all known locations. The button shows a spinning animation while the scan is running.
+### 2. Manual Browsing
+If your projects are stored in a non-standard location (e.g., a specific backup drive or a cloud-synced folder):
+1. Click **Browse...**.
+2. Select the directory you want to scan.
+3. The app will search that directory recursively and add all found Sets and projects to the results.
 
-## Custom directory scanning
+### Refreshing the Results
+If you insert a CF card or move files while the app is open, click the **Refresh** (↻) button in the header. The app will rescan all its known locations.
 
-If your projects are in a non-standard location:
+---
 
-1. Click **Browse...**
-2. Select the directory containing your Set(s) or project(s)
-3. The app scans that directory and adds it to the results
+## Navigating the Results
 
-Custom directories are remembered for the current session.
-
-## Understanding the results
+Results are organized by **Location**, which corresponds to a Set on your CF card or computer.
 
 ### Locations (Sets)
+Each location card provides key information at a glance:
+- **Device Type:** Labeled as **CF Card**, **USB**, or **Local Copy**.
+- **Audio Pool Status:** A **✓ Audio Pool** indicates that the `AUDIO/` folder contains valid samples. An **✗ Audio Pool** means it is missing or empty.
+- **Project Count:** Shows how many projects were found in that specific Set.
 
-Sets are displayed grouped by the device or directory they were found in. Each location card shows:
-
-- **Device type** — CF Card, USB, or Local Copy
-- **Audio Pool status** — ✓ if the `AUDIO/` folder contains valid WAV/AIFF files, ✗ if it is absent or empty
-- **Project count** — Number of projects inside the Set
-
-Click **▶** to expand a location and see its individual projects. Click **▼** to collapse it.
-
-Each project row shows:
-- **Project name**
-- **Project file status** — ✓ if `project.work` exists and is readable
-- **Banks status** — ✓ if bank files are present
+Click the **▶** arrow on a location card to expand it and see the individual projects within.
 
 ### Individual Projects
+If projects are found outside of a Set (i.e., they are standalone `.work` or `.strd` files without a parent `AUDIO/` folder), they are grouped in the **Individual Projects** section at the bottom.
 
-Projects that exist without a parent `AUDIO/` directory (i.e., not inside a proper Set) are grouped in the **Individual Projects** section at the bottom. These are typically standalone backups or projects copied without their audio pool.
+These projects can still be opened and inspected, but they do not have a dedicated Audio Pool and some cross-project tools may have limitations.
 
-## Sets vs Individual Projects
+---
 
-| | Set Project | Individual Project |
-|--|------------|-------------------|
-| Has `AUDIO/` folder | ✓ | ✗ |
-| Can use Audio Pool manager | ✓ | ✗ |
-| Can use "Move to Pool" in Tools | ✓ (same Set only) | ✗ |
-| Full Tools support | ✓ | ✓ |
-| Viewable in Project Detail | ✓ | ✓ |
+## Opening a Project
 
-## Opening a project
+To open a project and start working:
+1. Locate the project name in the expanded list.
+2. Click the project card.
+3. You will be taken to the [Project Detail](./project-detail.md) page.
 
-Click any project name to navigate to its [Project Detail](./project-detail.md) page. Use the back button in your browser or the breadcrumb to return to the Home page.
+---
+
+## Project Status Indicators
+
+Inside each project card, you will see two status markers:
+
+| Marker | What it means |
+|--------|----------------|
+| **✓ Project** | The main project file (`project.work`) was found and is readable. |
+| **✓ Banks** | All associated bank files (e.g., `bank01.work`) were found. |
+
+If a marker is **✗**, it indicates a missing or corrupted file. This typically happens when projects are partially copied or moved manually in your computer's file manager.

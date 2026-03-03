@@ -4,54 +4,36 @@ sidebar_position: 2
 
 # Copy Bank
 
-![Copy Bank](/img/screenshots/tools-copy-bank.png)
-
-The **Copy Bank** operation duplicates an entire bank — all 4 parts, all 16 patterns, their triggers, and all parameter locks — from a source project to one or more destination banks.
-
-## What gets copied
-
-- All 4 parts of the source bank
-- All 16 patterns
-- All step triggers in each pattern
-- All parameter locks (plocks) for every step
-- Part settings (machine assignments, amp, LFO, FX settings)
-- Sample slot assignments within the part data
-
-## Configuration
-
-### Source bank
-
-Select exactly **one** bank (A–P) as the source. Click the bank button to select it; click again to deselect.
-
-### Destination bank(s)
-
-Select one or more destination banks using the multi-select bank grid:
-
-- Click individual bank buttons to toggle them on or off
-- Click **All** to select all 16 banks simultaneously
-- Click **None** to deselect everything
-
-The destination bank(s) can be in:
-- The **same project** as the source (to duplicate a bank internally)
-- A **different project** (requires selecting a destination project)
-
-:::caution
-Existing data in the destination bank(s) will be **overwritten**. This operation cannot be undone from within the app — make a backup of the destination project before proceeding if in doubt.
+:::caution In Development — Coming Soon
+The **Copy Bank** feature is a work in progress and is not yet considered stable.
 :::
 
-## Example workflow
+The planned **Copy Bank** tool allows you to copy an entire bank—including all 16 patterns and all 4 parts—from one project to another. This is intended to simplify merging live sets or reordering banks across your project list.
 
-**Goal**: Copy Bank A from "Project Alpha" to Bank C and Bank D in "Project Beta"
+![Tools - Copy Bank](/img/screenshots/tools-copy-bank.png)
 
-1. Open "Project Alpha" and click the **Tools** tab
-2. Select **Copy Bank** operation
-3. Click bank **A** as the source
-4. Click **Select Destination Project** and choose "Project Beta"
-5. Select banks **C** and **D** as destinations
-6. Click **Execute**
+## Current Workflow (Experimental)
 
-## Tips
+1. **Source Bank:** Select the bank (A–P) to copy from the current project.
+2. **Destination Project:** Choose the project where the bank will be copied.
+3. **Destination Banks:** Choose one or more destination banks (A–P) to receive the data.
+4. **Execute:** Perform the bulk copy.
 
-- Copy Bank is the fastest way to duplicate a complete bank's worth of patterns and sound design to a new location.
-- You can copy a bank to itself if you want to normalise or reset data, though in practice this has no effect.
-- If you only want to copy specific parts or patterns within a bank, use [Copy Parts](./copy-parts.md) or [Copy Patterns](./copy-patterns.md) instead.
+---
+
+## Planned Data Coverage
+
+When stable, copying a bank is expected to include:
+
+- **16 Patterns:** Sequences, triggers, parameter locks, and micro-timing.
+- **4 Parts:** Machine settings, amplifier configuration, LFOs, and effects.
+- **Part Assignments:** Pattern links to their respective parts.
+- **Track Settings:** Swing, quantization, and other per-track parameters.
+
+---
+
+## Important Safety Notes
+
+- **Destructive Operation:** Copying a bank replaces any existing data at the destination.
+- **Backup Mandatory:** Because this is an experimental feature, **always back up your project** before executing a bank copy.
+- **Sample Slots:** This tool is designed to copy slot **references** only. It does not move the underlying audio files.

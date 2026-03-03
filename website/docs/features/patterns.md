@@ -1,78 +1,81 @@
 ---
-sidebar_position: 4
+sidebar_position: 6
 ---
 
 # Patterns
 
-A **pattern** is the fundamental sequencing unit of the Octatrack. It holds up to 16 steps of trigger data and parameter locks for all 8 audio tracks and 8 MIDI tracks. Each of the 16 banks (A–P) contains 4 parts and 16 patterns — giving a total of 256 patterns per project.
+The Patterns tab provides a visual representation of your sequencer data. It allows you to inspect every trigger, parameter lock, and trig condition in your project with a level of detail that is not possible on the hardware.
 
-![Pattern detail view](/img/screenshots/patterns-details.png)
+![Patterns - Detailed view](/img/screenshots/patterns-audio-tracks.png)
 
-![Pattern detail view — alternative](/img/screenshots/patterns-details-bis.png)
+## Visualizing Triggers
 
-## Viewing patterns
+Each pattern is displayed as a grid of 16 steps (for patterns up to 16 steps, or scrollable for longer ones).
 
-Patterns are accessible from the **Project Detail** page once a bank is selected.
+### Trig Types
+- **Trigger:** Indicated by a solid circle. A traditional sequencer trigger.
+- **Trigless:** Indicated by an empty circle. A trigger that changes parameters but does not restart the sample envelope.
+- **P-Lock:** Indicated by the letter **P**. Shows that one or more parameter locks are present on that step.
 
-### Pattern Selector
+### Specialized Indicators
+- **1:** One-Shot trigger.
+- **~:** Slide trigger.
+- **R:** Recorder trigger.
+- **%:** Trig Condition (e.g., Fill, 50%).
+- **X:** Trig Repeats.
+- **µ:** Micro-timing offset.
+- **V:** Velocity or Volume lock.
+- **S:** Sample slot lock.
+- **Swing:** A wave icon indicates that a swing trig is active on that step.
 
-The Pattern Selector displays all 16 patterns in the currently selected bank as numbered buttons (1–16):
+---
 
-- The **active pattern** (last active when the project was saved) is highlighted
-- Click any pattern button to select it and display its data below
+## Detailed Step Inspection
 
-### Selecting a bank first
+Click on any step in the grid to open the **Parameter Details Panel**. This panel shows you every single piece of data associated with that specific trigger.
 
-Select a bank (A–P) using the **Bank Selector** — the Pattern Selector then shows the 16 patterns for that bank.
+- **Notes & Chords:** For MIDI tracks, it shows the exact notes and even detects common chord types.
+- **P-Lock Values:** Lists every parameter lock and its exact value.
+- **Micro-timing:** Shows the precise offset (e.g., +1/32).
 
-## Pattern data
+![Patterns - Parameter Details](/img/screenshots/patterns-details.png)
 
-Each pattern stores the following information:
+---
 
-| Data | Description |
-|------|-------------|
-| **Step triggers** | Which steps are active for each track (up to 16 steps) |
-| **Parameter locks** | Per-step overrides for any track parameter |
-| **Pattern length** | Number of active steps (1–64, or per-track lengths) |
-| **Scale settings** | Time scale multiplier and master/track scale mode |
-| **Part assignment** | Which of the 4 parts this pattern uses for sound design |
-| **Chain settings** | How the pattern chains to the next one |
+## Pattern Navigation
 
-![Pattern — audio tracks](/img/screenshots/patterns-audio-tracks.png)
+- **Single Pattern:** Select a specific pattern (1–16) from the selector.
+- **All Patterns:** View all sequences in a bank at once by selecting **All** from the pattern selector.
+- **Hide Empty:** Toggle the **Hide empty** switch in the header to focus only on patterns that contain triggers.
 
-![Pattern — audio tracks (additional view)](/img/screenshots/patterns-audio-tracks-bis.png)
+---
 
-![Pattern — audio tracks (extended)](/img/screenshots/patterns-audio-tracks-ter.png)
+## Track Settings
 
-![Pattern — MIDI tracks](/img/screenshots/patterns-midi-tracks.png)
+Toggle **Track settings** in the header to see the configuration for each track within the bank.
 
-![Pattern — MIDI tracks (additional view)](/img/screenshots/patterns-midi-tracks-bis.png)
+This section shows:
+- **Swing:** The swing amount (%) for each track.
+- **Trig Mode:** The track's trig mode (e.g., Plays Free, One-Shot).
+- **Quantization:** The trig quantization settings.
+- **Start Silent:** Whether the track starts silently.
 
-## Parameter locks
+![Patterns - Track Settings](/img/screenshots/patterns-audio-tracks-bis.png)
 
-Parameter locks (plocks) let individual steps override the part's default values for any parameter — machine settings, amp, LFO, FX, or sample slot assignments. This is what makes Octatrack patterns so expressive: every step can have a completely different sound or behaviour.
+---
 
-Plocks are visible in the **Sample Slots** tables: slots that have per-step overrides are indicated alongside the base part values.
+## Advanced Sequencer Data
 
-## Pattern length and scale
+### Scale & Length
+The app displays the **Length** (in steps) and **Master Scale** (speed) for every pattern. If you are using **Per Track** scale mode, the individual track length and speed are shown instead.
 
-The Octatrack supports patterns from 1 to 64 steps. Patterns can also run at different time scales relative to the master tempo:
+### Chain Behavior
+The **Chain Mode** indicator shows how the Octatrack will transition after this pattern finishes playing (e.g., chain after 16, 32, 64 steps).
 
-| Setting | Description |
-|---------|-------------|
-| **Length** | Number of steps in the pattern (default: 16) |
-| **Scale** | Time multiplier: 1/8×, 1/4×, 1/2×, 1×, 2×, 3×, 4× |
-| **Master/Track mode** | Whether tracks share the pattern length or run independently |
+### MIDI Track Details
+For MIDI tracks, the app detects and displays:
+- The MIDI channel.
+- The default note for the track.
+- Chord information (major, minor, 7th, etc.) if multiple notes are triggered on a single step.
 
-These values are preserved and displayed in Octatrack Manager.
-
-## Copying patterns
-
-Use the **[Copy Patterns](./tools/copy-patterns.md)** tool to duplicate one or more patterns to new locations — within the same bank, across banks, or to a different project entirely. The copy operation supports:
-
-- Copying a single pattern to multiple destinations
-- Copying all 16 patterns at once
-- Choosing which tracks to include (all tracks or a specific subset)
-- Configuring how part assignments are handled at the destination
-
-See the [Copy Patterns](./tools/copy-patterns.md) documentation for full details.
+![Patterns - MIDI Tracks](/img/screenshots/patterns-midi-tracks.png)
