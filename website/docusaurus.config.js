@@ -56,7 +56,7 @@ const config = {
             type: 'docSidebar',
             sidebarId: 'docsSidebar',
             position: 'left',
-            label: 'Documentation',
+            label: 'User Guide',
           },
           {
             href: 'https://github.com/davidferlay/octatrack-manager',
@@ -68,18 +68,13 @@ const config = {
             label: 'Download',
             position: 'right',
           },
-          {
-            href: 'https://www.buymeacoffee.com/octatrackmanager',
-            label: 'Buy Me a Coffee',
-            position: 'right',
-          },
         ],
       },
       footer: {
         style: 'dark',
         links: [
           {
-            title: 'Docs',
+            title: 'User Guide',
             items: [
               {
                 label: 'Getting Started',
