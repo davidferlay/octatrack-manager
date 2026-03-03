@@ -4,101 +4,78 @@ sidebar_position: 2
 
 # Project Detail
 
-The Project Detail page shows a comprehensive view of a single Octatrack project. It is divided into several panels.
+The Project Detail page provides a comprehensive, high-level view of an Octatrack project. From here, you can inspect your project's settings, explore its patterns and parts, and manage its sample slots.
 
-![Project detail — overview](/img/screenshots/project-details.png)
+![Project Detail - Overview](/img/screenshots/project-details.png)
 
-:::info Roadmap
-Everything displayed on this page is intended to be editable directly in the UI later on. Editing support is being added progressively — the [Parts Editor](./parts-editor.md) is available today, with the remaining sections to follow in future releases.
-:::
+## Overview Tab
 
-## Project metadata
+The **Overview** tab displays the global settings that define how your project behaves on the Octatrack. It is a read-only view that captures the exact state of the project when it was last saved on the hardware.
 
-At the top of the page you'll find the core project settings:
+### Project Metadata
+Located in the **Project Info** section, this shows:
+- **Tempo:** The project BPM (40–300).
+- **Time Sig:** The project's time signature (e.g., 4/4).
+- **OS Version:** The firmware version used to save the project (e.g., 1.40B).
 
-| Field | Description |
-|-------|-------------|
-| **Name** | Project name as stored on disk |
-| **Tempo** | BPM value (40–300) |
-| **Time signature** | Beat structure (e.g., 4/4) |
-| **OS version** | Octatrack firmware version used to save the project (e.g., 1.40B) |
-| **Pattern length** | Default pattern length in steps |
+### Playback State
+The **Current State** section reflects what was active on the device:
+- **Bank & Pattern:** The currently active sequence.
+- **Part:** The part (1–4) assigned to the current bank.
+- **Mode:** Indicates whether the Octatrack was in Audio Mode or MIDI Mode.
+- **Track Status:** Shows which audio and MIDI tracks were **Muted**, **Soloed**, or **Cued**.
 
-## Current state
+### Mixer Settings
+The **Mixer** section mirrors the Octatrack's project-level gain and routing configuration:
+- **Gain AB / CD:** Input gain for the physical inputs.
+- **Dir AB / CD:** Direct-through level for the inputs.
+- **Phones Mix:** The blend between Main and Cue in the headphones.
+- **Main / Cue Level:** The master output volumes.
 
-Shows what was active when the project was last saved on the Octatrack:
+### MIDI & Memory
+- **MIDI Sync:** View whether Clock, Transport, and Program Change messages were enabled for send or receive.
+- **MIDI Channels:** Shows the MIDI channel assigned to each track and the **Auto Channel**.
+- **Memory:** Displays critical RAM allocation settings, such as **24-bit Flex** loading and **Dynamic Recorder** status.
 
-| Field | Description |
-|-------|-------------|
-| **Active bank** | Which of the 16 banks (A–P) was selected |
-| **Active pattern** | Active pattern number (1–16) |
-| **Active part** | Active part number (1–4) |
-| **Active track** | Active track (T1–T8 for audio, M1–M8 for MIDI) |
+### Metronome
+The **Metronome** section displays all click track settings, including volume, pitch, and tonal/noise click preferences.
 
-### Track states
+---
 
-Visual badges indicate which tracks were:
-- **Muted** — track output silenced
-- **Soloed** — only this track plays
-- **Cued** — track routed to cue output
+## Navigation Tabs
 
-## Mixer settings
+At the top of the project header, you can switch between several specialized views:
 
-The mixer panel shows the project-level gain and routing settings:
+### Parts
+The **Parts** tab takes you to the [Parts Editor](./parts-editor.md), where you can view and modify the sound design snapshots for each bank. This is where you edit machine types, effects, and LFOs.
 
-| Parameter | Range | Description |
-|-----------|-------|-------------|
-| **Gain AB** | 0–127 | Input gain for inputs A/B |
-| **Gain CD** | 0–127 | Input gain for inputs C/D |
-| **Direct AB** | 0–127 | Direct-through level for A/B |
-| **Direct CD** | 0–127 | Direct-through level for C/D |
-| **Phones mix** | 0–127 | Headphone mix level |
-| **Main to cue** | 0–127 | Main output bleed into cue bus |
-| **Main level** | 0–127 | Master output level |
-| **Cue level** | 0–127 | Cue output level |
+### Patterns
+The **Patterns** tab provides a visual representation of your sequencer data. You can inspect every trigger, parameter lock, and trig condition in your project. See [Patterns](./patterns.md) for details.
 
-## Memory settings
+### Flex & Static Slots
+The **Flex** and **Static** tabs list all 256 sample slots in your project. You can filter slots by name, check which slots are empty, and see the exact file path for every sample. See [Sample Slots](./sample-slots.md) for details.
 
-Controls how the Octatrack manages RAM for samples:
+### Tools (Coming Soon)
+The **Tools** tab is intended to provide bulk operations for copying content between projects. **Note: These features are currently under development.** See the [Tools Overview](./tools/index.md) for the latest status.
 
-| Setting | Description |
-|---------|-------------|
-| **Load 24-bit flex** | Whether 24-bit flex samples are loaded into RAM |
-| **Dynamic recorders** | Enable dynamic recorder allocation |
-| **Record 24-bit** | Record audio at 24-bit depth |
-| **Reserved recorders** | Number of reserved recorder slots (0–8) |
-| **Reserved recorder length** | Length allocated to reserved recorders |
+---
 
-## MIDI settings
+## Action Bar
 
-Global MIDI configuration for the project:
+The header of the Project Detail page contains several important actions:
 
-| Setting | Description |
-|---------|-------------|
-| **Clock send / receive** | Send or receive MIDI clock |
-| **Transport send / receive** | Send or receive MIDI start/stop |
-| **Program change send / receive** | Send or receive program change messages |
-| **Program change channels** | MIDI channels used for program change |
-| **Auto channel** | Automatic MIDI channel assignment |
-| **Per-track channel** | MIDI channel for each of the 8 audio tracks (–1 = disabled) |
-| **CC in / out** | MIDI CC receive/send per audio track |
-| **Note in / out** | MIDI note receive/send per audio track |
+- **Back Button:** Return to the [Home Page](./project-discovery.md).
+- **View/Edit Mode:** Use the toggle to switch between a safe, read-only view and **Edit Mode**, which enables changes in the Parts Editor.
+- **Refresh (↻):** Reload the project from disk. Use this if you have manually replaced project files on your computer.
+- **Save Status:** Displays when changes are being saved to `.unsaved` files or committed to the project.
+- **Unsupported Banks Warning:** Appears if some bank files are from an older OS version. Click it for instructions on how to update them on your hardware.
 
-## Metronome settings
+---
 
-| Setting | Range | Description |
-|---------|-------|-------------|
-| **Enabled** | On/Off | Whether the click track is active |
-| **Main volume** | 0–127 | Metronome level in main output |
-| **Cue volume** | 0–127 | Metronome level in cue output |
-| **Pitch** | 0–24 | Click pitch |
-| **Tonal** | On/Off | Tonal (pitched) vs. noise click |
-| **Preroll** | 0–4 bars | Count-in bars before playback |
+## Multi-Bank View
 
+In the **Parts** and **Patterns** tabs, you can use the **Bank Selector** to focus on a single bank (A–P) or select **All Banks** to see an overview of your entire project simultaneously. 
 
-## Navigation
+![Project details bank selector](/img/screenshots/project-details-bank-selector.png)
 
-Use the Bank Selector, Part Selector, Pattern Selector, and Track Selector to navigate the project data. See the dedicated [Navigation](./navigation.md) page for full details.
-
-
-
+When viewing "All Banks", you can scroll through all 16 banks on a single page, making it much easier to organize complex projects.

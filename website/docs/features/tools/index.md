@@ -4,66 +4,53 @@ sidebar_position: 1
 
 # Tools Overview
 
-:::caution Work in progress — coming soon
-The Tools feature is currently under active development and is **not yet available in the latest release**. It will be included in an upcoming version of Octatrack Manager. Stay tuned for updates on the [Elektronauts forum](https://www.elektronauts.com/t/project-manager-for-octatrack/) and the [GitHub releases page](https://github.com/davidferlay/octatrack-manager/releases/latest).
+:::caution Work in Progress — Coming Soon
+The **Tools** features are currently under active development and are **not yet available in a stable release**. They are included in the current version for testing purposes and to demonstrate the planned workflow.
 :::
 
-The **Tools** tab on any Project Detail page provides five powerful copy operations for moving content between projects — or within the same project. All operations are non-destructive: they read source data and write it to the destination without modifying the source.
+The **Tools** tab is designed to provide powerful bulk operations for moving content between different projects. Once stabilized, these tools will allow you to merge live sets, copy sound designs between banks, and reorganize your sample library without manual work on the hardware.
 
-## Accessing the Tools tab
+![Tools - Overview](/img/screenshots/tools-copy-bank.png)
 
-1. Open any project from the Home page
-2. Click the **Tools** tab at the top of the Project Detail page
+## Planned Operations (In Development)
 
-## Available operations
+The following operations are currently being implemented and refined:
 
-Select an operation using the radio buttons at the top of the Tools panel:
+### 1. [Copy Banks](./copy-bank.md)
+Move an entire bank (all 16 patterns and all 4 parts) from one project to another.
 
-| Operation | What it copies |
-|-----------|----------------|
-| [Copy Bank](./copy-bank.md) | All 4 parts, all 16 patterns, all triggers and parameter locks |
-| [Copy Parts](./copy-parts.md) | Selected parts and their sound design settings within a bank |
-| [Copy Patterns](./copy-patterns.md) | Selected patterns (triggers and parameter locks) with configurable track and part scope |
-| [Copy Tracks](./copy-tracks.md) | Track sound design (machine/amp/LFO/FX) and/or pattern trigger data |
-| [Copy Sample Slots](./copy-sample-slots.md) | Static and/or flex slot assignments, optionally with audio files |
+### 2. [Copy Parts](./copy-parts.md)
+Copy the sound design (Machine, Amp, LFO, FX) for all 16 tracks from one part to another.
 
-## Selecting a destination project
+### 3. [Copy Patterns](./copy-patterns.md)
+Move individual patterns between projects, with options for track scope and part assignment.
 
-Each operation requires a **destination project**. The source project is always the currently open project.
+### 4. [Copy Tracks](./copy-tracks.md)
+Granular copying of settings for a single track (audio or MIDI) between parts or patterns.
 
-![Destination project selection menu](/img/screenshots/tools-destination-selector.png)
+### 5. [Copy Sample Slots](./copy-sample-slots.md)
+Manage sample slot assignments and automate the movement of audio files into the Audio Pool.
 
-To set the destination:
+---
 
-1. Click **Select Destination Project** (or the destination project button)
-2. A modal opens showing all discovered projects, organized by location
-3. Browse and click any project to select it
-4. Confirm the selection
+## Experimental Workflow
 
-Within the modal you can:
-- Filter by Set or location type (CF Card, USB, Local Copy)
-- Click **Scan** to rescan for devices
-- Click **Browse...** to add a custom directory
+While in development, the tools generally follow this workflow:
 
-The destination can be the **same project** as the source (useful for copying within a project).
+1. **Select Source:** Choose the bank, part, or pattern you want to copy from.
+2. **Select Destination:** Choose the target project and location.
+3. **Configure Options:** Refine exactly what data is transferred.
+4. **Execute:** Perform the copy operation.
 
-## Executing an operation
+---
 
-1. Configure the source and destination settings for the selected operation
-2. Select the destination project
-3. Click **Execute**
+## Safety and Data Integrity
 
-The Execute button is disabled (greyed out) if required fields are missing or invalid. Hover over it to see a tooltip explaining what is missing.
+:::warning
+Because these features are **Work in Progress**, they may behave unexpectedly or be subject to changes in future updates. 
 
-After execution, a success or error message is displayed at the bottom of the panel.
+**Always back up your project files** before using any feature in the Tools tab. The app writes directly to the destination project files, and these changes are not reversible within the app.
+:::
 
-## Validation
-
-Each operation validates its inputs before executing. Common validation rules:
-
-- Source and destination bank must be selected
-- At least one source and one destination item must be selected
-- For "Specific Tracks" scope, at least one track must be selected
-- Source and destination cannot be identical where it would make no sense
-
-The Tools panel displays inline validation messages to guide you.
+- **Real-time Validation:** The interface attempt to prevent invalid selections, but users should verify all settings carefully.
+- **Direct File Modification:** These tools modify your binary project files. Ensure you have copies of your important work.

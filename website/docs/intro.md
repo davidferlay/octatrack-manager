@@ -4,63 +4,53 @@ sidebar_position: 1
 
 # Introduction
 
-**Octatrack Manager** is a free, open-source desktop application for browsing and managing Elektron Octatrack projects.
+**Octatrack Manager** is a task-oriented desktop application designed to simplify the management of your Elektron Octatrack projects.
 
-It runs on Linux, macOS, and Windows, offering a powerful and intuitive graphical interface that makes complex tasks easier and enables capabilities that aren’t available directly on the device.
+Whether you are preparing for a live set, organizing years of studio work, or deep-diving into sound design, Octatrack Manager provides a clear, high-level view of your data and powerful tools that are not available directly on the hardware.
 
 ![Octatrack Manager - Project discovery](/img/project-discovery.png)
 
-## What it does
+## Why use Octatrack Manager?
 
-Octatrack Manager lets you:
+The Octatrack is a deep and powerful machine, but its small screen can make certain tasks tedious. Octatrack Manager bridges this gap by bringing your projects to your computer, allowing you to:
 
-- **Discover projects** automatically by scanning CF cards, USB drives, and common local directories
-- **Inspect projects** in detail — view metadata, mixer settings, MIDI configuration, memory settings, and all 16 banks with their patterns and sample slots
-- **Manage audio pools** — browse, copy, move, and convert audio files with format information and transfer progress
-- **Edit parts** — modify machine parameters, effects, LFOs, and MIDI settings for each track directly on your computer
-- **Copy content** between projects using five powerful copy operations: banks, parts, patterns, tracks, and sample slots *(work in progress — coming soon)*
+- **Save Time:** Perform bulk operations like copying banks or parts between projects (experimental).
+- **Visualize Your Music:** See your patterns, triggers, and parameter locks clearly on a large screen.
+- **Organize Your Library:** Manage your sample library with automatic format conversion and high-quality resampling.
+- **Design Sounds Comfortably:** Edit machine parameters, effects, and LFOs with a dedicated interface, including a custom LFO designer.
+- **Maintain Data Integrity:** Inspect projects safely with a read-only view, or use the "Edit" mode to make intentional changes.
 
-## Key concepts
+## Core Capabilities
 
-Understanding Octatrack's terminology helps navigate the application:
+- **Project Discovery:** Automatically scans CF cards, USB drives, and local backups to find your music.
+- **In-Depth Inspection:** View mixer settings, MIDI configuration, memory allocation, and metronome settings for any project.
+- **Pattern Visualization:** Explore every step of your sequences, including micro-timing, trig conditions, and chord information for MIDI tracks.
+- **Audio Pool Management:** Browse your samples with detailed metadata (channels, bit depth, sample rate) and transfer files with automatic WAV conversion.
+- **Cross-Project Copying (WIP):** Move banks, parts, patterns, tracks, and sample slots between projects (coming soon).
+- **Parts Editing:** Modify sound design snapshots for both audio and MIDI tracks, with full support for machine parameters and effects.
 
-| Concept | Description |
+## Essential Concepts
+
+If you are new to the Octatrack or just need a refresher, here is how the app organizes your data:
+
+| Concept | What it is |
 |---------|-------------|
-| **Set** | A top-level directory containing an `AUDIO/` folder and one or more projects |
-| **Audio Pool** | The `AUDIO/` folder within a Set — contains WAV/AIFF samples referenced by projects |
-| **Project** | An Octatrack project (`.work` files) — contains 16 banks |
-| **Bank** | One of 16 banks (A–P) — each bank holds 4 parts and 16 patterns |
-| **Part** | A sound design snapshot for all 8 audio tracks and 8 MIDI tracks |
-| **Pattern** | A sequence of 16 steps with triggers and parameter locks |
-| **Static slot** | One of 128 sample slots loaded into RAM once, shared across patterns |
-| **Flex slot** | One of 128 sample slots streamed from CF card in real time |
+| **Set** | The top-level folder on your CF card. It contains an `AUDIO/` folder and multiple projects. |
+| **Audio Pool** | The `AUDIO/` folder inside a Set. This is the shared library where all your projects look for samples. |
+| **Project** | A collection of 16 banks. It also stores global settings like the mixer and MIDI configuration. |
+| **Bank** | A container for 16 patterns and 4 parts. Banks are named A through P. |
+| **Part** | A "kit" or "snapshot" of all settings for all 16 tracks. A bank can switch between 4 different parts. |
+| **Pattern** | A sequence of notes or triggers. Patterns are assigned to one of the 4 parts in their bank. |
+| **Sample Slot** | A reference to an audio file. **Static slots** stream from the card (for long samples), while **Flex slots** load into RAM (for manipulation). |
 
-## Project structure
+## Compatibility & Safety
 
-The app reads Octatrack's native binary file format:
-
-```
-MySet/
-├── AUDIO/                    ← Audio pool (shared samples)
-│   ├── kick.wav
-│   └── snare.wav
-├── MyProject/                ← Project directory
-│   ├── project.work          ← Project metadata, settings
-│   ├── bank01.work           ← Bank A data
-│   ├── bank02.work           ← Bank B data
-│   └── ...
-└── AnotherProject/
-    └── ...
-```
-
-Individual projects (without a parent Set) are also supported.
-
-## Compatibility
-
-:::warning Important
-Octatrack Manager is **only compatible with projects saved on OS version 1.40 or later**. If you have projects from an older OS version, open and re-save them on the Octatrack with the latest firmware before using this application.
+:::important
+**OS Requirement:** Octatrack Manager requires projects saved on **Octatrack OS 1.40 or later**. Projects from older versions must be opened and re-saved on the hardware first.
 :::
 
-## Getting started
+**Data Safety:** Octatrack Manager treats your data with care. It uses the `ot-tools-io` library to ensure binary compatibility. When you make changes in "Edit" mode, the app writes to `.unsaved` files (similar to how the Octatrack works internally) before you commit them to your final project.
 
-Head to [Installation](./getting-started/installation.md) to download and install the app, then follow the [Quick Start](./getting-started/quick-start.md) guide to get up and running.
+## Ready to start?
+
+Follow the [Installation](./getting-started/installation.md) guide to get the app, then jump into the [Quick Start](./getting-started/quick-start.md) to open your first project.
