@@ -13,9 +13,9 @@ Run these 10 tests first for rapid validation of core functionality.
 | 3 | **Copy Patterns** | With Part assignment | Copy Patterns 1-4 with "User Selection" Part = Part 2 | Success message. All copied patterns show "→ Part 2" |
 | 4 | **Copy Patterns** | Specific tracks only | Copy Pattern 1 with Track Scope = "Specific Tracks", select T1,T2 only | Success message. Only T1,T2 have triggers, other tracks empty |
 | 5 | **Copy Tracks** | Part Parameters only | Select T1 source and dest, mode "Part Parameters". Execute. | Success message. Machine/Amp/LFO/FX copied, pattern triggers unchanged |
-| 6 | **Copy Sample Slots** | Full range both types | Copy slots 1-128, Static+Flex, "Don't Copy" audio | Success message. All slot assignments copied |
+| 6 | **Copy Sample Slots** | Full range both types | Copy slots 1-128, Static+Flex, "Copy" audio | Success message. All slot + samples copied |
 | 7 | **Copy Sample Slots** | With Move to Pool | Copy slots 1-10 with "Move to Pool" (same Set) | Success message. Audio files in AUDIO POOL, paths updated |
-| 8 | **Copy Sample Slots** | Default values | Select Copy Sample Slots, dest in same Set | "Static + Flex" and "Move to Pool" selected by default |
+| 8 | **Copy Sample Slots** | No sample | Select Copy Sample Slots, dest in same Set | "Flex" and "Don't copy" |
 | 9 | **Validation** | No selection | Copy Tracks with no source/dest tracks selected | Execute button disabled, warning message shown |
 | 10 | **General** | Operation switching | Switch between all 5 operations | Correct fields shown for each operation |
 
