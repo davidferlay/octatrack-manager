@@ -11,7 +11,7 @@ Run these 10 tests first for rapid validation of core functionality.
 | 1 | **Copy Bank** | Cross-project copy | Copy Bank A from Project1 to Bank B in Project2 | Success message. Open Project2, verify Bank B has copied data |
 | 2 | **Copy Parts** | Multi-part copy | Click Source "All", verify destination syncs. Execute. | Success message. All 4 Parts copied |
 | 3 | **Copy Patterns** | With Part assignment | Copy Patterns 1-4 with "User Selection" Part = Part 2 | Success message. All copied patterns show "→ Part 2" |
-| 4 | **Copy Patterns** | Specific tracks only | Copy Pattern 1 with Track Scope = "Specific Tracks", select T1,T2 only | Success message. Only T1,T2 have triggers, other tracks empty |
+| 4 | **Copy Patterns** | Specific tracks only | Copy Pattern 1 with Track Scope = "Specific Tracks", select T1,T2 only | Success message. Only T4,T8, M1, M4 have triggers, other tracks empty |
 | 5 | **Copy Tracks** | Part Parameters only | Select T1 source and dest, mode "Part Parameters". Execute. | Success message. Machine/Amp/LFO/FX copied, pattern triggers unchanged |
 | 6 | **Copy Sample Slots** | Full range both types | Copy slots 1-128, Static+Flex, "Copy" audio | Success message. All slot + samples copied |
 | 7 | **Copy Sample Slots** | With Move to Pool | Copy slots 1-10 with "Move to Pool" (same Set) | Success message. Audio files in AUDIO POOL, paths updated |
