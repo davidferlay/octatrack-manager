@@ -26,12 +26,12 @@ The planned **Copy Pattern** tool allows you to move individual sequencer patter
 When stable, these features are intended to work as follows:
 
 ### Part Assignment
-- **Keep Original:** Target patterns keep their current part assignment.
-- **Copy Source Part:** The sound design from the source part is copied with the pattern, and assignments are updated.
-- **User Selection:** Manually choose which target part to assign.
+- **Keep Original:** Targeted patterns keep their current part assignment.
+- **Copy Source Part:** Targeted patterns take the current part assignment of source pattern.
+- **User Selection:** Manually choose which part to set for targeted patterns.
 
 ### Track Scope
-- **All Tracks:** Copy triggers and p-locks for all 16 tracks.
+- **All Tracks:** Copy triggers and p-locks for all 16 tracks (audio and MIDI).
 - **Specific Tracks:** Move only selected tracks (e.g., only T1 and T2).
 
 ---

@@ -20,16 +20,16 @@ The following operations are currently being implemented and refined:
 Move an entire bank (all 16 patterns and all 4 parts) from one project to another.
 
 ### 2. [Copy Parts](./copy-parts.md)
-Copy the sound design (Machine, Amp, LFO, FX) for all 16 tracks from one part to another.
+Copy the sound design (Machine, Amp, LFO, FX) for all 16 tracks from one part to another, within or across projects.
 
 ### 3. [Copy Patterns](./copy-patterns.md)
-Move individual patterns between projects, with options for track scope and part assignment.
+Move individual patterns within or inbetween projects, with options for track scope and part assignment.
 
 ### 4. [Copy Tracks](./copy-tracks.md)
-Granular copying of settings for a single track (audio or MIDI) between parts or patterns.
+Granular copying of settings for a single track (audio or MIDI) between parts and patterns.
 
 ### 5. [Copy Sample Slots](./copy-sample-slots.md)
-Manage sample slot assignments and automate the movement of audio files into the Audio Pool.
+Manage sample slot assignments across projects and automate the movement of audio files into the Audio Pool.
 
 ---
 
@@ -47,7 +47,7 @@ While in development, the tools generally follow this workflow:
 ## Safety and Data Integrity
 
 :::warning
-Because these features are **Work in Progress**, they may behave unexpectedly or be subject to changes in future updates. 
+Because these features are **Work in Progress**, they may behave unexpectedly or be subject to changes in future updates.
 
 **Always back up your project files** before using any feature in the Tools tab. The app writes directly to the destination project files, and these changes are not reversible within the app.
 :::
