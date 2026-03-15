@@ -3472,30 +3472,31 @@ pub fn copy_parts(
     };
 
     // Helper to copy all part state for a single src→dst pair
-    let copy_one_part = |dest_bank: &mut BankFile, source_bank: &BankFile, src_part: usize, dst_part: usize| {
-        // Copy unsaved (working) state
-        dest_bank.parts.unsaved.0[dst_part] = source_bank.parts.unsaved.0[src_part].clone();
-        // Copy saved (backup) state
-        dest_bank.parts.saved.0[dst_part] = source_bank.parts.saved.0[src_part].clone();
-        // Copy part name
-        dest_bank.part_names[dst_part] = source_bank.part_names[src_part];
-        // Copy saved state flag
-        dest_bank.parts_saved_state[dst_part] = source_bank.parts_saved_state[src_part];
-        // Mirror the source's edited bitmask for this part
-        if source_bank.parts_edited_bitmask & (1 << src_part) != 0 {
-            dest_bank.parts_edited_bitmask |= 1 << dst_part;
-        } else {
-            dest_bank.parts_edited_bitmask &= !(1 << dst_part);
-        }
+    let copy_one_part =
+        |dest_bank: &mut BankFile, source_bank: &BankFile, src_part: usize, dst_part: usize| {
+            // Copy unsaved (working) state
+            dest_bank.parts.unsaved.0[dst_part] = source_bank.parts.unsaved.0[src_part].clone();
+            // Copy saved (backup) state
+            dest_bank.parts.saved.0[dst_part] = source_bank.parts.saved.0[src_part].clone();
+            // Copy part name
+            dest_bank.part_names[dst_part] = source_bank.part_names[src_part];
+            // Copy saved state flag
+            dest_bank.parts_saved_state[dst_part] = source_bank.parts_saved_state[src_part];
+            // Mirror the source's edited bitmask for this part
+            if source_bank.parts_edited_bitmask & (1 << src_part) != 0 {
+                dest_bank.parts_edited_bitmask |= 1 << dst_part;
+            } else {
+                dest_bank.parts_edited_bitmask &= !(1 << dst_part);
+            }
 
-        println!(
-            "[DEBUG] Copied Part {} to Part {} (saved_state: {}, edited: {})",
-            src_part + 1,
-            dst_part + 1,
-            source_bank.parts_saved_state[src_part],
-            source_bank.parts_edited_bitmask & (1 << src_part) != 0
-        );
-    };
+            println!(
+                "[DEBUG] Copied Part {} to Part {} (saved_state: {}, edited: {})",
+                src_part + 1,
+                dst_part + 1,
+                source_bank.parts_saved_state[src_part],
+                source_bank.parts_edited_bitmask & (1 << src_part) != 0
+            );
+        };
 
     // Copy parts based on mode
     if source_part_indices.len() == 4 {
@@ -3669,8 +3670,12 @@ pub fn copy_patterns(
         // Copy the pattern
         if track_mode == "all" {
             // Save destination's current track data that we may need to preserve
-            let dest_audio_trigs = dest_bank.patterns.0[dest_pattern_idx as usize].audio_track_trigs.clone();
-            let dest_midi_trigs = dest_bank.patterns.0[dest_pattern_idx as usize].midi_track_trigs.clone();
+            let dest_audio_trigs = dest_bank.patterns.0[dest_pattern_idx as usize]
+                .audio_track_trigs
+                .clone();
+            let dest_midi_trigs = dest_bank.patterns.0[dest_pattern_idx as usize]
+                .midi_track_trigs
+                .clone();
 
             // Clone entire pattern from source (gets non-track data like scale, tempo, etc.)
             dest_bank.patterns.0[dest_pattern_idx as usize] = src_pattern.clone();
@@ -3679,11 +3684,13 @@ pub fn copy_patterns(
             match mode_scope {
                 "audio" => {
                     // Only copy audio tracks; restore destination's MIDI tracks
-                    dest_bank.patterns.0[dest_pattern_idx as usize].midi_track_trigs = dest_midi_trigs;
+                    dest_bank.patterns.0[dest_pattern_idx as usize].midi_track_trigs =
+                        dest_midi_trigs;
                 }
                 "midi" => {
                     // Only copy MIDI tracks; restore destination's audio tracks
-                    dest_bank.patterns.0[dest_pattern_idx as usize].audio_track_trigs = dest_audio_trigs;
+                    dest_bank.patterns.0[dest_pattern_idx as usize].audio_track_trigs =
+                        dest_audio_trigs;
                 }
                 _ => {
                     // "both" - keep everything from source (no restoration needed)
@@ -3904,9 +3911,12 @@ pub fn copy_tracks(
 
                 // Copy custom LFO designs and interpolation masks
                 dest_bank.parts.unsaved.0[dst_part].audio_tracks_custom_lfo_designs[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].audio_tracks_custom_lfo_designs[src_idx].clone();
-                dest_bank.parts.unsaved.0[dst_part].audio_tracks_custom_lfos_interpolation_masks[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].audio_tracks_custom_lfos_interpolation_masks[src_idx].clone();
+                    source_bank.parts.unsaved.0[src_part].audio_tracks_custom_lfo_designs[src_idx]
+                        .clone();
+                dest_bank.parts.unsaved.0[dst_part].audio_tracks_custom_lfos_interpolation_masks
+                    [dst_idx] = source_bank.parts.unsaved.0[src_part]
+                    .audio_tracks_custom_lfos_interpolation_masks[src_idx]
+                    .clone();
 
                 // Copy recorder setup
                 dest_bank.parts.unsaved.0[dst_part].recorder_setup[dst_idx] =
@@ -3933,8 +3943,10 @@ pub fn copy_tracks(
                 // Copy custom LFO designs and interpolation masks
                 dest_bank.parts.unsaved.0[dst_part].midi_tracks_custom_lfos[dst_idx] =
                     source_bank.parts.unsaved.0[src_part].midi_tracks_custom_lfos[src_idx].clone();
-                dest_bank.parts.unsaved.0[dst_part].midi_tracks_custom_lfos_interpolation_masks[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].midi_tracks_custom_lfos_interpolation_masks[src_idx].clone();
+                dest_bank.parts.unsaved.0[dst_part].midi_tracks_custom_lfos_interpolation_masks
+                    [dst_idx] = source_bank.parts.unsaved.0[src_part]
+                    .midi_tracks_custom_lfos_interpolation_masks[src_idx]
+                    .clone();
 
                 // Copy arp sequences
                 dest_bank.parts.unsaved.0[dst_part].midi_tracks_arp_seqs[dst_idx] =
@@ -3944,7 +3956,8 @@ pub fn copy_tracks(
                 dest_bank.parts.unsaved.0[dst_part].midi_tracks_arp_mute_masks[dst_idx * 2] =
                     source_bank.parts.unsaved.0[src_part].midi_tracks_arp_mute_masks[src_idx * 2];
                 dest_bank.parts.unsaved.0[dst_part].midi_tracks_arp_mute_masks[dst_idx * 2 + 1] =
-                    source_bank.parts.unsaved.0[src_part].midi_tracks_arp_mute_masks[src_idx * 2 + 1];
+                    source_bank.parts.unsaved.0[src_part].midi_tracks_arp_mute_masks
+                        [src_idx * 2 + 1];
 
                 println!(
                     "[DEBUG] Copied MIDI track {} Part params to track {} (params, LFO, arp)",
@@ -3961,13 +3974,17 @@ pub fn copy_tracks(
                     // All patterns: copy triggers for all 16 patterns (1-to-1)
                     for pattern_idx in 0..16 {
                         if is_audio {
-                            dest_bank.patterns.0[pattern_idx].audio_track_trigs.0[dst_track_idx as usize] =
-                                source_bank.patterns.0[pattern_idx].audio_track_trigs.0[src_track_idx as usize].clone();
+                            dest_bank.patterns.0[pattern_idx].audio_track_trigs.0
+                                [dst_track_idx as usize] = source_bank.patterns.0[pattern_idx]
+                                .audio_track_trigs
+                                .0[src_track_idx as usize]
+                                .clone();
                         } else {
                             let src_midi = (src_track_idx - 8) as usize;
                             let dst_midi = (dst_track_idx - 8) as usize;
                             dest_bank.patterns.0[pattern_idx].midi_track_trigs.0[dst_midi] =
-                                source_bank.patterns.0[pattern_idx].midi_track_trigs.0[src_midi].clone();
+                                source_bank.patterns.0[pattern_idx].midi_track_trigs.0[src_midi]
+                                    .clone();
                         }
                     }
                     println!(
@@ -3979,13 +3996,17 @@ pub fn copy_tracks(
                 (Some(src_pat), Some(dst_pat)) => {
                     // Specific source pattern to specific dest pattern
                     if is_audio {
-                        dest_bank.patterns.0[dst_pat as usize].audio_track_trigs.0[dst_track_idx as usize] =
-                            source_bank.patterns.0[src_pat as usize].audio_track_trigs.0[src_track_idx as usize].clone();
+                        dest_bank.patterns.0[dst_pat as usize].audio_track_trigs.0
+                            [dst_track_idx as usize] = source_bank.patterns.0[src_pat as usize]
+                            .audio_track_trigs
+                            .0[src_track_idx as usize]
+                            .clone();
                     } else {
                         let src_midi = (src_track_idx - 8) as usize;
                         let dst_midi = (dst_track_idx - 8) as usize;
                         dest_bank.patterns.0[dst_pat as usize].midi_track_trigs.0[dst_midi] =
-                            source_bank.patterns.0[src_pat as usize].midi_track_trigs.0[src_midi].clone();
+                            source_bank.patterns.0[src_pat as usize].midi_track_trigs.0[src_midi]
+                                .clone();
                     }
                     println!(
                         "[DEBUG] Copied track {} triggers (pattern {} to pattern {}) to track {}",
@@ -3999,13 +4020,18 @@ pub fn copy_tracks(
                     // Specific source pattern to all dest patterns
                     for pattern_idx in 0..16 {
                         if is_audio {
-                            dest_bank.patterns.0[pattern_idx].audio_track_trigs.0[dst_track_idx as usize] =
-                                source_bank.patterns.0[src_pat as usize].audio_track_trigs.0[src_track_idx as usize].clone();
+                            dest_bank.patterns.0[pattern_idx].audio_track_trigs.0
+                                [dst_track_idx as usize] = source_bank.patterns.0[src_pat as usize]
+                                .audio_track_trigs
+                                .0[src_track_idx as usize]
+                                .clone();
                         } else {
                             let src_midi = (src_track_idx - 8) as usize;
                             let dst_midi = (dst_track_idx - 8) as usize;
                             dest_bank.patterns.0[pattern_idx].midi_track_trigs.0[dst_midi] =
-                                source_bank.patterns.0[src_pat as usize].midi_track_trigs.0[src_midi].clone();
+                                source_bank.patterns.0[src_pat as usize].midi_track_trigs.0
+                                    [src_midi]
+                                    .clone();
                         }
                     }
                     println!(
@@ -5096,7 +5122,9 @@ mod tests {
             let source = TestProject::with_modified_bank(0, |bank| {
                 // Modify the saved state of part 0
                 bank.parts.saved.0[0].audio_track_params_values[0].lfo.spd1 = 99;
-                bank.parts.unsaved.0[0].audio_track_params_values[0].lfo.spd1 = 88;
+                bank.parts.unsaved.0[0].audio_track_params_values[0]
+                    .lfo
+                    .spd1 = 88;
             });
             let dest = TestProject::new();
 
@@ -5106,11 +5134,17 @@ mod tests {
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
 
             assert_eq!(
-                dest_bank.parts.unsaved.0[2].audio_track_params_values[0].lfo.spd1, 88,
+                dest_bank.parts.unsaved.0[2].audio_track_params_values[0]
+                    .lfo
+                    .spd1,
+                88,
                 "Unsaved part data should be copied"
             );
             assert_eq!(
-                dest_bank.parts.saved.0[2].audio_track_params_values[0].lfo.spd1, 99,
+                dest_bank.parts.saved.0[2].audio_track_params_values[0]
+                    .lfo
+                    .spd1,
+                99,
                 "Saved part data should be copied"
             );
         }
@@ -7132,7 +7166,11 @@ mod tests {
                 Some(10),
             );
 
-            assert!(result.is_ok(), "Should succeed (pattern params ignored): {:?}", result);
+            assert!(
+                result.is_ok(),
+                "Should succeed (pattern params ignored): {:?}",
+                result
+            );
 
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
@@ -7738,7 +7776,10 @@ mod tests {
 
             if let Some(ref slot) = dest_pf.slots.static_slots[0] {
                 assert_eq!(slot.gain, 72, "Gain should be reset to 72 (default)");
-                assert_eq!(slot.bpm, 2880, "BPM should be reset to 2880 (120 BPM default)");
+                assert_eq!(
+                    slot.bpm, 2880,
+                    "BPM should be reset to 2880 (120 BPM default)"
+                );
             } else {
                 panic!("Destination slot should exist");
             }
@@ -7870,8 +7911,14 @@ mod tests {
             let slot = ot_tools_io::projects::SlotAttributes::new(
                 ot_tools_io::settings::SlotType::Flex,
                 1, // 1-based slot_id
-                None, None, None, None, Some(72), Some(2880),
-            ).unwrap();
+                None,
+                None,
+                None,
+                None,
+                Some(72),
+                Some(2880),
+            )
+            .unwrap();
             pf.slots.flex_slots[0] = Some(slot);
             pf.to_data_file(&source_project_path).unwrap();
 
@@ -7958,7 +8005,10 @@ mod tests {
             let dest_audio = Path::new(&dest.path).join("AUDIO/test.wav");
             let dest_ot = Path::new(&dest.path).join("AUDIO/test.ot");
             assert!(dest_audio.exists(), "Audio file should be copied");
-            assert!(dest_ot.exists(), ".ot file should be copied alongside audio");
+            assert!(
+                dest_ot.exists(),
+                ".ot file should be copied alongside audio"
+            );
         }
 
         #[test]
@@ -8048,15 +8098,16 @@ mod tests {
             let source_project_path = Path::new(&source.path).join("project.work");
             let mut pf = ProjectFile::from_data_file(&source_project_path).unwrap();
             let slot = ot_tools_io::projects::SlotAttributes::new(
-                    ot_tools_io::settings::SlotType::Static,
-                    1,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                ).unwrap();
+                ot_tools_io::settings::SlotType::Static,
+                1,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
             pf.slots.static_slots[0] = Some(slot);
             pf.to_data_file(&source_project_path).unwrap();
 
@@ -8076,10 +8127,7 @@ mod tests {
             );
 
             // markers.work should now exist
-            assert!(
-                dest_markers_path.exists(),
-                "markers.work should be created"
-            );
+            assert!(dest_markers_path.exists(), "markers.work should be created");
         }
     }
 
