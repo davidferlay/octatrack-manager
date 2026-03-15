@@ -4495,7 +4495,7 @@ pub fn copy_sample_slots(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ot_tools_io::{BankFile, OctatrackFileIO, ProjectFile};
+    use ot_tools_io::{BankFile, MarkersFile, OctatrackFileIO, ProjectFile};
     use std::fs;
     use tempfile::TempDir;
 
@@ -4554,6 +4554,12 @@ mod tests {
 
             project
         }
+    }
+
+    /// Helper to read a bank file from a project
+    fn source_bank_data(project_path: &str, bank_index: u8) -> BankFile {
+        let bank_path = Path::new(project_path).join(format!("bank{:02}.work", bank_index + 1));
+        BankFile::from_data_file(&bank_path).unwrap()
     }
 
     // ==================== COPY BANK TESTS ====================
@@ -5081,6 +5087,142 @@ mod tests {
             assert_eq!(
                 dest_bank.checksum, calculated,
                 "Checksum should match calculated value after copy"
+            );
+        }
+
+        #[test]
+        fn test_copy_parts_copies_saved_state() {
+            // Verify that copy_parts copies both unsaved and saved Part data
+            let source = TestProject::with_modified_bank(0, |bank| {
+                // Modify the saved state of part 0
+                bank.parts.saved.0[0].audio_track_params_values[0].lfo.spd1 = 99;
+                bank.parts.unsaved.0[0].audio_track_params_values[0].lfo.spd1 = 88;
+            });
+            let dest = TestProject::new();
+
+            copy_parts(&source.path, 0, vec![0], &dest.path, 0, vec![2]).unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+
+            assert_eq!(
+                dest_bank.parts.unsaved.0[2].audio_track_params_values[0].lfo.spd1, 88,
+                "Unsaved part data should be copied"
+            );
+            assert_eq!(
+                dest_bank.parts.saved.0[2].audio_track_params_values[0].lfo.spd1, 99,
+                "Saved part data should be copied"
+            );
+        }
+
+        #[test]
+        fn test_copy_parts_copies_part_names() {
+            // Verify that part names are copied
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.part_names[0] = [b'M', b'Y', b'P', b'A', b'R', b'T', 0];
+            });
+            let dest = TestProject::new();
+
+            copy_parts(&source.path, 0, vec![0], &dest.path, 0, vec![1]).unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+
+            assert_eq!(
+                dest_bank.part_names[1],
+                [b'M', b'Y', b'P', b'A', b'R', b'T', 0],
+                "Part name should be copied to destination"
+            );
+        }
+
+        #[test]
+        fn test_copy_parts_copies_saved_state_flag() {
+            // Verify that parts_saved_state is copied
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.parts_saved_state[0] = 1; // Mark part 0 as saved
+            });
+            let dest = TestProject::new();
+
+            copy_parts(&source.path, 0, vec![0], &dest.path, 0, vec![2]).unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+
+            assert_eq!(
+                dest_bank.parts_saved_state[2], 1,
+                "parts_saved_state should be copied"
+            );
+        }
+
+        #[test]
+        fn test_copy_parts_clears_edited_bit_when_source_not_edited() {
+            // Verify that when source part is NOT edited, destination bit is cleared
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.parts_edited_bitmask = 0; // No parts edited
+            });
+            let dest = TestProject::with_modified_bank(0, |bank| {
+                bank.parts_edited_bitmask = 0b1111; // All parts edited
+            });
+
+            copy_parts(&source.path, 0, vec![0], &dest.path, 0, vec![2]).unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+
+            // Part 2 bit should be cleared (source was not edited)
+            assert_eq!(
+                dest_bank.parts_edited_bitmask & (1 << 2),
+                0,
+                "Destination part should NOT be marked as edited when source wasn't"
+            );
+            // Other parts should remain edited
+            assert_ne!(
+                dest_bank.parts_edited_bitmask & (1 << 0),
+                0,
+                "Other parts should remain edited"
+            );
+        }
+
+        #[test]
+        fn test_copy_parts_all_copies_all_names_and_saved() {
+            // Verify 4-to-4 copy copies all part names and saved states
+            let source = TestProject::with_modified_bank(0, |bank| {
+                for i in 0..4 {
+                    bank.part_names[i][0] = b'A' + i as u8;
+                    bank.parts_saved_state[i] = if i % 2 == 0 { 1 } else { 0 };
+                }
+                bank.parts_edited_bitmask = 0b1010;
+            });
+            let dest = TestProject::new();
+
+            copy_parts(
+                &source.path,
+                0,
+                vec![0, 1, 2, 3],
+                &dest.path,
+                0,
+                vec![0, 1, 2, 3],
+            )
+            .unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+
+            for i in 0..4 {
+                assert_eq!(
+                    dest_bank.part_names[i][0],
+                    b'A' + i as u8,
+                    "Part name {} should be copied",
+                    i
+                );
+            }
+            assert_eq!(dest_bank.parts_saved_state[0], 1);
+            assert_eq!(dest_bank.parts_saved_state[1], 0);
+            assert_eq!(dest_bank.parts_saved_state[2], 1);
+            assert_eq!(dest_bank.parts_saved_state[3], 0);
+            assert_eq!(
+                dest_bank.parts_edited_bitmask, 0b1010,
+                "Edited bitmask should match source"
             );
         }
     }
@@ -5824,6 +5966,176 @@ mod tests {
                 "Error message should mention count mismatch"
             );
         }
+
+        #[test]
+        fn test_copy_patterns_mode_scope_audio_only() {
+            // CPT-MS-01: Mode scope "audio" copies only audio track trigs, preserves MIDI
+            let source = TestProject::with_modified_bank(0, |bank| {
+                // Set distinctive audio trig data on source pattern 0
+                bank.patterns.0[0].audio_track_trigs.0[0].swing_amount = 15;
+                // Set distinctive MIDI trig data on source pattern 0
+                bank.patterns.0[0].midi_track_trigs.0[0].swing_amount = 20;
+            });
+            let dest = TestProject::with_modified_bank(0, |bank| {
+                // Set existing MIDI data on dest pattern 1
+                bank.patterns.0[1].midi_track_trigs.0[0].swing_amount = 25;
+                bank.patterns.0[1].audio_track_trigs.0[0].swing_amount = 10;
+            });
+
+            copy_patterns(
+                &source.path,
+                0,
+                vec![0],
+                &dest.path,
+                0,
+                vec![1],
+                "keep_original",
+                None,
+                "all",
+                None,
+                "audio",
+            )
+            .unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+
+            // Audio trigs should come from source
+            assert_eq!(
+                dest_bank.patterns.0[1].audio_track_trigs.0[0].swing_amount, 15,
+                "Audio trigs should be copied from source"
+            );
+            // MIDI trigs should be preserved from destination
+            assert_eq!(
+                dest_bank.patterns.0[1].midi_track_trigs.0[0].swing_amount, 25,
+                "MIDI trigs should be preserved from destination (audio mode)"
+            );
+        }
+
+        #[test]
+        fn test_copy_patterns_mode_scope_midi_only() {
+            // CPT-MS-02: Mode scope "midi" copies only MIDI track trigs, preserves audio
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.patterns.0[0].audio_track_trigs.0[0].swing_amount = 15;
+                bank.patterns.0[0].midi_track_trigs.0[0].swing_amount = 20;
+            });
+            let dest = TestProject::with_modified_bank(0, |bank| {
+                bank.patterns.0[1].audio_track_trigs.0[0].swing_amount = 10;
+                bank.patterns.0[1].midi_track_trigs.0[0].swing_amount = 25;
+            });
+
+            copy_patterns(
+                &source.path,
+                0,
+                vec![0],
+                &dest.path,
+                0,
+                vec![1],
+                "keep_original",
+                None,
+                "all",
+                None,
+                "midi",
+            )
+            .unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+
+            // Audio trigs should be preserved from destination
+            assert_eq!(
+                dest_bank.patterns.0[1].audio_track_trigs.0[0].swing_amount, 10,
+                "Audio trigs should be preserved from destination (midi mode)"
+            );
+            // MIDI trigs should come from source
+            assert_eq!(
+                dest_bank.patterns.0[1].midi_track_trigs.0[0].swing_amount, 20,
+                "MIDI trigs should be copied from source"
+            );
+        }
+
+        #[test]
+        fn test_copy_patterns_mode_scope_both() {
+            // CPT-MS-03: Mode scope "both" copies everything (default behavior)
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.patterns.0[0].audio_track_trigs.0[0].swing_amount = 15;
+                bank.patterns.0[0].midi_track_trigs.0[0].swing_amount = 20;
+            });
+            let dest = TestProject::with_modified_bank(0, |bank| {
+                bank.patterns.0[1].audio_track_trigs.0[0].swing_amount = 10;
+                bank.patterns.0[1].midi_track_trigs.0[0].swing_amount = 25;
+            });
+
+            copy_patterns(
+                &source.path,
+                0,
+                vec![0],
+                &dest.path,
+                0,
+                vec![1],
+                "keep_original",
+                None,
+                "all",
+                None,
+                "both",
+            )
+            .unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+
+            // Both audio and MIDI trigs should come from source
+            assert_eq!(
+                dest_bank.patterns.0[1].audio_track_trigs.0[0].swing_amount, 15,
+                "Audio trigs should be copied from source (both mode)"
+            );
+            assert_eq!(
+                dest_bank.patterns.0[1].midi_track_trigs.0[0].swing_amount, 20,
+                "MIDI trigs should be copied from source (both mode)"
+            );
+        }
+
+        #[test]
+        fn test_copy_patterns_mode_scope_ignored_for_specific_tracks() {
+            // CPT-MS-04: Mode scope is ignored when track_mode is "specific"
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.patterns.0[0].audio_track_trigs.0[0].swing_amount = 15;
+                bank.patterns.0[0].audio_track_trigs.0[1].swing_amount = 20;
+            });
+            let dest = TestProject::with_modified_bank(0, |bank| {
+                bank.patterns.0[1].audio_track_trigs.0[0].swing_amount = 10;
+                bank.patterns.0[1].audio_track_trigs.0[1].swing_amount = 5;
+            });
+
+            copy_patterns(
+                &source.path,
+                0,
+                vec![0],
+                &dest.path,
+                0,
+                vec![1],
+                "keep_original",
+                None,
+                "specific",
+                Some(vec![0]), // Only track 0
+                "midi",        // Should be ignored for specific mode
+            )
+            .unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+
+            // Track 0 should be copied from source
+            assert_eq!(
+                dest_bank.patterns.0[1].audio_track_trigs.0[0].swing_amount, 15,
+                "Specified track should be copied"
+            );
+            // Track 1 should be preserved
+            assert_eq!(
+                dest_bank.patterns.0[1].audio_track_trigs.0[1].swing_amount, 5,
+                "Non-specified track should be preserved"
+            );
+        }
     }
 
     // ==================== COPY TRACKS TESTS ====================
@@ -6477,6 +6789,358 @@ mod tests {
             );
             assert!(result.is_err(), "Empty source tracks should fail");
         }
+
+        #[test]
+        fn test_copy_tracks_part_params_copies_machine_types() {
+            // CT-FLD-01: Verify machine_types field is copied in part_params mode
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.parts.unsaved.0[0].audio_track_machine_types[0] = 42;
+            });
+            let dest = TestProject::new();
+
+            copy_tracks(
+                &source.path,
+                0,
+                0,
+                vec![0],
+                &dest.path,
+                0,
+                0,
+                vec![1],
+                "part_params",
+                None,
+                None,
+            )
+            .unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+            assert_eq!(
+                dest_bank.parts.unsaved.0[0].audio_track_machine_types[1], 42,
+                "machine_types should be copied"
+            );
+        }
+
+        #[test]
+        fn test_copy_tracks_part_params_copies_fx_fields() {
+            // CT-FLD-02: Verify FX1 and FX2 fields are copied (u8 arrays)
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.parts.unsaved.0[0].audio_track_fx1[0] = 4; // FILTER
+                bank.parts.unsaved.0[0].audio_track_fx2[0] = 8; // DELAY
+            });
+            let dest = TestProject::new();
+
+            copy_tracks(
+                &source.path,
+                0,
+                0,
+                vec![0],
+                &dest.path,
+                0,
+                0,
+                vec![2],
+                "part_params",
+                None,
+                None,
+            )
+            .unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+            assert_eq!(
+                dest_bank.parts.unsaved.0[0].audio_track_fx1[2], 4,
+                "FX1 should be copied"
+            );
+            assert_eq!(
+                dest_bank.parts.unsaved.0[0].audio_track_fx2[2], 8,
+                "FX2 should be copied"
+            );
+        }
+
+        #[test]
+        fn test_copy_tracks_part_params_copies_volumes_and_machine_fields() {
+            // CT-FLD-03: Verify volumes and machine_slots are copied (struct types)
+            // Use machine_types (u8 array) as the simple verifiable field
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.parts.unsaved.0[0].audio_track_machine_types[0] = 3; // Neighbour
+            });
+            let dest = TestProject::new();
+
+            copy_tracks(
+                &source.path,
+                0,
+                0,
+                vec![0],
+                &dest.path,
+                0,
+                0,
+                vec![3],
+                "part_params",
+                None,
+                None,
+            )
+            .unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+            assert_eq!(
+                dest_bank.parts.unsaved.0[0].audio_track_machine_types[3], 3,
+                "Machine types should be copied"
+            );
+            // Verify volumes are equal (struct comparison)
+            assert_eq!(
+                dest_bank.parts.unsaved.0[0].audio_track_volumes[3],
+                source_bank_data(&source.path, 0).parts.unsaved.0[0].audio_track_volumes[0],
+                "Volumes should be copied"
+            );
+            // Verify machine_slots are equal (struct comparison)
+            assert_eq!(
+                dest_bank.parts.unsaved.0[0].audio_track_machine_slots[3],
+                source_bank_data(&source.path, 0).parts.unsaved.0[0].audio_track_machine_slots[0],
+                "Machine slots should be copied"
+            );
+        }
+
+        #[test]
+        fn test_copy_tracks_part_params_copies_custom_lfo() {
+            // CT-FLD-05: Verify custom LFO designs are copied
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.parts.unsaved.0[0].audio_tracks_custom_lfo_designs[0].0[0] = 33;
+            });
+            let dest = TestProject::new();
+
+            copy_tracks(
+                &source.path,
+                0,
+                0,
+                vec![0],
+                &dest.path,
+                0,
+                0,
+                vec![5],
+                "part_params",
+                None,
+                None,
+            )
+            .unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+            assert_eq!(
+                dest_bank.parts.unsaved.0[0].audio_tracks_custom_lfo_designs[5].0[0], 33,
+                "Custom LFO designs should be copied"
+            );
+        }
+
+        #[test]
+        fn test_copy_tracks_part_params_copies_recorder_setup() {
+            // CT-FLD-06: Verify recorder_setup is copied
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.parts.unsaved.0[0].recorder_setup[0].src.in_ab = 44;
+            });
+            let dest = TestProject::new();
+
+            copy_tracks(
+                &source.path,
+                0,
+                0,
+                vec![0],
+                &dest.path,
+                0,
+                0,
+                vec![6],
+                "part_params",
+                None,
+                None,
+            )
+            .unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+            assert_eq!(
+                dest_bank.parts.unsaved.0[0].recorder_setup[6].src.in_ab, 44,
+                "Recorder setup should be copied"
+            );
+        }
+
+        #[test]
+        fn test_copy_tracks_midi_part_params_copies_custom_lfo() {
+            // CT-FLD-07: Verify MIDI track custom LFO fields are copied
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.parts.unsaved.0[0].midi_tracks_custom_lfos[0].0[0] = 66;
+            });
+            let dest = TestProject::new();
+
+            copy_tracks(
+                &source.path,
+                0,
+                0,
+                vec![8], // MIDI track 1
+                &dest.path,
+                0,
+                0,
+                vec![9], // MIDI track 2
+                "part_params",
+                None,
+                None,
+            )
+            .unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+            assert_eq!(
+                dest_bank.parts.unsaved.0[0].midi_tracks_custom_lfos[1].0[0], 66,
+                "MIDI custom LFO should be copied"
+            );
+        }
+
+        #[test]
+        fn test_copy_tracks_pattern_selector_specific_pattern() {
+            // CT-PS-01: Copy triggers for specific source+dest pattern only
+            let source = TestProject::with_modified_bank(0, |bank| {
+                // Modify audio trigs in pattern 3 only
+                bank.patterns.0[3].audio_track_trigs.0[0].swing_amount = 15;
+                // Also modify pattern 0 to ensure it's NOT copied
+                bank.patterns.0[0].audio_track_trigs.0[0].swing_amount = 20;
+            });
+            let dest = TestProject::new();
+
+            copy_tracks(
+                &source.path,
+                0,
+                0,
+                vec![0],
+                &dest.path,
+                0,
+                0,
+                vec![0],
+                "pattern_triggers",
+                Some(3), // Source pattern 3
+                Some(5), // Dest pattern 5
+            )
+            .unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+
+            // Pattern 5 should have source pattern 3's data
+            assert_eq!(
+                dest_bank.patterns.0[5].audio_track_trigs.0[0].swing_amount, 15,
+                "Dest pattern 5 should have source pattern 3 data"
+            );
+            // Pattern 0 should NOT have source data (we only copied pattern 3)
+            assert_ne!(
+                dest_bank.patterns.0[0].audio_track_trigs.0[0].swing_amount, 20,
+                "Dest pattern 0 should not be modified"
+            );
+        }
+
+        #[test]
+        fn test_copy_tracks_pattern_selector_source_to_all() {
+            // CT-PS-02: Copy one source pattern triggers to all 16 dest patterns
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.patterns.0[2].audio_track_trigs.0[0].swing_amount = 25;
+            });
+            let dest = TestProject::new();
+
+            copy_tracks(
+                &source.path,
+                0,
+                0,
+                vec![0],
+                &dest.path,
+                0,
+                0,
+                vec![0],
+                "pattern_triggers",
+                Some(2), // Source pattern 2
+                None,    // All dest patterns
+            )
+            .unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+
+            // All 16 dest patterns should have source pattern 2's data for track 0
+            for i in 0..16 {
+                assert_eq!(
+                    dest_bank.patterns.0[i].audio_track_trigs.0[0].swing_amount, 25,
+                    "Dest pattern {} should have source pattern 2 data",
+                    i
+                );
+            }
+        }
+
+        #[test]
+        fn test_copy_tracks_pattern_selector_all_to_all_default() {
+            // CT-PS-03: None/None = copy all 16 patterns (default behavior)
+            let source = TestProject::with_modified_bank(0, |bank| {
+                for i in 0..16 {
+                    bank.patterns.0[i].audio_track_trigs.0[0].swing_amount = (i + 1) as u8;
+                }
+            });
+            let dest = TestProject::new();
+
+            copy_tracks(
+                &source.path,
+                0,
+                0,
+                vec![0],
+                &dest.path,
+                0,
+                0,
+                vec![0],
+                "pattern_triggers",
+                None, // All
+                None, // All
+            )
+            .unwrap();
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+
+            for i in 0..16 {
+                assert_eq!(
+                    dest_bank.patterns.0[i].audio_track_trigs.0[0].swing_amount,
+                    (i + 1) as u8,
+                    "Dest pattern {} should have source data",
+                    i
+                );
+            }
+        }
+
+        #[test]
+        fn test_copy_tracks_pattern_selector_ignored_for_part_params() {
+            // CT-PS-04: Pattern selector params ignored when mode is "part_params"
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.parts.unsaved.0[0].audio_track_machine_types[0] = 42;
+            });
+            let dest = TestProject::new();
+
+            // Pass pattern indices but they should be ignored for part_params mode
+            let result = copy_tracks(
+                &source.path,
+                0,
+                0,
+                vec![0],
+                &dest.path,
+                0,
+                0,
+                vec![1],
+                "part_params",
+                Some(5),
+                Some(10),
+            );
+
+            assert!(result.is_ok(), "Should succeed (pattern params ignored): {:?}", result);
+
+            let dest_bank_path = Path::new(&dest.path).join("bank01.work");
+            let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+            assert_eq!(
+                dest_bank.parts.unsaved.0[0].audio_track_machine_types[1], 42,
+                "Part params should still be copied"
+            );
+        }
     }
 
     // ==================== COPY SAMPLE SLOTS TESTS ====================
@@ -7026,6 +7690,395 @@ mod tests {
             assert!(
                 result.unwrap_err().contains("same length"),
                 "Error message should mention length requirement"
+            );
+        }
+
+        /// Helper to create a TestProject with a sample slot populated
+        fn project_with_static_slot(slot_idx: usize, gain: u8) -> TestProject {
+            let project = TestProject::new();
+            let project_path = Path::new(&project.path).join("project.work");
+            let mut pf = ProjectFile::from_data_file(&project_path).unwrap();
+
+            let slot = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Static,
+                (slot_idx + 1) as u8,
+                None,
+                None,
+                None,
+                None,
+                Some(gain),
+                Some(3600), // 150 BPM
+            )
+            .unwrap();
+            pf.slots.static_slots[slot_idx] = Some(slot);
+
+            pf.to_data_file(&project_path).unwrap();
+            project
+        }
+
+        #[test]
+        fn test_copy_slots_editor_settings_off_resets_gain_to_72() {
+            // CSS-GAIN: When editor settings OFF, gain should reset to 72 (not 64)
+            let source = project_with_static_slot(0, 100);
+            let dest = TestProject::new();
+
+            copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "static",
+                vec![1],
+                vec![1],
+                "none",
+                false, // Editor settings OFF
+            )
+            .unwrap();
+
+            let dest_project_path = Path::new(&dest.path).join("project.work");
+            let dest_pf = ProjectFile::from_data_file(&dest_project_path).unwrap();
+
+            if let Some(ref slot) = dest_pf.slots.static_slots[0] {
+                assert_eq!(slot.gain, 72, "Gain should be reset to 72 (default)");
+                assert_eq!(slot.bpm, 2880, "BPM should be reset to 2880 (120 BPM default)");
+            } else {
+                panic!("Destination slot should exist");
+            }
+        }
+
+        #[test]
+        fn test_copy_slots_editor_settings_on_preserves_gain() {
+            // CSS-GAIN-ON: When editor settings ON, gain should be copied from source
+            let source = project_with_static_slot(0, 100);
+            let dest = TestProject::new();
+
+            copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "static",
+                vec![1],
+                vec![1],
+                "none",
+                true, // Editor settings ON
+            )
+            .unwrap();
+
+            let dest_project_path = Path::new(&dest.path).join("project.work");
+            let dest_pf = ProjectFile::from_data_file(&dest_project_path).unwrap();
+
+            if let Some(ref slot) = dest_pf.slots.static_slots[0] {
+                assert_eq!(slot.gain, 100, "Gain should be preserved from source");
+                assert_eq!(slot.bpm, 3600, "BPM should be preserved from source");
+            } else {
+                panic!("Destination slot should exist");
+            }
+        }
+
+        #[test]
+        fn test_copy_slots_markers_copied_when_editor_settings_on() {
+            // CSS-MRK-01: Markers file data copied when editor settings ON
+            let source = project_with_static_slot(0, 72);
+
+            // Create source markers file with non-default data
+            let mut src_markers = MarkersFile::default();
+            src_markers.static_slots[0].trim_offset = 1000;
+            src_markers.static_slots[0].trim_end = 50000;
+            src_markers.static_slots[0].loop_point = 25000;
+            let src_markers_path = Path::new(&source.path).join("markers.work");
+            src_markers.to_data_file(&src_markers_path).unwrap();
+
+            let dest = TestProject::new();
+            // Create default dest markers
+            let dest_markers = MarkersFile::default();
+            let dest_markers_path = Path::new(&dest.path).join("markers.work");
+            dest_markers.to_data_file(&dest_markers_path).unwrap();
+
+            copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "static",
+                vec![1],
+                vec![3],
+                "none",
+                true, // Editor settings ON - should copy markers
+            )
+            .unwrap();
+
+            let dest_markers_result = MarkersFile::from_data_file(&dest_markers_path).unwrap();
+            assert_eq!(
+                dest_markers_result.static_slots[2].trim_offset, 1000,
+                "trim_offset should be copied from source"
+            );
+            assert_eq!(
+                dest_markers_result.static_slots[2].trim_end, 50000,
+                "trim_end should be copied from source"
+            );
+            assert_eq!(
+                dest_markers_result.static_slots[2].loop_point, 25000,
+                "loop_point should be copied from source"
+            );
+        }
+
+        #[test]
+        fn test_copy_slots_markers_reset_when_editor_settings_off() {
+            // CSS-MRK-02: Markers reset to default when editor settings OFF
+            let source = project_with_static_slot(0, 72);
+
+            // Create source markers with non-default data
+            let mut src_markers = MarkersFile::default();
+            src_markers.static_slots[0].trim_offset = 1000;
+            src_markers.static_slots[0].trim_end = 50000;
+            let src_markers_path = Path::new(&source.path).join("markers.work");
+            src_markers.to_data_file(&src_markers_path).unwrap();
+
+            let dest = TestProject::new();
+            // Pre-populate dest markers with non-default data
+            let mut dest_markers = MarkersFile::default();
+            dest_markers.static_slots[2].trim_offset = 9999;
+            dest_markers.static_slots[2].trim_end = 8888;
+            let dest_markers_path = Path::new(&dest.path).join("markers.work");
+            dest_markers.to_data_file(&dest_markers_path).unwrap();
+
+            copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "static",
+                vec![1],
+                vec![3],
+                "none",
+                false, // Editor settings OFF - should reset markers
+            )
+            .unwrap();
+
+            let dest_markers_result = MarkersFile::from_data_file(&dest_markers_path).unwrap();
+            assert_eq!(
+                dest_markers_result.static_slots[2].trim_offset, 0,
+                "trim_offset should be reset to 0"
+            );
+            assert_eq!(
+                dest_markers_result.static_slots[2].trim_end, 0,
+                "trim_end should be reset to 0"
+            );
+        }
+
+        #[test]
+        fn test_copy_slots_flex_markers_copied() {
+            // CSS-MRK-03: Flex slot markers are copied correctly
+            let source = TestProject::new();
+
+            // Create a flex slot in the source project
+            let source_project_path = Path::new(&source.path).join("project.work");
+            let mut pf = ProjectFile::from_data_file(&source_project_path).unwrap();
+            let slot = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Flex,
+                1, // 1-based slot_id
+                None, None, None, None, Some(72), Some(2880),
+            ).unwrap();
+            pf.slots.flex_slots[0] = Some(slot);
+            pf.to_data_file(&source_project_path).unwrap();
+
+            let mut src_markers = MarkersFile::default();
+            src_markers.flex_slots[0].trim_offset = 2000;
+            src_markers.flex_slots[0].trim_end = 60000;
+            src_markers.flex_slots[0].slice_count = 4;
+            let src_markers_path = Path::new(&source.path).join("markers.work");
+            src_markers.to_data_file(&src_markers_path).unwrap();
+
+            let dest = TestProject::new();
+            let dest_markers = MarkersFile::default();
+            let dest_markers_path = Path::new(&dest.path).join("markers.work");
+            dest_markers.to_data_file(&dest_markers_path).unwrap();
+
+            copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "flex",
+                vec![1],
+                vec![5],
+                "none",
+                true,
+            )
+            .unwrap();
+
+            let dest_markers_result = MarkersFile::from_data_file(&dest_markers_path).unwrap();
+            assert_eq!(
+                dest_markers_result.flex_slots[4].trim_offset, 2000,
+                "Flex trim_offset should be copied"
+            );
+            assert_eq!(
+                dest_markers_result.flex_slots[4].trim_end, 60000,
+                "Flex trim_end should be copied"
+            );
+            assert_eq!(
+                dest_markers_result.flex_slots[4].slice_count, 4,
+                "Flex slice_count should be copied"
+            );
+        }
+
+        #[test]
+        fn test_copy_slots_audio_copy_with_ot_file() {
+            // CSS-OT-01: .ot metadata file is copied alongside audio file
+            let source = TestProject::new();
+
+            // Create source audio file and .ot file
+            let audio_dir = Path::new(&source.path).join("AUDIO");
+            fs::create_dir_all(&audio_dir).unwrap();
+            fs::write(audio_dir.join("test.wav"), b"fake wav data").unwrap();
+            fs::write(audio_dir.join("test.ot"), b"fake ot data").unwrap();
+
+            // Set up source project with a slot pointing to that file
+            let project_path = Path::new(&source.path).join("project.work");
+            let mut pf = ProjectFile::from_data_file(&project_path).unwrap();
+            let slot = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Static,
+                1,
+                Some(std::path::PathBuf::from("AUDIO/test.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            pf.slots.static_slots[0] = Some(slot);
+            pf.to_data_file(&project_path).unwrap();
+
+            let dest = TestProject::new();
+
+            copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "static",
+                vec![1],
+                vec![1],
+                "copy",
+                true,
+            )
+            .unwrap();
+
+            // Check both audio and .ot file were copied
+            let dest_audio = Path::new(&dest.path).join("AUDIO/test.wav");
+            let dest_ot = Path::new(&dest.path).join("AUDIO/test.ot");
+            assert!(dest_audio.exists(), "Audio file should be copied");
+            assert!(dest_ot.exists(), ".ot file should be copied alongside audio");
+        }
+
+        #[test]
+        fn test_copy_slots_move_to_pool_deletes_original() {
+            // CSS-MV-01: Move to Pool should delete the original file
+            // Create two projects in the same "Set" directory
+            let set_dir = TempDir::new().unwrap();
+            let src_project_dir = set_dir.path().join("SourceProject");
+            let dest_project_dir = set_dir.path().join("DestProject");
+            fs::create_dir_all(&src_project_dir).unwrap();
+            fs::create_dir_all(&dest_project_dir).unwrap();
+
+            // Create project files
+            let pf_default = ProjectFile::default();
+            pf_default
+                .to_data_file(&dest_project_dir.join("project.work"))
+                .unwrap();
+
+            // Create source project with audio file
+            let src_audio_dir = src_project_dir.join("AUDIO");
+            fs::create_dir_all(&src_audio_dir).unwrap();
+            fs::write(src_audio_dir.join("move_me.wav"), b"audio data").unwrap();
+            fs::write(src_audio_dir.join("move_me.ot"), b"ot data").unwrap();
+
+            let mut src_pf = ProjectFile::default();
+            let slot = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Static,
+                1,
+                Some(std::path::PathBuf::from("AUDIO/move_me.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            src_pf.slots.static_slots[0] = Some(slot);
+            src_pf
+                .to_data_file(&src_project_dir.join("project.work"))
+                .unwrap();
+
+            // Create bank files for both projects
+            for project_dir in [&src_project_dir, &dest_project_dir] {
+                for bank_num in 1..=16 {
+                    let bank = BankFile::default();
+                    bank.to_data_file(&project_dir.join(format!("bank{:02}.work", bank_num)))
+                        .unwrap();
+                }
+            }
+
+            let result = copy_sample_slots(
+                &src_project_dir.to_string_lossy(),
+                &dest_project_dir.to_string_lossy(),
+                "static",
+                vec![1],
+                vec![1],
+                "move_to_pool",
+                true,
+            );
+            assert!(result.is_ok(), "Move to pool should succeed: {:?}", result);
+
+            // Original files should be deleted
+            assert!(
+                !src_audio_dir.join("move_me.wav").exists(),
+                "Original audio file should be deleted after move"
+            );
+            assert!(
+                !src_audio_dir.join("move_me.ot").exists(),
+                "Original .ot file should be deleted after move"
+            );
+        }
+
+        #[test]
+        fn test_copy_slots_creates_markers_file_if_absent() {
+            // CSS-MRK-04: markers.work should be created if it doesn't exist
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            // Don't create markers files - they should be handled gracefully
+            let dest_markers_path = Path::new(&dest.path).join("markers.work");
+            assert!(
+                !dest_markers_path.exists(),
+                "markers.work should not exist initially"
+            );
+
+            // Create source with a slot to copy
+            let source_project_path = Path::new(&source.path).join("project.work");
+            let mut pf = ProjectFile::from_data_file(&source_project_path).unwrap();
+            let slot = ot_tools_io::projects::SlotAttributes::new(
+                    ot_tools_io::settings::SlotType::Static,
+                    1,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                ).unwrap();
+            pf.slots.static_slots[0] = Some(slot);
+            pf.to_data_file(&source_project_path).unwrap();
+
+            let result = copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "static",
+                vec![1],
+                vec![1],
+                "none",
+                false, // Editor settings OFF triggers markers reset
+            );
+            assert!(
+                result.is_ok(),
+                "Should succeed even without existing markers file: {:?}",
+                result
+            );
+
+            // markers.work should now exist
+            assert!(
+                dest_markers_path.exists(),
+                "markers.work should be created"
             );
         }
     }
