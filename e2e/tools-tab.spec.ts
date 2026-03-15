@@ -1767,3 +1767,271 @@ test.describe('Tools Tab - Execute Button', () => {
     await expect(executeBtn).toContainText('Execute')
   })
 })
+
+test.describe('Tools Tab - Copy Patterns Mode Scope', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
+    await toolsTab.click()
+    await page.waitForTimeout(500)
+
+    // Select Copy Patterns operation
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('copy_patterns')
+    await page.waitForTimeout(300)
+  })
+
+  test('Mode Scope is visible when All Tracks is selected', async ({ page }) => {
+    // All Tracks is default, Mode Scope should be visible
+    await expect(page.getByText('Mode Scope')).toBeVisible()
+  })
+
+  test('Mode Scope has three toggle buttons', async ({ page }) => {
+    const modeScopeField = page.locator('.tools-field').filter({ hasText: 'Mode Scope' })
+    const toggleGroup = modeScopeField.locator('.tools-toggle-group')
+
+    await expect(toggleGroup.locator('.tools-toggle-btn', { hasText: 'Audio' })).toBeVisible()
+    await expect(toggleGroup.locator('.tools-toggle-btn', { hasText: 'Both' })).toBeVisible()
+    await expect(toggleGroup.locator('.tools-toggle-btn', { hasText: 'MIDI' })).toBeVisible()
+  })
+
+  test('Audio is selected by default', async ({ page }) => {
+    const modeScopeField = page.locator('.tools-field').filter({ hasText: 'Mode Scope' })
+    const audioBtn = modeScopeField.locator('.tools-toggle-btn', { hasText: 'Audio' })
+    await expect(audioBtn).toHaveClass(/selected/)
+  })
+
+  test('clicking Mode Scope button changes selection', async ({ page }) => {
+    const modeScopeField = page.locator('.tools-field').filter({ hasText: 'Mode Scope' })
+    const audioBtn = modeScopeField.locator('.tools-toggle-btn', { hasText: 'Audio' })
+    const bothBtn = modeScopeField.locator('.tools-toggle-btn', { hasText: 'Both' })
+    const midiBtn = modeScopeField.locator('.tools-toggle-btn', { hasText: 'MIDI' })
+
+    // Click Both
+    await bothBtn.click()
+    await page.waitForTimeout(200)
+    await expect(bothBtn).toHaveClass(/selected/)
+    await expect(audioBtn).not.toHaveClass(/selected/)
+
+    // Click MIDI
+    await midiBtn.click()
+    await page.waitForTimeout(200)
+    await expect(midiBtn).toHaveClass(/selected/)
+    await expect(bothBtn).not.toHaveClass(/selected/)
+  })
+
+  test('Mode Scope is hidden when Specific Tracks is selected', async ({ page }) => {
+    const specificTracksBtn = page.locator('.tools-toggle-btn', { hasText: 'Specific Tracks' })
+    await specificTracksBtn.click()
+    await page.waitForTimeout(200)
+
+    // Mode Scope should not be visible
+    const modeScopeField = page.locator('.tools-field').filter({ hasText: 'Mode Scope' })
+    await expect(modeScopeField).not.toBeVisible()
+  })
+
+  test('Mode Scope buttons have correct tooltips', async ({ page }) => {
+    const modeScopeField = page.locator('.tools-field').filter({ hasText: 'Mode Scope' })
+    const audioBtn = modeScopeField.locator('.tools-toggle-btn', { hasText: 'Audio' })
+    const bothBtn = modeScopeField.locator('.tools-toggle-btn', { hasText: 'Both' })
+    const midiBtn = modeScopeField.locator('.tools-toggle-btn', { hasText: 'MIDI' })
+
+    await expect(audioBtn).toHaveAttribute('title', 'Copy only Audio tracks (T1-T8)')
+    await expect(bothBtn).toHaveAttribute('title', 'Copy both Audio and MIDI tracks')
+    await expect(midiBtn).toHaveAttribute('title', 'Copy only MIDI tracks (M1-M8)')
+  })
+})
+
+test.describe('Tools Tab - Copy Tracks Pattern Selector', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
+    await toolsTab.click()
+    await page.waitForTimeout(500)
+
+    // Select Copy Tracks operation
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('copy_tracks')
+    await page.waitForTimeout(300)
+  })
+
+  test('Pattern selector is not visible when Part Parameters mode is selected', async ({ page }) => {
+    // Part Parameters is the default
+    const sourcePanel = page.locator('.tools-source-panel')
+    const patternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
+    await expect(patternField).not.toBeVisible()
+  })
+
+  test('Pattern selector is visible when Both mode is selected', async ({ page }) => {
+    const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
+    await bothBtn.click()
+    await page.waitForTimeout(200)
+
+    const sourcePanel = page.locator('.tools-source-panel')
+    const patternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
+    await expect(patternField).toBeVisible()
+  })
+
+  test('Pattern selector is visible when Pattern Triggers mode is selected', async ({ page }) => {
+    const trigBtn = page.locator('.tools-toggle-btn', { hasText: 'Pattern Triggers' })
+    await trigBtn.click()
+    await page.waitForTimeout(200)
+
+    const sourcePanel = page.locator('.tools-source-panel')
+    const patternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
+    await expect(patternField).toBeVisible()
+  })
+
+  test('Source pattern selector has 16 pattern buttons and All button', async ({ page }) => {
+    const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
+    await bothBtn.click()
+    await page.waitForTimeout(200)
+
+    const sourcePanel = page.locator('.tools-source-panel')
+    const patternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
+    const patternButtons = patternField.locator('.tools-multi-btn.pattern-btn')
+
+    // 16 pattern buttons + 1 All button = 17
+    await expect(patternButtons).toHaveCount(17)
+
+    // All button should be visible
+    await expect(patternField.locator('.tools-multi-btn.pattern-btn.tools-select-all', { hasText: 'All' })).toBeVisible()
+  })
+
+  test('Source All pattern is selected by default', async ({ page }) => {
+    const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
+    await bothBtn.click()
+    await page.waitForTimeout(200)
+
+    const sourcePanel = page.locator('.tools-source-panel')
+    const patternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
+    const allBtn = patternField.locator('.tools-multi-btn.pattern-btn.tools-select-all')
+
+    await expect(allBtn).toHaveClass(/selected/)
+  })
+
+  test('Clicking specific source pattern deselects All', async ({ page }) => {
+    const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
+    await bothBtn.click()
+    await page.waitForTimeout(200)
+
+    const sourcePanel = page.locator('.tools-source-panel')
+    const patternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
+    const allBtn = patternField.locator('.tools-multi-btn.pattern-btn.tools-select-all')
+
+    // Click pattern 3
+    const pattern3 = patternField.locator('.tools-multi-btn.pattern-btn', { hasText: /^3$/ }).first()
+    await pattern3.click()
+    await page.waitForTimeout(200)
+
+    await expect(pattern3).toHaveClass(/selected/)
+    await expect(allBtn).not.toHaveClass(/selected/)
+  })
+
+  test('Destination pattern selector is disabled when source All is selected', async ({ page }) => {
+    const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
+    await bothBtn.click()
+    await page.waitForTimeout(200)
+
+    const destPanel = page.locator('.tools-dest-panel')
+    const patternField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
+    const destPatternContainer = patternField.locator('.tools-multi-select')
+
+    await expect(destPatternContainer).toHaveClass(/disabled/)
+  })
+
+  test('Destination pattern selector is enabled when source is specific pattern', async ({ page }) => {
+    const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
+    await bothBtn.click()
+    await page.waitForTimeout(200)
+
+    // Select specific source pattern
+    const sourcePanel = page.locator('.tools-source-panel')
+    const sourcePatternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
+    const pattern1 = sourcePatternField.locator('.tools-multi-btn.pattern-btn', { hasText: /^1$/ }).first()
+    await pattern1.click()
+    await page.waitForTimeout(200)
+
+    const destPanel = page.locator('.tools-dest-panel')
+    const destPatternField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
+    const destPatternContainer = destPatternField.locator('.tools-multi-select')
+
+    await expect(destPatternContainer).not.toHaveClass(/disabled/)
+  })
+
+  test('Destination pattern buttons show sync tooltip when source All is selected', async ({ page }) => {
+    const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
+    await bothBtn.click()
+    await page.waitForTimeout(200)
+
+    const destPanel = page.locator('.tools-dest-panel')
+    const destPatternField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
+    const destPattern1 = destPatternField.locator('.tools-multi-btn.pattern-btn', { hasText: /^1$/ }).first()
+
+    await expect(destPattern1).toHaveAttribute('title', 'Synced with source All selection')
+  })
+
+  test('Source pattern can be deselected to re-enable All', async ({ page }) => {
+    const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
+    await bothBtn.click()
+    await page.waitForTimeout(200)
+
+    const sourcePanel = page.locator('.tools-source-panel')
+    const patternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
+    const allBtn = patternField.locator('.tools-multi-btn.pattern-btn.tools-select-all')
+
+    // Select specific pattern
+    const pattern5 = patternField.locator('.tools-multi-btn.pattern-btn', { hasText: /^5$/ }).first()
+    await pattern5.click()
+    await page.waitForTimeout(200)
+    await expect(allBtn).not.toHaveClass(/selected/)
+
+    // Click All to go back to All
+    await allBtn.click()
+    await page.waitForTimeout(200)
+    await expect(allBtn).toHaveClass(/selected/)
+  })
+
+  test('Pattern buttons have correct tooltips', async ({ page }) => {
+    const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
+    await bothBtn.click()
+    await page.waitForTimeout(200)
+
+    const sourcePanel = page.locator('.tools-source-panel')
+    const patternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
+
+    const pattern1 = patternField.locator('.tools-multi-btn.pattern-btn', { hasText: /^1$/ }).first()
+    await expect(pattern1).toHaveAttribute('title', 'Pattern 1')
+
+    const allBtn = patternField.locator('.tools-multi-btn.pattern-btn.tools-select-all')
+    await expect(allBtn).toHaveAttribute('title', 'All patterns')
+  })
+})
+
+test.describe('Tools Tab - Select Source Track Message', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
+    await toolsTab.click()
+    await page.waitForTimeout(500)
+
+    // Select Copy Tracks operation
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('copy_tracks')
+    await page.waitForTimeout(300)
+  })
+
+  test('Execute button shows track selection hint when no tracks selected', async ({ page }) => {
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+    // Title should mention track selection
+    const title = await executeBtn.getAttribute('title')
+    expect(title).toContain('track')
+  })
+})
