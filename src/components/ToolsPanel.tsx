@@ -17,6 +17,9 @@ type PartAssignmentMode = "keep_original" | "copy_source_part" | "select_specifi
 // Track mode for copy_patterns
 type TrackMode = "all" | "specific";
 
+// Mode scope for copy_patterns (when trackMode is "all")
+type ModeScope = "audio" | "both" | "midi";
+
 // Copy mode for copy_tracks
 type CopyTrackMode = "part_params" | "pattern_triggers" | "both";
 
@@ -49,6 +52,7 @@ interface ToolsSettings {
   operation: OperationType;
   partAssignmentMode: PartAssignmentMode;
   trackMode: TrackMode;
+  modeScope: ModeScope;
   copyTrackMode: CopyTrackMode;
   slotType: SlotType;
   audioMode: AudioMode;
@@ -133,9 +137,12 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [partAssignmentMode, setPartAssignmentMode] = useState<PartAssignmentMode>(savedSettings.partAssignmentMode || "keep_original");
   const [destPart, setDestPart] = useState<number>(-1); // -1 = no selection
   const [trackMode, setTrackMode] = useState<TrackMode>(savedSettings.trackMode || "all");
+  const [modeScope, setModeScope] = useState<ModeScope>(savedSettings.modeScope || "audio");
 
   // Copy Tracks options
   const [copyTrackMode, setCopyTrackMode] = useState<CopyTrackMode>(savedSettings.copyTrackMode || "part_params");
+  const [copyTrackSourcePatternIndex, setCopyTrackSourcePatternIndex] = useState<number>(-1); // -1 = All, 0-15 = specific
+  const [copyTrackDestPatternIndex, setCopyTrackDestPatternIndex] = useState<number>(-1); // -1 = All, 0-15 = specific
   const [sourcePartIndex, setSourcePartIndex] = useState<number>(0); // 0 = Part 1, -1 = All parts, -2 = no selection
   const [destPartIndex, setDestPartIndex] = useState<number>(0); // 0 = Part 1, -1 = All parts, -2 = no selection
 
@@ -245,12 +252,13 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
       operation,
       partAssignmentMode,
       trackMode,
+      modeScope,
       copyTrackMode,
       slotType,
       audioMode,
       includeEditorSettings,
     });
-  }, [projectPath, operation, partAssignmentMode, trackMode, copyTrackMode, slotType, audioMode, includeEditorSettings]);
+  }, [projectPath, operation, partAssignmentMode, trackMode, modeScope, copyTrackMode, slotType, audioMode, includeEditorSettings]);
 
   // Collect all available projects from context
   const availableProjects: ProjectOption[] = [];
@@ -438,6 +446,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             destPart: partAssignmentMode === "select_specific" ? destPart : null,
             trackMode,
             trackIndices: trackMode === "specific" ? sourceTrackIndices : null,
+            modeScope: trackMode === "all" ? modeScope : null,
           });
           // Success message: show how many patterns were copied to how many destinations
           if (sourcePatternIndices.length === 1 && destPatternIndices.length > 1) {
@@ -461,6 +470,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             destPartIndex: destPartIndex === -1 ? null : destPartIndex, // null = all parts
             destTrackIndices,
             mode: copyTrackMode,
+            sourcePatternIndex: (copyTrackMode !== "part_params" && copyTrackSourcePatternIndex !== -1) ? copyTrackSourcePatternIndex : null,
+            destPatternIndex: (copyTrackMode !== "part_params" && copyTrackDestPatternIndex !== -1) ? copyTrackDestPatternIndex : null,
           });
           setStatusMessage(`${sourceTrackIndices.length} track${sourceTrackIndices.length > 1 ? 's' : ''} copied successfully`);
           if (destProject === projectPath && onBankUpdated) {
@@ -961,6 +972,67 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   </div>
                 </div>
               </div>
+              {/* Pattern selector for copy_tracks (only when mode includes pattern triggers) */}
+              {copyTrackMode !== "part_params" && (
+                <div className="tools-field">
+                  <label>Pattern</label>
+                  <div className="tools-multi-select banks-stacked">
+                    <div className="tools-track-row-buttons">
+                      {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
+                        <button
+                          key={idx}
+                          className={`tools-multi-btn pattern-btn ${copyTrackSourcePatternIndex === idx || copyTrackSourcePatternIndex === -1 ? "selected" : ""}`}
+                          onClick={() => {
+                            if (copyTrackSourcePatternIndex === idx) {
+                              setCopyTrackSourcePatternIndex(-1);
+                            } else {
+                              setCopyTrackSourcePatternIndex(idx);
+                            }
+                          }}
+                          title={`Pattern ${idx + 1}`}
+                        >
+                          {idx + 1}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="tools-track-row-buttons">
+                      {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
+                        <button
+                          key={idx}
+                          className={`tools-multi-btn pattern-btn ${copyTrackSourcePatternIndex === idx || copyTrackSourcePatternIndex === -1 ? "selected" : ""}`}
+                          onClick={() => {
+                            if (copyTrackSourcePatternIndex === idx) {
+                              setCopyTrackSourcePatternIndex(-1);
+                            } else {
+                              setCopyTrackSourcePatternIndex(idx);
+                            }
+                          }}
+                          title={`Pattern ${idx + 1}`}
+                        >
+                          {idx + 1}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="tools-select-actions">
+                      <button
+                        className={`tools-multi-btn pattern-btn tools-select-all ${copyTrackSourcePatternIndex === -1 ? "selected" : ""}`}
+                        onClick={() => {
+                          if (copyTrackSourcePatternIndex === -1) {
+                            setCopyTrackSourcePatternIndex(0);
+                            setCopyTrackDestPatternIndex(0);
+                          } else {
+                            setCopyTrackSourcePatternIndex(-1);
+                            setCopyTrackDestPatternIndex(-1);
+                          }
+                        }}
+                        title="All patterns"
+                      >
+                        All
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
 
@@ -1193,6 +1265,37 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   </button>
                 </div>
               </div>
+              {trackMode === "all" && (
+                <div className="tools-field">
+                  <label>Mode Scope</label>
+                  <div className="tools-toggle-group">
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn ${modeScope === "audio" ? "selected" : ""}`}
+                      onClick={() => setModeScope("audio")}
+                      title="Copy only Audio tracks (T1-T8)"
+                    >
+                      Audio
+                    </button>
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn ${modeScope === "both" ? "selected" : ""}`}
+                      onClick={() => setModeScope("both")}
+                      title="Copy both Audio and MIDI tracks"
+                    >
+                      Both
+                    </button>
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn ${modeScope === "midi" ? "selected" : ""}`}
+                      onClick={() => setModeScope("midi")}
+                      title="Copy only MIDI tracks (M1-M8)"
+                    >
+                      MIDI
+                    </button>
+                  </div>
+                </div>
+              )}
               {trackMode === "specific" && (
                 <div className="tools-field">
                   <label>Tracks</label>
@@ -1856,6 +1959,71 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   </div>
                 </div>
               </div>
+              {/* Pattern selector for copy_tracks destination (only when mode includes pattern triggers) */}
+              {copyTrackMode !== "part_params" && (
+                <div className="tools-field">
+                  <label>Pattern</label>
+                  <div className={`tools-multi-select banks-stacked ${copyTrackSourcePatternIndex === -1 ? "disabled" : ""}`}>
+                    <div className="tools-track-row-buttons">
+                      {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
+                        <button
+                          key={idx}
+                          className={`tools-multi-btn pattern-btn ${copyTrackDestPatternIndex === idx || copyTrackDestPatternIndex === -1 ? "selected" : ""}`}
+                          onClick={() => {
+                            if (copyTrackSourcePatternIndex === -1) return;
+                            if (copyTrackDestPatternIndex === idx) {
+                              setCopyTrackDestPatternIndex(-1);
+                            } else {
+                              setCopyTrackDestPatternIndex(idx);
+                            }
+                          }}
+                          disabled={copyTrackSourcePatternIndex === -1}
+                          title={copyTrackSourcePatternIndex === -1 ? "Synced with source All selection" : `Pattern ${idx + 1}`}
+                        >
+                          {idx + 1}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="tools-track-row-buttons">
+                      {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
+                        <button
+                          key={idx}
+                          className={`tools-multi-btn pattern-btn ${copyTrackDestPatternIndex === idx || copyTrackDestPatternIndex === -1 ? "selected" : ""}`}
+                          onClick={() => {
+                            if (copyTrackSourcePatternIndex === -1) return;
+                            if (copyTrackDestPatternIndex === idx) {
+                              setCopyTrackDestPatternIndex(-1);
+                            } else {
+                              setCopyTrackDestPatternIndex(idx);
+                            }
+                          }}
+                          disabled={copyTrackSourcePatternIndex === -1}
+                          title={copyTrackSourcePatternIndex === -1 ? "Synced with source All selection" : `Pattern ${idx + 1}`}
+                        >
+                          {idx + 1}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="tools-select-actions">
+                      <button
+                        className={`tools-multi-btn pattern-btn tools-select-all ${copyTrackDestPatternIndex === -1 ? "selected" : ""}`}
+                        onClick={() => {
+                          if (copyTrackSourcePatternIndex === -1) return;
+                          if (copyTrackDestPatternIndex === -1) {
+                            setCopyTrackDestPatternIndex(0);
+                          } else {
+                            setCopyTrackDestPatternIndex(-1);
+                          }
+                        }}
+                        disabled={copyTrackSourcePatternIndex === -1}
+                        title={copyTrackSourcePatternIndex === -1 ? "Synced with source All selection" : "All patterns"}
+                      >
+                        All
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
 
@@ -1959,7 +2127,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             (operation === "copy_tracks" && sourceBankIndex === -1) ? "Select a source bank" :
             (operation === "copy_tracks" && destBankIndex === -1) ? "Select a destination bank" :
             (operation === "copy_tracks" && sourceTrackIndices.length === 0 && destTrackIndices.length === 0) ? "Select source and destination tracks" :
-            (operation === "copy_tracks" && sourceTrackIndices.length === 0) ? "Select at least one source track" :
+            (operation === "copy_tracks" && sourceTrackIndices.length === 0) ? "Select a source track" :
             (operation === "copy_tracks" && destTrackIndices.length === 0) ? "Select at least one destination track" :
             (operation === "copy_tracks" && sourcePartIndex === -2 && destPartIndex === -2) ? "Select source and destination parts" :
             (operation === "copy_tracks" && sourcePartIndex === -2) ? "Select a source part" :
@@ -2043,6 +2211,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                           setDestProject(projectPath);
                           setShowProjectSelector(false);
                         }}
+                        title={projectPath}
                       >
                         <div className="project-name">{projectName}</div>
                       </div>
@@ -2111,6 +2280,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                                 setDestProject(project.path);
                                 setShowProjectSelector(false);
                               }}
+                              title={project.path}
                             >
                               <div className="project-name">{project.name}</div>
                             </div>
@@ -2226,6 +2396,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                                             setDestProject(project.path);
                                             setShowProjectSelector(false);
                                           }}
+                                          title={project.path}
                                         >
                                           <div className="project-name">{project.name}</div>
                                         </div>

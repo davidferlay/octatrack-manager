@@ -2,7 +2,7 @@
 #![allow(clippy::collapsible_if)]
 #![allow(clippy::collapsible_match)]
 
-use ot_tools_io::{BankFile, HasChecksumField, OctatrackFileIO, ProjectFile};
+use ot_tools_io::{BankFile, HasChecksumField, MarkersFile, OctatrackFileIO, ProjectFile};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -3471,36 +3471,46 @@ pub fn copy_parts(
         return Err(format!("Destination bank {} not found", dest_bank_index));
     };
 
+    // Helper to copy all part state for a single src→dst pair
+    let copy_one_part = |dest_bank: &mut BankFile, source_bank: &BankFile, src_part: usize, dst_part: usize| {
+        // Copy unsaved (working) state
+        dest_bank.parts.unsaved.0[dst_part] = source_bank.parts.unsaved.0[src_part].clone();
+        // Copy saved (backup) state
+        dest_bank.parts.saved.0[dst_part] = source_bank.parts.saved.0[src_part].clone();
+        // Copy part name
+        dest_bank.part_names[dst_part] = source_bank.part_names[src_part];
+        // Copy saved state flag
+        dest_bank.parts_saved_state[dst_part] = source_bank.parts_saved_state[src_part];
+        // Mirror the source's edited bitmask for this part
+        if source_bank.parts_edited_bitmask & (1 << src_part) != 0 {
+            dest_bank.parts_edited_bitmask |= 1 << dst_part;
+        } else {
+            dest_bank.parts_edited_bitmask &= !(1 << dst_part);
+        }
+
+        println!(
+            "[DEBUG] Copied Part {} to Part {} (saved_state: {}, edited: {})",
+            src_part + 1,
+            dst_part + 1,
+            source_bank.parts_saved_state[src_part],
+            source_bank.parts_edited_bitmask & (1 << src_part) != 0
+        );
+    };
+
     // Copy parts based on mode
     if source_part_indices.len() == 4 {
         // All parts mode: 1-to-1 mapping
         for (src_idx, dest_idx) in source_part_indices.iter().zip(dest_part_indices.iter()) {
             let src_part = *src_idx as usize;
             let dst_part = *dest_idx as usize;
-
-            dest_bank.parts.unsaved.0[dst_part] = source_bank.parts.unsaved.0[src_part].clone();
-            dest_bank.parts_edited_bitmask |= 1 << dst_part;
-
-            println!(
-                "[DEBUG] Copied Part {} to Part {}",
-                src_part + 1,
-                dst_part + 1
-            );
+            copy_one_part(&mut dest_bank, &source_bank, src_part, dst_part);
         }
     } else {
         // Single part mode: 1-to-many mapping
         let src_part = source_part_indices[0] as usize;
         for dest_idx in &dest_part_indices {
             let dst_part = *dest_idx as usize;
-
-            dest_bank.parts.unsaved.0[dst_part] = source_bank.parts.unsaved.0[src_part].clone();
-            dest_bank.parts_edited_bitmask |= 1 << dst_part;
-
-            println!(
-                "[DEBUG] Copied Part {} to Part {}",
-                src_part + 1,
-                dst_part + 1
-            );
+            copy_one_part(&mut dest_bank, &source_bank, src_part, dst_part);
         }
     }
 
@@ -3538,6 +3548,7 @@ pub fn copy_parts(
 /// * `dest_part` - Required if select_specific mode (0-3 for Parts 1-4)
 /// * `track_mode` - "all" or "specific"
 /// * `track_indices` - Required if specific mode (0-7 for audio, 8-15 for MIDI)
+/// * `mode_scope` - "audio", "both", or "midi" - which track types to copy when track_mode is "all"
 pub fn copy_patterns(
     source_project: &str,
     source_bank_index: u8,
@@ -3549,6 +3560,7 @@ pub fn copy_patterns(
     dest_part: Option<u8>,
     track_mode: &str,
     track_indices: Option<Vec<u8>>,
+    mode_scope: &str,
 ) -> Result<(), String> {
     // Validate inputs
     if source_bank_index > 15 || dest_bank_index > 15 {
@@ -3656,8 +3668,28 @@ pub fn copy_patterns(
 
         // Copy the pattern
         if track_mode == "all" {
-            // Copy entire pattern
+            // Save destination's current track data that we may need to preserve
+            let dest_audio_trigs = dest_bank.patterns.0[dest_pattern_idx as usize].audio_track_trigs.clone();
+            let dest_midi_trigs = dest_bank.patterns.0[dest_pattern_idx as usize].midi_track_trigs.clone();
+
+            // Clone entire pattern from source (gets non-track data like scale, tempo, etc.)
             dest_bank.patterns.0[dest_pattern_idx as usize] = src_pattern.clone();
+
+            // Apply mode_scope: selectively restore destination's tracks that shouldn't be overwritten
+            match mode_scope {
+                "audio" => {
+                    // Only copy audio tracks; restore destination's MIDI tracks
+                    dest_bank.patterns.0[dest_pattern_idx as usize].midi_track_trigs = dest_midi_trigs;
+                }
+                "midi" => {
+                    // Only copy MIDI tracks; restore destination's audio tracks
+                    dest_bank.patterns.0[dest_pattern_idx as usize].audio_track_trigs = dest_audio_trigs;
+                }
+                _ => {
+                    // "both" - keep everything from source (no restoration needed)
+                }
+            }
+
             // Update part assignment
             dest_bank.patterns.0[dest_pattern_idx as usize].part_assignment = new_part_assignment;
         } else if track_mode == "specific" {
@@ -3691,10 +3723,14 @@ pub fn copy_patterns(
         }
 
         println!(
-            "[DEBUG] Copied pattern {} to pattern {} (part assignment: {})",
+            "[DEBUG] Copied pattern {} to pattern {} (part_assignment_mode: {}, dest_part: {:?}, new_part_assignment: {}, track_mode: {}, mode_scope: {})",
             src_pattern_idx + 1,
             dest_pattern_idx + 1,
-            new_part_assignment + 1
+            part_assignment_mode,
+            dest_part,
+            new_part_assignment + 1,
+            track_mode,
+            mode_scope
         );
     }
 
@@ -3743,6 +3779,8 @@ pub fn copy_tracks(
     dest_part_index: u8,
     dest_track_indices: Vec<u8>,
     mode: &str,
+    source_pattern_index: Option<u8>,
+    dest_pattern_index: Option<u8>,
 ) -> Result<(), String> {
     // Validate inputs
     if source_bank_index > 15 || dest_bank_index > 15 {
@@ -3830,7 +3868,23 @@ pub fn copy_tracks(
                 let src_idx = src_track_idx as usize;
                 let dst_idx = dst_track_idx as usize;
 
-                // Copy audio track params values
+                // Copy audio track machine type (Static/Flex/Thru/Neighbour/Pickup)
+                dest_bank.parts.unsaved.0[dst_part].audio_track_machine_types[dst_idx] =
+                    source_bank.parts.unsaved.0[src_part].audio_track_machine_types[src_idx];
+
+                // Copy audio track machine parameters
+                dest_bank.parts.unsaved.0[dst_part].audio_track_machine_params[dst_idx] =
+                    source_bank.parts.unsaved.0[src_part].audio_track_machine_params[src_idx];
+
+                // Copy audio track machine setup
+                dest_bank.parts.unsaved.0[dst_part].audio_track_machine_setup[dst_idx] =
+                    source_bank.parts.unsaved.0[src_part].audio_track_machine_setup[src_idx];
+
+                // Copy audio track machine slot assignments
+                dest_bank.parts.unsaved.0[dst_part].audio_track_machine_slots[dst_idx] =
+                    source_bank.parts.unsaved.0[src_part].audio_track_machine_slots[src_idx];
+
+                // Copy audio track params values (AMP, LFO, FX)
                 dest_bank.parts.unsaved.0[dst_part].audio_track_params_values[dst_idx] =
                     source_bank.parts.unsaved.0[src_part].audio_track_params_values[src_idx];
 
@@ -3838,12 +3892,28 @@ pub fn copy_tracks(
                 dest_bank.parts.unsaved.0[dst_part].audio_track_params_setup[dst_idx] =
                     source_bank.parts.unsaved.0[src_part].audio_track_params_setup[src_idx];
 
-                // Copy audio track machine setup
-                dest_bank.parts.unsaved.0[dst_part].audio_track_machine_setup[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].audio_track_machine_setup[src_idx];
+                // Copy active FX type selections
+                dest_bank.parts.unsaved.0[dst_part].audio_track_fx1[dst_idx] =
+                    source_bank.parts.unsaved.0[src_part].audio_track_fx1[src_idx];
+                dest_bank.parts.unsaved.0[dst_part].audio_track_fx2[dst_idx] =
+                    source_bank.parts.unsaved.0[src_part].audio_track_fx2[src_idx];
+
+                // Copy audio track volume
+                dest_bank.parts.unsaved.0[dst_part].audio_track_volumes[dst_idx] =
+                    source_bank.parts.unsaved.0[src_part].audio_track_volumes[src_idx];
+
+                // Copy custom LFO designs and interpolation masks
+                dest_bank.parts.unsaved.0[dst_part].audio_tracks_custom_lfo_designs[dst_idx] =
+                    source_bank.parts.unsaved.0[src_part].audio_tracks_custom_lfo_designs[src_idx].clone();
+                dest_bank.parts.unsaved.0[dst_part].audio_tracks_custom_lfos_interpolation_masks[dst_idx] =
+                    source_bank.parts.unsaved.0[src_part].audio_tracks_custom_lfos_interpolation_masks[src_idx].clone();
+
+                // Copy recorder setup
+                dest_bank.parts.unsaved.0[dst_part].recorder_setup[dst_idx] =
+                    source_bank.parts.unsaved.0[src_part].recorder_setup[src_idx];
 
                 println!(
-                    "[DEBUG] Copied audio track {} Part params to track {}",
+                    "[DEBUG] Copied audio track {} Part params to track {} (machine type, params, FX, volume, LFO, recorder)",
                     src_idx + 1,
                     dst_idx + 1
                 );
@@ -3860,8 +3930,24 @@ pub fn copy_tracks(
                 dest_bank.parts.unsaved.0[dst_part].midi_track_params_setup[dst_idx] =
                     source_bank.parts.unsaved.0[src_part].midi_track_params_setup[src_idx];
 
+                // Copy custom LFO designs and interpolation masks
+                dest_bank.parts.unsaved.0[dst_part].midi_tracks_custom_lfos[dst_idx] =
+                    source_bank.parts.unsaved.0[src_part].midi_tracks_custom_lfos[src_idx].clone();
+                dest_bank.parts.unsaved.0[dst_part].midi_tracks_custom_lfos_interpolation_masks[dst_idx] =
+                    source_bank.parts.unsaved.0[src_part].midi_tracks_custom_lfos_interpolation_masks[src_idx].clone();
+
+                // Copy arp sequences
+                dest_bank.parts.unsaved.0[dst_part].midi_tracks_arp_seqs[dst_idx] =
+                    source_bank.parts.unsaved.0[src_part].midi_tracks_arp_seqs[src_idx].clone();
+
+                // Copy arp mute masks (2 elements per track)
+                dest_bank.parts.unsaved.0[dst_part].midi_tracks_arp_mute_masks[dst_idx * 2] =
+                    source_bank.parts.unsaved.0[src_part].midi_tracks_arp_mute_masks[src_idx * 2];
+                dest_bank.parts.unsaved.0[dst_part].midi_tracks_arp_mute_masks[dst_idx * 2 + 1] =
+                    source_bank.parts.unsaved.0[src_part].midi_tracks_arp_mute_masks[src_idx * 2 + 1];
+
                 println!(
-                    "[DEBUG] Copied MIDI track {} Part params to track {}",
+                    "[DEBUG] Copied MIDI track {} Part params to track {} (params, LFO, arp)",
                     src_idx + 1,
                     dst_idx + 1
                 );
@@ -3869,27 +3955,70 @@ pub fn copy_tracks(
         }
 
         if mode == "pattern_triggers" || mode == "both" {
-            // Copy Pattern-level triggers for all 16 patterns
-            for pattern_idx in 0..16 {
-                if is_audio {
-                    let src_idx = src_track_idx as usize;
-                    let dst_idx = dst_track_idx as usize;
-
-                    dest_bank.patterns.0[pattern_idx].audio_track_trigs.0[dst_idx] =
-                        source_bank.patterns.0[pattern_idx].audio_track_trigs.0[src_idx].clone();
-                } else {
-                    let src_idx = (src_track_idx - 8) as usize;
-                    let dst_idx = (dst_track_idx - 8) as usize;
-
-                    dest_bank.patterns.0[pattern_idx].midi_track_trigs.0[dst_idx] =
-                        source_bank.patterns.0[pattern_idx].midi_track_trigs.0[src_idx].clone();
+            // Determine which patterns to copy triggers for
+            match (source_pattern_index, dest_pattern_index) {
+                (None, None) => {
+                    // All patterns: copy triggers for all 16 patterns (1-to-1)
+                    for pattern_idx in 0..16 {
+                        if is_audio {
+                            dest_bank.patterns.0[pattern_idx].audio_track_trigs.0[dst_track_idx as usize] =
+                                source_bank.patterns.0[pattern_idx].audio_track_trigs.0[src_track_idx as usize].clone();
+                        } else {
+                            let src_midi = (src_track_idx - 8) as usize;
+                            let dst_midi = (dst_track_idx - 8) as usize;
+                            dest_bank.patterns.0[pattern_idx].midi_track_trigs.0[dst_midi] =
+                                source_bank.patterns.0[pattern_idx].midi_track_trigs.0[src_midi].clone();
+                        }
+                    }
+                    println!(
+                        "[DEBUG] Copied track {} triggers (all 16 patterns) to track {}",
+                        src_track_idx + 1,
+                        dst_track_idx + 1
+                    );
+                }
+                (Some(src_pat), Some(dst_pat)) => {
+                    // Specific source pattern to specific dest pattern
+                    if is_audio {
+                        dest_bank.patterns.0[dst_pat as usize].audio_track_trigs.0[dst_track_idx as usize] =
+                            source_bank.patterns.0[src_pat as usize].audio_track_trigs.0[src_track_idx as usize].clone();
+                    } else {
+                        let src_midi = (src_track_idx - 8) as usize;
+                        let dst_midi = (dst_track_idx - 8) as usize;
+                        dest_bank.patterns.0[dst_pat as usize].midi_track_trigs.0[dst_midi] =
+                            source_bank.patterns.0[src_pat as usize].midi_track_trigs.0[src_midi].clone();
+                    }
+                    println!(
+                        "[DEBUG] Copied track {} triggers (pattern {} to pattern {}) to track {}",
+                        src_track_idx + 1,
+                        src_pat + 1,
+                        dst_pat + 1,
+                        dst_track_idx + 1
+                    );
+                }
+                (Some(src_pat), None) => {
+                    // Specific source pattern to all dest patterns
+                    for pattern_idx in 0..16 {
+                        if is_audio {
+                            dest_bank.patterns.0[pattern_idx].audio_track_trigs.0[dst_track_idx as usize] =
+                                source_bank.patterns.0[src_pat as usize].audio_track_trigs.0[src_track_idx as usize].clone();
+                        } else {
+                            let src_midi = (src_track_idx - 8) as usize;
+                            let dst_midi = (dst_track_idx - 8) as usize;
+                            dest_bank.patterns.0[pattern_idx].midi_track_trigs.0[dst_midi] =
+                                source_bank.patterns.0[src_pat as usize].midi_track_trigs.0[src_midi].clone();
+                        }
+                    }
+                    println!(
+                        "[DEBUG] Copied track {} triggers (pattern {} to all patterns) to track {}",
+                        src_track_idx + 1,
+                        src_pat + 1,
+                        dst_track_idx + 1
+                    );
+                }
+                _ => {
+                    return Err("Invalid pattern index combination: dest cannot be specific when source is all".to_string());
                 }
             }
-            println!(
-                "[DEBUG] Copied track {} triggers (all 16 patterns) to track {}",
-                src_track_idx + 1,
-                dst_track_idx + 1
-            );
         }
     }
 
@@ -4021,6 +4150,52 @@ pub fn copy_sample_slots(
         None
     };
 
+    // Read source markers file for editor settings
+    let source_markers_work = source_path.join("markers.work");
+    let source_markers_strd = source_path.join("markers.strd");
+    let source_markers_path = if source_markers_work.exists() {
+        Some(source_markers_work)
+    } else if source_markers_strd.exists() {
+        Some(source_markers_strd)
+    } else {
+        None
+    };
+    let source_markers = source_markers_path
+        .as_ref()
+        .map(|p| MarkersFile::from_data_file(p))
+        .transpose()
+        .map_err(|e| format!("Failed to read source markers file: {:?}", e))?;
+
+    // Read destination markers file
+    let dest_markers_work = dest_path.join("markers.work");
+    let dest_markers_strd = dest_path.join("markers.strd");
+    let dest_markers_file_path = if dest_markers_work.exists() {
+        Some(dest_markers_work)
+    } else if dest_markers_strd.exists() {
+        Some(dest_markers_strd)
+    } else {
+        None
+    };
+    let mut dest_markers = if let Some(ref p) = dest_markers_file_path {
+        MarkersFile::from_data_file(p)
+            .map_err(|e| format!("Failed to read destination markers file: {:?}", e))?
+    } else {
+        MarkersFile::default()
+    };
+    let mut markers_modified = false;
+
+    // Helper: copy .ot metadata file alongside an audio file
+    fn copy_ot_file(src_audio: &Path, dest_audio: &Path) {
+        let ot_src = src_audio.with_extension("ot");
+        if ot_src.exists() {
+            let ot_dest = dest_audio.with_extension("ot");
+            if let Some(parent) = ot_dest.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let _ = std::fs::copy(&ot_src, &ot_dest);
+        }
+    }
+
     // Process each slot
     for (&src_slot_id, &dest_slot_id) in source_indices.iter().zip(dest_indices.iter()) {
         let src_idx = (src_slot_id - 1) as usize;
@@ -4048,7 +4223,10 @@ pub fn copy_sample_slots(
                                         let _ = std::fs::create_dir_all(parent);
                                     }
                                     let _ = std::fs::copy(&src_full_path, &dest_full_path);
+                                    copy_ot_file(&src_full_path, &dest_full_path);
                                     println!("[DEBUG] Copied audio file: {}", sample_path_str);
+                                } else {
+                                    eprintln!("[WARN] Source audio file not found: {:?} (resolved from '{}')", src_full_path, sample_path_str);
                                 }
                             }
                             "move_to_pool" => {
@@ -4064,11 +4242,21 @@ pub fn copy_sample_slots(
                                             .unwrap_or_default();
                                         let pool_dest = Path::new(pool_path).join(&file_name);
 
-                                        // Copy to Audio Pool
-                                        let _ = std::fs::copy(&src_full_path, &pool_dest);
+                                        // Copy to Audio Pool then delete original (move semantics)
+                                        if std::fs::copy(&src_full_path, &pool_dest).is_ok() {
+                                            let _ = std::fs::remove_file(&src_full_path);
+                                        }
+
+                                        // Move .ot file too
+                                        let ot_src = src_full_path.with_extension("ot");
+                                        if ot_src.exists() {
+                                            let ot_dest = pool_dest.with_extension("ot");
+                                            if std::fs::copy(&ot_src, &ot_dest).is_ok() {
+                                                let _ = std::fs::remove_file(&ot_src);
+                                            }
+                                        }
 
                                         // Update path to reference Audio Pool
-                                        // Audio Pool is at ../AUDIO POOL relative to project
                                         new_slot.path = Some(std::path::PathBuf::from(format!(
                                             "../AUDIO POOL/{}",
                                             file_name
@@ -4082,10 +4270,31 @@ pub fn copy_sample_slots(
                         }
                     }
 
-                    // Optionally clear editor settings
-                    if !include_editor_settings {
-                        new_slot.gain = 64; // Default gain
-                                            // Loop mode and timestretch stay as is (they might affect playback)
+                    // Handle editor settings and markers
+                    if include_editor_settings {
+                        // Copy markers from source to destination
+                        if let Some(ref src_markers) = source_markers {
+                            if src_idx < src_markers.static_slots.len()
+                                && dest_idx < dest_markers.static_slots.len()
+                            {
+                                dest_markers.static_slots[dest_idx] =
+                                    src_markers.static_slots[src_idx].clone();
+                                markers_modified = true;
+                            }
+                        }
+                    } else {
+                        // Reset all editor settings to defaults
+                        new_slot.gain = 72;
+                        new_slot.loop_mode = Default::default();
+                        new_slot.timestrech_mode = Default::default();
+                        new_slot.trig_quantization_mode = Default::default();
+                        new_slot.bpm = 2880;
+
+                        // Reset markers to default (full sample, no slices)
+                        if dest_idx < dest_markers.static_slots.len() {
+                            dest_markers.static_slots[dest_idx] = Default::default();
+                            markers_modified = true;
+                        }
                     }
 
                     // Static slots are a fixed-size array (128 slots)
@@ -4107,7 +4316,7 @@ pub fn copy_sample_slots(
                     // Clone the slot
                     let mut new_slot = src_slot_data.clone();
 
-                    // Handle audio file based on mode (same as above)
+                    // Handle audio file based on mode
                     if let Some(ref sample_path) = new_slot.path {
                         let sample_path_str = sample_path.to_string_lossy().to_string();
 
@@ -4120,7 +4329,10 @@ pub fn copy_sample_slots(
                                         let _ = std::fs::create_dir_all(parent);
                                     }
                                     let _ = std::fs::copy(&src_full_path, &dest_full_path);
+                                    copy_ot_file(&src_full_path, &dest_full_path);
                                     println!("[DEBUG] Copied audio file: {}", sample_path_str);
+                                } else {
+                                    eprintln!("[WARN] Source audio file not found: {:?} (resolved from '{}')", src_full_path, sample_path_str);
                                 }
                             }
                             "move_to_pool" => {
@@ -4135,7 +4347,20 @@ pub fn copy_sample_slots(
                                             .unwrap_or_default();
                                         let pool_dest = Path::new(pool_path).join(&file_name);
 
-                                        let _ = std::fs::copy(&src_full_path, &pool_dest);
+                                        // Copy to Audio Pool then delete original (move semantics)
+                                        if std::fs::copy(&src_full_path, &pool_dest).is_ok() {
+                                            let _ = std::fs::remove_file(&src_full_path);
+                                        }
+
+                                        // Move .ot file too
+                                        let ot_src = src_full_path.with_extension("ot");
+                                        if ot_src.exists() {
+                                            let ot_dest = pool_dest.with_extension("ot");
+                                            if std::fs::copy(&ot_src, &ot_dest).is_ok() {
+                                                let _ = std::fs::remove_file(&ot_src);
+                                            }
+                                        }
+
                                         new_slot.path = Some(std::path::PathBuf::from(format!(
                                             "../AUDIO POOL/{}",
                                             file_name
@@ -4149,8 +4374,31 @@ pub fn copy_sample_slots(
                         }
                     }
 
-                    if !include_editor_settings {
-                        new_slot.gain = 64;
+                    // Handle editor settings and markers
+                    if include_editor_settings {
+                        // Copy markers from source to destination
+                        if let Some(ref src_markers) = source_markers {
+                            if src_idx < src_markers.flex_slots.len()
+                                && dest_idx < dest_markers.flex_slots.len()
+                            {
+                                dest_markers.flex_slots[dest_idx] =
+                                    src_markers.flex_slots[src_idx].clone();
+                                markers_modified = true;
+                            }
+                        }
+                    } else {
+                        // Reset all editor settings to defaults
+                        new_slot.gain = 72;
+                        new_slot.loop_mode = Default::default();
+                        new_slot.timestrech_mode = Default::default();
+                        new_slot.trig_quantization_mode = Default::default();
+                        new_slot.bpm = 2880;
+
+                        // Reset markers to default
+                        if dest_idx < dest_markers.flex_slots.len() {
+                            dest_markers.flex_slots[dest_idx] = Default::default();
+                            markers_modified = true;
+                        }
                     }
 
                     // Flex slots are a fixed-size array (128 slots - though internal array is 136)
@@ -4172,6 +4420,15 @@ pub fn copy_sample_slots(
     dest_project_data
         .to_data_file(&dest_final_path)
         .map_err(|e| format!("Failed to write destination project: {:?}", e))?;
+
+    // Write destination markers file if modified
+    if markers_modified {
+        let dest_markers_final = dest_path.join("markers.work");
+        dest_markers
+            .to_data_file(&dest_markers_final)
+            .map_err(|e| format!("Failed to write destination markers file: {:?}", e))?;
+        println!("[DEBUG] Wrote markers file: {:?}", dest_markers_final);
+    }
 
     // If move_to_pool mode, also update source project paths
     if audio_mode == "move_to_pool" {
@@ -4690,15 +4947,17 @@ mod tests {
 
         #[test]
         fn test_copy_parts_marks_edited() {
-            // Verify that copying a part marks it as edited
-            let source = TestProject::new();
+            // Verify that copying a part mirrors the source's edited bitmask
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.parts_edited_bitmask = 0b0001; // Part 0 is edited
+            });
             let dest = TestProject::new();
 
             copy_parts(&source.path, 0, vec![0], &dest.path, 0, vec![2]).unwrap();
 
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
-            // Part 2 (index 2) should be marked as edited
+            // Part 2 (index 2) should be marked as edited since source part 0 was edited
             assert!(
                 (dest_bank.parts_edited_bitmask & (1 << 2)) != 0,
                 "Destination part should be marked as edited"
@@ -4708,7 +4967,9 @@ mod tests {
         #[test]
         fn test_copy_single_part_to_multiple_destinations() {
             // CP-07: Copy 1 part to multiple destinations (1-to-many)
-            let source = TestProject::new();
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.parts_edited_bitmask = 0b0001; // Part 0 is edited
+            });
             let dest = TestProject::new();
 
             // Copy part 0 to parts 1, 2, and 3
@@ -4719,7 +4980,7 @@ mod tests {
                 result
             );
 
-            // Verify all destination parts are marked as edited
+            // Verify all destination parts are marked as edited (source part 0 was edited)
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
             assert!(
@@ -4731,7 +4992,9 @@ mod tests {
         #[test]
         fn test_copy_single_part_to_all_parts() {
             // CP-08: Copy 1 part to all 4 destinations
-            let source = TestProject::new();
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.parts_edited_bitmask = 0b0001; // Part 0 is edited
+            });
             let dest = TestProject::new();
 
             // Copy part 0 to all 4 parts
@@ -4742,7 +5005,7 @@ mod tests {
                 result
             );
 
-            // Verify all destination parts are marked as edited
+            // Verify all destination parts are marked as edited (source part 0 was edited)
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
             assert_eq!(
@@ -4844,6 +5107,7 @@ mod tests {
                 None,
                 "all",
                 None,
+                "audio",
             );
             assert!(
                 result.is_ok(),
@@ -4869,6 +5133,7 @@ mod tests {
                 None,
                 "all",
                 None,
+                "audio",
             );
             assert!(
                 result.is_ok(),
@@ -4894,6 +5159,7 @@ mod tests {
                 None,
                 "all",
                 None,
+                "audio",
             );
             assert!(
                 result.is_ok(),
@@ -4918,6 +5184,7 @@ mod tests {
                 None,
                 "all",
                 None,
+                "audio",
             );
             assert!(
                 result.is_ok(),
@@ -4943,6 +5210,7 @@ mod tests {
                 None,
                 "all",
                 None,
+                "audio",
             );
             assert!(
                 result.is_ok(),
@@ -4971,6 +5239,7 @@ mod tests {
                 None,
                 "all",
                 None,
+                "audio",
             )
             .unwrap();
 
@@ -4999,6 +5268,7 @@ mod tests {
                 Some(3), // Assign all to Part 4 (index 3)
                 "all",
                 None,
+                "audio",
             )
             .unwrap();
 
@@ -5026,6 +5296,7 @@ mod tests {
                 None,
                 "specific",
                 Some(vec![0, 1, 2]), // Only tracks T1, T2, T3
+                "audio",
             );
             assert!(
                 result.is_ok(),
@@ -5051,6 +5322,7 @@ mod tests {
                 None,
                 "specific",
                 Some(vec![8, 9]), // MIDI tracks M1, M2 (indices 8-15)
+                "audio",
             );
             assert!(
                 result.is_ok(),
@@ -5076,6 +5348,7 @@ mod tests {
                 None,
                 "specific",
                 Some(vec![0, 1, 8, 9]), // T1, T2, M1, M2
+                "audio",
             );
             assert!(
                 result.is_ok(),
@@ -5101,6 +5374,7 @@ mod tests {
                 None,
                 "all",
                 None,
+                "audio",
             );
             assert!(result.is_err(), "Pattern overflow should fail");
             assert!(result
@@ -5124,6 +5398,7 @@ mod tests {
                 None,
                 "all",
                 None,
+                "audio",
             );
             assert!(result.is_err());
             assert!(result
@@ -5147,6 +5422,7 @@ mod tests {
                 None,
                 "specific",
                 Some(vec![16]), // Invalid track index
+                "audio",
             );
             assert!(result.is_err());
             assert!(result
@@ -5170,6 +5446,7 @@ mod tests {
                 None, // Missing dest_part for select_specific mode
                 "all",
                 None,
+                "audio",
             );
             assert!(result.is_err());
             assert!(result.unwrap_err().contains("dest_part is required"));
@@ -5191,6 +5468,7 @@ mod tests {
                 None,
                 "all",
                 None,
+                "audio",
             );
             assert!(result.is_err());
             assert!(result.unwrap_err().contains("Invalid part_assignment_mode"));
@@ -5216,6 +5494,7 @@ mod tests {
                 None,
                 "all",
                 None,
+                "audio",
             );
             assert!(
                 result.is_ok(),
@@ -5255,6 +5534,7 @@ mod tests {
                 None,
                 "all",
                 None,
+                "audio",
             );
             assert!(
                 result.is_ok(),
@@ -5292,6 +5572,7 @@ mod tests {
                 None,
                 "all",
                 None,
+                "audio",
             );
             assert!(result.is_err(), "Mismatched pattern count should fail");
             assert!(result
@@ -5316,6 +5597,7 @@ mod tests {
                 None,
                 "all",
                 None,
+                "audio",
             );
             assert!(
                 result.is_ok(),
@@ -5341,6 +5623,7 @@ mod tests {
                 None,
                 "invalid_track_mode",
                 None,
+                "audio",
             );
             assert!(result.is_err(), "Invalid track mode should fail");
         }
@@ -5364,6 +5647,7 @@ mod tests {
                 None,
                 "all",
                 None,
+                "audio",
             )
             .unwrap();
 
@@ -5392,6 +5676,7 @@ mod tests {
                 None,
                 "all",
                 None,
+                "audio",
             );
             assert!(result.is_ok(), "Self-copy should succeed: {:?}", result);
         }
@@ -5413,6 +5698,7 @@ mod tests {
                 None,
                 "all",
                 None,
+                "audio",
             )
             .unwrap();
 
@@ -5443,6 +5729,7 @@ mod tests {
                 None,
                 "specific",
                 Some(vec![0, 1, 2, 3, 4, 5, 6, 7]), // All audio tracks
+                "audio",
             );
             assert!(
                 result.is_ok(),
@@ -5468,6 +5755,7 @@ mod tests {
                 None,
                 "specific",
                 Some(vec![8, 9, 10, 11, 12, 13, 14, 15]), // All MIDI tracks
+                "audio",
             );
             assert!(
                 result.is_ok(),
@@ -5493,6 +5781,7 @@ mod tests {
                 Some(3), // Assign all patterns to part 4 (index 3)
                 "all",
                 None,
+                "audio",
             )
             .unwrap();
 
@@ -5527,6 +5816,7 @@ mod tests {
                 None,
                 "all",
                 None,
+                "audio",
             );
             assert!(result.is_err(), "Mismatched pattern counts should fail");
             assert!(
@@ -5557,6 +5847,8 @@ mod tests {
                 0,
                 vec![0],
                 "both",
+                None,
+                None,
             );
             assert!(
                 result.is_ok(),
@@ -5581,6 +5873,8 @@ mod tests {
                 0,
                 vec![4, 5, 6, 7],
                 "both",
+                None,
+                None,
             );
             assert!(
                 result.is_ok(),
@@ -5605,6 +5899,8 @@ mod tests {
                 0,
                 vec![8],
                 "both",
+                None,
+                None,
             );
             assert!(
                 result.is_ok(),
@@ -5629,6 +5925,8 @@ mod tests {
                 0,
                 vec![0, 1, 2, 3, 4, 5, 6, 7],
                 "both",
+                None,
+                None,
             );
             assert!(
                 result.is_ok(),
@@ -5652,6 +5950,8 @@ mod tests {
                 1, // Part 2
                 vec![0],
                 "both",
+                None,
+                None,
             );
             assert!(
                 result.is_ok(),
@@ -5675,6 +5975,8 @@ mod tests {
                 0, // Bank B
                 vec![0],
                 "both",
+                None,
+                None,
             );
             assert!(
                 result.is_ok(),
@@ -5699,6 +6001,8 @@ mod tests {
                 0,
                 vec![0],
                 "both",
+                None,
+                None,
             );
             assert!(
                 result.is_ok(),
@@ -5723,6 +6027,8 @@ mod tests {
                 0,
                 vec![0],
                 "both",
+                None,
+                None,
             );
             assert!(result.is_ok(), "Both mode should succeed: {:?}", result);
         }
@@ -5743,6 +6049,8 @@ mod tests {
                 0,
                 vec![0],
                 "part_params",
+                None,
+                None,
             );
             assert!(
                 result.is_ok(),
@@ -5767,6 +6075,8 @@ mod tests {
                 0,
                 vec![0],
                 "pattern_triggers",
+                None,
+                None,
             );
             assert!(
                 result.is_ok(),
@@ -5791,6 +6101,8 @@ mod tests {
                 0,
                 vec![0, 1], // 2 dest tracks
                 "both",
+                None,
+                None,
             );
             assert!(result.is_err());
             assert!(result.unwrap_err().contains("same length"));
@@ -5812,6 +6124,8 @@ mod tests {
                 0,
                 vec![8], // MIDI track
                 "both",
+                None,
+                None,
             );
             assert!(result.is_err(), "Audio to MIDI mixing should fail");
             assert!(result.unwrap_err().contains("Cannot mix audio tracks"));
@@ -5832,6 +6146,8 @@ mod tests {
                 0,
                 vec![0], // Audio track
                 "both",
+                None,
+                None,
             );
             assert!(result.is_err(), "MIDI to audio mixing should fail");
             assert!(result.unwrap_err().contains("Cannot mix audio tracks"));
@@ -5852,6 +6168,8 @@ mod tests {
                 0,
                 vec![0],
                 "invalid_mode",
+                None,
+                None,
             );
             assert!(result.is_err());
             assert!(result.unwrap_err().contains("Invalid mode"));
@@ -5872,6 +6190,8 @@ mod tests {
                 0,
                 vec![0],
                 "both",
+                None,
+                None,
             );
             assert!(result.is_err());
             assert!(result
@@ -5894,6 +6214,8 @@ mod tests {
                 0,
                 vec![0],
                 "both",
+                None,
+                None,
             );
             assert!(result.is_err());
             assert!(result
@@ -5917,6 +6239,8 @@ mod tests {
                 2, // Dest part 3 (index 2)
                 vec![0],
                 "part_params",
+                None,
+                None,
             )
             .unwrap();
 
@@ -5943,6 +6267,8 @@ mod tests {
                 0,
                 vec![0],
                 "part_params",
+                None,
+                None,
             );
             assert!(result.is_ok(), "Self-copy should succeed: {:?}", result);
         }
@@ -5963,6 +6289,8 @@ mod tests {
                 0,
                 vec![1],
                 "part_params",
+                None,
+                None,
             )
             .unwrap();
 
@@ -5992,6 +6320,8 @@ mod tests {
                 0,
                 vec![5, 6, 7], // Tracks T6, T7, T8
                 "part_params",
+                None,
+                None,
             );
             assert!(
                 result.is_ok(),
@@ -6016,6 +6346,8 @@ mod tests {
                 0,
                 vec![13, 14, 15], // Tracks M6, M7, M8
                 "part_params",
+                None,
+                None,
             );
             assert!(
                 result.is_ok(),
@@ -6040,6 +6372,8 @@ mod tests {
                 0,
                 vec![8], // MIDI track M1
                 "part_params",
+                None,
+                None,
             );
             assert!(result.is_err(), "Audio to MIDI should fail");
             assert!(
@@ -6064,6 +6398,8 @@ mod tests {
                 0,
                 vec![0], // Audio track T1
                 "part_params",
+                None,
+                None,
             );
             assert!(result.is_err(), "MIDI to audio should fail");
             assert!(
@@ -6088,6 +6424,8 @@ mod tests {
                 0,
                 vec![1],
                 "both",
+                None,
+                None,
             );
             assert!(result.is_ok(), "Both mode should succeed: {:?}", result);
         }
@@ -6108,6 +6446,8 @@ mod tests {
                 0,
                 vec![1],
                 "pattern_triggers",
+                None,
+                None,
             );
             assert!(
                 result.is_ok(),
@@ -6132,6 +6472,8 @@ mod tests {
                 0,
                 vec![0],
                 "part_params",
+                None,
+                None,
             );
             assert!(result.is_err(), "Empty source tracks should fail");
         }
@@ -6732,6 +7074,7 @@ mod tests {
                     None,
                     "all",
                     None,
+                    "audio",
                 );
                 assert!(result.is_ok(), "Pattern index {} should be valid", i);
             }
@@ -6753,6 +7096,8 @@ mod tests {
                     0,
                     vec![i],
                     "both",
+                    None,
+                    None,
                 );
                 assert!(result.is_ok(), "Audio track index {} should be valid", i);
             }
@@ -6769,6 +7114,8 @@ mod tests {
                     0,
                     vec![i],
                     "both",
+                    None,
+                    None,
                 );
                 assert!(result.is_ok(), "MIDI track index {} should be valid", i);
             }
@@ -6819,6 +7166,7 @@ mod tests {
                 None,
                 "all",
                 None,
+                "audio",
             );
             assert!(result.is_ok(), "Empty patterns copy should succeed (no-op)");
         }
@@ -6837,6 +7185,8 @@ mod tests {
                 0,
                 vec![],
                 "both",
+                None,
+                None,
             );
             assert!(result.is_ok(), "Empty tracks copy should succeed (no-op)");
         }
@@ -6903,6 +7253,7 @@ mod tests {
                 None,
                 "all",
                 None,
+                "audio",
             )
             .unwrap();
 
@@ -6978,6 +7329,7 @@ mod tests {
                 None,
                 "all",
                 None,
+                "audio",
             )
             .unwrap();
             copy_tracks(
@@ -6990,6 +7342,8 @@ mod tests {
                 0,
                 vec![2, 3],
                 "both",
+                None,
+                None,
             )
             .unwrap();
             copy_sample_slots(

@@ -399,6 +399,7 @@ async fn copy_patterns(
     dest_part: Option<u8>,
     track_mode: String,
     track_indices: Option<Vec<u8>>,
+    mode_scope: Option<String>,
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         copy_patterns_impl(
@@ -412,6 +413,7 @@ async fn copy_patterns(
             dest_part,
             &track_mode,
             track_indices,
+            mode_scope.as_deref().unwrap_or("audio"),
         )
     })
     .await
@@ -429,6 +431,8 @@ async fn copy_tracks(
     dest_part_index: Option<u8>, // None = all parts (0-3)
     dest_track_indices: Vec<u8>,
     mode: String,
+    source_pattern_index: Option<u8>, // None = all 16 patterns, Some(0-15) = specific
+    dest_pattern_index: Option<u8>,   // None = all 16 patterns, Some(0-15) = specific
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         // If part indices are None, copy to all 4 parts (1-to-1 mapping)
@@ -446,6 +450,8 @@ async fn copy_tracks(
                         part_idx,
                         dest_track_indices.clone(),
                         &mode,
+                        source_pattern_index,
+                        dest_pattern_index,
                     )?;
                 }
                 Ok(())
@@ -462,6 +468,8 @@ async fn copy_tracks(
                     dst,
                     dest_track_indices,
                     &mode,
+                    source_pattern_index,
+                    dest_pattern_index,
                 )
             }
             _ => Err("Both source and destination part indices must be specified or both must be None (all parts)".to_string())
