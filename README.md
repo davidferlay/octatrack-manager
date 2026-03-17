@@ -4,7 +4,7 @@
 
 <p align="center">
   <img
-    src="website/static/img/project-discovery.png"
+    src="user-guide/static/img/project-discovery.png"
     alt="Octatrack Manager - Project discovery"
     style="width:80%; height:auto;"
   />

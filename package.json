@@ -16,7 +16,7 @@
     "test:frontend": "vitest run",
     "test:e2e": "playwright test",
     "test:rust": "cd src-tauri && cargo fmt --check && cargo clippy -- -D warnings && cargo test",
-    "docs:watch": "npm --prefix website run start"
+    "docs:watch": "npm --prefix user-guide run start"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.1.0",

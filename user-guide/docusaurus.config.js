@@ -77,7 +77,7 @@ const config = {
         docs: {
           sidebarPath: './sidebars.js',
           editUrl:
-            'https://github.com/davidferlay/octatrack-manager/tree/main/website/',
+            'https://github.com/davidferlay/octatrack-manager/tree/main/user-guide/',
         },
         blog: false,
         theme: {
