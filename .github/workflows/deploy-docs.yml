@@ -40,9 +40,36 @@ jobs:
         working-directory: website
         run: npm ci
 
+      - name: Optimize images
+        working-directory: website
+        run: npm run optimize-images
+
       - name: Build website
         working-directory: website
         run: npm run build
+
+      - name: Generate PDF user guide
+        working-directory: website
+        run: |
+          npx docusaurus serve --port 3030 --no-open &
+          SERVER_PID=$!
+          for i in $(seq 1 30); do
+            curl -s http://localhost:3030/octatrack-manager/docs/intro > /dev/null 2>&1 && break
+            sleep 1
+          done
+          npx docs-to-pdf docusaurus \
+            --initialDocURLs "http://localhost:3030/octatrack-manager/docs/intro" \
+            --contentSelector "article" \
+            --paginationSelector "a.pagination-nav__link--next" \
+            --excludeSelectors ".margin-vert--xl a,[class^='tocCollapsible'],.breadcrumbs,.theme-edit-this-page" \
+            --coverImage "http://localhost:3030/octatrack-manager/img/logo-512.png" \
+            --coverTitle "Octatrack Manager" \
+            --coverSub "User Guide" \
+            --paperFormat "A4" \
+            --pdfMargin "60,50,60,50" \
+            --outputPDFFilename "build/octatrack-manager-user-guide.pdf" \
+            --disableTOC
+          kill $SERVER_PID 2>/dev/null || true
 
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5

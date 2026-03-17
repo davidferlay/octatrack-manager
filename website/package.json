@@ -12,7 +12,8 @@
     "serve": "docusaurus serve",
     "write-translations": "docusaurus write-translations",
     "write-heading-ids": "docusaurus write-heading-ids",
-    "generate-pdf": "bash scripts/generate-pdf.sh"
+    "generate-pdf": "bash scripts/generate-pdf.sh",
+    "optimize-images": "node scripts/optimize-images.mjs"
   },
   "dependencies": {
     "@docusaurus/core": "3.7.0",
@@ -27,7 +28,8 @@
   "devDependencies": {
     "@docusaurus/module-type-aliases": "3.7.0",
     "@docusaurus/types": "3.7.0",
-    "docs-to-pdf": "^1.1.0"
+    "docs-to-pdf": "^1.1.0",
+    "sharp": "^0.34.5"
   },
   "engines": {
     "node": ">=18.0"
