@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'website/**'
+      - 'user-guide/**'
   workflow_dispatch:
 
 env:
@@ -34,22 +34,22 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: website/package-lock.json
+          cache-dependency-path: user-guide/package-lock.json
 
       - name: Install dependencies
-        working-directory: website
+        working-directory: user-guide
         run: npm ci
 
       - name: Optimize images
-        working-directory: website
+        working-directory: user-guide
         run: npm run optimize-images
 
-      - name: Build website
-        working-directory: website
+      - name: Build user guide
+        working-directory: user-guide
         run: npm run build
 
       - name: Generate PDF user guide
-        working-directory: website
+        working-directory: user-guide
         run: |
           npx docusaurus serve --port 3030 --no-open &
           SERVER_PID=$!
@@ -78,7 +78,7 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-pages-artifact@v4
         with:
-          path: website/build
+          path: user-guide/build
 
   deploy:
     name: Deploy to GitHub Pages
