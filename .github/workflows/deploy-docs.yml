@@ -73,7 +73,7 @@ jobs:
           kill $SERVER_PID 2>/dev/null || true
 
       - name: Setup GitHub Pages
-        uses: actions/configure-pages@v6
+        uses: actions/configure-pages@v5
 
       - name: Upload build artifact
         uses: actions/upload-pages-artifact@v4
