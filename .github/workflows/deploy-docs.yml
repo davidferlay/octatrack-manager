@@ -68,6 +68,7 @@ jobs:
             --paperFormat "A4" \
             --pdfMargin "60,50,60,50" \
             --outputPDFFilename "build/octatrack-manager-user-guide.pdf" \
+            --puppeteerArgs "--no-sandbox" \
             --disableTOC
           kill $SERVER_PID 2>/dev/null || true
 
