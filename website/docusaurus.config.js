@@ -23,6 +23,52 @@ const config = {
     locales: ['en'],
   },
 
+  plugins: [
+    [
+      '@docusaurus/plugin-pwa',
+      {
+        debug: false,
+        offlineModeActivationStrategies: [
+          'appInstalled',
+          'standalone',
+          'queryString',
+        ],
+        pwaHead: [
+          {
+            tagName: 'link',
+            rel: 'icon',
+            href: '/octatrack-manager/img/logo-192.png',
+          },
+          {
+            tagName: 'link',
+            rel: 'manifest',
+            href: '/octatrack-manager/manifest.json',
+          },
+          {
+            tagName: 'meta',
+            name: 'theme-color',
+            content: '#e85d04',
+          },
+          {
+            tagName: 'meta',
+            name: 'apple-mobile-web-app-capable',
+            content: 'yes',
+          },
+          {
+            tagName: 'meta',
+            name: 'apple-mobile-web-app-status-bar-style',
+            content: '#e85d04',
+          },
+          {
+            tagName: 'link',
+            rel: 'apple-touch-icon',
+            href: '/octatrack-manager/img/logo-192.png',
+          },
+        ],
+      },
+    ],
+  ],
+
   presets: [
     [
       'classic',
@@ -57,6 +103,11 @@ const config = {
             sidebarId: 'docsSidebar',
             position: 'left',
             label: 'User Guide',
+          },
+          {
+            href: 'https://davidferlay.github.io/octatrack-manager/octatrack-manager-user-guide.pdf',
+            label: 'PDF',
+            position: 'right',
           },
           {
             href: 'https://github.com/davidferlay/octatrack-manager',

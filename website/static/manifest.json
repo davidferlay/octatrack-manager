@@ -1,0 +1,21 @@
+{
+  "name": "Octatrack Manager - User Guide",
+  "short_name": "OT Manager Docs",
+  "theme_color": "#e85d04",
+  "background_color": "#1b1b1d",
+  "display": "standalone",
+  "scope": "/octatrack-manager/",
+  "start_url": "/octatrack-manager/docs/intro",
+  "icons": [
+    {
+      "src": "img/logo-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "img/logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
