@@ -3,6 +3,9 @@ name: Dev Release Build
 on:
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   create-release:
     runs-on: ubuntu-latest
