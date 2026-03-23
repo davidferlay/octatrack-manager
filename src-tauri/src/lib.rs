@@ -13,11 +13,11 @@ use audio_pool::{
 use device_detection::{discover_devices, scan_directory, ScanResult};
 use project_reader::{
     are_projects_in_same_set,
+    check_missing_source_files as check_missing_source_files_impl,
     commit_all_parts_data,
     commit_part_data,
     // Copy operations
     copy_bank as copy_bank_impl,
-    check_missing_source_files as check_missing_source_files_impl,
     copy_parts as copy_parts_impl,
     copy_patterns as copy_patterns_impl,
     copy_sample_slots as copy_sample_slots_impl,
@@ -425,7 +425,7 @@ async fn copy_patterns(
 async fn copy_tracks(
     source_project: String,
     source_bank_index: u8,
-    source_part_index: Option<u8>,    // None = all parts (0-3)
+    source_part_index: Option<u8>, // None = all parts (0-3)
     source_track_indices: Vec<u8>,
     dest_project: String,
     dest_bank_index: u8,
