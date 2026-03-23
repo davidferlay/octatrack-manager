@@ -38,7 +38,7 @@ The Parts Editor is organized into several pages, similar to the hardware interf
 
 ### Navigation Within the Editor
 
-Use the tabs at the bottom of the track panel to switch between the different parameter pages (Machine, LFO, Amp, FX1, FX2).
+Use the tabs at the bottom of the track panel to switch between the different parameter pages (Machine, LFO, Amp, FX1, FX2). Both your parameter page selection and part selection persist when switching between banks, so you can quickly compare the same page across different banks.
 
 ---
 

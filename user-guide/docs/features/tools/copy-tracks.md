@@ -15,7 +15,7 @@ The planned **Copy Track** tool is the most granular bulk operation in Octatrack
 ## Current Workflow (Experimental)
 
 1. **Source:** Select the bank (A–P), part (1–4), and specific track (T1–T8 or M1–M8).
-2. **Destination:** Choose the target project, bank, parts, and tracks.
+2. **Destination:** Choose the target project, bank, parts (multiple destination parts can be selected), and tracks.
 3. **Configure Options:** Select exactly what is copied (Parameters, Triggers, or Both).
 4. **Execute:** Perform the track copy.
 
@@ -25,7 +25,7 @@ The planned **Copy Track** tool is the most granular bulk operation in Octatrack
 
 When stable, these modes are intended to function as follows:
 
-- **Part Parameters:** Only copies the sound design (Machine, Amp, FX, LFO). Pattern sequences are not affected.
+- **Part Parameters:** Copies the full Part state, including both saved (backup) and unsaved (working) track data, as well as part names, saved state flags, and edited bitmask. Pattern sequences are not affected.
 - **Pattern Triggers:** Only copies the sequencer data (triggers, p-locks, micro-timing). Sound design settings remain unchanged.
 - **Both:** Copies both sound design settings and sequencer data to ensure a complete transfer.
 

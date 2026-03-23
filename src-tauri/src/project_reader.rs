@@ -3316,6 +3316,67 @@ pub fn create_audio_pool(project_path: &str) -> Result<String, String> {
     Ok(audio_pool_path.to_string_lossy().to_string())
 }
 
+/// Check which source sample slots have missing audio files.
+/// Returns the count of slots with assigned paths where the file doesn't exist.
+///
+/// # Arguments
+/// * `project_path` - Path to the project
+/// * `slot_type` - "static", "flex", or "both"
+/// * `source_indices` - Slot indices to check (1-based, 1-128)
+pub fn check_missing_source_files(
+    project_path: &str,
+    slot_type: &str,
+    source_indices: Vec<u8>,
+) -> Result<u32, String> {
+    let path = Path::new(project_path);
+
+    let project_work = path.join("project.work");
+    let project_strd = path.join("project.strd");
+    let project_file_path = if project_work.exists() {
+        project_work
+    } else if project_strd.exists() {
+        project_strd
+    } else {
+        return Err("Project file not found".to_string());
+    };
+
+    let project_data = ProjectFile::from_data_file(&project_file_path)
+        .map_err(|e| format!("Failed to read project: {:?}", e))?;
+
+    let mut missing_count: u32 = 0;
+
+    for &slot_id in &source_indices {
+        if !(1..=128).contains(&slot_id) {
+            continue;
+        }
+        let idx = (slot_id - 1) as usize;
+
+        if slot_type == "static" || slot_type == "both" {
+            if let Some(Some(ref slot)) = project_data.slots.static_slots.get(idx) {
+                if let Some(ref sample_path) = slot.path {
+                    let full_path = path.join(sample_path.to_string_lossy().to_string());
+                    if !full_path.exists() {
+                        missing_count += 1;
+                    }
+                }
+            }
+        }
+
+        if slot_type == "flex" || slot_type == "both" {
+            if let Some(Some(ref slot)) = project_data.slots.flex_slots.get(idx) {
+                if let Some(ref sample_path) = slot.path {
+                    let full_path = path.join(sample_path.to_string_lossy().to_string());
+                    if !full_path.exists() {
+                        missing_count += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(missing_count)
+}
+
 // ============================================================================
 // Copy Operations
 // ============================================================================
@@ -3652,12 +3713,12 @@ pub fn copy_patterns(
         let source_part_assignment = src_pattern.part_assignment;
 
         // Get the destination pattern's current part assignment (before overwriting)
-        let _dest_part_assignment = dest_bank.patterns.0[dest_pattern_idx as usize].part_assignment;
+        let dest_part_assignment = dest_bank.patterns.0[dest_pattern_idx as usize].part_assignment;
 
         // Determine the new part assignment
         let new_part_assignment = match part_assignment_mode {
-            "keep_original" => source_part_assignment, // Keep the source pattern's original part assignment
-            "copy_source_part" => source_part_assignment, // Same as keep_original (for compatibility)
+            "keep_original" => dest_part_assignment, // Keep the destination pattern's current part assignment
+            "copy_source_part" => source_part_assignment, // Copy the source pattern's part assignment
             "select_specific" => dest_part.unwrap(),
             _ => {
                 return Err(format!(
@@ -3870,60 +3931,46 @@ pub fn copy_tracks(
         let is_audio = src_track_idx < 8;
 
         if mode == "part_params" || mode == "both" {
-            // Copy Part-level parameters (sound design)
+            // Copy Part-level parameters (sound design) to both unsaved AND saved states
+            // This ensures the destination Part is a full copy (matching copy_parts behavior)
             if is_audio {
                 let src_idx = src_track_idx as usize;
                 let dst_idx = dst_track_idx as usize;
 
-                // Copy audio track machine type (Static/Flex/Thru/Neighbour/Pickup)
-                dest_bank.parts.unsaved.0[dst_part].audio_track_machine_types[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].audio_track_machine_types[src_idx];
-
-                // Copy audio track machine parameters
-                dest_bank.parts.unsaved.0[dst_part].audio_track_machine_params[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].audio_track_machine_params[src_idx];
-
-                // Copy audio track machine setup
-                dest_bank.parts.unsaved.0[dst_part].audio_track_machine_setup[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].audio_track_machine_setup[src_idx];
-
-                // Copy audio track machine slot assignments
-                dest_bank.parts.unsaved.0[dst_part].audio_track_machine_slots[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].audio_track_machine_slots[src_idx];
-
-                // Copy audio track params values (AMP, LFO, FX)
-                dest_bank.parts.unsaved.0[dst_part].audio_track_params_values[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].audio_track_params_values[src_idx];
-
-                // Copy audio track params setup
-                dest_bank.parts.unsaved.0[dst_part].audio_track_params_setup[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].audio_track_params_setup[src_idx];
-
-                // Copy active FX type selections
-                dest_bank.parts.unsaved.0[dst_part].audio_track_fx1[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].audio_track_fx1[src_idx];
-                dest_bank.parts.unsaved.0[dst_part].audio_track_fx2[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].audio_track_fx2[src_idx];
-
-                // Copy audio track volume
-                dest_bank.parts.unsaved.0[dst_part].audio_track_volumes[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].audio_track_volumes[src_idx];
-
-                // Copy custom LFO designs and interpolation masks
-                dest_bank.parts.unsaved.0[dst_part].audio_tracks_custom_lfo_designs[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].audio_tracks_custom_lfo_designs[src_idx]
-                        .clone();
-                dest_bank.parts.unsaved.0[dst_part].audio_tracks_custom_lfos_interpolation_masks
-                    [dst_idx] = source_bank.parts.unsaved.0[src_part]
-                    .audio_tracks_custom_lfos_interpolation_masks[src_idx]
-                    .clone();
-
-                // Copy recorder setup
-                dest_bank.parts.unsaved.0[dst_part].recorder_setup[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].recorder_setup[src_idx];
+                // Copy to both unsaved (working) and saved (backup) states
+                for (src_parts, dst_parts) in [
+                    (&source_bank.parts.unsaved.0, &mut dest_bank.parts.unsaved.0),
+                    (&source_bank.parts.saved.0, &mut dest_bank.parts.saved.0),
+                ] {
+                    dst_parts[dst_part].audio_track_machine_types[dst_idx] =
+                        src_parts[src_part].audio_track_machine_types[src_idx];
+                    dst_parts[dst_part].audio_track_machine_params[dst_idx] =
+                        src_parts[src_part].audio_track_machine_params[src_idx];
+                    dst_parts[dst_part].audio_track_machine_setup[dst_idx] =
+                        src_parts[src_part].audio_track_machine_setup[src_idx];
+                    dst_parts[dst_part].audio_track_machine_slots[dst_idx] =
+                        src_parts[src_part].audio_track_machine_slots[src_idx];
+                    dst_parts[dst_part].audio_track_params_values[dst_idx] =
+                        src_parts[src_part].audio_track_params_values[src_idx];
+                    dst_parts[dst_part].audio_track_params_setup[dst_idx] =
+                        src_parts[src_part].audio_track_params_setup[src_idx];
+                    dst_parts[dst_part].audio_track_fx1[dst_idx] =
+                        src_parts[src_part].audio_track_fx1[src_idx];
+                    dst_parts[dst_part].audio_track_fx2[dst_idx] =
+                        src_parts[src_part].audio_track_fx2[src_idx];
+                    dst_parts[dst_part].audio_track_volumes[dst_idx] =
+                        src_parts[src_part].audio_track_volumes[src_idx];
+                    dst_parts[dst_part].audio_tracks_custom_lfo_designs[dst_idx] =
+                        src_parts[src_part].audio_tracks_custom_lfo_designs[src_idx].clone();
+                    dst_parts[dst_part].audio_tracks_custom_lfos_interpolation_masks[dst_idx] =
+                        src_parts[src_part].audio_tracks_custom_lfos_interpolation_masks[src_idx]
+                            .clone();
+                    dst_parts[dst_part].recorder_setup[dst_idx] =
+                        src_parts[src_part].recorder_setup[src_idx];
+                }
 
                 println!(
-                    "[DEBUG] Copied audio track {} Part params to track {} (machine type, params, FX, volume, LFO, recorder)",
+                    "[DEBUG] Copied audio track {} Part params to track {} (machine type, params, FX, volume, LFO, recorder) [unsaved+saved]",
                     src_idx + 1,
                     dst_idx + 1
                 );
@@ -3932,35 +3979,30 @@ pub fn copy_tracks(
                 let src_idx = (src_track_idx - 8) as usize;
                 let dst_idx = (dst_track_idx - 8) as usize;
 
-                // Copy MIDI track params values
-                dest_bank.parts.unsaved.0[dst_part].midi_track_params_values[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].midi_track_params_values[src_idx];
-
-                // Copy MIDI track params setup
-                dest_bank.parts.unsaved.0[dst_part].midi_track_params_setup[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].midi_track_params_setup[src_idx];
-
-                // Copy custom LFO designs and interpolation masks
-                dest_bank.parts.unsaved.0[dst_part].midi_tracks_custom_lfos[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].midi_tracks_custom_lfos[src_idx].clone();
-                dest_bank.parts.unsaved.0[dst_part].midi_tracks_custom_lfos_interpolation_masks
-                    [dst_idx] = source_bank.parts.unsaved.0[src_part]
-                    .midi_tracks_custom_lfos_interpolation_masks[src_idx]
-                    .clone();
-
-                // Copy arp sequences
-                dest_bank.parts.unsaved.0[dst_part].midi_tracks_arp_seqs[dst_idx] =
-                    source_bank.parts.unsaved.0[src_part].midi_tracks_arp_seqs[src_idx].clone();
-
-                // Copy arp mute masks (2 elements per track)
-                dest_bank.parts.unsaved.0[dst_part].midi_tracks_arp_mute_masks[dst_idx * 2] =
-                    source_bank.parts.unsaved.0[src_part].midi_tracks_arp_mute_masks[src_idx * 2];
-                dest_bank.parts.unsaved.0[dst_part].midi_tracks_arp_mute_masks[dst_idx * 2 + 1] =
-                    source_bank.parts.unsaved.0[src_part].midi_tracks_arp_mute_masks
-                        [src_idx * 2 + 1];
+                // Copy to both unsaved (working) and saved (backup) states
+                for (src_parts, dst_parts) in [
+                    (&source_bank.parts.unsaved.0, &mut dest_bank.parts.unsaved.0),
+                    (&source_bank.parts.saved.0, &mut dest_bank.parts.saved.0),
+                ] {
+                    dst_parts[dst_part].midi_track_params_values[dst_idx] =
+                        src_parts[src_part].midi_track_params_values[src_idx];
+                    dst_parts[dst_part].midi_track_params_setup[dst_idx] =
+                        src_parts[src_part].midi_track_params_setup[src_idx];
+                    dst_parts[dst_part].midi_tracks_custom_lfos[dst_idx] =
+                        src_parts[src_part].midi_tracks_custom_lfos[src_idx].clone();
+                    dst_parts[dst_part].midi_tracks_custom_lfos_interpolation_masks[dst_idx] =
+                        src_parts[src_part].midi_tracks_custom_lfos_interpolation_masks[src_idx]
+                            .clone();
+                    dst_parts[dst_part].midi_tracks_arp_seqs[dst_idx] =
+                        src_parts[src_part].midi_tracks_arp_seqs[src_idx].clone();
+                    dst_parts[dst_part].midi_tracks_arp_mute_masks[dst_idx * 2] =
+                        src_parts[src_part].midi_tracks_arp_mute_masks[src_idx * 2];
+                    dst_parts[dst_part].midi_tracks_arp_mute_masks[dst_idx * 2 + 1] =
+                        src_parts[src_part].midi_tracks_arp_mute_masks[src_idx * 2 + 1];
+                }
 
                 println!(
-                    "[DEBUG] Copied MIDI track {} Part params to track {} (params, LFO, arp)",
+                    "[DEBUG] Copied MIDI track {} Part params to track {} (params, LFO, arp) [unsaved+saved]",
                     src_idx + 1,
                     dst_idx + 1
                 );
@@ -4048,9 +4090,18 @@ pub fn copy_tracks(
         }
     }
 
-    // Mark destination part as edited (if we copied part params)
+    // Mirror the source Part's state flags and name (if we copied part params)
     if mode == "part_params" || mode == "both" {
-        dest_bank.parts_edited_bitmask |= 1 << dst_part;
+        // Copy part name from source to destination
+        dest_bank.part_names[dst_part] = source_bank.part_names[src_part];
+        // Copy saved state flag
+        dest_bank.parts_saved_state[dst_part] = source_bank.parts_saved_state[src_part];
+        // Mirror the source's edited bitmask for this part
+        if source_bank.parts_edited_bitmask & (1 << src_part) != 0 {
+            dest_bank.parts_edited_bitmask |= 1 << dst_part;
+        } else {
+            dest_bank.parts_edited_bitmask &= !(1 << dst_part);
+        }
     }
 
     // Recalculate checksum
@@ -4284,7 +4335,7 @@ pub fn copy_sample_slots(
 
                                         // Update path to reference Audio Pool
                                         new_slot.path = Some(std::path::PathBuf::from(format!(
-                                            "../AUDIO POOL/{}",
+                                            "../AUDIO/{}",
                                             file_name
                                         )));
 
@@ -4388,7 +4439,7 @@ pub fn copy_sample_slots(
                                         }
 
                                         new_slot.path = Some(std::path::PathBuf::from(format!(
-                                            "../AUDIO POOL/{}",
+                                            "../AUDIO/{}",
                                             file_name
                                         )));
 
@@ -4473,7 +4524,7 @@ pub fn copy_sample_slots(
                         if !sample_path_str.starts_with("../AUDIO") {
                             if let Some(file_name) = sample_path.file_name() {
                                 slot.path = Some(std::path::PathBuf::from(format!(
-                                    "../AUDIO POOL/{}",
+                                    "../AUDIO/{}",
                                     file_name.to_string_lossy()
                                 )));
                             }
@@ -4491,7 +4542,7 @@ pub fn copy_sample_slots(
                         if !sample_path_str.starts_with("../AUDIO") {
                             if let Some(file_name) = sample_path.file_name() {
                                 slot.path = Some(std::path::PathBuf::from(format!(
-                                    "../AUDIO POOL/{}",
+                                    "../AUDIO/{}",
                                     file_name.to_string_lossy()
                                 )));
                             }
@@ -5422,8 +5473,8 @@ mod tests {
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
             assert_eq!(
-                dest_bank.patterns.0[5].part_assignment, 2,
-                "Should keep original part assignment"
+                dest_bank.patterns.0[5].part_assignment, 0,
+                "Should keep destination's original part assignment"
             );
         }
 
@@ -5678,13 +5729,13 @@ mod tests {
                 result
             );
 
-            // Verify all destination patterns have the copied part assignment
+            // Verify all destination patterns kept their original part assignment
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
             for dest_idx in [5, 10, 15] {
                 assert_eq!(
-                    dest_bank.patterns.0[dest_idx].part_assignment, 2,
-                    "Pattern {} should have copied part assignment",
+                    dest_bank.patterns.0[dest_idx].part_assignment, 0,
+                    "Pattern {} should keep destination's original part assignment",
                     dest_idx
                 );
             }
@@ -5718,13 +5769,13 @@ mod tests {
                 result
             );
 
-            // Verify all 16 destination patterns have the copied part assignment
+            // Verify all 16 destination patterns kept their original part assignment
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
             for i in 0..16 {
                 assert_eq!(
-                    dest_bank.patterns.0[i].part_assignment, 3,
-                    "Pattern {} should have copied part assignment",
+                    dest_bank.patterns.0[i].part_assignment, 0,
+                    "Pattern {} should keep destination's original part assignment",
                     i
                 );
             }
@@ -6592,9 +6643,11 @@ mod tests {
 
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
+            // Source part 0 is not marked as edited in a default project,
+            // so mirroring the source's edited bitmask should leave dest part 2 unset
             assert!(
-                (dest_bank.parts_edited_bitmask & (1 << 2)) != 0,
-                "Part 3 should be marked as edited"
+                (dest_bank.parts_edited_bitmask & (1 << 2)) == 0,
+                "Part 3 should mirror source's edited state (not edited)"
             );
         }
 
@@ -8360,8 +8413,9 @@ mod tests {
 
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
-            assert_eq!(dest_bank.patterns.0[5].part_assignment, 2);
-            assert_eq!(dest_bank.patterns.0[6].part_assignment, 3);
+            // "keep_original" keeps the destination's original part assignment (0), not the source's
+            assert_eq!(dest_bank.patterns.0[5].part_assignment, 0);
+            assert_eq!(dest_bank.patterns.0[6].part_assignment, 0);
         }
 
         #[test]

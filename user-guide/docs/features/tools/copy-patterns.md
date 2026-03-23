@@ -26,7 +26,7 @@ The planned **Copy Pattern** tool allows you to move individual sequencer patter
 When stable, these features are intended to work as follows:
 
 ### Part Assignment
-- **Keep Original:** Targeted patterns keep their current part assignment.
+- **Keep Original:** Targeted patterns keep the **destination** pattern's existing part assignment.
 - **Copy Source Part:** Targeted patterns take the current part assignment of source pattern.
 - **User Selection:** Manually choose which part to set for targeted patterns.
 

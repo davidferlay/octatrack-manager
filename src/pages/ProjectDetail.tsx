@@ -116,8 +116,9 @@ export function ProjectDetail() {
   const [selectedTrackIndex, setSelectedTrackIndex] = useState<number>(0); // Default to track 0, will be set to active track
   const [selectedPatternIndex, setSelectedPatternIndex] = useState<number>(0); // Default to pattern 0, will be set to active pattern
   const [selectedStepNumber, setSelectedStepNumber] = useState<number | null>(null); // Selected step number (synchronized across all patterns)
-  const [sharedPartsPageIndex, setSharedPartsPageIndex] = useState<number>(0); // Shared page index for Parts panels when "All banks" is selected
-  const [sharedPartsLfoTab, setSharedPartsLfoTab] = useState<'LFO1' | 'LFO2' | 'LFO3' | 'DESIGN'>('LFO1'); // Shared LFO tab for Parts panels when "All banks" is selected
+  const [sharedPartsPageIndex, setSharedPartsPageIndex] = useState<number>(0); // Shared page index for Parts panels (persists across bank changes)
+  const [sharedPartsLfoTab, setSharedPartsLfoTab] = useState<'LFO1' | 'LFO2' | 'LFO3' | 'DESIGN'>('LFO1'); // Shared LFO tab for Parts panels (persists across bank changes)
+  const [sharedPartsActivePartIndex, setSharedPartsActivePartIndex] = useState<number | undefined>(undefined); // Active part index (persists across bank changes)
 
   // Pattern display settings
   const [hideEmptyPatterns, setHideEmptyPatterns] = useState<boolean>(false); // Hide patterns with no trigs
@@ -817,10 +818,12 @@ export function ProjectDetail() {
                           selectedTrack={trackForParts}
                           initialActivePart={initialPart}
                           isEditMode={isEditMode}
-                          sharedPageIndex={selectedBankIndex === ALL_BANKS ? sharedPartsPageIndex : undefined}
-                          onSharedPageChange={selectedBankIndex === ALL_BANKS ? setSharedPartsPageIndex : undefined}
-                          sharedLfoTab={selectedBankIndex === ALL_BANKS ? sharedPartsLfoTab : undefined}
-                          onSharedLfoTabChange={selectedBankIndex === ALL_BANKS ? setSharedPartsLfoTab : undefined}
+                          sharedPageIndex={sharedPartsPageIndex}
+                          onSharedPageChange={setSharedPartsPageIndex}
+                          sharedLfoTab={sharedPartsLfoTab}
+                          onSharedLfoTabChange={setSharedPartsLfoTab}
+                          sharedActivePartIndex={sharedPartsActivePartIndex}
+                          onSharedActivePartChange={setSharedPartsActivePartIndex}
                           onWriteStatusChange={handleWriteStatusChange}
                         />
                       );
@@ -1013,7 +1016,7 @@ export function ProjectDetail() {
                                 <div key={`pattern-${patternIndex}-track-${trackIndex}`} className="pattern-card">
                             <div className="pattern-header">
                               <span className="pattern-name">{pattern.name}</span>
-                              <span className="pattern-part">→ Part {pattern.part_assignment + 1}</span>
+                              <span className="pattern-part" title={bank.parts[pattern.part_assignment]?.name || `Part ${pattern.part_assignment + 1}`}>→ Part {pattern.part_assignment + 1}</span>
                               <TrackBadge trackId={trackData.track_id} />
                               {pattern.tempo_info && <span className="pattern-tempo-indicator">{pattern.tempo_info}</span>}
                               <span className="pattern-tempo-indicator">Scale Mode: {pattern.scale_mode === "Normal" ? "Pattern" : pattern.scale_mode}</span>

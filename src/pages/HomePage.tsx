@@ -7,6 +7,11 @@ import { Version } from "../components/Version";
 import { ScrollToTop } from "../components/ScrollToTop";
 import "../App.css";
 
+// Natural sort comparator: "Project_2" < "Project_10" (not lexicographic)
+function naturalCompare(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+}
+
 interface OctatrackProject {
   name: string;
   path: string;
@@ -60,7 +65,7 @@ export function HomePage() {
       sets: loc.sets.map(set => ({
         ...set,
         projects: [...set.projects].sort((a, b) =>
-          a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+          naturalCompare(a.name, b.name)
         )
       }))
     }));
@@ -73,12 +78,12 @@ export function HomePage() {
       // Sort locations alphabetically by name and projects within each set
       const sortedLocations = sortProjectsInLocations(
         [...result.locations].sort((a, b) =>
-          a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+          naturalCompare(a.name, b.name)
         )
       );
       // Sort standalone projects alphabetically
       const sortedStandaloneProjects = [...result.standalone_projects].sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+        naturalCompare(a.name, b.name)
       );
       setLocations(sortedLocations);
       setStandaloneProjects(sortedStandaloneProjects);
@@ -126,7 +131,7 @@ export function HomePage() {
             // Sort locations alphabetically by name and projects within each set
             const sortedMerged = sortProjectsInLocations(
               merged.sort((a, b) =>
-                a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+                naturalCompare(a.name, b.name)
               )
             );
 
@@ -141,7 +146,7 @@ export function HomePage() {
             const existingPaths = new Set(prev.map(proj => proj.path));
             const newProjects = result.standalone_projects.filter(proj => !existingPaths.has(proj.path));
             return [...prev, ...newProjects].sort((a, b) =>
-              a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+              naturalCompare(a.name, b.name)
             );
           });
 
@@ -243,7 +248,7 @@ export function HomePage() {
               <div className={`sets-section ${isIndividualProjectsOpen ? 'open' : 'closed'}`}>
                 <div className="sets-section-content">
                   <div className="projects-grid">
-                    {[...standaloneProjects].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })).map((project, projIdx) => (
+                    {[...standaloneProjects].sort((a, b) => naturalCompare(a.name, b.name)).map((project, projIdx) => (
                     <div
                       key={projIdx}
                       className="project-card clickable-project"
@@ -344,7 +349,7 @@ export function HomePage() {
                                           <span>{set.has_audio_pool ? "SAMPLES" : "NO SAMPLE"}</span>
                                         </div>
                                       </div>
-                                      {[...set.projects].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })).map((project, projIdx) => (
+                                      {[...set.projects].sort((a, b) => naturalCompare(a.name, b.name)).map((project, projIdx) => (
                                         <div
                                           key={projIdx}
                                           className="project-card clickable-project"

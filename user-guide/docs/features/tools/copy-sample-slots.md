@@ -32,8 +32,12 @@ When stable, these features are intended to work as follows:
 
 ### Planned Audio File Options
 - **Copy:** Copy referenced audio files to the destination project's sample folder.
-- **Move to Pool:** Move audio files to the Set's `AUDIO/` folder and update slot paths automatically.
+- **Move to Pool:** Move audio files to the Set's `AUDIO/` folder and update slot paths to `../AUDIO/` automatically.
 - **Don't Copy:** Only copy the filename and path reference.
+
+:::note
+When the audio file mode is set to **Copy** or **Move to Pool**, a warning badge is displayed if any source audio files are missing on disk.
+:::
 
 ---
 

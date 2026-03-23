@@ -17,6 +17,7 @@ use project_reader::{
     commit_part_data,
     // Copy operations
     copy_bank as copy_bank_impl,
+    check_missing_source_files as check_missing_source_files_impl,
     copy_parts as copy_parts_impl,
     copy_patterns as copy_patterns_impl,
     copy_sample_slots as copy_sample_slots_impl,
@@ -424,21 +425,20 @@ async fn copy_patterns(
 async fn copy_tracks(
     source_project: String,
     source_bank_index: u8,
-    source_part_index: Option<u8>, // None = all parts (0-3)
+    source_part_index: Option<u8>,    // None = all parts (0-3)
     source_track_indices: Vec<u8>,
     dest_project: String,
     dest_bank_index: u8,
-    dest_part_index: Option<u8>, // None = all parts (0-3)
+    dest_part_indices: Option<Vec<u8>>, // None = all parts (synced with source), Some = specific parts
     dest_track_indices: Vec<u8>,
     mode: String,
     source_pattern_index: Option<u8>, // None = all 16 patterns, Some(0-15) = specific
     dest_pattern_index: Option<u8>,   // None = all 16 patterns, Some(0-15) = specific
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        // If part indices are None, copy to all 4 parts (1-to-1 mapping)
-        match (source_part_index, dest_part_index) {
+        match (source_part_index, &dest_part_indices) {
             (None, None) => {
-                // Copy tracks across all 4 parts
+                // Copy tracks across all 4 parts (1-to-1 mapping)
                 for part_idx in 0..4u8 {
                     copy_tracks_impl(
                         &source_project,
@@ -456,21 +456,24 @@ async fn copy_tracks(
                 }
                 Ok(())
             }
-            (Some(src), Some(dst)) => {
-                // Copy tracks for specific parts
-                copy_tracks_impl(
-                    &source_project,
-                    source_bank_index,
-                    src,
-                    source_track_indices,
-                    &dest_project,
-                    dest_bank_index,
-                    dst,
-                    dest_track_indices,
-                    &mode,
-                    source_pattern_index,
-                    dest_pattern_index,
-                )
+            (Some(src), Some(dst_indices)) => {
+                // Copy source part to each selected destination part (1-to-many)
+                for &dst in dst_indices {
+                    copy_tracks_impl(
+                        &source_project,
+                        source_bank_index,
+                        src,
+                        source_track_indices.clone(),
+                        &dest_project,
+                        dest_bank_index,
+                        dst,
+                        dest_track_indices.clone(),
+                        &mode,
+                        source_pattern_index,
+                        dest_pattern_index,
+                    )?;
+                }
+                Ok(())
             }
             _ => Err("Both source and destination part indices must be specified or both must be None (all parts)".to_string())
         }
@@ -499,6 +502,19 @@ async fn copy_sample_slots(
             &audio_mode,
             include_editor_settings,
         )
+    })
+    .await
+    .unwrap()
+}
+
+#[tauri::command]
+async fn check_missing_source_files(
+    project_path: String,
+    slot_type: String,
+    source_indices: Vec<u8>,
+) -> Result<u32, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        check_missing_source_files_impl(&project_path, &slot_type, source_indices)
     })
     .await
     .unwrap()
@@ -557,7 +573,8 @@ pub fn run() {
             copy_parts,
             copy_patterns,
             copy_tracks,
-            copy_sample_slots
+            copy_sample_slots,
+            check_missing_source_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

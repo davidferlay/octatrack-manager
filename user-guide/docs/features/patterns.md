@@ -66,6 +66,9 @@ This section shows:
 
 ## Advanced Sequencer Data
 
+### Part Assignment
+Each pattern displays its assigned part as a **"→ Part N"** label. Hovering over this label shows a tooltip with the part's name, making it easy to identify parts at a glance.
+
 ### Scale & Length
 The app displays the **Length** (in steps) and **Master Scale** (speed) for every pattern. If you are using **Per Track** scale mode, the individual track length and speed are shown instead.
 

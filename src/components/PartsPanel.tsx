@@ -19,6 +19,8 @@ interface PartsPanelProps {
   onSharedPageChange?: (index: number) => void;  // Optional callback for shared page change
   sharedLfoTab?: LfoTabType;  // Optional shared LFO tab for unified LFO tab selection across banks
   onSharedLfoTabChange?: (tab: LfoTabType) => void;  // Optional callback for shared LFO tab change
+  sharedActivePartIndex?: number;  // Optional shared active part index (persists across bank changes)
+  onSharedActivePartChange?: (index: number) => void;  // Optional callback for shared active part change
   onWriteStatusChange?: (status: WriteStatus) => void;  // Optional callback to report write status to parent
 }
 
@@ -38,6 +40,8 @@ export default function PartsPanel({
   onSharedPageChange,
   sharedLfoTab,
   onSharedLfoTabChange,
+  sharedActivePartIndex,
+  onSharedActivePartChange,
   onWriteStatusChange
 }: PartsPanelProps) {
   const [partsData, setPartsData] = useState<PartData[]>([]);
@@ -45,7 +49,7 @@ export default function PartsPanel({
   const [error, setError] = useState<string | null>(null);
   // Unified page index: -1=ALL, 0=SRC/NOTE, 1=AMP/ARP, 2=LFO, 3=FX1/CTRL1, 4=FX2/CTRL2
   const [localPageIndex, setLocalPageIndex] = useState<number>(-1);
-  const [activePartIndex, setActivePartIndex] = useState<number>(initialActivePart ?? 0);
+  const [localActivePartIndex, setLocalActivePartIndex] = useState<number>(initialActivePart ?? 0);
   const [localLfoTab, setLocalLfoTab] = useState<LfoTabType>('LFO1');
 
   // Editing state - always editable (like Octatrack behavior)
@@ -71,9 +75,13 @@ export default function PartsPanel({
   const activePageIndex = sharedPageIndex !== undefined ? sharedPageIndex : localPageIndex;
   const setActivePageIndex = onSharedPageChange !== undefined ? onSharedPageChange : setLocalPageIndex;
 
-  // Use shared LFO tab if provided (All banks mode), otherwise use local state
+  // Use shared LFO tab if provided, otherwise use local state
   const activeLfoTab = sharedLfoTab !== undefined ? sharedLfoTab : localLfoTab;
   const setActiveLfoTab = onSharedLfoTabChange !== undefined ? onSharedLfoTabChange : setLocalLfoTab;
+
+  // Use shared active part index if provided (persists across bank changes), otherwise use local state
+  const activePartIndex = sharedActivePartIndex !== undefined ? sharedActivePartIndex : localActivePartIndex;
+  const setActivePartIndex = onSharedActivePartChange !== undefined ? onSharedActivePartChange : setLocalActivePartIndex;
 
   // Determine if selected track is MIDI (tracks 8-15 or ALL_MIDI_TRACKS) or Audio (tracks 0-7 or ALL_AUDIO_TRACKS)
   const isMidiTrack = selectedTrack !== undefined && (selectedTrack >= 8 || selectedTrack === ALL_MIDI_TRACKS);

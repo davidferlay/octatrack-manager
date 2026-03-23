@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useProjects } from "../context/ProjectsContext";
@@ -7,6 +7,11 @@ import { formatBankName } from "./BankSelector";
 import "../App.css";
 
 const TOOLS_STORAGE_KEY_PREFIX = "octatrack-tools-settings-";
+
+// Natural sort comparator: "Project_2" < "Project_10" (not lexicographic)
+function naturalCompare(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+}
 
 // Operation types
 type OperationType = "copy_bank" | "copy_parts" | "copy_patterns" | "copy_tracks" | "copy_sample_slots";
@@ -130,7 +135,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [destPartIndices, setDestPartIndices] = useState<number[]>([0]);
   const [destPatternIndices, setDestPatternIndices] = useState<number[]>([0]); // For copy_patterns multi-select
   const [destTrackIndices, setDestTrackIndices] = useState<number[]>([]);
-  const [destSampleIndices, setDestSampleIndices] = useState<number[]>(Array.from({ length: 128 }, (_, i) => i));
+  const [destSampleStart, setDestSampleStart] = useState<number>(0);
 
   // Operation-specific options
   // Copy Patterns options
@@ -144,7 +149,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [copyTrackSourcePatternIndex, setCopyTrackSourcePatternIndex] = useState<number>(-1); // -1 = All, 0-15 = specific
   const [copyTrackDestPatternIndex, setCopyTrackDestPatternIndex] = useState<number>(-1); // -1 = All, 0-15 = specific
   const [sourcePartIndex, setSourcePartIndex] = useState<number>(0); // 0 = Part 1, -1 = All parts, -2 = no selection
-  const [destPartIndex, setDestPartIndex] = useState<number>(0); // 0 = Part 1, -1 = All parts, -2 = no selection
+  const [destTrackPartIndices, setDestTrackPartIndices] = useState<number[]>([0]); // Copy Tracks dest parts: array of 0-3, or [0,1,2,3] for All
 
   // Copy Sample Slots options
   const [slotType, setSlotType] = useState<SlotType>(savedSettings.slotType || "both");
@@ -155,6 +160,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   // Audio Pool status
   const [audioPoolStatus, setAudioPoolStatus] = useState<AudioPoolStatus | null>(null);
   const [sameSetStatus, setSameSetStatus] = useState<boolean>(false);
+  const [missingSourceFiles, setMissingSourceFiles] = useState<number>(0);
 
   // UI state
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
@@ -178,10 +184,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     try {
       const result = await invoke<ScanResult>("scan_devices");
       const sortedLocations = [...result.locations].sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+        naturalCompare(a.name, b.name)
       );
       const sortedStandaloneProjects = [...result.standalone_projects].sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+        naturalCompare(a.name, b.name)
       );
       setLocations(sortedLocations);
       setStandaloneProjects(sortedStandaloneProjects);
@@ -352,12 +358,30 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     prevSameSetStatus.current = sameSetStatus;
   }, [audioMode, sameSetStatus]);
 
-  // Sync destination sample indices with source sample indices count
+  // Check for missing source audio files when audio mode requires files
   useEffect(() => {
-    const start = destSampleIndices[0] || 0;
+    if (operation !== "copy_sample_slots" || audioMode === "none") {
+      setMissingSourceFiles(0);
+      return;
+    }
+    let cancelled = false;
+    invoke<number>("check_missing_source_files", {
+      projectPath,
+      slotType,
+      sourceIndices: sourceSampleIndices.map(i => i + 1),
+    }).then(count => {
+      if (!cancelled) setMissingSourceFiles(count);
+    }).catch(() => {
+      if (!cancelled) setMissingSourceFiles(0);
+    });
+    return () => { cancelled = true; };
+  }, [operation, audioMode, slotType, sourceSampleIndices, projectPath]);
+
+  // Derive destination sample indices from destSampleStart and source count
+  const destSampleIndices = useMemo(() => {
     const count = sourceSampleIndices.length;
-    setDestSampleIndices(Array.from({ length: count }, (_, i) => Math.min(127, start + i)));
-  }, [sourceSampleIndices.length]);
+    return Array.from({ length: count }, (_, i) => Math.min(127, destSampleStart + i));
+  }, [destSampleStart, sourceSampleIndices.length]);
 
   // Auto-sync destination tracks when source "All Audio" or "All MIDI" is selected
   useEffect(() => {
@@ -448,11 +472,15 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             trackIndices: trackMode === "specific" ? sourceTrackIndices : null,
             modeScope: trackMode === "all" ? modeScope : null,
           });
-          // Success message: show how many patterns were copied to how many destinations
-          if (sourcePatternIndices.length === 1 && destPatternIndices.length > 1) {
-            setStatusMessage(`Pattern copied to ${destPatternIndices.length} destination patterns successfully`);
+          // Success message
+          if (sourcePatternIndices.length === 1) {
+            if (destPatternIndices.length > 1) {
+              setStatusMessage(`Pattern copied to ${destPatternIndices.length} destination patterns successfully`);
+            } else {
+              setStatusMessage("Pattern copied successfully");
+            }
           } else {
-            setStatusMessage(`${sourcePatternIndices.length} pattern${sourcePatternIndices.length > 1 ? 's' : ''} copied successfully`);
+            setStatusMessage(`${sourcePatternIndices.length} patterns copied successfully`);
           }
           if (destProject === projectPath && onBankUpdated) {
             onBankUpdated(destBankIndex);
@@ -467,13 +495,15 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             sourceTrackIndices,
             destProject,
             destBankIndex,
-            destPartIndex: destPartIndex === -1 ? null : destPartIndex, // null = all parts
+            destPartIndices: sourcePartIndex === -1 ? null : destTrackPartIndices, // null = all parts (synced with source)
             destTrackIndices,
             mode: copyTrackMode,
             sourcePatternIndex: (copyTrackMode !== "part_params" && copyTrackSourcePatternIndex !== -1) ? copyTrackSourcePatternIndex : null,
             destPatternIndex: (copyTrackMode !== "part_params" && copyTrackDestPatternIndex !== -1) ? copyTrackDestPatternIndex : null,
           });
-          setStatusMessage(`${sourceTrackIndices.length} track${sourceTrackIndices.length > 1 ? 's' : ''} copied successfully`);
+          setStatusMessage(sourceTrackIndices.length === 1
+            ? "Track copied successfully"
+            : `${sourceTrackIndices.length} tracks copied successfully`);
           if (destProject === projectPath && onBankUpdated) {
             onBankUpdated(destBankIndex);
           }
@@ -490,7 +520,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             audioMode,
             includeEditorSettings,
           });
-          setStatusMessage(`${sourceSampleIndices.length} sample slot${sourceSampleIndices.length > 1 ? 's' : ''} copied successfully`);
+          setStatusMessage(sourceSampleIndices.length === 1
+            ? "Sample slot copied successfully"
+            : `${sourceSampleIndices.length} sample slots copied successfully`);
           break;
       }
       setStatusType("success");
@@ -929,10 +961,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       onClick={() => {
                         if (sourcePartIndex === -1) {
                           setSourcePartIndex(-2);
-                          setDestPartIndex(-2);
+                          setDestTrackPartIndices([]);
                         } else {
                           setSourcePartIndex(-1);
-                          setDestPartIndex(-1);
+                          setDestTrackPartIndices([0, 1, 2, 3]);
                         }
                       }}
                       title="Select all Parts"
@@ -1404,6 +1436,14 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               <div className="tools-field">
                 <label className="tools-label-with-hint">
                   Audio Files
+                  {audioMode !== "none" && missingSourceFiles > 0 && (
+                    <span
+                      className="tools-warning-badge"
+                      title={`${missingSourceFiles} source audio file${missingSourceFiles > 1 ? 's' : ''} not found on disk. These slots will be copied without their audio.`}
+                    >
+                      {missingSourceFiles} missing file{missingSourceFiles > 1 ? 's' : ''}
+                    </span>
+                  )}
                   {audioMode === "move_to_pool" && sameSetStatus && !audioPoolStatus?.exists && destProject !== projectPath && (
                     <span className="tools-hint-inline" title="Both Source and Destination projects seem to be in the same Set but the Audio Pool folder doesn't exist yet: It will be created automatically when the operation runs.">Pool will be created</span>
                   )}
@@ -1506,7 +1546,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         ? setDestBankIndices(destBankIndices.filter(i => i !== idx))
                         : setDestBankIndices([...destBankIndices, idx].sort((a, b) => a - b))
                       }
-                      title={`Bank ${String.fromCharCode(65 + idx)}`}
+                      title={`Bank ${String.fromCharCode(65 + idx)} (${idx + 1})`}
                     >
                       {String.fromCharCode(65 + idx)}
                     </button>
@@ -1522,7 +1562,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         ? setDestBankIndices(destBankIndices.filter(i => i !== idx))
                         : setDestBankIndices([...destBankIndices, idx].sort((a, b) => a - b))
                       }
-                      title={`Bank ${String.fromCharCode(65 + idx)}`}
+                      title={`Bank ${String.fromCharCode(65 + idx)} (${idx + 1})`}
                     >
                       {String.fromCharCode(65 + idx)}
                     </button>
@@ -1560,7 +1600,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       type="button"
                       className={`tools-multi-btn bank-btn ${destBankIndex === idx ? "selected" : ""}`}
                       onClick={() => setDestBankIndex(destBankIndex === idx ? -1 : idx)}
-                      title={`Bank ${String.fromCharCode(65 + idx)}`}
+                      title={`Bank ${String.fromCharCode(65 + idx)} (${idx + 1})`}
                     >
                       {String.fromCharCode(65 + idx)}
                     </button>
@@ -1573,7 +1613,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       type="button"
                       className={`tools-multi-btn bank-btn ${destBankIndex === idx ? "selected" : ""}`}
                       onClick={() => setDestBankIndex(destBankIndex === idx ? -1 : idx)}
-                      title={`Bank ${String.fromCharCode(65 + idx)}`}
+                      title={`Bank ${String.fromCharCode(65 + idx)} (${idx + 1})`}
                     >
                       {String.fromCharCode(65 + idx)}
                     </button>
@@ -1595,7 +1635,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       type="button"
                       className={`tools-multi-btn bank-btn ${destBankIndex === idx ? "selected" : ""}`}
                       onClick={() => setDestBankIndex(destBankIndex === idx ? -1 : idx)}
-                      title={`Bank ${String.fromCharCode(65 + idx)}`}
+                      title={`Bank ${String.fromCharCode(65 + idx)} (${idx + 1})`}
                     >
                       {String.fromCharCode(65 + idx)}
                     </button>
@@ -1608,7 +1648,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       type="button"
                       className={`tools-multi-btn bank-btn ${destBankIndex === idx ? "selected" : ""}`}
                       onClick={() => setDestBankIndex(destBankIndex === idx ? -1 : idx)}
-                      title={`Bank ${String.fromCharCode(65 + idx)}`}
+                      title={`Bank ${String.fromCharCode(65 + idx)} (${idx + 1})`}
                     >
                       {String.fromCharCode(65 + idx)}
                     </button>
@@ -1770,7 +1810,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         type="button"
                         className={`tools-multi-btn bank-btn ${destBankIndex === idx ? "selected" : ""}`}
                         onClick={() => setDestBankIndex(destBankIndex === idx ? -1 : idx)}
-                        title={`Bank ${String.fromCharCode(65 + idx)}`}
+                        title={`Bank ${String.fromCharCode(65 + idx)} (${idx + 1})`}
                       >
                         {String.fromCharCode(65 + idx)}
                       </button>
@@ -1783,7 +1823,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         type="button"
                         className={`tools-multi-btn bank-btn ${destBankIndex === idx ? "selected" : ""}`}
                         onClick={() => setDestBankIndex(destBankIndex === idx ? -1 : idx)}
-                        title={`Bank ${String.fromCharCode(65 + idx)}`}
+                        title={`Bank ${String.fromCharCode(65 + idx)} (${idx + 1})`}
                       >
                         {String.fromCharCode(65 + idx)}
                       </button>
@@ -1904,13 +1944,16 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 </div>
               </div>
               <div className="tools-field">
-                <label>Part</label>
+                <label>Parts</label>
                 <div className={`tools-part-cross ${sourcePartIndex === -1 ? "disabled" : ""}`}>
                   <div className="tools-part-cross-row">
                     <button
                       type="button"
-                      className={`tools-toggle-btn part-btn ${destPartIndex === 0 || destPartIndex === -1 ? "selected" : ""}`}
-                      onClick={() => sourcePartIndex !== -1 && setDestPartIndex(destPartIndex === 0 ? -2 : 0)}
+                      className={`tools-toggle-btn part-btn ${destTrackPartIndices.includes(0) ? "selected" : ""}`}
+                      onClick={() => sourcePartIndex !== -1 && (destTrackPartIndices.includes(0)
+                        ? setDestTrackPartIndices(destTrackPartIndices.filter(i => i !== 0))
+                        : setDestTrackPartIndices([...destTrackPartIndices, 0].sort((a, b) => a - b))
+                      )}
                       disabled={sourcePartIndex === -1}
                       title={sourcePartIndex === -1 ? "Synced with source All selection" : "Part 1"}
                     >
@@ -1920,8 +1963,11 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   <div className="tools-part-cross-row">
                     <button
                       type="button"
-                      className={`tools-toggle-btn part-btn ${destPartIndex === 3 || destPartIndex === -1 ? "selected" : ""}`}
-                      onClick={() => sourcePartIndex !== -1 && setDestPartIndex(destPartIndex === 3 ? -2 : 3)}
+                      className={`tools-toggle-btn part-btn ${destTrackPartIndices.includes(3) ? "selected" : ""}`}
+                      onClick={() => sourcePartIndex !== -1 && (destTrackPartIndices.includes(3)
+                        ? setDestTrackPartIndices(destTrackPartIndices.filter(i => i !== 3))
+                        : setDestTrackPartIndices([...destTrackPartIndices, 3].sort((a, b) => a - b))
+                      )}
                       disabled={sourcePartIndex === -1}
                       title={sourcePartIndex === -1 ? "Synced with source All selection" : "Part 4"}
                     >
@@ -1929,8 +1975,11 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     </button>
                     <button
                       type="button"
-                      className={`tools-toggle-btn part-btn part-all ${destPartIndex === -1 ? "selected" : ""}`}
-                      onClick={() => sourcePartIndex !== -1 && setDestPartIndex(destPartIndex === -1 ? -2 : -1)}
+                      className={`tools-toggle-btn part-btn part-all ${destTrackPartIndices.length === 4 ? "selected" : ""}`}
+                      onClick={() => sourcePartIndex !== -1 && (destTrackPartIndices.length === 4
+                        ? setDestTrackPartIndices([])
+                        : setDestTrackPartIndices([0, 1, 2, 3])
+                      )}
                       disabled={sourcePartIndex === -1}
                       title={sourcePartIndex === -1 ? "Synced with source All selection" : "Select all Parts"}
                     >
@@ -1938,8 +1987,11 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     </button>
                     <button
                       type="button"
-                      className={`tools-toggle-btn part-btn ${destPartIndex === 1 || destPartIndex === -1 ? "selected" : ""}`}
-                      onClick={() => sourcePartIndex !== -1 && setDestPartIndex(destPartIndex === 1 ? -2 : 1)}
+                      className={`tools-toggle-btn part-btn ${destTrackPartIndices.includes(1) ? "selected" : ""}`}
+                      onClick={() => sourcePartIndex !== -1 && (destTrackPartIndices.includes(1)
+                        ? setDestTrackPartIndices(destTrackPartIndices.filter(i => i !== 1))
+                        : setDestTrackPartIndices([...destTrackPartIndices, 1].sort((a, b) => a - b))
+                      )}
                       disabled={sourcePartIndex === -1}
                       title={sourcePartIndex === -1 ? "Synced with source All selection" : "Part 2"}
                     >
@@ -1949,8 +2001,11 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   <div className="tools-part-cross-row">
                     <button
                       type="button"
-                      className={`tools-toggle-btn part-btn ${destPartIndex === 2 || destPartIndex === -1 ? "selected" : ""}`}
-                      onClick={() => sourcePartIndex !== -1 && setDestPartIndex(destPartIndex === 2 ? -2 : 2)}
+                      className={`tools-toggle-btn part-btn ${destTrackPartIndices.includes(2) ? "selected" : ""}`}
+                      onClick={() => sourcePartIndex !== -1 && (destTrackPartIndices.includes(2)
+                        ? setDestTrackPartIndices(destTrackPartIndices.filter(i => i !== 2))
+                        : setDestTrackPartIndices([...destTrackPartIndices, 2].sort((a, b) => a - b))
+                      )}
                       disabled={sourcePartIndex === -1}
                       title={sourcePartIndex === -1 ? "Synced with source All selection" : "Part 3"}
                     >
@@ -2032,7 +2087,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             <div className="tools-field">
               <label className="tools-label-with-warning">
                 Slots
-                {sourceSampleIndices.length + destSampleIndices[0] > 128 && (
+                {sourceSampleIndices.length + destSampleStart > 128 && (
                   <span
                     className="tools-warning-badge"
                     title="The selected slot range exceeds the maximum of 128 slots. Some slots will not be copied."
@@ -2049,17 +2104,15 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       inputMode="numeric"
                       pattern="[0-9]*"
                       className="tools-slot-value-input"
-                      defaultValue={destSampleIndices[0] + 1}
-                      key={`dest-from-${destSampleIndices[0]}`}
+                      defaultValue={destSampleStart + 1}
+                      key={`dest-from-${destSampleStart}`}
                       title="Starting destination slot"
                       onBlur={(e) => {
                         let val = parseInt(e.target.value, 10);
                         if (isNaN(val) || val < 1) val = 1;
                         if (val > 128) val = 128;
                         e.target.value = String(val);
-                        const start = val - 1;
-                        const count = sourceSampleIndices.length;
-                        setDestSampleIndices(Array.from({ length: count }, (_, i) => Math.min(127, start + i)));
+                        setDestSampleStart(val - 1);
                       }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
@@ -2068,18 +2121,17 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       }}
                     />
                     <span className="tools-slot-separator">–</span>
-                    <span className="tools-slot-value-display" title="Ending destination slot (based on source count)">{Math.min(128, destSampleIndices[0] + sourceSampleIndices.length)}</span>
+                    <span className="tools-slot-value-display" title="Ending destination slot (based on source count)">{Math.min(128, destSampleStart + sourceSampleIndices.length)}</span>
                   </div>
-                  <div className="tools-slot-count" title={`Effective slots to copy${Math.min(sourceSampleIndices.length, 128 - destSampleIndices[0]) < sourceSampleIndices.length ? ` (${sourceSampleIndices.length - Math.min(sourceSampleIndices.length, 128 - destSampleIndices[0])} will overflow)` : ''}`}>
-                    <span className="tools-slot-count-number">{Math.min(sourceSampleIndices.length, 128 - destSampleIndices[0])}</span>
-                    <span className="tools-slot-count-label">slot{Math.min(sourceSampleIndices.length, 128 - destSampleIndices[0]) !== 1 ? 's' : ''}</span>
+                  <div className="tools-slot-count" title={`Effective slots to copy${Math.min(sourceSampleIndices.length, 128 - destSampleStart) < sourceSampleIndices.length ? ` (${sourceSampleIndices.length - Math.min(sourceSampleIndices.length, 128 - destSampleStart)} will overflow)` : ''}`}>
+                    <span className="tools-slot-count-number">{Math.min(sourceSampleIndices.length, 128 - destSampleStart)}</span>
+                    <span className="tools-slot-count-label">slot{Math.min(sourceSampleIndices.length, 128 - destSampleStart) !== 1 ? 's' : ''}</span>
                   </div>
                   <button
                     type="button"
                     className="tools-slot-all-btn"
                     onClick={() => {
-                      const count = sourceSampleIndices.length;
-                      setDestSampleIndices(Array.from({ length: count }, (_, i) => i));
+                      setDestSampleStart(0);
                     }}
                     title="Reset destination to start at slot 1"
                   >
@@ -2092,11 +2144,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     className="tools-dual-range-input"
                     min="1"
                     max="128"
-                    value={destSampleIndices[0] + 1}
+                    value={destSampleStart + 1}
                     onChange={(e) => {
-                      const start = Math.max(0, Math.min(127, Number(e.target.value) - 1));
-                      const count = sourceSampleIndices.length;
-                      setDestSampleIndices(Array.from({ length: count }, (_, i) => Math.min(127, start + i)));
+                      setDestSampleStart(Math.max(0, Math.min(127, Number(e.target.value) - 1)));
                     }}
                   />
                 </div>
@@ -2111,7 +2161,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         <button
           className="tools-execute-btn"
           onClick={executeOperation}
-          disabled={isExecuting || (operation === "copy_bank" && sourceBankIndex === -1) || (operation === "copy_bank" && destBankIndices.length === 0) || (operation === "copy_parts" && sourceBankIndex === -1) || (operation === "copy_parts" && destBankIndex === -1) || (operation === "copy_parts" && sourcePartIndices.length === 0) || (operation === "copy_parts" && destPartIndices.length === 0) || (operation === "copy_tracks" && sourceBankIndex === -1) || (operation === "copy_tracks" && sourceTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex === -2) || (operation === "copy_tracks" && destBankIndex === -1) || (operation === "copy_tracks" && destTrackIndices.length === 0) || (operation === "copy_tracks" && destPartIndex === -2) || (operation === "copy_tracks" && sourceTrackIndices.length > 1 && sourceTrackIndices.length < 8) || (operation === "copy_patterns" && sourceBankIndex === -1) || (operation === "copy_patterns" && sourcePatternIndices.length === 0) || (operation === "copy_patterns" && destBankIndex === -1) || (operation === "copy_patterns" && destPatternIndices.length === 0) || (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1) || (operation === "copy_patterns" && trackMode === "specific" && sourceTrackIndices.length === 0)}
+          disabled={isExecuting || (operation === "copy_bank" && sourceBankIndex === -1) || (operation === "copy_bank" && destBankIndices.length === 0) || (operation === "copy_parts" && sourceBankIndex === -1) || (operation === "copy_parts" && destBankIndex === -1) || (operation === "copy_parts" && sourcePartIndices.length === 0) || (operation === "copy_parts" && destPartIndices.length === 0) || (operation === "copy_tracks" && sourceBankIndex === -1) || (operation === "copy_tracks" && sourceTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex === -2) || (operation === "copy_tracks" && destBankIndex === -1) || (operation === "copy_tracks" && destTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex !== -1 && destTrackPartIndices.length === 0) || (operation === "copy_tracks" && sourceTrackIndices.length > 1 && sourceTrackIndices.length < 8) || (operation === "copy_patterns" && sourceBankIndex === -1) || (operation === "copy_patterns" && sourcePatternIndices.length === 0) || (operation === "copy_patterns" && destBankIndex === -1) || (operation === "copy_patterns" && destPatternIndices.length === 0) || (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1) || (operation === "copy_patterns" && trackMode === "specific" && sourceTrackIndices.length === 0)}
           title={
             isExecuting ? "Operation in progress..." :
             (operation === "copy_bank" && sourceBankIndex === -1 && destBankIndices.length === 0) ? "Select source and destination banks" :
@@ -2129,9 +2179,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             (operation === "copy_tracks" && sourceTrackIndices.length === 0 && destTrackIndices.length === 0) ? "Select source and destination tracks" :
             (operation === "copy_tracks" && sourceTrackIndices.length === 0) ? "Select a source track" :
             (operation === "copy_tracks" && destTrackIndices.length === 0) ? "Select at least one destination track" :
-            (operation === "copy_tracks" && sourcePartIndex === -2 && destPartIndex === -2) ? "Select source and destination parts" :
+            (operation === "copy_tracks" && sourcePartIndex === -2 && destTrackPartIndices.length === 0) ? "Select source and destination parts" :
             (operation === "copy_tracks" && sourcePartIndex === -2) ? "Select a source part" :
-            (operation === "copy_tracks" && destPartIndex === -2) ? "Select a destination part" :
+            (operation === "copy_tracks" && sourcePartIndex !== -1 && destTrackPartIndices.length === 0) ? "Select at least one destination part" :
             (operation === "copy_tracks" && sourceTrackIndices.length > 1 && sourceTrackIndices.length < 8) ? "Select one track or use All button" :
             (operation === "copy_patterns" && sourceBankIndex === -1 && destBankIndex === -1) ? "Select source and destination banks" :
             (operation === "copy_patterns" && sourceBankIndex === -1) ? "Select a source bank" :
@@ -2270,8 +2320,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   <div className={`sets-section ${isIndividualProjectsOpenInModal ? 'open' : 'closed'}`}>
                     <div className="sets-section-content">
                       <div className="projects-grid">
-                        {standaloneProjects
+                        {[...standaloneProjects]
                           .filter(p => p.path !== projectPath && p.has_project_file)
+                          .sort((a, b) => naturalCompare(a.name, b.name))
                           .map((project, projIdx) => (
                             <div
                               key={projIdx}
@@ -2347,7 +2398,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                             const bIsPresets = b.name.toLowerCase() === 'presets';
                             if (aIsPresets && !bIsPresets) return 1;
                             if (!aIsPresets && bIsPresets) return -1;
-                            return 0;
+                            return naturalCompare(a.name, b.name);
                           }).map((set, setIdx) => {
                             const validProjects = set.projects.filter(p => p.path !== projectPath && p.has_project_file);
                             if (validProjects.length === 0) return null;
@@ -2388,7 +2439,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                                 <div className={`sets-section ${isSetOpen ? 'open' : 'closed'}`}>
                                   <div className="sets-section-content">
                                     <div className="projects-grid">
-                                      {validProjects.map((project, projIdx) => (
+                                      {[...validProjects].sort((a, b) => naturalCompare(a.name, b.name)).map((project, projIdx) => (
                                         <div
                                           key={projIdx}
                                           className={`project-card project-selector-card ${destProject === project.path ? 'selected' : ''}`}
