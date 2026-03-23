@@ -29,7 +29,7 @@
 | SM11 OK | Copy Patterns | Copy All patterns 1-to-1 | Source All, execute | All 16 Patterns copied to destination 1-to-1 |
 | SM12 OK | Copy Patterns | Copy single to multiple | Copy Pattern 1 → Patterns 5, 8, 12 | All 3 destination patterns match source Pattern 1 |
 | SM13 OK | Copy Patterns | Cross-bank pattern copy | Copy Pattern 1 Bank A → Pattern 3 Bank C | Bank C Pattern 3 matches Bank A Pattern 1 |
-| SM14 | Copy Patterns | Keep Original Part mode | Copy pattern with "Keep Original" | Copied pattern retains its original Part assignment |
+| SM14 | Copy Patterns | Keep Original Part mode | Copy pattern with "Keep Original" | Copied pattern retains the **destination** pattern's existing Part assignment (not the source's) |
 | SM15 | Copy Patterns | Copy Source Part mode | Copy pattern with "Copy Source" | Part data also copied, pattern references copied Part |
 | SM16 OK | Copy Patterns | User Selection Part mode | Copy pattern with "User Selection" Part = Part 3 | Copied pattern assigned to Part 3 |
 | SM17 OK | Copy Patterns | All Tracks copies everything | Copy pattern with "All Tracks" | All 16 tracks (T1-T8 + M1-M8) copied per Mode Scope |
@@ -38,7 +38,7 @@
 | SM20 OK | Copy Patterns | Both scope copies all tracks | Copy pattern with Mode Scope = Both | Both audio and MIDI trigs copied |
 | SM21 OK | Copy Patterns | MIDI scope copies only M1-M8 | Copy pattern with Mode Scope = MIDI | Only MIDI track trigs copied; audio trigs untouched in destination |
 | **Copy Tracks** | | | | |
-| SM22 | Copy Tracks | Audio single track | Copy T1 → T3 (Part params) | T3 Part params match T1 |
+| SM22 | Copy Tracks | Audio single track | Copy T1 → T3 (Part params) | T3 Part params match T1 (both saved and unsaved state, part name, saved_state flag, edited bitmask) |
 | SM23 OK | Copy Tracks | Audio All tracks | Source/Dest All Audio, execute | All 8 audio tracks copied |
 | SM24 OK | Copy Tracks | MIDI single track | Copy M1 → M2 (Part params) | MIDI params, arp sequences, custom LFO match source |
 | SM25 OK | Copy Tracks | MIDI All tracks | Source/Dest All MIDI, execute | All 8 MIDI tracks copied |
@@ -54,6 +54,7 @@
 | SM35 OK | Copy Tracks | Volumes and amp copied | Copy track with custom volume/amp | Volume and amp settings match source |
 | SM36 OK | Copy Tracks | Custom LFO copied | Copy track with custom LFO design | Custom LFO waveform and interpolation masks match source |
 | SM37 | Copy Tracks | Recorder setup copied | Copy track with recorder configuration | Recorder source and settings match source |
+| SM37b | Copy Tracks | Multi-select dest Parts | Copy T1 → T3, select dest Parts 1 and 3 | T3 params copied to both Part 1 and Part 3 in destination |
 | **Copy Sample Slots** | | | | |
 | SM38 | Copy Sample Slots | Copy single slot | Copy slot 1 → slot 1 (diff project) | Slot data matches source |
 | SM39 | Copy Sample Slots | Copy slot range | Copy slots 1-10 → slots 50-59 | All 10 slot assignments copied correctly |
@@ -65,7 +66,7 @@
 | SM45 | Copy Sample Slots | Copy audio files | Select "Copy", execute | Audio files copied to dest project folder |
 | SM46 | Copy Sample Slots | Don't Copy audio | Select "Don't Copy", execute | Slot assignments copied, no audio files transferred |
 | SM47 | Copy Sample Slots | .ot file copied with audio | Copy slot with .ot metadata alongside .wav | Both .wav and .ot files present in destination |
-| SM48 | Copy Sample Slots | Move to Pool | Select "Move to Pool" (same Set), execute | Files in AUDIO POOL dir, slot paths updated to ../AUDIO POOL/ |
+| SM48 | Copy Sample Slots | Move to Pool | Select "Move to Pool" (same Set), execute | Files in AUDIO dir, slot paths updated to ../AUDIO/ |
 | SM49 | Copy Sample Slots | Move to Pool deletes originals | Move to Pool, check source folder | Original .wav and .ot files deleted from source |
 | SM50 | Copy Sample Slots | Move to Pool requires same Set | Dest project in different Set | Move to Pool unavailable; must use Copy or Don't Copy |
 | SM51 | Copy Sample Slots | Audio mode auto-switches on dest change | Select "Move to Pool", change dest to diff-Set project | Switches to "Copy" automatically |
@@ -75,3 +76,5 @@
 | SM55 | Copy Sample Slots | Markers reset when OFF | Uncheck box, copy slot with markers | Dest markers reset to zero/default |
 | SM56 | Copy Sample Slots | Flex markers copied | Copy Flex slot with editor settings ON | Flex slot markers in dest match source |
 | SM57 | Copy Sample Slots | Markers file created if absent | Copy to project without markers.work | markers.work created in destination |
+| SM58 | Copy Sample Slots | Missing source files warning | Select "Copy" audio mode, source slots reference missing .wav files | Warning badge shows "N missing file(s)" next to Audio Files label |
+| SM59 | Copy Sample Slots | Dest slot mapping respected | Copy slot 1 → slot 10 (different project) | Slot data written to slot 10, not slot 1 |
