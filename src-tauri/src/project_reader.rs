@@ -8184,6 +8184,326 @@ mod tests {
         }
     }
 
+    // ==================== CHECK MISSING SOURCE FILES TESTS ====================
+
+    mod check_missing_source_files_tests {
+        use super::*;
+
+        #[test]
+        fn test_no_missing_files_empty_slots() {
+            // Default project has no slot paths assigned, so nothing can be missing
+            let project = TestProject::new();
+
+            let result = check_missing_source_files(&project.path, "both", (1..=128).collect());
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), 0);
+        }
+
+        #[test]
+        fn test_missing_static_file() {
+            let project = TestProject::new();
+
+            // Set up a static slot pointing to a non-existent file
+            let project_path = Path::new(&project.path).join("project.work");
+            let mut pf = ProjectFile::from_data_file(&project_path).unwrap();
+            let slot = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Static,
+                1,
+                Some(std::path::PathBuf::from("AUDIO/missing.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            pf.slots.static_slots[0] = Some(slot);
+            pf.to_data_file(&project_path).unwrap();
+
+            let result = check_missing_source_files(&project.path, "static", vec![1]);
+            assert_eq!(result.unwrap(), 1);
+        }
+
+        #[test]
+        fn test_missing_flex_file() {
+            let project = TestProject::new();
+
+            let project_path = Path::new(&project.path).join("project.work");
+            let mut pf = ProjectFile::from_data_file(&project_path).unwrap();
+            let slot = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Flex,
+                1,
+                Some(std::path::PathBuf::from("AUDIO/missing_flex.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            pf.slots.flex_slots[0] = Some(slot);
+            pf.to_data_file(&project_path).unwrap();
+
+            let result = check_missing_source_files(&project.path, "flex", vec![1]);
+            assert_eq!(result.unwrap(), 1);
+        }
+
+        #[test]
+        fn test_existing_file_not_counted() {
+            let project = TestProject::new();
+
+            // Create the actual audio file
+            let audio_dir = Path::new(&project.path).join("AUDIO");
+            fs::create_dir_all(&audio_dir).unwrap();
+            fs::write(audio_dir.join("exists.wav"), b"fake wav data").unwrap();
+
+            // Set up slot pointing to existing file
+            let project_path = Path::new(&project.path).join("project.work");
+            let mut pf = ProjectFile::from_data_file(&project_path).unwrap();
+            let slot = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Static,
+                1,
+                Some(std::path::PathBuf::from("AUDIO/exists.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            pf.slots.static_slots[0] = Some(slot);
+            pf.to_data_file(&project_path).unwrap();
+
+            let result = check_missing_source_files(&project.path, "static", vec![1]);
+            assert_eq!(result.unwrap(), 0);
+        }
+
+        #[test]
+        fn test_both_slot_types_counted() {
+            let project = TestProject::new();
+
+            let project_path = Path::new(&project.path).join("project.work");
+            let mut pf = ProjectFile::from_data_file(&project_path).unwrap();
+
+            // Missing static slot
+            let static_slot = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Static,
+                1,
+                Some(std::path::PathBuf::from("AUDIO/missing_s.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            pf.slots.static_slots[0] = Some(static_slot);
+
+            // Missing flex slot
+            let flex_slot = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Flex,
+                1,
+                Some(std::path::PathBuf::from("AUDIO/missing_f.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            pf.slots.flex_slots[0] = Some(flex_slot);
+            pf.to_data_file(&project_path).unwrap();
+
+            // "both" should count both missing files
+            let result = check_missing_source_files(&project.path, "both", vec![1]);
+            assert_eq!(result.unwrap(), 2);
+        }
+
+        #[test]
+        fn test_slot_type_filter_static_only() {
+            let project = TestProject::new();
+
+            let project_path = Path::new(&project.path).join("project.work");
+            let mut pf = ProjectFile::from_data_file(&project_path).unwrap();
+
+            let static_slot = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Static,
+                1,
+                Some(std::path::PathBuf::from("AUDIO/missing_s.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            pf.slots.static_slots[0] = Some(static_slot);
+
+            let flex_slot = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Flex,
+                1,
+                Some(std::path::PathBuf::from("AUDIO/missing_f.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            pf.slots.flex_slots[0] = Some(flex_slot);
+            pf.to_data_file(&project_path).unwrap();
+
+            // "static" should only count the static slot
+            let result = check_missing_source_files(&project.path, "static", vec![1]);
+            assert_eq!(result.unwrap(), 1);
+        }
+
+        #[test]
+        fn test_slot_type_filter_flex_only() {
+            let project = TestProject::new();
+
+            let project_path = Path::new(&project.path).join("project.work");
+            let mut pf = ProjectFile::from_data_file(&project_path).unwrap();
+
+            let static_slot = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Static,
+                1,
+                Some(std::path::PathBuf::from("AUDIO/missing_s.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            pf.slots.static_slots[0] = Some(static_slot);
+
+            let flex_slot = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Flex,
+                1,
+                Some(std::path::PathBuf::from("AUDIO/missing_f.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            pf.slots.flex_slots[0] = Some(flex_slot);
+            pf.to_data_file(&project_path).unwrap();
+
+            // "flex" should only count the flex slot
+            let result = check_missing_source_files(&project.path, "flex", vec![1]);
+            assert_eq!(result.unwrap(), 1);
+        }
+
+        #[test]
+        fn test_multiple_missing_across_slots() {
+            let project = TestProject::new();
+
+            let project_path = Path::new(&project.path).join("project.work");
+            let mut pf = ProjectFile::from_data_file(&project_path).unwrap();
+
+            // Set up 3 static slots with missing files
+            for i in 0..3 {
+                let slot = ot_tools_io::projects::SlotAttributes::new(
+                    ot_tools_io::settings::SlotType::Static,
+                    (i + 1) as u8,
+                    Some(std::path::PathBuf::from(format!("AUDIO/missing_{}.wav", i))),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .unwrap();
+                pf.slots.static_slots[i] = Some(slot);
+            }
+            pf.to_data_file(&project_path).unwrap();
+
+            let result = check_missing_source_files(&project.path, "static", vec![1, 2, 3]);
+            assert_eq!(result.unwrap(), 3);
+        }
+
+        #[test]
+        fn test_mix_of_existing_and_missing() {
+            let project = TestProject::new();
+
+            // Create one real file
+            let audio_dir = Path::new(&project.path).join("AUDIO");
+            fs::create_dir_all(&audio_dir).unwrap();
+            fs::write(audio_dir.join("exists.wav"), b"data").unwrap();
+
+            let project_path = Path::new(&project.path).join("project.work");
+            let mut pf = ProjectFile::from_data_file(&project_path).unwrap();
+
+            // Slot 1: exists
+            let slot1 = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Static,
+                1,
+                Some(std::path::PathBuf::from("AUDIO/exists.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            pf.slots.static_slots[0] = Some(slot1);
+
+            // Slot 2: missing
+            let slot2 = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Static,
+                2,
+                Some(std::path::PathBuf::from("AUDIO/missing.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            pf.slots.static_slots[1] = Some(slot2);
+            pf.to_data_file(&project_path).unwrap();
+
+            let result = check_missing_source_files(&project.path, "static", vec![1, 2]);
+            assert_eq!(result.unwrap(), 1);
+        }
+
+        #[test]
+        fn test_out_of_range_indices_skipped() {
+            // Slot IDs outside 1-128 should be silently skipped
+            let project = TestProject::new();
+
+            let result = check_missing_source_files(&project.path, "static", vec![0, 129, 255]);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), 0);
+        }
+
+        #[test]
+        fn test_empty_indices_returns_zero() {
+            let project = TestProject::new();
+
+            let result = check_missing_source_files(&project.path, "static", vec![]);
+            assert_eq!(result.unwrap(), 0);
+        }
+
+        #[test]
+        fn test_nonexistent_project_returns_error() {
+            let result = check_missing_source_files("/nonexistent/project/path", "static", vec![1]);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_unassigned_slots_not_counted() {
+            // Default project has empty slots (None) - they should not be counted as missing
+            let project = TestProject::new();
+
+            let result = check_missing_source_files(&project.path, "both", vec![1, 2, 3]);
+            assert_eq!(result.unwrap(), 0);
+        }
+    }
+
     // ==================== VALIDATION EDGE CASE TESTS ====================
 
     mod validation_tests {
