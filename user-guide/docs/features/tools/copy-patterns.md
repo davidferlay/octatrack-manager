@@ -2,43 +2,42 @@
 sidebar_position: 4
 ---
 
-# Copy Pattern
+# Copy Patterns
 
-:::caution In Development — Coming Soon
-The **Copy Pattern** feature is a work in progress and is not yet available in a stable release.
-:::
+**Copy Patterns** copies individual sequencer patterns (1–16) between banks and projects, with granular control over track scope, part assignment, and mode scope.
 
-The planned **Copy Pattern** tool allows you to move individual sequencer patterns (1–16) between banks and projects. It is designed to offer granular control over track scope and part assignment.
+![Tools - Copy Patterns](/img/screenshots/tools-copy-patterns.png)
 
-![Tools - Copy Pattern](/img/screenshots/tools-copy-patterns.png)
+## Workflow
 
-## Current Workflow (Experimental)
-
-1. **Source:** Select the bank (A–P) and pattern (1–16) in the current project.
-2. **Destination:** Choose the target project, bank, and target patterns.
-3. **Configure Options:** Refine what data is transferred.
+1. **Source:** Select the bank (A–P) and pattern (1–16, or All for 1-to-1 copy).
+2. **Destination:** Choose the target project, bank, and target pattern(s). When the source is a single pattern, multiple destination patterns can be selected.
+3. **Configure Options:** Set part assignment, track scope, and mode scope.
 4. **Execute:** Perform the pattern copy.
 
 ---
 
-## Planned Copy Options
-
-When stable, these features are intended to work as follows:
+## Copy Options
 
 ### Part Assignment
-- **Keep Original:** Targeted patterns keep the **destination** pattern's existing part assignment.
-- **Copy Source Part:** Targeted patterns take the current part assignment of source pattern.
-- **User Selection:** Manually choose which part to set for targeted patterns.
+- **Keep Original:** Destination patterns keep their existing part assignment.
+- **Copy Source Part:** The source pattern's part data is also copied; destination patterns reference the copied part.
+- **User Selection:** Manually choose which part (1–4) to assign to the destination patterns.
 
 ### Track Scope
-- **All Tracks:** Copy triggers and p-locks for all 16 tracks (audio and MIDI).
-- **Specific Tracks:** Move only selected tracks (e.g., only T1 and T2).
+- **All Tracks:** Copy triggers and p-locks for all tracks, filtered by Mode Scope.
+- **Specific Tracks:** Copy only selected tracks (e.g., only T1 and T2).
+
+### Mode Scope
+Visible when **All Tracks** is selected. Controls which track types are copied:
+- **Audio:** Copy only audio tracks (T1–T8); MIDI tracks in the destination are untouched.
+- **Both:** Copy all 16 tracks (T1–T8 and M1–M8).
+- **MIDI:** Copy only MIDI tracks (M1–M8); audio tracks in the destination are untouched.
 
 ---
 
-## Planned Data Coverage
+## Data Copied
 
-When stable, the following data is expected to be transferred:
 - **Triggers:** Standard, trigless, and one-shot triggers.
 - **Parameter Locks:** Every parameter lock on every step.
 - **Trig Conditions & Timing:** Probability, fill, and micro-timing.
@@ -46,7 +45,7 @@ When stable, the following data is expected to be transferred:
 
 ---
 
-## Important Safety Notes
+## Important Notes
 
 - **Destructive Operation:** Copying a pattern replaces existing sequences at the destination.
-- **Backup Mandatory:** This is an experimental tool—**always back up your project** before using it. Changes are written directly to binary project files.
+- **Backup Recommended:** Changes are written directly to binary project files.

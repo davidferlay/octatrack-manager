@@ -2,27 +2,23 @@
 sidebar_position: 3
 ---
 
-# Copy Part
+# Copy Parts
 
-:::caution In Development — Coming Soon
-The **Copy Part** feature is currently a work in progress and is not yet available in a stable release.
-:::
+**Copy Parts** transfers sound design snapshots — the equivalent of a "kit" — between different banks and projects. Use it to quickly move a sound you've developed to a new part.
 
-The planned **Copy Part** tool is intended for transferring sound design snapshots—the equivalent of a "kit"—between different banks and projects. Use it to quickly move a sound you've developed to a new part.
+![Tools - Copy Parts](/img/screenshots/tools-copy-parts.png)
 
-![Tools - Copy Part](/img/screenshots/tools-copy-parts.png)
+## Workflow
 
-## Current Workflow (Experimental)
-
-1. **Source:** Choose the source bank (A–P) and part (1–4) in the current project.
-2. **Destination:** Choose the target project, bank, and one or more target parts.
+1. **Source:** Choose the source bank (A–P) and part (1–4, or All for 1-to-1 copy).
+2. **Destination:** Choose the target project, bank, and one or more destination parts.
 3. **Execute:** Perform the part copy.
 
 ---
 
-## Planned Data Coverage
+## Data Copied
 
-When stable, copying a part is expected to include all sound design data for both audio and MIDI tracks:
+All sound design data for both audio and MIDI tracks:
 
 ### Audio Track Settings
 - **Machine Type and Parameters:** Core sound engine settings.
@@ -34,10 +30,15 @@ When stable, copying a part is expected to include all sound design data for bot
 - **MIDI Parameters:** Notes, velocity, length, and MIDI channel.
 - **LFOs:** MIDI LFO configurations.
 
+### Part Metadata
+- **Part Names:** Custom part names are copied.
+- **Saved State:** Both saved (backup) and unsaved (working) states are transferred.
+- **Edited Bitmask:** Mirrors the source part's edited status.
+
 ---
 
-## Important Safety Notes
+## Important Notes
 
-- **Patterns Not Affected:** This operation only copies the **sound design settings** (the part), not the sequences or triggers.
-- **Experimental Status:** **Always back up your destination project** before using this tool. It writes directly to your project files.
-- **Sample Slot References:** This copies the reference to a sample slot (S1, F32), not the sample itself.
+- **Patterns Not Affected:** This operation only copies sound design settings (the Part), not sequences or triggers.
+- **Backup Recommended:** Changes are written directly to binary project files.
+- **Sample Slot References:** This copies the reference to a sample slot (e.g., S1, F32), not the audio file itself.

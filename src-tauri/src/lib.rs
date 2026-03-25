@@ -433,45 +433,62 @@ async fn copy_tracks(
     dest_track_indices: Vec<u8>,
     mode: String,
     source_pattern_index: Option<u8>, // None = all 16 patterns, Some(0-15) = specific
-    dest_pattern_index: Option<u8>,   // None = all 16 patterns, Some(0-15) = specific
+    dest_pattern_indices: Option<Vec<u8>>, // None = all 16 patterns, Some = specific (1-to-many)
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
+        // Build the list of (src_pattern, dest_pattern) pairs to process
+        let pattern_pairs: Vec<(Option<u8>, Option<u8>)> = match (&source_pattern_index, &dest_pattern_indices) {
+            (None, None) => vec![(None, None)],                  // All → All (1-to-1)
+            (Some(src), None) => vec![(Some(*src), None)],       // Specific → All
+            (Some(src), Some(dsts)) => {
+                // 1-to-many: copy source pattern to each destination pattern
+                dsts.iter().map(|&d| (Some(*src), Some(d))).collect()
+            }
+            (None, Some(_)) => {
+                return Err("Cannot specify destination patterns when source is 'All'".to_string());
+            }
+        };
+
         match (source_part_index, &dest_part_indices) {
             (None, None) => {
                 // Copy tracks across all 4 parts (1-to-1 mapping)
                 for part_idx in 0..4u8 {
-                    copy_tracks_impl(
-                        &source_project,
-                        source_bank_index,
-                        part_idx,
-                        source_track_indices.clone(),
-                        &dest_project,
-                        dest_bank_index,
-                        part_idx,
-                        dest_track_indices.clone(),
-                        &mode,
-                        source_pattern_index,
-                        dest_pattern_index,
-                    )?;
+                    for &(src_pat, dst_pat) in &pattern_pairs {
+                        copy_tracks_impl(
+                            &source_project,
+                            source_bank_index,
+                            part_idx,
+                            source_track_indices.clone(),
+                            &dest_project,
+                            dest_bank_index,
+                            part_idx,
+                            dest_track_indices.clone(),
+                            &mode,
+                            src_pat,
+                            dst_pat,
+                        )?;
+                    }
                 }
                 Ok(())
             }
             (Some(src), Some(dst_indices)) => {
                 // Copy source part to each selected destination part (1-to-many)
                 for &dst in dst_indices {
-                    copy_tracks_impl(
-                        &source_project,
-                        source_bank_index,
-                        src,
-                        source_track_indices.clone(),
-                        &dest_project,
-                        dest_bank_index,
-                        dst,
-                        dest_track_indices.clone(),
-                        &mode,
-                        source_pattern_index,
-                        dest_pattern_index,
-                    )?;
+                    for &(src_pat, dst_pat) in &pattern_pairs {
+                        copy_tracks_impl(
+                            &source_project,
+                            source_bank_index,
+                            src,
+                            source_track_indices.clone(),
+                            &dest_project,
+                            dest_bank_index,
+                            dst,
+                            dest_track_indices.clone(),
+                            &mode,
+                            src_pat,
+                            dst_pat,
+                        )?;
+                    }
                 }
                 Ok(())
             }
@@ -491,7 +508,7 @@ async fn copy_sample_slots(
     dest_indices: Vec<u8>,
     audio_mode: String,
     include_editor_settings: bool,
-) -> Result<(), String> {
+) -> Result<project_reader::CopySlotsResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
         copy_sample_slots_impl(
             &source_project,

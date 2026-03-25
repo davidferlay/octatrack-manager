@@ -2,37 +2,47 @@
 sidebar_position: 5
 ---
 
-# Copy Track
+# Copy Tracks
 
-:::caution In Development — Coming Soon
-The **Copy Track** feature is a work in progress and is not yet available in a stable release.
-:::
+**Copy Tracks** is the most granular copy operation in Octatrack Manager. It copies individual track data (sound design and/or pattern triggers) between parts and patterns, within or across projects.
 
-The planned **Copy Track** tool is the most granular bulk operation in Octatrack Manager. It allows you to copy the settings for a single audio or MIDI track between different parts or patterns.
+![Tools - Copy Tracks](/img/screenshots/tools-copy-tracks.png)
 
-![Tools - Copy Track](/img/screenshots/tools-copy-tracks.png)
+## Workflow
 
-## Current Workflow (Experimental)
-
-1. **Source:** Select the bank (A–P), part (1–4), and specific track (T1–T8 or M1–M8).
-2. **Destination:** Choose the target project, bank, parts (multiple destination parts can be selected), and tracks.
-3. **Configure Options:** Select exactly what is copied (Parameters, Triggers, or Both).
+1. **Source:** Select the bank (A–P), part (1–4), and track (T1–T8 for audio, M1–M8 for MIDI).
+2. **Destination:** Choose the target project, bank, part(s), and track(s). Multiple destination parts and tracks can be selected when the source is a single track.
+3. **Copy Mode:** Choose what data to copy — Part Parameters, Pattern Triggers, or Both.
 4. **Execute:** Perform the track copy.
 
 ---
 
-## Planned Copy Modes
+## Copy Modes
 
-When stable, these modes are intended to function as follows:
-
-- **Part Parameters:** Copies the full Part state, including both saved (backup) and unsaved (working) track data, as well as part names, saved state flags, and edited bitmask. Pattern sequences are not affected.
-- **Pattern Triggers:** Only copies the sequencer data (triggers, p-locks, micro-timing). Sound design settings remain unchanged.
-- **Both:** Copies both sound design settings and sequencer data to ensure a complete transfer.
+- **Part Parameters:** Copies per-track sound design data (machine type, amp, LFO, FX, volumes, recorder setup) for both saved and unsaved Part state. The destination Part's edited bitmask is updated. Part names are **not** copied, since only selected tracks are modified — the destination Part becomes a hybrid of source and existing data.
+- **Pattern Triggers:** Copies only the sequencer data (triggers, trigless trigs, parameter locks, swing) for the selected tracks. Sound design settings remain unchanged. Defaults to Pattern 1 (not All patterns).
+- **Both:** Copies both sound design settings and sequencer data for a complete transfer.
 
 ---
 
-## Important Safety Notes
+## Track Mapping
 
-- **Track Type Consistency:** Audio tracks must be copied to audio targets (T1–T8), and MIDI tracks to MIDI targets (M1–M8).
-- **Experimental Feature:** **Always back up your destination project** before using this tool. Changes are written directly to binary project files.
-- **Sample Slot References:** This tool copies references to sample slots, not the samples themselves.
+- **Single source → single destination:** Copies one track to one target.
+- **Single source → multiple destinations:** A single source track can be copied to multiple destination tracks (e.g., T1 → T1, T3, T5).
+- **All Audio / All MIDI:** Select All Audio (T1–T8) or All MIDI (M1–M8) to copy all tracks 1-to-1.
+
+## Pattern Selection
+
+When using **Both** or **Pattern Triggers** mode, you can select which patterns to copy:
+
+- **All patterns (default for Both mode):** Copies triggers for all 16 patterns 1-to-1.
+- **Specific source pattern → multiple destinations:** A single source pattern can be copied to one or more destination patterns.
+
+---
+
+## Important Notes
+
+- **Track Type Consistency:** Audio tracks (T1–T8) can only be copied to audio targets, and MIDI tracks (M1–M8) to MIDI targets.
+- **Part Names Not Copied:** Since Copy Tracks only modifies selected tracks, the destination Part name is preserved. Overwriting it with the source Part name would be misleading for a hybrid Part.
+- **Backup Recommended:** Changes are written directly to binary project files.
+- **Sample Slot References:** This tool copies references to sample slots, not the audio files themselves. Use [Copy Sample Slots](./copy-sample-slots.md) to transfer audio files.

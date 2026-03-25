@@ -3859,8 +3859,12 @@ pub fn copy_tracks(
         return Err("Part index must be between 0 and 3".to_string());
     }
 
-    if source_track_indices.len() != dest_track_indices.len() {
-        return Err("Source and destination track indices must have the same length".to_string());
+    // Allow 1-to-many: single source track copied to each destination track
+    if source_track_indices.len() != 1 && source_track_indices.len() != dest_track_indices.len() {
+        return Err(
+            "Source and destination track indices must have the same length, or source must be a single track"
+                .to_string(),
+        );
     }
 
     if source_track_indices.iter().any(|&i| i > 15) || dest_track_indices.iter().any(|&i| i > 15) {
@@ -3924,10 +3928,13 @@ pub fn copy_tracks(
     let src_part = source_part_index as usize;
     let dst_part = dest_part_index as usize;
 
-    // Copy each track
-    for (&src_track_idx, &dst_track_idx) in
-        source_track_indices.iter().zip(dest_track_indices.iter())
-    {
+    // Copy each track (supports 1-to-many: single source track to all dest tracks)
+    for (i, &dst_track_idx) in dest_track_indices.iter().enumerate() {
+        let src_track_idx = if source_track_indices.len() == 1 {
+            source_track_indices[0]
+        } else {
+            source_track_indices[i]
+        };
         let is_audio = src_track_idx < 8;
 
         if mode == "part_params" || mode == "both" {
@@ -4090,18 +4097,13 @@ pub fn copy_tracks(
         }
     }
 
-    // Mirror the source Part's state flags and name (if we copied part params)
+    // Update Part state flags (if we copied part params).
+    // Note: Part name is NOT copied because copy_tracks only modifies selected tracks,
+    // leaving non-selected tracks unchanged. The destination Part is a hybrid, so
+    // taking the source Part name would be misleading.
     if mode == "part_params" || mode == "both" {
-        // Copy part name from source to destination
-        dest_bank.part_names[dst_part] = source_bank.part_names[src_part];
-        // Copy saved state flag
-        dest_bank.parts_saved_state[dst_part] = source_bank.parts_saved_state[src_part];
-        // Mirror the source's edited bitmask for this part
-        if source_bank.parts_edited_bitmask & (1 << src_part) != 0 {
-            dest_bank.parts_edited_bitmask |= 1 << dst_part;
-        } else {
-            dest_bank.parts_edited_bitmask &= !(1 << dst_part);
-        }
+        // Mark destination part as edited since we modified its track data
+        dest_bank.parts_edited_bitmask |= 1 << dst_part;
     }
 
     // Recalculate checksum
@@ -4127,6 +4129,14 @@ pub fn copy_tracks(
     Ok(())
 }
 
+/// Result of a copy_sample_slots operation
+#[derive(serde::Serialize, Default, Debug)]
+pub struct CopySlotsResult {
+    /// Number of source files that were NOT deleted because they are also
+    /// referenced by the other slot type (static/flex) not included in this operation.
+    pub shared_files_kept: u32,
+}
+
 /// Copy sample slots from the current project to a destination project.
 ///
 /// # Arguments
@@ -4147,7 +4157,7 @@ pub fn copy_sample_slots(
     dest_indices: Vec<u8>,
     audio_mode: &str,
     include_editor_settings: bool,
-) -> Result<(), String> {
+) -> Result<CopySlotsResult, String> {
     // Validate inputs
     if source_indices.len() != dest_indices.len() {
         return Err("Source and destination indices must have the same length".to_string());
@@ -4227,6 +4237,32 @@ pub fn copy_sample_slots(
         None
     };
 
+    // For move_to_pool when slot_type is not "both", collect file paths referenced by the
+    // opposite slot type so we can avoid deleting shared files.
+    let mut shared_files_kept: u32 = 0;
+    let other_type_paths: std::collections::HashSet<String> =
+        if audio_mode == "move_to_pool" && slot_type != "both" {
+            if slot_type == "static" {
+                source_project_data
+                    .slots
+                    .flex_slots
+                    .iter()
+                    .filter_map(|s| s.as_ref())
+                    .filter_map(|s| s.path.as_ref().map(|p| p.to_string_lossy().to_string()))
+                    .collect()
+            } else {
+                source_project_data
+                    .slots
+                    .static_slots
+                    .iter()
+                    .filter_map(|s| s.as_ref())
+                    .filter_map(|s| s.path.as_ref().map(|p| p.to_string_lossy().to_string()))
+                    .collect()
+            }
+        } else {
+            std::collections::HashSet::new()
+        };
+
     // Read source markers file for editor settings
     let source_markers_work = source_path.join("markers.work");
     let source_markers_strd = source_path.join("markers.strd");
@@ -4282,8 +4318,9 @@ pub fn copy_sample_slots(
         if slot_type == "static" || slot_type == "both" {
             if let Some(src_slot) = source_project_data.slots.static_slots.get(src_idx) {
                 if let Some(ref src_slot_data) = src_slot {
-                    // Clone the slot
+                    // Clone the slot and fix the slot_id to match destination position
                     let mut new_slot = src_slot_data.clone();
+                    new_slot.slot_id = dest_slot_id;
 
                     // Handle audio file based on mode
                     if let Some(ref sample_path) = new_slot.path {
@@ -4319,9 +4356,15 @@ pub fn copy_sample_slots(
                                             .unwrap_or_default();
                                         let pool_dest = Path::new(pool_path).join(&file_name);
 
-                                        // Copy to Audio Pool then delete original (move semantics)
+                                        // Copy to Audio Pool
                                         if std::fs::copy(&src_full_path, &pool_dest).is_ok() {
-                                            let _ = std::fs::remove_file(&src_full_path);
+                                            // Only delete original if NOT referenced by the other slot type
+                                            if other_type_paths.contains(&sample_path_str) {
+                                                shared_files_kept += 1;
+                                                println!("[DEBUG] Kept shared file (referenced by other slot type): {}", file_name);
+                                            } else {
+                                                let _ = std::fs::remove_file(&src_full_path);
+                                            }
                                         }
 
                                         // Move .ot file too
@@ -4329,7 +4372,9 @@ pub fn copy_sample_slots(
                                         if ot_src.exists() {
                                             let ot_dest = pool_dest.with_extension("ot");
                                             if std::fs::copy(&ot_src, &ot_dest).is_ok() {
-                                                let _ = std::fs::remove_file(&ot_src);
+                                                if !other_type_paths.contains(&sample_path_str) {
+                                                    let _ = std::fs::remove_file(&ot_src);
+                                                }
                                             }
                                         }
 
@@ -4390,8 +4435,9 @@ pub fn copy_sample_slots(
         if slot_type == "flex" || slot_type == "both" {
             if let Some(src_slot) = source_project_data.slots.flex_slots.get(src_idx) {
                 if let Some(ref src_slot_data) = src_slot {
-                    // Clone the slot
+                    // Clone the slot and fix the slot_id to match destination position
                     let mut new_slot = src_slot_data.clone();
+                    new_slot.slot_id = dest_slot_id;
 
                     // Handle audio file based on mode
                     if let Some(ref sample_path) = new_slot.path {
@@ -4424,9 +4470,15 @@ pub fn copy_sample_slots(
                                             .unwrap_or_default();
                                         let pool_dest = Path::new(pool_path).join(&file_name);
 
-                                        // Copy to Audio Pool then delete original (move semantics)
+                                        // Copy to Audio Pool
                                         if std::fs::copy(&src_full_path, &pool_dest).is_ok() {
-                                            let _ = std::fs::remove_file(&src_full_path);
+                                            // Only delete original if NOT referenced by the other slot type
+                                            if other_type_paths.contains(&sample_path_str) {
+                                                shared_files_kept += 1;
+                                                println!("[DEBUG] Kept shared file (referenced by other slot type): {}", file_name);
+                                            } else {
+                                                let _ = std::fs::remove_file(&src_full_path);
+                                            }
                                         }
 
                                         // Move .ot file too
@@ -4434,7 +4486,9 @@ pub fn copy_sample_slots(
                                         if ot_src.exists() {
                                             let ot_dest = pool_dest.with_extension("ot");
                                             if std::fs::copy(&ot_src, &ot_dest).is_ok() {
-                                                let _ = std::fs::remove_file(&ot_src);
+                                                if !other_type_paths.contains(&sample_path_str) {
+                                                    let _ = std::fs::remove_file(&ot_src);
+                                                }
                                             }
                                         }
 
@@ -4566,7 +4620,7 @@ pub fn copy_sample_slots(
         dest_project
     );
 
-    Ok(())
+    Ok(CopySlotsResult { shared_files_kept })
 }
 
 #[cfg(test)]
@@ -6643,12 +6697,121 @@ mod tests {
 
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
-            // Source part 0 is not marked as edited in a default project,
-            // so mirroring the source's edited bitmask should leave dest part 2 unset
+            // copy_tracks always marks the destination part as edited since track data was modified
             assert!(
-                (dest_bank.parts_edited_bitmask & (1 << 2)) == 0,
-                "Part 3 should mirror source's edited state (not edited)"
+                (dest_bank.parts_edited_bitmask & (1 << 2)) != 0,
+                "Part 3 should be marked as edited after receiving copied track data"
             );
+        }
+
+        #[test]
+        fn test_copy_tracks_part_name_not_copied() {
+            // Copy tracks should NOT copy the Part name since only selected tracks are modified
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.part_names[0] = [b'S', b'R', b'C', b'N', b'A', b'M', b'E'];
+            });
+            let dest = TestProject::with_modified_bank(0, |bank| {
+                bank.part_names[0] = [b'D', b'S', b'T', b'N', b'A', b'M', b'E'];
+            });
+
+            copy_tracks(
+                &source.path,
+                0,
+                0,
+                vec![0],
+                &dest.path,
+                0,
+                0,
+                vec![0],
+                "part_params",
+                None,
+                None,
+            )
+            .unwrap();
+
+            let dest_bank = source_bank_data(&dest.path, 0);
+            // Part name should remain the destination's original name, not the source's
+            assert_eq!(
+                dest_bank.part_names[0][0..7],
+                [b'D', b'S', b'T', b'N', b'A', b'M', b'E'],
+                "Part name should NOT be overwritten by copy_tracks"
+            );
+        }
+
+        #[test]
+        fn test_copy_tracks_non_selected_tracks_unchanged() {
+            // Copy T1 → T1, verify T2 data is unchanged in destination
+            let source = TestProject::with_modified_bank(0, |bank| {
+                // Set distinct machine type on T1
+                bank.parts.unsaved.0[0].audio_track_machine_types[0] = 99;
+                // Set distinct machine type on T2
+                bank.parts.unsaved.0[0].audio_track_machine_types[1] = 88;
+            });
+            let dest = TestProject::with_modified_bank(0, |bank| {
+                bank.parts.unsaved.0[0].audio_track_machine_types[1] = 77; // T2 in dest
+            });
+
+            // Only copy T1 (index 0)
+            copy_tracks(
+                &source.path,
+                0,
+                0,
+                vec![0],
+                &dest.path,
+                0,
+                0,
+                vec![0],
+                "part_params",
+                None,
+                None,
+            )
+            .unwrap();
+
+            let dest_bank = source_bank_data(&dest.path, 0);
+            // T1 should be from source
+            assert_eq!(
+                dest_bank.parts.unsaved.0[0].audio_track_machine_types[0], 99,
+                "T1 should be copied from source"
+            );
+            // T2 should remain the dest's original value
+            assert_eq!(
+                dest_bank.parts.unsaved.0[0].audio_track_machine_types[1], 77,
+                "T2 should be unchanged in destination"
+            );
+        }
+
+        #[test]
+        fn test_copy_tracks_one_to_many() {
+            // Copy single source track T1 to multiple dest tracks T1, T2, T3
+            let source = TestProject::with_modified_bank(0, |bank| {
+                bank.parts.unsaved.0[0].audio_track_machine_types[0] = 42;
+            });
+            let dest = TestProject::new();
+
+            copy_tracks(
+                &source.path,
+                0,
+                0,
+                vec![0], // single source: T1
+                &dest.path,
+                0,
+                0,
+                vec![0, 1, 2], // multiple dest: T1, T2, T3
+                "part_params",
+                None,
+                None,
+            )
+            .unwrap();
+
+            let dest_bank = source_bank_data(&dest.path, 0);
+            for &track_idx in &[0usize, 1, 2] {
+                assert_eq!(
+                    dest_bank.parts.unsaved.0[0].audio_track_machine_types[track_idx],
+                    42,
+                    "Track {} should have source T1's machine type",
+                    track_idx + 1
+                );
+            }
         }
 
         #[test]
@@ -8181,6 +8344,238 @@ mod tests {
 
             // markers.work should now exist
             assert!(dest_markers_path.exists(), "markers.work should be created");
+        }
+
+        #[test]
+        fn test_copy_slots_destination_slot_id_matches() {
+            // SM38/SM59: Copied slot should have the destination slot_id, not the source's
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            // Set up source with a static slot at position 1
+            let src_project_path = Path::new(&source.path).join("project.work");
+            let mut pf = ProjectFile::from_data_file(&src_project_path).unwrap();
+            let slot = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Static,
+                1,
+                Some(std::path::PathBuf::from("AUDIO/test.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            pf.slots.static_slots[0] = Some(slot);
+            pf.to_data_file(&src_project_path).unwrap();
+
+            // Copy slot 1 → slot 5
+            copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "static",
+                vec![1],
+                vec![5],
+                "none",
+                true,
+            )
+            .unwrap();
+
+            let dest_pf =
+                ProjectFile::from_data_file(&Path::new(&dest.path).join("project.work")).unwrap();
+            if let Some(ref slot) = dest_pf.slots.static_slots[4] {
+                assert_eq!(
+                    slot.slot_id, 5,
+                    "Destination slot_id should be 5, not source's 1"
+                );
+            } else {
+                panic!("Destination slot 5 should exist");
+            }
+        }
+
+        #[test]
+        fn test_copy_slots_flex_destination_slot_id_matches() {
+            // Same test for flex slots
+            let source = TestProject::new();
+            let dest = TestProject::new();
+
+            let src_project_path = Path::new(&source.path).join("project.work");
+            let mut pf = ProjectFile::from_data_file(&src_project_path).unwrap();
+            let slot = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Flex,
+                1,
+                Some(std::path::PathBuf::from("AUDIO/test.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            pf.slots.flex_slots[0] = Some(slot);
+            pf.to_data_file(&src_project_path).unwrap();
+
+            // Copy flex slot 1 → slot 10
+            copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "flex",
+                vec![1],
+                vec![10],
+                "none",
+                true,
+            )
+            .unwrap();
+
+            let dest_pf =
+                ProjectFile::from_data_file(&Path::new(&dest.path).join("project.work")).unwrap();
+            if let Some(ref slot) = dest_pf.slots.flex_slots[9] {
+                assert_eq!(
+                    slot.slot_id, 10,
+                    "Destination flex slot_id should be 10, not source's 1"
+                );
+            } else {
+                panic!("Destination flex slot 10 should exist");
+            }
+        }
+
+        #[test]
+        fn test_copy_slots_move_to_pool_shared_file_kept() {
+            // SM49 exception: file referenced by both static and flex should NOT be deleted
+            // when only one type is being processed
+            let set_dir = TempDir::new().unwrap();
+            let src_dir = set_dir.path().join("Source");
+            let dest_dir = set_dir.path().join("Dest");
+            fs::create_dir_all(&src_dir).unwrap();
+            fs::create_dir_all(&dest_dir).unwrap();
+
+            // Create audio file in source project
+            let audio_dir = src_dir.join("AUDIO");
+            fs::create_dir_all(&audio_dir).unwrap();
+            fs::write(audio_dir.join("shared.wav"), b"audio data").unwrap();
+
+            // Set up source project: same file in both static slot 1 and flex slot 1
+            let mut src_pf = ProjectFile::default();
+            let static_slot = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Static,
+                1,
+                Some(std::path::PathBuf::from("AUDIO/shared.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            let flex_slot = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Flex,
+                1,
+                Some(std::path::PathBuf::from("AUDIO/shared.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            src_pf.slots.static_slots[0] = Some(static_slot);
+            src_pf.slots.flex_slots[0] = Some(flex_slot);
+            src_pf.to_data_file(&src_dir.join("project.work")).unwrap();
+
+            // Create destination project
+            let dest_pf = ProjectFile::default();
+            dest_pf
+                .to_data_file(&dest_dir.join("project.work"))
+                .unwrap();
+
+            // Create Audio Pool directory
+            let pool_dir = set_dir.path().join("AUDIO");
+            fs::create_dir_all(&pool_dir).unwrap();
+
+            // Copy only static slots with move_to_pool
+            let result = copy_sample_slots(
+                &src_dir.to_string_lossy(),
+                &dest_dir.to_string_lossy(),
+                "static",
+                vec![1],
+                vec![1],
+                "move_to_pool",
+                true,
+            )
+            .unwrap();
+
+            // File should still exist in source (shared with flex)
+            assert!(
+                audio_dir.join("shared.wav").exists(),
+                "Shared file should NOT be deleted from source"
+            );
+            assert_eq!(
+                result.shared_files_kept, 1,
+                "Should report 1 shared file kept"
+            );
+            // File should be in pool too
+            assert!(
+                pool_dir.join("shared.wav").exists(),
+                "File should be copied to Audio Pool"
+            );
+        }
+
+        #[test]
+        fn test_copy_slots_move_to_pool_unshared_file_deleted() {
+            // When file is only referenced by the type being processed, it should be deleted
+            let set_dir = TempDir::new().unwrap();
+            let src_dir = set_dir.path().join("Source");
+            let dest_dir = set_dir.path().join("Dest");
+            fs::create_dir_all(&src_dir).unwrap();
+            fs::create_dir_all(&dest_dir).unwrap();
+
+            // Create audio file
+            let audio_dir = src_dir.join("AUDIO");
+            fs::create_dir_all(&audio_dir).unwrap();
+            fs::write(audio_dir.join("unique.wav"), b"audio data").unwrap();
+
+            // Set up source: file only in static slot 1 (no flex reference)
+            let mut src_pf = ProjectFile::default();
+            let slot = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Static,
+                1,
+                Some(std::path::PathBuf::from("AUDIO/unique.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            src_pf.slots.static_slots[0] = Some(slot);
+            src_pf.to_data_file(&src_dir.join("project.work")).unwrap();
+
+            let dest_pf = ProjectFile::default();
+            dest_pf
+                .to_data_file(&dest_dir.join("project.work"))
+                .unwrap();
+
+            let pool_dir = set_dir.path().join("AUDIO");
+            fs::create_dir_all(&pool_dir).unwrap();
+
+            let result = copy_sample_slots(
+                &src_dir.to_string_lossy(),
+                &dest_dir.to_string_lossy(),
+                "static",
+                vec![1],
+                vec![1],
+                "move_to_pool",
+                true,
+            )
+            .unwrap();
+
+            // File should be deleted from source (not shared)
+            assert!(
+                !audio_dir.join("unique.wav").exists(),
+                "Unshared file should be deleted from source"
+            );
+            assert_eq!(result.shared_files_kept, 0);
+            assert!(pool_dir.join("unique.wav").exists());
         }
     }
 

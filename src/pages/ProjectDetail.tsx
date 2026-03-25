@@ -1016,7 +1016,13 @@ export function ProjectDetail() {
                                 <div key={`pattern-${patternIndex}-track-${trackIndex}`} className="pattern-card">
                             <div className="pattern-header">
                               <span className="pattern-name">{pattern.name}</span>
-                              <span className="pattern-part" title={bank.parts[pattern.part_assignment]?.name || `Part ${pattern.part_assignment + 1}`}>→ Part {pattern.part_assignment + 1}</span>
+                              <span className="pattern-part" title={
+                                (() => {
+                                  const partName = bank.parts[pattern.part_assignment]?.name;
+                                  const partNum = pattern.part_assignment + 1;
+                                  return partName ? `Part ${partNum}: ${partName}` : `Part ${partNum}`;
+                                })()
+                              }>→ Part {pattern.part_assignment + 1}</span>
                               <TrackBadge trackId={trackData.track_id} />
                               {pattern.tempo_info && <span className="pattern-tempo-indicator">{pattern.tempo_info}</span>}
                               <span className="pattern-tempo-indicator">Scale Mode: {pattern.scale_mode === "Normal" ? "Pattern" : pattern.scale_mode}</span>
