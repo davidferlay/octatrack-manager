@@ -40,11 +40,38 @@ Each operation displays a description below the options explaining what it does.
 
 ---
 
+## Automatic Backups
+
+Every time you execute a copy operation or enable Edit mode, the app automatically backs up the destination files that are about to be modified. Backups are stored inside the project directory under:
+
+```
+<project>/backups/<timestamp>_<operation>/
+```
+
+For example: `backups/2026-03-26_14-30-45_copy_bank/`
+
+**What gets backed up:**
+
+| Operation | Backed-up files |
+|-----------|----------------|
+| Copy Banks | Destination bank file(s) (e.g., `bank01.work`) |
+| Copy Parts | Destination bank file(s) |
+| Copy Patterns | Destination bank file |
+| Copy Tracks | Destination bank file |
+| Copy Sample Slots | `project.work`, `markers.work`, and destination audio files (`.wav` + `.ot`) that would be overwritten |
+| Edit mode toggle | Current bank file |
+
+To restore from a backup, simply copy the backed-up files back into the project directory, replacing the modified ones.
+
+---
+
 ## Safety and Data Integrity
 
+- **Automatic Backups:** The app creates timestamped backups before every write operation (see above).
+- **Validation:** The interface prevents invalid selections (e.g., mixing audio and MIDI track types) and disables the Execute button until all required fields are set.
+- **Direct File Modification:** These tools modify binary project files. The automatic backup lets you revert changes manually if needed.
+
 :::warning
-**Always back up your project files** before using Tools. The app writes directly to the destination project files, and these changes are not reversible within the app.
+**Always back up your project files anyways**: While the app creates automatic backups (see above), no software is guaranteed to work perfectly. Keep your own copies of important work.
 :::
 
-- **Validation:** The interface prevents invalid selections (e.g., mixing audio and MIDI track types) and disables the Execute button until all required fields are set.
-- **Direct File Modification:** These tools modify binary project files. Ensure you have backups of important work.

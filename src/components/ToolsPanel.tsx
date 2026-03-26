@@ -432,6 +432,64 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     }
   }
 
+  // Determine which files need backing up before an operation
+  async function getBackupFiles(): Promise<{ project: string; files: string[]; label: string }> {
+    const bankFile = (idx: number) => `bank${String(idx + 1).padStart(2, '0')}.work`;
+    switch (operation) {
+      case "copy_bank":
+        return {
+          project: destProject,
+          files: destBankIndices.map(bankFile),
+          label: "copy_bank",
+        };
+      case "copy_parts":
+        return {
+          project: destProject,
+          files: destPartBankIndices.map(bankFile),
+          label: "copy_parts",
+        };
+      case "copy_patterns":
+        return {
+          project: destProject,
+          files: [bankFile(destBankIndex)],
+          label: "copy_patterns",
+        };
+      case "copy_tracks":
+        return {
+          project: destProject,
+          files: [bankFile(destBankIndex)],
+          label: "copy_tracks",
+        };
+      case "copy_sample_slots": {
+        const baseFiles = ["project.work", "markers.work"];
+        if (audioMode !== "none") {
+          // Also back up destination audio files (+ .ot) that would be overwritten
+          try {
+            const audioPaths = await invoke<string[]>("get_slot_audio_paths", {
+              projectPath,
+              slotType,
+              sourceIndices: sourceSampleIndices.map(i => i + 1),
+            });
+            return {
+              project: destProject,
+              files: [...baseFiles, ...audioPaths],
+              label: "copy_sample_slots",
+            };
+          } catch {
+            // Fall through to base files only
+          }
+        }
+        return {
+          project: destProject,
+          files: baseFiles,
+          label: "copy_sample_slots",
+        };
+      }
+      default:
+        return { project: destProject, files: [], label: "unknown" };
+    }
+  }
+
   // Execute operation
   async function executeOperation() {
     setIsExecuting(true);
@@ -442,6 +500,16 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     setStatusType("");
 
     try {
+      // Back up destination files before modifying them
+      const backup = await getBackupFiles();
+      if (backup.files.length > 0) {
+        await invoke("backup_project_files", {
+          projectPath: backup.project,
+          files: backup.files,
+          label: backup.label,
+        });
+      }
+
       switch (operation) {
         case "copy_bank":
           await invoke("copy_bank", {

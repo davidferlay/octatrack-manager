@@ -3377,6 +3377,72 @@ pub fn check_missing_source_files(
     Ok(missing_count)
 }
 
+/// Return the relative audio file paths (and their .ot companions) referenced by
+/// the given source slot indices.  Used by the frontend to back up destination
+/// files that would be overwritten during a copy_sample_slots operation.
+pub fn get_slot_audio_paths(
+    project_path: &str,
+    slot_type: &str,
+    source_indices: Vec<u8>,
+) -> Result<Vec<String>, String> {
+    let path = Path::new(project_path);
+
+    let project_work = path.join("project.work");
+    let project_strd = path.join("project.strd");
+    let project_file_path = if project_work.exists() {
+        project_work
+    } else if project_strd.exists() {
+        project_strd
+    } else {
+        return Err("Project file not found".to_string());
+    };
+
+    let project_data = ProjectFile::from_data_file(&project_file_path)
+        .map_err(|e| format!("Failed to read project: {:?}", e))?;
+
+    let mut paths: Vec<String> = Vec::new();
+    let mut seen = std::collections::HashSet::<String>::new();
+
+    for &slot_id in &source_indices {
+        if !(1..=128).contains(&slot_id) {
+            continue;
+        }
+        let idx = (slot_id - 1) as usize;
+
+        // Collect slot references to check
+        let mut slots_to_check: Vec<&Option<_>> = Vec::new();
+        if slot_type == "static" || slot_type == "both" {
+            if let Some(slot) = project_data.slots.static_slots.get(idx) {
+                slots_to_check.push(slot);
+            }
+        }
+        if slot_type == "flex" || slot_type == "both" {
+            if let Some(slot) = project_data.slots.flex_slots.get(idx) {
+                slots_to_check.push(slot);
+            }
+        }
+
+        for slot_data in slots_to_check {
+            if let Some(ref slot) = slot_data {
+                if let Some(ref sample_path) = slot.path {
+                    let rel: String = sample_path.to_string_lossy().to_string();
+                    if seen.insert(rel.clone()) {
+                        paths.push(rel.clone());
+                        // Also include .ot companion
+                        let ot_rel = std::path::Path::new(&rel)
+                            .with_extension("ot")
+                            .to_string_lossy()
+                            .to_string();
+                        paths.push(ot_rel);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(paths)
+}
+
 // ============================================================================
 // Copy Operations
 // ============================================================================

@@ -40,5 +40,5 @@ All sound design data for both audio and MIDI tracks:
 ## Important Notes
 
 - **Patterns Not Affected:** This operation only copies sound design settings (the Part), not sequences or triggers.
-- **Backup Recommended:** Changes are written directly to binary project files.
+- **Automatic Backup:** The app automatically backs up destination bank files before executing. See [Tools Overview](./index.md) for details.
 - **Sample Slot References:** This copies the reference to a sample slot (e.g., S1, F32), not the audio file itself.

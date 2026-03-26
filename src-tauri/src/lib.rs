@@ -537,6 +537,85 @@ async fn check_missing_source_files(
     .unwrap()
 }
 
+#[tauri::command]
+async fn get_slot_audio_paths(
+    project_path: String,
+    slot_type: String,
+    source_indices: Vec<u8>,
+) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        project_reader::get_slot_audio_paths(&project_path, &slot_type, source_indices)
+    })
+    .await
+    .unwrap()
+}
+
+/// Back up specific files from a project before modifying them.
+/// Creates a timestamped subdirectory under `<project_path>/backups/` and copies the listed files.
+fn backup_project_files_impl(
+    project_path: &str,
+    files: &[String],
+    label: &str,
+) -> Result<String, String> {
+    use std::path::Path;
+
+    let project_dir = Path::new(project_path);
+    if !project_dir.exists() {
+        return Err(format!("Project path does not exist: {}", project_path));
+    }
+
+    // Build timestamp directory name: YYYY-MM-DD_HH-MM-SS_label
+    let now = chrono::Local::now();
+    let dir_name = format!("{}_{}", now.format("%Y-%m-%d_%H-%M-%S"), label);
+    let backup_dir = project_dir.join("backups").join(&dir_name);
+
+    // Only create the backup dir if at least one source file actually exists
+    let existing_files: Vec<_> = files
+        .iter()
+        .filter(|f| project_dir.join(f).exists())
+        .collect();
+
+    if existing_files.is_empty() {
+        return Ok("No files to back up".to_string());
+    }
+
+    std::fs::create_dir_all(&backup_dir)
+        .map_err(|e| format!("Failed to create backup directory: {}", e))?;
+
+    let mut copied = 0u32;
+    for file in &existing_files {
+        let src = project_dir.join(file);
+        let dest = backup_dir.join(file);
+        // Preserve subdirectory structure (e.g. AUDIO/sample.wav)
+        if let Some(parent) = dest.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if std::fs::copy(&src, &dest).is_ok() {
+            copied += 1;
+        }
+    }
+
+    println!(
+        "[BACKUP] {} file(s) backed up to {}",
+        copied,
+        backup_dir.display()
+    );
+    Ok(format!("{} file(s) backed up", copied))
+}
+
+#[tauri::command]
+async fn backup_project_files(
+    project_path: String,
+    files: Vec<String>,
+    label: String,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        backup_project_files_impl(&project_path, &files, &label)
+    })
+    .await
+    .unwrap()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -591,7 +670,9 @@ pub fn run() {
             copy_patterns,
             copy_tracks,
             copy_sample_slots,
-            check_missing_source_files
+            check_missing_source_files,
+            get_slot_audio_paths,
+            backup_project_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -742,6 +823,138 @@ mod tests {
             resources.recommended_concurrency >= 1 && resources.recommended_concurrency <= 8,
             "Recommended concurrency {} should be between 1 and 8",
             resources.recommended_concurrency
+        );
+    }
+
+    // =========================================================================
+    // backup_project_files_impl tests
+    // =========================================================================
+
+    #[test]
+    fn test_backup_copies_existing_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path();
+        std::fs::write(project.join("bank01.work"), b"bank1data").unwrap();
+        std::fs::write(project.join("bank02.work"), b"bank2data").unwrap();
+
+        let files = vec!["bank01.work".to_string(), "bank02.work".to_string()];
+        let result = backup_project_files_impl(
+            project.to_str().unwrap(),
+            &files,
+            "copy_bank",
+        );
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "2 file(s) backed up");
+
+        // Verify backup directory was created
+        let backups_dir = project.join("backups");
+        assert!(backups_dir.exists());
+        let entries: Vec<_> = std::fs::read_dir(&backups_dir).unwrap().collect();
+        assert_eq!(entries.len(), 1);
+
+        // Verify files were copied with correct content
+        let backup_subdir = entries[0].as_ref().unwrap().path();
+        assert_eq!(
+            std::fs::read(backup_subdir.join("bank01.work")).unwrap(),
+            b"bank1data"
+        );
+        assert_eq!(
+            std::fs::read(backup_subdir.join("bank02.work")).unwrap(),
+            b"bank2data"
+        );
+    }
+
+    #[test]
+    fn test_backup_skips_missing_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path();
+        std::fs::write(project.join("bank01.work"), b"data").unwrap();
+
+        let files = vec![
+            "bank01.work".to_string(),
+            "bank99.work".to_string(), // does not exist
+        ];
+        let result = backup_project_files_impl(
+            project.to_str().unwrap(),
+            &files,
+            "test",
+        );
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "1 file(s) backed up");
+    }
+
+    #[test]
+    fn test_backup_no_existing_files_skips_directory_creation() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path();
+
+        let files = vec!["nonexistent.work".to_string()];
+        let result = backup_project_files_impl(
+            project.to_str().unwrap(),
+            &files,
+            "test",
+        );
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "No files to back up");
+        assert!(!project.join("backups").exists());
+    }
+
+    #[test]
+    fn test_backup_invalid_project_path() {
+        let result = backup_project_files_impl(
+            "/nonexistent/path/to/project",
+            &["bank01.work".to_string()],
+            "test",
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("does not exist"));
+    }
+
+    #[test]
+    fn test_backup_preserves_subdirectory_structure() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path();
+        std::fs::create_dir_all(project.join("AUDIO")).unwrap();
+        std::fs::write(project.join("AUDIO/sample.wav"), b"wavdata").unwrap();
+
+        let files = vec!["AUDIO/sample.wav".to_string()];
+        let result = backup_project_files_impl(
+            project.to_str().unwrap(),
+            &files,
+            "copy_sample_slots",
+        );
+        assert!(result.is_ok());
+
+        let backups_dir = project.join("backups");
+        let entries: Vec<_> = std::fs::read_dir(&backups_dir).unwrap().collect();
+        let backup_subdir = entries[0].as_ref().unwrap().path();
+        assert_eq!(
+            std::fs::read(backup_subdir.join("AUDIO/sample.wav")).unwrap(),
+            b"wavdata"
+        );
+    }
+
+    #[test]
+    fn test_backup_directory_name_contains_label() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path();
+        std::fs::write(project.join("bank01.work"), b"data").unwrap();
+
+        let files = vec!["bank01.work".to_string()];
+        let _ = backup_project_files_impl(
+            project.to_str().unwrap(),
+            &files,
+            "edit_mode",
+        );
+
+        let backups_dir = project.join("backups");
+        let entries: Vec<_> = std::fs::read_dir(&backups_dir).unwrap().collect();
+        let dir_name = entries[0].as_ref().unwrap().file_name();
+        let dir_name_str = dir_name.to_str().unwrap();
+        assert!(
+            dir_name_str.ends_with("_edit_mode"),
+            "Backup dir name '{}' should end with '_edit_mode'",
+            dir_name_str
         );
     }
 }

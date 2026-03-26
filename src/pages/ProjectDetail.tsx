@@ -360,7 +360,22 @@ export function ProjectDetail() {
           <h1 ref={titleRef} className={isTitleTruncated ? 'truncated' : ''} title={projectPath || ''}>{projectName}</h1>
           {/* View/Edit mode toggle - hidden during loading */}
           {!isLoading && (
-            <div className="mode-toggle" onClick={() => setIsEditMode(!isEditMode)}>
+            <div className="mode-toggle" onClick={async () => {
+              if (!isEditMode && projectPath) {
+                // Back up current bank file before entering edit mode
+                const bankFile = `bank${String(selectedBankIndex + 1).padStart(2, '0')}.work`;
+                try {
+                  await invoke("backup_project_files", {
+                    projectPath,
+                    files: [bankFile],
+                    label: "edit_mode",
+                  });
+                } catch (err) {
+                  console.error("Backup failed:", err);
+                }
+              }
+              setIsEditMode(!isEditMode);
+            }}>
               <span className={`mode-toggle-btn ${!isEditMode ? 'active' : ''}`}>
                 View
               </span>

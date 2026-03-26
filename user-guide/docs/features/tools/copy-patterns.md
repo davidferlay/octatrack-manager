@@ -48,4 +48,4 @@ Visible when **All Tracks** is selected. Controls which track types are copied:
 ## Important Notes
 
 - **Destructive Operation:** Copying a pattern replaces existing sequences at the destination.
-- **Backup Recommended:** Changes are written directly to binary project files.
+- **Automatic Backup:** The app automatically backs up the destination bank file before executing. See [Tools Overview](./index.md) for details.

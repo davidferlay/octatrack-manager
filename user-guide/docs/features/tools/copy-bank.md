@@ -28,5 +28,5 @@ sidebar_position: 2
 ## Important Notes
 
 - **Destructive Operation:** Copying a bank replaces all existing data at the destination.
-- **Backup Recommended:** Changes are written directly to binary project files.
+- **Automatic Backup:** The app automatically backs up destination bank files before executing. See [Tools Overview](./index.md) for details.
 - **Sample Slots:** This tool copies slot **references** only. It does not move the underlying audio files. Use [Copy Sample Slots](./copy-sample-slots.md) to transfer audio files.
