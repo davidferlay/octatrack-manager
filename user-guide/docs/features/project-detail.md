@@ -55,8 +55,8 @@ The **Patterns** tab provides a visual representation of your sequencer data. Yo
 ### Flex & Static Slots
 The **Flex** and **Static** tabs list all 256 sample slots in your project. You can filter slots by name, check which slots are empty, and see the exact file path for every sample. See [Sample Slots](./sample-slots.md) for details.
 
-### Tools (Coming Soon)
-The **Tools** tab is intended to provide bulk operations for copying content between projects. **Note: These features are currently under development.** See the [Tools Overview](./tools/index.md) for the latest status.
+### Tools
+The **Tools** tab provides bulk operations for copying content between projects — banks, parts, patterns, tracks, and sample slots. See the [Tools Overview](./tools/index.md) for details on each operation.
 
 ---
 

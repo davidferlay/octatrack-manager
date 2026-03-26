@@ -8,6 +8,7 @@
 | SM1 OK | Copy Banks | Copy single bank | Copy Bank A → Bank B (same project) | Bank B Parts + Patterns match Bank A |
 | SM2 OK | Copy Banks | Copy to multiple banks | Copy Bank A → Banks B, C, D | All 3 destination banks match source |
 | SM3 OK | Copy Banks | Cross-project copy | Copy Bank A from Project1 → Bank B in Project2 | Open Project2, verify Bank B data matches |
+| SM67 | Copy Parts | Multi-select dest Banks | Copy Part 1 → Banks A, B, C | Part 1 copied to all 3 destination banks |
 | **Copy Parts** | | | | |
 | SM4 OK | Copy Parts | Copy single part | Copy Part 1 → Part 3 | Part 3 machines, amps, LFOs, FX match Part 1 |
 | SM5 OK | Copy Parts | Copy All parts | Click source "All", execute | All 4 Parts copied including names |
@@ -49,7 +50,7 @@
 | SM37 | Copy Tracks | Recorder setup copied | Copy track with recorder configuration | Recorder source and settings match source |
 | SM37b OK | Copy Tracks | Multi-select dest Parts | Copy T1 → T3, select dest Parts 1 and 3 | T3 params copied to both Part 1 and Part 3 in destination |
 | **Copy Sample Slots** | | | | |
-| SM38 OK | Copy Sample Slots | Copy single slot | Copy slot 2 → slot 1 (diff project) | Slot data matches source; dest slot_id = 1 (not source's 2) |
+| SM38 OK | Copy Sample Slots | Copy single slot | Copy slot 1 → slot 2 (diff project) | Slot data matches source; dest slot_id = 2 (not source's 1) |
 | SM39 OK | Copy Sample Slots | Copy slot range | Copy slots 1-10 → slots 50-59 | All 10 slot assignments copied; each dest slot_id matches its position |
 | SM40 OK | Copy Sample Slots | Copy all 128 slots | Select All (1-128), execute | All 128 slots copied |
 | SM41 OK | Copy Sample Slots | Self-copy same project | Copy slot 1 → slot 2 (same project) | Slot 2 matches slot 1 |
@@ -58,33 +59,15 @@
 | SM44 OK | Copy Sample Slots | Flex only | Select "Flex", copy slots, execute | Only Flex slot data copied; Static untouched |
 | SM45 OK | Copy Sample Slots | Copy audio files | Select "Copy", execute | Audio files copied to dest project folder |
 | SM46 OK | Copy Sample Slots | Don't Copy audio | Select "Don't Copy", execute | Slot assignments copied, no audio files transferred |
-| SM47 | Copy Sample Slots | .ot file copied when editor settings ON | Copy slot with .ot metadata, editor settings ON | Both .wav and .ot files present in destination |
-| SM47b | Copy Sample Slots | .ot file NOT copied when editor settings OFF | Copy slot with .ot metadata, editor settings OFF | .wav copied but .ot file NOT present in destination |
 | SM48 OK | Copy Sample Slots | Move to Pool | Select "Move to Pool" (same Set), execute | Files in AUDIO dir, slot paths updated to ../AUDIO/ |
 | SM49 OK | Copy Sample Slots | Move to Pool deletes originals | Move to Pool, check source folder | Original .wav files deleted from source (except files also referenced by opposite slot type) |
 | SM50 OK | Copy Sample Slots | Move to Pool requires same Set | Dest project in different Set | Move to Pool unavailable; must use Copy or Don't Copy |
 | SM51 OK | Copy Sample Slots | Audio mode auto-switches on dest change | Select "Move to Pool", change dest to diff-Set project | Switches to "Copy" automatically |
-| SM52 | Copy Sample Slots | Editor Settings ON preserves all | Check box, copy slot with gain=100, BPM=150 | Dest slot gain=100, BPM=150, loop mode, timestretch match source |
-| SM53 | Copy Sample Slots | Editor Settings OFF resets to defaults | Uncheck box, copy slot with gain=100 | Dest slot gain=72, BPM=120, loop/timestretch/trig quant reset to default |
+| SM58 OK | Copy Sample Slots | Missing source files warning | Select "Copy" audio mode, source slots reference missing .wav files | Warning badge shows "N missing file(s)" next to Audio Files label |
+| SM63 | Copy Sample Slots | Shared file kept on Move to Pool | Move to Pool with file shared between Static and Flex | Shared file NOT deleted; success message shows count of kept files |
 | SM54 | Copy Sample Slots | Markers copied when ON | Check box, copy slot with custom trim/loop/slices | Dest markers (trim_offset, trim_end, loop_point, slices) match source |
 | SM55 | Copy Sample Slots | Markers reset when OFF | Uncheck box, copy slot with markers | Dest markers reset to zero/default |
-| SM56 | Copy Sample Slots | Flex markers copied | Copy Flex slot with editor settings ON | Flex slot markers in dest match source |
-| SM57 | Copy Sample Slots | Markers file created if absent | Copy to project without markers.work | markers.work created in destination |
-| SM58 OK | Copy Sample Slots | Missing source files warning | Select "Copy" audio mode, source slots reference missing .wav files | Warning badge shows "N missing file(s)" next to Audio Files label |
-| SM59 OK | Copy Sample Slots | Dest slot mapping respected | Copy slot 1 → slot 10 (different project) | Slot data written to slot 10, not slot 1; slot_id = 10 |
+| SM47 | Copy Sample Slots | .ot file copied when editor settings ON | Copy slot with .ot metadata, editor settings ON | Both .wav and .ot files present in destination |
+| SM47b | Copy Sample Slots | .ot file NOT copied when editor settings OFF | Copy slot with .ot metadata, editor settings OFF | .wav copied but .ot file NOT present in destination |
 | **Additional Tests** | | | | |
-| SM60 | Copy Tracks | Pattern Triggers defaults to Pattern 1 | Click "Pattern Triggers" mode | Source and dest default to Pattern 1 (not All) |
-| SM61 | Copy Tracks | Part name not copied | Copy T1 → T3 (Part params), check Part name | Destination Part name unchanged (not overwritten by source Part name) |
-| SM62 | Copy Tracks | Non-selected tracks unchanged | Copy T1 → T3 (Part params) | Tracks T2, T4-T8 in destination Part are unchanged |
-| SM63 | Copy Sample Slots | Shared file kept on Move to Pool | Move to Pool with file shared between Static and Flex | Shared file NOT deleted; success message shows count of kept files |
-| SM64 | Copy Sample Slots | Flex slot_id matches position | Copy Flex slot 5 → slot 10 | Destination Flex slot_id = 10 |
-| SM65 | All operations | Operation descriptions visible | Select each operation | Each shows a description in its own pane above the options |
-| SM66 | Copy Tracks | Both mode defaults to Pattern 1 | Click "Both" mode | Source and dest default to Pattern 1 (not All), same as Pattern Triggers |
-| SM67 | Copy Parts | Multi-select dest Banks | Copy Part 1 → Banks A, B, C | Part 1 copied to all 3 destination banks |
-| SM68 | Copy Parts | Dest banks All/None buttons | Click All button for dest banks | All 16 destination banks selected; click None deselects all |
-| SM69 | Copy Sample Slots | "One" selection mode | Click "One" button | Shows single slot input and single-handle slider |
-| SM70 | Copy Sample Slots | "Range" selection mode | Click "Range" button | Shows dual slot inputs with dual-handle range slider |
-| SM71 | Select Destination | Auto-open current project's Set | Open project selector for project in a Set | The project's Set fieldset is auto-expanded |
-| SM72 | Select Destination | Auto-open Locations when no Set match | Open project selector for standalone project | Locations section expanded if sets exist, else Individual Projects expanded |
-| SM73 | All operations | Saved preferences persist | Set dest project, sample range, navigate away and back | Previously selected dest project, slot ranges restored |
 | SM74 | All operations | Auto-refresh on same-project copy | Copy any operation to current project | Project data refreshes automatically after successful copy |

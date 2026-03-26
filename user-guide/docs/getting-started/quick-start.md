@@ -44,7 +44,7 @@ At the top of the project view, you can switch between several specialized views
 - **Parts:** Manage the 4 sound snapshots (kits) for each bank.
 - **Patterns:** Visualize your sequences and triggers in detail.
 - **Flex / Static:** Browse and filter the 256 sample slots.
-- **Tools (Coming Soon):** Access bulk copy operations between projects (Work in Progress).
+- **Tools:** Access bulk copy operations between projects.
 
 ## 4. Edit a Part
 
@@ -68,6 +68,28 @@ In the **Audio Pool** view, you can move samples from your computer into your Se
 4. Octatrack Manager will automatically convert them to the correct WAV format and resample them to 44.1 kHz if necessary.
 
 ![Audio Pool conversion](/img/screenshots/audio-pool-conversion.png)
+
+## 6. Copy Content Between Projects
+
+The **Tools** tab lets you copy content between banks and projects without touching the hardware. Select an operation from the dropdown, configure source, options, and destination, then execute.
+
+### Available Operations
+
+- **[Copy Banks](../features/tools/copy-bank.md):** Duplicate an entire bank (all 4 Parts + 16 Patterns) to one or more destination banks.
+- **[Copy Parts](../features/tools/copy-parts.md):** Transfer Part sound design (machines, amps, LFOs, FX) between parts and banks.
+- **[Copy Patterns](../features/tools/copy-patterns.md):** Copy patterns with configurable Part assignment and track scope.
+- **[Copy Tracks](../features/tools/copy-tracks.md):** Copy individual track data — sound design, pattern triggers, or both.
+- **[Copy Sample Slots](../features/tools/copy-sample-slots.md):** Copy sample slot assignments with optional audio file transfer and Audio Pool management.
+
+All operations work within the same project or across different projects. The destination project can be selected from your scanned locations or browsed manually.
+
+![Tools - Copy](/img/screenshots/tools-copy-bank.png)
+
+:::tip
+Your tool settings (selected operation, destination project, slot ranges, etc.) are remembered for each project during your session — you can switch tabs and come back without losing your configuration.
+:::
+
+---
 
 ## Tips for Success
 

@@ -14,7 +14,7 @@ Whether you are preparing for a live set, organizing years of studio work, or de
 
 The Octatrack is a deep and powerful machine, but its small screen can make certain tasks tedious. Octatrack Manager bridges this gap by bringing your projects to your computer, allowing you to:
 
-- **Save Time:** Perform bulk operations like copying banks or parts between projects (work in progress).
+- **Save Time:** Perform bulk operations like copying banks, parts, patterns, tracks, and sample slots between projects.
 - **Visualize Your Projects:** See your patterns, triggers, and parameter locks clearly on a large screen.
 - **Organize Your Library:** Manage your sample library with automatic format conversion and high-quality resampling.
 - **Design Sounds Comfortably:** Edit machine parameters, effects, and LFOs with a dedicated interface, including a custom LFO designer.
@@ -26,7 +26,7 @@ The Octatrack is a deep and powerful machine, but its small screen can make cert
 - **In-Depth Inspection:** View mixer settings, MIDI configuration, memory allocation, and metronome settings for any project.
 - **Pattern Visualization:** Explore every step of your sequences, including micro-timing, trig conditions, and chord information for MIDI tracks.
 - **Audio Pool Management:** Browse your samples with detailed metadata (channels, bit depth, sample rate) and transfer files with automatic WAV conversion.
-- **Cross-Project Copying (WIP):** Move banks, parts, patterns, tracks, and sample slots between projects (coming soon).
+- **Cross-Project Copying:** Copy banks, parts, patterns, tracks, and sample slots between projects, with configurable options for each operation.
 - **Parts Editing:** Modify sound design snapshots for both audio and MIDI tracks, with full support for machine parameters and effects.
 
 ## Essential Concepts
