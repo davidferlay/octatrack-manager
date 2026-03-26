@@ -344,24 +344,9 @@ h1 {
   margin-bottom: 0.6rem;
 }
 
-.set-card::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background-color: transparent;
-  transition: background-color 0.15s ease;
-}
-
 .set-card:hover {
   border-color: var(--elektron-orange);
   background-color: #252525;
-}
-
-.set-card:hover::before {
-  background-color: var(--elektron-orange);
 }
 
 .set-header {
