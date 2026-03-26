@@ -3187,7 +3187,7 @@ h1 {
   background-color: var(--elektron-dark-gray);
   border: 1px solid var(--elektron-medium-gray);
   border-radius: 4px;
-  color: var(--elektron-text-secondary);
+  color: #cccccc;
   cursor: pointer;
   transition: all 0.15s;
   min-width: 32px;
@@ -3244,6 +3244,26 @@ h1 {
 .tools-slot-range span {
   color: var(--elektron-text-secondary);
   font-size: 0.9rem;
+}
+
+.tools-options-column {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.tools-description-pane {
+  background-color: var(--elektron-darker-gray);
+  border: 2px solid var(--elektron-dark-gray);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+}
+
+.tools-description-pane p {
+  margin: 0;
+  font-size: 1rem;
+  color: #cccccc;
+  line-height: 1.5;
 }
 
 .tools-info {
@@ -3335,7 +3355,7 @@ h1 {
   background-color: var(--elektron-dark-gray);
   border: 1px solid var(--elektron-medium-gray);
   border-radius: 4px;
-  color: var(--elektron-text-secondary);
+  color: #cccccc;
   cursor: pointer;
   transition: all 0.15s;
   text-align: center;
@@ -3815,7 +3835,7 @@ h1 {
   background-color: transparent;
   border: 1px dashed var(--elektron-medium-gray);
   border-radius: 4px;
-  color: var(--elektron-text-secondary);
+  color: #cccccc;
   cursor: pointer;
   transition: all 0.15s;
 }

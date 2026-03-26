@@ -1905,16 +1905,18 @@ test.describe('Tools Tab - Copy Tracks Pattern Selector', () => {
     await expect(patternField.locator('.tools-multi-btn.pattern-btn.tools-select-all', { hasText: 'All' })).toBeVisible()
   })
 
-  test('Source All pattern is selected by default', async ({ page }) => {
+  test('Source Pattern 1 is selected by default in Both mode', async ({ page }) => {
     const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
     await bothBtn.click()
     await page.waitForTimeout(200)
 
     const sourcePanel = page.locator('.tools-source-panel')
     const patternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
+    const pattern1 = patternField.locator('.tools-multi-btn.pattern-btn', { hasText: /^1$/ }).first()
     const allBtn = patternField.locator('.tools-multi-btn.pattern-btn.tools-select-all')
 
-    await expect(allBtn).toHaveClass(/selected/)
+    await expect(pattern1).toHaveClass(/selected/)
+    await expect(allBtn).not.toHaveClass(/selected/)
   })
 
   test('Clicking specific source pattern deselects All', async ({ page }) => {
@@ -1940,6 +1942,13 @@ test.describe('Tools Tab - Copy Tracks Pattern Selector', () => {
     await bothBtn.click()
     await page.waitForTimeout(200)
 
+    // Explicitly select All (Both mode now defaults to Pattern 1)
+    const sourcePanel = page.locator('.tools-source-panel')
+    const sourcePatternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
+    const allBtn = sourcePatternField.locator('.tools-multi-btn.pattern-btn.tools-select-all')
+    await allBtn.click()
+    await page.waitForTimeout(200)
+
     const destPanel = page.locator('.tools-dest-panel')
     const patternField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
     const destPatternContainer = patternField.locator('.tools-multi-select')
@@ -1952,13 +1961,7 @@ test.describe('Tools Tab - Copy Tracks Pattern Selector', () => {
     await bothBtn.click()
     await page.waitForTimeout(200)
 
-    // Select specific source pattern
-    const sourcePanel = page.locator('.tools-source-panel')
-    const sourcePatternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
-    const pattern1 = sourcePatternField.locator('.tools-multi-btn.pattern-btn', { hasText: /^1$/ }).first()
-    await pattern1.click()
-    await page.waitForTimeout(200)
-
+    // Both mode now defaults to Pattern 1 (specific), so dest should be enabled
     const destPanel = page.locator('.tools-dest-panel')
     const destPatternField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
     const destPatternContainer = destPatternField.locator('.tools-multi-select')
@@ -1969,6 +1972,13 @@ test.describe('Tools Tab - Copy Tracks Pattern Selector', () => {
   test('Destination pattern buttons show sync tooltip when source All is selected', async ({ page }) => {
     const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
     await bothBtn.click()
+    await page.waitForTimeout(200)
+
+    // Explicitly select All (Both mode now defaults to Pattern 1)
+    const sourcePanel = page.locator('.tools-source-panel')
+    const sourcePatternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
+    const allBtn = sourcePatternField.locator('.tools-multi-btn.pattern-btn.tools-select-all')
+    await allBtn.click()
     await page.waitForTimeout(200)
 
     const destPanel = page.locator('.tools-dest-panel')
@@ -2052,16 +2062,18 @@ test.describe('Tools Tab - Copy Tracks Destination Patterns Multi-Select', () =>
     await expect(destPattern1).toHaveClass(/selected/)
   })
 
-  test('Both mode defaults to All patterns', async ({ page }) => {
+  test('Both mode defaults to Pattern 1', async ({ page }) => {
     const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
     await bothBtn.click()
     await page.waitForTimeout(200)
 
-    // Source All should be selected
+    // Source Pattern 1 should be selected (not All)
     const sourcePanel = page.locator('.tools-source-panel')
     const sourcePatternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
+    const sourcePattern1 = sourcePatternField.locator('.tools-multi-btn.pattern-btn', { hasText: /^1$/ }).first()
     const sourceAll = sourcePatternField.locator('.tools-multi-btn.pattern-btn.tools-select-all')
-    await expect(sourceAll).toHaveClass(/selected/)
+    await expect(sourcePattern1).toHaveClass(/selected/)
+    await expect(sourceAll).not.toHaveClass(/selected/)
   })
 
   test('Destination patterns allow multi-select when source is specific pattern', async ({ page }) => {
@@ -2069,22 +2081,18 @@ test.describe('Tools Tab - Copy Tracks Destination Patterns Multi-Select', () =>
     await bothBtn.click()
     await page.waitForTimeout(200)
 
-    // Select specific source pattern
-    const sourcePanel = page.locator('.tools-source-panel')
-    const sourcePatternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
-    const sourcePattern1 = sourcePatternField.locator('.tools-multi-btn.pattern-btn', { hasText: /^1$/ }).first()
-    await sourcePattern1.click()
-    await page.waitForTimeout(200)
-
-    // Select multiple destination patterns
+    // Both mode defaults to source Pattern 1, dest Pattern 1
+    // Add more destination patterns
     const destPanel = page.locator('.tools-dest-panel')
     const destPatternField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
     const destPattern1 = destPatternField.locator('.tools-multi-btn.pattern-btn', { hasText: /^1$/ }).first()
     const destPattern2 = destPatternField.locator('.tools-multi-btn.pattern-btn', { hasText: /^2$/ }).first()
     const destPattern3 = destPatternField.locator('.tools-multi-btn.pattern-btn', { hasText: /^3$/ }).first()
 
-    await destPattern1.click()
-    await page.waitForTimeout(200)
+    // Pattern 1 already selected by default
+    await expect(destPattern1).toHaveClass(/selected/)
+
+    // Add pattern 2 and 3
     await destPattern2.click()
     await page.waitForTimeout(200)
     await destPattern3.click()
@@ -2101,22 +2109,13 @@ test.describe('Tools Tab - Copy Tracks Destination Patterns Multi-Select', () =>
     await bothBtn.click()
     await page.waitForTimeout(200)
 
-    // Select specific source pattern
-    const sourcePanel = page.locator('.tools-source-panel')
-    const sourcePatternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
-    const sourcePattern1 = sourcePatternField.locator('.tools-multi-btn.pattern-btn', { hasText: /^1$/ }).first()
-    await sourcePattern1.click()
-    await page.waitForTimeout(200)
-
+    // Both mode defaults to source Pattern 1, dest Pattern 1
     const destPanel = page.locator('.tools-dest-panel')
     const destPatternField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
     const destPattern1 = destPatternField.locator('.tools-multi-btn.pattern-btn', { hasText: /^1$/ }).first()
     const destPattern2 = destPatternField.locator('.tools-multi-btn.pattern-btn', { hasText: /^2$/ }).first()
 
-    // Click pattern 1 to switch from All to single
-    await destPattern1.click()
-    await page.waitForTimeout(200)
-    // Add pattern 2
+    // Pattern 1 already selected, add pattern 2
     await destPattern2.click()
     await page.waitForTimeout(200)
     await expect(destPattern1).toHaveClass(/selected/)
@@ -2134,13 +2133,7 @@ test.describe('Tools Tab - Copy Tracks Destination Patterns Multi-Select', () =>
     await bothBtn.click()
     await page.waitForTimeout(200)
 
-    // Select specific source pattern first
-    const sourcePanel = page.locator('.tools-source-panel')
-    const sourcePatternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
-    const sourcePattern1 = sourcePatternField.locator('.tools-multi-btn.pattern-btn', { hasText: /^1$/ }).first()
-    await sourcePattern1.click()
-    await page.waitForTimeout(200)
-
+    // Both mode defaults to source Pattern 1, so dest is enabled
     // Click dest All
     const destPanel = page.locator('.tools-dest-panel')
     const destPatternField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
@@ -2169,7 +2162,7 @@ test.describe('Tools Tab - Operation Descriptions', () => {
     await operationSelect.selectOption('copy_bank')
     await page.waitForTimeout(300)
 
-    const description = page.locator('.tools-info')
+    const description = page.locator('.tools-description-pane')
     await expect(description).toBeVisible()
     await expect(description).toContainText('Copies entire bank')
   })
@@ -2179,7 +2172,7 @@ test.describe('Tools Tab - Operation Descriptions', () => {
     await operationSelect.selectOption('copy_parts')
     await page.waitForTimeout(300)
 
-    const description = page.locator('.tools-info')
+    const description = page.locator('.tools-description-pane')
     await expect(description).toBeVisible()
     await expect(description).toContainText('Copies Part sound design')
   })
@@ -2189,7 +2182,7 @@ test.describe('Tools Tab - Operation Descriptions', () => {
     await operationSelect.selectOption('copy_patterns')
     await page.waitForTimeout(300)
 
-    const description = page.locator('.tools-info')
+    const description = page.locator('.tools-description-pane')
     await expect(description).toBeVisible()
     await expect(description).toContainText('Copies pattern step data')
   })
@@ -2199,7 +2192,7 @@ test.describe('Tools Tab - Operation Descriptions', () => {
     await operationSelect.selectOption('copy_tracks')
     await page.waitForTimeout(300)
 
-    const description = page.locator('.tools-info')
+    const description = page.locator('.tools-description-pane')
     await expect(description).toBeVisible()
     await expect(description).toContainText('Copies individual track data')
   })
@@ -2209,7 +2202,7 @@ test.describe('Tools Tab - Operation Descriptions', () => {
     await operationSelect.selectOption('copy_sample_slots')
     await page.waitForTimeout(300)
 
-    const description = page.locator('.tools-info')
+    const description = page.locator('.tools-description-pane')
     await expect(description).toBeVisible()
     await expect(description).toContainText('Copies sample slot assignments')
   })
@@ -2236,5 +2229,155 @@ test.describe('Tools Tab - Select Source Track Message', () => {
     // Title should mention track selection
     const title = await executeBtn.getAttribute('title')
     expect(title).toContain('track')
+  })
+})
+
+test.describe('Tools Tab - Copy Parts Multi-Select Destination Banks', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
+    await toolsTab.click()
+    await page.waitForTimeout(500)
+
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('copy_parts')
+    await page.waitForTimeout(300)
+  })
+
+  test('Destination Banks label is plural (multi-select)', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const banksLabel = destPanel.locator('.tools-field label', { hasText: 'Banks' })
+    await expect(banksLabel).toBeVisible()
+  })
+
+  test('Destination banks allow multiple selection', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const bankA = destPanel.locator('.tools-multi-btn.bank-btn', { hasText: /^A$/ })
+    const bankB = destPanel.locator('.tools-multi-btn.bank-btn', { hasText: /^B$/ })
+
+    // Bank A should be selected by default
+    await expect(bankA).toHaveClass(/selected/)
+
+    // Click bank B to add it
+    await bankB.click()
+    await page.waitForTimeout(200)
+
+    // Both should be selected
+    await expect(bankA).toHaveClass(/selected/)
+    await expect(bankB).toHaveClass(/selected/)
+  })
+
+  test('Destination banks has All and None buttons', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const allButton = destPanel.locator('.tools-multi-btn.tools-select-all', { hasText: 'All' })
+    const noneButton = destPanel.locator('.tools-multi-btn.tools-select-all', { hasText: 'None' })
+    await expect(allButton).toBeVisible()
+    await expect(noneButton).toBeVisible()
+  })
+
+  test('Execute disabled when no destination bank selected', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const noneButton = destPanel.locator('.tools-multi-btn.tools-select-all', { hasText: 'None' })
+    await noneButton.click()
+    await page.waitForTimeout(200)
+
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+  })
+})
+
+test.describe('Tools Tab - Copy Sample Slots One/Range Mode', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
+    await toolsTab.click()
+    await page.waitForTimeout(500)
+
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('copy_sample_slots')
+    await page.waitForTimeout(300)
+  })
+
+  test('Range button is visible and selected by default', async ({ page }) => {
+    const rangeBtn = page.locator('.tools-slot-all-btn', { hasText: 'Range' })
+    await expect(rangeBtn).toBeVisible()
+    await expect(rangeBtn).toHaveClass(/selected/)
+  })
+
+  test('One button is visible', async ({ page }) => {
+    const oneBtn = page.locator('.tools-slot-all-btn', { hasText: 'One' })
+    await expect(oneBtn).toBeVisible()
+  })
+
+  test('Clicking One shows a single-handle slider', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const oneBtn = sourcePanel.locator('.tools-slot-all-btn', { hasText: 'One' })
+    await oneBtn.click()
+    await page.waitForTimeout(200)
+
+    // Source range slider should be visible with single-range class
+    const rangeSlider = sourcePanel.locator('.tools-dual-range-slider.tools-single-range')
+    await expect(rangeSlider).toBeVisible()
+
+    // Should have exactly one range input (single handle)
+    const rangeInputs = rangeSlider.locator('.tools-dual-range-input')
+    await expect(rangeInputs).toHaveCount(1)
+
+    // One button should be selected
+    await expect(oneBtn).toHaveClass(/selected/)
+  })
+
+  test('Clicking Range shows a dual-handle slider', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+
+    // First switch to One
+    const oneBtn = sourcePanel.locator('.tools-slot-all-btn', { hasText: 'One' })
+    await oneBtn.click()
+    await page.waitForTimeout(200)
+
+    // Switch back to Range
+    const rangeBtn = sourcePanel.locator('.tools-slot-all-btn', { hasText: 'Range' })
+    await rangeBtn.click()
+    await page.waitForTimeout(200)
+
+    // Range slider should be visible without single-range class
+    const rangeSlider = sourcePanel.locator('.tools-dual-range-slider').first()
+    await expect(rangeSlider).toBeVisible()
+    await expect(rangeSlider).not.toHaveClass(/tools-single-range/)
+
+    // Should have two range inputs (dual handles)
+    const rangeInputs = rangeSlider.locator('.tools-dual-range-input')
+    await expect(rangeInputs).toHaveCount(2)
+
+    await expect(rangeBtn).toHaveClass(/selected/)
+  })
+
+  test('One mode shows single slot input', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    const oneBtn = sourcePanel.locator('.tools-slot-all-btn', { hasText: 'One' })
+    await oneBtn.click()
+    await page.waitForTimeout(200)
+
+    // Should have exactly one input in the source range display
+    const inputs = sourcePanel.locator('.tools-slot-range-display .tools-slot-value-input')
+    await expect(inputs).toHaveCount(1)
+
+    // Separator should not be visible
+    const separator = sourcePanel.locator('.tools-slot-separator')
+    await expect(separator).not.toBeVisible()
+  })
+
+  test('Range mode shows two slot inputs with separator', async ({ page }) => {
+    const sourcePanel = page.locator('.tools-source-panel')
+    // Range is default
+    const inputs = sourcePanel.locator('.tools-slot-range-display .tools-slot-value-input')
+    await expect(inputs).toHaveCount(2)
+
+    const separator = sourcePanel.locator('.tools-slot-separator')
+    await expect(separator).toBeVisible()
   })
 })

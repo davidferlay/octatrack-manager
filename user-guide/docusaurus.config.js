@@ -116,7 +116,7 @@ const config = {
           },
           {
             href: 'https://github.com/davidferlay/octatrack-manager/releases/latest',
-            label: 'Download',
+            label: 'App',
             position: 'right',
           },
         ],

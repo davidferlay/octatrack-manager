@@ -19,7 +19,7 @@ sidebar_position: 5
 
 ## Copy Modes
 
-- **Part Parameters:** Copies per-track sound design data (machine type, amp, LFO, FX, volumes, recorder setup) for both saved and unsaved Part state. The destination Part's edited bitmask is updated. Part names are **not** copied, since only selected tracks are modified — the destination Part becomes a hybrid of source and existing data.
+- **Part Parameters:** Copies per-track sound design data (machine type, amp, LFO, FX, volumes, recorder setup). Both saved and unsaved (working) Part states are transferred, but only for the selected tracks — all other tracks' data in both states is completely preserved. The destination Part becomes a hybrid gracefully: selected tracks get source data in both states, while non-selected tracks keep their existing saved and unsaved data untouched. The destination Part's edited bitmask is updated. Part names are **not** copied, since only selected tracks are modified.
 - **Pattern Triggers:** Copies only the sequencer data (triggers, trigless trigs, parameter locks, swing) for the selected tracks. Sound design settings remain unchanged. Defaults to Pattern 1 (not All patterns).
 - **Both:** Copies both sound design settings and sequencer data for a complete transfer.
 
@@ -35,7 +35,7 @@ sidebar_position: 5
 
 When using **Both** or **Pattern Triggers** mode, you can select which patterns to copy:
 
-- **All patterns (default for Both mode):** Copies triggers for all 16 patterns 1-to-1.
+- **Pattern 1 (default):** Both "Both" and "Pattern Triggers" modes default to Pattern 1 as source and destination.
 - **Specific source pattern → multiple destinations:** A single source pattern can be copied to one or more destination patterns.
 
 ---
