@@ -91,6 +91,32 @@ export function HomePage() {
       setHasScanned(true);
       // Open all locations by default
       setOpenLocations(new Set(sortedLocations.map((_, idx) => idx)));
+
+      // Auto-open first set that has projects
+      let foundFirstSet = false;
+      for (let locIdx = 0; locIdx < sortedLocations.length; locIdx++) {
+        const loc = sortedLocations[locIdx];
+        const sortedSets = [...loc.sets].sort((a, b) => {
+          const aIsPresets = a.name.toLowerCase() === 'presets';
+          const bIsPresets = b.name.toLowerCase() === 'presets';
+          if (aIsPresets && !bIsPresets) return 1;
+          if (!aIsPresets && bIsPresets) return -1;
+          return 0;
+        });
+        for (const set of sortedSets) {
+          if (set.projects.length > 0) {
+            setOpenSets(new Set([`${locIdx}-${set.name}`]));
+            foundFirstSet = true;
+            break;
+          }
+        }
+        if (foundFirstSet) break;
+      }
+
+      // If no set with projects found, open Individual Projects if any exist
+      if (!foundFirstSet && sortedStandaloneProjects.length > 0) {
+        setIsIndividualProjectsOpen(true);
+      }
     } catch (error) {
       console.error("Error scanning devices:", error);
     } finally {
