@@ -11,7 +11,7 @@ sidebar_position: 3
 ## Workflow
 
 1. **Source:** Choose the source bank (A–P) and part (1–4, or All for 1-to-1 copy).
-2. **Destination:** Choose the target project, bank, and one or more destination parts.
+2. **Destination:** Choose the target project, one or more destination banks (A–P), and one or more destination parts.
 3. **Execute:** Perform the part copy.
 
 ---

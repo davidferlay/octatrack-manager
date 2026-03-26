@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "Octatrack Manager",
-        "width": 1440,
-        "height": 900,
+        "width": 1300,
+        "height": 830,
         "dragDropEnabled": true
       }
     ],

@@ -4337,7 +4337,9 @@ pub fn copy_sample_slots(
                                         let _ = std::fs::create_dir_all(parent);
                                     }
                                     let _ = std::fs::copy(&src_full_path, &dest_full_path);
-                                    copy_ot_file(&src_full_path, &dest_full_path);
+                                    if include_editor_settings {
+                                        copy_ot_file(&src_full_path, &dest_full_path);
+                                    }
                                     println!("[DEBUG] Copied audio file: {}", sample_path_str);
                                 } else {
                                     eprintln!("[WARN] Source audio file not found: {:?} (resolved from '{}')", src_full_path, sample_path_str);
@@ -4367,7 +4369,7 @@ pub fn copy_sample_slots(
                                             }
                                         }
 
-                                        // Move .ot file too
+                                        // Always move .ot file alongside audio (it's a relocation)
                                         let ot_src = src_full_path.with_extension("ot");
                                         if ot_src.exists() {
                                             let ot_dest = pool_dest.with_extension("ot");
@@ -4452,7 +4454,9 @@ pub fn copy_sample_slots(
                                         let _ = std::fs::create_dir_all(parent);
                                     }
                                     let _ = std::fs::copy(&src_full_path, &dest_full_path);
-                                    copy_ot_file(&src_full_path, &dest_full_path);
+                                    if include_editor_settings {
+                                        copy_ot_file(&src_full_path, &dest_full_path);
+                                    }
                                     println!("[DEBUG] Copied audio file: {}", sample_path_str);
                                 } else {
                                     eprintln!("[WARN] Source audio file not found: {:?} (resolved from '{}')", src_full_path, sample_path_str);
@@ -4481,7 +4485,7 @@ pub fn copy_sample_slots(
                                             }
                                         }
 
-                                        // Move .ot file too
+                                        // Always move .ot file alongside audio (it's a relocation)
                                         let ot_src = src_full_path.with_extension("ot");
                                         if ot_src.exists() {
                                             let ot_dest = pool_dest.with_extension("ot");
@@ -8223,7 +8227,58 @@ mod tests {
             assert!(dest_audio.exists(), "Audio file should be copied");
             assert!(
                 dest_ot.exists(),
-                ".ot file should be copied alongside audio"
+                ".ot file should be copied alongside audio when editor settings ON"
+            );
+        }
+
+        #[test]
+        fn test_copy_slots_audio_copy_without_ot_when_editor_settings_off() {
+            // CSS-OT-02: .ot metadata file is NOT copied when include_editor_settings is false
+            let source = TestProject::new();
+
+            // Create source audio file and .ot file
+            let audio_dir = Path::new(&source.path).join("AUDIO");
+            fs::create_dir_all(&audio_dir).unwrap();
+            fs::write(audio_dir.join("test.wav"), b"fake wav data").unwrap();
+            fs::write(audio_dir.join("test.ot"), b"fake ot data").unwrap();
+
+            // Set up source project with a slot pointing to that file
+            let project_path = Path::new(&source.path).join("project.work");
+            let mut pf = ProjectFile::from_data_file(&project_path).unwrap();
+            let slot = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Static,
+                1,
+                Some(std::path::PathBuf::from("AUDIO/test.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            pf.slots.static_slots[0] = Some(slot);
+            pf.to_data_file(&project_path).unwrap();
+
+            let dest = TestProject::new();
+
+            copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "static",
+                vec![1],
+                vec![1],
+                "copy",
+                false, // editor settings OFF
+            )
+            .unwrap();
+
+            // Audio file should be copied, but .ot file should NOT
+            let dest_audio = Path::new(&dest.path).join("AUDIO/test.wav");
+            let dest_ot = Path::new(&dest.path).join("AUDIO/test.ot");
+            assert!(dest_audio.exists(), "Audio file should be copied");
+            assert!(
+                !dest_ot.exists(),
+                ".ot file should NOT be copied when editor settings are off"
             );
         }
 

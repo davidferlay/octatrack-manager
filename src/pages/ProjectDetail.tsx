@@ -1020,7 +1020,8 @@ export function ProjectDetail() {
                                 (() => {
                                   const partName = bank.parts[pattern.part_assignment]?.name;
                                   const partNum = pattern.part_assignment + 1;
-                                  return partName ? `Part ${partNum}: ${partName}` : `Part ${partNum}`;
+                                  const label = partName ? `Part ${partNum}: ${partName}` : `Part ${partNum}`;
+                                  return `This pattern uses ${label}`;
                                 })()
                               }>→ Part {pattern.part_assignment + 1}</span>
                               <TrackBadge trackId={trackData.track_id} />
@@ -1392,6 +1393,7 @@ export function ProjectDetail() {
                 banks={banks}
                 loadedBankIndices={loadedBankIndices}
                 onBankUpdated={reloadBank}
+                onProjectRefresh={loadProjectData}
               />
             )}
 
