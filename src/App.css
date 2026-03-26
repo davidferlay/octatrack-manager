@@ -1029,7 +1029,7 @@ h1 {
 .bank-card {
   background-color: var(--elektron-dark-gray);
   border: 1px solid var(--elektron-border-gray);
-  border-left: 3px solid var(--elektron-orange);
+  border-left: 1px solid var(--elektron-orange);
   padding: 1rem;
   margin-bottom: 1rem;
 }
@@ -1099,7 +1099,7 @@ h1 {
 .pattern-card {
   background-color: var(--elektron-black);
   border: 1px solid var(--elektron-border-gray);
-  border-left: 3px solid var(--elektron-orange);
+  border-left: 1px solid var(--elektron-orange);
   padding: 1rem;
   margin-bottom: 0.5rem;
   display: flex;
@@ -1599,7 +1599,7 @@ h1 {
 .overview-section {
   background: linear-gradient(145deg, var(--elektron-dark-gray) 0%, #151515 100%);
   border: 1px solid var(--elektron-border-gray);
-  border-left: 4px solid var(--elektron-orange);
+  border-left: 1px solid var(--elektron-orange);
   border-radius: 2px;
   padding: 0.4rem 1rem;
   box-shadow: none;
