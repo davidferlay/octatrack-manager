@@ -217,7 +217,12 @@ h1 {
   font-size: 0.75rem;
   color: var(--elektron-orange);
   transition: transform 0.2s ease;
-  min-width: 1rem;
+  display: inline-block;
+  width: 0.85rem;
+  text-align: center;
+  margin-right: 0.35rem;
+  position: relative;
+  top: -0.1rem;
 }
 
 .location-header h3 {
