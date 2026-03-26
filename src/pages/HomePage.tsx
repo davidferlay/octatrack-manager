@@ -55,6 +55,7 @@ export function HomePage() {
   } = useProjects();
   const [isScanning, setIsScanning] = useState(false);
   const [isSpinning, setIsSpinning] = useState(false);
+  const [openSets, setOpenSets] = useState<Set<string>>(() => new Set());
   const navigate = useNavigate();
   const [, startTransition] = useTransition();
 
@@ -316,10 +317,29 @@ export function HomePage() {
                                 if (aIsPresets && !bIsPresets) return 1;
                                 if (!aIsPresets && bIsPresets) return -1;
                                 return 0;
-                              }).map((set, setIdx) => (
+                              }).map((set, setIdx) => {
+                                const setKey = `${locIdx}-${set.name}`;
+                                const isSetOpen = openSets.has(setKey);
+                                return (
                                 <div key={setIdx} className="set-card" title={set.path}>
-                                  <div className="set-header">
-                                    <div className="set-name">{set.name}</div>
+                                  <div
+                                    className="set-header clickable"
+                                    onClick={() => {
+                                      setOpenSets(prev => {
+                                        const next = new Set(prev);
+                                        if (next.has(setKey)) {
+                                          next.delete(setKey);
+                                        } else {
+                                          next.add(setKey);
+                                        }
+                                        return next;
+                                      });
+                                    }}
+                                  >
+                                    <div className="set-name">
+                                      <span className="collapse-indicator">{isSetOpen ? '▼' : '▶'}</span>
+                                      {set.name}
+                                    </div>
                                     <div className="set-info">
                                       <span
                                         className={set.has_audio_pool ? "status-audio-pool" : "status-audio-pool-empty"}
@@ -334,47 +354,52 @@ export function HomePage() {
                                   </div>
 
                                   {set.projects.length > 0 && (
-                                    <div className="projects-grid">
-                                      <div
-                                        className={`audio-pool-card ${!set.has_audio_pool ? 'audio-pool-empty' : ''}`}
-                                        onClick={() => {
-                                          startTransition(() => {
-                                            navigate(`/audio-pool?path=${encodeURIComponent(set.path + '/AUDIO')}&name=${encodeURIComponent(set.name)}`);
-                                          });
-                                        }}
-                                        title={set.has_audio_pool ? "Audio Pool - Click to view samples" : "Audio Pool - No samples found"}
-                                      >
-                                        <div className="audio-pool-name">Audio Pool</div>
-                                        <div className="audio-pool-info">
-                                          <span>{set.has_audio_pool ? "SAMPLES" : "NO SAMPLE"}</span>
+                                    <div className={`sets-section ${isSetOpen ? 'open' : 'closed'}`}>
+                                      <div className="sets-section-content">
+                                        <div className="projects-grid">
+                                          <div
+                                            className={`audio-pool-card ${!set.has_audio_pool ? 'audio-pool-empty' : ''}`}
+                                            onClick={() => {
+                                              startTransition(() => {
+                                                navigate(`/audio-pool?path=${encodeURIComponent(set.path + '/AUDIO')}&name=${encodeURIComponent(set.name)}`);
+                                              });
+                                            }}
+                                            title={set.has_audio_pool ? "Audio Pool - Click to view samples" : "Audio Pool - No samples found"}
+                                          >
+                                            <div className="audio-pool-name">Audio Pool</div>
+                                            <div className="audio-pool-info">
+                                              <span>{set.has_audio_pool ? "SAMPLES" : "NO SAMPLE"}</span>
+                                            </div>
+                                          </div>
+                                          {[...set.projects].sort((a, b) => naturalCompare(a.name, b.name)).map((project, projIdx) => (
+                                            <div
+                                              key={projIdx}
+                                              className="project-card clickable-project"
+                                              onClick={() => {
+                                                startTransition(() => {
+                                                  navigate(`/project?path=${encodeURIComponent(project.path)}&name=${encodeURIComponent(project.name)}`);
+                                                });
+                                              }}
+                                              title="Click to view project details"
+                                            >
+                                              <div className="project-name">{project.name}</div>
+                                              <div className="project-info">
+                                                <span className={project.has_project_file ? "status-yes" : "status-no"}>
+                                                  {project.has_project_file ? "✓ Project" : "✗ Project"}
+                                                </span>
+                                                <span className={project.has_banks ? "status-yes" : "status-no"}>
+                                                  {project.has_banks ? "✓ Banks" : "✗ Banks"}
+                                                </span>
+                                              </div>
+                                            </div>
+                                          ))}
                                         </div>
                                       </div>
-                                      {[...set.projects].sort((a, b) => naturalCompare(a.name, b.name)).map((project, projIdx) => (
-                                        <div
-                                          key={projIdx}
-                                          className="project-card clickable-project"
-                                          onClick={() => {
-                                            startTransition(() => {
-                                              navigate(`/project?path=${encodeURIComponent(project.path)}&name=${encodeURIComponent(project.name)}`);
-                                            });
-                                          }}
-                                          title="Click to view project details"
-                                        >
-                                          <div className="project-name">{project.name}</div>
-                                          <div className="project-info">
-                                            <span className={project.has_project_file ? "status-yes" : "status-no"}>
-                                              {project.has_project_file ? "✓ Project" : "✗ Project"}
-                                            </span>
-                                            <span className={project.has_banks ? "status-yes" : "status-no"}>
-                                              {project.has_banks ? "✓ Banks" : "✗ Banks"}
-                                            </span>
-                                          </div>
-                                        </div>
-                                      ))}
                                     </div>
                                   )}
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
                         )}
