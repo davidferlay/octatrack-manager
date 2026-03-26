@@ -297,9 +297,9 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
     await expect(slotTypeButtons).toHaveCount(3)
   })
 
-  test('Static + Flex is selected by default', async ({ page }) => {
-    const staticFlexBtn = page.locator('.tools-toggle-btn', { hasText: 'Static + Flex' })
-    await expect(staticFlexBtn).toHaveClass(/selected/)
+  test('Flex is selected by default', async ({ page }) => {
+    const flexBtn = page.locator('.tools-toggle-btn').filter({ hasText: /^Flex$/ })
+    await expect(flexBtn).toHaveClass(/selected/)
   })
 
   test('clicking Slot Type button changes selection', async ({ page }) => {
