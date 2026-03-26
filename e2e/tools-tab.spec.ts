@@ -151,6 +151,15 @@ async function setupTauriMocks(page: Page) {
           case 'get_system_resources':
             return { cpu_cores: 4, available_memory_mb: 8000, recommended_concurrency: 4 }
 
+          case 'check_missing_source_files':
+            return 0
+
+          case 'get_slot_audio_paths':
+            return []
+
+          case 'backup_project_files':
+            return '0 file(s) backed up'
+
           case 'plugin:app|version':
             return '1.0.0'
 
@@ -337,6 +346,26 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
 
     const checkbox = page.locator('.tools-checkbox input[type="checkbox"]')
     await expect(checkbox).toBeChecked()
+  })
+
+  test('Include Editor Settings checkbox is disabled when Move to Pool is selected', async ({ page }) => {
+    const moveToPoolBtn = page.locator('.tools-toggle-btn', { hasText: 'Move to Pool' })
+    await moveToPoolBtn.click()
+    await page.waitForTimeout(200)
+
+    const checkbox = page.locator('.tools-checkbox input[type="checkbox"]')
+    await expect(checkbox).toBeDisabled()
+    await expect(checkbox).toBeChecked()
+  })
+
+  test('Include Editor Settings checkbox is enabled when Copy is selected', async ({ page }) => {
+    // First switch to Copy mode
+    const copyBtn = page.locator('.tools-toggle-btn').filter({ hasText: /^Copy$/ })
+    await copyBtn.click()
+    await page.waitForTimeout(200)
+
+    const checkbox = page.locator('.tools-checkbox input[type="checkbox"]')
+    await expect(checkbox).toBeEnabled()
   })
 })
 
@@ -2205,6 +2234,42 @@ test.describe('Tools Tab - Operation Descriptions', () => {
     const description = page.locator('.tools-description-pane')
     await expect(description).toBeVisible()
     await expect(description).toContainText('Copies sample slot assignments')
+  })
+
+  test('Copy Banks hides OPTIONS pane', async ({ page }) => {
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('copy_bank')
+    await page.waitForTimeout(300)
+
+    const optionsPanel = page.locator('.tools-options-panel')
+    await expect(optionsPanel).toHaveCount(0)
+  })
+
+  test('Copy Parts hides OPTIONS pane', async ({ page }) => {
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('copy_parts')
+    await page.waitForTimeout(300)
+
+    const optionsPanel = page.locator('.tools-options-panel')
+    await expect(optionsPanel).toHaveCount(0)
+  })
+
+  test('Copy Patterns shows OPTIONS pane', async ({ page }) => {
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('copy_patterns')
+    await page.waitForTimeout(300)
+
+    const optionsPanel = page.locator('.tools-options-panel')
+    await expect(optionsPanel).toBeVisible()
+  })
+
+  test('Copy Sample Slots shows OPTIONS pane', async ({ page }) => {
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('copy_sample_slots')
+    await page.waitForTimeout(300)
+
+    const optionsPanel = page.locator('.tools-options-panel')
+    await expect(optionsPanel).toBeVisible()
   })
 })
 
