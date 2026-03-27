@@ -838,11 +838,7 @@ mod tests {
         std::fs::write(project.join("bank02.work"), b"bank2data").unwrap();
 
         let files = vec!["bank01.work".to_string(), "bank02.work".to_string()];
-        let result = backup_project_files_impl(
-            project.to_str().unwrap(),
-            &files,
-            "copy_bank",
-        );
+        let result = backup_project_files_impl(project.to_str().unwrap(), &files, "copy_bank");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "2 file(s) backed up");
 
@@ -874,11 +870,7 @@ mod tests {
             "bank01.work".to_string(),
             "bank99.work".to_string(), // does not exist
         ];
-        let result = backup_project_files_impl(
-            project.to_str().unwrap(),
-            &files,
-            "test",
-        );
+        let result = backup_project_files_impl(project.to_str().unwrap(), &files, "test");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "1 file(s) backed up");
     }
@@ -889,11 +881,7 @@ mod tests {
         let project = dir.path();
 
         let files = vec!["nonexistent.work".to_string()];
-        let result = backup_project_files_impl(
-            project.to_str().unwrap(),
-            &files,
-            "test",
-        );
+        let result = backup_project_files_impl(project.to_str().unwrap(), &files, "test");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "No files to back up");
         assert!(!project.join("backups").exists());
@@ -918,11 +906,8 @@ mod tests {
         std::fs::write(project.join("AUDIO/sample.wav"), b"wavdata").unwrap();
 
         let files = vec!["AUDIO/sample.wav".to_string()];
-        let result = backup_project_files_impl(
-            project.to_str().unwrap(),
-            &files,
-            "copy_sample_slots",
-        );
+        let result =
+            backup_project_files_impl(project.to_str().unwrap(), &files, "copy_sample_slots");
         assert!(result.is_ok());
 
         let backups_dir = project.join("backups");
@@ -941,11 +926,7 @@ mod tests {
         std::fs::write(project.join("bank01.work"), b"data").unwrap();
 
         let files = vec!["bank01.work".to_string()];
-        let _ = backup_project_files_impl(
-            project.to_str().unwrap(),
-            &files,
-            "edit_mode",
-        );
+        let _ = backup_project_files_impl(project.to_str().unwrap(), &files, "edit_mode");
 
         let backups_dir = project.join("backups");
         let entries: Vec<_> = std::fs::read_dir(&backups_dir).unwrap().collect();
