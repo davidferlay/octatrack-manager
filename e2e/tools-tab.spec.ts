@@ -8,8 +8,10 @@ import { test, expect, Page } from '@playwright/test'
  */
 
 // Helper to inject Tauri mocks before page load
-async function setupTauriMocks(page: Page) {
-  await page.addInitScript(() => {
+async function setupTauriMocks(page: Page, overrides?: { sameSet?: boolean; withOtherProject?: boolean }) {
+  const sameSet = overrides?.sameSet ?? true
+  const withOtherProject = overrides?.withOtherProject ?? false
+  await page.addInitScript((opts: { sameSet: boolean; withOtherProject: boolean }) => {
     // Mock Tauri internals
     (window as any).__TAURI_INTERNALS__ = {
       invoke: async (cmd: string, args?: any) => {
@@ -137,13 +139,32 @@ async function setupTauriMocks(page: Page) {
             return [0, 1, 2, 3] // Banks A, B, C, D exist
 
           case 'scan_devices':
+            if (opts.withOtherProject) {
+              return {
+                locations: [{
+                  name: 'TestLocation',
+                  path: '/test/location',
+                  device_type: 'LocalCopy',
+                  sets: [{
+                    name: 'Set1',
+                    path: '/test/location/Set1',
+                    has_audio_pool: false,
+                    projects: [
+                      { name: 'TestProject', path: '/test/project', has_project_file: true, has_banks: true },
+                      { name: 'OtherProject', path: '/test/other-project', has_project_file: true, has_banks: true },
+                    ],
+                  }],
+                }],
+                standalone_projects: [],
+              }
+            }
             return { locations: [], standalone_projects: [] }
 
           case 'check_project_in_set':
             return true
 
           case 'check_projects_in_same_set':
-            return true
+            return opts.sameSet
 
           case 'get_audio_pool_status':
             return { exists: false, path: null, set_path: '/test/set' }
@@ -212,7 +233,7 @@ async function setupTauriMocks(page: Page) {
     ;(window as any).__TAURI__ = {
       invoke: (window as any).__TAURI_INTERNALS__.invoke,
     }
-  })
+  }, { sameSet, withOtherProject })
 }
 
 test.describe('Tools Tab - UI Tests', () => {
@@ -365,6 +386,82 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
 
     const checkbox = page.locator('.tools-checkbox input[type="checkbox"]')
     await expect(checkbox).toBeEnabled()
+  })
+
+  test('Move to Pool is enabled when projects are in the same Set', async ({ page }) => {
+    // Default mock returns check_projects_in_same_set: true
+    const moveToPoolBtn = page.locator('.tools-toggle-btn', { hasText: 'Move to Pool' })
+    await expect(moveToPoolBtn).toBeEnabled()
+  })
+})
+
+test.describe('Tools Tab - Copy Sample Slots Not Same Set', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page, { sameSet: false, withOtherProject: true })
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
+    await toolsTab.click()
+    await page.waitForTimeout(500)
+
+    // Select Copy Sample Slots operation
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('copy_sample_slots')
+    await page.waitForTimeout(300)
+
+    // Open project selector and pick OtherProject (different set)
+    const destButton = page.locator('.tools-project-selector-btn')
+    await destButton.click()
+    await page.waitForTimeout(300)
+
+    // Click "Rescan for Projects" to populate the list
+    const rescanBtn = page.locator('.project-selector-modal .scan-button', { hasText: 'Rescan for Projects' })
+    await rescanBtn.click()
+    await page.waitForTimeout(500)
+
+    // Expand location (collapsed by default in modal)
+    const locationHeader = page.locator('.project-selector-modal .location-header').first()
+    await expect(locationHeader).toBeAttached({ timeout: 5000 })
+    await page.evaluate(() => {
+      const el = document.querySelector('.project-selector-modal .location-header') as HTMLElement
+      if (el) el.click()
+    })
+    await page.waitForTimeout(300)
+
+    // Expand set within location
+    await page.evaluate(() => {
+      const el = document.querySelector('.project-selector-modal .set-header') as HTMLElement
+      if (el) el.click()
+    })
+    await page.waitForTimeout(300)
+
+    // Select the other project
+    await page.evaluate(() => {
+      const cards = document.querySelectorAll('.project-selector-card')
+      for (const card of cards) {
+        if (card.textContent?.includes('OtherProject')) {
+          (card as HTMLElement).click()
+          break
+        }
+      }
+    })
+
+    // Wait for destination to update (modal closes, UI reflects new project)
+    await expect(page.locator('.tools-project-selector-name')).toContainText('OtherProject', { timeout: 5000 })
+    await page.waitForTimeout(500)
+  })
+
+  test('Move to Pool is disabled when projects are not in the same Set', async ({ page }) => {
+    const moveToPoolBtn = page.locator('.tools-toggle-btn', { hasText: 'Move to Pool' })
+    await expect(moveToPoolBtn).toBeDisabled()
+  })
+
+  test('Copy remains selected when Move to Pool is unavailable', async ({ page }) => {
+    const copyBtn = page.locator('.tools-toggle-btn', { hasText: 'Copy' }).first()
+    await expect(copyBtn).toHaveClass(/selected/)
+
+    const moveToPoolBtn = page.locator('.tools-toggle-btn', { hasText: 'Move to Pool' })
+    await expect(moveToPoolBtn).not.toHaveClass(/selected/)
   })
 })
 

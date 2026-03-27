@@ -8851,6 +8851,136 @@ mod tests {
             assert_eq!(result.shared_files_kept, 0);
             assert!(pool_dir.join("unique.wav").exists());
         }
+
+        #[test]
+        fn test_copy_slots_move_to_pool_both_types_same_file() {
+            // CSS-MV-BOTH: When slot_type="both" and static/flex reference the same file,
+            // both destination slots should get ../AUDIO/ paths even though the file is moved once.
+            let set_dir = TempDir::new().unwrap();
+            let src_dir = set_dir.path().join("Source");
+            let dest_dir = set_dir.path().join("Dest");
+            fs::create_dir_all(&src_dir).unwrap();
+            fs::create_dir_all(&dest_dir).unwrap();
+
+            // Create audio file in source project root
+            fs::write(src_dir.join("shared.wav"), b"audio data").unwrap();
+
+            // Set up source: same file referenced by both static slot 1 and flex slot 1
+            let mut src_pf = ProjectFile::default();
+            let static_slot = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Static,
+                1,
+                Some(std::path::PathBuf::from("shared.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            let flex_slot = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Flex,
+                1,
+                Some(std::path::PathBuf::from("shared.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            src_pf.slots.static_slots[0] = Some(static_slot);
+            src_pf.slots.flex_slots[0] = Some(flex_slot);
+            src_pf.to_data_file(&src_dir.join("project.work")).unwrap();
+
+            let dest_pf = ProjectFile::default();
+            dest_pf
+                .to_data_file(&dest_dir.join("project.work"))
+                .unwrap();
+
+            // Create bank files
+            for project_dir in [&src_dir, &dest_dir] {
+                for bank_num in 1..=16 {
+                    let bank = BankFile::default();
+                    bank.to_data_file(&project_dir.join(format!("bank{:02}.work", bank_num)))
+                        .unwrap();
+                }
+            }
+
+            let result = copy_sample_slots(
+                &src_dir.to_string_lossy(),
+                &dest_dir.to_string_lossy(),
+                "both",
+                vec![1],
+                vec![1],
+                "move_to_pool",
+                true,
+            );
+            assert!(result.is_ok(), "Move to pool should succeed: {:?}", result);
+
+            // Both destination slots should have ../AUDIO/ paths
+            let dest_project = ProjectFile::from_data_file(&dest_dir.join("project.work")).unwrap();
+            let dest_static = dest_project.slots.static_slots[0].as_ref().unwrap();
+            let dest_static_path = dest_static
+                .path
+                .as_ref()
+                .unwrap()
+                .to_string_lossy()
+                .to_string();
+            assert_eq!(
+                dest_static_path, "../AUDIO/shared.wav",
+                "Destination static slot should reference Audio Pool"
+            );
+
+            let dest_flex = dest_project.slots.flex_slots[0].as_ref().unwrap();
+            let dest_flex_path = dest_flex
+                .path
+                .as_ref()
+                .unwrap()
+                .to_string_lossy()
+                .to_string();
+            assert_eq!(
+                dest_flex_path, "../AUDIO/shared.wav",
+                "Destination flex slot should reference Audio Pool (even though file was already moved by static)"
+            );
+
+            // Both source slots should also have ../AUDIO/ paths
+            let src_project = ProjectFile::from_data_file(&src_dir.join("project.work")).unwrap();
+            let src_static = src_project.slots.static_slots[0].as_ref().unwrap();
+            assert_eq!(
+                src_static
+                    .path
+                    .as_ref()
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string(),
+                "../AUDIO/shared.wav",
+                "Source static slot path should be updated"
+            );
+            let src_flex = src_project.slots.flex_slots[0].as_ref().unwrap();
+            assert_eq!(
+                src_flex
+                    .path
+                    .as_ref()
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string(),
+                "../AUDIO/shared.wav",
+                "Source flex slot path should be updated"
+            );
+
+            // File should exist in pool
+            assert!(
+                set_dir.path().join("AUDIO").join("shared.wav").exists(),
+                "File should exist in Audio Pool"
+            );
+
+            // Original should be deleted (slot_type="both" means other_type_paths is empty)
+            assert!(
+                !src_dir.join("shared.wav").exists(),
+                "Original file should be deleted from source"
+            );
+        }
     }
 
     // ==================== CHECK MISSING SOURCE FILES TESTS ====================
