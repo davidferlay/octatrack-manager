@@ -26,7 +26,7 @@ sidebar_position: 6
 
 ### Audio Files
 - **Copy:** Copy referenced audio files to the destination project's root directory (by filename only, regardless of where the source file is located). `.ot` metadata files are included only when **Include Editor Settings** is enabled. The destination slot path is updated to reference the file in the project root.
-- **Move to Pool:** Move audio files to the Set's shared `AUDIO/` folder and update slot paths to `../AUDIO/`. Only available when source and destination projects are in the same Set. If a source file is also referenced by the opposite slot type (e.g., a file used by both a Static and Flex slot), the original file is kept to avoid breaking the other reference — the success message reports how many shared files were preserved.
+- **Move to Pool:** Move audio files to the Set's shared `AUDIO/` folder and update slot paths to `../AUDIO/` in **both** the source and destination projects. Only available when source and destination projects are in the same Set. If a source file is also referenced by the opposite slot type (e.g., a file used by both a Static and Flex slot), the original file is kept to avoid breaking the other reference — the success message reports how many shared files were preserved.
 - **Don't Copy:** Copy only the slot assignment data (file path reference); no audio files are transferred.
 
 :::note
