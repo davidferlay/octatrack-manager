@@ -3424,15 +3424,21 @@ pub fn get_slot_audio_paths(
 
         for slot in slots_to_check.into_iter().flatten() {
             if let Some(ref sample_path) = slot.path {
-                let rel: String = sample_path.to_string_lossy().to_string();
-                if seen.insert(rel.clone()) {
-                    paths.push(rel.clone());
+                // Copy mode places files in project root by filename,
+                // so back up by filename (not the full relative path which may contain ../)
+                let file_name: String =
+                    std::path::Path::new(&sample_path.to_string_lossy().to_string())
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                if !file_name.is_empty() && seen.insert(file_name.clone()) {
+                    paths.push(file_name.clone());
                     // Also include .ot companion
-                    let ot_rel = std::path::Path::new(&rel)
+                    let ot_name = std::path::Path::new(&file_name)
                         .with_extension("ot")
                         .to_string_lossy()
                         .to_string();
-                    paths.push(ot_rel);
+                    paths.push(ot_name);
                 }
             }
         }
@@ -4392,19 +4398,29 @@ pub fn copy_sample_slots(
 
                         match audio_mode {
                             "copy" => {
-                                // Copy audio file to destination project
+                                // Copy audio file to destination project root
                                 let src_full_path = source_path.join(&sample_path_str);
                                 if src_full_path.exists() {
-                                    let dest_full_path = dest_path.join(&sample_path_str);
-                                    // Ensure destination directory exists
-                                    if let Some(parent) = dest_full_path.parent() {
-                                        let _ = std::fs::create_dir_all(parent);
+                                    let file_name = src_full_path
+                                        .file_name()
+                                        .map(|n| n.to_string_lossy().to_string())
+                                        .unwrap_or_default();
+                                    let dest_full_path = dest_path.join(&file_name);
+                                    // Avoid copying a file onto itself
+                                    if std::fs::canonicalize(&src_full_path).ok()
+                                        != std::fs::canonicalize(&dest_full_path).ok()
+                                    {
+                                        let _ = std::fs::copy(&src_full_path, &dest_full_path);
+                                        if include_editor_settings {
+                                            copy_ot_file(&src_full_path, &dest_full_path);
+                                        }
                                     }
-                                    let _ = std::fs::copy(&src_full_path, &dest_full_path);
-                                    if include_editor_settings {
-                                        copy_ot_file(&src_full_path, &dest_full_path);
-                                    }
-                                    println!("[DEBUG] Copied audio file: {}", sample_path_str);
+                                    // Update slot path to flat filename in project root
+                                    new_slot.path = Some(std::path::PathBuf::from(&file_name));
+                                    println!(
+                                        "[DEBUG] Copied audio file: {} -> {}",
+                                        sample_path_str, file_name
+                                    );
                                 } else {
                                     eprintln!("[WARN] Source audio file not found: {:?} (resolved from '{}')", src_full_path, sample_path_str);
                                 }
@@ -4511,17 +4527,29 @@ pub fn copy_sample_slots(
 
                         match audio_mode {
                             "copy" => {
+                                // Copy audio file to destination project root
                                 let src_full_path = source_path.join(&sample_path_str);
                                 if src_full_path.exists() {
-                                    let dest_full_path = dest_path.join(&sample_path_str);
-                                    if let Some(parent) = dest_full_path.parent() {
-                                        let _ = std::fs::create_dir_all(parent);
+                                    let file_name = src_full_path
+                                        .file_name()
+                                        .map(|n| n.to_string_lossy().to_string())
+                                        .unwrap_or_default();
+                                    let dest_full_path = dest_path.join(&file_name);
+                                    // Avoid copying a file onto itself
+                                    if std::fs::canonicalize(&src_full_path).ok()
+                                        != std::fs::canonicalize(&dest_full_path).ok()
+                                    {
+                                        let _ = std::fs::copy(&src_full_path, &dest_full_path);
+                                        if include_editor_settings {
+                                            copy_ot_file(&src_full_path, &dest_full_path);
+                                        }
                                     }
-                                    let _ = std::fs::copy(&src_full_path, &dest_full_path);
-                                    if include_editor_settings {
-                                        copy_ot_file(&src_full_path, &dest_full_path);
-                                    }
-                                    println!("[DEBUG] Copied audio file: {}", sample_path_str);
+                                    // Update slot path to flat filename in project root
+                                    new_slot.path = Some(std::path::PathBuf::from(&file_name));
+                                    println!(
+                                        "[DEBUG] Copied audio file: {} -> {}",
+                                        sample_path_str, file_name
+                                    );
                                 } else {
                                     eprintln!("[WARN] Source audio file not found: {:?} (resolved from '{}')", src_full_path, sample_path_str);
                                 }
@@ -8285,10 +8313,13 @@ mod tests {
             )
             .unwrap();
 
-            // Check both audio and .ot file were copied
-            let dest_audio = Path::new(&dest.path).join("AUDIO/test.wav");
-            let dest_ot = Path::new(&dest.path).join("AUDIO/test.ot");
-            assert!(dest_audio.exists(), "Audio file should be copied");
+            // Check both audio and .ot file were copied to project root (flat)
+            let dest_audio = Path::new(&dest.path).join("test.wav");
+            let dest_ot = Path::new(&dest.path).join("test.ot");
+            assert!(
+                dest_audio.exists(),
+                "Audio file should be copied to project root"
+            );
             assert!(
                 dest_ot.exists(),
                 ".ot file should be copied alongside audio when editor settings ON"
@@ -8336,10 +8367,13 @@ mod tests {
             )
             .unwrap();
 
-            // Audio file should be copied, but .ot file should NOT
-            let dest_audio = Path::new(&dest.path).join("AUDIO/test.wav");
-            let dest_ot = Path::new(&dest.path).join("AUDIO/test.ot");
-            assert!(dest_audio.exists(), "Audio file should be copied");
+            // Audio file should be copied to project root, but .ot file should NOT
+            let dest_audio = Path::new(&dest.path).join("test.wav");
+            let dest_ot = Path::new(&dest.path).join("test.ot");
+            assert!(
+                dest_audio.exists(),
+                "Audio file should be copied to project root"
+            );
             assert!(
                 !dest_ot.exists(),
                 ".ot file should NOT be copied when editor settings are off"

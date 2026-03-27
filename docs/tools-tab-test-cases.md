@@ -57,7 +57,7 @@
 | SM42 OK | Copy Sample Slots | Static + Flex | Select "Static + Flex", copy slots, execute | Both slot types copied |
 | SM43 OK | Copy Sample Slots | Static only | Select "Static", copy slots, execute | Only Static slot data copied; Flex untouched |
 | SM44 OK | Copy Sample Slots | Flex only | Select "Flex", copy slots, execute | Only Flex slot data copied; Static untouched |
-| SM45 OK | Copy Sample Slots | Copy audio files | Select "Copy", execute | Audio files copied to dest project folder |
+| SM45 | Copy Sample Slots | Copy audio files to project root | Select "Copy", execute with source files in project subdir or AUDIO pool | Audio files copied to dest project root (flat, by filename); slot paths updated to filename only |
 | SM46 OK | Copy Sample Slots | Don't Copy audio | Select "Don't Copy", execute | Slot assignments copied, no audio files transferred |
 | SM48 OK | Copy Sample Slots | Move to Pool | Select "Move to Pool" (same Set), execute | Files in AUDIO dir, slot paths updated to ../AUDIO/ |
 | SM49 OK | Copy Sample Slots | Move to Pool deletes originals | Move to Pool, check source folder | Original .wav files deleted from source (except files also referenced by opposite slot type) |
@@ -67,13 +67,14 @@
 | SM63 | Copy Sample Slots | Shared file kept on Move to Pool | Move to Pool with file shared between Static and Flex | Shared file NOT deleted; success message shows count of kept files |
 | SM54 | Copy Sample Slots | Markers copied when ON | Check box, copy slot with custom trim/loop/slices | Dest markers (trim_offset, trim_end, loop_point, slices) match source |
 | SM55 | Copy Sample Slots | Markers reset when OFF | Uncheck box, copy slot with markers | Dest markers reset to zero/default |
+| SM80 | Copy Sample Slots | Copy from AUDIO pool preserves source | Copy slots referencing ../AUDIO/ files to another project in same Set | Source files in AUDIO pool intact (not 0 bytes); dest files in project root |
 | SM47 | Copy Sample Slots | .ot file copied when editor settings ON | Copy slot with .ot metadata, editor settings ON | Both .wav and .ot files present in destination |
 | SM47b | Copy Sample Slots | .ot file NOT copied when editor settings OFF | Copy slot with .ot metadata, editor settings OFF | .wav copied but .ot file NOT present in destination |
 | **Backup Feature** | | | | |
 | SM75 | All operations | Backup before copy execute | Execute any copy operation | `backups/` directory created in dest project with timestamped subfolder containing destination files |
 | SM76 | All operations | Backup on edit mode ON | Toggle View→Edit mode | `backups/` directory created with current bank file backed up |
 | SM77 | All operations | Backup skips missing files | Execute copy on fresh project with no existing dest files | No error; backup reports "No files to back up" |
-| SM78 | All operations | Backup preserves subdirectories | Execute copy_sample_slots with audio files in AUDIO/ | Backup subfolder preserves AUDIO/ directory structure |
+| SM78 | All operations | Backup backs up dest audio by filename | Execute copy_sample_slots with audio mode Copy | Backup contains destination audio files (by filename) that would be overwritten |
 | SM79 | All operations | Backup label in directory name | Execute different operations | Each backup dir name ends with operation label (e.g., `_copy_bank`, `_edit_mode`) |
 | **Additional Tests** | | | | |
 | SM74 | All operations | Auto-refresh on same-project copy | Copy any operation to current project | Project data refreshes automatically after successful copy |
