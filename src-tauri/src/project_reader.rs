@@ -3422,19 +3422,17 @@ pub fn get_slot_audio_paths(
             }
         }
 
-        for slot_data in slots_to_check {
-            if let Some(ref slot) = slot_data {
-                if let Some(ref sample_path) = slot.path {
-                    let rel: String = sample_path.to_string_lossy().to_string();
-                    if seen.insert(rel.clone()) {
-                        paths.push(rel.clone());
-                        // Also include .ot companion
-                        let ot_rel = std::path::Path::new(&rel)
-                            .with_extension("ot")
-                            .to_string_lossy()
-                            .to_string();
-                        paths.push(ot_rel);
-                    }
+        for slot in slots_to_check.into_iter().flatten() {
+            if let Some(ref sample_path) = slot.path {
+                let rel: String = sample_path.to_string_lossy().to_string();
+                if seen.insert(rel.clone()) {
+                    paths.push(rel.clone());
+                    // Also include .ot companion
+                    let ot_rel = std::path::Path::new(&rel)
+                        .with_extension("ot")
+                        .to_string_lossy()
+                        .to_string();
+                    paths.push(ot_rel);
                 }
             }
         }
