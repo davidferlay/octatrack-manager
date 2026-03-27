@@ -106,6 +106,7 @@ export function HomePage() {
         for (const set of sortedSets) {
           if (set.projects.length > 0) {
             setOpenSets(new Set([`${locIdx}-${set.name}`]));
+            setIsIndividualProjectsOpen(false);
             foundFirstSet = true;
             break;
           }
