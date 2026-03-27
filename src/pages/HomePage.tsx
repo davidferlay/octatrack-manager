@@ -44,18 +44,19 @@ export function HomePage() {
     standaloneProjects,
     hasScanned,
     openLocations,
+    openSets,
     isIndividualProjectsOpen,
     isLocationsOpen,
     setLocations,
     setStandaloneProjects,
     setHasScanned,
     setOpenLocations,
+    setOpenSets,
     setIsIndividualProjectsOpen,
     setIsLocationsOpen,
   } = useProjects();
   const [isScanning, setIsScanning] = useState(false);
   const [isSpinning, setIsSpinning] = useState(false);
-  const [openSets, setOpenSets] = useState<Set<string>>(() => new Set());
   const navigate = useNavigate();
   const [, startTransition] = useTransition();
 

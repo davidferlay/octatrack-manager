@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useProjects } from "../context/ProjectsContext";
@@ -166,7 +166,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [audioMode, setAudioMode] = useState<AudioMode>(savedSettings.audioMode || "copy");
   const [includeEditorSettings, setIncludeEditorSettings] = useState<boolean>(savedSettings.includeEditorSettings ?? true);
   const [sampleSelectionMode, setSampleSelectionMode] = useState<"one" | "range">("range");
-  const userChangedAudioMode = useRef<boolean>(!!savedSettings.audioMode);
 
   // Audio Pool status
   const [audioPoolStatus, setAudioPoolStatus] = useState<AudioPoolStatus | null>(null);
@@ -337,41 +336,34 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           const status = await invoke<AudioPoolStatus>("get_audio_pool_status", { projectPath });
           setAudioPoolStatus(status);
 
+          let sameSet: boolean;
           if (destProject !== projectPath) {
-            const sameSet = await invoke<boolean>("check_projects_in_same_set", {
+            sameSet = await invoke<boolean>("check_projects_in_same_set", {
               project1: projectPath,
               project2: destProject,
             });
-            setSameSetStatus(sameSet);
           } else {
-            setSameSetStatus(true);
+            sameSet = true;
+          }
+          setSameSetStatus(sameSet);
+
+          // Fall back to "copy" if move_to_pool is no longer valid
+          if (!sameSet && audioMode === "move_to_pool") {
+            setAudioMode("copy");
           }
         } catch (err) {
           console.error("Error checking audio pool:", err);
           setAudioPoolStatus(null);
           setSameSetStatus(false);
+          if (audioMode === "move_to_pool") {
+            setAudioMode("copy");
+          }
         }
       }
     }
     checkAudioPool();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [destProject, projectPath, operation]);
-
-  // Track previous sameSetStatus to detect transitions
-  const prevSameSetStatus = useRef<boolean | null>(null);
-
-  // Adjust audio mode based on sameSetStatus transitions
-  useEffect(() => {
-    // When projects are no longer in same set, fall back to "copy" if on "move_to_pool"
-    if (prevSameSetStatus.current === true && !sameSetStatus && audioMode === "move_to_pool") {
-      setAudioMode("copy");
-    }
-    // When projects become in same set, switch back to "move_to_pool" if on "copy"
-    // (only if user hasn't manually selected an option)
-    if (prevSameSetStatus.current === false && sameSetStatus && audioMode === "copy" && !userChangedAudioMode.current) {
-      setAudioMode("move_to_pool");
-    }
-    prevSameSetStatus.current = sameSetStatus;
-  }, [audioMode, sameSetStatus]);
 
   // Check for missing source audio files when audio mode requires files
   useEffect(() => {
@@ -1633,7 +1625,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   <button
                     type="button"
                     className={`tools-toggle-btn ${audioMode === "copy" ? "selected" : ""}`}
-                    onClick={() => { userChangedAudioMode.current = true; setAudioMode("copy"); }}
+                    onClick={() => { setAudioMode("copy"); }}
                     title="Copy audio files to the destination project's sample folder"
                   >
                     Copy
@@ -1641,7 +1633,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   <button
                     type="button"
                     className={`tools-toggle-btn ${audioMode === "move_to_pool" ? "selected" : ""}`}
-                    onClick={() => { if (sameSetStatus) { userChangedAudioMode.current = true; setAudioMode("move_to_pool"); } }}
+                    onClick={() => { if (sameSetStatus) { setAudioMode("move_to_pool"); } }}
                     disabled={!sameSetStatus}
                     title={sameSetStatus
                       ? "Move audio files to the Set's Audio Pool folder, shared between all projects in the Set"
@@ -1653,7 +1645,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   <button
                     type="button"
                     className={`tools-toggle-btn ${audioMode === "none" ? "selected" : ""}`}
-                    onClick={() => { userChangedAudioMode.current = true; setAudioMode("none"); }}
+                    onClick={() => { setAudioMode("none"); }}
                     title="Only copy slot settings, don't copy audio files (files must already exist at destination)"
                   >
                     Don't Copy
