@@ -4445,45 +4445,47 @@ pub fn copy_sample_slots(
                             "move_to_pool" => {
                                 // Move file to Audio Pool and update path
                                 if let Some(ref pool_path) = audio_pool_path {
-                                    let src_full_path = source_path.join(&sample_path_str);
-                                    if src_full_path.exists()
-                                        && !sample_path_str.starts_with("../AUDIO")
-                                    {
+                                    if !sample_path_str.starts_with("../AUDIO") {
+                                        let src_full_path = source_path.join(&sample_path_str);
                                         let file_name = src_full_path
                                             .file_name()
                                             .map(|n| n.to_string_lossy().to_string())
                                             .unwrap_or_default();
                                         let pool_dest = Path::new(pool_path).join(&file_name);
 
-                                        // Copy to Audio Pool
-                                        if std::fs::copy(&src_full_path, &pool_dest).is_ok() {
-                                            // Only delete original if NOT referenced by the other slot type
-                                            if other_type_paths.contains(&sample_path_str) {
-                                                shared_files_kept += 1;
-                                                println!("[DEBUG] Kept shared file (referenced by other slot type): {}", file_name);
-                                            } else {
-                                                let _ = std::fs::remove_file(&src_full_path);
-                                            }
-                                        }
-
-                                        // Always move .ot file alongside audio (it's a relocation)
-                                        let ot_src = src_full_path.with_extension("ot");
-                                        if ot_src.exists() {
-                                            let ot_dest = pool_dest.with_extension("ot");
-                                            if std::fs::copy(&ot_src, &ot_dest).is_ok() {
-                                                if !other_type_paths.contains(&sample_path_str) {
-                                                    let _ = std::fs::remove_file(&ot_src);
+                                        if src_full_path.exists() {
+                                            // Copy to Audio Pool
+                                            if std::fs::copy(&src_full_path, &pool_dest).is_ok() {
+                                                // Only delete original if NOT referenced by the other slot type
+                                                if other_type_paths.contains(&sample_path_str) {
+                                                    shared_files_kept += 1;
+                                                    println!("[DEBUG] Kept shared file (referenced by other slot type): {}", file_name);
+                                                } else {
+                                                    let _ = std::fs::remove_file(&src_full_path);
                                                 }
                                             }
+
+                                            // Always move .ot file alongside audio (it's a relocation)
+                                            let ot_src = src_full_path.with_extension("ot");
+                                            if ot_src.exists() {
+                                                let ot_dest = pool_dest.with_extension("ot");
+                                                if std::fs::copy(&ot_src, &ot_dest).is_ok() {
+                                                    if !other_type_paths.contains(&sample_path_str)
+                                                    {
+                                                        let _ = std::fs::remove_file(&ot_src);
+                                                    }
+                                                }
+                                            }
+
+                                            println!("[DEBUG] Moved to Audio Pool: {}", file_name);
                                         }
 
                                         // Update path to reference Audio Pool
+                                        // (also handles case where file was already moved by the other slot type)
                                         new_slot.path = Some(std::path::PathBuf::from(format!(
                                             "../AUDIO/{}",
                                             file_name
                                         )));
-
-                                        println!("[DEBUG] Moved to Audio Pool: {}", file_name);
                                     }
                                 }
                             }
@@ -4573,44 +4575,47 @@ pub fn copy_sample_slots(
                             }
                             "move_to_pool" => {
                                 if let Some(ref pool_path) = audio_pool_path {
-                                    let src_full_path = source_path.join(&sample_path_str);
-                                    if src_full_path.exists()
-                                        && !sample_path_str.starts_with("../AUDIO")
-                                    {
+                                    if !sample_path_str.starts_with("../AUDIO") {
+                                        let src_full_path = source_path.join(&sample_path_str);
                                         let file_name = src_full_path
                                             .file_name()
                                             .map(|n| n.to_string_lossy().to_string())
                                             .unwrap_or_default();
                                         let pool_dest = Path::new(pool_path).join(&file_name);
 
-                                        // Copy to Audio Pool
-                                        if std::fs::copy(&src_full_path, &pool_dest).is_ok() {
-                                            // Only delete original if NOT referenced by the other slot type
-                                            if other_type_paths.contains(&sample_path_str) {
-                                                shared_files_kept += 1;
-                                                println!("[DEBUG] Kept shared file (referenced by other slot type): {}", file_name);
-                                            } else {
-                                                let _ = std::fs::remove_file(&src_full_path);
-                                            }
-                                        }
-
-                                        // Always move .ot file alongside audio (it's a relocation)
-                                        let ot_src = src_full_path.with_extension("ot");
-                                        if ot_src.exists() {
-                                            let ot_dest = pool_dest.with_extension("ot");
-                                            if std::fs::copy(&ot_src, &ot_dest).is_ok() {
-                                                if !other_type_paths.contains(&sample_path_str) {
-                                                    let _ = std::fs::remove_file(&ot_src);
+                                        if src_full_path.exists() {
+                                            // Copy to Audio Pool
+                                            if std::fs::copy(&src_full_path, &pool_dest).is_ok() {
+                                                // Only delete original if NOT referenced by the other slot type
+                                                if other_type_paths.contains(&sample_path_str) {
+                                                    shared_files_kept += 1;
+                                                    println!("[DEBUG] Kept shared file (referenced by other slot type): {}", file_name);
+                                                } else {
+                                                    let _ = std::fs::remove_file(&src_full_path);
                                                 }
                                             }
+
+                                            // Always move .ot file alongside audio (it's a relocation)
+                                            let ot_src = src_full_path.with_extension("ot");
+                                            if ot_src.exists() {
+                                                let ot_dest = pool_dest.with_extension("ot");
+                                                if std::fs::copy(&ot_src, &ot_dest).is_ok() {
+                                                    if !other_type_paths.contains(&sample_path_str)
+                                                    {
+                                                        let _ = std::fs::remove_file(&ot_src);
+                                                    }
+                                                }
+                                            }
+
+                                            println!("[DEBUG] Moved to Audio Pool: {}", file_name);
                                         }
 
+                                        // Update path to reference Audio Pool
+                                        // (also handles case where file was already moved by the other slot type)
                                         new_slot.path = Some(std::path::PathBuf::from(format!(
                                             "../AUDIO/{}",
                                             file_name
                                         )));
-
-                                        println!("[DEBUG] Moved to Audio Pool: {}", file_name);
                                     }
                                 }
                             }
@@ -8464,6 +8469,105 @@ mod tests {
             assert!(
                 !src_audio_dir.join("move_me.ot").exists(),
                 "Original .ot file should be deleted after move"
+            );
+        }
+
+        #[test]
+        fn test_copy_slots_move_to_pool_updates_source_slot_paths() {
+            // CSS-MV-SRC: Move to Pool should update source project slot paths to ../AUDIO/
+            let set_dir = TempDir::new().unwrap();
+            let src_project_dir = set_dir.path().join("SourceProject");
+            let dest_project_dir = set_dir.path().join("DestProject");
+            fs::create_dir_all(&src_project_dir).unwrap();
+            fs::create_dir_all(&dest_project_dir).unwrap();
+
+            // Create audio file in source project root
+            fs::write(src_project_dir.join("kick.wav"), b"audio data").unwrap();
+
+            // Create source project with a static slot referencing local file
+            let mut src_pf = ProjectFile::default();
+            let slot = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Static,
+                1,
+                Some(std::path::PathBuf::from("kick.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            src_pf.slots.static_slots[0] = Some(slot);
+            src_pf
+                .to_data_file(&src_project_dir.join("project.work"))
+                .unwrap();
+
+            // Create default destination project
+            let pf_default = ProjectFile::default();
+            pf_default
+                .to_data_file(&dest_project_dir.join("project.work"))
+                .unwrap();
+
+            // Create bank files for both projects
+            for project_dir in [&src_project_dir, &dest_project_dir] {
+                for bank_num in 1..=16 {
+                    let bank = BankFile::default();
+                    bank.to_data_file(&project_dir.join(format!("bank{:02}.work", bank_num)))
+                        .unwrap();
+                }
+            }
+
+            let result = copy_sample_slots(
+                &src_project_dir.to_string_lossy(),
+                &dest_project_dir.to_string_lossy(),
+                "static",
+                vec![1],
+                vec![1],
+                "move_to_pool",
+                true,
+            );
+            assert!(result.is_ok(), "Move to pool should succeed: {:?}", result);
+
+            // Source project slot path should be updated to ../AUDIO/kick.wav
+            let updated_src =
+                ProjectFile::from_data_file(&src_project_dir.join("project.work")).unwrap();
+            let src_slot = updated_src.slots.static_slots[0].as_ref().unwrap();
+            let src_path_str = src_slot
+                .path
+                .as_ref()
+                .unwrap()
+                .to_string_lossy()
+                .to_string();
+            assert_eq!(
+                src_path_str, "../AUDIO/kick.wav",
+                "Source slot path should be updated to Audio Pool"
+            );
+
+            // Destination project slot path should also be ../AUDIO/kick.wav
+            let updated_dest =
+                ProjectFile::from_data_file(&dest_project_dir.join("project.work")).unwrap();
+            let dest_slot = updated_dest.slots.static_slots[0].as_ref().unwrap();
+            let dest_path_str = dest_slot
+                .path
+                .as_ref()
+                .unwrap()
+                .to_string_lossy()
+                .to_string();
+            assert_eq!(
+                dest_path_str, "../AUDIO/kick.wav",
+                "Destination slot path should reference Audio Pool"
+            );
+
+            // Original file should be deleted from source
+            assert!(
+                !src_project_dir.join("kick.wav").exists(),
+                "Original file should be deleted from source"
+            );
+
+            // File should exist in Audio Pool
+            assert!(
+                set_dir.path().join("AUDIO").join("kick.wav").exists(),
+                "File should exist in Audio Pool"
             );
         }
 

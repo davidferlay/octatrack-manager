@@ -625,7 +625,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             }
             setStatusMessage(msg);
           }
-          if (destProject === projectPath && onProjectRefresh) {
+          if (onProjectRefresh && (destProject === projectPath || audioMode === "move_to_pool")) {
             onProjectRefresh();
           }
           break;
