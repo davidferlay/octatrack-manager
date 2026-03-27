@@ -179,6 +179,8 @@ async function setupTauriMocks(page: Page, overrides?: { sameSet?: boolean; with
             return []
 
           case 'backup_project_files':
+            if (!(window as any).__backupCalls__) (window as any).__backupCalls__ = []
+            ;(window as any).__backupCalls__.push(args)
             return '0 file(s) backed up'
 
           case 'plugin:app|version':
@@ -220,6 +222,15 @@ async function setupTauriMocks(page: Page, overrides?: { sameSet?: boolean; with
               ],
             }
           }
+
+          case 'copy_sample_slots':
+            return { shared_files_kept: 0 }
+
+          case 'copy_bank':
+          case 'copy_parts':
+          case 'copy_patterns':
+          case 'copy_tracks':
+            return null
 
           default:
             console.warn('Unhandled mock invoke:', cmd)
@@ -392,6 +403,49 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
     // Default mock returns check_projects_in_same_set: true
     const moveToPoolBtn = page.locator('.tools-toggle-btn', { hasText: 'Move to Pool' })
     await expect(moveToPoolBtn).toBeEnabled()
+  })
+
+  test('Copy mode backup does not include source project backup', async ({ page }) => {
+    // Clear any previous backup calls
+    await page.evaluate(() => { (window as any).__backupCalls__ = [] })
+
+    // Copy is already selected by default, click Execute
+    const executeBtn = page.locator('.tools-execute-btn')
+    await executeBtn.click()
+    await page.waitForTimeout(1000)
+
+    // Check backup calls — only destination backup, no source backup
+    const backupCalls = await page.evaluate(() => (window as any).__backupCalls__ || [])
+    expect(backupCalls.length).toBe(1)
+    expect(backupCalls[0].label).toBe('copy_sample_slots')
+  })
+
+  test('Move to Pool backup includes source project.work', async ({ page }) => {
+    // Clear any previous backup calls
+    await page.evaluate(() => { (window as any).__backupCalls__ = [] })
+
+    // Select Move to Pool mode
+    const moveToPoolBtn = page.locator('.tools-toggle-btn', { hasText: 'Move to Pool' })
+    await moveToPoolBtn.click()
+    await page.waitForTimeout(200)
+
+    // Click Execute
+    const executeBtn = page.locator('.tools-execute-btn')
+    await executeBtn.click()
+    await page.waitForTimeout(1000)
+
+    // Check backup calls
+    const backupCalls = await page.evaluate(() => (window as any).__backupCalls__ || [])
+    expect(backupCalls.length).toBe(2)
+
+    // First call: destination backup (project.work, markers.work)
+    expect(backupCalls[0].files).toContain('project.work')
+    expect(backupCalls[0].files).toContain('markers.work')
+    expect(backupCalls[0].label).toBe('copy_sample_slots')
+
+    // Second call: source backup (project.work + audio files)
+    expect(backupCalls[1].files).toContain('project.work')
+    expect(backupCalls[1].label).toBe('move_to_pool_source')
   })
 })
 

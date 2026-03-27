@@ -50,6 +50,6 @@ Each copied slot is assigned the correct destination slot ID matching its positi
 
 ## Important Notes
 
-- **Automatic Backup:** Before executing, the app automatically backs up `project.work`, `markers.work`, and any destination audio files (`.wav` + `.ot`) that would be overwritten. See [Tools Overview](./index.md) for details.
+- **Automatic Backup:** Before executing, the app automatically backs up `project.work`, `markers.work`, and any destination audio files (`.wav` + `.ot`) that would be overwritten. When using **Move to Pool**, the source project's `project.work` and audio files are also backed up since both are modified. See [Tools Overview](./index.md) for details.
 - **Move to Pool:** Only available when both projects are in the same Set. The option auto-switches to "Copy" if you select a destination project in a different Set.
 - **Shared Files:** When using Move to Pool, files referenced by both Static and Flex slots are not deleted from the source location to prevent breaking cross-references.

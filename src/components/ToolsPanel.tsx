@@ -468,15 +468,14 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         }
         backups.push({ project: destProject, files: destFiles, label: "copy_sample_slots" });
 
-        // Back up source project audio files when Move to Pool (they get deleted)
+        // Back up source project files when Move to Pool (audio files get deleted, project.work gets updated)
         if (audioMode === "move_to_pool") {
           try {
             const sourceAudioPaths = await invoke<string[]>("get_slot_audio_paths", {
               projectPath, slotType, sourceIndices: sourceIndices1, flatten: false,
             });
-            if (sourceAudioPaths.length > 0) {
-              backups.push({ project: projectPath, files: sourceAudioPaths, label: "move_to_pool_source" });
-            }
+            const sourceFiles = ["project.work", ...sourceAudioPaths];
+            backups.push({ project: projectPath, files: sourceFiles, label: "move_to_pool_source" });
           } catch { /* ignore */ }
         }
 
