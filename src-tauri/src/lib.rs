@@ -542,9 +542,10 @@ async fn get_slot_audio_paths(
     project_path: String,
     slot_type: String,
     source_indices: Vec<u8>,
+    flatten: bool,
 ) -> Result<Vec<String>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        project_reader::get_slot_audio_paths(&project_path, &slot_type, source_indices)
+        project_reader::get_slot_audio_paths(&project_path, &slot_type, source_indices, flatten)
     })
     .await
     .unwrap()

@@ -72,6 +72,7 @@
 | SM47b | Copy Sample Slots | .ot file NOT copied when editor settings OFF | Copy slot with .ot metadata, editor settings OFF | .wav copied but .ot file NOT present in destination |
 | **Backup Feature** | | | | |
 | SM75 | All operations | Backup before copy execute | Execute any copy operation | `backups/` directory created in dest project with timestamped subfolder containing destination files |
+| SM81 | Copy Sample Slots | Backup source on Move to Pool | Execute Move to Pool | Source project `backups/` contains audio files that were moved/deleted; AUDIO pool files not backed up |
 | SM76 | All operations | Backup on edit mode ON | Toggle View→Edit mode | `backups/` directory created with current bank file backed up |
 | SM77 | All operations | Backup skips missing files | Execute copy on fresh project with no existing dest files | No error; backup reports "No files to back up" |
 | SM78 | All operations | Backup backs up dest audio by filename | Execute copy_sample_slots with audio mode Copy | Backup contains destination audio files (by filename) that would be overwritten |

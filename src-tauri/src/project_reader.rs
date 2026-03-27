@@ -3380,10 +3380,15 @@ pub fn check_missing_source_files(
 /// Return the relative audio file paths (and their .ot companions) referenced by
 /// the given source slot indices.  Used by the frontend to back up destination
 /// files that would be overwritten during a copy_sample_slots operation.
+/// Return audio file paths (and .ot companions) referenced by given source slot indices.
+/// When `flatten` is true, returns filenames only (for backing up dest project root in copy mode).
+/// When `flatten` is false, returns original relative paths, excluding ../AUDIO paths
+/// (for backing up source project files that move_to_pool will delete).
 pub fn get_slot_audio_paths(
     project_path: &str,
     slot_type: &str,
     source_indices: Vec<u8>,
+    flatten: bool,
 ) -> Result<Vec<String>, String> {
     let path = Path::new(project_path);
 
@@ -3424,21 +3429,33 @@ pub fn get_slot_audio_paths(
 
         for slot in slots_to_check.into_iter().flatten() {
             if let Some(ref sample_path) = slot.path {
-                // Copy mode places files in project root by filename,
-                // so back up by filename (not the full relative path which may contain ../)
-                let file_name: String =
-                    std::path::Path::new(&sample_path.to_string_lossy().to_string())
+                let rel = sample_path.to_string_lossy().to_string();
+
+                if flatten {
+                    // Return filename only (for dest backup in copy mode)
+                    let file_name: String = std::path::Path::new(&rel)
                         .file_name()
                         .map(|n| n.to_string_lossy().to_string())
                         .unwrap_or_default();
-                if !file_name.is_empty() && seen.insert(file_name.clone()) {
-                    paths.push(file_name.clone());
-                    // Also include .ot companion
-                    let ot_name = std::path::Path::new(&file_name)
-                        .with_extension("ot")
-                        .to_string_lossy()
-                        .to_string();
-                    paths.push(ot_name);
+                    if !file_name.is_empty() && seen.insert(file_name.clone()) {
+                        paths.push(file_name.clone());
+                        let ot_name = std::path::Path::new(&file_name)
+                            .with_extension("ot")
+                            .to_string_lossy()
+                            .to_string();
+                        paths.push(ot_name);
+                    }
+                } else {
+                    // Return original relative path (for source backup in move_to_pool mode)
+                    // Skip ../AUDIO paths — those are already in the pool and won't be deleted
+                    if !rel.starts_with("../AUDIO") && seen.insert(rel.clone()) {
+                        paths.push(rel.clone());
+                        let ot_rel = std::path::Path::new(&rel)
+                            .with_extension("ot")
+                            .to_string_lossy()
+                            .to_string();
+                        paths.push(ot_rel);
+                    }
                 }
             }
         }

@@ -58,7 +58,8 @@ For example: `backups/2026-03-26_14-30-45_copy_bank/`
 | Copy Parts | Destination bank file(s) |
 | Copy Patterns | Destination bank file |
 | Copy Tracks | Destination bank file |
-| Copy Sample Slots | `project.work`, `markers.work`, and destination audio files (`.wav` + `.ot`) that would be overwritten |
+| Copy Sample Slots (Copy) | Destination: `project.work`, `markers.work`, and audio files (`.wav` + `.ot`) that would be overwritten |
+| Copy Sample Slots (Move to Pool) | Destination: `project.work`, `markers.work`. Source: audio files (`.wav` + `.ot`) that will be moved/deleted |
 | Edit mode toggle | Current bank file |
 
 To restore from a backup, simply copy the backed-up files back into the project directory, replacing the modified ones.

@@ -433,60 +433,65 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   }
 
   // Determine which files need backing up before an operation
-  async function getBackupFiles(): Promise<{ project: string; files: string[]; label: string }> {
+  async function getBackupFiles(): Promise<{ project: string; files: string[]; label: string }[]> {
     const bankFile = (idx: number) => `bank${String(idx + 1).padStart(2, '0')}.work`;
     switch (operation) {
       case "copy_bank":
-        return {
+        return [{
           project: destProject,
           files: destBankIndices.map(bankFile),
           label: "copy_bank",
-        };
+        }];
       case "copy_parts":
-        return {
+        return [{
           project: destProject,
           files: destPartBankIndices.map(bankFile),
           label: "copy_parts",
-        };
+        }];
       case "copy_patterns":
-        return {
+        return [{
           project: destProject,
           files: [bankFile(destBankIndex)],
           label: "copy_patterns",
-        };
+        }];
       case "copy_tracks":
-        return {
+        return [{
           project: destProject,
           files: [bankFile(destBankIndex)],
           label: "copy_tracks",
-        };
+        }];
       case "copy_sample_slots": {
-        const baseFiles = ["project.work", "markers.work"];
-        if (audioMode !== "none") {
-          // Also back up destination audio files (+ .ot) that would be overwritten
+        const backups: { project: string; files: string[]; label: string }[] = [];
+        const sourceIndices1 = sourceSampleIndices.map(i => i + 1);
+
+        // Back up destination project files
+        const destFiles = ["project.work", "markers.work"];
+        if (audioMode === "copy") {
           try {
             const audioPaths = await invoke<string[]>("get_slot_audio_paths", {
-              projectPath,
-              slotType,
-              sourceIndices: sourceSampleIndices.map(i => i + 1),
+              projectPath, slotType, sourceIndices: sourceIndices1, flatten: true,
             });
-            return {
-              project: destProject,
-              files: [...baseFiles, ...audioPaths],
-              label: "copy_sample_slots",
-            };
-          } catch {
-            // Fall through to base files only
-          }
+            destFiles.push(...audioPaths);
+          } catch { /* ignore */ }
         }
-        return {
-          project: destProject,
-          files: baseFiles,
-          label: "copy_sample_slots",
-        };
+        backups.push({ project: destProject, files: destFiles, label: "copy_sample_slots" });
+
+        // Back up source project audio files when Move to Pool (they get deleted)
+        if (audioMode === "move_to_pool") {
+          try {
+            const sourceAudioPaths = await invoke<string[]>("get_slot_audio_paths", {
+              projectPath, slotType, sourceIndices: sourceIndices1, flatten: false,
+            });
+            if (sourceAudioPaths.length > 0) {
+              backups.push({ project: projectPath, files: sourceAudioPaths, label: "move_to_pool_source" });
+            }
+          } catch { /* ignore */ }
+        }
+
+        return backups;
       }
       default:
-        return { project: destProject, files: [], label: "unknown" };
+        return [];
     }
   }
 
@@ -500,14 +505,16 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     setStatusType("");
 
     try {
-      // Back up destination files before modifying them
-      const backup = await getBackupFiles();
-      if (backup.files.length > 0) {
-        await invoke("backup_project_files", {
-          projectPath: backup.project,
-          files: backup.files,
-          label: backup.label,
-        });
+      // Back up files before modifying them
+      const backups = await getBackupFiles();
+      for (const backup of backups) {
+        if (backup.files.length > 0) {
+          await invoke("backup_project_files", {
+            projectPath: backup.project,
+            files: backup.files,
+            label: backup.label,
+          });
+        }
       }
 
       switch (operation) {
