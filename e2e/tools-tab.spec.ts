@@ -334,10 +334,9 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
     await expect(dontCopyBtn).toBeVisible()
   })
 
-  test('Move to Pool is selected by default when projects are in same Set', async ({ page }) => {
-    // Our mock returns check_projects_in_same_set = true
-    const moveToPoolBtn = page.locator('.tools-toggle-btn', { hasText: 'Move to Pool' })
-    await expect(moveToPoolBtn).toHaveClass(/selected/)
+  test('Copy is selected by default for Audio Files', async ({ page }) => {
+    const copyBtn = page.locator('.tools-toggle-btn', { hasText: 'Copy' }).first()
+    await expect(copyBtn).toHaveClass(/selected/)
   })
 
   test('Include Editor Settings checkbox is visible and checked by default', async ({ page }) => {

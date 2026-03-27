@@ -449,12 +449,14 @@ interface ProjectsContextType {
   standaloneProjects: OctatrackProject[];
   hasScanned: boolean;
   openLocations: Set<number>;
+  openSets: Set<string>;
   isIndividualProjectsOpen: boolean;
   isLocationsOpen: boolean;
   setLocations: (locations: OctatrackLocation[] | ((prev: OctatrackLocation[]) => OctatrackLocation[])) => void;
   setStandaloneProjects: (projects: OctatrackProject[] | ((prev: OctatrackProject[]) => OctatrackProject[])) => void;
   setHasScanned: (scanned: boolean) => void;
   setOpenLocations: (openLocs: Set<number> | ((prev: Set<number>) => Set<number>)) => void;
+  setOpenSets: (openSets: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
   setIsIndividualProjectsOpen: (open: boolean) => void;
   setIsLocationsOpen: (open: boolean) => void;
   clearAll: () => void;
@@ -535,6 +537,19 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     return true;
   });
 
+  const [openSets, setOpenSetsState] = useState<Set<string>>(() => {
+    try {
+      const stored = sessionStorage.getItem(SESSION_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return new Set(parsed.openSets || []);
+      }
+    } catch (error) {
+      console.error("Error loading from sessionStorage:", error);
+    }
+    return new Set();
+  });
+
   const [isLocationsOpen, setIsLocationsOpenState] = useState<boolean>(() => {
     try {
       const stored = sessionStorage.getItem(SESSION_STORAGE_KEY);
@@ -556,6 +571,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         standaloneProjects,
         hasScanned,
         openLocations: Array.from(openLocations),
+        openSets: Array.from(openSets),
         isIndividualProjectsOpen,
         isLocationsOpen,
       };
@@ -563,7 +579,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     } catch (error) {
       console.error("Error saving to sessionStorage:", error);
     }
-  }, [locations, standaloneProjects, hasScanned, openLocations, isIndividualProjectsOpen, isLocationsOpen]);
+  }, [locations, standaloneProjects, hasScanned, openLocations, openSets, isIndividualProjectsOpen, isLocationsOpen]);
 
   const setLocations = (newLocations: OctatrackLocation[] | ((prev: OctatrackLocation[]) => OctatrackLocation[])) => {
     setLocationsState(newLocations);
@@ -581,6 +597,10 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     setOpenLocationsState(openLocs);
   };
 
+  const setOpenSets = (openSetsArg: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+    setOpenSetsState(openSetsArg);
+  };
+
   const setIsIndividualProjectsOpen = (open: boolean) => {
     setIsIndividualProjectsOpenState(open);
   };
@@ -594,6 +614,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     setStandaloneProjectsState([]);
     setHasScannedState(false);
     setOpenLocationsState(new Set());
+    setOpenSetsState(new Set());
     setIsIndividualProjectsOpenState(true);
     setIsLocationsOpenState(true);
     sessionStorage.removeItem(SESSION_STORAGE_KEY);
@@ -604,12 +625,14 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     standaloneProjects,
     hasScanned,
     openLocations,
+    openSets,
     isIndividualProjectsOpen,
     isLocationsOpen,
     setLocations,
     setStandaloneProjects,
     setHasScanned,
     setOpenLocations,
+    setOpenSets,
     setIsIndividualProjectsOpen,
     setIsLocationsOpen,
     clearAll,
