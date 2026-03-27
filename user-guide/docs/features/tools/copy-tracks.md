@@ -23,6 +23,8 @@ sidebar_position: 5
 - **Pattern Triggers:** Copies only the sequencer data (triggers, trigless trigs, parameter locks, swing) for the selected tracks. Sound design settings remain unchanged. Defaults to Pattern 1 (not All patterns).
 - **Both:** Copies both sound design settings and sequencer data for a complete transfer.
 
+![Copy Tracks - Both mode (Part Parameters + Pattern Triggers)](/img/screenshots/tools-copy-tracks-params-plus-trigs.png)
+
 ---
 
 ## Track Mapping

@@ -18,6 +18,8 @@ By default, Octatrack Manager is in a safe, read-only mode to prevent accidental
 
 When Edit Mode is active, the knobs and fields become interactive, and your changes will be written to disk.
 
+![View/Edit mode toggle](/img/screenshots/parts-editor-toggle.png)
+
 ---
 
 ## Modifying Part Settings
@@ -28,17 +30,31 @@ The Parts Editor is organized into several pages, similar to the hardware interf
 
 - **Machine Page:** Select and configure the machine type (e.g., Flex, Static, Thru, Neighbor) and its six core parameters (Pitch, Start, Length, Rate, etc.).
 - **Amp Page:** Adjust the envelope (Attack, Hold, Release), Volume, and Balance for the track.
+
+![Parts Editor - AMP page](/img/screenshots/parts-editor-amp.png)
+
 - **FX1 & FX2 Pages:** Edit the two effect slots for each track. All Octatrack effects are supported, from Delay and Reverb to Filter and Compressor.
 - **LFO Pages:** Configure the three LFOs per track, including speed, depth, and destination.
+
+![Parts Editor - LFO page](/img/screenshots/parts-editor-lfo.png)
 
 ### MIDI Track Pages (M1–M8)
 
 - **MIDI Page:** Edit the MIDI channel, notes, velocity, and length for external sequencing.
+
+![Parts Editor - MIDI Notes page](/img/screenshots/parts-editor-notes.png)
+
+- **CTRL Pages:** Configure the MIDI CC parameters for external gear control.
+
+![Parts Editor - MIDI CTRL1 page](/img/screenshots/parts-editor-ctrl1.png)
+
 - **LFO Pages:** Adjust the three MIDI LFOs.
 
 ### Navigation Within the Editor
 
-Use the tabs at the bottom of the track panel to switch between the different parameter pages (Machine, LFO, Amp, FX1, FX2). Both your parameter page selection and part selection persist when switching between banks, so you can quickly compare the same page across different banks.
+Use the tabs at the bottom of the track panel to switch between the different parameter pages (Machine, LFO, Amp, FX1, FX2). Both your parameter page selection and part selection persist when switching between banks, so you can quickly compare the same page across different banks. The bank dropdown lets you switch quickly between all 16 banks:
+
+![Parts Editor - Bank selector dropdown](/img/screenshots/parts-editor-bank-selector.png)
 
 ---
 
@@ -62,7 +78,9 @@ Octatrack Manager follows a safe, two-step process for saving changes, mirroring
 ### 1. Automatic "Unsaved" Save
 As you move a knob or change a setting, the app automatically writes the change to an **`.unsaved`** file on your disk. This ensures that your work is not lost if the app closes unexpectedly.
 
-- An **unsaved indicator** (circle icon) will appear next to the bank name in the editor to show that it contains uncommitted changes.
+- An **unsaved indicator** (asterisk) will appear next to the part name to show that it contains uncommitted changes.
+
+![Unsaved indicator on part tab](/img/screenshots/parts-editor-unsaved.png)
 
 ### 2. Committing to the Project
 To make your changes permanent and readable by the Octatrack hardware:
@@ -76,8 +94,10 @@ To make your changes permanent and readable by the Octatrack hardware:
 ### Reloading a Part
 If you have made changes but want to discard them and return to the last saved state:
 
-- Click the **Reload** (arrow) icon in the bank header.
+- Click the **Reload** button in the bank header.
 - This will overwrite your unsaved changes with the data from the last committed project file.
+
+![Reload, Save, and Save All buttons](/img/screenshots/parts-editor-reload.png)
 
 ---
 

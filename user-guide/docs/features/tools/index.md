@@ -32,9 +32,11 @@ Copy sample slot assignments between projects, with optional audio file transfer
 All tools follow a consistent workflow:
 
 1. **Select Source:** Choose the bank, part, pattern, or slots to copy from.
-2. **Select Destination:** Choose the target project, bank, and location.
+2. **Select Destination:** Choose the target project, bank, and location. The destination project selector lets you pick from scanned projects, browse for a folder, or select the current project.
 3. **Configure Options:** Refine exactly what data is transferred.
 4. **Execute:** Perform the copy operation.
+
+![Destination project selector](/img/screenshots/tools-destination-selector.png)
 
 Each operation displays a description below the options explaining what it does.
 
@@ -61,6 +63,8 @@ For example: `backups/2026-03-26_14-30-45_copy_bank/`
 | Copy Sample Slots (Copy) | Destination: `project.work`, `markers.work`, and audio files (`.wav` + `.ot`) that would be overwritten |
 | Copy Sample Slots (Move to Pool) | Destination: `project.work`, `markers.work`. Source: `project.work` and audio files (`.wav` + `.ot`) that will be moved/deleted |
 | Edit mode toggle | Current bank file |
+
+![Backup directory structure](/img/screenshots/project-backup-files.png)
 
 To restore from a backup, simply copy the backed-up files back into the project directory, replacing the modified ones.
 

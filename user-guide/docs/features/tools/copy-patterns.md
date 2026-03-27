@@ -24,9 +24,13 @@ sidebar_position: 4
 - **Copy Source Part:** The source pattern's part data is also copied; destination patterns reference the copied part.
 - **User Selection:** Manually choose which part (1–4) to assign to the destination patterns.
 
+![Copy Patterns - User Selection for Part Assignment](/img/screenshots/tools-copy-patterns-part-user-selection.png)
+
 ### Track Scope
 - **All Tracks:** Copy triggers and p-locks for all tracks, filtered by Mode Scope.
 - **Specific Tracks:** Copy only selected tracks (e.g., only T1 and T2).
+
+![Copy Patterns - Specific Tracks selection](/img/screenshots/tools-copy-patterns-specific-tracks.png)
 
 ### Mode Scope
 Visible when **All Tracks** is selected. Controls which track types are copied:

@@ -70,6 +70,8 @@ The header of the Project Detail page contains several important actions:
 - **Save Status:** Displays when changes are being saved to `.unsaved` files or committed to the project.
 - **Unsupported Banks Warning:** Appears if some bank files are from an older OS version. Click it for instructions on how to update them on your hardware.
 
+![Unsupported banks warning dialog](/img/screenshots/project-details-unsupported-banks-bank-load-error.png)
+
 ---
 
 ## Multi-Bank View

@@ -40,6 +40,10 @@ Click on any step in the grid to open the **Parameter Details Panel**. This pane
 
 ![Patterns - Parameter Details](/img/screenshots/patterns-details.png)
 
+When viewing all patterns at once, each track's triggers are displayed across multiple rows with full indicator detail:
+
+![Patterns - All Patterns multi-track view](/img/screenshots/patterns-details-bis.png)
+
 ---
 
 ## Pattern Navigation
@@ -62,6 +66,10 @@ This section shows:
 
 ![Patterns - Track Settings](/img/screenshots/patterns-audio-tracks-bis.png)
 
+Click on any step to open its detail panel, showing every parameter lock, trig condition, and micro-timing offset:
+
+![Patterns - Step detail panel](/img/screenshots/patterns-audio-tracks-ter.png)
+
 ---
 
 ## Advanced Sequencer Data
@@ -82,3 +90,5 @@ For MIDI tracks, the app detects and displays:
 - Chord information (major, minor, 7th, etc.) if multiple notes are triggered on a single step.
 
 ![Patterns - MIDI Tracks](/img/screenshots/patterns-midi-tracks.png)
+
+![Patterns - MIDI Tracks detail](/img/screenshots/patterns-midi-tracks-bis.png)

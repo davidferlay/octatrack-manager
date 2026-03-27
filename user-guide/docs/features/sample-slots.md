@@ -15,6 +15,8 @@ The Octatrack manages memory in two distinct ways:
 - **Static Slots (128):** Samples are streamed directly from the CF card. Use these for long recordings, backing tracks, or large sample libraries.
 - **Flex Slots (128):** Samples are loaded into the Octatrack's RAM. Use these for real-time manipulation, slicing, and intensive sound design.
 
+![Sample Slots - Static Table](/img/screenshots/sample-slots-static.png)
+
 ---
 
 ## Exploring the Table
@@ -43,8 +45,16 @@ The table includes a powerful toolbar to help you find what you need:
 
 ![Sample Slots - Filters](/img/screenshots/sample-slots-flex-filters.png)
 
+You can also filter by column values directly. Click the filter icon on a column header to access per-column filters (e.g., filter by file status):
+
+![Sample Slots - Column filter](/img/screenshots/sample-slots-flex-filters-col-filter.png)
+
 ### Column Preferences
-You can customize which columns are visible. Right-click any column header to toggle visibility. These preferences are remembered across sessions.
+You can customize which columns are visible. Click the column menu icon in the toolbar to toggle column visibility. These preferences are remembered across sessions.
+
+![Sample Slots - Column selector](/img/screenshots/sample-slots-flex-filters-bis-col-selec.png)
+
+![Sample Slots - Column visibility menu](/img/screenshots/sample-slots-flex-filters-bis.png)
 
 ---
 
