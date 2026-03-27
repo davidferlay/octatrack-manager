@@ -148,6 +148,17 @@ export function ProjectDetail() {
     setPartsWriteStatus(status);
   }, []);
 
+  // Lightweight refresh: reload metadata without unmounting the UI (used after copy operations)
+  const refreshProjectData = useCallback(async () => {
+    if (!projectPath) return;
+    try {
+      const projectMetadata = await invoke<ProjectMetadata>("load_project_metadata", { path: projectPath });
+      setMetadata(projectMetadata);
+    } catch (err) {
+      console.error("Failed to refresh project metadata:", err);
+    }
+  }, [projectPath]);
+
   // Reload a specific bank (used after copy operations in Tools panel)
   const reloadBank = useCallback(async (bankIndex: number) => {
     if (!projectPath) return;
@@ -1408,7 +1419,7 @@ export function ProjectDetail() {
                 banks={banks}
                 loadedBankIndices={loadedBankIndices}
                 onBankUpdated={reloadBank}
-                onProjectRefresh={loadProjectData}
+                onProjectRefresh={refreshProjectData}
               />
             )}
 
