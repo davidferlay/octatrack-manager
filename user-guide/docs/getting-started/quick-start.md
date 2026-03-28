@@ -72,6 +72,8 @@ In the **Audio Pool** view, you can move samples from your computer into your Se
 
 The **Tools** tab lets you copy content between banks and projects without touching the hardware. Select an operation from the dropdown, configure source, options, and destination, then execute.
 
+![Tools - Copy](/img/screenshots/tools-copy-bank.png)
+
 ### Available Operations
 
 - **[Copy Banks](../features/tools/copy-bank.md):** Duplicate an entire bank (all 4 Parts + 16 Patterns) to one or more destination banks.
@@ -80,12 +82,15 @@ The **Tools** tab lets you copy content between banks and projects without touch
 - **[Copy Tracks](../features/tools/copy-tracks.md):** Copy individual track data — sound design, pattern triggers, or both.
 - **[Copy Sample Slots](../features/tools/copy-sample-slots.md):** Copy sample slot assignments with optional audio file transfer and Audio Pool management.
 
-All operations work within the same project or across different projects. The destination project can be selected from your scanned locations or browsed manually.
+All operations work within the same project or across different projects.
 
-![Tools - Copy](/img/screenshots/tools-copy-bank.png)
+The destination project can be selected from your scanned locations or browsed manually:
+
+![Tools - Copy - Destination Project Selection Modal](/img/screenshots/tools-destination-selector.png)
+
 
 :::tip
-Your tool settings (selected operation, destination project, slot ranges, etc.) are remembered for each project during your session — you can switch tabs and come back without losing your configuration.
+Your tool settings (selected operation, destination project, slot ranges, etc.) are remembered for each project during your session — you can switch tabs and come back without losing selected values.
 :::
 
 ---
@@ -93,5 +98,5 @@ Your tool settings (selected operation, destination project, slot ranges, etc.) 
 ## Tips
 
 - **Back Up First:** Always keep a backup of your important projects before making major changes with "Edit" mode.
-- **Refresh:** If you insert a CF card while the app is open, click the **Refresh** (↻) button in the header.
-- **Version Check:** The app automatically checks for updates. Click the version number in the header to manually check or download the latest version.
+- **Refresh:** If you insert a CF card, or make any change in Projects while the app is open, click the **Refresh** (↻) button in the header.
+- **Version Check:** The app automatically checks for updates. Click the version number in the header to manually check and download the latest version.

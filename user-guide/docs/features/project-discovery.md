@@ -20,13 +20,13 @@ Click **Scan for Projects** to trigger a comprehensive search across your system
 - **Octatrack Folders:** Any folder on your home directory named `octatrack` (in any capitalization).
 
 ### 2. Manual Browsing
-If your projects are stored in a non-standard location (e.g., a specific backup drive or a cloud-synced folder):
+If your projects are stored in a non-standard location (e.g. a specific backup drive or a cloud-synced folder):
 1. Click **Browse...**.
 2. Select the directory you want to scan.
 3. The app will search that directory recursively and add all found Sets and projects to the results.
 
 ### Refreshing the Results
-If you insert a CF card or move files while the app is open, click the **Refresh** (↻) button in the header. The app will rescan all its known locations.
+If you insert a CF card or move files while the app is open, click the **Refresh** (↻) button in the header: The app will rescan all its known locations.
 
 ---
 
@@ -43,9 +43,9 @@ Each location card provides key information at a glance:
 Click the **▶** arrow on a location card to expand it and see the individual projects within.
 
 ### Individual Projects
-If projects are found outside of a Set (i.e., they are standalone `.work` or `.strd` files without a parent `AUDIO/` folder), they are grouped in the **Individual Projects** section at the bottom.
+If projects are found outside of a Set (i.e., they are standalone `.work` or `.strd` files without a parent `AUDIO/` folder), they are listed in the **Individual Projects** section at the bottom.
 
-These projects can still be opened and inspected, but they do not have a dedicated Audio Pool and some cross-project tools may have limitations.
+These projects can be opened and edited like any other, but because they do not have a dedicated Audio Pool and are not part of a set, features related to Audio Pool mangement are not available.
 
 ---
 

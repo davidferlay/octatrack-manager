@@ -10,7 +10,7 @@ Octatrack Manager is a cross-platform desktop application available for Windows,
 
 Always download the latest version from the official GitHub Releases page:
 
-[**Download Octatrack Manager**](https://github.com/davidferlay/octatrack-manager/releases/latest)
+- [**Download Octatrack Manager**](https://github.com/davidferlay/octatrack-manager/releases/latest)
 
 Choose the file that matches your operating system below.
 
