@@ -4,13 +4,15 @@ sidebar_position: 2
 
 # Project Detail
 
-The Project Detail page provides a comprehensive, high-level view of an Octatrack project. From here, you can inspect your project's settings, explore its patterns and parts, and manage its sample slots.
-
-![Project Detail - Overview](/img/screenshots/project-details.png)
+The Project Detail page provides a comprehensive, high-level view of an Octatrack project. From here, you can inspect your project's settings, explore its banks, parts, patterns and sample slots.
 
 ## Overview Tab
 
-The **Overview** tab displays the global settings that define how your project behaves on the Octatrack. It is a read-only view that captures the exact state of the project when it was last saved on the hardware.
+The **Overview** tab displays the global settings that define how your project behaves on the Octatrack. 
+
+It's a view that captures the exact state of the project when it was last saved on the hardware.
+
+![Project Detail - Overview](/img/screenshots/project-details.png)
 
 ### Project Metadata
 Located in the **Project Info** section, this shows:
@@ -46,14 +48,16 @@ The **Metronome** section displays all click track settings, including volume, p
 
 At the top of the project header, you can switch between several specialized views:
 
+![Project Detail - Menu tabs](/img/screenshots/project-details-menu.png)
+
 ### Parts
-The **Parts** tab takes you to the [Parts Editor](./parts-editor.md), where you can view and modify the sound design snapshots for each bank. This is where you edit machine types, effects, and LFOs.
+The **Parts** tab takes you to the [Parts Editor](./parts-editor.md), where you can view and modify the sound design parameters of each bank. This is where you can edit Source, Amp, effects, and LFOs perameters for each track - according to machine type.
 
 ### Patterns
 The **Patterns** tab provides a visual representation of your sequencer data. You can inspect every trigger, parameter lock, and trig condition in your project. See [Patterns](./patterns.md) for details.
 
 ### Flex & Static Slots
-The **Flex** and **Static** tabs list all 256 sample slots in your project. You can filter slots by name, check which slots are empty, and see the exact file path for every sample. See [Sample Slots](./sample-slots.md) for details.
+The **Flex** and **Static** tabs list all 256 sample slots in your project. You can filter slots (by name - or any other column), check which slots are empty, and see the exact file path for every sample as well as their state. See [Sample Slots](./sample-slots.md) for details.
 
 ### Tools
 The **Tools** tab provides bulk operations for copying content between projects — banks, parts, patterns, tracks, and sample slots. See the [Tools Overview](./tools/index.md) for details on each operation.
@@ -62,22 +66,25 @@ The **Tools** tab provides bulk operations for copying content between projects 
 
 ## Action Bar
 
-The header of the Project Detail page contains several important actions:
+In addition of the menu, the header of the Project Detail page also contains several important actions:
 
-- **Back Button:** Return to the [Home Page](./project-discovery.md).
-- **View/Edit Mode:** Use the toggle to switch between a safe, read-only view and **Edit Mode**, which enables changes in the Parts Editor.
-- **Refresh (↻):** Reload the project from disk. Use this if you have manually replaced project files on your computer.
-- **Save Status:** Displays when changes are being saved to `.unsaved` files or committed to the project.
-- **Unsupported Banks Warning:** Appears if some bank files are from an older OS version. Click it for instructions on how to update them on your hardware.
+- **Back Button:** Return to the [Home Page](./project-discovery.md). ![Project Detail - Menu back button](/img/screenshots/project-details-menu-back.png)
+- **View/Edit Mode:** Use the toggle to switch between a safe, read-only view and **Edit Mode**. ![Project Detail - Menu back button](/img/screenshots/project-details-menu-edit.png)
+- **Refresh (↻):** Reload the project from disk. Use this if you have manually replaced project files on your computer. ![Project Detail - Menu back button](/img/screenshots/project-details-menu-refresh.png)
+- **Save Status:** Displays when changes are being saved to `.unsaved` files or committed to the project. ![Project Detail - Menu back button](/img/screenshots/project-details-menu-saved.png)
+- **Unsupported Banks Warning:** Appears if some bank files are from an older OS version. Click it for instructions on how to update them on your hardware. ![Project Detail - Menu back button](/img/screenshots/project-details-menu-update.png)
 
 ![Unsupported banks warning dialog](/img/screenshots/project-details-unsupported-banks-bank-load-error.png)
+
+![Unsupported banks bank selector](/img/screenshots/project-details-bank-selector-unsupported-banks.png)
 
 ---
 
 ## Multi-Bank View
 
-In the **Parts** and **Patterns** tabs, you can use the **Bank Selector** to focus on a single bank (A–P) or select **All Banks** to see an overview of your entire project simultaneously. 
+- In the **Parts** and **Patterns** tabs, you can use the **Bank Selector** to focus on a single bank (A–P) or select **All Banks** to see an overview of your entire project simultaneously. 
+
+- By viewing "All Banks", you can scroll through all 16 banks on a single page, making it much easier to organize complex projects.
 
 ![Project details bank selector](/img/screenshots/project-details-bank-selector.png)
 
-When viewing "All Banks", you can scroll through all 16 banks on a single page, making it much easier to organize complex projects.

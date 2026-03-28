@@ -17,7 +17,7 @@ By default, the app focuses on a single bank. Select a letter (A through P) to d
 Select **All** from the bank selector to see an overview of every bank in your project on a single, scrollable page. This is incredibly useful for:
 - Getting a bird's-eye view of your entire live set.
 - Quickly finding where a specific part or pattern is located.
-- Organizing and comparing content across different sections of your project.
+- Comparing content across different sections of your project.
 
 ![Project details bank selector](/img/screenshots/project-details-bank-selector.png)
 
@@ -29,7 +29,7 @@ The **Track Selector** allows you to focus on specific audio or MIDI tracks.
 
 - **Audio Tracks (T1–T8):** Focus on your internal sound engines and effects.
 - **MIDI Tracks (M1–M8):** Focus on your external sequencer data.
-- **"All Audio" / "All MIDI":** View all 8 tracks of a single type simultaneously. This is the default and most powerful view for sound design and pattern inspection.
+- **"All Audio" / "All MIDI":** View all 8 tracks of a single type simultaneously.
 
 ![Project details track selector](/img/screenshots/parts-editor-track-selector.png)
 
