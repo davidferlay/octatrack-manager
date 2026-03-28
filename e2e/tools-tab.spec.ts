@@ -311,6 +311,96 @@ test.describe('Tools Tab - Operation Selector', () => {
     const partAssignmentField = page.locator('.tools-field').filter({ hasText: 'Part Assignment' })
     await expect(partAssignmentField).toBeVisible()
   })
+
+  test('Copy Patterns specific tracks do not bleed into Copy Tracks source', async ({ page }) => {
+    const operationSelect = page.locator('.tools-section .tools-select')
+    const optionsPanel = page.locator('.tools-options-panel')
+    const sourcePanel = page.locator('.tools-source-panel')
+
+    // Go to Copy Patterns, enable Specific Tracks, select T1 and T2
+    await operationSelect.selectOption('copy_patterns')
+    await page.waitForTimeout(300)
+    const specificBtn = page.locator('.tools-toggle-btn', { hasText: 'Specific Tracks' })
+    await specificBtn.click()
+    await page.waitForTimeout(200)
+    const trackButtons = optionsPanel.locator('.tools-multi-select.tracks-stacked')
+    await trackButtons.locator('.tools-multi-btn.track-btn', { hasText: 'T1' }).click()
+    await page.waitForTimeout(100)
+    await trackButtons.locator('.tools-multi-btn.track-btn', { hasText: 'T2' }).click()
+    await page.waitForTimeout(100)
+
+    // Switch to Copy Tracks
+    await operationSelect.selectOption('copy_tracks')
+    await page.waitForTimeout(300)
+
+    // Source tracks should be empty (no bleeding from Copy Patterns)
+    const selectedSourceTracks = sourcePanel.locator('.tools-multi-btn.track-btn.selected')
+    await expect(selectedSourceTracks).toHaveCount(0)
+
+    // All source track buttons should be enabled
+    const audioTrackButtons = sourcePanel.locator('.tools-multi-btn.track-btn', { hasText: /^T[1-8]$/ })
+    for (let i = 0; i < 8; i++) {
+      await expect(audioTrackButtons.nth(i)).not.toHaveClass(/disabled/)
+    }
+    const midiTrackButtons = sourcePanel.locator('.tools-multi-btn.track-btn', { hasText: /^M[1-8]$/ })
+    for (let i = 0; i < 8; i++) {
+      await expect(midiTrackButtons.nth(i)).not.toHaveClass(/disabled/)
+    }
+  })
+
+  test('Copy Tracks source tracks do not bleed into Copy Patterns specific tracks', async ({ page }) => {
+    const operationSelect = page.locator('.tools-section .tools-select')
+    const sourcePanel = page.locator('.tools-source-panel')
+    const optionsPanel = page.locator('.tools-options-panel')
+
+    // Go to Copy Tracks, select source T3
+    await operationSelect.selectOption('copy_tracks')
+    await page.waitForTimeout(300)
+    await sourcePanel.locator('.tools-multi-btn.track-btn', { hasText: 'T3' }).click()
+    await page.waitForTimeout(200)
+
+    // Switch to Copy Patterns, enable Specific Tracks
+    await operationSelect.selectOption('copy_patterns')
+    await page.waitForTimeout(300)
+    const specificBtn = page.locator('.tools-toggle-btn', { hasText: 'Specific Tracks' })
+    await specificBtn.click()
+    await page.waitForTimeout(200)
+
+    // No tracks should be selected (no bleeding from Copy Tracks)
+    const trackButtons = optionsPanel.locator('.tools-multi-select.tracks-stacked')
+    const selectedTracks = trackButtons.locator('.tools-multi-btn.track-btn.selected')
+    await expect(selectedTracks).toHaveCount(0)
+  })
+
+  test('Copy Patterns specific tracks persist when switching away and back', async ({ page }) => {
+    const operationSelect = page.locator('.tools-section .tools-select')
+    const optionsPanel = page.locator('.tools-options-panel')
+
+    // Go to Copy Patterns, enable Specific Tracks, select T1 and M3
+    await operationSelect.selectOption('copy_patterns')
+    await page.waitForTimeout(300)
+    const specificBtn = page.locator('.tools-toggle-btn', { hasText: 'Specific Tracks' })
+    await specificBtn.click()
+    await page.waitForTimeout(200)
+    const trackButtons = optionsPanel.locator('.tools-multi-select.tracks-stacked')
+    await trackButtons.locator('.tools-multi-btn.track-btn', { hasText: 'T1' }).click()
+    await page.waitForTimeout(100)
+    await trackButtons.locator('.tools-multi-btn.track-btn', { hasText: 'M3' }).click()
+    await page.waitForTimeout(100)
+
+    // Switch to Copy Tracks then back
+    await operationSelect.selectOption('copy_tracks')
+    await page.waitForTimeout(300)
+    await operationSelect.selectOption('copy_patterns')
+    await page.waitForTimeout(300)
+
+    // Re-enable Specific Tracks and verify selections persisted
+    await specificBtn.click()
+    await page.waitForTimeout(200)
+    const trackButtonsAfter = optionsPanel.locator('.tools-multi-select.tracks-stacked')
+    await expect(trackButtonsAfter.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })).toHaveClass(/selected/)
+    await expect(trackButtonsAfter.locator('.tools-multi-btn.track-btn', { hasText: 'M3' })).toHaveClass(/selected/)
+  })
 })
 
 test.describe('Tools Tab - Copy Sample Slots Options', () => {

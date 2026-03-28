@@ -130,7 +130,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [sourceBankIndex, setSourceBankIndex] = useState<number>(0);
   const [sourcePartIndices, setSourcePartIndices] = useState<number[]>([0]);
   const [sourcePatternIndices, setSourcePatternIndices] = useState<number[]>([0]);
-  const [sourceTrackIndices, setSourceTrackIndices] = useState<number[]>([]);
+  const [sourceTrackIndices, setSourceTrackIndices] = useState<number[]>([]); // Copy Tracks source
+  const [patternsTrackIndices, setPatternsTrackIndices] = useState<number[]>([]); // Copy Patterns specific tracks filter
   const [sourceSampleIndices, setSourceSampleIndices] = useState<number[]>(() => {
     const start = savedSettings.sourceSampleStart ?? 0;
     const end = savedSettings.sourceSampleEnd ?? 127;
@@ -186,7 +187,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [isLocationsOpenInModal, setIsLocationsOpenInModal] = useState<boolean>(true);
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [browsedProject, setBrowsedProject] = useState<{ name: string; path: string } | null>(null);
-
 
   // Rescan for devices
   async function handleRescan() {
@@ -554,7 +554,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             partAssignmentMode,
             destPart: partAssignmentMode === "select_specific" ? destPart : null,
             trackMode,
-            trackIndices: trackMode === "specific" ? sourceTrackIndices : null,
+            trackIndices: trackMode === "specific" ? patternsTrackIndices : null,
             modeScope: trackMode === "all" ? modeScope : null,
           });
           // Success message
@@ -1500,10 +1500,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
                         <button
                           key={idx}
-                          className={`tools-multi-btn track-btn ${sourceTrackIndices.includes(idx) ? "selected" : ""}`}
-                          onClick={() => sourceTrackIndices.includes(idx)
-                            ? setSourceTrackIndices(sourceTrackIndices.filter(i => i !== idx))
-                            : setSourceTrackIndices([...sourceTrackIndices, idx].sort((a, b) => a - b))
+                          className={`tools-multi-btn track-btn ${patternsTrackIndices.includes(idx) ? "selected" : ""}`}
+                          onClick={() => patternsTrackIndices.includes(idx)
+                            ? setPatternsTrackIndices(patternsTrackIndices.filter(i => i !== idx))
+                            : setPatternsTrackIndices([...patternsTrackIndices, idx].sort((a, b) => a - b))
                           }
                           title={`Audio Track ${idx + 1}`}
                         >
@@ -1515,10 +1515,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
                         <button
                           key={idx}
-                          className={`tools-multi-btn track-btn ${sourceTrackIndices.includes(idx) ? "selected" : ""}`}
-                          onClick={() => sourceTrackIndices.includes(idx)
-                            ? setSourceTrackIndices(sourceTrackIndices.filter(i => i !== idx))
-                            : setSourceTrackIndices([...sourceTrackIndices, idx].sort((a, b) => a - b))
+                          className={`tools-multi-btn track-btn ${patternsTrackIndices.includes(idx) ? "selected" : ""}`}
+                          onClick={() => patternsTrackIndices.includes(idx)
+                            ? setPatternsTrackIndices(patternsTrackIndices.filter(i => i !== idx))
+                            : setPatternsTrackIndices([...patternsTrackIndices, idx].sort((a, b) => a - b))
                           }
                           title={`MIDI Track ${idx - 7}`}
                         >
@@ -2381,7 +2381,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         <button
           className="tools-execute-btn"
           onClick={executeOperation}
-          disabled={isExecuting || (operation === "copy_bank" && sourceBankIndex === -1) || (operation === "copy_bank" && destBankIndices.length === 0) || (operation === "copy_parts" && sourceBankIndex === -1) || (operation === "copy_parts" && destPartBankIndices.length === 0) || (operation === "copy_parts" && sourcePartIndices.length === 0) || (operation === "copy_parts" && destPartIndices.length === 0) || (operation === "copy_tracks" && sourceBankIndex === -1) || (operation === "copy_tracks" && sourceTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex === -2) || (operation === "copy_tracks" && destBankIndex === -1) || (operation === "copy_tracks" && destTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex !== -1 && destTrackPartIndices.length === 0) || (operation === "copy_patterns" && sourceBankIndex === -1) || (operation === "copy_patterns" && sourcePatternIndices.length === 0) || (operation === "copy_patterns" && destBankIndex === -1) || (operation === "copy_patterns" && destPatternIndices.length === 0) || (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1) || (operation === "copy_patterns" && trackMode === "specific" && sourceTrackIndices.length === 0)}
+          disabled={isExecuting || (operation === "copy_bank" && sourceBankIndex === -1) || (operation === "copy_bank" && destBankIndices.length === 0) || (operation === "copy_parts" && sourceBankIndex === -1) || (operation === "copy_parts" && destPartBankIndices.length === 0) || (operation === "copy_parts" && sourcePartIndices.length === 0) || (operation === "copy_parts" && destPartIndices.length === 0) || (operation === "copy_tracks" && sourceBankIndex === -1) || (operation === "copy_tracks" && sourceTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex === -2) || (operation === "copy_tracks" && destBankIndex === -1) || (operation === "copy_tracks" && destTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex !== -1 && destTrackPartIndices.length === 0) || (operation === "copy_patterns" && sourceBankIndex === -1) || (operation === "copy_patterns" && sourcePatternIndices.length === 0) || (operation === "copy_patterns" && destBankIndex === -1) || (operation === "copy_patterns" && destPatternIndices.length === 0) || (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1) || (operation === "copy_patterns" && trackMode === "specific" && patternsTrackIndices.length === 0)}
           title={
             isExecuting ? "Operation in progress..." :
             (operation === "copy_bank" && sourceBankIndex === -1 && destBankIndices.length === 0) ? "Select source and destination banks" :
@@ -2409,7 +2409,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             (operation === "copy_patterns" && sourcePatternIndices.length === 0) ? "Select a source pattern" :
             (operation === "copy_patterns" && destPatternIndices.length === 0) ? "Select at least one destination pattern" :
             (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1) ? "Select a destination part" :
-            (operation === "copy_patterns" && trackMode === "specific" && sourceTrackIndices.length === 0) ? "Select at least one track" :
+            (operation === "copy_patterns" && trackMode === "specific" && patternsTrackIndices.length === 0) ? "Select at least one track" :
             undefined
           }
         >
