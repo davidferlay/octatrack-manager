@@ -82,6 +82,59 @@ kbd {
   white-space: nowrap;
 }
 
+/* Center the search bar in the navbar */
+.navbar .navbar__inner {
+  position: relative;
+}
+
+.navbar .navbar__search {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 360px;
+}
+
+.navbar .navbar__search input,
+.navbar .navbar__search .navbar__search-input {
+  width: 360px !important;
+}
+
+/* Make Ctrl+K hint smaller */
+.navbar .navbar__search [class*="searchHint"] {
+  font-size: 0.65rem;
+  padding: 1px 4px;
+}
+
+/* Search input: match results font */
+.navbar .navbar__search .navbar__search-input {
+  font-family: var(--ifm-font-family-base);
+  font-size: 0.9rem;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Dark mode: more transparent background */
+[data-theme='dark'] .navbar .navbar__search .navbar__search-input {
+  background-color: rgba(255, 255, 255, 0.06) !important;
+  border-color: var(--ifm-color-emphasis-300);
+}
+
+/* Center the results dropdown under the search bar */
+.navbar .navbar__search [class*="dropdownMenu"] {
+  left: 50% !important;
+  right: auto !important;
+  transform: translateX(-50%);
+}
+
+/* On mobile, revert to normal flow so it doesn't overlap */
+@media (max-width: 996px) {
+  .navbar .navbar__search {
+    position: static;
+    transform: none;
+  }
+}
+
 /* Screenshot images */
 .screenshot {
   border: 1px solid var(--ifm-color-emphasis-300);

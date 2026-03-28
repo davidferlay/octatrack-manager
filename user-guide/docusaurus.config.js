@@ -73,6 +73,18 @@ const config = {
     ],
   ],
 
+  themes: [
+    [
+      '@easyops-cn/docusaurus-search-local',
+      /** @type {import("@easyops-cn/docusaurus-search-local").PluginOptions} */
+      ({
+        hashed: true,
+        highlightSearchTermsOnTargetPage: true,
+        docsRouteBasePath: '/docs',
+      }),
+    ],
+  ],
+
   presets: [
     [
       'classic',
