@@ -25,7 +25,7 @@ This shows the contents of your `AUDIO/` directory. You can:
 - **Filter and Sort:** Use the toolbar to filter by name, bit depth, sample rate, or audio format.
 
 ### Left Panel: Your Computer
-This is a standard file browser that lets you explore your local hard drives to find samples you want to add to your Set.
+- This is a standard file browser that lets you explore your local hard drives to find samples you want to add to your Set.
 
 ---
 
@@ -35,14 +35,19 @@ Octatrack Manager simplifies the process of getting new sounds into your Octatra
 
 1. **Select Source:** Browse to your samples in the left panel.
 2. **Select Destination:** Navigate to the folder where you want them in the right panel.
-3. **Execute:** Click **Copy to Pool** (to keep the original) or **Move to Pool** (to delete the original after transfer).
+3. **Execute:** Click **Copy** button or **Copy to Pool** in right-click contextual menu.
+
+![Copy selected Audio files from button](/img/screenshots/audio-pool-copy-button.png)
+
+![Copy selected Audio files from contextual menu](/img/screenshots/audio-pool-copy-menu.png)
+
 
 ### Progress Tracking
 A progress bar appears for every file, showing the current stage of the transfer:
-- **Decoding:** Reading the source file.
-- **Resampling:** Changing the sample rate to 44.1 kHz.
-- **Writing:** Creating the final WAV file.
-- **Copying:** Simply moving the file if it is already in the correct format.
+- **Decoding:** Reading and decoding the source file into raw audio data.
+- **Resampling:** Changing the sample rate to 44.1 kHz (skipped if the source is already at 44.1 kHz).
+- **Writing:** Converting to the target bit depth and creating the final file in WAV format.
+- **Copying:** Simply moving the file if it is already in the correct format (no conversion needed).
 
 ![Audio file conversion in progress](/img/screenshots/audio-pool-conversion.png)
 
@@ -84,6 +89,5 @@ To remove unwanted samples from your library:
 
 ## Tips
 
-- **Folder Depth:** The Octatrack can navigate through several levels of subfolders. We recommend keeping your library organized by category (e.g., Drums, Synths, Field Recordings).
 - **Batch Processing:** You can select and transfer dozens of folders at once. Octatrack Manager will handle the recursive conversion of every audio file within them.
-- **External Drives:** You can browse and import samples from any connected external drive or network share.
+- **External Drives:** You can browse and import samples from any connected external drive or shared network.
