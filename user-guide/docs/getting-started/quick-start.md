@@ -86,7 +86,9 @@ All operations work within the same project or across different projects.
 
 The destination project can be selected from your scanned locations or browsed manually:
 
-![Tools - Copy - Destination Project Selection Modal](/img/screenshots/tools-destination-selector.png)
+![Tools - Copy - Destination Project Selection Modal](/img/screenshots/tools-destination-selector-field.png)
+
+![Tools - Copy - Destination Project Selection Modal](/img/screenshots/tools-destination-selector-modal.png)
 
 
 :::tip
@@ -107,8 +109,12 @@ For example: `backups/2026-03-26_14-30-45_copy_bank/`
 
 This means you can always revert changes by copying the backed-up files back into the project directory. See the [Tools Overview](../features/tools/index.md#automatic-backups) for details on what gets backed up for each operation.
 
+
+![Automated backups](/img/screenshots/project-backup-files.png)
+
+
 :::tip
-While automatic backups provide a safety net, we still recommend keeping your own separate backups of important projects.
+While automatic backups provide a safety net, it’s strongly advised to keep your own copies of your projects as well.
 :::
 
 ---
