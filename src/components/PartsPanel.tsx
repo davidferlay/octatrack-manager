@@ -2455,6 +2455,7 @@ export default function PartsPanel({
               key={index}
               className={`parts-part-tab ${activePartIndex === index ? 'active' : ''} ${modifiedPartIds.has(index) ? 'modified' : ''}`}
               onClick={() => setActivePartIndex(index)}
+              title={modifiedPartIds.has(index) ? 'Part has been modified. Use Save to keep changes, or Reload to discard them.' : undefined}
             >
               {partName} ({index + 1})<span className={`unsaved-indicator ${modifiedPartIds.has(index) ? 'visible' : ''}`}>*</span>
             </button>
