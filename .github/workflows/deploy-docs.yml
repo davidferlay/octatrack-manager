@@ -44,6 +44,13 @@ jobs:
         working-directory: user-guide
         run: npm run optimize-images
 
+      - name: Fetch latest release version
+        run: |
+          RELEASE_VERSION=$(curl -s https://api.github.com/repos/davidferlay/octatrack-manager/releases/latest \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['tag_name'].lstrip('v'))")
+          echo "RELEASE_VERSION=$RELEASE_VERSION" >> $GITHUB_ENV
+          echo "Resolved latest release version: $RELEASE_VERSION"
+
       - name: Build user guide
         working-directory: user-guide
         run: npm run build

@@ -3,6 +3,10 @@ import { themes as prismThemes } from 'prism-react-renderer';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
+  customFields: {
+    releaseVersion: process.env.RELEASE_VERSION || undefined,
+  },
+
   title: 'Octatrack Manager',
   tagline: 'A desktop application for managing Elektron Octatrack projects',
   favicon: 'img/favicon.ico',

@@ -6,7 +6,7 @@ sidebar_position: 3
 
 The Audio Pool is the shared sample library for your Octatrack Set. It is located in the **`AUDIO/`** folder at the top level of your Set. All projects within that Set can make use of samples from this directory and assign them to Static or Flex Sample Slots.
 
-Octatrack Manager provides an interface for browsing, managing , importing and converting new samples to your pool.
+Octatrack Manager provides an interface for browsing, managing, importing and converting new samples to your pool.
 
 ![Audio Pool interface](/img/screenshots/audio-pool.png)
 
