@@ -42,6 +42,9 @@ In the **Parts** tab, you can navigate between the four snapshots (kits) availab
 - Click on the **Part 1**, **Part 2**, **Part 3**, or **Part 4** tabs within a bank.
 - The interface updates instantly to show the sound design settings (Machine, LFO, Amp, FX) for all tracks in that part.
 
+![Project details part selector](/img/screenshots/parts-editor-part-selector.png)
+
+
 ---
 
 ## Navigating Patterns (1–16)
@@ -52,21 +55,12 @@ In the **Patterns** tab, you can choose which sequences to inspect.
 - Use the **"All Patterns"** option to see every sequence in the bank simultaneously. This helps you visualize how your track evolves across patterns.
 - Use the **"Hide Empty"** toggle in the header to filter out patterns that contain no triggers or data.
 
+![Project details part selector](/img/screenshots/patterns-details-pattern-selector.png)
+
 ---
 
-## Sync Across Tabs
-
-Octatrack Manager intelligently synchronizes your navigation across different tabs. For example:
+:::tip
+Octatrack Manager synchronizes your navigation across different tabs. For example:
 - If you select **Bank B** in the Parts tab, the app will stay on **Bank B** when you switch to the Patterns tab.
 - This ensures that your workflow remains fluid as you move between different aspects of your project.
-
----
-
-## Breadcrumb Navigation
-
-A breadcrumb bar at the top of the page always shows you where you are.
-
-- **Set Name:** Click this to return to the [Home Page](./project-discovery.md).
-- **Project Name:** Click this to return to the [Project Detail](./project-detail.md) overview.
-
-This makes it easy to jump between the deep details of a part and the high-level settings of the project.
+:::

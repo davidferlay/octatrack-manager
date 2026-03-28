@@ -41,6 +41,18 @@ Octatrack Manager simplifies the process of getting new sounds into your Octatra
 
 ![Copy selected Audio files from contextual menu](/img/screenshots/audio-pool-copy-menu.png)
 
+---
+
+## Automatic Conversion
+
+The Octatrack hardware is very specific about the audio formats it can play. Octatrack Manager takes care of all this automatically — **you never need to manually convert files again**.
+
+Conversion uses a **high-quality Sinc interpolation** algorithm (Blackman-Harris windowed) for the best possible audio fidelity.
+
+### What happens during import?
+- **Format:** All files (MP3, FLAC, AIFF, etc.) are converted to **WAV**.
+- **Sample Rate:** Every file is resampled to **44.1 kHz** (the only rate the Octatrack supports).
+- **Bit Depth:** 16-bit and 24-bit depths are preserved. Files with higher or lower bit depths are automatically adjusted to the closest supported value (16 or 24-bit).
 
 ### Progress Tracking
 A progress bar appears for every file, showing the current stage of the transfer:
@@ -50,20 +62,6 @@ A progress bar appears for every file, showing the current stage of the transfer
 - **Copying:** Simply moving the file if it is already in the correct format (no conversion needed).
 
 ![Audio file conversion in progress](/img/screenshots/audio-pool-conversion.png)
-
----
-
-## Automatic Conversion
-
-The Octatrack hardware is very specific about the audio formats it can play. Octatrack Manager takes care of all this automatically — **you never need to manually convert files again**.
-
-### What happens during import?
-- **Format:** All files (MP3, FLAC, AIFF, etc.) are converted to **WAV**.
-- **Sample Rate:** Every file is resampled to **44.1 kHz** (the only rate the Octatrack supports).
-- **Bit Depth:** 16-bit and 24-bit depths are preserved. Files with higher or lower bit depths are automatically adjusted to the closest supported value (16 or 24-bit).
-
-### Quality
-Conversion uses a **high-quality Sinc interpolation** algorithm (Blackman-Harris windowed) for the best possible audio fidelity.
 
 ---
 

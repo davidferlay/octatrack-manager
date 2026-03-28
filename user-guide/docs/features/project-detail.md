@@ -68,11 +68,16 @@ The **Tools** tab provides bulk operations for copying content between projects 
 
 In addition of the menu, the header of the Project Detail page also contains several important actions:
 
-- **Back Button:** Return to the [Home Page](./project-discovery.md). ![Project Detail - Menu back button](/img/screenshots/project-details-menu-back.png)
-- **View/Edit Mode:** Use the toggle to switch between a safe, read-only view and **Edit Mode**. ![Project Detail - Menu back button](/img/screenshots/project-details-menu-edit.png)
-- **Refresh (↻):** Reload the project from disk. Use this if you have manually replaced project files on your computer. ![Project Detail - Menu back button](/img/screenshots/project-details-menu-refresh.png)
-- **Save Status:** Displays when changes are being saved to `.unsaved` files or committed to the project. ![Project Detail - Menu back button](/img/screenshots/project-details-menu-saved.png)
-- **Unsupported Banks Warning:** Appears if some bank files are from an older OS version. Click it for instructions on how to update them on your hardware. ![Project Detail - Menu back button](/img/screenshots/project-details-menu-update.png)
+- **Back Button:** Return to the [Home Page](./project-discovery.md).
+![Project Detail - Menu back button](/img/screenshots/project-details-menu-back.png)
+- **View/Edit Mode:** Use the toggle to switch between a safe, read-only view and **Edit Mode**.
+![Project Detail - Menu back button](/img/screenshots/project-details-menu-edit.png)
+- **Refresh (↻):** Reload the project from disk. Use this if you have manually replaced project files on your computer. 
+![Project Detail - Menu back button](/img/screenshots/project-details-menu-refresh.png)
+- **Save Status:** Displays when changes are being saved to `.unsaved` files or committed to the project. 
+![Project Detail - Menu back button](/img/screenshots/project-details-menu-saved.png)
+- **Unsupported Banks Warning:** Appears if some bank files are from an older OS version. Click it for instructions on how to update them on your hardware. 
+![Project Detail - Menu back button](/img/screenshots/project-details-menu-update.png)
 
 ![Unsupported banks warning dialog](/img/screenshots/project-details-unsupported-banks-bank-load-error.png)
 
