@@ -34,7 +34,7 @@ If you insert a CF card or move files while the app is open, click the **Refresh
 
 Results are organized by **Location**, which corresponds to a Set on your CF card or computer.
 
-### Locations (Sets)
+### Set Locations
 Each location card provides key information at a glance:
 - **Device Type:** Labeled as **CF Card**, **USB**, or **Local Copy**.
 - **Audio Pool Status:** A **✓ Audio Pool** indicates that the `AUDIO/` folder contains valid samples. An **✗ Audio Pool** means it is missing or empty.

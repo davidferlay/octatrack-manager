@@ -12,16 +12,16 @@ Octatrack Manager provides a task-oriented interface for browsing, organizing, a
 
 ## Browsing the Pool
 
-Access the Audio Pool from the **Home Page** by clicking the **Audio Pool** card within any Set, or from within a project by clicking the **Audio Pool** button in the header.
+Access the Audio Pool of a Set from the **Home Page** by clicking the **Audio Pool** card within any Set, or from within a project by clicking the **Audio Pool** button in the header.
 
-### Left Panel: Your Audio Pool
+### Right Panel: Your Audio Pool
 This shows the contents of your `AUDIO/` directory. You can:
 - **Navigate:** Double-click a folder to enter it. Click the breadcrumb to go back up.
 - **Create Folders:** Click **+ New Folder** to organize your library.
 - **Inspect Metadata:** Every audio file shows its sample rate, bit depth, and number of channels.
 - **Filter and Sort:** Use the toolbar to filter by name, bit depth, sample rate, or audio format.
 
-### Right Panel: Your Computer
+### Left Panel: Your Computer
 This is a standard file browser that lets you explore your local hard drives to find samples you want to add to your Set.
 
 ---
@@ -30,8 +30,8 @@ This is a standard file browser that lets you explore your local hard drives to 
 
 Octatrack Manager simplifies the process of getting new sounds into your Octatrack.
 
-1. **Select Source:** Browse to your samples in the right panel.
-2. **Select Destination:** Navigate to the folder where you want them in the left panel.
+1. **Select Source:** Browse to your samples in the left panel.
+2. **Select Destination:** Navigate to the folder where you want them in the right panel.
 3. **Execute:** Click **Copy to Pool** (to keep the original) or **Move to Pool** (to delete the original after transfer).
 
 ### Progress Tracking
@@ -73,13 +73,13 @@ If you try to add a file with the same name as one that already exists in your p
 ## Deleting Samples
 
 To remove unwanted samples from your library:
-1. Select one or more files in the left panel.
+1. Select one or more files in the right panel (Audio Pool).
 2. Click **Delete**.
 3. A confirmation dialog will appear to prevent accidental loss of data.
 
 ---
 
-## Technical Tips
+## Tips
 
 - **Folder Depth:** The Octatrack can navigate through several levels of subfolders. We recommend keeping your library organized by category (e.g., Drums, Synths, Field Recordings).
 - **Batch Processing:** You can select and transfer dozens of folders at once. Octatrack Manager will handle the recursive conversion of every audio file within them.
