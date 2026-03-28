@@ -25,11 +25,11 @@ Select **All** from the bank selector to see an overview of every bank in your p
 
 ## Selecting Tracks (T1–T8 & M1–M8)
 
-The **Track Selector** allows you to focus on specific audio or MIDI tracks.
+The **Track Selector** allows you to focus on a specific audio or MIDI track, or view all tracks of a given type at once.
 
-- **Audio Tracks (T1–T8):** Focus on your internal sound engines and effects.
-- **MIDI Tracks (M1–M8):** Focus on your external sequencer data.
-- **"All Audio" / "All MIDI":** View all 8 tracks of a single type simultaneously.
+- **Audio Tracks (T1–T8):** The 8 audio tracks, each with its own machine, effects, and LFOs.
+- **MIDI Tracks (M1–M8):** The 8 MIDI tracks for sequencing external gear.
+- **"All Audio" / "All MIDI":** View all 8 tracks of a given type simultaneously.
 
 ![Project details track selector](/img/screenshots/parts-editor-track-selector.png)
 

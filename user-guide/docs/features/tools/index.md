@@ -36,7 +36,7 @@ All tools follow a consistent workflow:
 3. **Configure Options:** Refine exactly what data is transferred.
 4. **Execute:** Perform the copy operation.
 
-![Destination project selector](/img/screenshots/tools-destination-selector.png)
+![Destination project selector](/img/screenshots/tools-destination-selector-modal.png)
 
 Each operation displays a description below the options explaining what it does.
 
