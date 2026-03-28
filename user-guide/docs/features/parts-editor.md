@@ -75,18 +75,17 @@ Octatrack Manager features a powerful **LFO Designer** that allows you to draw c
 
 Octatrack Manager follows a safe, two-step process for saving changes, mirroring how the Octatrack works internally.
 
-### 1. Automatic "Unsaved" Save
-As you move a knob or change a setting, the app automatically writes the change to an **`.unsaved`** file on your disk. This ensures that your work is not lost if the app closes unexpectedly.
+### 1. Live Editing
+As you move a knob or change a setting, the change is written to disk immediately. Your edits are stored in the bank's working state and are never lost, even if the app closes unexpectedly.
 
 - An **unsaved indicator** (asterisk) will appear next to the part name to show that it contains uncommitted changes.
 
 ![Unsaved indicator on part tab](/img/screenshots/parts-editor-unsaved.png)
 
-### 2. Committing to the Project
-To make your changes permanent and readable by the Octatrack hardware:
+### 2. Saving to the Project
+To commit your edits to the bank file (`bankXX.work`):
 
-- Click the **Save** (diskette) icon in the bank header.
-- The app will copy the data from the `.unsaved` file into the actual project file (`bankXX.work`).
+- Click **Save** to commit the current part, or **Save All** to commit all modified parts in the bank at once.
 - The **unsaved indicator** will disappear, and your changes are now final.
 
 ![Parts Editor Save Button](/img/screenshots/parts-editor-save.png)
@@ -101,7 +100,7 @@ If you have made changes but want to discard them and return to the last saved s
 
 ---
 
-## Data Safety Tips
+## Data Safety
 
 :::warning
 **Important:** Editing parts directly modifies your project files on disk. While the app uses a safe "unsaved" system, we highly recommend keeping a backup of your project before making significant changes.

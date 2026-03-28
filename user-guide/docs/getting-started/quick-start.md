@@ -16,7 +16,7 @@ Click **Scan for Projects** to let the app automatically search for:
 - **Common Paths:** Folders like `Documents`, `Music`, `Downloads`, and `Desktop`.
 - **Octatrack Folders:** Any folder on your home directory named `octatrack`, `Octatrack`, or `OCTATRACK`.
 
-If your projects are in a custom location (e.g., an external drive or a specific backup folder), click **Browse...** to select it manually.
+If your projects are in a custom location which is not automatically detected (e.g., an external drive or a specific backup folder), click **Browse...** to select it manually.
 
 ![Project discovery — Home page](/img/screenshots/project-discovery.png)
 
@@ -25,9 +25,8 @@ If your projects are in a custom location (e.g., an external drive or a specific
 Found content is grouped into **Locations** (which are your Sets) and **Individual Projects**.
 
 - **Locations:** Each card represents a Set on your disk or CF card. It shows the number of projects inside and if it has a valid Audio Pool.
-- **Expand/Collapse:** Click the **▶** arrow on a location card to see the projects within it.
 - **Open a Project:** Click on any project name to enter the **Project Detail** view.
-- **Access the Audio Pool:** Click the **Audio Pool** card within a Set to manage your samples.
+- **Access the Audio Pool of a Set:** Click the **Audio Pool** card within a Set to manage your samples.
 
 ## 3. Explore Project Details
 
@@ -53,8 +52,8 @@ To modify a part, navigate to the **Parts** tab and select a bank (A–P).
 1. Click on a **Part** tab (Part 1, 2, 3, or 4).
 2. Toggle **Edit mode** using the switch in the top header.
 3. Use the knobs and fields to modify machine parameters, effects, and LFOs.
-4. Changes are saved to an `.unsaved` file automatically.
-5. Click **Commit** (Save icon) to write the changes permanently to the project file.
+4. Each change is written to disk immediately as you make it.
+5. Click **Save** to commit the current part, or **Save All** to commit all modified parts at once.
 
 ![Parts Editor](/img/screenshots/parts-editor.png)
 
@@ -62,10 +61,10 @@ To modify a part, navigate to the **Parts** tab and select a bank (A–P).
 
 In the **Audio Pool** view, you can move samples from your computer into your Set.
 
-1. Browse your computer in the right panel.
+1. Browse your computer in the left panel and your Audio Pool in the right panel.
 2. Select the audio files you want to add.
 3. Click **Copy to Pool**.
-4. Octatrack Manager will automatically convert them to the correct WAV format and resample them to 44.1 kHz if necessary.
+4. Octatrack Manager will automatically convert them as needed.
 
 ![Audio Pool conversion](/img/screenshots/audio-pool-conversion.png)
 
@@ -91,7 +90,7 @@ Your tool settings (selected operation, destination project, slot ranges, etc.) 
 
 ---
 
-## Tips for Success
+## Tips
 
 - **Back Up First:** Always keep a backup of your important projects before making major changes with "Edit" mode.
 - **Refresh:** If you insert a CF card while the app is open, click the **Refresh** (↻) button in the header.
