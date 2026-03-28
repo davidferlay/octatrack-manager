@@ -23,8 +23,8 @@ Octatrack Manager is not yet "signed" with an Apple Developer certificate. This 
 :::
 
 1. **Download:** Get the `.dmg` file for your Mac:
-   - **Intel Macs:** Look for `_x64_darwin.dmg`
-   - **Apple Silicon (M1/M2/M3):** Look for `_aarch64_darwin.dmg`
+   - **Intel Macs:** [Download for Intel Mac](https://github.com/davidferlay/octatrack-manager/releases/latest/download/octatrack-manager_0.26.0_x64.dmg)
+   - **Apple Silicon (M1/M2/M3):** [Download for Apple Silicon](https://github.com/davidferlay/octatrack-manager/releases/latest/download/octatrack-manager_0.26.0_aarch64.dmg)
 
 2. **Install:** Open the `.dmg` file and drag **Octatrack Manager** into your **Applications** folder.
 
@@ -45,7 +45,7 @@ Octatrack Manager is not yet "signed" with an Apple Developer certificate. This 
 
 ## Windows
 
-1. **Download:** Get the installer file ending in `.msi` (recommended) or `.exe`.
+1. **Download:** Get the installer for Windows: [Download .msi](https://github.com/davidferlay/octatrack-manager/releases/latest/download/octatrack-manager_0.26.0_x64_en-US.msi) (recommended) or [Download .exe](https://github.com/davidferlay/octatrack-manager/releases/latest/download/octatrack-manager_0.26.0_x64-setup.exe).
 2. **Install:** Double-click the file and follow the setup wizard instructions.
 3. **Launch:** Open Octatrack Manager from your Start menu or Desktop shortcut.
 
@@ -55,17 +55,17 @@ Octatrack Manager is not yet "signed" with an Apple Developer certificate. This 
 
 We provide three package formats for Linux users:
 
-- **Debian / Ubuntu:** Download the `.deb` file and install it:
+- **Debian / Ubuntu:** [Download .deb](https://github.com/davidferlay/octatrack-manager/releases/latest/download/octatrack-manager_0.26.0_amd64.deb) and install it:
   ```bash
   sudo dpkg -i octatrack-manager_*.deb
   ```
 
-- **Fedora / RHEL:** Download the `.rpm` file and install it:
+- **Fedora / RHEL:** [Download .rpm](https://github.com/davidferlay/octatrack-manager/releases/latest/download/octatrack-manager-0.26.0-1.x86_64.rpm) and install it:
   ```bash
   sudo rpm -i octatrack-manager-*.rpm
   ```
 
-- **AppImage (Universal):** Download the `.AppImage` file, make it executable, and run it:
+- **AppImage (Universal):** [Download .AppImage](https://github.com/davidferlay/octatrack-manager/releases/latest/download/octatrack-manager_0.26.0_amd64.AppImage), make it executable, and run it:
   ```bash
   chmod +x octatrack-manager_*.AppImage
   ./octatrack-manager_*.AppImage

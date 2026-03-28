@@ -18,7 +18,7 @@ The Octatrack is a deep and powerful machine, but its small screen can make cert
 - **Visualize Your Projects:** See your patterns, triggers, and parameter locks clearly on a large screen.
 - **Organize Your Library:** Manage your sample library with automatic format conversion and high-quality resampling.
 - **Design Sounds Comfortably:** Edit machine parameters, effects, and LFOs with a dedicated interface, including a custom LFO designer.
-- **Maintain Data Integrity:** Inspect projects safely with a read-only view, or use the "Edit" mode to make intentional changes.
+- **Maintain Data Integrity:** Inspect projects safely with a read-only view, or use the "Edit" mode to make intentional changes. An automatic backup system protects your data before any write operation.
 
 ## Core Capabilities
 
@@ -31,25 +31,23 @@ The Octatrack is a deep and powerful machine, but its small screen can make cert
 
 ## Essential Concepts
 
-If you are new to the Octatrack or just need a refresher, here is how the app organizes your data:
+If you are new to the Octatrack or just need a refresher, here is how the Octatrack data is organized:
 
 | Concept | What it is |
 |---------|-------------|
 | **Set** | The top-level folder on your CF card. It contains an `AUDIO/` folder and multiple projects. |
-| **Audio Pool** | The `AUDIO/` folder inside a Set. This is the shared library where all your projects look for samples. |
+| **Audio Pool** | The `AUDIO/` folder inside a Set. This is the shared directory where samples can be shared and used from a single location across projects. |
 | **Project** | A collection of 16 banks. It also stores global settings like the mixer and MIDI configuration. |
-| **Bank** | A container for 16 patterns and 4 parts. Banks are named A through P. |
+| **Bank** | A collection of 16 patterns and 4 parts. Banks are named A through P. |
 | **Part** | A "kit" or "snapshot" of all settings for all 16 tracks. A bank can switch between 4 different parts. |
-| **Pattern** | A sequence of notes or triggers. Patterns are assigned to one of the 4 parts in their bank. |
-| **Sample Slot** | A reference to an audio file. **Static slots** stream from the card (for long samples), while **Flex slots** load into RAM (for manipulation). |
+| **Pattern** | A sequence of notes, triggers and parameter locks. Patterns concern all tracks at once. They also select one of the 4 parts. |
+| **Sample Slot** | A reference to an audio file located in Audio Pool or project directory. They are assigned to the project and available to tracks' machines. **Static slots** stream from the card (for long samples), while **Flex slots** load into RAM (for manipulation). Sample slots also contain metadata information from the Audio Editor (gain, timestretch, loop, slices, etc). |
 
-## Compatibility & Safety
+## Compatibility
 
 :::important
 **OS Requirement:** Octatrack Manager requires projects saved on **Octatrack OS 1.40 or later**. Projects from older versions must be opened and re-saved on the hardware first.
 :::
-
-**Data Safety:** Octatrack Manager treats your data with care. It uses the `ot-tools-io` library to ensure binary compatibility. When you make changes in "Edit" mode, the app writes to `.unsaved` files (similar to how the Octatrack works internally) before you commit them to your final project.
 
 ## Ready to start?
 

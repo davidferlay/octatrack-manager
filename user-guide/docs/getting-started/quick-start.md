@@ -22,7 +22,7 @@ If your projects are in a custom location which is not automatically detected (e
 
 ## 2. Navigate Your Content
 
-Found content is grouped into **Locations** (which are your Sets) and **Individual Projects**.
+Found content is grouped into **Locations** (where your Sets are located) and **Individual Projects** (not part of a Set).
 
 - **Locations:** Each card represents a Set on your disk or CF card. It shows the number of projects inside and if it has a valid Audio Pool.
 - **Open a Project:** Click on any project name to enter the **Project Detail** view.
@@ -32,7 +32,7 @@ Found content is grouped into **Locations** (which are your Sets) and **Individu
 
 Once a project is open, you can see everything about it.
 
-The **Overview** tab shows your mixer, MIDI, memory, and metronome settings. This is a read-only view that helps you understand how the project was configured when last saved.
+The **Overview** tab shows your mixer, MIDI, memory, and metronome settings. This is a view that helps you understand how the project was configured when last saved.
 
 ![Project detail — Overview](/img/screenshots/project-details.png)
 
@@ -49,11 +49,11 @@ At the top of the project view, you can switch between several specialized views
 
 To modify a part, navigate to the **Parts** tab and select a bank (A–P).
 
-1. Click on a **Part** tab (Part 1, 2, 3, or 4).
+1. Select a specific **Bank** and one of the 4 **Parts** (Part 1, 2, 3, or 4).
 2. Toggle **Edit mode** using the switch in the top header.
 3. Use the knobs and fields to modify machine parameters, effects, and LFOs.
-4. Each change is written to disk immediately as you make it.
-5. Click **Save** to commit the current part, or **Save All** to commit all modified parts at once.
+4. Each change is **written to project immediately** as you make it, in the form of 'un-saved' changes - Just like on the Octatrack.
+5. Changes can then be saved to the current Part, All Parts, or reverted (reloads to 'saved' state of Part).
 
 ![Parts Editor](/img/screenshots/parts-editor.png)
 
@@ -64,11 +64,11 @@ In the **Audio Pool** view, you can move samples from your computer into your Se
 1. Browse your computer in the left panel and your Audio Pool in the right panel.
 2. Select the audio files you want to add.
 3. Click **Copy to Pool**.
-4. Octatrack Manager will automatically convert them as needed.
+4. Octatrack Manager will **automatically convert them** as needed - making all audio files compatible with the Octatrack by default (Format, Sampling Rate, Bit Depth).
 
 ![Audio Pool conversion](/img/screenshots/audio-pool-conversion.png)
 
-## 6. Copy Content Between Projects
+## 6. Copy Content Within and Between Projects
 
 The **Tools** tab lets you copy content between banks and projects without touching the hardware. Select an operation from the dropdown, configure source, options, and destination, then execute.
 
@@ -91,6 +91,24 @@ The destination project can be selected from your scanned locations or browsed m
 
 :::tip
 Your tool settings (selected operation, destination project, slot ranges, etc.) are remembered for each project during your session — you can switch tabs and come back without losing selected values.
+:::
+
+## 7. Automatic Backups
+
+Octatrack Manager automatically backs up your project files before any write operation — whether you are enabling Edit mode, saving a Part, or executing a copy operation via Tools.
+
+Backups are stored inside the project directory under:
+
+```
+<project>/backups/<timestamp>_<operation>/
+```
+
+For example: `backups/2026-03-26_14-30-45_copy_bank/`
+
+This means you can always revert changes by copying the backed-up files back into the project directory. See the [Tools Overview](../features/tools/index.md#automatic-backups) for details on what gets backed up for each operation.
+
+:::tip
+While automatic backups provide a safety net, we still recommend keeping your own separate backups of important projects.
 :::
 
 ---
