@@ -4,16 +4,16 @@ sidebar_position: 4
 
 # Copy Patterns
 
-**Copy Patterns** copies individual sequencer patterns (1–16) between banks and projects, with granular control over track scope, part assignment, and mode scope.
+**Copy Patterns** copies individual sequencer data (1–16) between banks and projects, with granular control over track scope, part assignment and mode (Audio / MIDI) scope.
 
 ![Tools - Copy Patterns](/img/screenshots/tools-copy-patterns.png)
 
 ## Workflow
 
 1. **Source:** Select the bank (A–P) and pattern (1–16, or All for 1-to-1 copy).
-2. **Destination:** Choose the target project, bank, and target pattern(s). When the source is a single pattern, multiple destination patterns can be selected.
+2. **Destination:** Choose the target project, bank, and target pattern(s).
 3. **Configure Options:** Set part assignment, track scope, and mode scope.
-4. **Execute:** Perform the pattern copy.
+4. **Execute:** Perform the copy.
 
 ---
 
@@ -28,15 +28,17 @@ sidebar_position: 4
 
 ### Track Scope
 - **All Tracks:** Copy triggers and p-locks for all tracks, filtered by Mode Scope.
-- **Specific Tracks:** Copy only selected tracks (e.g., only T1 and T2).
+- **Specific Tracks:** Copy only selected tracks (only T1, T2, T7, M4 and M5).
 
 ![Copy Patterns - Specific Tracks selection](/img/screenshots/tools-copy-patterns-specific-tracks.png)
 
 ### Mode Scope
 Visible when **All Tracks** is selected. Controls which track types are copied:
 - **Audio:** Copy only audio tracks (T1–T8); MIDI tracks in the destination are untouched.
-- **Both:** Copy all 16 tracks (T1–T8 and M1–M8).
 - **MIDI:** Copy only MIDI tracks (M1–M8); audio tracks in the destination are untouched.
+- **Both:** Copy all 16 tracks (T1–T8 and M1–M8).
+
+![Copy Patterns - Specific Mode Scope](/img/screenshots/tools-copy-patterns-mode-scope.png)
 
 ---
 
@@ -51,5 +53,6 @@ Visible when **All Tracks** is selected. Controls which track types are copied:
 
 ## Important Notes
 
+- **All Tracks Affected:** Pattern data includes **of all Audio and MIDI tracks** of current bank - it's not tied to individual tracks.
 - **Destructive Operation:** Copying a pattern replaces existing sequences at the destination.
 - **Automatic Backup:** The app automatically backs up the destination bank file before executing. See [Tools Overview](./index.md) for details.
