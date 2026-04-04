@@ -121,6 +121,6 @@ While automatic backups provide a safety net, it’s strongly advised to keep yo
 
 ## Tips
 
-- **Back Up First:** Always keep a backup of your important projects before making major changes with "Edit" mode.
+- **Back Up First:** Always keep a backup of your important projects before making major changes.
 - **Refresh:** If you insert a CF card, or make any change in Projects while the app is open, click the **Refresh** (↻) button in the header.
 - **Version Check:** The app automatically checks for updates. Click the version number in the header to manually check and download the latest version.

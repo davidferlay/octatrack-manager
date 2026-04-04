@@ -67,4 +67,4 @@ Inside each project card, you will see two status markers:
 | **✓ Project** | The main project file (`project.work`) was found and is readable. |
 | **✓ Banks** | All associated bank files (e.g., `bank01.work`) were found. |
 
-If a marker is **✗**, it indicates a missing or corrupted file. This typically happens when projects are partially copied or moved manually in your computer's file manager.
+If a marker is **✗**, it indicates a missing or corrupted file. This can happen when projects are partially copied or moved manually in your computer's file manager.
