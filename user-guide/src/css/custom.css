@@ -143,3 +143,10 @@ kbd {
   max-width: 100%;
   margin: 1rem 0;
 }
+
+/* Prevent article images from stretching beyond their natural dimensions */
+article img {
+  width: auto;
+  max-width: 100%;
+  height: auto;
+}
