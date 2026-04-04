@@ -38,7 +38,7 @@ Visible when **All Tracks** is selected. Controls which track types are copied:
 - **MIDI:** Copy only MIDI tracks (M1–M8); audio tracks in the destination are untouched.
 - **Both:** Copy all 16 tracks (T1–T8 and M1–M8).
 
-![Copy Patterns - Specific Mode Scope](/img/screenshots/tools-copy-patterns-mode-scope.png)
+![Copy Patterns - Specific Mode Scope](/img/screenshots/tools-copy-mode-scope.png)
 
 ---
 

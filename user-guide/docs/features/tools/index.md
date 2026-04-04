@@ -63,7 +63,7 @@ For example: `backups/2026-03-26_14-30-45_copy_bank/`
 | Copy Patterns | Destination bank file |
 | Copy Tracks | Destination bank file |
 | Copy Sample Slots (Copy) | Destination: `project.work`, `markers.work`, and audio files (`.wav` + `.ot`) that would be overwritten |
-| Copy Sample Slots (Move to Pool) | Destination: `project.work`, `markers.work`<br>Source: `project.work` and audio files (`.wav` + `.ot`) that will be moved/deleted |
+| Copy Sample Slots (Move to Pool) | Destination: `project.work`, `markers.work`<br/>Source: `project.work` and audio files (`.wav` + `.ot`) that will be moved/deleted |
 | Edit mode toggle (in header)| Current bank file |
 
 ![Backup directory structure](/img/screenshots/project-backup-files.png)
