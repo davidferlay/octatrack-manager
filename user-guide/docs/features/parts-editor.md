@@ -126,7 +126,7 @@ To commit your edits to the Part:
 ## Data Safety
 
 :::warning
-**Important:** Editing parts directly modifies your project files. While [automatic backups]((../getting-started/quick-start.md#7-automatic-backups)) provide a safety net, it’s strongly advised to keep your own copies of your projects as well.
+**Important:** Editing parts directly modifies your project files. While [automatic backups](../getting-started/quick-start.md#7-automatic-backups) provide a safety net, it’s strongly advised to keep your own copies of your projects as well.
 :::
 
 - **Check Your Bank:** Ensure you have selected the correct bank (A–P) before you start editing.
