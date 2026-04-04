@@ -33,18 +33,20 @@ All tools follow a consistent workflow:
 
 1. **Select Source:** Choose the bank, part, pattern, or slots to copy from.
 2. **Select Destination:** Choose the target project, bank, and location. The destination project selector lets you pick from scanned projects, browse for a folder, or select the current project.
-3. **Configure Options:** Refine exactly what data is transferred.
+3. **Configure Options:** Refine exactly what data is copied.
 4. **Execute:** Perform the copy operation.
 
 ![Destination project selector](/img/screenshots/tools-destination-selector-modal.png)
 
-Each operation displays a description below the options explaining what it does.
+:::tip
+Each operation displays a description near options panel, explaining what it does.
+:::
 
 ---
 
 ## Automatic Backups
 
-Every time you execute a copy operation or enable Edit mode, the app automatically backs up the destination files that are about to be modified. Backups are stored inside the project directory under:
+Every time you execute a copy operation or enable Edit mode, **the app automatically backs up the destination files that are about to be modified**. Backups are stored inside the project directory under:
 
 ```
 <project>/backups/<timestamp>_<operation>/
@@ -61,8 +63,8 @@ For example: `backups/2026-03-26_14-30-45_copy_bank/`
 | Copy Patterns | Destination bank file |
 | Copy Tracks | Destination bank file |
 | Copy Sample Slots (Copy) | Destination: `project.work`, `markers.work`, and audio files (`.wav` + `.ot`) that would be overwritten |
-| Copy Sample Slots (Move to Pool) | Destination: `project.work`, `markers.work`. Source: `project.work` and audio files (`.wav` + `.ot`) that will be moved/deleted |
-| Edit mode toggle | Current bank file |
+| Copy Sample Slots (Move to Pool) | Destination: `project.work`, `markers.work`<br>Source: `project.work` and audio files (`.wav` + `.ot`) that will be moved/deleted |
+| Edit mode toggle (in header)| Current bank file |
 
 ![Backup directory structure](/img/screenshots/project-backup-files.png)
 
@@ -74,7 +76,7 @@ To restore from a backup, simply copy the backed-up files back into the project 
 
 - **Automatic Backups:** The app creates timestamped backups before every write operation (see above).
 - **Validation:** The interface prevents invalid selections (e.g., mixing audio and MIDI track types) and disables the Execute button until all required fields are set.
-- **Direct File Modification:** These tools modify binary project files. The automatic backup lets you revert changes manually if needed.
+- **Direct File Modification:** These tools modify project files immediately. The automatic backup lets you revert changes manually if needed.
 
 :::warning
 **Always back up your project files anyways**: While the app creates automatic backups (see above), no software is guaranteed to work perfectly. Keep your own copies of important work.
