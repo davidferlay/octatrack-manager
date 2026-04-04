@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Keyboard Shortcuts
 
-Octatrack Manager is designed for speed. While you can use your mouse for everything, many tasks are much faster with keyboard shortcuts.
+Octatrack Manager is designed for intuitivity. While you can use your mouse for everything, many tasks can also be performed with keyboard shortcuts.
 
 ## Universal Navigation
 

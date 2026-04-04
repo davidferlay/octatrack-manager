@@ -38,9 +38,7 @@
 
 ## Active Development
 
-Octatrack Manager is currently a **work in progress**. While the core inspection and audio management features are stable, the project is under active development, and new functionalities are being added regularly to expand its capabilities.
-
-Editing features should be used with care. **Always back up your project files** before making changes, as the application modifies your binary project files directly.
+Octatrack Manager is currently a **work in progress**. New functionalities are being added regularly to expand its capabilities.
 
 We are constantly working to improve the application and add more power-user features. Your feedback and bug reports are essential to the project's growth.
 

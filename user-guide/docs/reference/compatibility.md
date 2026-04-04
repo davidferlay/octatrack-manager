@@ -30,7 +30,7 @@ Octatrack Manager is a cross-platform desktop application.
 | Platform | Supported Versions |
 |----------|--------------------|
 | **Linux** | Debian/Ubuntu (`.deb`), Fedora/RHEL (`.rpm`), and universal `.AppImage`. |
-| **macOS** | macOS 11 (Big Sur) and later. Supports both Intel and Apple Silicon (M1/M2/M3) natively. |
+| **macOS** | macOS 10.13 (High Sierra) and later. Supports both Intel and Apple Silicon (M1/M2/M3) natively. |
 | **Windows** | Windows 10 and Windows 11. |
 
 ---
