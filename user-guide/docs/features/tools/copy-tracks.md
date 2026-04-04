@@ -23,7 +23,10 @@ Tracks aren’t treated as first-class entities in the [Octatrack's architecture
 
 ## Copy Modes
 
-- **Part Parameters:** Copies per-track sound design data (machine type, amp, LFO, FX, volumes, recorder setup). Both saved and unsaved (working) Part states are transferred, but only for the selected tracks — all other tracks' data in both states is completely preserved. **The destination Part becomes a hybrid gracefully**: selected tracks get source data in both states, while non-selected tracks keep their existing saved and unsaved data untouched. The destination Part's edited bitmask is updated. Part names are **not** copied, since only selected tracks are modified.
+- **Part Parameters:** Copies per-track sound design data (machine type, amp, LFO, FX, volumes, recorder setup). 
+    - Both saved and unsaved (working) Part states are transferred, but only for the selected tracks — all other tracks' data in both states is completely preserved. 
+    - **The destination Part becomes a hybrid gracefully**: selected tracks get source data in both states, while non-selected tracks keep their existing saved and unsaved data untouched. 
+    - Part names are **not** copied, since only selected tracks are modified.
 - **Pattern Triggers:** Copies only the sequencer data (triggers, trigless trigs, parameter locks, swing) for the selected tracks. Sound design settings remain unchanged.
 - **Both:** Copies both sound design settings and sequencer data for a complete transfer.
 
