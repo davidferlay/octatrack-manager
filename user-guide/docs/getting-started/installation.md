@@ -81,6 +81,6 @@ Launch the application. You should see the **Home** screen with a **Scan for Pro
 
 ## Updating
 
-The app includes an automatic update checker. When a new version is available, you will see a notification in the app header.
+The app includes an automatic update checker. When a new version is available, you will see a notification in the app header. Click the version number <img src={require('@site/static/img/screenshots/project-details-menu-update.png').default} alt="Version badge" style={{height: '34px', verticalAlign: 'middle'}} /> to manually check and download the latest version.
 
 To update manually, simply download the latest installer for your platform and run it. It will automatically replace the old version while keeping your settings intact.
