@@ -68,16 +68,11 @@ The **Tools** tab provides bulk operations for copying content between projects 
 
 In addition of the menu, the header of the Project Detail page also contains several important actions:
 
-- **Back Button:** Return to the [Home Page](./project-discovery.md).
-![Project Detail - Menu back button](/img/screenshots/project-details-menu-back.png)
-- **View/Edit Mode:** Use the toggle to switch between a safe, read-only view and **Edit Mode**.
-![Project Detail - Menu back button](/img/screenshots/project-details-menu-edit.png)
-- **Refresh (↻):** Reload the project from disk. Use this if you have manually replaced project files on your computer. 
-![Project Detail - Menu back button](/img/screenshots/project-details-menu-refresh.png)
-- **Save Status:** Displays when changes are being saved to `.unsaved` files or committed to the project. 
-![Project Detail - Menu back button](/img/screenshots/project-details-menu-saved.png)
-- **Unsupported Banks Warning:** Appears if some bank files are from an older OS version. Click it for instructions on how to update them on your hardware. 
-![Project Detail - Menu back button](/img/screenshots/project-details-menu-update.png)
+- **Back Button:** <img src={require('@site/static/img/screenshots/project-details-menu-back.png').default} alt="Back button" style={{height: '44px', verticalAlign: 'middle'}} /> Return to the [Home Page](./project-discovery.md).
+- **View/Edit Mode:** <img src={require('@site/static/img/screenshots/project-details-menu-edit.png').default} alt="View/Edit toggle" style={{height: '44px', verticalAlign: 'middle'}} /> Use the toggle to switch between a safe, read-only view and **Edit Mode**.
+- **Refresh (↻):** <img src={require('@site/static/img/screenshots/project-details-menu-refresh.png').default} alt="Refresh button" style={{height: '44px', verticalAlign: 'middle'}} /> Reload the project from disk. Use this if you have manually replaced project files on your computer.
+- **Save Status:** <img src={require('@site/static/img/screenshots/project-details-menu-saved.png').default} alt="Save status" style={{height: '34px', verticalAlign: 'middle'}} /> Displays when changes are being saved to `.unsaved` files or committed to the project.
+- **Unsupported Banks Warning:** <img src={require('@site/static/img/screenshots/project-details-menu-bankerr.png').default} alt="Unsupported banks warning" style={{height: '34px', verticalAlign: 'middle'}} /> Appears if some bank files are from an older OS version. Click it for instructions on how to update them on your hardware.
 
 <img src={require('@site/static/img/screenshots/project-details-unsupported-banks-bank-load-error.png').default} alt="Unsupported banks warning dialog" style={{width: '60%', display: 'block', margin: '0 auto'}} />
 
