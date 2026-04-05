@@ -2685,4 +2685,46 @@ test.describe('Tools Tab - Copy Sample Slots One/Range Mode', () => {
     const separator = sourcePanel.locator('.tools-slot-separator')
     await expect(separator).toBeVisible()
   })
+
+  test('Execute button is disabled when destination overflows', async ({ page }) => {
+    // Default source range is 1-128 (all 128 slots)
+    // Set destination start to 2 so range 2-129 overflows
+    const destInput = page.locator('.tools-slot-selector .tools-slot-value-input').last()
+    await destInput.fill('2')
+    await destInput.blur()
+    await page.waitForTimeout(300)
+
+    // Warning badge should be visible
+    const warningBadge = page.locator('.tools-warning-badge')
+    await expect(warningBadge).toBeVisible()
+    await expect(warningBadge).toHaveText('Some slots will overflow')
+
+    // Execute button should be disabled
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+  })
+
+  test('Execute button is re-enabled when overflow is resolved', async ({ page }) => {
+    // Create overflow: set dest start to 2 with full range
+    const destInput = page.locator('.tools-slot-selector .tools-slot-value-input').last()
+    await destInput.fill('2')
+    await destInput.blur()
+    await page.waitForTimeout(300)
+
+    // Confirm disabled
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+
+    // Fix overflow: reset dest start to 1
+    await destInput.fill('1')
+    await destInput.blur()
+    await page.waitForTimeout(300)
+
+    // Warning should disappear
+    const warningBadge = page.locator('.tools-warning-badge')
+    await expect(warningBadge).not.toBeVisible()
+
+    // Execute button should be enabled again
+    await expect(executeBtn).toBeEnabled()
+  })
 })
