@@ -34,11 +34,11 @@ Every row in the table represents a slot (S1–S128 or F1–F128). The table pro
 | **Timestretch** | Shows the timestretch mode (Off, Normal, Beat). |
 | **Loop** | Shows whether the sample is set to loop (Off, Normal). |
 
-![Sample Slots - Hover compat](/img/screenshots/sample-slots-hover-compat.png)
+<img src={require('@site/static/img/screenshots/sample-slots-hover-compat.png').default} alt="Sample Slots - Hover compat" style={{width: '58%', display: 'block', margin: '0 auto'}} />
 
-![Sample Slots - Hover status](/img/screenshots/sample-slots-hover-status.png)
+<img src={require('@site/static/img/screenshots/sample-slots-hover-status.png').default} alt="Sample Slots - Hover status" style={{width: '52%', display: 'block', margin: '0 auto'}} />
 
-![Sample Slots - Hover source](/img/screenshots/sample-slots-hover-source.png)
+<img src={require('@site/static/img/screenshots/sample-slots-hover-source.png').default} alt="Sample Slots - Hover source" style={{width: '37%', display: 'block', margin: '0 auto'}} />
 
 ### Filtering and Sorting
 The table includes a powerful toolbar to help you find what you need. 
@@ -47,22 +47,22 @@ Each column cna be sorted or filtered:
 - **Filter:** Click on the 3 dots menu in column header to filter the slots form existing values.
 - **Sort:** Click on any column header to sort the slots by name, path, gain, etc.
 
-![Sample Slots - Column filter](/img/screenshots/sample-slots-flex-filters-col-filter.png)
+<img src={require('@site/static/img/screenshots/sample-slots-flex-filters-col-filter.png').default} alt="Sample Slots - Column filter" style={{width: '46%', display: 'block', margin: '0 auto'}} />
 
 Additionally, you can also use these advanced features:
 - **Hide Empty:** Toggle the switch to focus only on slots that have a sample assigned.
 - **Search:** Type a name to filter the list instantly.
 
-![Sample Slots - Hide Empty](/img/screenshots/sample-slots-hide-empty.png)
+<img src={require('@site/static/img/screenshots/sample-slots-hide-empty.png').default} alt="Sample Slots - Hide Empty" style={{width: '54%', display: 'block', margin: '0 auto'}} />
 
-![Sample Slots - Search bar](/img/screenshots/sample-slots-search-bar.png)
+<img src={require('@site/static/img/screenshots/sample-slots-search-bar.png').default} alt="Sample Slots - Search bar" style={{width: '60%', display: 'block', margin: '0 auto'}} />
 
 ![Sample Slots - Search results](/img/screenshots/sample-slots-search-results.png)
 
 ### Column Preferences
 You can customize which columns are visible. Click the column menu icon in the toolbar to toggle column visibility. These preferences are remembered across sessions.
 
-![Sample Slots - Column selector](/img/screenshots/sample-slots-flex-filters-bis-col-selec.png)
+<img src={require('@site/static/img/screenshots/sample-slots-flex-filters-bis-col-selec.png').default} alt="Sample Slots - Column selector" style={{width: '50%', display: 'block', margin: '0 auto'}} />
 
 ![Sample Slots - Column visibility menu](/img/screenshots/sample-slots-flex-filters-bis.png)
 

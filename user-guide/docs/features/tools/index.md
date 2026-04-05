@@ -66,7 +66,7 @@ For example: `backups/2026-03-26_14-30-45_copy_bank/`
 | Copy Sample Slots (Move to Pool) | Destination: `project.work`, `markers.work`<br/>Source: `project.work` and audio files (`.wav` + `.ot`) that will be moved/deleted |
 | Edit mode toggle (in header)| Current bank file |
 
-![Backup directory structure](/img/screenshots/project-backup-files.png)
+<img src={require('@site/static/img/screenshots/project-backup-files.png').default} alt="Backup directory structure" style={{width: '38%', display: 'block', margin: '0 auto'}} />
 
 To restore from a backup, simply copy the backed-up files back into the project directory, replacing the modified ones.
 

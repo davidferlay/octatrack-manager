@@ -15,7 +15,7 @@ sidebar_position: 6
 3. **Configure Options:** Choose slot type, audio file handling, and editor settings.
 4. **Execute:** Perform the sample slot copy.
 
-![Copy Sample Slots - One mode](/img/screenshots/tools-copy-sample-slots-source-one.png) ![Copy Sample Slots - Range mode](/img/screenshots/tools-copy-sample-slots-source-range.png)
+<img src={require('@site/static/img/screenshots/tools-copy-sample-slots-source-one.png').default} alt="Copy Sample Slots - One mode" style={{width: '40%'}} /> <img src={require('@site/static/img/screenshots/tools-copy-sample-slots-source-range.png').default} alt="Copy Sample Slots - Range mode" style={{width: '40%'}} />
 
 ---
 

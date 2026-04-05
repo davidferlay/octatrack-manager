@@ -14,7 +14,7 @@ Octatrack Manager provides an interface for browsing, managing, importing and co
 
 Access the Audio Pool of a Set from the **Home Page** by clicking the **Audio Pool** card within any Set:
 
-![Audio Pool interface](/img/screenshots/project-discovery-audio-pool.png)
+<img src={require('@site/static/img/screenshots/project-discovery-audio-pool.png').default} alt="Audio Pool interface" style={{width: '58%', display: 'block', margin: '0 auto'}} />
 
 
 ### Right Panel: Your Audio Pool
@@ -37,9 +37,9 @@ Octatrack Manager simplifies the process of getting new sounds into your Octatra
 2. **Select Destination:** Navigate to the folder where you want them in the right panel.
 3. **Execute:** Click **Copy** button or **Copy to Pool** in right-click contextual menu.
 
-![Copy selected Audio files from button](/img/screenshots/audio-pool-copy-button.png)
+<img src={require('@site/static/img/screenshots/audio-pool-copy-button.png').default} alt="Copy selected Audio files from button" style={{width: '64%', display: 'block', margin: '0 auto'}} />
 
-![Copy selected Audio files from contextual menu](/img/screenshots/audio-pool-copy-menu.png)
+<img src={require('@site/static/img/screenshots/audio-pool-copy-menu.png').default} alt="Copy selected Audio files from contextual menu" style={{width: '62%', display: 'block', margin: '0 auto'}} />
 
 ---
 
@@ -72,7 +72,7 @@ If you try to add a file with the same name as one that already exists in your p
 - **Skip:** Keep the old file and don't import the new one.
 - **Apply to All:** Use your choice for all subsequent conflicts in the current batch.
 
-![File conflict confirmation modal](/img/screenshots/audio-pool-confirmation.png)
+<img src={require('@site/static/img/screenshots/audio-pool-confirmation.png').default} alt="File conflict confirmation modal" style={{width: '64%', display: 'block', margin: '0 auto'}} />
 
 ---
 

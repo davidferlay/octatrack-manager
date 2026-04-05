@@ -79,7 +79,7 @@ In addition of the menu, the header of the Project Detail page also contains sev
 - **Unsupported Banks Warning:** Appears if some bank files are from an older OS version. Click it for instructions on how to update them on your hardware. 
 ![Project Detail - Menu back button](/img/screenshots/project-details-menu-update.png)
 
-![Unsupported banks warning dialog](/img/screenshots/project-details-unsupported-banks-bank-load-error.png)
+<img src={require('@site/static/img/screenshots/project-details-unsupported-banks-bank-load-error.png').default} alt="Unsupported banks warning dialog" style={{width: '60%', display: 'block', margin: '0 auto'}} />
 
 ![Unsupported banks bank selector](/img/screenshots/project-details-bank-selector-unsupported-banks.png)
 

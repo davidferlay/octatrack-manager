@@ -20,7 +20,7 @@ When Edit Mode is active, the knobs and fields become interactive, and your chan
 
 Note that in the future, more than Parts will be editable in projects.
 
-![View/Edit mode toggle](/img/screenshots/parts-editor-toggle.png)
+<img src={require('@site/static/img/screenshots/parts-editor-toggle.png').default} alt="View/Edit mode toggle" style={{width: '64%', display: 'block', margin: '0 auto'}} />
 
 
 ---
@@ -103,7 +103,7 @@ As you move a knob or change a setting, the change is **immediately written to p
 
 - An **unsaved indicator** (asterisk) will appear next to the part name to show that it contains uncommitted changes. Exactly like on the Octatrack.
 
-![Unsaved indicator on part tab](/img/screenshots/parts-editor-unsaved.png)
+<img src={require('@site/static/img/screenshots/parts-editor-unsaved.png').default} alt="Unsaved indicator on part tab" style={{width: '56%', display: 'block', margin: '0 auto'}} />
 
 ### 2. Reloading a Part
 Live changes made can easily be discarded; allowing you to return to the last saved state of Part:
@@ -111,7 +111,7 @@ Live changes made can easily be discarded; allowing you to return to the last sa
 - Click the **Reload** button in the bank header.
 - This will clear the unsaved changes.
 
-![Reload, Save, and Save All buttons](/img/screenshots/parts-editor-reload.png)
+<img src={require('@site/static/img/screenshots/parts-editor-reload.png').default} alt="Reload, Save, and Save All buttons" style={{width: '50%', display: 'block', margin: '0 auto'}} />
 
 ### 3. Saving to Part
 To commit your edits to the Part:
@@ -119,7 +119,7 @@ To commit your edits to the Part:
 - Click **Save** to commit the current part, or **Save All** to commit all modified parts in the bank at once.
 - The **unsaved indicator** will disappear, and your changes are now final.
 
-![Parts Editor Save Button](/img/screenshots/parts-editor-save.png)
+<img src={require('@site/static/img/screenshots/parts-editor-save.png').default} alt="Parts Editor Save Button" style={{width: '50%', display: 'block', margin: '0 auto'}} />
 
 ---
 
