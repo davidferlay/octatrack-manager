@@ -617,6 +617,77 @@ async fn backup_project_files(
     .unwrap()
 }
 
+#[tauri::command]
+async fn list_missing_samples(
+    project_path: String,
+) -> Result<Vec<project_reader::MissingSample>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        project_reader::list_missing_samples(&project_path)
+    })
+    .await
+    .unwrap()
+}
+
+#[tauri::command]
+async fn search_project_dir(
+    project_path: String,
+    filenames: Vec<String>,
+) -> Result<Vec<project_reader::FoundSample>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        project_reader::search_project_dir(&project_path, filenames)
+    })
+    .await
+    .unwrap()
+}
+
+#[tauri::command]
+async fn search_audio_pool(
+    project_path: String,
+    filenames: Vec<String>,
+) -> Result<Vec<project_reader::FoundSample>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        project_reader::search_audio_pool(&project_path, filenames)
+    })
+    .await
+    .unwrap()
+}
+
+#[tauri::command]
+async fn search_other_projects(
+    project_path: String,
+    filenames: Vec<String>,
+) -> Result<Vec<project_reader::FoundSample>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        project_reader::search_other_projects(&project_path, filenames)
+    })
+    .await
+    .unwrap()
+}
+
+#[tauri::command]
+async fn search_directory(
+    dir_path: String,
+    filenames: Vec<String>,
+) -> Result<Vec<project_reader::FoundSample>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        project_reader::search_directory(&dir_path, filenames)
+    })
+    .await
+    .unwrap()
+}
+
+#[tauri::command]
+async fn fix_missing_samples(
+    project_path: String,
+    resolutions: Vec<project_reader::SampleResolution>,
+) -> Result<project_reader::FixResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        project_reader::fix_missing_samples(&project_path, resolutions)
+    })
+    .await
+    .unwrap()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -673,7 +744,14 @@ pub fn run() {
             copy_sample_slots,
             check_missing_source_files,
             get_slot_audio_paths,
-            backup_project_files
+            backup_project_files,
+            // Tools Tab - Fix Missing Samples
+            list_missing_samples,
+            search_project_dir,
+            search_audio_pool,
+            search_other_projects,
+            search_directory,
+            fix_missing_samples
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

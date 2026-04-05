@@ -1,0 +1,899 @@
+import { useState, useEffect, useCallback, useRef } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
+
+interface MissingSample {
+  filename: string;
+  original_path: string;
+  slot_type: string;
+  flex_slot_ids: number[];
+  static_slot_ids: number[];
+}
+
+interface FoundSample {
+  filename: string;
+  found_path: string;
+  source_project: string | null;
+}
+
+interface SampleResolution {
+  filename: string;
+  found_path: string;
+  action: string;
+  new_slot_path: string;
+}
+
+interface FixResult {
+  resolved_count: number;
+  files_copied: number;
+  files_moved: number;
+  projects_updated: string[];
+}
+
+type PoolOption = "use_from_pool" | "copy_to_project";
+type OtherProjectOption = "move_to_pool" | "copy_to_project";
+
+type ModalPhase = "searching" | "browse_prompt" | "confirming" | "applying" | "done";
+
+interface SearchStep {
+  label: string;
+  status: "pending" | "running" | "done" | "skipped";
+  foundCount: number;
+}
+
+interface ResolvedFile {
+  filename: string;
+  found_path: string;
+  source: string; // "project", "pool", "other_project", "user_dir"
+  source_project?: string;
+  action: string;
+  new_slot_path: string;
+  color: string; // CSS class for color coding
+}
+
+interface Props {
+  projectPath: string;
+  projectName: string;
+  missingSamples: MissingSample[];
+  poolOption: PoolOption;
+  otherProjectOption: OtherProjectOption;
+  hasAudioPool: boolean;
+  onClose: () => void;
+  onApplied: () => void;
+}
+
+export function FixMissingSamplesModal({
+  projectPath,
+  projectName: _projectName,
+  missingSamples,
+  poolOption,
+  otherProjectOption,
+  hasAudioPool,
+  onClose,
+  onApplied,
+}: Props) {
+  const [phase, setPhase] = useState<ModalPhase>("searching");
+  const [steps, setSteps] = useState<SearchStep[]>([
+    { label: "Project directory", status: "pending", foundCount: 0 },
+    { label: "Audio Pool", status: "pending", foundCount: 0 },
+    { label: "Other Set projects", status: "pending", foundCount: 0 },
+  ]);
+
+  // All found files (accumulated across search steps)
+  const [resolvedFiles, setResolvedFiles] = useState<ResolvedFile[]>([]);
+  const [remainingFilenames, setRemainingFilenames] = useState<string[]>(
+    missingSamples.map((s) => s.filename)
+  );
+
+  // Browse prompt state
+  const [searchedDirs, setSearchedDirs] = useState<string[]>([]);
+  const [dirWarning, setDirWarning] = useState<string>("");
+
+  // Apply result
+  const [fixResult, setFixResult] = useState<FixResult | null>(null);
+  const [applyError, setApplyError] = useState<string>("");
+
+  // Modal resize
+  const [modalWidth, setModalWidth] = useState<number | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const isModalDragging = useRef<"left" | "right" | null>(null);
+  const modalDragStartX = useRef(0);
+  const modalDragStartWidth = useRef(0);
+
+  // Column resize
+  const [colWidths, setColWidths] = useState<number[]>([]);
+  const colDragIndex = useRef<number | null>(null);
+  const colDragStartX = useRef(0);
+  const colDragStartWidths = useRef<number[]>([]);
+  const tableRef = useRef<HTMLTableElement>(null);
+
+  // Sorting and filtering for confirmation table
+  type ConfirmSortColumn = "file" | "found" | "location" | "action";
+  type SortDirection = "asc" | "desc";
+  const [confirmSortColumn, setConfirmSortColumn] = useState<ConfirmSortColumn>("found");
+  const [confirmSortDirection, setConfirmSortDirection] = useState<SortDirection>("desc");
+  const [confirmSearchText, setConfirmSearchText] = useState("");
+  const [foundFilter, setFoundFilter] = useState<string>("all");
+  const [actionFilter, setActionFilter] = useState<string>("all");
+  const [confirmOpenDropdown, setConfirmOpenDropdown] = useState<string | null>(null);
+  const [confirmDropdownPosition, setConfirmDropdownPosition] = useState<{ top: number; left: number } | null>(null);
+
+  const closeConfirmDropdown = () => {
+    setConfirmOpenDropdown(null);
+    setConfirmDropdownPosition(null);
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!confirmOpenDropdown) return;
+    function handleClick(event: MouseEvent) {
+      const target = event.target as HTMLElement;
+      if (!target.closest(".filter-dropdown") && !target.closest(".filter-icon")) {
+        setConfirmOpenDropdown(null);
+        setConfirmDropdownPosition(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [confirmOpenDropdown]);
+
+  const handleConfirmSort = (column: ConfirmSortColumn) => {
+    if (confirmSortColumn === column) {
+      setConfirmSortDirection(confirmSortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setConfirmSortColumn(column);
+      setConfirmSortDirection("asc");
+    }
+  };
+
+  const handleModalResizeMouseDown = useCallback(
+    (side: "left" | "right", e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      isModalDragging.current = side;
+      modalDragStartX.current = e.clientX;
+      modalDragStartWidth.current =
+        modalRef.current?.getBoundingClientRect().width ?? 700;
+    },
+    []
+  );
+
+  useEffect(() => {
+    function handleMouseMove(e: MouseEvent) {
+      if (isModalDragging.current) {
+        const delta = e.clientX - modalDragStartX.current;
+        const multiplier = isModalDragging.current === "right" ? 2 : -2;
+        const newWidth = Math.max(
+          400,
+          Math.min(window.innerWidth * 0.95, modalDragStartWidth.current + delta * multiplier)
+        );
+        setModalWidth(newWidth);
+      }
+      if (colDragIndex.current !== null) {
+        const delta = e.clientX - colDragStartX.current;
+        const idx = colDragIndex.current;
+        const prev = colDragStartWidths.current;
+        const minW = 40;
+        const newLeft = Math.max(minW, prev[idx] + delta);
+        const newRight = Math.max(minW, prev[idx + 1] - delta);
+        setColWidths((w) => {
+          const copy = [...w];
+          copy[idx] = newLeft;
+          copy[idx + 1] = newRight;
+          return copy;
+        });
+      }
+    }
+    function handleMouseUp() {
+      isModalDragging.current = null;
+      colDragIndex.current = null;
+    }
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, []);
+
+  // Initialize column widths from actual header widths when confirming phase starts
+  useEffect(() => {
+    if (phase === "confirming" && tableRef.current && colWidths.length === 0) {
+      const ths = tableRef.current.querySelectorAll("thead th");
+      const widths = Array.from(ths).map((th) => (th as HTMLElement).offsetWidth);
+      if (widths.length > 0) setColWidths(widths);
+    }
+  }, [phase, colWidths.length]);
+
+  const handleColResizeMouseDown = useCallback(
+    (colIndex: number, e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      colDragIndex.current = colIndex;
+      colDragStartX.current = e.clientX;
+      // Capture current widths from DOM if state not yet set
+      if (tableRef.current) {
+        const ths = tableRef.current.querySelectorAll("thead th");
+        const widths = Array.from(ths).map((th) => (th as HTMLElement).offsetWidth);
+        colDragStartWidths.current = widths;
+        setColWidths(widths);
+      }
+    },
+    []
+  );
+
+  // Compute resolutions for the confirmation screen
+  const buildResolution = useCallback(
+    (file: ResolvedFile): SampleResolution => {
+      return {
+        filename: file.filename,
+        found_path: file.found_path,
+        action: file.action,
+        new_slot_path: file.new_slot_path,
+      };
+    },
+    []
+  );
+
+  // Determine action and path for a found file based on its source and options
+  function resolveAction(
+    filename: string,
+    found_path: string,
+    source: string,
+    source_project?: string
+  ): ResolvedFile {
+    let action: string;
+    let new_slot_path: string;
+    let color: string;
+
+    switch (source) {
+      case "project": {
+        // Found in project dir — compute relative path from project root
+        const projectPrefix = projectPath.endsWith("/")
+          ? projectPath
+          : projectPath + "/";
+        const relativePath = found_path.startsWith(projectPrefix)
+          ? found_path.slice(projectPrefix.length)
+          : filename;
+        action = "update_path";
+        new_slot_path = relativePath;
+        color = "green";
+        break;
+      }
+      case "pool": {
+        if (poolOption === "use_from_pool") {
+          action = "update_path";
+          new_slot_path = `../AUDIO/${filename}`;
+          color = "green";
+        } else {
+          action = "copy_to_project";
+          new_slot_path = filename;
+          color = "blue";
+        }
+        break;
+      }
+      case "other_project": {
+        if (otherProjectOption === "move_to_pool") {
+          action = "move_to_pool";
+          new_slot_path = `../AUDIO/${filename}`;
+          color = "purple";
+        } else {
+          action = "copy_to_project";
+          new_slot_path = filename;
+          color = "blue";
+        }
+        break;
+      }
+      case "user_dir":
+      default: {
+        action = "copy_to_project";
+        new_slot_path = filename;
+        color = "blue";
+        break;
+      }
+    }
+
+    return {
+      filename,
+      found_path,
+      source,
+      source_project,
+      action,
+      new_slot_path,
+      color,
+    };
+  }
+
+  // Run all search steps sequentially
+  useEffect(() => {
+    let cancelled = false;
+
+    async function runSearchSteps() {
+      let remaining = [...missingSamples.map((s) => s.filename)];
+      const allResolved: ResolvedFile[] = [];
+
+      // Step 1: Project directory
+      setSteps((prev) =>
+        prev.map((s, i) => (i === 0 ? { ...s, status: "running" } : s))
+      );
+      try {
+        const found = await invoke<FoundSample[]>("search_project_dir", {
+          projectPath,
+          filenames: remaining,
+        });
+        if (cancelled) return;
+
+        for (const f of found) {
+          const resolved = resolveAction(f.filename, f.found_path, "project");
+          allResolved.push(resolved);
+          remaining = remaining.filter((n) => n !== f.filename);
+        }
+        setSteps((prev) =>
+          prev.map((s, i) =>
+            i === 0 ? { ...s, status: "done", foundCount: found.length } : s
+          )
+        );
+      } catch (err) {
+        console.error("search_project_dir error:", err);
+        setSteps((prev) =>
+          prev.map((s, i) => (i === 0 ? { ...s, status: "done" } : s))
+        );
+      }
+
+      // Step 2: Audio Pool
+      if (remaining.length === 0 || !hasAudioPool) {
+        setSteps((prev) =>
+          prev.map((s, i) => (i === 1 ? { ...s, status: "skipped" } : s))
+        );
+      } else {
+        setSteps((prev) =>
+          prev.map((s, i) => (i === 1 ? { ...s, status: "running" } : s))
+        );
+        try {
+          const found = await invoke<FoundSample[]>("search_audio_pool", {
+            projectPath,
+            filenames: remaining,
+          });
+          if (cancelled) return;
+
+          for (const f of found) {
+            const resolved = resolveAction(f.filename, f.found_path, "pool");
+            allResolved.push(resolved);
+            remaining = remaining.filter((n) => n !== f.filename);
+          }
+          setSteps((prev) =>
+            prev.map((s, i) =>
+              i === 1 ? { ...s, status: "done", foundCount: found.length } : s
+            )
+          );
+        } catch (err) {
+          console.error("search_audio_pool error:", err);
+          setSteps((prev) =>
+            prev.map((s, i) => (i === 1 ? { ...s, status: "done" } : s))
+          );
+        }
+      }
+
+      // Step 3: Other Set projects
+      if (remaining.length === 0) {
+        setSteps((prev) =>
+          prev.map((s, i) => (i === 2 ? { ...s, status: "skipped" } : s))
+        );
+      } else {
+        setSteps((prev) =>
+          prev.map((s, i) => (i === 2 ? { ...s, status: "running" } : s))
+        );
+        try {
+          const found = await invoke<FoundSample[]>("search_other_projects", {
+            projectPath,
+            filenames: remaining,
+          });
+          if (cancelled) return;
+
+          for (const f of found) {
+            const resolved = resolveAction(
+              f.filename,
+              f.found_path,
+              "other_project",
+              f.source_project || undefined
+            );
+            allResolved.push(resolved);
+            remaining = remaining.filter((n) => n !== f.filename);
+          }
+          setSteps((prev) =>
+            prev.map((s, i) =>
+              i === 2
+                ? { ...s, status: "done", foundCount: found.length }
+                : s
+            )
+          );
+        } catch (err) {
+          console.error("search_other_projects error:", err);
+          setSteps((prev) =>
+            prev.map((s, i) => (i === 2 ? { ...s, status: "done" } : s))
+          );
+        }
+      }
+
+      if (cancelled) return;
+
+      setResolvedFiles(allResolved);
+      setRemainingFilenames(remaining);
+
+      // If files still missing → browse prompt; otherwise → confirmation
+      if (remaining.length > 0) {
+        setPhase("browse_prompt");
+      } else {
+        setPhase("confirming");
+      }
+    }
+
+    if (phase === "searching") {
+      runSearchSteps();
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Handle browse directory
+  async function handleBrowse() {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: "Select directory to search for missing samples",
+      });
+      if (!selected || typeof selected !== "string") return;
+
+      // Warn if already searched
+      if (searchedDirs.includes(selected)) {
+        setDirWarning(`This directory was already searched: ${selected}`);
+        return;
+      }
+
+      setDirWarning("");
+      setSearchedDirs((prev) => [...prev, selected]);
+
+      // Search the directory
+      const found = await invoke<FoundSample[]>("search_directory", {
+        dirPath: selected,
+        filenames: remainingFilenames,
+      });
+
+      const newResolved = [...resolvedFiles];
+      let newRemaining = [...remainingFilenames];
+
+      for (const f of found) {
+        const resolved = resolveAction(f.filename, f.found_path, "user_dir");
+        newResolved.push(resolved);
+        newRemaining = newRemaining.filter((n) => n !== f.filename);
+      }
+
+      setResolvedFiles(newResolved);
+      setRemainingFilenames(newRemaining);
+
+      if (newRemaining.length === 0) {
+        setPhase("confirming");
+      }
+      // else stay in browse_prompt
+    } catch (err) {
+      console.error("Browse error:", err);
+    }
+  }
+
+  // Handle apply
+  async function handleApply() {
+    setPhase("applying");
+    setApplyError("");
+
+    try {
+      // Back up all affected projects
+      const projectsToBackup = new Set<string>();
+      projectsToBackup.add(projectPath);
+      for (const file of resolvedFiles) {
+        if (file.action === "move_to_pool" && file.source_project) {
+          // Need to find sibling project path
+          const projectParent = projectPath.substring(0, projectPath.lastIndexOf("/"));
+          projectsToBackup.add(`${projectParent}/${file.source_project}`);
+        }
+      }
+
+      for (const p of projectsToBackup) {
+        await invoke("backup_project_files", {
+          projectPath: p,
+          files: ["project.work"],
+          label: "fix_missing_samples",
+        });
+      }
+
+      // Apply fixes
+      const resolutions: SampleResolution[] = resolvedFiles.map(buildResolution);
+      const result = await invoke<FixResult>("fix_missing_samples", {
+        projectPath,
+        resolutions,
+      });
+
+      setFixResult(result);
+      setPhase("done");
+    } catch (err) {
+      setApplyError(String(err));
+      setPhase("done");
+    }
+  }
+
+  // Compute affected sibling projects for confirmation screen
+  const affectedProjects: Map<string, ResolvedFile[]> = new Map();
+  for (const file of resolvedFiles) {
+    if (file.action === "move_to_pool" && file.source_project) {
+      const existing = affectedProjects.get(file.source_project) || [];
+      existing.push(file);
+      affectedProjects.set(file.source_project, existing);
+    }
+  }
+
+  const notFoundFilenames = missingSamples
+    .map((s) => s.filename)
+    .filter((f) => !resolvedFiles.some((r) => r.filename === f));
+
+  // Build unified confirmation rows for sorting/filtering
+  interface ConfirmRow {
+    filename: string;
+    found: boolean;
+    location: string;
+    actionLabel: string;
+    actionTooltip: string;
+    isNotFound: boolean;
+    color?: string;
+  }
+
+  const allConfirmRows: ConfirmRow[] = [
+    ...resolvedFiles.map((file): ConfirmRow => {
+      const actionLabel =
+        file.action === "update_path" && file.source === "pool" ? "Use from Pool" :
+        file.action === "update_path" && file.source === "project" ? "Update path" :
+        file.action === "copy_to_project" ? "Copy to project" :
+        file.action === "move_to_pool" ? "Move to Pool" : "";
+      const actionTooltip =
+        file.action === "update_path" && file.source === "pool" ? "File exists in Audio Pool — update the slot path to reference it" :
+        file.action === "update_path" && file.source === "project" ? "File found in project directory — update the slot path" :
+        file.action === "copy_to_project" ? "File will be copied into the project directory" :
+        file.action === "move_to_pool" ? "File will be moved to the Audio Pool and slot path updated" : "";
+      return { filename: file.filename, found: true, location: file.found_path, actionLabel, actionTooltip, isNotFound: false, color: file.color };
+    }),
+    ...notFoundFilenames.map((f): ConfirmRow => ({
+      filename: f, found: false, location: "—", actionLabel: "Not found", actionTooltip: "No matching file was found — this sample will remain missing", isNotFound: true,
+    })),
+  ];
+
+  const filteredConfirmRows = allConfirmRows.filter((row) => {
+    if (confirmSearchText && !row.filename.toLowerCase().includes(confirmSearchText.toLowerCase())) return false;
+    if (foundFilter === "yes" && !row.found) return false;
+    if (foundFilter === "no" && row.found) return false;
+    if (actionFilter !== "all" && row.actionLabel !== actionFilter) return false;
+    return true;
+  });
+
+  const sortedConfirmRows = [...filteredConfirmRows].sort((a, b) => {
+    let cmpA: string | number;
+    let cmpB: string | number;
+    switch (confirmSortColumn) {
+      case "file": cmpA = a.filename.toLowerCase(); cmpB = b.filename.toLowerCase(); break;
+      case "found": cmpA = a.found ? 0 : 1; cmpB = b.found ? 0 : 1; break;
+      case "location": cmpA = a.location.toLowerCase(); cmpB = b.location.toLowerCase(); break;
+      case "action": cmpA = a.actionLabel.toLowerCase(); cmpB = b.actionLabel.toLowerCase(); break;
+      default: return 0;
+    }
+    if (cmpA < cmpB) return confirmSortDirection === "asc" ? -1 : 1;
+    if (cmpA > cmpB) return confirmSortDirection === "asc" ? 1 : -1;
+    return 0;
+  });
+
+  const uniqueActions = Array.from(new Set(allConfirmRows.map((r) => r.actionLabel))).sort();
+
+  const hasConfirmActiveFilters = foundFilter !== "all" || actionFilter !== "all";
+
+  const renderConfirmFilterableHeader = (
+    column: ConfirmSortColumn,
+    label: string,
+    filterName: string,
+    isActive: boolean,
+    options: { value: string; label: string }[],
+    currentValue: string,
+    onChange: (value: string) => void,
+    extraStyle?: React.CSSProperties,
+    resizeIndex?: number,
+  ) => (
+    <th className="filterable-header" style={{ ...extraStyle, position: 'relative' }}>
+      <div className="header-content">
+        <span onClick={() => handleConfirmSort(column)} className="sortable-label">
+          {label} {confirmSortColumn === column && (confirmSortDirection === "asc" ? "▲" : "▼")}
+        </span>
+        <button
+          className={`filter-icon ${confirmOpenDropdown === filterName || isActive ? "active" : ""}`}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (confirmOpenDropdown === filterName) {
+              closeConfirmDropdown();
+            } else {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setConfirmDropdownPosition({ top: rect.bottom + 4, left: rect.right - 120 });
+              setConfirmOpenDropdown(filterName);
+            }
+          }}
+        >
+          ⋮
+        </button>
+      </div>
+      {confirmOpenDropdown === filterName && confirmDropdownPosition && (
+        <div className="filter-dropdown" style={{ position: "fixed", top: confirmDropdownPosition.top, left: confirmDropdownPosition.left, width: "auto", minWidth: "auto" }}>
+          <div className="dropdown-options" style={{ width: "max-content" }}>
+            {options.map((opt) => (
+              <label key={opt.value} className="dropdown-option">
+                <input type="radio" name={`${filterName}-confirm-filter`} checked={currentValue === opt.value} onChange={() => { onChange(opt.value); closeConfirmDropdown(); }} />
+                <span>{opt.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+      {resizeIndex !== undefined && (
+        <span className="col-resize-handle" onMouseDown={(e) => handleColResizeMouseDown(resizeIndex, e)} />
+      )}
+    </th>
+  );
+
+  return (
+    <div className="modal-overlay" onClick={phase === "done" || phase === "confirming" || phase === "browse_prompt" ? onClose : undefined}>
+      <div
+        ref={modalRef}
+        className="modal-content fix-missing-modal"
+        onClick={(e) => e.stopPropagation()}
+        style={modalWidth ? { width: modalWidth, maxWidth: "95vw" } : undefined}
+      >
+        {/* Resize handles */}
+        <div
+          className="modal-resize-handle modal-resize-left"
+          onMouseDown={(e) => handleModalResizeMouseDown("left", e)}
+        />
+        <div
+          className="modal-resize-handle modal-resize-right"
+          onMouseDown={(e) => handleModalResizeMouseDown("right", e)}
+        />
+        <div className="modal-header">
+          <h3>
+            {phase === "searching" && "Searching for missing samples..."}
+            {phase === "browse_prompt" && `${remainingFilenames.length} file${remainingFilenames.length !== 1 ? "s" : ""} are still missing`}
+            {phase === "confirming" && <><i className="fas fa-clipboard-check"></i> Review planned changes before execution</>}
+            {phase === "applying" && "Applying changes..."}
+            {phase === "done" && (applyError ? "Error" : "Complete")}
+          </h3>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className={`modal-body ${phase === "confirming" ? "fix-confirm-body" : ""}`}>
+          {/* SEARCHING PHASE */}
+          {phase === "searching" && (
+            <div className="fix-search-steps">
+              {steps.map((step, i) => (
+                <div key={i} className={`fix-search-step ${step.status}`}>
+                  <span className="fix-step-icon">
+                    {step.status === "running" && <span className="loading-spinner-small"></span>}
+                    {step.status === "done" && <i className="fas fa-check"></i>}
+                    {step.status === "skipped" && <i className="fas fa-minus"></i>}
+                    {step.status === "pending" && <i className="fas fa-circle" style={{ opacity: 0.3 }}></i>}
+                  </span>
+                  <span className="fix-step-label">{step.label}</span>
+                  {step.status === "done" && step.foundCount > 0 && (
+                    <span className="fix-step-count">{step.foundCount} found</span>
+                  )}
+                  {step.status === "skipped" && (
+                    <span className="fix-step-count">skipped</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* BROWSE PROMPT PHASE */}
+          {phase === "browse_prompt" && (
+            <div className="fix-browse-prompt">
+              <p style={{ textAlign: 'center', color: 'var(--elektron-orange)', fontSize: '1.1rem' }}>Select a location to search for audio files still missing after automatic search:</p>
+              <div className="fix-remaining-list">
+                {remainingFilenames.map((f) => (
+                  <div key={f} className="fix-remaining-item">{f}</div>
+                ))}
+              </div>
+              {dirWarning && (
+                <div className="fix-dir-warning">
+                  <i className="fas fa-exclamation-triangle"></i> {dirWarning}
+                </div>
+              )}
+              <div className="fix-browse-actions">
+                <button className="tools-execute-btn" onClick={handleBrowse}>
+                  <i className="fas fa-folder-open"></i> Browse...
+                </button>
+                <button
+                  className="tools-execute-btn"
+                  onClick={() => setPhase("confirming")}
+                >
+                  Continue
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* CONFIRMATION PHASE */}
+          {phase === "confirming" && (
+            <div className="fix-confirmation">
+              <div className="filter-results-info">
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                  <span className={`fix-confirm-status${resolvedFiles.length === allConfirmRows.length ? " all-resolved" : ""}`}>
+                    <strong>{resolvedFiles.length}/{allConfirmRows.length}</strong> missing files found
+                    {sortedConfirmRows.length !== allConfirmRows.length && <span style={{ color: 'var(--elektron-text-secondary)', fontWeight: 400 }}> — showing {sortedConfirmRows.length}</span>}
+                  </span>
+                  {foundFilter !== "all" && <span className="filter-badge">Found: {foundFilter === "yes" ? "Yes" : "No"}</span>}
+                  {actionFilter !== "all" && <span className="filter-badge">Action: {actionFilter}</span>}
+                  {hasConfirmActiveFilters && (
+                    <button className="reset-filters-btn" onClick={() => { setFoundFilter("all"); setActionFilter("all"); }} title="Reset all filters">✕ Reset</button>
+                  )}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+                  <div className="header-search-container">
+                    <input type="text" placeholder="Search..." value={confirmSearchText} onChange={(e) => setConfirmSearchText(e.target.value)} className="header-search-input" />
+                    {confirmSearchText && (
+                      <button className="header-search-clear" onClick={() => setConfirmSearchText("")} title="Clear search">×</button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Unified table: resolved + not found */}
+              <div className="fix-confirm-table-wrapper">
+                <table className="samples-table" ref={tableRef}>
+                  <colgroup>
+                    {colWidths.length > 0
+                      ? colWidths.map((w, i) => <col key={i} style={{ width: w }} />)
+                      : <><col /><col /><col /><col /></>
+                    }
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th className="sortable" onClick={() => handleConfirmSort("file")} style={{ position: 'relative' }}>
+                        File {confirmSortColumn === "file" && (confirmSortDirection === "asc" ? "▲" : "▼")}
+                        <span className="col-resize-handle" onMouseDown={(e) => { e.stopPropagation(); handleColResizeMouseDown(0, e); }} />
+                      </th>
+                      {renderConfirmFilterableHeader(
+                        "found", "Found", "found", foundFilter !== "all",
+                        [{ value: "all", label: "All" }, { value: "yes", label: "Yes" }, { value: "no", label: "No" }],
+                        foundFilter, setFoundFilter, { textAlign: 'center' }, 1
+                      )}
+                      <th className="sortable" onClick={() => handleConfirmSort("location")} style={{ position: 'relative' }}>
+                        Location {confirmSortColumn === "location" && (confirmSortDirection === "asc" ? "▲" : "▼")}
+                        <span className="col-resize-handle" onMouseDown={(e) => { e.stopPropagation(); handleColResizeMouseDown(2, e); }} />
+                      </th>
+                      {renderConfirmFilterableHeader(
+                        "action", "Action", "action", actionFilter !== "all",
+                        [{ value: "all", label: "All" }, ...uniqueActions.map((a) => ({ value: a, label: a }))],
+                        actionFilter, setActionFilter, undefined, undefined
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedConfirmRows.map((row) => (
+                      <tr key={row.filename} className={row.isNotFound ? "fix-notfound-row" : ""}>
+                        <td className="col-sample" title={row.filename}>{row.filename}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span className={`file-status-badge ${row.found ? "file-exists" : "file-missing"}`} title={row.found ? "File was found and will be resolved" : "File could not be found in any searched location"}>
+                            {row.found ? "✓" : "✗"}
+                          </span>
+                        </td>
+                        <td className="fix-location-cell" title={row.location}>{row.location}</td>
+                        <td className={row.isNotFound ? "fix-notfound-cell" : ""} title={row.actionTooltip}>{row.actionLabel}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Affected sibling projects */}
+              {affectedProjects.size > 0 && (
+                <div className="fix-confirm-affected">
+                  <div className="fix-confirm-affected-header">
+                    <i className="fas fa-exclamation-triangle"></i> Other projects affected by "Move to Pool"
+                  </div>
+                  {Array.from(affectedProjects.entries()).map(([project, files]) => (
+                    <div key={project} className="fix-confirm-affected-project">
+                      <div className="fix-confirm-affected-name">{project}</div>
+                      {files.map((f) => (
+                        <div key={f.filename} className="fix-confirm-affected-change">
+                          {f.filename} &rarr; ../AUDIO/{f.filename}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div className="fix-confirm-actions">
+                <button className="fix-cancel-btn" onClick={onClose}>{resolvedFiles.length > 0 ? "Cancel" : "Close"}</button>
+                {resolvedFiles.length > 0 && (
+                  <button className="tools-execute-btn" onClick={handleApply}>
+                    Apply Changes
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* APPLYING PHASE */}
+          {phase === "applying" && (
+            <div className="fix-applying">
+              <span className="loading-spinner-small"></span>
+              <span>Applying changes...</span>
+            </div>
+          )}
+
+          {/* DONE PHASE */}
+          {phase === "done" && (
+            <div className="fix-done">
+              {applyError ? (
+                <div className="fix-done-error">
+                  <i className="fas fa-exclamation-circle"></i>
+                  <p>{applyError}</p>
+                </div>
+              ) : fixResult && (
+                <div className="fix-done-success">
+                  <div className="fix-done-counts">
+                    <div className="fix-done-count">
+                      <span className="fix-done-number">{fixResult.resolved_count}</span>
+                      <span>resolved</span>
+                    </div>
+                    {notFoundFilenames.length > 0 && (
+                      <div className="fix-done-count not-found">
+                        <span className="fix-done-number">{notFoundFilenames.length}</span>
+                        <span>not found</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <details className="fix-done-details">
+                    <summary>Details</summary>
+                    <div className="fix-done-details-content">
+                      {fixResult.files_copied > 0 && <div>{fixResult.files_copied} file{fixResult.files_copied !== 1 ? "s" : ""} copied</div>}
+                      {fixResult.files_moved > 0 && <div>{fixResult.files_moved} file{fixResult.files_moved !== 1 ? "s" : ""} moved to pool</div>}
+                      {fixResult.projects_updated.length > 1 && (
+                        <div>{fixResult.projects_updated.length} projects updated</div>
+                      )}
+                      <div className="fix-done-file-list">
+                        {resolvedFiles.map((f) => (
+                          <div key={f.filename} className="fix-done-file-item">
+                            <span className={`fix-action-${f.color}`}>&#9679;</span> {f.filename}: {f.action.replace("_", " ")}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              )}
+
+              <div className="fix-done-actions">
+                <button
+                  className="tools-execute-btn"
+                  onClick={() => {
+                    if (!applyError) onApplied();
+                    onClose();
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -5,6 +5,7 @@
 use ot_tools_io::{BankFile, HasChecksumField, MarkersFile, OctatrackFileIO, ProjectFile};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use walkdir::WalkDir;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectMetadata {
@@ -3462,6 +3463,587 @@ pub fn get_slot_audio_paths(
     }
 
     Ok(paths)
+}
+
+// ============================================================================
+// Fix Missing Samples
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MissingSample {
+    pub filename: String,
+    pub original_path: String,
+    pub slot_type: String, // "flex", "static", or "both"
+    pub flex_slot_ids: Vec<u16>,
+    pub static_slot_ids: Vec<u16>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FoundSample {
+    pub filename: String,
+    pub found_path: String,
+    pub source_project: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SampleResolution {
+    pub filename: String,
+    pub found_path: String,
+    pub action: String, // "update_path", "copy_to_project", "copy_to_pool", "move_to_pool"
+    pub new_slot_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixResult {
+    pub resolved_count: u32,
+    pub files_copied: u32,
+    pub files_moved: u32,
+    pub projects_updated: Vec<String>,
+}
+
+/// Scan all 128 Flex + 128 Static sample slots for missing audio files.
+/// Returns deduplicated list sorted by filename. If the same filename is missing
+/// in both Flex and Static, returns one entry with slot_type "both".
+pub fn list_missing_samples(project_path: &str) -> Result<Vec<MissingSample>, String> {
+    let path = Path::new(project_path);
+
+    let project_work = path.join("project.work");
+    let project_strd = path.join("project.strd");
+    let project_file_path = if project_work.exists() {
+        project_work
+    } else if project_strd.exists() {
+        project_strd
+    } else {
+        return Err("Project file not found".to_string());
+    };
+
+    let project_data = ProjectFile::from_data_file(&project_file_path)
+        .map_err(|e| format!("Failed to read project: {:?}", e))?;
+
+    // Track missing files: filename -> (original_path, flex_slot_ids, static_slot_ids)
+    let mut missing_map: std::collections::HashMap<String, (String, Vec<u16>, Vec<u16>)> =
+        std::collections::HashMap::new();
+
+    // Check Flex slots (128 slots, 1-indexed in UI but 0-indexed internally)
+    for idx in 0..128usize {
+        if let Some(Some(ref slot_data)) = project_data.slots.flex_slots.get(idx) {
+            if let Some(ref sample_path) = slot_data.path {
+                let rel = sample_path.to_string_lossy().to_string();
+                if rel.is_empty() {
+                    continue;
+                }
+                let full_path = path.join(&rel);
+                if !full_path.exists() {
+                    let filename = std::path::Path::new(&rel)
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_else(|| rel.clone());
+                    let entry = missing_map
+                        .entry(filename)
+                        .or_insert_with(|| (rel.clone(), Vec::new(), Vec::new()));
+                    entry.1.push((idx + 1) as u16); // 1-indexed slot ID
+                }
+            }
+        }
+    }
+
+    // Check Static slots (128 slots)
+    for idx in 0..128usize {
+        if let Some(Some(ref slot_data)) = project_data.slots.static_slots.get(idx) {
+            if let Some(ref sample_path) = slot_data.path {
+                let rel = sample_path.to_string_lossy().to_string();
+                if rel.is_empty() {
+                    continue;
+                }
+                let full_path = path.join(&rel);
+                if !full_path.exists() {
+                    let filename = std::path::Path::new(&rel)
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_else(|| rel.clone());
+                    let entry = missing_map
+                        .entry(filename)
+                        .or_insert_with(|| (rel.clone(), Vec::new(), Vec::new()));
+                    entry.2.push((idx + 1) as u16); // 1-indexed slot ID
+                }
+            }
+        }
+    }
+
+    let mut result: Vec<MissingSample> = missing_map
+        .into_iter()
+        .map(|(filename, (original_path, flex_slot_ids, static_slot_ids))| {
+            let slot_type = match (!flex_slot_ids.is_empty(), !static_slot_ids.is_empty()) {
+                (true, true) => "both",
+                (true, false) => "flex",
+                (false, true) => "static",
+                _ => "flex", // shouldn't happen
+            };
+            MissingSample {
+                filename,
+                original_path,
+                slot_type: slot_type.to_string(),
+                flex_slot_ids,
+                static_slot_ids,
+            }
+        })
+        .collect();
+
+    result.sort_by(|a, b| a.filename.cmp(&b.filename));
+    Ok(result)
+}
+
+/// Recursively search a project directory for files matching the given filenames.
+/// Returns the first match per filename. Skips the `backups/` subdirectory.
+pub fn search_project_dir(
+    project_path: &str,
+    filenames: Vec<String>,
+) -> Result<Vec<FoundSample>, String> {
+    let path = Path::new(project_path);
+    if !path.exists() {
+        return Err(format!("Project path does not exist: {}", project_path));
+    }
+
+    let mut remaining: std::collections::HashSet<String> = filenames.into_iter().collect();
+    let mut found = Vec::new();
+
+    for entry in WalkDir::new(path)
+        .into_iter()
+        .filter_entry(|e| e.file_name() != "backups")
+        .filter_map(|e| e.ok())
+    {
+        if remaining.is_empty() {
+            break;
+        }
+        if entry.file_type().is_file() {
+            if let Some(name) = entry.file_name().to_str() {
+                if remaining.remove(name) {
+                    found.push(FoundSample {
+                        filename: name.to_string(),
+                        found_path: entry.path().to_string_lossy().to_string(),
+                        source_project: None,
+                    });
+                }
+            }
+        }
+    }
+
+    Ok(found)
+}
+
+/// Search the Set's AUDIO/ directory for files matching the given filenames.
+/// Returns empty if no Audio Pool exists.
+pub fn search_audio_pool(
+    project_path: &str,
+    filenames: Vec<String>,
+) -> Result<Vec<FoundSample>, String> {
+    let status = get_audio_pool_status(project_path)?;
+    let pool_path = match status.path {
+        Some(p) => p,
+        None => return Ok(Vec::new()),
+    };
+
+    let pool_dir = Path::new(&pool_path);
+    if !pool_dir.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut remaining: std::collections::HashSet<String> = filenames.into_iter().collect();
+    let mut found = Vec::new();
+
+    for entry in WalkDir::new(pool_dir).into_iter().filter_map(|e| e.ok()) {
+        if remaining.is_empty() {
+            break;
+        }
+        if entry.file_type().is_file() {
+            if let Some(name) = entry.file_name().to_str() {
+                if remaining.remove(name) {
+                    found.push(FoundSample {
+                        filename: name.to_string(),
+                        found_path: entry.path().to_string_lossy().to_string(),
+                        source_project: None,
+                    });
+                }
+            }
+        }
+    }
+
+    Ok(found)
+}
+
+/// Search sibling project directories in the same Set for files matching given filenames.
+/// Skips the current project. Returns matches with source_project set.
+pub fn search_other_projects(
+    project_path: &str,
+    filenames: Vec<String>,
+) -> Result<Vec<FoundSample>, String> {
+    let path = Path::new(project_path);
+    let parent = path
+        .parent()
+        .ok_or_else(|| "Cannot determine parent directory".to_string())?;
+
+    let current_name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    let mut remaining: std::collections::HashSet<String> = filenames.into_iter().collect();
+    let mut found = Vec::new();
+
+    let mut siblings: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(parent) {
+        for entry in entries.flatten() {
+            let entry_path = entry.path();
+            if !entry_path.is_dir() {
+                continue;
+            }
+            let dir_name = entry_path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            if dir_name == current_name || dir_name == "AUDIO" {
+                continue;
+            }
+            if entry_path.join("project.work").exists() || entry_path.join("project.strd").exists()
+            {
+                siblings.push(entry_path);
+            }
+        }
+    }
+
+    siblings.sort();
+
+    for sibling in &siblings {
+        if remaining.is_empty() {
+            break;
+        }
+        let sibling_name = sibling
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        for entry in WalkDir::new(sibling)
+            .into_iter()
+            .filter_entry(|e| e.file_name() != "backups")
+            .filter_map(|e| e.ok())
+        {
+            if remaining.is_empty() {
+                break;
+            }
+            if entry.file_type().is_file() {
+                if let Some(name) = entry.file_name().to_str() {
+                    if remaining.remove(name) {
+                        found.push(FoundSample {
+                            filename: name.to_string(),
+                            found_path: entry.path().to_string_lossy().to_string(),
+                            source_project: Some(sibling_name.clone()),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(found)
+}
+
+/// Search an arbitrary directory recursively for files matching given filenames.
+pub fn search_directory(
+    dir_path: &str,
+    filenames: Vec<String>,
+) -> Result<Vec<FoundSample>, String> {
+    let path = Path::new(dir_path);
+    if !path.exists() {
+        return Err(format!("Directory does not exist: {}", dir_path));
+    }
+
+    let mut remaining: std::collections::HashSet<String> = filenames.into_iter().collect();
+    let mut found = Vec::new();
+
+    for entry in WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
+        if remaining.is_empty() {
+            break;
+        }
+        if entry.file_type().is_file() {
+            if let Some(name) = entry.file_name().to_str() {
+                if remaining.remove(name) {
+                    found.push(FoundSample {
+                        filename: name.to_string(),
+                        found_path: entry.path().to_string_lossy().to_string(),
+                        source_project: None,
+                    });
+                }
+            }
+        }
+    }
+
+    Ok(found)
+}
+
+/// Apply resolved sample fixes: update paths, copy/move files, handle .ot companions.
+pub fn fix_missing_samples(
+    project_path: &str,
+    resolutions: Vec<SampleResolution>,
+) -> Result<FixResult, String> {
+    let path = Path::new(project_path);
+
+    // Read current project
+    let project_file_path = if path.join("project.work").exists() {
+        path.join("project.work")
+    } else if path.join("project.strd").exists() {
+        path.join("project.strd")
+    } else {
+        return Err("Project file not found".to_string());
+    };
+
+    let mut project_data = ProjectFile::from_data_file(&project_file_path)
+        .map_err(|e| format!("Failed to read project: {:?}", e))?;
+
+    let parent = path
+        .parent()
+        .ok_or_else(|| "Cannot determine parent directory".to_string())?;
+
+    // Track which sibling projects need path updates (for move_to_pool)
+    let mut sibling_updates: std::collections::HashMap<String, Vec<(String, String)>> =
+        std::collections::HashMap::new();
+
+    let mut files_copied: u32 = 0;
+    let mut files_moved: u32 = 0;
+    let mut resolved_count: u32 = 0;
+
+    // Helper: copy .ot metadata file alongside an audio file
+    fn copy_ot_file(src_audio: &Path, dest_audio: &Path) {
+        let ot_src = src_audio.with_extension("ot");
+        if ot_src.exists() {
+            let ot_dest = dest_audio.with_extension("ot");
+            if let Some(parent) = ot_dest.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let _ = std::fs::copy(&ot_src, &ot_dest);
+        }
+    }
+
+    for resolution in &resolutions {
+        let found = Path::new(&resolution.found_path);
+        let new_slot_path = &resolution.new_slot_path;
+
+        match resolution.action.as_str() {
+            "update_path" => {
+                // Just update the slot path, no file operations
+            }
+            "copy_to_project" => {
+                let dest = path.join(&resolution.filename);
+                if found.exists() {
+                    std::fs::copy(found, &dest)
+                        .map_err(|e| format!("Failed to copy {}: {}", resolution.filename, e))?;
+                    copy_ot_file(found, &dest);
+                    files_copied += 1;
+                }
+            }
+            "copy_to_pool" => {
+                let pool_path = parent.join("AUDIO");
+                if !pool_path.exists() {
+                    std::fs::create_dir(&pool_path)
+                        .map_err(|e| format!("Failed to create Audio Pool: {}", e))?;
+                }
+                let dest = pool_path.join(&resolution.filename);
+                if found.exists() {
+                    std::fs::copy(found, &dest).map_err(|e| {
+                        format!("Failed to copy to pool {}: {}", resolution.filename, e)
+                    })?;
+                    copy_ot_file(found, &dest);
+                    files_copied += 1;
+                }
+            }
+            "move_to_pool" => {
+                let pool_path = parent.join("AUDIO");
+                if !pool_path.exists() {
+                    std::fs::create_dir(&pool_path)
+                        .map_err(|e| format!("Failed to create Audio Pool: {}", e))?;
+                }
+                let dest = pool_path.join(&resolution.filename);
+                if found.exists() {
+                    std::fs::copy(found, &dest).map_err(|e| {
+                        format!("Failed to copy to pool {}: {}", resolution.filename, e)
+                    })?;
+                    copy_ot_file(found, &dest);
+                    files_moved += 1;
+                }
+
+                // Scan all sibling projects: update paths AND delete file copies
+                if let Ok(entries) = std::fs::read_dir(parent) {
+                    for entry in entries.flatten() {
+                        let entry_path = entry.path();
+                        if !entry_path.is_dir() {
+                            continue;
+                        }
+                        let dir_name = entry_path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_default();
+                        if dir_name == "AUDIO" {
+                            continue;
+                        }
+                        if entry_path == path {
+                            continue;
+                        }
+                        if entry_path.join("project.work").exists()
+                            || entry_path.join("project.strd").exists()
+                        {
+                            let sibling_path_str = entry_path.to_string_lossy().to_string();
+                            let new_path = format!("../AUDIO/{}", resolution.filename);
+                            sibling_updates
+                                .entry(sibling_path_str)
+                                .or_default()
+                                .push((resolution.filename.clone(), new_path));
+
+                            // Delete the file from this sibling project if it exists
+                            let sibling_file = entry_path.join(&resolution.filename);
+                            if sibling_file.exists() {
+                                let _ = std::fs::remove_file(&sibling_file);
+                                let ot_file = sibling_file.with_extension("ot");
+                                if ot_file.exists() {
+                                    let _ = std::fs::remove_file(&ot_file);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {
+                return Err(format!("Unknown action: {}", resolution.action));
+            }
+        }
+
+        // Update slot paths in current project
+        let new_path_buf = std::path::PathBuf::from(new_slot_path);
+        for idx in 0..128usize {
+            if let Some(ref mut slot_data) = project_data
+                .slots
+                .flex_slots
+                .get_mut(idx)
+                .and_then(|s| s.as_mut())
+            {
+                if let Some(ref slot_path) = slot_data.path {
+                    let slot_filename = slot_path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    if slot_filename == resolution.filename {
+                        let slot_path_str = slot_path.to_string_lossy().to_string();
+                        let full = path.join(&slot_path_str);
+                        if !full.exists() {
+                            slot_data.path = Some(new_path_buf.clone());
+                        }
+                    }
+                }
+            }
+        }
+        for idx in 0..128usize {
+            if let Some(ref mut slot_data) = project_data
+                .slots
+                .static_slots
+                .get_mut(idx)
+                .and_then(|s| s.as_mut())
+            {
+                if let Some(ref slot_path) = slot_data.path {
+                    let slot_filename = slot_path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    if slot_filename == resolution.filename {
+                        let slot_path_str = slot_path.to_string_lossy().to_string();
+                        let full = path.join(&slot_path_str);
+                        if !full.exists() {
+                            slot_data.path = Some(new_path_buf.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        resolved_count += 1;
+    }
+
+    // Write current project
+    let output_path = path.join("project.work");
+    project_data
+        .to_data_file(&output_path)
+        .map_err(|e| format!("Failed to write project: {:?}", e))?;
+
+    let mut projects_updated = vec![project_path.to_string()];
+
+    // Update sibling projects (for move_to_pool actions)
+    for (sibling_path, updates) in &sibling_updates {
+        let sibling = Path::new(sibling_path);
+        let sibling_project_file = if sibling.join("project.work").exists() {
+            sibling.join("project.work")
+        } else {
+            sibling.join("project.strd")
+        };
+
+        let mut sibling_data = ProjectFile::from_data_file(&sibling_project_file)
+            .map_err(|e| format!("Failed to read sibling project {}: {:?}", sibling_path, e))?;
+
+        let mut modified = false;
+        for (filename, new_path) in updates {
+            let new_path_buf = std::path::PathBuf::from(new_path);
+
+            for idx in 0..128usize {
+                if let Some(ref mut slot_data) = sibling_data
+                    .slots
+                    .flex_slots
+                    .get_mut(idx)
+                    .and_then(|s| s.as_mut())
+                {
+                    if let Some(ref slot_path) = slot_data.path {
+                        let slot_filename = slot_path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_default();
+                        if &slot_filename == filename {
+                            slot_data.path = Some(new_path_buf.clone());
+                            modified = true;
+                        }
+                    }
+                }
+            }
+            for idx in 0..128usize {
+                if let Some(ref mut slot_data) = sibling_data
+                    .slots
+                    .static_slots
+                    .get_mut(idx)
+                    .and_then(|s| s.as_mut())
+                {
+                    if let Some(ref slot_path) = slot_data.path {
+                        let slot_filename = slot_path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_default();
+                        if &slot_filename == filename {
+                            slot_data.path = Some(new_path_buf.clone());
+                            modified = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        if modified {
+            let sibling_output = sibling.join("project.work");
+            sibling_data.to_data_file(&sibling_output).map_err(|e| {
+                format!("Failed to write sibling project {}: {:?}", sibling_path, e)
+            })?;
+            projects_updated.push(sibling_path.clone());
+        }
+    }
+
+    Ok(FixResult {
+        resolved_count,
+        files_copied,
+        files_moved,
+        projects_updated,
+    })
 }
 
 // ============================================================================
@@ -10289,6 +10871,431 @@ mod tests {
 
             let result = create_audio_pool(&project_path.to_string_lossy());
             assert!(result.is_ok(), "Should succeed even if pool exists");
+        }
+    }
+
+    mod fix_missing_samples_tests {
+        use super::*;
+
+        fn make_flex_slot(slot_id: u8, path: &str) -> ot_tools_io::projects::SlotAttributes {
+            ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Flex,
+                slot_id,
+                Some(std::path::PathBuf::from(path)),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap()
+        }
+
+        fn make_static_slot(slot_id: u8, path: &str) -> ot_tools_io::projects::SlotAttributes {
+            ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Static,
+                slot_id,
+                Some(std::path::PathBuf::from(path)),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap()
+        }
+
+        #[test]
+        fn test_list_missing_empty_project() {
+            // Default project has no sample paths assigned
+            let project = TestProject::new();
+            let result = list_missing_samples(&project.path);
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap().len(), 0);
+        }
+
+        #[test]
+        fn test_list_missing_all_present() {
+            let project = TestProject::new();
+            let project_path = Path::new(&project.path);
+
+            // Create an audio file on disk
+            fs::write(project_path.join("kick.wav"), b"audio").unwrap();
+
+            // Set flex slot 1 (index 0, slot_id=1) to the existing file
+            let mut project_data = ProjectFile::default();
+            project_data.slots.flex_slots[0] = Some(make_flex_slot(1, "kick.wav"));
+            project_data
+                .to_data_file(&project_path.join("project.work"))
+                .unwrap();
+
+            let result = list_missing_samples(&project.path).unwrap();
+            assert_eq!(result.len(), 0);
+        }
+
+        #[test]
+        fn test_list_missing_some_missing() {
+            let project = TestProject::new();
+            let project_path = Path::new(&project.path);
+
+            // Set two flex slots to files that don't exist on disk
+            // slot_id must match the 1-indexed array position for correct round-trip
+            let mut project_data = ProjectFile::default();
+            project_data.slots.flex_slots[0] = Some(make_flex_slot(1, "kick.wav"));
+            project_data.slots.flex_slots[1] = Some(make_flex_slot(2, "snare.wav"));
+            project_data
+                .to_data_file(&project_path.join("project.work"))
+                .unwrap();
+
+            let result = list_missing_samples(&project.path).unwrap();
+            assert_eq!(result.len(), 2);
+            assert_eq!(result[0].filename, "kick.wav");
+            assert_eq!(result[0].slot_type, "flex");
+            assert_eq!(result[0].flex_slot_ids, vec![1]);
+            assert!(result[0].static_slot_ids.is_empty());
+            assert_eq!(result[1].filename, "snare.wav");
+            assert_eq!(result[1].flex_slot_ids, vec![2]);
+        }
+
+        #[test]
+        fn test_list_missing_both_slot_types() {
+            let project = TestProject::new();
+            let project_path = Path::new(&project.path);
+
+            // Same filename missing in both flex slot 1 and static slot 1
+            let mut project_data = ProjectFile::default();
+            project_data.slots.flex_slots[0] = Some(make_flex_slot(1, "kick.wav"));
+            project_data.slots.static_slots[0] = Some(make_static_slot(1, "kick.wav"));
+            project_data
+                .to_data_file(&project_path.join("project.work"))
+                .unwrap();
+
+            let result = list_missing_samples(&project.path).unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].filename, "kick.wav");
+            assert_eq!(result[0].slot_type, "both");
+            assert_eq!(result[0].flex_slot_ids, vec![1]);
+            assert_eq!(result[0].static_slot_ids, vec![1]);
+        }
+
+        #[test]
+        fn test_search_project_dir_found_in_root() {
+            let project = TestProject::new();
+            let project_path = Path::new(&project.path);
+            fs::write(project_path.join("kick.wav"), b"audio").unwrap();
+
+            let result = search_project_dir(&project.path, vec!["kick.wav".to_string()]).unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].filename, "kick.wav");
+            assert!(result[0].found_path.ends_with("kick.wav"));
+        }
+
+        #[test]
+        fn test_search_project_dir_found_in_subdir() {
+            let project = TestProject::new();
+            let project_path = Path::new(&project.path);
+            let subdir = project_path.join("drums");
+            fs::create_dir(&subdir).unwrap();
+            fs::write(subdir.join("kick.wav"), b"audio").unwrap();
+
+            let result = search_project_dir(&project.path, vec!["kick.wav".to_string()]).unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].filename, "kick.wav");
+        }
+
+        #[test]
+        fn test_search_project_dir_not_found() {
+            let project = TestProject::new();
+            let result =
+                search_project_dir(&project.path, vec!["nonexistent.wav".to_string()]).unwrap();
+            assert_eq!(result.len(), 0);
+        }
+
+        #[test]
+        fn test_search_project_dir_skips_backups() {
+            let project = TestProject::new();
+            let project_path = Path::new(&project.path);
+            let backups = project_path.join("backups");
+            fs::create_dir(&backups).unwrap();
+            fs::write(backups.join("kick.wav"), b"audio").unwrap();
+
+            let result = search_project_dir(&project.path, vec!["kick.wav".to_string()]).unwrap();
+            assert_eq!(result.len(), 0);
+        }
+
+        #[test]
+        fn test_search_project_dir_multiple_files() {
+            let project = TestProject::new();
+            let project_path = Path::new(&project.path);
+            fs::write(project_path.join("kick.wav"), b"audio1").unwrap();
+            fs::write(project_path.join("snare.wav"), b"audio2").unwrap();
+
+            let result = search_project_dir(
+                &project.path,
+                vec![
+                    "kick.wav".to_string(),
+                    "snare.wav".to_string(),
+                    "hihat.wav".to_string(),
+                ],
+            )
+            .unwrap();
+            assert_eq!(result.len(), 2);
+        }
+
+        #[test]
+        fn test_search_audio_pool_no_pool() {
+            let project = TestProject::new();
+            let result = search_audio_pool(&project.path, vec!["kick.wav".to_string()]).unwrap();
+            assert_eq!(result.len(), 0);
+        }
+
+        #[test]
+        fn test_search_audio_pool_found() {
+            let temp_dir = TempDir::new().unwrap();
+            let set_dir = temp_dir.path();
+            let audio_dir = set_dir.join("AUDIO");
+            fs::create_dir(&audio_dir).unwrap();
+            fs::write(audio_dir.join("kick.wav"), b"audio").unwrap();
+
+            let project_dir = set_dir.join("ProjectA");
+            fs::create_dir(&project_dir).unwrap();
+            let project_file = ProjectFile::default();
+            project_file
+                .to_data_file(&project_dir.join("project.work"))
+                .unwrap();
+
+            let result =
+                search_audio_pool(project_dir.to_str().unwrap(), vec!["kick.wav".to_string()])
+                    .unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].filename, "kick.wav");
+        }
+
+        #[test]
+        fn test_search_other_projects_found() {
+            let temp_dir = TempDir::new().unwrap();
+            let set_dir = temp_dir.path();
+
+            let project_a = set_dir.join("ProjectA");
+            fs::create_dir(&project_a).unwrap();
+            ProjectFile::default()
+                .to_data_file(&project_a.join("project.work"))
+                .unwrap();
+
+            let project_b = set_dir.join("ProjectB");
+            fs::create_dir(&project_b).unwrap();
+            ProjectFile::default()
+                .to_data_file(&project_b.join("project.work"))
+                .unwrap();
+            fs::write(project_b.join("kick.wav"), b"audio").unwrap();
+
+            let result =
+                search_other_projects(project_a.to_str().unwrap(), vec!["kick.wav".to_string()])
+                    .unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].filename, "kick.wav");
+            assert_eq!(result[0].source_project, Some("ProjectB".to_string()));
+        }
+
+        #[test]
+        fn test_search_other_projects_no_siblings() {
+            let project = TestProject::new();
+            let result =
+                search_other_projects(&project.path, vec!["kick.wav".to_string()]).unwrap();
+            assert_eq!(result.len(), 0);
+        }
+
+        #[test]
+        fn test_search_directory_found() {
+            let temp_dir = TempDir::new().unwrap();
+            let search_dir = temp_dir.path().join("samples");
+            fs::create_dir(&search_dir).unwrap();
+            fs::write(search_dir.join("kick.wav"), b"audio").unwrap();
+
+            let result =
+                search_directory(search_dir.to_str().unwrap(), vec!["kick.wav".to_string()])
+                    .unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].filename, "kick.wav");
+        }
+
+        #[test]
+        fn test_search_directory_nested() {
+            let temp_dir = TempDir::new().unwrap();
+            let nested = temp_dir.path().join("a").join("b").join("c");
+            fs::create_dir_all(&nested).unwrap();
+            fs::write(nested.join("deep.wav"), b"audio").unwrap();
+
+            let result = search_directory(
+                temp_dir.path().to_str().unwrap(),
+                vec!["deep.wav".to_string()],
+            )
+            .unwrap();
+            assert_eq!(result.len(), 1);
+        }
+
+        #[test]
+        fn test_fix_update_path() {
+            let project = TestProject::new();
+            let project_path = Path::new(&project.path);
+
+            let subdir = project_path.join("drums");
+            fs::create_dir(&subdir).unwrap();
+            fs::write(subdir.join("kick.wav"), b"audio").unwrap();
+
+            let mut project_data =
+                ProjectFile::from_data_file(&project_path.join("project.work")).unwrap();
+            project_data.slots.flex_slots[0] = Some(make_flex_slot(1, "kick.wav"));
+            project_data
+                .to_data_file(&project_path.join("project.work"))
+                .unwrap();
+
+            let result = fix_missing_samples(
+                &project.path,
+                vec![SampleResolution {
+                    filename: "kick.wav".to_string(),
+                    found_path: subdir.join("kick.wav").to_string_lossy().to_string(),
+                    action: "update_path".to_string(),
+                    new_slot_path: "drums/kick.wav".to_string(),
+                }],
+            )
+            .unwrap();
+
+            assert_eq!(result.resolved_count, 1);
+            assert_eq!(result.files_copied, 0);
+
+            let updated = ProjectFile::from_data_file(&project_path.join("project.work")).unwrap();
+            let slot = updated.slots.flex_slots[0].as_ref().unwrap();
+            assert_eq!(
+                slot.path.as_ref().unwrap().to_string_lossy(),
+                "drums/kick.wav"
+            );
+        }
+
+        #[test]
+        fn test_fix_copy_to_project() {
+            let temp_dir = TempDir::new().unwrap();
+            let source_dir = temp_dir.path().join("source");
+            fs::create_dir(&source_dir).unwrap();
+            fs::write(source_dir.join("kick.wav"), b"audio_data").unwrap();
+
+            let project = TestProject::new();
+            let project_path = Path::new(&project.path);
+
+            let mut project_data =
+                ProjectFile::from_data_file(&project_path.join("project.work")).unwrap();
+            project_data.slots.flex_slots[0] = Some(make_flex_slot(1, "kick.wav"));
+            project_data
+                .to_data_file(&project_path.join("project.work"))
+                .unwrap();
+
+            let result = fix_missing_samples(
+                &project.path,
+                vec![SampleResolution {
+                    filename: "kick.wav".to_string(),
+                    found_path: source_dir.join("kick.wav").to_string_lossy().to_string(),
+                    action: "copy_to_project".to_string(),
+                    new_slot_path: "kick.wav".to_string(),
+                }],
+            )
+            .unwrap();
+
+            assert_eq!(result.resolved_count, 1);
+            assert_eq!(result.files_copied, 1);
+            assert!(project_path.join("kick.wav").exists());
+            assert_eq!(
+                fs::read(project_path.join("kick.wav")).unwrap(),
+                b"audio_data"
+            );
+        }
+
+        #[test]
+        fn test_fix_copy_to_project_with_ot_companion() {
+            let temp_dir = TempDir::new().unwrap();
+            let source_dir = temp_dir.path().join("source");
+            fs::create_dir(&source_dir).unwrap();
+            fs::write(source_dir.join("kick.wav"), b"audio_data").unwrap();
+            fs::write(source_dir.join("kick.ot"), b"ot_data").unwrap();
+
+            let project = TestProject::new();
+            let project_path = Path::new(&project.path);
+
+            let mut project_data =
+                ProjectFile::from_data_file(&project_path.join("project.work")).unwrap();
+            project_data.slots.flex_slots[0] = Some(make_flex_slot(1, "kick.wav"));
+            project_data
+                .to_data_file(&project_path.join("project.work"))
+                .unwrap();
+
+            fix_missing_samples(
+                &project.path,
+                vec![SampleResolution {
+                    filename: "kick.wav".to_string(),
+                    found_path: source_dir.join("kick.wav").to_string_lossy().to_string(),
+                    action: "copy_to_project".to_string(),
+                    new_slot_path: "kick.wav".to_string(),
+                }],
+            )
+            .unwrap();
+
+            assert!(project_path.join("kick.wav").exists());
+            assert!(project_path.join("kick.ot").exists());
+        }
+
+        #[test]
+        fn test_fix_move_to_pool() {
+            let temp_dir = TempDir::new().unwrap();
+            let set_dir = temp_dir.path();
+
+            let project_a = set_dir.join("ProjectA");
+            fs::create_dir(&project_a).unwrap();
+            let mut project_a_data = ProjectFile::default();
+            project_a_data.slots.flex_slots[0] = Some(make_flex_slot(1, "kick.wav"));
+            project_a_data
+                .to_data_file(&project_a.join("project.work"))
+                .unwrap();
+
+            let project_b = set_dir.join("ProjectB");
+            fs::create_dir(&project_b).unwrap();
+            fs::write(project_b.join("kick.wav"), b"audio_data").unwrap();
+            let mut project_b_data = ProjectFile::default();
+            project_b_data.slots.flex_slots[0] = Some(make_flex_slot(1, "kick.wav"));
+            project_b_data
+                .to_data_file(&project_b.join("project.work"))
+                .unwrap();
+
+            let result = fix_missing_samples(
+                project_a.to_str().unwrap(),
+                vec![SampleResolution {
+                    filename: "kick.wav".to_string(),
+                    found_path: project_b.join("kick.wav").to_string_lossy().to_string(),
+                    action: "move_to_pool".to_string(),
+                    new_slot_path: "../AUDIO/kick.wav".to_string(),
+                }],
+            )
+            .unwrap();
+
+            assert_eq!(result.files_moved, 1);
+            assert!(set_dir.join("AUDIO").join("kick.wav").exists());
+            assert!(
+                !project_b.join("kick.wav").exists(),
+                "kick.wav should be deleted from ProjectB after move_to_pool"
+            );
+            assert!(result.projects_updated.len() >= 2);
+
+            let updated_a = ProjectFile::from_data_file(&project_a.join("project.work")).unwrap();
+            let slot_a = updated_a.slots.flex_slots[0].as_ref().unwrap();
+            assert_eq!(
+                slot_a.path.as_ref().unwrap().to_string_lossy(),
+                "../AUDIO/kick.wav"
+            );
+
+            let updated_b = ProjectFile::from_data_file(&project_b.join("project.work")).unwrap();
+            let slot_b = updated_b.slots.flex_slots[0].as_ref().unwrap();
+            assert_eq!(
+                slot_b.path.as_ref().unwrap().to_string_lossy(),
+                "../AUDIO/kick.wav"
+            );
         }
     }
 }

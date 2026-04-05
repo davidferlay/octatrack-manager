@@ -5,6 +5,8 @@ import { useProjects } from "../context/ProjectsContext";
 import type { Bank } from "../context/ProjectsContext";
 import { formatBankName } from "./BankSelector";
 import "../App.css";
+import { FixMissingSamplesModal } from "./FixMissingSamplesModal";
+import { MissingSamplesListModal } from "./MissingSamplesListModal";
 
 const TOOLS_STORAGE_KEY_PREFIX = "octatrack-tools-settings-";
 
@@ -14,7 +16,7 @@ function naturalCompare(a: string, b: string): number {
 }
 
 // Operation types
-type OperationType = "copy_bank" | "copy_parts" | "copy_patterns" | "copy_tracks" | "copy_sample_slots";
+type OperationType = "copy_bank" | "copy_parts" | "copy_patterns" | "copy_tracks" | "copy_sample_slots" | "fix_missing_samples";
 
 // Part assignment modes for copy_patterns
 type PartAssignmentMode = "keep_original" | "copy_source_part" | "select_specific";
@@ -39,6 +41,17 @@ interface AudioPoolStatus {
   path: string | null;
   set_path: string | null;
 }
+
+interface MissingSample {
+  filename: string;
+  original_path: string;
+  slot_type: string; // "flex", "static", or "both"
+  flex_slot_ids: number[];
+  static_slot_ids: number[];
+}
+
+type PoolOption = "use_from_pool" | "copy_to_project";
+type OtherProjectOption = "move_to_pool" | "copy_to_project";
 
 interface ToolsPanelProps {
   projectPath: string;
@@ -67,6 +80,8 @@ interface ToolsSettings {
   sourceSampleStart: number;
   sourceSampleEnd: number;
   destSampleStart: number;
+  poolOption: PoolOption;
+  otherProjectOption: OtherProjectOption;
 }
 
 function loadToolsSettings(projectPath: string): Partial<ToolsSettings> {
@@ -167,6 +182,18 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [audioMode, setAudioMode] = useState<AudioMode>(savedSettings.audioMode || "copy");
   const [includeEditorSettings, setIncludeEditorSettings] = useState<boolean>(savedSettings.includeEditorSettings ?? true);
   const [sampleSelectionMode, setSampleSelectionMode] = useState<"one" | "range">("range");
+
+  // Fix Missing Samples state
+  const [missingSamples, setMissingSamples] = useState<MissingSample[]>([]);
+  const [poolOption, setPoolOption] = useState<PoolOption>(
+    (savedSettings.poolOption as PoolOption) || "use_from_pool"
+  );
+  const [otherProjectOption, setOtherProjectOption] = useState<OtherProjectOption>(
+    (savedSettings.otherProjectOption as OtherProjectOption) || "copy_to_project"
+  );
+  const [showFixModal, setShowFixModal] = useState<boolean>(false);
+  const [showMissingSamplesListModal, setShowMissingSamplesListModal] = useState<boolean>(false);
+  const [loadingMissingSamples, setLoadingMissingSamples] = useState<boolean>(false);
 
   // Audio Pool status
   const [audioPoolStatus, setAudioPoolStatus] = useState<AudioPoolStatus | null>(null);
@@ -277,8 +304,28 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
       sourceSampleStart: sourceSampleIndices[0],
       sourceSampleEnd: sourceSampleIndices[sourceSampleIndices.length - 1],
       destSampleStart,
+      poolOption,
+      otherProjectOption,
     });
-  }, [projectPath, operation, partAssignmentMode, trackMode, modeScope, copyTrackMode, slotType, audioMode, includeEditorSettings, destProject, sourceSampleIndices, destSampleStart]);
+  }, [projectPath, operation, partAssignmentMode, trackMode, modeScope, copyTrackMode, slotType, audioMode, includeEditorSettings, destProject, sourceSampleIndices, destSampleStart, poolOption, otherProjectOption]);
+
+  // Load missing samples when Fix Missing Samples operation is selected
+  useEffect(() => {
+    if (operation === "fix_missing_samples") {
+      setLoadingMissingSamples(true);
+      invoke<MissingSample[]>("list_missing_samples", { projectPath })
+        .then((samples) => {
+          setMissingSamples(samples);
+        })
+        .catch((err) => {
+          console.error("Error loading missing samples:", err);
+          setMissingSamples([]);
+        })
+        .finally(() => {
+          setLoadingMissingSamples(false);
+        });
+    }
+  }, [operation, projectPath]);
 
   // Collect all available projects from context
   const availableProjects: ProjectOption[] = [];
@@ -331,7 +378,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   // Check audio pool status when destination project changes
   useEffect(() => {
     async function checkAudioPool() {
-      if (destProject && operation === "copy_sample_slots") {
+      if (destProject && (operation === "copy_sample_slots" || operation === "fix_missing_samples")) {
         try {
           const status = await invoke<AudioPoolStatus>("get_audio_pool_status", { projectPath });
           setAudioPoolStatus(status);
@@ -655,9 +702,11 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           <option value="copy_patterns">Copy Patterns</option>
           <option value="copy_tracks">Copy Tracks</option>
           <option value="copy_sample_slots">Copy Sample Slots</option>
+          <option value="fix_missing_samples">Fix Missing Samples</option>
         </select>
       </div>
 
+      {operation !== "fix_missing_samples" && (
       <div className="tools-panels">
         {/* Source Panel */}
         <div className="tools-source-panel">
@@ -2375,8 +2424,122 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           )}
         </div>
       </div>
+      )}
+
+      {/* Fix Missing Samples Panel */}
+      {operation === "fix_missing_samples" && (
+        <div className="tools-fix-missing-layout">
+          {/* Description pane — same as tools-description-pane used by other operations */}
+          <div className="tools-description-pane">
+            <p>Scans for missing audio files in the project directory, the Audio Pool and other projects within same Set. If any files are still not found, the user is prompted to choose specific locations to search.</p>
+          </div>
+
+          {/* Options panel */}
+          {missingSamples.length > 0 && (audioPoolStatus?.exists || audioPoolStatus?.set_path) && (
+            <div className="tools-options-panel">
+              <h3>Options</h3>
+
+              {/* What to do when a file is found in the Audio Pool */}
+              {audioPoolStatus?.exists && (
+                <div className="tools-field">
+                  <label>When samples are found in Audio Pool</label>
+                  <div className="tools-toggle-group">
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn ${poolOption === "use_from_pool" ? "selected" : ""}`}
+                      onClick={() => setPoolOption("use_from_pool")}
+                      title="Update Sample Slots to reference audio files from Audio Pool directory (../AUDIO/)"
+                    >
+                      Use from Pool
+                    </button>
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn ${poolOption === "copy_to_project" ? "selected" : ""}`}
+                      onClick={() => setPoolOption("copy_to_project")}
+                      title="Copy audio files from Audio Pool into the project root directory"
+                    >
+                      Copy to Project
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* What to do when a file is found in another project of the Set */}
+              {audioPoolStatus?.set_path && (
+                <div className="tools-field">
+                  <label>When samples are found in another project of Set</label>
+                  <div className="tools-toggle-group">
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn ${otherProjectOption === "copy_to_project" ? "selected" : ""}`}
+                      onClick={() => setOtherProjectOption("copy_to_project")}
+                      title="Copy audio files from found projects path into the project root directory"
+                    >
+                      Copy to Project
+                    </button>
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn ${otherProjectOption === "move_to_pool" ? "selected" : ""}`}
+                      onClick={() => setOtherProjectOption("move_to_pool")}
+                      title={`Move audio files to Audio Pool directory (../AUDIO/) and update Sample Slots for all projects that reference them`}
+                    >
+                      Move to Pool
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Status pane */}
+          <div className="tools-fix-status-panel">
+            <h3>Status</h3>
+            {loadingMissingSamples ? (
+              <div className="tools-fix-status loading">
+                <span className="loading-spinner-small"></span>
+                <span>Scanning sample slots...</span>
+              </div>
+            ) : missingSamples.length === 0 ? (
+              <div className="tools-fix-status all-good">
+                <div className="tools-fix-status-count">0</div>
+                <div className="tools-fix-status-label">missing sample files - All Sample Slots reference existing files</div>
+              </div>
+            ) : (
+              <button
+                className="tools-missing-files-summary"
+                onClick={() => setShowMissingSamplesListModal(true)}
+                title="Click to view missing samples list"
+              >
+                <span className="tools-fix-status-count">{missingSamples.length}</span>
+                {" "}missing sample file{missingSamples.length !== 1 ? "s" : ""}
+                <span className="tools-fix-status-detail">
+                  {" — "}{missingSamples.filter(s => s.slot_type === "flex" || s.slot_type === "both").length} Flex,{" "}
+                  {missingSamples.filter(s => s.slot_type === "static" || s.slot_type === "both").length} Static
+                  {missingSamples.filter(s => s.slot_type === "both").length > 0 &&
+                    ` (${missingSamples.filter(s => s.slot_type === "both").length} in both)`}
+                </span>
+              </button>
+            )}
+          </div>
+
+          {/* Execute button */}
+          {missingSamples.length > 0 && (
+            <div className="tools-actions">
+              <button
+                className="tools-execute-btn"
+                onClick={() => setShowFixModal(true)}
+                disabled={loadingMissingSamples}
+              >
+                <i className="fas fa-wrench"></i>
+                Execute
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Execute Button */}
+      {operation !== "fix_missing_samples" && (
       <div className="tools-actions">
         <button
           className="tools-execute-btn"
@@ -2439,6 +2602,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           </details>
         )}
       </div>
+      )}
 
       {/* Status Modal */}
       {statusMessage && (
@@ -2691,6 +2855,34 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             </div>
           </div>
         </div>
+      )}
+
+      {/* Missing Samples List Modal */}
+      {showMissingSamplesListModal && (
+        <MissingSamplesListModal
+          missingSamples={missingSamples}
+          onClose={() => setShowMissingSamplesListModal(false)}
+        />
+      )}
+
+      {/* Fix Missing Samples Modal */}
+      {showFixModal && operation === "fix_missing_samples" && (
+        <FixMissingSamplesModal
+          projectPath={projectPath}
+          projectName={projectName}
+          missingSamples={missingSamples}
+          poolOption={poolOption}
+          otherProjectOption={otherProjectOption}
+          hasAudioPool={audioPoolStatus?.exists ?? false}
+          onClose={() => setShowFixModal(false)}
+          onApplied={() => {
+            // Reload missing samples list
+            invoke<MissingSample[]>("list_missing_samples", { projectPath })
+              .then(setMissingSamples)
+              .catch(() => setMissingSamples([]));
+            if (onProjectRefresh) onProjectRefresh();
+          }}
+        />
       )}
     </div>
   );

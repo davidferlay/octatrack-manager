@@ -368,7 +368,11 @@ export function ProjectDetail() {
           <button onClick={() => navigate("/")} className="back-button">
             ← Back
           </button>
-          <h1 ref={titleRef} className={isTitleTruncated ? 'truncated' : ''} title={projectPath || ''}>{projectName}</h1>
+          <h1 ref={titleRef} className={isTitleTruncated ? 'truncated' : ''} title={projectPath || ''} style={{ cursor: 'pointer' }} onClick={() => {
+            if (projectPath) {
+              navigator.clipboard.writeText(projectPath);
+            }
+          }}>{projectName}</h1>
           {/* View/Edit mode toggle - hidden during loading */}
           {!isLoading && (
             <div className="mode-toggle" onClick={async () => {

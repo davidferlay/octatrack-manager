@@ -232,6 +232,28 @@ async function setupTauriMocks(page: Page, overrides?: { sameSet?: boolean; with
           case 'copy_tracks':
             return null
 
+          case 'list_missing_samples':
+            return [
+              { filename: 'kick.wav', original_path: 'kick.wav', slot_type: 'flex', flex_slot_ids: [1], static_slot_ids: [] },
+              { filename: 'snare.wav', original_path: 'snare.wav', slot_type: 'static', flex_slot_ids: [], static_slot_ids: [5] },
+              { filename: 'hihat.wav', original_path: 'hihat.wav', slot_type: 'both', flex_slot_ids: [3], static_slot_ids: [3] },
+            ]
+
+          case 'search_project_dir':
+            return [{ filename: 'kick.wav', found_path: '/test/project/kick.wav', source_project: null }]
+
+          case 'search_audio_pool':
+            return []
+
+          case 'search_other_projects':
+            return []
+
+          case 'search_directory':
+            return []
+
+          case 'fix_missing_samples':
+            return { resolved_count: 1, files_copied: 0, files_moved: 0, projects_updated: ['/test/project'] }
+
           default:
             console.warn('Unhandled mock invoke:', cmd)
             return null
@@ -2726,5 +2748,92 @@ test.describe('Tools Tab - Copy Sample Slots One/Range Mode', () => {
 
     // Execute button should be enabled again
     await expect(executeBtn).toBeEnabled()
+  })
+})
+
+test.describe('Tools Tab - Fix Missing Samples', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(2000)
+    const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
+    await toolsTab.click()
+    await page.waitForTimeout(500)
+  })
+
+  test('Fix Missing Samples appears in operation dropdown', async ({ page }) => {
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await expect(operationSelect.locator('option[value="fix_missing_samples"]')).toHaveText('Fix Missing Samples')
+  })
+
+  test('selecting Fix Missing Samples shows status badge', async ({ page }) => {
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('fix_missing_samples')
+    await page.waitForTimeout(1000)
+
+    // Status badge should show count
+    const statusCount = page.locator('.tools-fix-status-count')
+    await expect(statusCount).toBeVisible()
+    await expect(statusCount).toHaveText('3')
+  })
+
+  test('missing files list modal shows correct slot data', async ({ page }) => {
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('fix_missing_samples')
+    await page.waitForTimeout(1000)
+
+    // Open the modal via the missing files summary button
+    const summaryBtn = page.locator('.tools-missing-files-summary')
+    await summaryBtn.click()
+
+    // Modal should be visible
+    const modal = page.locator('.missing-samples-list-modal')
+    await expect(modal).toBeVisible()
+
+    // Check table contents — 3 files expand to 4 rows (hihat is in both Flex and Static)
+    const rows = modal.locator('.samples-table tbody tr')
+    await expect(rows).toHaveCount(4)
+  })
+
+  test('Execute button is visible when missing files exist', async ({ page }) => {
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('fix_missing_samples')
+    await page.waitForTimeout(1000)
+
+    const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
+    await expect(executeBtn).toBeVisible()
+    await expect(executeBtn).toBeEnabled()
+  })
+
+  test('Execute button hidden when 0 missing files', async ({ page }) => {
+    // Override to return empty list
+    await page.evaluate(() => {
+      const original = (window as any).__TAURI_INTERNALS__.invoke
+      ;(window as any).__TAURI_INTERNALS__.invoke = async (cmd: string, args?: any) => {
+        if (cmd === 'list_missing_samples') return []
+        return original(cmd, args)
+      }
+    })
+
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('fix_missing_samples')
+    await page.waitForTimeout(1000)
+
+    const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
+    await expect(executeBtn).not.toBeVisible()
+  })
+
+  test('clicking Execute opens modal with search steps', async ({ page }) => {
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('fix_missing_samples')
+    await page.waitForTimeout(1000)
+
+    const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
+    await executeBtn.click()
+    await page.waitForTimeout(1000)
+
+    // Modal should be visible
+    const modal = page.locator('.fix-missing-modal')
+    await expect(modal).toBeVisible()
   })
 })

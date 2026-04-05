@@ -1859,8 +1859,12 @@ h1 {
 .sort-indicator {
   position: absolute;
   left: -14px;
+  top: 4px;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 12px;
-  text-align: center;
   font-size: 0.7rem;
   cursor: pointer;
 }
@@ -1870,6 +1874,9 @@ h1 {
   user-select: none;
   flex: 1 1 auto;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Filter Icon Button */
@@ -4014,4 +4021,506 @@ h1 {
 /* Single range variant (for destination slider) */
 .tools-single-range .tools-dual-range-input {
   pointer-events: auto;
+}
+
+/* ============================================================================
+   Fix Missing Samples
+   ============================================================================ */
+
+/* Layout container for fix-missing (single-column, centered) */
+.tools-fix-missing-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+/* Status pane — same look as tools-source-panel / tools-options-panel */
+.tools-fix-status-panel {
+  background-color: var(--elektron-darker-gray);
+  border: 2px solid var(--elektron-dark-gray);
+  border-radius: 8px;
+  padding: 1.25rem;
+}
+
+.tools-fix-status-panel h3 {
+  margin: 0 0 1rem 0;
+  font-size: 1.1rem;
+  color: var(--elektron-orange);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--elektron-medium-gray);
+}
+
+.tools-fix-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 4px;
+  border: 1px solid var(--elektron-border-gray);
+}
+
+.tools-fix-status.loading {
+  color: var(--elektron-text-secondary);
+}
+
+.tools-fix-status.all-good {
+  background: rgba(76, 175, 80, 0.08);
+  border-color: #4caf50;
+}
+
+.tools-fix-status.all-good .tools-fix-status-count {
+  color: #4caf50;
+}
+
+.tools-fix-status-count {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--elektron-orange);
+}
+
+.tools-fix-status-label {
+  font-weight: 500;
+  color: var(--elektron-text-primary);
+}
+
+.tools-fix-status-detail {
+  font-size: 0.85rem;
+  color: var(--elektron-text-secondary);
+}
+
+/* Scoped toggle group for fix-missing (pill-style for 2-option toggles) */
+.tools-fix-missing-layout .tools-toggle-group {
+  gap: 0;
+  flex-wrap: nowrap;
+}
+
+.tools-fix-missing-layout .tools-toggle-group .tools-toggle-btn {
+  border-radius: 0;
+}
+
+.tools-fix-missing-layout .tools-toggle-group .tools-toggle-btn:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.tools-fix-missing-layout .tools-toggle-group .tools-toggle-btn:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.tools-missing-files-summary {
+  cursor: pointer;
+  padding: 1rem 0.75rem;
+  border-radius: 4px;
+  border: 1px solid var(--elektron-orange);
+  background: rgba(255, 102, 0, 0.08);
+  color: var(--elektron-text-primary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  user-select: none;
+  transition: all 0.15s;
+  text-align: center;
+  width: 100%;
+}
+
+.tools-missing-files-summary:hover {
+  background: rgba(255, 102, 0, 0.22);
+  border-color: var(--elektron-orange-hover);
+}
+
+.tools-missing-files-summary .tools-fix-status-count {
+  font-size: 1.1rem;
+}
+
+.tools-missing-files-summary .tools-fix-status-detail {
+  font-size: 0.85rem;
+}
+
+/* Missing Samples List Modal */
+.modal-content.missing-samples-list-modal {
+  max-width: 850px;
+  width: 95%;
+  max-height: 85vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+.missing-samples-list-modal .samples-tab {
+  padding: 0;
+}
+
+.missing-samples-list-modal .samples-section {
+  margin: 0;
+  padding: 0;
+}
+
+.missing-samples-list-modal .filter-results-info {
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--elektron-border-gray);
+}
+
+.missing-samples-list-modal .table-wrapper {
+  min-height: 30vh;
+  max-height: 60vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.missing-samples-list-modal .col-type {
+  width: 80px;
+  text-align: center;
+}
+
+.missing-samples-list-modal .col-source {
+  width: 120px;
+  white-space: nowrap;
+}
+
+/* Modal resize handles */
+.modal-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  z-index: 10;
+}
+
+.modal-resize-left {
+  left: -3px;
+}
+
+.modal-resize-right {
+  right: -3px;
+}
+
+/* Dynamic width for filter dropdown options */
+.missing-samples-list-modal .dropdown-options {
+  width: max-content;
+  min-width: auto;
+}
+
+/* Modal styles */
+.modal-content.fix-missing-modal {
+  max-width: 850px;
+  width: 95%;
+  position: relative;
+  overflow-x: hidden;
+}
+
+.fix-search-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+.fix-search-step {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.95rem;
+}
+
+.fix-step-icon {
+  width: 1.25rem;
+  display: flex;
+  justify-content: center;
+}
+
+.fix-search-step.done .fix-step-icon {
+  color: #4caf50;
+}
+
+.fix-search-step.skipped {
+  opacity: 0.5;
+}
+
+.fix-step-label {
+  color: var(--elektron-text-primary);
+}
+
+.fix-step-count {
+  margin-left: auto;
+  font-size: 0.8rem;
+  color: var(--elektron-text-secondary);
+}
+
+.fix-search-step.done .fix-step-count {
+  color: #4caf50;
+}
+
+/* Browse prompt */
+.fix-browse-prompt p {
+  margin-bottom: 0.5rem;
+  color: var(--elektron-text-secondary);
+}
+
+.fix-remaining-list {
+  background: var(--elektron-darker-gray);
+  border: 1px solid var(--elektron-border-gray);
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+  max-height: 45vh;
+  overflow-y: auto;
+  font-size: 0.85rem;
+  color: var(--elektron-text-secondary);
+}
+
+.fix-remaining-item {
+  padding: 0.15rem 0;
+}
+
+.fix-dir-warning {
+  background: rgba(255, 170, 50, 0.08);
+  border: 1px solid rgba(255, 170, 50, 0.4);
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  color: #FFAA32;
+  margin-bottom: 0.75rem;
+}
+
+.fix-browse-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.fix-browse-actions .tools-execute-btn {
+  padding: 0.6rem 2rem;
+}
+
+/* Confirmation */
+.fix-confirm-body {
+  padding: 0 !important;
+}
+
+.fix-confirmation {
+  font-size: 0.85rem;
+}
+
+.fix-confirmation .filter-results-info {
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--elektron-border-gray);
+}
+
+.fix-confirm-status {
+  color: var(--elektron-text-primary);
+  font-size: 0.95rem;
+}
+
+.fix-confirm-status.all-resolved,
+.fix-confirm-status.all-resolved strong {
+  color: #2ecc71;
+}
+
+
+.fix-confirm-table-wrapper {
+  min-height: 30vh;
+  max-height: 45vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.fix-confirmation .samples-table {
+  table-layout: fixed;
+}
+
+.fix-confirmation .samples-table col:nth-child(1) { width: 28%; }
+.fix-confirmation .samples-table col:nth-child(2) { width: 90px; }
+.fix-confirmation .samples-table col:nth-child(3) { width: 25%; }
+.fix-confirmation .samples-table col:nth-child(4) { width: 150px; }
+
+.fix-confirmation .samples-table td {
+  font-size: 0.85rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Column resize handles */
+.col-resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.col-resize-handle:hover {
+  background: var(--elektron-orange);
+}
+
+.fix-notfound-row td {
+  color: var(--elektron-text-secondary) !important;
+}
+
+.fix-notfound-row td:first-child {
+  color: var(--elektron-text-secondary) !important;
+  font-weight: 400 !important;
+}
+
+.fix-notfound-cell {
+  color: #777 !important;
+  font-style: italic;
+}
+
+.fix-location-cell {
+  color: var(--elektron-text-secondary) !important;
+  font-weight: 400 !important;
+}
+
+/* Affected projects warning */
+.fix-confirm-affected {
+  margin: 0.75rem 1.25rem;
+  border: 1px solid rgba(255, 170, 50, 0.4);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.fix-confirm-affected-header {
+  background: rgba(255, 170, 50, 0.08);
+  padding: 0.5rem 0.75rem;
+  font-weight: 600;
+  color: #FFAA32;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.fix-confirm-affected-project {
+  padding: 0.6rem 0.75rem;
+  border-top: 1px solid var(--elektron-border-gray);
+}
+
+.fix-confirm-affected-name {
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+  color: var(--elektron-text-primary);
+}
+
+.fix-confirm-affected-change {
+  color: var(--elektron-text-secondary);
+  padding-left: 0.75rem;
+  font-size: 0.8rem;
+}
+
+
+/* Confirm action buttons */
+.fix-confirm-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--elektron-border-gray);
+}
+
+.fix-confirm-actions .tools-execute-btn {
+  padding: 0.5rem 1.5rem;
+}
+
+.fix-cancel-btn {
+  background: var(--elektron-medium-gray);
+  color: var(--elektron-text-secondary);
+  border: 1px solid var(--elektron-border-gray);
+  padding: 0.5rem 1.25rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.15s;
+}
+
+.fix-cancel-btn:hover {
+  color: var(--elektron-text-primary);
+  border-color: var(--elektron-light-gray);
+}
+
+/* Applying */
+.fix-applying {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.25rem 0;
+  color: var(--elektron-orange);
+  font-size: 0.95rem;
+}
+
+/* Done */
+.fix-done-success {
+  padding: 0.5rem 0;
+}
+
+.fix-done-counts {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.fix-done-count {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.fix-done-number {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #4caf50;
+}
+
+.fix-done-count.not-found .fix-done-number {
+  color: #dc3545;
+}
+
+.fix-done-details summary {
+  cursor: pointer;
+  color: var(--elektron-orange);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  user-select: none;
+}
+
+.fix-done-details summary:hover {
+  color: var(--elektron-orange-hover);
+}
+
+.fix-done-details-content {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--elektron-text-secondary);
+}
+
+.fix-done-file-list {
+  margin-top: 0.5rem;
+}
+
+.fix-done-file-item {
+  padding: 0.15rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.fix-done-error {
+  color: #FF8888;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fix-done-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1rem;
 }

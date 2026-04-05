@@ -80,3 +80,25 @@
 | **Additional Tests** | | | | |
 | SM74 | All operations | Auto-refresh on same-project copy | Copy any operation to current project | Project data refreshes automatically after successful copy |
 | SM82 | Copy Sample Slots | Source project refreshes after Move to Pool | Execute Move to Pool to different project | Source (active) project UI refreshes to show updated ../AUDIO/ slot paths |
+| **Fix Missing Samples** | | | | |
+| FMS-01 | Fix Missing Samples | Status badge shows correct count | Select "Fix Missing Samples" from dropdown | Status badge shows number of unique missing files with Flex/Static breakdown |
+| FMS-02 | Fix Missing Samples | Missing files table | Click "Show missing files" collapsible | Table shows filename and Slots column (Flex/Static/Both). "Both" highlighted |
+| FMS-03 | Fix Missing Samples | Execute disabled when 0 missing | Select "Fix Missing Samples" when all sample files exist | Execute button not shown. Status badge shows 0 with green styling |
+| FMS-04 | Fix Missing Samples | Pool options visible only with Set/Audio Pool | Open project in a Set with Audio Pool | "If found in Audio Pool" toggle visible. "If found in other Set projects" toggle visible |
+| FMS-05 | Fix Missing Samples | Pool options hidden for standalone project | Open standalone project (not in a Set) | Neither pool-related toggle shown |
+| FMS-06 | Fix Missing Samples | Search step 1 — Project directory | Place missing file in project subdirectory. Click Execute | Step 1 spinner → checkmark with count. File resolved with "Update path" action |
+| FMS-07 | Fix Missing Samples | Search step 2 — Audio Pool | Place missing file in AUDIO/ directory. Click Execute | Step 2 finds file. With "Use from Pool": path update to ../AUDIO/. With "Copy to Project": file copied |
+| FMS-08 | Fix Missing Samples | Search step 3 — Other projects | Place missing file in sibling project. Click Execute | Step 3 finds file. With "Copy to Project": file copied to project root. With "Move to Pool": file moved to AUDIO/, all projects updated |
+| FMS-09 | Fix Missing Samples | Step 4 — Browse directory loop | Create missing files not in project/pool/siblings. Click Execute | Browse prompt appears after steps 1-3. Select directory with file. Found count updates. If still missing, loop repeats |
+| FMS-10 | Fix Missing Samples | Step 4 — Skip | In browse prompt, click Skip | Proceeds to confirmation with partial results |
+| FMS-11 | Fix Missing Samples | Same directory warning | Browse same directory twice | Warning displayed about already-searched directory |
+| FMS-12 | Fix Missing Samples | Confirmation — path update only | File found in project subdirectory | Green "Update path → subdir/filename" in confirmation table |
+| FMS-13 | Fix Missing Samples | Confirmation — copy from other project | File found in sibling project, "Copy to Project" selected | Blue "Copy to project ← ProjectB/filename" in confirmation |
+| FMS-14 | Fix Missing Samples | Confirmation — move to pool | File found in sibling project, "Move to Pool" selected | Purple "Move to Pool + update path" in confirmation. "Other projects affected" section visible |
+| FMS-15 | Fix Missing Samples | Confirmation — not found section | Some files not found anywhere | Red "Not found" section lists unresolved filenames |
+| FMS-16 | Fix Missing Samples | Cancel from confirmation | Click Cancel on confirmation screen | Modal closes. No files modified. No backups created |
+| FMS-17 | Fix Missing Samples | Apply changes — backup creation | Click "Apply Changes" on confirmation | Backup directory created under project/backups/ with label "fix_missing_samples" |
+| FMS-18 | Fix Missing Samples | Apply changes — file copy | Apply with "Copy to Project" resolutions | Audio files (+.ot companions) copied to project root. Slot paths updated |
+| FMS-19 | Fix Missing Samples | Apply changes — move to pool cross-project | Apply with "Move to Pool" from sibling project | File in AUDIO/. Original deleted from sibling. All sibling project paths updated |
+| FMS-20 | Fix Missing Samples | Final summary | After Apply completes | Resolved count and not-found count displayed. Expandable details show per-file actions. Close returns to Tools panel |
+| FMS-21 | Fix Missing Samples | .ot companion files handled | Missing file has .ot companion in found location | Both .wav and .ot are copied/moved together |
