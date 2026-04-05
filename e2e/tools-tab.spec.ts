@@ -2836,4 +2836,119 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
     const modal = page.locator('.fix-missing-modal')
     await expect(modal).toBeVisible()
   })
+
+  test('browse prompt shows Continue button and remaining files', async ({ page }) => {
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('fix_missing_samples')
+    await page.waitForTimeout(1000)
+
+    const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
+    await executeBtn.click()
+    await page.waitForTimeout(3000)
+
+    // Should show browse prompt with remaining files
+    const modal = page.locator('.fix-missing-modal')
+    await expect(modal).toBeVisible()
+
+    // Continue button should be visible (not "Skip")
+    const continueBtn = modal.locator('.fix-browse-actions .tools-execute-btn', { hasText: 'Continue' })
+    await expect(continueBtn).toBeVisible()
+
+    // Browse button should be visible
+    const browseBtn = modal.locator('.fix-browse-actions .tools-execute-btn', { hasText: 'Browse...' })
+    await expect(browseBtn).toBeVisible()
+  })
+
+  test('Continue button opens review modal with unified table', async ({ page }) => {
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('fix_missing_samples')
+    await page.waitForTimeout(1000)
+
+    const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
+    await executeBtn.click()
+    await page.waitForTimeout(3000)
+
+    const modal = page.locator('.fix-missing-modal')
+
+    // Click Continue to go to review
+    const continueBtn = modal.locator('.fix-browse-actions .tools-execute-btn', { hasText: 'Continue' })
+    await continueBtn.click()
+    await page.waitForTimeout(500)
+
+    // Review title should be visible
+    await expect(modal.locator('.modal-header h3')).toContainText('Review planned changes before execution')
+
+    // Should show status with found count
+    await expect(modal.locator('.fix-confirm-status')).toBeVisible()
+
+    // Unified table should have all 3 files (1 found + 2 not found)
+    const rows = modal.locator('.fix-confirmation .samples-table tbody tr')
+    await expect(rows).toHaveCount(3)
+
+    // Should have Found checkmarks (1 green, 2 red)
+    const foundBadges = modal.locator('.file-status-badge.file-exists')
+    await expect(foundBadges).toHaveCount(1)
+    const missingBadges = modal.locator('.file-status-badge.file-missing')
+    await expect(missingBadges).toHaveCount(2)
+
+    // Should have Apply Changes and Cancel buttons
+    await expect(modal.locator('.fix-confirm-actions .tools-execute-btn', { hasText: 'Apply Changes' })).toBeVisible()
+    await expect(modal.locator('.fix-confirm-actions .fix-cancel-btn')).toBeVisible()
+  })
+
+  test('review modal supports filtering by Found status', async ({ page }) => {
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('fix_missing_samples')
+    await page.waitForTimeout(1000)
+
+    const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
+    await executeBtn.click()
+    await page.waitForTimeout(3000)
+
+    const modal = page.locator('.fix-missing-modal')
+    const continueBtn = modal.locator('.fix-browse-actions .tools-execute-btn', { hasText: 'Continue' })
+    await continueBtn.click()
+    await page.waitForTimeout(500)
+
+    // Search box should be visible
+    await expect(modal.locator('.header-search-input')).toBeVisible()
+
+    // Filter icon for Found column should be visible
+    const foundFilterIcon = modal.locator('.fix-confirmation .filterable-header .filter-icon').first()
+    await expect(foundFilterIcon).toBeVisible()
+  })
+
+  test('review modal has resize handles', async ({ page }) => {
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('fix_missing_samples')
+    await page.waitForTimeout(1000)
+
+    const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
+    await executeBtn.click()
+    await page.waitForTimeout(500)
+
+    const modal = page.locator('.fix-missing-modal')
+
+    // Should have left, right, and bottom resize handles
+    await expect(modal.locator('.modal-resize-left')).toBeAttached()
+    await expect(modal.locator('.modal-resize-right')).toBeAttached()
+    await expect(modal.locator('.modal-resize-bottom')).toBeAttached()
+  })
+
+  test('missing samples list modal has resize handles', async ({ page }) => {
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('fix_missing_samples')
+    await page.waitForTimeout(1000)
+
+    const summaryBtn = page.locator('.tools-missing-files-summary')
+    await summaryBtn.click()
+
+    const modal = page.locator('.missing-samples-list-modal')
+    await expect(modal).toBeVisible()
+
+    // Should have left, right, and bottom resize handles
+    await expect(modal.locator('.modal-resize-left')).toBeAttached()
+    await expect(modal.locator('.modal-resize-right')).toBeAttached()
+    await expect(modal.locator('.modal-resize-bottom')).toBeAttached()
+  })
 })

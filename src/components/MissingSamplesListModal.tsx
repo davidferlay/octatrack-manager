@@ -56,7 +56,7 @@ export function MissingSamplesListModal({
   const [copyFeedback, setCopyFeedback] = useState<"idle" | "copied">("idle");
   const [modalWidth, setModalWidth] = useState<number | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
-  const isDragging = useRef<"left" | "right" | null>(null);
+  const isDragging = useRef<"left" | "right" | "bottom" | null>(null);
   const dragStartX = useRef(0);
   const dragStartWidth = useRef(0);
 
@@ -108,7 +108,7 @@ export function MissingSamplesListModal({
 
   // Resize drag handlers
   const handleResizeMouseDown = useCallback(
-    (side: "left" | "right", e: React.MouseEvent) => {
+    (side: "left" | "right" | "bottom", e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
       isDragging.current = side;
@@ -319,6 +319,11 @@ export function MissingSamplesListModal({
         <div
           className="modal-resize-handle modal-resize-right"
           onMouseDown={(e) => handleResizeMouseDown("right", e)}
+        />
+        {/* Bottom resize handle */}
+        <div
+          className="modal-resize-handle modal-resize-bottom"
+          onMouseDown={(e) => handleResizeMouseDown("bottom", e)}
         />
         <div className="modal-header">
           <h3>

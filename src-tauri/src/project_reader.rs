@@ -3572,21 +3572,23 @@ pub fn list_missing_samples(project_path: &str) -> Result<Vec<MissingSample>, St
 
     let mut result: Vec<MissingSample> = missing_map
         .into_iter()
-        .map(|(filename, (original_path, flex_slot_ids, static_slot_ids))| {
-            let slot_type = match (!flex_slot_ids.is_empty(), !static_slot_ids.is_empty()) {
-                (true, true) => "both",
-                (true, false) => "flex",
-                (false, true) => "static",
-                _ => "flex", // shouldn't happen
-            };
-            MissingSample {
-                filename,
-                original_path,
-                slot_type: slot_type.to_string(),
-                flex_slot_ids,
-                static_slot_ids,
-            }
-        })
+        .map(
+            |(filename, (original_path, flex_slot_ids, static_slot_ids))| {
+                let slot_type = match (!flex_slot_ids.is_empty(), !static_slot_ids.is_empty()) {
+                    (true, true) => "both",
+                    (true, false) => "flex",
+                    (false, true) => "static",
+                    _ => "flex", // shouldn't happen
+                };
+                MissingSample {
+                    filename,
+                    original_path,
+                    slot_type: slot_type.to_string(),
+                    flex_slot_ids,
+                    static_slot_ids,
+                }
+            },
+        )
         .collect();
 
     result.sort_by(|a, b| a.filename.cmp(&b.filename));

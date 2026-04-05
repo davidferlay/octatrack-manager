@@ -96,7 +96,7 @@ export function FixMissingSamplesModal({
   // Modal resize
   const [modalWidth, setModalWidth] = useState<number | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
-  const isModalDragging = useRef<"left" | "right" | null>(null);
+  const isModalDragging = useRef<"left" | "right" | "bottom" | null>(null);
   const modalDragStartX = useRef(0);
   const modalDragStartWidth = useRef(0);
 
@@ -147,7 +147,7 @@ export function FixMissingSamplesModal({
   };
 
   const handleModalResizeMouseDown = useCallback(
-    (side: "left" | "right", e: React.MouseEvent) => {
+    (side: "left" | "right" | "bottom", e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
       isModalDragging.current = side;
@@ -661,6 +661,10 @@ export function FixMissingSamplesModal({
         <div
           className="modal-resize-handle modal-resize-right"
           onMouseDown={(e) => handleModalResizeMouseDown("right", e)}
+        />
+        <div
+          className="modal-resize-handle modal-resize-bottom"
+          onMouseDown={(e) => handleModalResizeMouseDown("bottom", e)}
         />
         <div className="modal-header">
           <h3>
