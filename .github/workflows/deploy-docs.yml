@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'user-guide/**'
+      - '.github/workflows/deploy-docs.yml'
   workflow_dispatch:
 
 env:

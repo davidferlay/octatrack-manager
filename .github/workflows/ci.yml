@@ -3,8 +3,32 @@ name: CI
 on:
   push:
     branches: ['**']
+    paths:
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'e2e/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig*.json'
+      - 'vite.config.*'
+      - 'playwright.config.*'
+      - '.github/workflows/ci.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'e2e/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig*.json'
+      - 'vite.config.*'
+      - 'playwright.config.*'
+      - '.github/workflows/ci.yml'
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
