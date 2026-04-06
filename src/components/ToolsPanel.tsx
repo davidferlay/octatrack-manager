@@ -82,6 +82,7 @@ interface ToolsSettings {
   destSampleStart: number;
   poolOption: PoolOption;
   otherProjectOption: OtherProjectOption;
+  skipReview: boolean;
 }
 
 function loadToolsSettings(projectPath: string): Partial<ToolsSettings> {
@@ -190,6 +191,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   );
   const [otherProjectOption, setOtherProjectOption] = useState<OtherProjectOption>(
     (savedSettings.otherProjectOption as OtherProjectOption) || "copy_to_project"
+  );
+  const [skipReview, setSkipReview] = useState<boolean>(
+    savedSettings.skipReview ?? true
   );
   const [showFixModal, setShowFixModal] = useState<boolean>(false);
   const [showMissingSamplesListModal, setShowMissingSamplesListModal] = useState<boolean>(false);
@@ -306,8 +310,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
       destSampleStart,
       poolOption,
       otherProjectOption,
+      skipReview,
     });
-  }, [projectPath, operation, partAssignmentMode, trackMode, modeScope, copyTrackMode, slotType, audioMode, includeEditorSettings, destProject, sourceSampleIndices, destSampleStart, poolOption, otherProjectOption]);
+  }, [projectPath, operation, partAssignmentMode, trackMode, modeScope, copyTrackMode, slotType, audioMode, includeEditorSettings, destProject, sourceSampleIndices, destSampleStart, poolOption, otherProjectOption, skipReview]);
 
   // Load missing samples when Fix Missing Samples operation is selected
   useEffect(() => {
@@ -2435,11 +2440,11 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           </div>
 
           {/* Options panel */}
-          {missingSamples.length > 0 && (audioPoolStatus?.exists || audioPoolStatus?.set_path) && (
+          {missingSamples.length > 0 && (
             <div className="tools-options-panel">
               <h3>Options</h3>
 
-              {/* What to do when a file is found in the Audio Pool */}
+              {/* Pool option — only when audio pool exists */}
               {audioPoolStatus?.exists && (
                 <div className="tools-field">
                   <label>When samples are found in Audio Pool</label>
@@ -2464,7 +2469,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 </div>
               )}
 
-              {/* What to do when a file is found in another project of the Set */}
+              {/* Other project option — only when set path exists */}
               {audioPoolStatus?.set_path && (
                 <div className="tools-field">
                   <label>When samples are found in another project of Set</label>
@@ -2488,6 +2493,18 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   </div>
                 </div>
               )}
+
+              {/* Auto-apply option — always visible */}
+              <div className="tools-field tools-checkbox">
+                <label title="Show the review screen before applying changes when all missing samples are found">
+                  <input
+                    type="checkbox"
+                    checked={!skipReview}
+                    onChange={(e) => setSkipReview(!e.target.checked)}
+                  />
+                  Review before applying changes
+                </label>
+              </div>
             </div>
           )}
 
@@ -2874,6 +2891,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           poolOption={poolOption}
           otherProjectOption={otherProjectOption}
           hasAudioPool={audioPoolStatus?.exists ?? false}
+          skipReview={skipReview}
           onClose={() => setShowFixModal(false)}
           onApplied={() => {
             // Reload missing samples list

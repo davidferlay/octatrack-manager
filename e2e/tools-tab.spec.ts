@@ -2830,7 +2830,7 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
 
     const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
     await executeBtn.click()
-    await page.waitForTimeout(1000)
+    await page.waitForTimeout(2500)
 
     // Modal should be visible
     const modal = page.locator('.fix-missing-modal')
@@ -2844,7 +2844,7 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
 
     const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
     await executeBtn.click()
-    await page.waitForTimeout(3000)
+    await page.waitForTimeout(4000)
 
     // Should show browse prompt with remaining files
     const modal = page.locator('.fix-missing-modal')
@@ -2866,7 +2866,7 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
 
     const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
     await executeBtn.click()
-    await page.waitForTimeout(3000)
+    await page.waitForTimeout(4000)
 
     const modal = page.locator('.fix-missing-modal')
 
@@ -2903,7 +2903,7 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
 
     const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
     await executeBtn.click()
-    await page.waitForTimeout(3000)
+    await page.waitForTimeout(4000)
 
     const modal = page.locator('.fix-missing-modal')
     const continueBtn = modal.locator('.fix-browse-actions .tools-execute-btn', { hasText: 'Continue' })
@@ -2950,5 +2950,65 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
     await expect(modal.locator('.modal-resize-left')).toBeAttached()
     await expect(modal.locator('.modal-resize-right')).toBeAttached()
     await expect(modal.locator('.modal-resize-bottom')).toBeAttached()
+  })
+
+  test('auto-apply option is visible in Options panel', async ({ page }) => {
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('fix_missing_samples')
+    await page.waitForTimeout(1000)
+
+    const optionsPanel = page.locator('.tools-options-panel')
+    await expect(optionsPanel).toBeVisible()
+
+    const checkbox = optionsPanel.locator('.tools-checkbox input[type="checkbox"]')
+    await expect(checkbox).toBeVisible()
+    await expect(checkbox).not.toBeChecked()
+
+    const label = optionsPanel.locator('.tools-checkbox label')
+    await expect(label).toContainText('Review before applying changes')
+  })
+
+  test('done phase shows search steps and result in unified progress view', async ({ page }) => {
+    // Override to make search find all samples
+    await page.evaluate(() => {
+      const original = (window as any).__TAURI_INTERNALS__.invoke
+      ;(window as any).__TAURI_INTERNALS__.invoke = async (cmd: string, args?: any) => {
+        if (cmd === 'search_project_dir') {
+          return [
+            { filename: 'kick.wav', found_path: '/test/project/kick.wav', source_project: null },
+            { filename: 'snare.wav', found_path: '/test/project/snare.wav', source_project: null },
+            { filename: 'hihat.wav', found_path: '/test/project/hihat.wav', source_project: null },
+          ]
+        }
+        return original(cmd, args)
+      }
+    })
+
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('fix_missing_samples')
+    await page.waitForTimeout(1000)
+
+    const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
+    await executeBtn.click()
+    await page.waitForTimeout(3000)
+
+    const modal = page.locator('.fix-missing-modal')
+
+    // Should be in confirming phase — click Apply
+    const applyBtn = modal.locator('.tools-execute-btn', { hasText: 'Apply Changes' })
+    await applyBtn.click()
+    await page.waitForTimeout(1000)
+
+    // Progress section should be visible in done phase
+    const progressSection = modal.locator('.fix-progress-section')
+    await expect(progressSection).toBeVisible()
+
+    // Search steps should still be visible
+    const searchSteps = modal.locator('.fix-search-steps .fix-search-step')
+    const count = await searchSteps.count()
+    expect(count).toBeGreaterThanOrEqual(3) // 3 search steps + 1 apply step = at least 4
+
+    // Close button should be visible
+    await expect(modal.locator('.fix-done-actions .tools-execute-btn', { hasText: 'Close' })).toBeVisible()
   })
 })

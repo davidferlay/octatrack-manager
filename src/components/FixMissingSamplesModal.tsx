@@ -33,7 +33,7 @@ interface FixResult {
 type PoolOption = "use_from_pool" | "copy_to_project";
 type OtherProjectOption = "move_to_pool" | "copy_to_project";
 
-type ModalPhase = "searching" | "browse_prompt" | "confirming" | "applying" | "done";
+type ModalPhase = "searching" | "search_done" | "browse_prompt" | "confirming" | "applying" | "done";
 
 interface SearchStep {
   label: string;
@@ -58,6 +58,7 @@ interface Props {
   poolOption: PoolOption;
   otherProjectOption: OtherProjectOption;
   hasAudioPool: boolean;
+  skipReview: boolean;
   onClose: () => void;
   onApplied: () => void;
 }
@@ -69,6 +70,7 @@ export function FixMissingSamplesModal({
   poolOption,
   otherProjectOption,
   hasAudioPool,
+  skipReview,
   onClose,
   onApplied,
 }: Props) {
@@ -77,6 +79,7 @@ export function FixMissingSamplesModal({
     { label: "Project directory", status: "pending", foundCount: 0 },
     { label: "Audio Pool", status: "pending", foundCount: 0 },
     { label: "Other Set projects", status: "pending", foundCount: 0 },
+    { label: "User location selection", status: "pending", foundCount: 0 },
   ]);
 
   // All found files (accumulated across search steps)
@@ -117,6 +120,9 @@ export function FixMissingSamplesModal({
   const [actionFilter, setActionFilter] = useState<string>("all");
   const [confirmOpenDropdown, setConfirmOpenDropdown] = useState<string | null>(null);
   const [confirmDropdownPosition, setConfirmDropdownPosition] = useState<{ top: number; left: number } | null>(null);
+
+  // Auto-apply: when skipReview enabled and all samples found, apply immediately
+  const autoApplyTriggered = useRef(false);
 
   const closeConfirmDropdown = () => {
     setConfirmOpenDropdown(null);
@@ -204,6 +210,18 @@ export function FixMissingSamplesModal({
       if (widths.length > 0) setColWidths(widths);
     }
   }, [phase, colWidths.length]);
+
+  useEffect(() => {
+    if (
+      skipReview &&
+      phase === "search_done" &&
+      resolvedFiles.length > 0 &&
+      !autoApplyTriggered.current
+    ) {
+      autoApplyTriggered.current = true;
+      handleApply();
+    }
+  }, [phase, skipReview, resolvedFiles.length]);
 
   const handleColResizeMouseDown = useCallback(
     (colIndex: number, e: React.MouseEvent) => {
@@ -312,15 +330,30 @@ export function FixMissingSamplesModal({
       let remaining = [...missingSamples.map((s) => s.filename)];
       const allResolved: ResolvedFile[] = [];
 
+      const MIN_STEP_MS = 400;
+
+      async function withMinDuration<T>(promise: Promise<T>, startTime: number): Promise<T> {
+        const result = await promise;
+        const elapsed = Date.now() - startTime;
+        if (elapsed < MIN_STEP_MS) {
+          await new Promise((r) => setTimeout(r, MIN_STEP_MS - elapsed));
+        }
+        return result;
+      }
+
       // Step 1: Project directory
       setSteps((prev) =>
         prev.map((s, i) => (i === 0 ? { ...s, status: "running" } : s))
       );
       try {
-        const found = await invoke<FoundSample[]>("search_project_dir", {
-          projectPath,
-          filenames: remaining,
-        });
+        const step1Start = Date.now();
+        const found = await withMinDuration(
+          invoke<FoundSample[]>("search_project_dir", {
+            projectPath,
+            filenames: remaining,
+          }),
+          step1Start
+        );
         if (cancelled) return;
 
         for (const f of found) {
@@ -350,10 +383,14 @@ export function FixMissingSamplesModal({
           prev.map((s, i) => (i === 1 ? { ...s, status: "running" } : s))
         );
         try {
-          const found = await invoke<FoundSample[]>("search_audio_pool", {
-            projectPath,
-            filenames: remaining,
-          });
+          const step2Start = Date.now();
+          const found = await withMinDuration(
+            invoke<FoundSample[]>("search_audio_pool", {
+              projectPath,
+              filenames: remaining,
+            }),
+            step2Start
+          );
           if (cancelled) return;
 
           for (const f of found) {
@@ -384,10 +421,14 @@ export function FixMissingSamplesModal({
           prev.map((s, i) => (i === 2 ? { ...s, status: "running" } : s))
         );
         try {
-          const found = await invoke<FoundSample[]>("search_other_projects", {
-            projectPath,
-            filenames: remaining,
-          });
+          const step3Start = Date.now();
+          const found = await withMinDuration(
+            invoke<FoundSample[]>("search_other_projects", {
+              projectPath,
+              filenames: remaining,
+            }),
+            step3Start
+          );
           if (cancelled) return;
 
           for (const f of found) {
@@ -420,11 +461,15 @@ export function FixMissingSamplesModal({
       setResolvedFiles(allResolved);
       setRemainingFilenames(remaining);
 
-      // If files still missing → browse prompt; otherwise → confirmation
+      // If files still missing → browse prompt; otherwise → search done
       if (remaining.length > 0) {
         setPhase("browse_prompt");
       } else {
-        setPhase("confirming");
+        // All found — skip user location step
+        setSteps((prev) =>
+          prev.map((s, i) => (i === 3 ? { ...s, status: "skipped" } : s))
+        );
+        setPhase("search_done");
       }
     }
 
@@ -474,6 +519,11 @@ export function FixMissingSamplesModal({
       setResolvedFiles(newResolved);
       setRemainingFilenames(newRemaining);
 
+      // Update user location step count
+      setSteps((prev) =>
+        prev.map((s, i) => (i === 3 ? { ...s, status: "done", foundCount: s.foundCount + found.length } : s))
+      );
+
       if (newRemaining.length === 0) {
         setPhase("confirming");
       }
@@ -517,6 +567,7 @@ export function FixMissingSamplesModal({
 
       setFixResult(result);
       setPhase("done");
+      onApplied();
     } catch (err) {
       setApplyError(String(err));
       setPhase("done");
@@ -646,7 +697,7 @@ export function FixMissingSamplesModal({
   );
 
   return (
-    <div className="modal-overlay" onClick={phase === "done" || phase === "confirming" || phase === "browse_prompt" ? onClose : undefined}>
+    <div className="modal-overlay" onClick={phase === "done" || phase === "search_done" || phase === "confirming" || phase === "browse_prompt" ? onClose : undefined}>
       <div
         ref={modalRef}
         className="modal-content fix-missing-modal"
@@ -668,35 +719,104 @@ export function FixMissingSamplesModal({
         />
         <div className="modal-header">
           <h3>
-            {phase === "searching" && "Searching for missing samples..."}
+            {(phase === "searching" || phase === "search_done" || phase === "applying" || phase === "done") && (applyError ? "Error" : "Searching for missing samples...")}
             {phase === "browse_prompt" && `${remainingFilenames.length} file${remainingFilenames.length !== 1 ? "s" : ""} are still missing`}
             {phase === "confirming" && <><i className="fas fa-clipboard-check"></i> Review planned changes before execution</>}
-            {phase === "applying" && "Applying changes..."}
-            {phase === "done" && (applyError ? "Error" : "Complete")}
           </h3>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <div className={`modal-body ${phase === "confirming" ? "fix-confirm-body" : ""}`}>
-          {/* SEARCHING PHASE */}
-          {phase === "searching" && (
-            <div className="fix-search-steps">
-              {steps.map((step, i) => (
-                <div key={i} className={`fix-search-step ${step.status}`}>
-                  <span className="fix-step-icon">
-                    {step.status === "running" && <span className="loading-spinner-small"></span>}
-                    {step.status === "done" && <i className="fas fa-check"></i>}
-                    {step.status === "skipped" && <i className="fas fa-minus"></i>}
-                    {step.status === "pending" && <i className="fas fa-circle" style={{ opacity: 0.3 }}></i>}
-                  </span>
-                  <span className="fix-step-label">{step.label}</span>
-                  {step.status === "done" && step.foundCount > 0 && (
-                    <span className="fix-step-count">{step.foundCount} found</span>
-                  )}
-                  {step.status === "skipped" && (
-                    <span className="fix-step-count">skipped</span>
+          {/* PROGRESS SECTION — visible during searching, search_done, applying, and done */}
+          {(phase === "searching" || phase === "search_done" || phase === "applying" || phase === "done") && (
+            <div className="fix-progress-section">
+              <div className="fix-search-steps">
+                {steps.map((step, i) => {
+                  const baseTooltips = [
+                    "Search for missing files within the project directory and subdirectories",
+                    "Search the shared Audio Pool directory (../AUDIO/) for matching files",
+                    "Search other projects within the same Set for matching files",
+                    "Manually browse for a directory to search for remaining missing files",
+                  ];
+                  const skippedTooltips = [
+                    "Skipped",
+                    hasAudioPool ? "All missing files were already found in previous steps" : "No Audio Pool directory found for this Set",
+                    "All missing files were already found in previous steps",
+                    "All missing files were already found in previous steps",
+                  ];
+                  const tooltip = step.status === "skipped" ? skippedTooltips[i] : baseTooltips[i];
+                  return (
+                    <div key={i} className={`fix-search-step ${step.status}`} title={tooltip}>
+                      <span className="fix-step-icon">
+                        {step.status === "running" && <span className="loading-spinner-small"></span>}
+                        {step.status === "done" && <i className="fas fa-check"></i>}
+                        {step.status === "skipped" && <i className="fas fa-minus"></i>}
+                        {step.status === "pending" && <i className="fas fa-circle" style={{ opacity: 0.3 }}></i>}
+                      </span>
+                      <span className="fix-step-label">{step.label}</span>
+                      {step.status === "done" && step.foundCount > 0 && (
+                        <span className="fix-step-count">{step.foundCount} found</span>
+                      )}
+                      {step.status === "done" && step.foundCount === 0 && (
+                        <span className="fix-step-count fix-step-count-zero">0 found</span>
+                      )}
+                      {step.status === "skipped" && (
+                        <span className="fix-step-count">skipped</span>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* Apply step — visible during applying and done */}
+                {(phase === "applying" || phase === "done") && (
+                  <div className={`fix-search-step ${phase === "applying" ? "running" : "done"}`}>
+                    <span className="fix-step-icon">
+                      {phase === "applying" && <span className="loading-spinner-small"></span>}
+                      {phase === "done" && !applyError && <i className="fas fa-check"></i>}
+                      {phase === "done" && applyError && <i className="fas fa-exclamation-circle" style={{ color: '#e74c3c' }}></i>}
+                    </span>
+                    <span className="fix-step-label">
+                      {phase === "applying" ? "Applying changes..." : applyError ? "Error applying changes" : `${fixResult?.resolved_count ?? 0} samples resolved`}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Summary line — appears after search completes */}
+              {phase !== "searching" && (
+                <div className={`fix-search-summary${resolvedFiles.length === missingSamples.length ? " all-resolved" : ""}`} title={`${resolvedFiles.length} of ${missingSamples.length} missing sample files were located across searched locations`}>
+                  <strong>{resolvedFiles.length}/{missingSamples.length}</strong> missing files found
+                  {remainingFilenames.length > 0 && (
+                    <span className="fix-search-summary-remaining"> — {remainingFilenames.length} still missing</span>
                   )}
                 </div>
-              ))}
+              )}
+
+              {/* Error detail */}
+              {phase === "done" && applyError && (
+                <div className="fix-done-error">
+                  <i className="fas fa-exclamation-circle"></i>
+                  <p>{applyError}</p>
+                </div>
+              )}
+
+              {/* Buttons after search completes — review or auto-applied */}
+              {phase === "search_done" && !skipReview && (
+                <div className="fix-done-actions">
+                  <button className="fix-cancel-btn" onClick={onClose} title="Close without applying any changes">Cancel</button>
+                  <button className="tools-execute-btn" onClick={() => setPhase("confirming")} title="Review the list of changes before applying them to the project">
+                    Review changes
+                  </button>
+                </div>
+              )}
+
+              {/* Done button after apply */}
+              {phase === "done" && (
+                <div className="fix-done-actions">
+                  <button className="tools-execute-btn" onClick={onClose} title="Close this dialog">
+                    Done
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -720,7 +840,13 @@ export function FixMissingSamplesModal({
                 </button>
                 <button
                   className="tools-execute-btn"
-                  onClick={() => setPhase("confirming")}
+                  onClick={() => {
+                    // Mark user location step as done if not already
+                    setSteps((prev) =>
+                      prev.map((s, i) => (i === 3 && s.status !== "done" ? { ...s, status: "done" } : s))
+                    );
+                    setPhase("confirming");
+                  }}
                 >
                   Continue
                 </button>
@@ -832,70 +958,6 @@ export function FixMissingSamplesModal({
             </div>
           )}
 
-          {/* APPLYING PHASE */}
-          {phase === "applying" && (
-            <div className="fix-applying">
-              <span className="loading-spinner-small"></span>
-              <span>Applying changes...</span>
-            </div>
-          )}
-
-          {/* DONE PHASE */}
-          {phase === "done" && (
-            <div className="fix-done">
-              {applyError ? (
-                <div className="fix-done-error">
-                  <i className="fas fa-exclamation-circle"></i>
-                  <p>{applyError}</p>
-                </div>
-              ) : fixResult && (
-                <div className="fix-done-success">
-                  <div className="fix-done-counts">
-                    <div className="fix-done-count">
-                      <span className="fix-done-number">{fixResult.resolved_count}</span>
-                      <span>resolved</span>
-                    </div>
-                    {notFoundFilenames.length > 0 && (
-                      <div className="fix-done-count not-found">
-                        <span className="fix-done-number">{notFoundFilenames.length}</span>
-                        <span>not found</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <details className="fix-done-details">
-                    <summary>Details</summary>
-                    <div className="fix-done-details-content">
-                      {fixResult.files_copied > 0 && <div>{fixResult.files_copied} file{fixResult.files_copied !== 1 ? "s" : ""} copied</div>}
-                      {fixResult.files_moved > 0 && <div>{fixResult.files_moved} file{fixResult.files_moved !== 1 ? "s" : ""} moved to pool</div>}
-                      {fixResult.projects_updated.length > 1 && (
-                        <div>{fixResult.projects_updated.length} projects updated</div>
-                      )}
-                      <div className="fix-done-file-list">
-                        {resolvedFiles.map((f) => (
-                          <div key={f.filename} className="fix-done-file-item">
-                            <span className={`fix-action-${f.color}`}>&#9679;</span> {f.filename}: {f.action.replace("_", " ")}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </details>
-                </div>
-              )}
-
-              <div className="fix-done-actions">
-                <button
-                  className="tools-execute-btn"
-                  onClick={() => {
-                    if (!applyError) onApplied();
-                    onClose();
-                  }}
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
