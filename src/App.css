@@ -4189,8 +4189,7 @@ h1 {
 }
 
 .missing-samples-list-modal .table-wrapper {
-  min-height: 30vh;
-  max-height: 45vh;
+  height: 45vh;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -4392,8 +4391,7 @@ h1 {
 
 
 .fix-confirm-table-wrapper {
-  min-height: 30vh;
-  max-height: 45vh;
+  height: 45vh;
   overflow-y: auto;
   overflow-x: hidden;
 }
