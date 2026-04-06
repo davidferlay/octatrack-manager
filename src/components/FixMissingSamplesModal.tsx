@@ -121,6 +121,8 @@ export function FixMissingSamplesModal({
   const [confirmOpenDropdown, setConfirmOpenDropdown] = useState<string | null>(null);
   const [confirmDropdownPosition, setConfirmDropdownPosition] = useState<{ top: number; left: number } | null>(null);
 
+  const [copyFeedback, setCopyFeedback] = useState<"idle" | "copied">("idle");
+
   // Auto-apply: when skipReview enabled and all samples found, apply immediately
   const autoApplyTriggered = useRef(false);
 
@@ -142,6 +144,21 @@ export function FixMissingSamplesModal({
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [confirmOpenDropdown]);
+
+  const copyConfirmTableToClipboard = async () => {
+    const headers = ["File", "Found", "Location", "Action"];
+    const tsvRows = sortedConfirmRows.map(
+      (row) => `${row.filename}\t${row.found ? "Yes" : "No"}\t${row.location}\t${row.actionLabel}`
+    );
+    const tsv = [headers.join("\t"), ...tsvRows].join("\n");
+    try {
+      await navigator.clipboard.writeText(tsv);
+      setCopyFeedback("copied");
+      setTimeout(() => setCopyFeedback("idle"), 2000);
+    } catch (err) {
+      console.error("Failed to copy to clipboard:", err);
+    }
+  };
 
   const handleConfirmSort = (column: ConfirmSortColumn) => {
     if (confirmSortColumn === column) {
@@ -717,12 +734,42 @@ export function FixMissingSamplesModal({
           className="modal-resize-handle modal-resize-bottom"
           onMouseDown={(e) => handleModalResizeMouseDown("bottom", e)}
         />
-        <div className="modal-header">
+        <div className={`modal-header${phase === "confirming" ? " missing-samples-header" : ""}`}>
           <h3>
             {(phase === "searching" || phase === "search_done" || phase === "applying" || phase === "done") && (applyError ? "Error" : "Searching for missing samples...")}
             {phase === "browse_prompt" && `${remainingFilenames.length} file${remainingFilenames.length !== 1 ? "s" : ""} are still missing`}
-            {phase === "confirming" && <><i className="fas fa-clipboard-check"></i> Review planned changes before execution</>}
+            {phase === "confirming" && <><i className="fas fa-clipboard-check"></i> Review planned changes</>}
           </h3>
+          {phase === "confirming" && (
+            <>
+              <div className="missing-samples-header-info">
+                <span className={`fix-confirm-status${resolvedFiles.length === allConfirmRows.length ? " all-resolved" : ""}`}>
+                  <strong>{resolvedFiles.length}/{allConfirmRows.length}</strong> missing files found
+                  {sortedConfirmRows.length !== allConfirmRows.length && <span style={{ color: 'var(--elektron-text-secondary)', fontWeight: 400 }}> — showing {sortedConfirmRows.length}</span>}
+                </span>
+                {foundFilter !== "all" && <span className="filter-badge">Found: {foundFilter === "yes" ? "Yes" : "No"}</span>}
+                {actionFilter !== "all" && <span className="filter-badge">Action: {actionFilter}</span>}
+                {hasConfirmActiveFilters && (
+                  <button className="reset-filters-btn" onClick={() => { setFoundFilter("all"); setActionFilter("all"); }} title="Reset all filters">✕ Reset</button>
+                )}
+              </div>
+              <div className="missing-samples-header-actions">
+                <div className="header-search-container">
+                  <input type="text" placeholder="Search..." value={confirmSearchText} onChange={(e) => setConfirmSearchText(e.target.value)} className="header-search-input" />
+                  {confirmSearchText && (
+                    <button className="header-search-clear" onClick={() => setConfirmSearchText("")} title="Clear search">×</button>
+                  )}
+                </div>
+                <button
+                  className={`copy-table-btn ${copyFeedback === "copied" ? "copied" : ""}`}
+                  onClick={copyConfirmTableToClipboard}
+                  title="Copy table to clipboard (for Excel/Google Sheets)"
+                >
+                  {copyFeedback === "copied" ? "✓" : "⧉"}
+                </button>
+              </div>
+            </>
+          )}
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <div className={`modal-body ${phase === "confirming" || phase === "searching" || phase === "search_done" || phase === "applying" || phase === "done" ? "fix-confirm-body" : ""}`}>
@@ -861,28 +908,6 @@ export function FixMissingSamplesModal({
           {/* CONFIRMATION PHASE */}
           {phase === "confirming" && (
             <div className="fix-confirmation">
-              <div className="filter-results-info">
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-                  <span className={`fix-confirm-status${resolvedFiles.length === allConfirmRows.length ? " all-resolved" : ""}`}>
-                    <strong>{resolvedFiles.length}/{allConfirmRows.length}</strong> missing files found
-                    {sortedConfirmRows.length !== allConfirmRows.length && <span style={{ color: 'var(--elektron-text-secondary)', fontWeight: 400 }}> — showing {sortedConfirmRows.length}</span>}
-                  </span>
-                  {foundFilter !== "all" && <span className="filter-badge">Found: {foundFilter === "yes" ? "Yes" : "No"}</span>}
-                  {actionFilter !== "all" && <span className="filter-badge">Action: {actionFilter}</span>}
-                  {hasConfirmActiveFilters && (
-                    <button className="reset-filters-btn" onClick={() => { setFoundFilter("all"); setActionFilter("all"); }} title="Reset all filters">✕ Reset</button>
-                  )}
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-                  <div className="header-search-container">
-                    <input type="text" placeholder="Search..." value={confirmSearchText} onChange={(e) => setConfirmSearchText(e.target.value)} className="header-search-input" />
-                    {confirmSearchText && (
-                      <button className="header-search-clear" onClick={() => setConfirmSearchText("")} title="Clear search">×</button>
-                    )}
-                  </div>
-                </div>
-              </div>
-
               {/* Unified table: resolved + not found */}
               <div className="fix-confirm-table-wrapper">
                 <table className="samples-table" ref={tableRef}>
