@@ -33,6 +33,7 @@ const sidebars = {
             'features/tools/copy-patterns',
             'features/tools/copy-tracks',
             'features/tools/copy-sample-slots',
+            'features/tools/fix-missing-samples',
           ],
         },
       ],
