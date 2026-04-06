@@ -11092,9 +11092,11 @@ mod tests {
                 .unwrap();
             fs::write(project_b.join("kick.wav"), b"audio").unwrap();
 
-            let result =
-                search_other_projects_of_set(project_a.to_str().unwrap(), vec!["kick.wav".to_string()])
-                    .unwrap();
+            let result = search_other_projects_of_set(
+                project_a.to_str().unwrap(),
+                vec!["kick.wav".to_string()],
+            )
+            .unwrap();
             assert_eq!(result.len(), 1);
             assert_eq!(result[0].filename, "kick.wav");
             assert_eq!(result[0].source_project, Some("ProjectB".to_string()));
@@ -11119,9 +11121,11 @@ mod tests {
                 .unwrap();
             fs::write(project_b.join("kick.wav"), b"audio").unwrap();
 
-            let result =
-                search_other_projects_of_set(project_a.to_str().unwrap(), vec!["kick.wav".to_string()])
-                    .unwrap();
+            let result = search_other_projects_of_set(
+                project_a.to_str().unwrap(),
+                vec!["kick.wav".to_string()],
+            )
+            .unwrap();
             assert_eq!(result.len(), 0, "Should return empty when not in a Set");
         }
 
