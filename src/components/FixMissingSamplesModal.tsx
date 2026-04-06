@@ -797,7 +797,7 @@ export function FixMissingSamplesModal({
                         {step.status === "running" && <span className="loading-spinner-small"></span>}
                         {step.status === "done" && <i className="fas fa-check"></i>}
                         {step.status === "skipped" && <i className="fas fa-minus"></i>}
-                        {step.status === "pending" && <i className="fas fa-circle" style={{ opacity: 0.3 }}></i>}
+                        {step.status === "pending" && <i className="fas fa-minus"></i>}
                       </span>
                       <span className="fix-step-label">{step.label}</span>
                       {step.status === "done" && step.foundCount > 0 && (
