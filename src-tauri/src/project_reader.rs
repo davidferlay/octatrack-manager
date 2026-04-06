@@ -11354,7 +11354,11 @@ mod tests {
 
             // Verify no missing samples after fix
             let missing_after = list_missing_samples(&project.path).unwrap();
-            assert_eq!(missing_after.len(), 0, "No samples should be missing after fix");
+            assert_eq!(
+                missing_after.len(),
+                0,
+                "No samples should be missing after fix"
+            );
         }
 
         #[test]
@@ -11411,7 +11415,11 @@ mod tests {
 
             // Verify no missing samples after fix
             let missing_after = list_missing_samples(project_dir.to_str().unwrap()).unwrap();
-            assert_eq!(missing_after.len(), 0, "No samples should be missing after fix");
+            assert_eq!(
+                missing_after.len(),
+                0,
+                "No samples should be missing after fix"
+            );
         }
     }
 }
