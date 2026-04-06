@@ -94,6 +94,8 @@ export function FixMissingSamplesModal({
   // Browse prompt state
   const [searchedDirs, setSearchedDirs] = useState<string[]>([]);
   const [dirWarning, setDirWarning] = useState<string>("");
+  const [dirWarningFading, setDirWarningFading] = useState(false);
+  const dirWarningTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // Apply result
   const [fixResult, setFixResult] = useState<FixResult | null>(null);
@@ -514,7 +516,24 @@ export function FixMissingSamplesModal({
 
       // Warn if already searched
       if (searchedDirs.includes(selected)) {
-        setDirWarning(`This directory was already searched: ${selected}`);
+        // Clear any pending timers
+        dirWarningTimers.current.forEach(clearTimeout);
+        dirWarningTimers.current = [];
+        // Show warning, then fade out like Parts save indicator
+        // Keep the end of the path (most useful to user), trim the beginning
+        const parts = selected.split("/");
+        let displayPath = selected;
+        // Progressively remove leading segments until short enough
+        while (displayPath.length > 35 && parts.length > 2) {
+          parts.splice(1, 1);
+          displayPath = parts[0] + "/…/" + parts.slice(1).join("/");
+        }
+        setDirWarning(`Already searched: ${displayPath}`);
+        setDirWarningFading(false);
+        dirWarningTimers.current.push(
+          setTimeout(() => setDirWarningFading(true), 2000),
+          setTimeout(() => { setDirWarning(""); setDirWarningFading(false); }, 3200),
+        );
         return;
       }
 
@@ -747,6 +766,9 @@ export function FixMissingSamplesModal({
             {(phase === "searching" || phase === "search_done" || phase === "applying" || phase === "done") && (applyError ? "Error" : "Searching for missing samples...")}
             {phase === "confirming" && <><i className="fas fa-clipboard-check"></i> Review planned changes</>}
           </h3>
+          {dirWarning && (
+            <div className={`fix-dir-warning${dirWarningFading ? " fading" : ""}`}><i className="fas fa-exclamation-triangle"></i> {dirWarning}</div>
+          )}
           {phase === "confirming" && (
             <>
               <div className="missing-samples-header-info">
@@ -850,11 +872,6 @@ export function FixMissingSamplesModal({
               {/* Browse section — centered, visible in search_done when files still missing */}
               {phase === "search_done" && remainingFilenames.length > 0 && (
                 <div className="fix-browse-inline">
-                  {dirWarning && (
-                    <div className="fix-dir-warning">
-                      <i className="fas fa-exclamation-triangle"></i> {dirWarning}
-                    </div>
-                  )}
                   <button
                     className="tools-execute-btn"
                     onClick={handleBrowse}

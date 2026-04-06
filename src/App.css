@@ -798,6 +798,7 @@ h1 {
   justify-content: space-between;
   padding: 1rem 1.25rem;
   border-bottom: 1px solid var(--elektron-border-gray);
+  position: relative;
 }
 
 .modal-header h3 {
@@ -4342,12 +4343,28 @@ h1 {
 }
 
 .fix-dir-warning {
-  background: rgba(255, 170, 50, 0.08);
-  border: 1px solid rgba(255, 170, 50, 0.4);
-  border-radius: 4px;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.85rem;
+  position: absolute;
+  right: 2.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  max-width: calc(100% - 22rem);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 4px 12px;
+  border-radius: 10px;
   color: #FFAA32;
+  background: rgba(255, 170, 50, 0.12);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 1;
+  transition: opacity 0.1s ease-in;
+}
+
+.fix-dir-warning.fading {
+  opacity: 0;
+  transition: opacity 1.2s ease-out;
 }
 
 /* Confirmation */
