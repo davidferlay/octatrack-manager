@@ -4260,7 +4260,8 @@ h1 {
   color: #4caf50;
 }
 
-.fix-search-step.skipped {
+.fix-search-step.skipped,
+.fix-search-step.pending {
   opacity: 0.5;
 }
 
