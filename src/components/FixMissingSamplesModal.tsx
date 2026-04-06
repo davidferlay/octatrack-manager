@@ -33,12 +33,13 @@ interface FixResult {
 type PoolOption = "use_from_pool" | "copy_to_project";
 type OtherProjectOption = "move_to_pool" | "copy_to_project";
 
-type ModalPhase = "searching" | "search_done" | "browse_prompt" | "confirming" | "applying" | "done";
+type ModalPhase = "searching" | "search_done" | "confirming" | "applying" | "done";
 
 interface SearchStep {
   label: string;
   status: "pending" | "running" | "done" | "skipped";
   foundCount: number;
+  fullPath?: string; // Full path for user-selected directories (used in tooltip)
 }
 
 interface ResolvedFile {
@@ -79,7 +80,6 @@ export function FixMissingSamplesModal({
     { label: "Project directory", status: "pending", foundCount: 0 },
     { label: "Audio Pool", status: "pending", foundCount: 0 },
     { label: "Other Set projects", status: "pending", foundCount: 0 },
-    { label: "User location selection", status: "pending", foundCount: 0 },
   ]);
 
   // Capture initial count so it doesn't change when parent refreshes missingSamples
@@ -490,17 +490,7 @@ export function FixMissingSamplesModal({
 
       setResolvedFiles(allResolved);
       setRemainingFilenames(remaining);
-
-      // If files still missing → browse prompt; otherwise → search done
-      if (remaining.length > 0) {
-        setPhase("browse_prompt");
-      } else {
-        // All found — skip user location step
-        setSteps((prev) =>
-          prev.map((s, i) => (i === 3 ? { ...s, status: "skipped" } : s))
-        );
-        setPhase("search_done");
-      }
+      setPhase("search_done");
     }
 
     if (phase === "searching") {
@@ -531,6 +521,16 @@ export function FixMissingSamplesModal({
       setDirWarning("");
       setSearchedDirs((prev) => [...prev, selected]);
 
+      // Extract directory name for display
+      const dirName = selected.split("/").filter(Boolean).pop() || selected;
+
+      // Add a new step for this user-selected directory (running state)
+      const stepIndex = steps.length;
+      setSteps((prev) => [
+        ...prev,
+        { label: `User selection: ${dirName}`, status: "running", foundCount: 0, fullPath: selected },
+      ]);
+
       // Search the directory
       const found = await invoke<FoundSample[]>("search_directory", {
         dirPath: selected,
@@ -549,15 +549,10 @@ export function FixMissingSamplesModal({
       setResolvedFiles(newResolved);
       setRemainingFilenames(newRemaining);
 
-      // Update user location step count
+      // Mark this step as done
       setSteps((prev) =>
-        prev.map((s, i) => (i === 3 ? { ...s, status: "done", foundCount: s.foundCount + found.length } : s))
+        prev.map((s, i) => (i === stepIndex ? { ...s, status: "done", foundCount: found.length } : s))
       );
-
-      if (newRemaining.length === 0) {
-        setPhase("confirming");
-      }
-      // else stay in browse_prompt
     } catch (err) {
       console.error("Browse error:", err);
     }
@@ -727,7 +722,7 @@ export function FixMissingSamplesModal({
   );
 
   return (
-    <div className="modal-overlay" onClick={phase === "done" || phase === "search_done" || phase === "confirming" || phase === "browse_prompt" ? onClose : undefined}>
+    <div className="modal-overlay" onClick={phase === "done" || phase === "search_done" || phase === "confirming" ? onClose : undefined}>
       <div
         ref={modalRef}
         className="modal-content fix-missing-modal"
@@ -750,7 +745,6 @@ export function FixMissingSamplesModal({
         <div className={`modal-header${phase === "confirming" ? " missing-samples-header" : ""}`}>
           <h3>
             {(phase === "searching" || phase === "search_done" || phase === "applying" || phase === "done") && (applyError ? "Error" : "Searching for missing samples...")}
-            {phase === "browse_prompt" && `${remainingFilenames.length} file${remainingFilenames.length !== 1 ? "s" : ""} are still missing`}
             {phase === "confirming" && <><i className="fas fa-clipboard-check"></i> Review planned changes</>}
           </h3>
           {phase === "confirming" && (
@@ -795,15 +789,17 @@ export function FixMissingSamplesModal({
                     "Search for missing files within the project directory and subdirectories",
                     "Search the shared Audio Pool directory (../AUDIO/) for matching files",
                     "Search other projects within the same Set for matching files",
-                    "Manually browse for a directory to search for remaining missing files",
                   ];
                   const skippedTooltips = [
                     "Skipped",
                     hasAudioPool ? "All missing files were already found in previous steps" : "No Audio Pool directory found for this Set",
                     "All missing files were already found in previous steps",
-                    "All missing files were already found in previous steps",
                   ];
-                  const tooltip = step.status === "skipped" ? skippedTooltips[i] : baseTooltips[i];
+                  const tooltip = step.fullPath
+                    ? step.fullPath
+                    : step.status === "skipped"
+                      ? skippedTooltips[i] ?? "Skipped"
+                      : baseTooltips[i] ?? "";
                   return (
                     <div key={i} className={`fix-search-step ${step.status}`} title={tooltip}>
                       <span className="fix-step-icon">
@@ -812,7 +808,9 @@ export function FixMissingSamplesModal({
                         {step.status === "skipped" && <i className="fas fa-minus"></i>}
                         {step.status === "pending" && <i className="fas fa-minus"></i>}
                       </span>
-                      <span className="fix-step-label">{step.label}</span>
+                      <span className="fix-step-label">
+                        {step.fullPath ? <>User selection: <span className="fix-step-dirname" title={step.fullPath}>{step.label.replace("User selection: ", "")}</span></> : step.label}
+                      </span>
                       {step.status === "done" && step.foundCount > 0 && (
                         <span className="fix-step-count">{step.foundCount} found</span>
                       )}
@@ -849,6 +847,24 @@ export function FixMissingSamplesModal({
                 )}
               </div>
 
+              {/* Browse section — centered, visible in search_done when files still missing */}
+              {phase === "search_done" && remainingFilenames.length > 0 && (
+                <div className="fix-browse-inline">
+                  {dirWarning && (
+                    <div className="fix-dir-warning">
+                      <i className="fas fa-exclamation-triangle"></i> {dirWarning}
+                    </div>
+                  )}
+                  <button
+                    className="tools-execute-btn"
+                    onClick={handleBrowse}
+                    title="Browse for a directory to search for remaining missing files"
+                  >
+                    <i className="fas fa-folder-open"></i> Browse...
+                  </button>
+                </div>
+              )}
+
               {/* Error detail */}
               {phase === "done" && applyError && (
                 <div className="fix-done-error">
@@ -884,39 +900,7 @@ export function FixMissingSamplesModal({
             </div>
           )}
 
-          {/* BROWSE PROMPT PHASE */}
-          {phase === "browse_prompt" && (
-            <div className="fix-browse-prompt">
-              <p style={{ textAlign: 'center', color: 'var(--elektron-orange)', fontSize: '1.1rem' }}>Select a location to search for audio files still missing after automatic search:</p>
-              <div className="fix-remaining-list">
-                {remainingFilenames.map((f) => (
-                  <div key={f} className="fix-remaining-item">{f}</div>
-                ))}
-              </div>
-              {dirWarning && (
-                <div className="fix-dir-warning">
-                  <i className="fas fa-exclamation-triangle"></i> {dirWarning}
-                </div>
-              )}
-              <div className="fix-browse-actions">
-                <button className="tools-execute-btn" onClick={handleBrowse}>
-                  <i className="fas fa-folder-open"></i> Browse...
-                </button>
-                <button
-                  className="tools-execute-btn"
-                  onClick={() => {
-                    // Mark user location step as done if not already
-                    setSteps((prev) =>
-                      prev.map((s, i) => (i === 3 && s.status !== "done" ? { ...s, status: "done" } : s))
-                    );
-                    setPhase("confirming");
-                  }}
-                >
-                  Continue
-                </button>
-              </div>
-            </div>
-          )}
+          {/* browse_prompt phase removed — Browse button is now inline in progress section */}
 
           {/* CONFIRMATION PHASE */}
           {phase === "confirming" && (
