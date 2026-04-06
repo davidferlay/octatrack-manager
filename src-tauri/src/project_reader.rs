@@ -11299,5 +11299,119 @@ mod tests {
                 "../AUDIO/kick.wav"
             );
         }
+
+        #[test]
+        fn test_fix_update_path_both_flex_and_static() {
+            let project = TestProject::new();
+            let project_path = Path::new(&project.path);
+
+            let subdir = project_path.join("drums");
+            fs::create_dir(&subdir).unwrap();
+            fs::write(subdir.join("kick.wav"), b"audio").unwrap();
+
+            let mut project_data =
+                ProjectFile::from_data_file(&project_path.join("project.work")).unwrap();
+            project_data.slots.flex_slots[0] = Some(make_flex_slot(1, "kick.wav"));
+            project_data.slots.static_slots[0] = Some(make_static_slot(1, "kick.wav"));
+            project_data
+                .to_data_file(&project_path.join("project.work"))
+                .unwrap();
+
+            // Verify both are missing before fix
+            let missing = list_missing_samples(&project.path).unwrap();
+            assert_eq!(missing.len(), 1);
+            assert_eq!(missing[0].slot_type, "both");
+
+            let result = fix_missing_samples(
+                &project.path,
+                vec![SampleResolution {
+                    filename: "kick.wav".to_string(),
+                    found_path: subdir.join("kick.wav").to_string_lossy().to_string(),
+                    action: "update_path".to_string(),
+                    new_slot_path: "drums/kick.wav".to_string(),
+                }],
+            )
+            .unwrap();
+
+            assert_eq!(result.resolved_count, 1);
+
+            // Verify both flex and static slot paths were updated
+            let updated = ProjectFile::from_data_file(&project_path.join("project.work")).unwrap();
+
+            let flex_slot = updated.slots.flex_slots[0].as_ref().unwrap();
+            assert_eq!(
+                flex_slot.path.as_ref().unwrap().to_string_lossy(),
+                "drums/kick.wav",
+                "Flex slot path should be updated"
+            );
+
+            let static_slot = updated.slots.static_slots[0].as_ref().unwrap();
+            assert_eq!(
+                static_slot.path.as_ref().unwrap().to_string_lossy(),
+                "drums/kick.wav",
+                "Static slot path should be updated"
+            );
+
+            // Verify no missing samples after fix
+            let missing_after = list_missing_samples(&project.path).unwrap();
+            assert_eq!(missing_after.len(), 0, "No samples should be missing after fix");
+        }
+
+        #[test]
+        fn test_fix_copy_to_pool_both_flex_and_static() {
+            let temp_dir = TempDir::new().unwrap();
+            let set_dir = temp_dir.path();
+
+            let project_dir = set_dir.join("ProjectA");
+            fs::create_dir(&project_dir).unwrap();
+
+            // Create source file outside the project
+            let source_dir = temp_dir.path().join("source");
+            fs::create_dir(&source_dir).unwrap();
+            fs::write(source_dir.join("kick.wav"), b"audio_data").unwrap();
+
+            let mut project_data = ProjectFile::default();
+            project_data.slots.flex_slots[0] = Some(make_flex_slot(1, "kick.wav"));
+            project_data.slots.static_slots[0] = Some(make_static_slot(1, "kick.wav"));
+            project_data
+                .to_data_file(&project_dir.join("project.work"))
+                .unwrap();
+
+            let result = fix_missing_samples(
+                project_dir.to_str().unwrap(),
+                vec![SampleResolution {
+                    filename: "kick.wav".to_string(),
+                    found_path: source_dir.join("kick.wav").to_string_lossy().to_string(),
+                    action: "copy_to_pool".to_string(),
+                    new_slot_path: "../AUDIO/kick.wav".to_string(),
+                }],
+            )
+            .unwrap();
+
+            assert_eq!(result.resolved_count, 1);
+            assert_eq!(result.files_copied, 1);
+            assert!(set_dir.join("AUDIO").join("kick.wav").exists());
+
+            // Verify both flex and static slot paths were updated
+            let updated = ProjectFile::from_data_file(&project_dir.join("project.work")).unwrap();
+
+            let flex_slot = updated.slots.flex_slots[0].as_ref().unwrap();
+            assert_eq!(
+                flex_slot.path.as_ref().unwrap().to_string_lossy(),
+                "../AUDIO/kick.wav",
+                "Flex slot path should be updated to pool"
+            );
+
+            let static_slot = updated.slots.static_slots[0].as_ref().unwrap();
+            assert_eq!(
+                static_slot.path.as_ref().unwrap().to_string_lossy(),
+                "../AUDIO/kick.wav",
+                "Static slot path should be updated to pool"
+            );
+
+            // Verify no missing samples after fix
+            let missing_after = list_missing_samples(project_dir.to_str().unwrap()).unwrap();
+            assert_eq!(missing_after.len(), 0, "No samples should be missing after fix");
+        }
     }
 }

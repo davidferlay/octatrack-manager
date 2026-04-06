@@ -148,14 +148,33 @@ export function ProjectDetail() {
     setPartsWriteStatus(status);
   }, []);
 
-  // Lightweight refresh: reload metadata without unmounting the UI (used after copy operations)
+  // Refresh metadata + reload all banks in-place (without unmounting the UI)
   const refreshProjectData = useCallback(async () => {
     if (!projectPath) return;
     try {
+      // Reload metadata
       const projectMetadata = await invoke<ProjectMetadata>("load_project_metadata", { path: projectPath });
       setMetadata(projectMetadata);
+
+      // Reload all banks in-place
+      const existingBankIndices = await invoke<number[]>("get_existing_banks", { path: projectPath });
+      const reloadPromises = existingBankIndices.map(async (bankIndex) => {
+        try {
+          const bank = await invoke<Bank | null>("load_single_bank", { path: projectPath, bankIndex });
+          if (bank) {
+            setBanks(prev => {
+              const newBanks = [...prev];
+              newBanks[bankIndex] = bank;
+              return newBanks;
+            });
+          }
+        } catch (err) {
+          console.error(`Failed to reload bank ${bankIndex}:`, err);
+        }
+      });
+      await Promise.all(reloadPromises);
     } catch (err) {
-      console.error("Failed to refresh project metadata:", err);
+      console.error("Failed to refresh project data:", err);
     }
   }, [projectPath]);
 

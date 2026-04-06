@@ -82,6 +82,9 @@ export function FixMissingSamplesModal({
     { label: "User location selection", status: "pending", foundCount: 0 },
   ]);
 
+  // Capture initial count so it doesn't change when parent refreshes missingSamples
+  const initialMissingCount = useRef(missingSamples.length);
+
   // All found files (accumulated across search steps)
   const [resolvedFiles, setResolvedFiles] = useState<ResolvedFile[]>([]);
   const [remainingFilenames, setRemainingFilenames] = useState<string[]>(
@@ -298,7 +301,17 @@ export function FixMissingSamplesModal({
       case "pool": {
         if (poolOption === "use_from_pool") {
           action = "update_path";
-          new_slot_path = `../AUDIO/${filename}`;
+          // Compute relative path from project dir to found file in pool
+          // e.g. project=/Set/Project, found=/Set/AUDIO/sub/file.wav → ../AUDIO/sub/file.wav
+          const setDir = projectPath.substring(
+            0,
+            projectPath.lastIndexOf("/")
+          );
+          const setPrefix = setDir.endsWith("/") ? setDir : setDir + "/";
+          const relFromSet = found_path.startsWith(setPrefix)
+            ? found_path.slice(setPrefix.length)
+            : `AUDIO/${filename}`;
+          new_slot_path = `../${relFromSet}`;
           color = "green";
         } else {
           action = "copy_to_project";
@@ -829,8 +842,8 @@ export function FixMissingSamplesModal({
               </div>
 
               {/* Summary line — always visible, updates live */}
-              <div className={`fix-search-summary${resolvedFiles.length === missingSamples.length && phase !== "searching" ? " all-resolved" : ""}`} title={`${resolvedFiles.length} of ${missingSamples.length} missing sample files were located across searched locations`}>
-                <strong>{resolvedFiles.length}/{missingSamples.length}</strong> missing files found
+              <div className={`fix-search-summary${resolvedFiles.length === initialMissingCount.current && phase !== "searching" ? " all-resolved" : ""}`} title={`${resolvedFiles.length} of ${initialMissingCount.current} missing sample files were located across searched locations`}>
+                <strong>{resolvedFiles.length}/{initialMissingCount.current}</strong> missing files found
                 {phase !== "searching" && remainingFilenames.length > 0 && (
                   <span className="fix-search-summary-remaining"> — {remainingFilenames.length} still missing</span>
                 )}
