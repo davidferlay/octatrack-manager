@@ -4297,6 +4297,8 @@ h1 {
 
 .fix-progress-section .fix-search-steps {
   padding: 1.25rem 1.25rem 1rem;
+  max-height: 50vh;
+  overflow-y: auto;
 }
 
 .fix-search-summary {
