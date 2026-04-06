@@ -325,11 +325,58 @@ export function MissingSamplesListModal({
           className="modal-resize-handle modal-resize-bottom"
           onMouseDown={(e) => handleResizeMouseDown("bottom", e)}
         />
-        <div className="modal-header">
+        <div className="modal-header missing-samples-header">
           <h3>
             <i className="fas fa-list"></i>
             Missing Samples
           </h3>
+          <div className="missing-samples-header-info">
+            <span className="missing-samples-header-count">
+              Showing {sortedRows.length} of {rows.length} slots
+            </span>
+            {typeFilter !== "all" && (
+              <span className="filter-badge">Type: {typeFilter}</span>
+            )}
+            {sourceFilter !== "all" && (
+              <span className="filter-badge">Source: {sourceFilter}</span>
+            )}
+            {hasActiveFilters && (
+              <button
+                className="reset-filters-btn"
+                onClick={resetAllFilters}
+                title="Reset all filters"
+              >
+                ✕ Reset
+              </button>
+            )}
+          </div>
+          <div className="missing-samples-header-actions">
+            <div className="header-search-container">
+              <input
+                type="text"
+                placeholder="Search..."
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                className="header-search-input"
+              />
+              {searchText && (
+                <button
+                  className="header-search-clear"
+                  onClick={() => setSearchText("")}
+                  title="Clear search"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+            <button
+              className={`copy-table-btn ${copyFeedback === "copied" ? "copied" : ""}`}
+              onClick={copyTableToClipboard}
+              title="Copy table to clipboard (for Excel/Google Sheets)"
+            >
+              {copyFeedback === "copied" ? "✓" : "⧉"}
+            </button>
+          </div>
           <button className="modal-close" onClick={onClose}>
             &times;
           </button>
@@ -337,68 +384,6 @@ export function MissingSamplesListModal({
         <div className="modal-body" style={{ padding: 0 }}>
           <div className="samples-tab">
             <section className="samples-section">
-              <div className="filter-results-info">
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.5rem",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <span>
-                    Showing {sortedRows.length} of {rows.length} slots
-                  </span>
-                  {typeFilter !== "all" && (
-                    <span className="filter-badge">Type: {typeFilter}</span>
-                  )}
-                  {sourceFilter !== "all" && (
-                    <span className="filter-badge">Source: {sourceFilter}</span>
-                  )}
-                  {hasActiveFilters && (
-                    <button
-                      className="reset-filters-btn"
-                      onClick={resetAllFilters}
-                      title="Reset all filters"
-                    >
-                      ✕ Reset
-                    </button>
-                  )}
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "1rem",
-                  }}
-                >
-                  <div className="header-search-container">
-                    <input
-                      type="text"
-                      placeholder="Search..."
-                      value={searchText}
-                      onChange={(e) => setSearchText(e.target.value)}
-                      className="header-search-input"
-                    />
-                    {searchText && (
-                      <button
-                        className="header-search-clear"
-                        onClick={() => setSearchText("")}
-                        title="Clear search"
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
-                  <button
-                    className={`copy-table-btn ${copyFeedback === "copied" ? "copied" : ""}`}
-                    onClick={copyTableToClipboard}
-                    title="Copy table to clipboard (for Excel/Google Sheets)"
-                  >
-                    {copyFeedback === "copied" ? "✓" : "⧉"}
-                  </button>
-                </div>
-              </div>
               <div className="table-wrapper">
                 <table className="samples-table">
                   <thead>

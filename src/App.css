@@ -4152,6 +4152,28 @@ h1 {
   overflow-x: hidden;
 }
 
+.missing-samples-header {
+  gap: 0.5rem;
+}
+
+.missing-samples-header-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--elektron-text-secondary);
+  position: relative;
+  top: 1px;
+}
+
+.missing-samples-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  margin-right: 0.5rem;
+}
+
 .missing-samples-list-modal .samples-tab {
   padding: 0;
 }
@@ -4168,7 +4190,7 @@ h1 {
 
 .missing-samples-list-modal .table-wrapper {
   min-height: 30vh;
-  max-height: 60vh;
+  max-height: 45vh;
   overflow-y: auto;
   overflow-x: hidden;
 }
