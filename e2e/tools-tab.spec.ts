@@ -2876,7 +2876,7 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
     await page.waitForTimeout(500)
 
     // Review title should be visible
-    await expect(modal.locator('.modal-header h3')).toContainText('Review planned changes before execution')
+    await expect(modal.locator('.modal-header h3')).toContainText('Review planned changes')
 
     // Should show status with found count
     await expect(modal.locator('.fix-confirm-status')).toBeVisible()
@@ -2893,7 +2893,7 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
 
     // Should have Apply Changes and Cancel buttons
     await expect(modal.locator('.fix-confirm-actions .tools-execute-btn', { hasText: 'Apply Changes' })).toBeVisible()
-    await expect(modal.locator('.fix-confirm-actions .fix-cancel-btn')).toBeVisible()
+    await expect(modal.locator('.fix-confirm-actions .fix-cancel-btn').first()).toBeVisible()
   })
 
   test('review modal supports filtering by Found status', async ({ page }) => {
@@ -2988,16 +2988,12 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
     await operationSelect.selectOption('fix_missing_samples')
     await page.waitForTimeout(1000)
 
+    // skipReview defaults to true, so auto-apply fires after all samples found
     const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
     await executeBtn.click()
-    await page.waitForTimeout(3000)
+    await page.waitForTimeout(4000)
 
     const modal = page.locator('.fix-missing-modal')
-
-    // Should be in confirming phase — click Apply
-    const applyBtn = modal.locator('.tools-execute-btn', { hasText: 'Apply Changes' })
-    await applyBtn.click()
-    await page.waitForTimeout(1000)
 
     // Progress section should be visible in done phase
     const progressSection = modal.locator('.fix-progress-section')
@@ -3006,9 +3002,9 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
     // Search steps should still be visible
     const searchSteps = modal.locator('.fix-search-steps .fix-search-step')
     const count = await searchSteps.count()
-    expect(count).toBeGreaterThanOrEqual(3) // 3 search steps + 1 apply step = at least 4
+    expect(count).toBeGreaterThanOrEqual(3)
 
-    // Close button should be visible
-    await expect(modal.locator('.fix-done-actions .tools-execute-btn', { hasText: 'Close' })).toBeVisible()
+    // Done button should be visible (auto-apply completed)
+    await expect(modal.locator('.fix-done-actions .tools-execute-btn', { hasText: 'Done' })).toBeVisible()
   })
 })
