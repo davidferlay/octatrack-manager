@@ -4269,6 +4269,11 @@ h1 {
   color: var(--elektron-text-primary);
 }
 
+.fix-step-dirname {
+  color: #5bc0de;
+  font-style: italic;
+}
+
 .fix-step-count {
   margin-left: auto;
   font-size: 1.1rem;
@@ -4324,26 +4329,16 @@ h1 {
   padding: 0.5rem 1.25rem;
 }
 
-/* Browse prompt */
-.fix-browse-prompt p {
-  margin-bottom: 0.5rem;
-  color: var(--elektron-text-secondary);
+.fix-browse-inline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
 }
 
-.fix-remaining-list {
-  background: var(--elektron-darker-gray);
-  border: 1px solid var(--elektron-border-gray);
-  border-radius: 4px;
-  padding: 0.5rem 0.75rem;
-  margin-bottom: 0.75rem;
-  max-height: 45vh;
-  overflow-y: auto;
-  font-size: 0.85rem;
-  color: var(--elektron-text-secondary);
-}
-
-.fix-remaining-item {
-  padding: 0.15rem 0;
+.fix-browse-inline .tools-execute-btn {
+  padding: 0.5rem 1.5rem;
 }
 
 .fix-dir-warning {
@@ -4353,17 +4348,6 @@ h1 {
   padding: 0.5rem 0.75rem;
   font-size: 0.85rem;
   color: #FFAA32;
-  margin-bottom: 0.75rem;
-}
-
-.fix-browse-actions {
-  display: flex;
-  justify-content: center;
-  gap: 0.5rem;
-}
-
-.fix-browse-actions .tools-execute-btn {
-  padding: 0.6rem 2rem;
 }
 
 /* Confirmation */

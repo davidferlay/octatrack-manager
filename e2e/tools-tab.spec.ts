@@ -2837,32 +2837,43 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
     await expect(modal).toBeVisible()
   })
 
-  test('browse prompt shows Continue button and remaining files', async ({ page }) => {
+  test('progress modal shows Browse button when files are still missing', async ({ page }) => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('fix_missing_samples')
     await page.waitForTimeout(1000)
+
+    // Enable "Review before applying" to prevent auto-apply
+    const checkbox = page.locator('.tools-options-panel .tools-checkbox input[type="checkbox"]')
+    if (!(await checkbox.isChecked())) {
+      await checkbox.click()
+    }
 
     const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
     await executeBtn.click()
     await page.waitForTimeout(4000)
 
-    // Should show browse prompt with remaining files
     const modal = page.locator('.fix-missing-modal')
     await expect(modal).toBeVisible()
 
-    // Continue button should be visible (not "Skip")
-    const continueBtn = modal.locator('.fix-browse-actions .tools-execute-btn', { hasText: 'Continue' })
-    await expect(continueBtn).toBeVisible()
-
-    // Browse button should be visible
-    const browseBtn = modal.locator('.fix-browse-actions .tools-execute-btn', { hasText: 'Browse...' })
+    // Browse button should be visible centered in its own section
+    const browseBtn = modal.locator('.fix-browse-inline .tools-execute-btn', { hasText: 'Browse...' })
     await expect(browseBtn).toBeVisible()
+
+    // Summary should mention still missing files
+    const summary = modal.locator('.fix-search-summary')
+    await expect(summary).toContainText('still missing')
   })
 
-  test('Continue button opens review modal with unified table', async ({ page }) => {
+  test('Review changes button opens review modal with unified table', async ({ page }) => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('fix_missing_samples')
     await page.waitForTimeout(1000)
+
+    // Uncheck skip-review so Review changes button is visible
+    const checkbox = page.locator('.tools-options-panel .tools-checkbox input[type="checkbox"]')
+    if (!(await checkbox.isChecked())) {
+      await checkbox.click()
+    }
 
     const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
     await executeBtn.click()
@@ -2870,9 +2881,9 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
 
     const modal = page.locator('.fix-missing-modal')
 
-    // Click Continue to go to review
-    const continueBtn = modal.locator('.fix-browse-actions .tools-execute-btn', { hasText: 'Continue' })
-    await continueBtn.click()
+    // Click Review changes to go to confirmation
+    const reviewBtn = modal.locator('.fix-done-actions .tools-execute-btn', { hasText: 'Review changes' })
+    await reviewBtn.click()
     await page.waitForTimeout(500)
 
     // Review title should be visible
@@ -2901,13 +2912,19 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
     await operationSelect.selectOption('fix_missing_samples')
     await page.waitForTimeout(1000)
 
+    // Uncheck skip-review so Review changes button is visible
+    const checkbox = page.locator('.tools-options-panel .tools-checkbox input[type="checkbox"]')
+    if (!(await checkbox.isChecked())) {
+      await checkbox.click()
+    }
+
     const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
     await executeBtn.click()
     await page.waitForTimeout(4000)
 
     const modal = page.locator('.fix-missing-modal')
-    const continueBtn = modal.locator('.fix-browse-actions .tools-execute-btn', { hasText: 'Continue' })
-    await continueBtn.click()
+    const reviewBtn = modal.locator('.fix-done-actions .tools-execute-btn', { hasText: 'Review changes' })
+    await reviewBtn.click()
     await page.waitForTimeout(500)
 
     // Search box should be visible
