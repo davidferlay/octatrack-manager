@@ -2469,8 +2469,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 </div>
               )}
 
-              {/* Other project option — only when set path exists */}
-              {audioPoolStatus?.set_path && (
+              {/* Other project option — only when project is in a Set (has AUDIO dir) */}
+              {audioPoolStatus?.exists && (
                 <div className="tools-field">
                   <label>When samples are found in another project of Set</label>
                   <div className="tools-toggle-group">

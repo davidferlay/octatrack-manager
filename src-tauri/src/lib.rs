@@ -653,12 +653,24 @@ async fn search_audio_pool(
 }
 
 #[tauri::command]
-async fn search_other_projects(
+async fn search_other_projects_of_set(
     project_path: String,
     filenames: Vec<String>,
 ) -> Result<Vec<project_reader::FoundSample>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        project_reader::search_other_projects(&project_path, filenames)
+        project_reader::search_other_projects_of_set(&project_path, filenames)
+    })
+    .await
+    .unwrap()
+}
+
+#[tauri::command]
+async fn search_parent_projects(
+    project_path: String,
+    filenames: Vec<String>,
+) -> Result<Vec<project_reader::FoundSample>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        project_reader::search_parent_projects(&project_path, filenames)
     })
     .await
     .unwrap()
@@ -749,7 +761,8 @@ pub fn run() {
             list_missing_samples,
             search_project_dir,
             search_audio_pool,
-            search_other_projects,
+            search_other_projects_of_set,
+            search_parent_projects,
             search_directory,
             fix_missing_samples
         ])

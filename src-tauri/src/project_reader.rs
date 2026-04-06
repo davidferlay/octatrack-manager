@@ -3195,45 +3195,18 @@ pub struct AudioPoolStatus {
 }
 
 /// Check if a project is part of a Set.
-/// A project is considered part of a Set if:
-/// - Its parent directory contains an "AUDIO POOL" folder, OR
-/// - Its parent directory contains other Octatrack project directories
+/// A project is considered part of a Set if its parent directory contains an "AUDIO" folder.
+/// This matches the Set detection logic used by project discovery (device_detection::is_octatrack_set).
 pub fn is_project_in_set(project_path: &str) -> Result<bool, String> {
     let path = Path::new(project_path);
 
-    // Get the parent directory (the potential Set folder)
     let parent = path
         .parent()
         .ok_or_else(|| "Cannot determine parent directory".to_string())?;
 
-    // Check if AUDIO POOL exists in parent
-    let audio_pool_path = parent.join("AUDIO POOL");
-    if audio_pool_path.exists() && audio_pool_path.is_dir() {
-        return Ok(true);
-    }
-
-    // Check if there are other project directories in the parent
-    // (projects have a project.work or project.strd file)
-    if let Ok(entries) = std::fs::read_dir(parent) {
-        let mut project_count = 0;
-        for entry in entries.flatten() {
-            let entry_path = entry.path();
-            if entry_path.is_dir() {
-                // Check for project.work or project.strd file
-                let project_work = entry_path.join("project.work");
-                let project_strd = entry_path.join("project.strd");
-                if project_work.exists() || project_strd.exists() {
-                    project_count += 1;
-                    if project_count >= 2 {
-                        // More than one project in the same directory = Set
-                        return Ok(true);
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(false)
+    // A Set is defined by the presence of an AUDIO directory
+    let audio_dir = parent.join("AUDIO");
+    Ok(audio_dir.exists() && audio_dir.is_dir())
 }
 
 /// Check if two projects are in the same Set.
@@ -3283,7 +3256,7 @@ pub fn get_audio_pool_status(project_path: &str) -> Result<AudioPoolStatus, Stri
         Ok(AudioPoolStatus {
             exists: false,
             path: None,
-            set_path: Some(parent.to_string_lossy().to_string()),
+            set_path: None,
         })
     }
 }
@@ -3673,9 +3646,9 @@ pub fn search_audio_pool(
     Ok(found)
 }
 
-/// Search sibling project directories in the same Set for files matching given filenames.
-/// Skips the current project. Returns matches with source_project set.
-pub fn search_other_projects(
+/// Search sibling project directories for files matching given filenames.
+/// Skips the current project and the AUDIO directory. Returns matches with source_project set.
+fn search_sibling_projects(
     project_path: &str,
     filenames: Vec<String>,
 ) -> Result<Vec<FoundSample>, String> {
@@ -3747,6 +3720,29 @@ pub fn search_other_projects(
     }
 
     Ok(found)
+}
+
+/// Search other project directories in the same Set for files matching given filenames.
+/// Only searches if the project is in a Set (parent has AUDIO directory).
+/// Returns empty if the project is not in a Set.
+pub fn search_other_projects_of_set(
+    project_path: &str,
+    filenames: Vec<String>,
+) -> Result<Vec<FoundSample>, String> {
+    // Only search if project is in a Set
+    if !is_project_in_set(project_path)? {
+        return Ok(Vec::new());
+    }
+    search_sibling_projects(project_path, filenames)
+}
+
+/// Search sibling project directories in the parent directory for files matching given filenames.
+/// Unlike search_other_projects_of_set, this works regardless of whether the parent is a Set.
+pub fn search_parent_projects(
+    project_path: &str,
+    filenames: Vec<String>,
+) -> Result<Vec<FoundSample>, String> {
+    search_sibling_projects(project_path, filenames)
 }
 
 /// Search an arbitrary directory recursively for files matching given filenames.
@@ -10697,7 +10693,7 @@ mod tests {
 
         #[test]
         fn test_is_project_in_set_with_audio_pool() {
-            // Create a Set structure with AUDIO POOL
+            // Create a Set structure with AUDIO directory
             let set_dir = TempDir::new().unwrap();
             let project_path = set_dir.path().join("Project1");
             fs::create_dir(&project_path).unwrap();
@@ -10708,29 +10704,27 @@ mod tests {
                 .to_data_file(&project_path.join("project.work"))
                 .unwrap();
 
-            // Create AUDIO POOL directory
-            fs::create_dir(set_dir.path().join("AUDIO POOL")).unwrap();
+            // Create AUDIO directory (defines a Set)
+            fs::create_dir(set_dir.path().join("AUDIO")).unwrap();
 
             let result = is_project_in_set(&project_path.to_string_lossy());
             assert!(result.is_ok());
             assert!(
                 result.unwrap(),
-                "Project with AUDIO POOL sibling should be in a Set"
+                "Project with AUDIO sibling should be in a Set"
             );
         }
 
         #[test]
-        fn test_is_project_in_set_multiple_projects() {
-            // Create a Set structure with multiple projects
+        fn test_is_project_in_set_multiple_projects_no_audio() {
+            // Multiple projects without AUDIO dir is NOT a Set
             let set_dir = TempDir::new().unwrap();
 
-            // Create two project directories
             let project1_path = set_dir.path().join("Project1");
             let project2_path = set_dir.path().join("Project2");
             fs::create_dir(&project1_path).unwrap();
             fs::create_dir(&project2_path).unwrap();
 
-            // Create project files in both
             let project_file = ProjectFile::default();
             project_file
                 .to_data_file(&project1_path.join("project.work"))
@@ -10742,8 +10736,8 @@ mod tests {
             let result = is_project_in_set(&project1_path.to_string_lossy());
             assert!(result.is_ok());
             assert!(
-                result.unwrap(),
-                "Project with sibling projects should be in a Set"
+                !result.unwrap(),
+                "Projects without AUDIO dir should NOT be in a Set"
             );
         }
 
@@ -10810,6 +10804,10 @@ mod tests {
             assert!(
                 !status.exists,
                 "Audio pool should not exist for new project"
+            );
+            assert!(
+                status.set_path.is_none(),
+                "set_path should be None when AUDIO dir doesn't exist"
             );
         }
 
@@ -11074,7 +11072,37 @@ mod tests {
         }
 
         #[test]
-        fn test_search_other_projects_found() {
+        fn test_search_other_projects_of_set_found() {
+            let temp_dir = TempDir::new().unwrap();
+            let set_dir = temp_dir.path();
+
+            // Create AUDIO directory to make this a Set
+            fs::create_dir(set_dir.join("AUDIO")).unwrap();
+
+            let project_a = set_dir.join("ProjectA");
+            fs::create_dir(&project_a).unwrap();
+            ProjectFile::default()
+                .to_data_file(&project_a.join("project.work"))
+                .unwrap();
+
+            let project_b = set_dir.join("ProjectB");
+            fs::create_dir(&project_b).unwrap();
+            ProjectFile::default()
+                .to_data_file(&project_b.join("project.work"))
+                .unwrap();
+            fs::write(project_b.join("kick.wav"), b"audio").unwrap();
+
+            let result =
+                search_other_projects_of_set(project_a.to_str().unwrap(), vec!["kick.wav".to_string()])
+                    .unwrap();
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].filename, "kick.wav");
+            assert_eq!(result[0].source_project, Some("ProjectB".to_string()));
+        }
+
+        #[test]
+        fn test_search_other_projects_of_set_not_in_set() {
+            // Without AUDIO dir, search_other_projects_of_set returns empty
             let temp_dir = TempDir::new().unwrap();
             let set_dir = temp_dir.path();
 
@@ -11092,7 +11120,32 @@ mod tests {
             fs::write(project_b.join("kick.wav"), b"audio").unwrap();
 
             let result =
-                search_other_projects(project_a.to_str().unwrap(), vec!["kick.wav".to_string()])
+                search_other_projects_of_set(project_a.to_str().unwrap(), vec!["kick.wav".to_string()])
+                    .unwrap();
+            assert_eq!(result.len(), 0, "Should return empty when not in a Set");
+        }
+
+        #[test]
+        fn test_search_parent_projects_found() {
+            // search_parent_projects works even without AUDIO dir
+            let temp_dir = TempDir::new().unwrap();
+            let parent_dir = temp_dir.path();
+
+            let project_a = parent_dir.join("ProjectA");
+            fs::create_dir(&project_a).unwrap();
+            ProjectFile::default()
+                .to_data_file(&project_a.join("project.work"))
+                .unwrap();
+
+            let project_b = parent_dir.join("ProjectB");
+            fs::create_dir(&project_b).unwrap();
+            ProjectFile::default()
+                .to_data_file(&project_b.join("project.work"))
+                .unwrap();
+            fs::write(project_b.join("kick.wav"), b"audio").unwrap();
+
+            let result =
+                search_parent_projects(project_a.to_str().unwrap(), vec!["kick.wav".to_string()])
                     .unwrap();
             assert_eq!(result.len(), 1);
             assert_eq!(result[0].filename, "kick.wav");
@@ -11100,10 +11153,10 @@ mod tests {
         }
 
         #[test]
-        fn test_search_other_projects_no_siblings() {
+        fn test_search_other_projects_of_set_no_siblings() {
             let project = TestProject::new();
             let result =
-                search_other_projects(&project.path, vec!["kick.wav".to_string()]).unwrap();
+                search_other_projects_of_set(&project.path, vec!["kick.wav".to_string()]).unwrap();
             assert_eq!(result.len(), 0);
         }
 

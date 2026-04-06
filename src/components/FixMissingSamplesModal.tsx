@@ -76,11 +76,18 @@ export function FixMissingSamplesModal({
   onApplied,
 }: Props) {
   const [phase, setPhase] = useState<ModalPhase>("searching");
-  const [steps, setSteps] = useState<SearchStep[]>([
-    { label: "Project directory", status: "pending", foundCount: 0 },
-    { label: "Audio Pool", status: "pending", foundCount: 0 },
-    { label: "Other Set projects", status: "pending", foundCount: 0 },
-  ]);
+  const [steps, setSteps] = useState<SearchStep[]>(() => {
+    const initial: SearchStep[] = [
+      { label: "Project directory", status: "pending", foundCount: 0 },
+      { label: "Audio Pool", status: "pending", foundCount: 0 },
+    ];
+    if (hasAudioPool) {
+      initial.push({ label: "Other Set projects", status: "pending", foundCount: 0 });
+    } else {
+      initial.push({ label: "Parent directory", status: "pending", foundCount: 0 });
+    }
+    return initial;
+  });
 
   // Capture initial count so it doesn't change when parent refreshes missingSamples
   const initialMissingCount = useRef(missingSamples.length);
@@ -354,6 +361,13 @@ export function FixMissingSamplesModal({
     };
   }
 
+  // Helper to update a step by label
+  function updateStep(label: string, update: Partial<SearchStep>) {
+    setSteps((prev) =>
+      prev.map((s) => (s.label === label ? { ...s, ...update } : s))
+    );
+  }
+
   // Run all search steps sequentially
   useEffect(() => {
     let cancelled = false;
@@ -373,121 +387,64 @@ export function FixMissingSamplesModal({
         return result;
       }
 
-      // Step 1: Project directory
-      setSteps((prev) =>
-        prev.map((s, i) => (i === 0 ? { ...s, status: "running" } : s))
-      );
-      try {
-        const step1Start = Date.now();
-        const found = await withMinDuration(
-          invoke<FoundSample[]>("search_project_dir", {
-            projectPath,
-            filenames: remaining,
-          }),
-          step1Start
-        );
-        if (cancelled) return;
-
-        for (const f of found) {
-          const resolved = resolveAction(f.filename, f.found_path, "project");
-          allResolved.push(resolved);
-          remaining = remaining.filter((n) => n !== f.filename);
+      async function runStep(
+        label: string,
+        skip: boolean,
+        searchFn: () => Promise<FoundSample[]>,
+        source: string,
+      ) {
+        if (remaining.length === 0 || skip) {
+          updateStep(label, { status: "skipped" });
+          return;
         }
-        setSteps((prev) =>
-          prev.map((s, i) =>
-            i === 0 ? { ...s, status: "done", foundCount: found.length } : s
-          )
-        );
-      } catch (err) {
-        console.error("search_project_dir error:", err);
-        setSteps((prev) =>
-          prev.map((s, i) => (i === 0 ? { ...s, status: "done" } : s))
-        );
-      }
-
-      // Step 2: Audio Pool
-      if (remaining.length === 0 || !hasAudioPool) {
-        setSteps((prev) =>
-          prev.map((s, i) => (i === 1 ? { ...s, status: "skipped" } : s))
-        );
-      } else {
-        setSteps((prev) =>
-          prev.map((s, i) => (i === 1 ? { ...s, status: "running" } : s))
-        );
+        updateStep(label, { status: "running" });
         try {
-          const step2Start = Date.now();
-          const found = await withMinDuration(
-            invoke<FoundSample[]>("search_audio_pool", {
-              projectPath,
-              filenames: remaining,
-            }),
-            step2Start
-          );
+          const start = Date.now();
+          const found = await withMinDuration(searchFn(), start);
           if (cancelled) return;
-
-          for (const f of found) {
-            const resolved = resolveAction(f.filename, f.found_path, "pool");
-            allResolved.push(resolved);
-            remaining = remaining.filter((n) => n !== f.filename);
-          }
-          setSteps((prev) =>
-            prev.map((s, i) =>
-              i === 1 ? { ...s, status: "done", foundCount: found.length } : s
-            )
-          );
-        } catch (err) {
-          console.error("search_audio_pool error:", err);
-          setSteps((prev) =>
-            prev.map((s, i) => (i === 1 ? { ...s, status: "done" } : s))
-          );
-        }
-      }
-
-      // Step 3: Other Set projects
-      if (remaining.length === 0) {
-        setSteps((prev) =>
-          prev.map((s, i) => (i === 2 ? { ...s, status: "skipped" } : s))
-        );
-      } else {
-        setSteps((prev) =>
-          prev.map((s, i) => (i === 2 ? { ...s, status: "running" } : s))
-        );
-        try {
-          const step3Start = Date.now();
-          const found = await withMinDuration(
-            invoke<FoundSample[]>("search_other_projects", {
-              projectPath,
-              filenames: remaining,
-            }),
-            step3Start
-          );
-          if (cancelled) return;
-
           for (const f of found) {
             const resolved = resolveAction(
               f.filename,
               f.found_path,
-              "other_project",
+              source,
               f.source_project || undefined
             );
             allResolved.push(resolved);
             remaining = remaining.filter((n) => n !== f.filename);
           }
-          setSteps((prev) =>
-            prev.map((s, i) =>
-              i === 2
-                ? { ...s, status: "done", foundCount: found.length }
-                : s
-            )
-          );
+          updateStep(label, { status: "done", foundCount: found.length });
         } catch (err) {
-          console.error("search_other_projects error:", err);
-          setSteps((prev) =>
-            prev.map((s, i) => (i === 2 ? { ...s, status: "done" } : s))
-          );
+          console.error(`${label} search error:`, err);
+          updateStep(label, { status: "done" });
         }
       }
 
+      // Step 1: Project directory
+      await runStep("Project directory", false,
+        () => invoke<FoundSample[]>("search_project_dir", { projectPath, filenames: remaining }),
+        "project"
+      );
+      if (cancelled) return;
+
+      // Step 2: Audio Pool
+      await runStep("Audio Pool", !hasAudioPool,
+        () => invoke<FoundSample[]>("search_audio_pool", { projectPath, filenames: remaining }),
+        "pool"
+      );
+      if (cancelled) return;
+
+      // Step 3: Other Set projects (when in a Set) or Parent directory (when not in a Set)
+      if (hasAudioPool) {
+        await runStep("Other Set projects", false,
+          () => invoke<FoundSample[]>("search_other_projects_of_set", { projectPath, filenames: remaining }),
+          "other_project"
+        );
+      } else {
+        await runStep("Parent directory", false,
+          () => invoke<FoundSample[]>("search_parent_projects", { projectPath, filenames: remaining }),
+          "other_project"
+        );
+      }
       if (cancelled) return;
 
       setResolvedFiles(allResolved);
@@ -807,21 +764,23 @@ export function FixMissingSamplesModal({
             <div className="fix-progress-section">
               <div className="fix-search-steps">
                 {steps.map((step, i) => {
-                  const baseTooltips = [
-                    "Search for missing files within the project directory and subdirectories",
-                    "Search the shared Audio Pool directory (../AUDIO/) for matching files",
-                    "Search other projects within the same Set for matching files",
-                  ];
-                  const skippedTooltips = [
-                    "Skipped",
-                    hasAudioPool ? "All missing files were already found in previous steps" : "No Audio Pool directory found for this Set",
-                    "All missing files were already found in previous steps",
-                  ];
+                  const baseTooltipMap: Record<string, string> = {
+                    "Project directory": "Search for missing files within the project directory and subdirectories",
+                    "Audio Pool": "Search the shared Audio Pool directory (../AUDIO/) for matching files",
+                    "Other Set projects": "Search other projects within the same Set for matching files",
+                    "Parent directory": "Search sibling projects in the parent directory for matching files",
+                  };
+                  const skippedTooltipMap: Record<string, string> = {
+                    "Project directory": "Skipped",
+                    "Audio Pool": hasAudioPool ? "All missing files were already found in previous steps" : "No Audio Pool directory found",
+                    "Other Set projects": "All missing files were already found in previous steps",
+                    "Parent directory": "All missing files were already found in previous steps",
+                  };
                   const tooltip = step.fullPath
                     ? step.fullPath
                     : step.status === "skipped"
-                      ? skippedTooltips[i] ?? "Skipped"
-                      : baseTooltips[i] ?? "";
+                      ? skippedTooltipMap[step.label] ?? "Skipped"
+                      : baseTooltipMap[step.label] ?? "";
                   return (
                     <div key={i} className={`fix-search-step ${step.status}`} title={tooltip}>
                       <span className="fix-step-icon">
