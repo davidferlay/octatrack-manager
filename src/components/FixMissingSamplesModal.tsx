@@ -781,15 +781,13 @@ export function FixMissingSamplesModal({
                 )}
               </div>
 
-              {/* Summary line — appears after search completes */}
-              {phase !== "searching" && (
-                <div className={`fix-search-summary${resolvedFiles.length === missingSamples.length ? " all-resolved" : ""}`} title={`${resolvedFiles.length} of ${missingSamples.length} missing sample files were located across searched locations`}>
-                  <strong>{resolvedFiles.length}/{missingSamples.length}</strong> missing files found
-                  {remainingFilenames.length > 0 && (
-                    <span className="fix-search-summary-remaining"> — {remainingFilenames.length} still missing</span>
-                  )}
-                </div>
-              )}
+              {/* Summary line — always visible, updates live */}
+              <div className={`fix-search-summary${resolvedFiles.length === missingSamples.length && phase !== "searching" ? " all-resolved" : ""}`} title={`${resolvedFiles.length} of ${missingSamples.length} missing sample files were located across searched locations`}>
+                <strong>{resolvedFiles.length}/{missingSamples.length}</strong> missing files found
+                {phase !== "searching" && remainingFilenames.length > 0 && (
+                  <span className="fix-search-summary-remaining"> — {remainingFilenames.length} still missing</span>
+                )}
+              </div>
 
               {/* Error detail */}
               {phase === "done" && applyError && (
@@ -799,12 +797,17 @@ export function FixMissingSamplesModal({
                 </div>
               )}
 
-              {/* Buttons after search completes — review or auto-applied */}
-              {phase === "search_done" && !skipReview && (
+              {/* Buttons — always visible, disabled during search/apply */}
+              {phase !== "done" && !skipReview && (
                 <div className="fix-done-actions">
                   <button className="fix-cancel-btn" onClick={onClose} title="Close without applying any changes">Cancel</button>
                   <div style={{ flex: 1 }} />
-                  <button className="tools-execute-btn" onClick={() => setPhase("confirming")} title="Review the list of changes before applying them to the project">
+                  <button
+                    className="tools-execute-btn"
+                    onClick={() => setPhase("confirming")}
+                    title="Review the list of changes before applying them to the project"
+                    disabled={phase === "searching" || phase === "applying"}
+                  >
                     Review changes
                   </button>
                 </div>
