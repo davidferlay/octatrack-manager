@@ -863,15 +863,13 @@ export function FixMissingSamplesModal({
 
               {/* Summary line — always visible, updates live */}
               <div className={`fix-search-summary${resolvedFiles.length === initialMissingCount.current && phase !== "searching" ? " all-resolved" : ""}`} title={`${resolvedFiles.length} of ${initialMissingCount.current} missing sample files were located across searched locations`}>
-                <strong>{resolvedFiles.length}/{initialMissingCount.current}</strong> missing files found
-                {phase !== "searching" && remainingFilenames.length > 0 && (
-                  <span className="fix-search-summary-remaining"> — {remainingFilenames.length} still missing</span>
-                )}
-              </div>
-
-              {/* Browse section — centered, visible in search_done when files still missing */}
-              {phase === "search_done" && remainingFilenames.length > 0 && (
-                <div className="fix-browse-inline">
+                <span>
+                  <strong>{resolvedFiles.length}/{initialMissingCount.current}</strong> missing files found
+                  {phase !== "searching" && remainingFilenames.length > 0 && (
+                    <span className="fix-search-summary-remaining"> — {remainingFilenames.length} still missing</span>
+                  )}
+                </span>
+                {phase === "search_done" && remainingFilenames.length > 0 && (
                   <button
                     className="tools-execute-btn"
                     onClick={handleBrowse}
@@ -879,8 +877,8 @@ export function FixMissingSamplesModal({
                   >
                     <i className="fas fa-folder-open"></i> Browse...
                   </button>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* Error detail */}
               {phase === "done" && applyError && (

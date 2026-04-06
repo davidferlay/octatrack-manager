@@ -2855,8 +2855,8 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
     const modal = page.locator('.fix-missing-modal')
     await expect(modal).toBeVisible()
 
-    // Browse button should be visible centered in its own section
-    const browseBtn = modal.locator('.fix-browse-inline .tools-execute-btn', { hasText: 'Browse...' })
+    // Browse button should be visible in the summary line
+    const browseBtn = modal.locator('.fix-search-summary .tools-execute-btn', { hasText: 'Browse...' })
     await expect(browseBtn).toBeVisible()
 
     // Summary should mention still missing files
