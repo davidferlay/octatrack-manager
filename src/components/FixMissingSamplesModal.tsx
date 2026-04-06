@@ -725,7 +725,7 @@ export function FixMissingSamplesModal({
           </h3>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
-        <div className={`modal-body ${phase === "confirming" ? "fix-confirm-body" : ""}`}>
+        <div className={`modal-body ${phase === "confirming" || phase === "searching" || phase === "search_done" || phase === "applying" || phase === "done" ? "fix-confirm-body" : ""}`}>
           {/* PROGRESS SECTION — visible during searching, search_done, applying, and done */}
           {(phase === "searching" || phase === "search_done" || phase === "applying" || phase === "done") && (
             <div className="fix-progress-section">
@@ -757,7 +757,7 @@ export function FixMissingSamplesModal({
                         <span className="fix-step-count">{step.foundCount} found</span>
                       )}
                       {step.status === "done" && step.foundCount === 0 && (
-                        <span className="fix-step-count fix-step-count-zero">0 found</span>
+                        <span className="fix-step-count">0 found</span>
                       )}
                       {step.status === "skipped" && (
                         <span className="fix-step-count">skipped</span>
@@ -803,6 +803,7 @@ export function FixMissingSamplesModal({
               {phase === "search_done" && !skipReview && (
                 <div className="fix-done-actions">
                   <button className="fix-cancel-btn" onClick={onClose} title="Close without applying any changes">Cancel</button>
+                  <div style={{ flex: 1 }} />
                   <button className="tools-execute-btn" onClick={() => setPhase("confirming")} title="Review the list of changes before applying them to the project">
                     Review changes
                   </button>
@@ -948,7 +949,11 @@ export function FixMissingSamplesModal({
 
               {/* Action buttons */}
               <div className="fix-confirm-actions">
-                <button className="fix-cancel-btn" onClick={onClose}>{resolvedFiles.length > 0 ? "Cancel" : "Close"}</button>
+                <button className="fix-cancel-btn" onClick={onClose} title="Close without applying any changes">{resolvedFiles.length > 0 ? "Cancel" : "Close"}</button>
+                <button className="fix-cancel-btn" onClick={() => setPhase("search_done")} title="Go back to the search results">
+                  Previous
+                </button>
+                <div style={{ flex: 1 }} />
                 {resolvedFiles.length > 0 && (
                   <button className="tools-execute-btn" onClick={handleApply}>
                     Apply Changes

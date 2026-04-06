@@ -4250,16 +4250,17 @@ h1 {
 .fix-step-count {
   margin-left: auto;
   font-size: 1.1rem;
-  color: var(--elektron-text-secondary);
+  color: var(--elektron-text-primary);
+  opacity: 0.5;
 }
 
 .fix-search-step.done .fix-step-count {
   color: #4caf50;
+  opacity: 1;
 }
 
-.fix-step-count-zero {
-  color: var(--elektron-text-secondary) !important;
-  opacity: 0.5;
+.fix-search-step.skipped .fix-step-count {
+  opacity: 1;
 }
 
 .fix-progress-section {
@@ -4488,7 +4489,7 @@ h1 {
   padding: 0.5rem 1.25rem;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 1rem;
   transition: all 0.15s;
 }
 
@@ -4577,5 +4578,5 @@ h1 {
 .fix-done-actions {
   display: flex;
   justify-content: flex-end;
-  margin-top: 1rem;
+  gap: 0.5rem;
 }
