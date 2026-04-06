@@ -81,6 +81,7 @@ The **Tools** tab lets you copy content between banks and projects without touch
 - **[Copy Patterns](../features/tools/copy-patterns.md):** Copy patterns with configurable Part assignment and track scope.
 - **[Copy Tracks](../features/tools/copy-tracks.md):** Copy individual track data — sound design, pattern triggers, or both.
 - **[Copy Sample Slots](../features/tools/copy-sample-slots.md):** Copy sample slot assignments with optional audio file transfer and Audio Pool management.
+- **[Fix Missing Samples](../features/tools/fix-missing-samples.md):** Scan for broken sample references and automatically locate and reconnect missing audio files.
 
 All operations work within the same project or across different projects.
 

@@ -25,6 +25,9 @@ Copy individual track data (sound design and/or pattern triggers) between parts 
 ### 5. [Copy Sample Slots](./copy-sample-slots.md)
 Copy sample slot assignments between projects, with optional audio file transfer and Audio Pool management.
 
+### 6. [Fix Missing Samples](./fix-missing-samples.md)
+Scan for broken sample references and automatically locate and reconnect missing audio files across the project, Audio Pool, and sibling projects.
+
 ---
 
 ## General Workflow
@@ -64,6 +67,7 @@ For example: `backups/2026-03-26_14-30-45_copy_bank/`
 | Copy Tracks | Destination bank file |
 | Copy Sample Slots (Copy) | Destination: `project.work`, `markers.work`, and audio files (`.wav` + `.ot`) that would be overwritten |
 | Copy Sample Slots (Move to Pool) | Destination: `project.work`, `markers.work`<br/>Source: `project.work` and audio files (`.wav` + `.ot`) that will be moved/deleted |
+| Fix Missing Samples | `project.work` (and sibling projects' `project.work` when using Move to Pool) |
 | Edit mode toggle (in header)| Current bank file |
 
 <img src={require('@site/static/img/screenshots/project-backup-files.png').default} alt="Backup directory structure" style={{width: '38%', display: 'block', margin: '0 auto'}} />
