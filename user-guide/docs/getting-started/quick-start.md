@@ -81,7 +81,6 @@ The **Tools** tab lets you copy content between banks and projects without touch
 - **[Copy Patterns](../features/tools/copy-patterns.md):** Copy patterns with configurable Part assignment and track scope.
 - **[Copy Tracks](../features/tools/copy-tracks.md):** Copy individual track data — sound design, pattern triggers, or both.
 - **[Copy Sample Slots](../features/tools/copy-sample-slots.md):** Copy sample slot assignments with optional audio file transfer and Audio Pool management.
-- **[Fix Missing Samples](../features/tools/fix-missing-samples.md):** Scan for broken sample references and automatically locate and reconnect missing audio files.
 
 All operations work within the same project or across different projects.
 
@@ -93,10 +92,14 @@ The destination project can be selected from your scanned locations or browsed m
 
 
 :::tip
-Your tool settings (selected operation, destination project, slot ranges, etc.) are remembered for each project during your session — you can switch tabs and come back without losing selected values.
+Your copy settings (selected operation, destination project, slot ranges, etc.) are remembered for each project during your session — you can switch tabs and come back without losing selected values.
 :::
 
-## 7. Automatic Backups
+## 7. Fix Missing Samples
+
+The **Tools** tab also includes a **[Fix Missing Samples](../features/tools/fix-missing-samples.md)** operation that scans your project for broken sample slot references and automatically locates and reconnects missing audio files. It searches the project directory, Audio Pool, and sibling projects, with the option to browse additional directories manually.
+
+## 8. Automatic Backups
 
 Octatrack Manager automatically backs up your project files before any write operation — whether you are enabling Edit mode, saving a Part, or executing a copy operation via Tools.
 
@@ -122,6 +125,5 @@ While automatic backups provide a safety net, it’s strongly advised to keep yo
 
 ## Tips
 
-- **Back Up First:** Always keep a backup of your important projects before making major changes.
 - **Refresh:** If you insert a CF card, or make any change in Projects while the app is open, click the **Refresh** (↻) button in the header.
 - **Version Check:** The app automatically checks for updates. Click the version number in the header to manually check and download the latest version.
