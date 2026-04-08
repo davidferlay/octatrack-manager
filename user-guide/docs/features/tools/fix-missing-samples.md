@@ -4,15 +4,13 @@ sidebar_position: 7
 
 # Fix Missing Samples
 
-:::info Work in Progress
-This feature is under active development and has not been released yet. The documentation below reflects the current implementation.
-:::
-
 **Fix Missing Samples** scans your project for sample slot references that point to missing audio files, then searches multiple locations to find and reconnect them automatically.
 
 ## When to Use
 
-Sample references can break when projects are moved between computers, CF cards are reformatted, or files are reorganized manually. Instead of re-assigning each slot on the Octatrack hardware, this tool locates the missing files and updates the slot paths in bulk.
+Sample references can break when projects are moved between computers, CF cards are reformatted, or files are reorganized manually.
+
+Instead of re-assigning manually each slot on the Octatrack hardware, this tool automatically locates the missing files and updates the slot paths in bulk.
 
 ---
 
