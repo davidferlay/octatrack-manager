@@ -31,7 +31,7 @@ Options are displayed only when there are missing files to fix.
 
 ### When samples are found in Audio Pool
 
-_Only visible when the project is part of a Set (parent directory contains an `AUDIO/` folder)._
+_Only visible when the project is part of a Set._
 
 - **Use from Pool:** Update the slot path to reference the file directly from the Audio Pool (e.g., `../AUDIO/subfolder/file.wav`). No files are copied.
 - **Copy to Project:** Copy the file from the Audio Pool into the project's root directory.
@@ -42,6 +42,9 @@ _Only visible when the project is part of a Set._
 
 - **Copy to Project:** Copy the file into the current project's root directory.
 - **Move to Pool:** Move the file to the shared `AUDIO/` folder and update slot paths in **all** projects within the Set that reference it.
+
+**Set detection:** A project is considered part of a Set only if its parent directory contains an `AUDIO/` folder. Projects in directories without an `AUDIO/` folder are treated as standalone, and Set-specific options are hidden.
+
 
 ### Review before applying changes
 
@@ -98,11 +101,7 @@ Once changes are applied, the tool:
 
 The done screen shows a summary of all search steps and the final result.
 
----
-
-## Important Notes
-
-- **Audio Pool subdirectories are preserved:** If a file is found in `AUDIO/Drums/kick.wav`, the slot path is updated to `../AUDIO/Drums/kick.wav` — not flattened to `../AUDIO/kick.wav`.
+:::tip
 - **Both slot types are updated:** If a missing file is referenced by both a Static and a Flex slot, both are fixed in a single operation.
 - **Companion `.ot` files** are copied or moved alongside their `.wav` files when present.
-- **Set detection:** A project is considered part of a Set only if its parent directory contains an `AUDIO/` folder. Projects in directories without an `AUDIO/` folder are treated as standalone, and Set-specific options are hidden.
+:::
