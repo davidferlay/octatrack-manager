@@ -10559,6 +10559,128 @@ mod tests {
             let result = save_parts_data(&project.path, "Z", parts.parts);
             assert!(result.is_err());
         }
+
+        #[test]
+        fn test_machine_type_default_is_static() {
+            // Default BankFile should have machine type 0 (Static) for all tracks
+            let project = TestProject::new();
+            let parts_response = read_parts_data(&project.path, "A").unwrap();
+
+            for (part_idx, part) in parts_response.parts.iter().enumerate() {
+                for machine in &part.machines {
+                    assert_eq!(
+                        machine.machine_type, "Static",
+                        "Part {} Track {} default machine type should be Static",
+                        part_idx, machine.track_id
+                    );
+                }
+            }
+        }
+
+        #[test]
+        fn test_machine_type_mapping_all_types() {
+            // Set each track to a different machine type and verify the string mapping
+            let project = TestProject::with_modified_bank(0, |bank| {
+                let part = &mut bank.parts.unsaved.0[0];
+                part.audio_track_machine_types[0] = 0; // Static
+                part.audio_track_machine_types[1] = 1; // Flex
+                part.audio_track_machine_types[2] = 2; // Thru
+                part.audio_track_machine_types[3] = 3; // Neighbor
+                part.audio_track_machine_types[4] = 4; // Pickup
+            });
+
+            let parts_response = read_parts_data(&project.path, "A").unwrap();
+            let machines = &parts_response.parts[0].machines;
+
+            assert_eq!(machines[0].machine_type, "Static");
+            assert_eq!(machines[1].machine_type, "Flex");
+            assert_eq!(machines[2].machine_type, "Thru");
+            assert_eq!(machines[3].machine_type, "Neighbor");
+            assert_eq!(machines[4].machine_type, "Pickup");
+        }
+
+        #[test]
+        fn test_machine_type_unknown_value() {
+            // An unrecognized machine type ID should map to "Unknown"
+            let project = TestProject::with_modified_bank(0, |bank| {
+                bank.parts.unsaved.0[0].audio_track_machine_types[0] = 255;
+            });
+
+            let parts_response = read_parts_data(&project.path, "A").unwrap();
+            assert_eq!(parts_response.parts[0].machines[0].machine_type, "Unknown");
+        }
+
+        #[test]
+        fn test_machine_type_track_ids_sequential() {
+            // Verify each machine entry has the correct sequential track_id (0-7)
+            let project = TestProject::new();
+            let parts_response = read_parts_data(&project.path, "A").unwrap();
+
+            for part in &parts_response.parts {
+                for (i, machine) in part.machines.iter().enumerate() {
+                    assert_eq!(
+                        machine.track_id, i as u8,
+                        "Machine at index {} should have track_id {}",
+                        i, i
+                    );
+                }
+            }
+        }
+
+        #[test]
+        fn test_machine_type_per_part_independence() {
+            // Each of the 4 parts can have different machine types on the same track
+            let project = TestProject::with_modified_bank(0, |bank| {
+                bank.parts.unsaved.0[0].audio_track_machine_types[0] = 0; // Part 1: Static
+                bank.parts.unsaved.0[1].audio_track_machine_types[0] = 1; // Part 2: Flex
+                bank.parts.unsaved.0[2].audio_track_machine_types[0] = 2; // Part 3: Thru
+                bank.parts.unsaved.0[3].audio_track_machine_types[0] = 4; // Part 4: Pickup
+            });
+
+            let parts_response = read_parts_data(&project.path, "A").unwrap();
+            assert_eq!(parts_response.parts[0].machines[0].machine_type, "Static");
+            assert_eq!(parts_response.parts[1].machines[0].machine_type, "Flex");
+            assert_eq!(parts_response.parts[2].machines[0].machine_type, "Thru");
+            assert_eq!(parts_response.parts[3].machines[0].machine_type, "Pickup");
+        }
+
+        #[test]
+        fn test_machine_type_roundtrip() {
+            // Set machine types, save, reload, and verify they persist
+            let project = TestProject::with_modified_bank(0, |bank| {
+                bank.parts.unsaved.0[0].audio_track_machine_types[0] = 0; // Static
+                bank.parts.unsaved.0[0].audio_track_machine_types[1] = 2; // Thru
+                bank.parts.unsaved.0[0].audio_track_machine_types[2] = 4; // Pickup
+            });
+
+            let original = read_parts_data(&project.path, "A").unwrap();
+            save_parts_data(&project.path, "A", original.parts.clone()).unwrap();
+            let reloaded = read_parts_data(&project.path, "A").unwrap();
+
+            assert_eq!(reloaded.parts[0].machines[0].machine_type, "Static");
+            assert_eq!(reloaded.parts[0].machines[1].machine_type, "Thru");
+            assert_eq!(reloaded.parts[0].machines[2].machine_type, "Pickup");
+        }
+
+        #[test]
+        fn test_machine_type_different_banks() {
+            // Different banks can have different machine types for the same track
+            let project = TestProject::with_modified_bank(0, |bank| {
+                bank.parts.unsaved.0[0].audio_track_machine_types[0] = 0; // Bank A: Static
+            });
+            // Modify bank B separately
+            let bank_path = Path::new(&project.path).join("bank02.work");
+            let mut bank_b = BankFile::from_data_file(&bank_path).unwrap();
+            bank_b.parts.unsaved.0[0].audio_track_machine_types[0] = 2; // Bank B: Thru
+            bank_b.checksum = bank_b.calculate_checksum().unwrap();
+            bank_b.to_data_file(&bank_path).unwrap();
+
+            let bank_a_parts = read_parts_data(&project.path, "A").unwrap();
+            let bank_b_parts = read_parts_data(&project.path, "B").unwrap();
+
+            assert_eq!(bank_a_parts.parts[0].machines[0].machine_type, "Static");
+            assert_eq!(bank_b_parts.parts[0].machines[0].machine_type, "Thru");
+        }
     }
 
     // ==================== COMMIT/RELOAD PARTS TESTS ====================

@@ -1,7 +1,7 @@
 import { useState, useEffect, useTransition, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
-import type { ProjectMetadata, Bank } from "../context/ProjectsContext";
+import type { ProjectMetadata, Bank, PartsDataResponse } from "../context/ProjectsContext";
 import { BankSelector, ALL_BANKS, formatBankName } from "../components/BankSelector";
 import { TrackSelector, ALL_AUDIO_TRACKS, ALL_MIDI_TRACKS } from "../components/TrackSelector";
 import { PatternSelector, ALL_PATTERNS } from "../components/PatternSelector";
@@ -134,6 +134,7 @@ export function ProjectDetail() {
   const [showBankWarningModal, setShowBankWarningModal] = useState<boolean>(false); // Show modal with details
   const [isTitleTruncated, setIsTitleTruncated] = useState<boolean>(false); // Track if project title is truncated
   const titleRef = useRef<HTMLHeadingElement>(null); // Ref for project title h1
+  const [audioTrackMachineTypes, setAudioTrackMachineTypes] = useState<Record<number, string>>({}); // Track index (0-7) -> machine type
 
   // Wrapper to capture last message before going idle (for fade-out effect)
   const handleWriteStatusChange = useCallback((status: WriteStatus) => {
@@ -220,6 +221,38 @@ export function ProjectDetail() {
       setShowBankWarning(false);
     }
   }, [partsWriteStatus.state]);
+
+  // Load machine types for the selected bank's active part
+  useEffect(() => {
+    if (!projectPath || selectedBankIndex < 0 || selectedBankIndex >= 16) {
+      setAudioTrackMachineTypes({});
+      return;
+    }
+    if (!loadedBankIndices.has(selectedBankIndex)) return;
+    const bank = banks[selectedBankIndex];
+    if (!bank) return;
+
+    const loadMachineTypes = async () => {
+      try {
+        const response = await invoke<PartsDataResponse>('load_parts_data', {
+          path: projectPath,
+          bankId: bank.id
+        });
+        const activePartIndex = sharedPartsActivePartIndex ?? metadata?.current_state.part ?? 0;
+        const partData = response.parts[activePartIndex];
+        if (partData?.machines) {
+          const types: Record<number, string> = {};
+          for (const m of partData.machines) {
+            types[m.track_id] = m.machine_type;
+          }
+          setAudioTrackMachineTypes(types);
+        }
+      } catch {
+        setAudioTrackMachineTypes({});
+      }
+    };
+    loadMachineTypes();
+  }, [projectPath, selectedBankIndex, banks, loadedBankIndices, sharedPartsActivePartIndex, metadata?.current_state.part]);
 
   // Detect if project title is truncated (for conditional fade effect)
   useEffect(() => {
@@ -817,6 +850,7 @@ export function ProjectDetail() {
                     value={selectedTrackIndex}
                     onChange={setSelectedTrackIndex}
                     currentTrack={metadata?.current_state.track}
+                    audioTrackMachineTypes={audioTrackMachineTypes}
                   />
                 </div>
 
@@ -940,6 +974,7 @@ export function ProjectDetail() {
                     value={selectedTrackIndex}
                     onChange={setSelectedTrackIndex}
                     currentTrack={metadata?.current_state.track}
+                    audioTrackMachineTypes={audioTrackMachineTypes}
                   />
                 </div>
 

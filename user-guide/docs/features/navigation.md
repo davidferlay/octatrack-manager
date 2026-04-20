@@ -23,13 +23,16 @@ Select **All** from the bank selector to see an overview of every bank in your p
 
 ---
 
-## Selecting Tracks (T1–T8 & M1–M8)
+## Navigating Tracks (T1–T8 & M1–M8)
 
 The **Track Selector** allows you to focus on a specific audio or MIDI track, or view all tracks of a given type at once.
 
 - **Audio Tracks (T1–T8):** The 8 audio tracks, each with its own machine, effects, and LFOs.
+    - Each audio track displays its active machine type from the current part - _T1 (Flex)_, _T2 (Thru)_, etc
 - **MIDI Tracks (M1–M8):** The 8 MIDI tracks for sequencing external gear.
 - **"All Audio" / "All MIDI":** View all 8 tracks of a given type simultaneously.
+
+The machine type shown updates automatically when you switch banks or change the active part.
 
 ![Project details track selector](/img/screenshots/parts-editor-track-selector.png)
 

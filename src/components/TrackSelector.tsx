@@ -5,13 +5,14 @@ interface TrackSelectorProps {
   value: number;
   onChange: (trackIndex: number) => void;
   currentTrack?: number;
+  audioTrackMachineTypes?: Record<number, string>;
 }
 
 // Special values for "all tracks" options
 export const ALL_AUDIO_TRACKS = -1;
 export const ALL_MIDI_TRACKS = -2;
 
-export function TrackSelector({ id, value, onChange, currentTrack }: TrackSelectorProps) {
+export function TrackSelector({ id, value, onChange, currentTrack, audioTrackMachineTypes }: TrackSelectorProps) {
   return (
     <div className="selector-group">
       <label htmlFor={id} className="bank-selector-label">
@@ -28,7 +29,7 @@ export function TrackSelector({ id, value, onChange, currentTrack }: TrackSelect
         <optgroup label="Audio Tracks">
           {[0, 1, 2, 3, 4, 5, 6, 7].map((trackNum) => (
             <option key={`audio-${trackNum}`} value={trackNum}>
-              {formatTrackName(trackNum)} (Audio){trackNum === currentTrack ? ' (Active)' : ''}
+              {formatTrackName(trackNum)} ({audioTrackMachineTypes?.[trackNum] || 'Audio'}){trackNum === currentTrack ? ' (Active)' : ''}
             </option>
           ))}
         </optgroup>
