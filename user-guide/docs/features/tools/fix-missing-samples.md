@@ -6,6 +6,8 @@ sidebar_position: 7
 
 **Fix Missing Samples** scans your project for sample slot references that point to missing audio files, then searches multiple locations to find and reconnect them automatically.
 
+![Tools - Fix Missing Samples](/img/screenshots/tools-fix-samples-notok.png)
+
 ## When to Use
 
 Sample references can break when projects are moved between computers, CF cards are reformatted, or files are reorganized manually.
@@ -22,6 +24,8 @@ When you select **Fix Missing Samples** from the operation dropdown, the tool im
 - **Orange badge (N missing):** Shows the count of unique missing files with a Flex/Static breakdown (e.g., _"39 missing sample files — 15 Flex, 39 Static (15 in both)"_).
 
 Click **Show missing files** to expand the full list. Each row shows the filename and which slot types reference it (Flex, Static, or Both).
+
+![Tools - Fix Missing Samples - Missing files](/img/screenshots/tools-fix-samples-list.png)
 
 ---
 
@@ -71,6 +75,8 @@ If files are still missing after the automatic search, a **Browse...** button ap
 
 You can browse as many directories as needed. If you select a directory that was already searched, a temporary warning badge appears in the header.
 
+![Tools - Fix Missing Samples - Browse](/img/screenshots/tools-fix-samples-browse.png)
+
 ---
 
 ## Review Screen
@@ -88,6 +94,8 @@ The table supports sorting by any column, filtering by Found status or Action ty
 
 Click **Apply Changes** to execute, or **Previous** to return to the progress view and browse additional directories.
 
+![Tools - Fix Missing Samples - Review](/img/screenshots/tools-fix-samples-review.png)
+
 ---
 
 ## After Applying
@@ -100,6 +108,8 @@ Once changes are applied, the tool:
 4. **Refreshes the UI** automatically — the missing samples count and Sample Slots table update without needing to reload the project.
 
 The done screen shows a summary of all search steps and the final result.
+
+![Tools - Fix Missing Samples - All ok](/img/screenshots/tools-fix-samples-ok.png)
 
 :::tip
 - **Both slot types are updated:** If a missing file is referenced by both a Static and a Flex slot, both are fixed in a single operation.
