@@ -105,7 +105,13 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn check_free_space_returns_error_for_missing_path() {
+        // On Unix, statvfs(2) returns ENOENT for missing paths.
+        // On Windows, GetVolumePathNameW walks toward the root for a missing
+        // leaf, so the call succeeds against the volume. Callers are expected
+        // to pass extant paths anyway, so the missing-path branch is only
+        // observable (and testable) on Unix.
         let bogus = PathBuf::from("/this/path/does/not/exist/anywhere");
         assert!(check_free_space(&bogus, 0).is_err());
     }
