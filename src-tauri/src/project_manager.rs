@@ -1,6 +1,9 @@
 //! Project management commands: create, copy, rename, move, delete, rescan.
 //! See `docs/superpowers/specs/2026-04-25-project-management-design.md`.
 
+use fs2::available_space;
+use std::path::Path;
+
 /// Characters allowed in Octatrack project names, transcribed from MKII hardware.
 /// Source of truth: hardware screenshots captured during the 2026-04-25 brainstorm.
 /// Before shipping any UI that consumes this constant, verify each row below
@@ -51,9 +54,61 @@ pub fn validate_project_name(name: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Safety margin (1 MB) added to required size when checking free space, to avoid
+/// races with other writers and small overhead from filesystem metadata.
+const FREE_SPACE_MARGIN: u64 = 1024 * 1024;
+
+/// Verifies that `path`'s filesystem has at least `required_bytes` (+ a 1 MB safety margin).
+/// Returns a user-facing error message on failure.
+pub fn check_free_space(path: &Path, required_bytes: u64) -> Result<(), String> {
+    let available = available_space(path)
+        .map_err(|e| format!("Could not check free space at {}: {}", path.display(), e))?;
+    let needed = required_bytes.saturating_add(FREE_SPACE_MARGIN);
+    if available < needed {
+        return Err(format!(
+            "Not enough free space: need {} MB, available {} MB",
+            needed / (1024 * 1024),
+            available / (1024 * 1024),
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+
+    fn tmp_dir() -> tempfile::TempDir {
+        tempfile::tempdir().expect("create tempdir")
+    }
+
+    #[test]
+    fn check_free_space_passes_when_required_is_zero() {
+        let dir = tmp_dir();
+        assert!(check_free_space(dir.path(), 0).is_ok());
+    }
+
+    #[test]
+    fn check_free_space_passes_when_required_is_small() {
+        let dir = tmp_dir();
+        assert!(check_free_space(dir.path(), 1024).is_ok());
+    }
+
+    #[test]
+    fn check_free_space_fails_when_required_exceeds_available() {
+        let dir = tmp_dir();
+        let err = check_free_space(dir.path(), u64::MAX).unwrap_err();
+        assert!(err.contains("Not enough free space"));
+        assert!(err.contains("need"));
+        assert!(err.contains("available"));
+    }
+
+    #[test]
+    fn check_free_space_returns_error_for_missing_path() {
+        let bogus = PathBuf::from("/this/path/does/not/exist/anywhere");
+        assert!(check_free_space(&bogus, 0).is_err());
+    }
 
     #[test]
     fn accepts_simple_ascii() {
