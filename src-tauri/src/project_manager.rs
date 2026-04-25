@@ -3,6 +3,7 @@
 
 use fs2::available_space;
 use std::path::Path;
+use walkdir::WalkDir;
 
 /// Characters allowed in Octatrack project names, transcribed from MKII hardware.
 /// Source of truth: hardware screenshots captured during the 2026-04-25 brainstorm.
@@ -72,6 +73,23 @@ pub fn check_free_space(path: &Path, required_bytes: u64) -> Result<(), String> 
         ));
     }
     Ok(())
+}
+
+/// Returns the total size in bytes of all regular files under `path` (recursive).
+pub fn dir_size(path: &Path) -> std::io::Result<u64> {
+    if !path.exists() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Path does not exist: {}", path.display()),
+        ));
+    }
+    let mut total: u64 = 0;
+    for entry in WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
+        if entry.file_type().is_file() {
+            total = total.saturating_add(entry.metadata()?.len());
+        }
+    }
+    Ok(total)
 }
 
 #[cfg(test)]
@@ -216,5 +234,39 @@ mod tests {
             !err.contains("not supported on Octatrack"),
             "got charset message instead of fs-forbidden: {err}"
         );
+    }
+
+    use std::fs;
+
+    #[test]
+    fn dir_size_empty_dir_is_zero() {
+        let dir = tmp_dir();
+        assert_eq!(dir_size(dir.path()).unwrap(), 0);
+    }
+
+    #[test]
+    fn dir_size_sums_files_at_root() {
+        let dir = tmp_dir();
+        fs::write(dir.path().join("a.bin"), vec![0u8; 100]).unwrap();
+        fs::write(dir.path().join("b.bin"), vec![0u8; 250]).unwrap();
+        assert_eq!(dir_size(dir.path()).unwrap(), 350);
+    }
+
+    #[test]
+    fn dir_size_recurses_into_subdirs() {
+        let dir = tmp_dir();
+        fs::write(dir.path().join("a.bin"), vec![0u8; 100]).unwrap();
+        let sub = dir.path().join("sub");
+        fs::create_dir(&sub).unwrap();
+        fs::write(sub.join("b.bin"), vec![0u8; 50]).unwrap();
+        let subsub = sub.join("deeper");
+        fs::create_dir(&subsub).unwrap();
+        fs::write(subsub.join("c.bin"), vec![0u8; 25]).unwrap();
+        assert_eq!(dir_size(dir.path()).unwrap(), 175);
+    }
+
+    #[test]
+    fn dir_size_errors_on_missing_path() {
+        assert!(dir_size(Path::new("/no/such/path/here")).is_err());
     }
 }
