@@ -99,6 +99,30 @@ pub fn dir_size(path: &Path) -> std::io::Result<u64> {
     Ok(total)
 }
 
+/// Generates a non-colliding copy name in `dest_set` based on `base`.
+/// Format: `"{base}_{n}"` for n = 2, 3, 4, …
+/// If `"{base}_{n}"` exceeds 12 chars, the base is truncated until it fits.
+pub fn next_available_copy_name(base: &str, dest_set: &Path) -> Result<String, String> {
+    if base.is_empty() {
+        return Err("Cannot generate copy name from empty base".to_string());
+    }
+    // Cap counter at 999 to bound the search; in practice users will not have hundreds of copies.
+    for n in 2u32..=999 {
+        let suffix = format!("_{}", n);
+        let suffix_len = suffix.chars().count();
+        let max_base_len = MAX_NAME_LEN.saturating_sub(suffix_len);
+        let truncated_base: String = base.chars().take(max_base_len).collect();
+        if truncated_base.is_empty() {
+            return Err("Suffix too long to fit in 12-char limit".to_string());
+        }
+        let candidate = format!("{}{}", truncated_base, suffix);
+        if !dest_set.join(&candidate).exists() {
+            return Ok(candidate);
+        }
+    }
+    Err("Could not find an available copy name (tried up to _999)".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -107,6 +131,69 @@ mod tests {
 
     fn tmp_dir() -> tempfile::TempDir {
         tempfile::tempdir().expect("create tempdir")
+    }
+
+    fn make_project(set: &Path, name: &str) {
+        let p = set.join(name);
+        fs::create_dir_all(&p).unwrap();
+        fs::write(p.join("project.work"), b"x").unwrap();
+    }
+
+    #[test]
+    fn copy_name_first_unused_is_underscore_2() {
+        let set = tmp_dir();
+        make_project(set.path(), "FOO");
+        let name = next_available_copy_name("FOO", set.path()).unwrap();
+        assert_eq!(name, "FOO_2");
+    }
+
+    #[test]
+    fn copy_name_advances_to_3_when_2_taken() {
+        let set = tmp_dir();
+        make_project(set.path(), "FOO");
+        make_project(set.path(), "FOO_2");
+        let name = next_available_copy_name("FOO", set.path()).unwrap();
+        assert_eq!(name, "FOO_3");
+    }
+
+    #[test]
+    fn copy_name_skips_to_first_available() {
+        let set = tmp_dir();
+        make_project(set.path(), "FOO");
+        make_project(set.path(), "FOO_2");
+        make_project(set.path(), "FOO_4");
+        let name = next_available_copy_name("FOO", set.path()).unwrap();
+        assert_eq!(name, "FOO_3");
+    }
+
+    #[test]
+    fn copy_name_truncates_when_base_plus_suffix_exceeds_12() {
+        let set = tmp_dir();
+        // base="LONG_PROJECT" (12) + "_2" (2) = 14 → truncate base to 10 → "LONG_PROJE_2" (12)
+        let name = next_available_copy_name("LONG_PROJECT", set.path()).unwrap();
+        assert_eq!(name, "LONG_PROJE_2");
+        assert!(name.chars().count() <= 12);
+    }
+
+    #[test]
+    fn copy_name_truncates_for_multidigit_suffix() {
+        let set = tmp_dir();
+        // Pre-fill _2..=_9 so we land on _10.
+        for i in 2..=9 {
+            make_project(set.path(), &format!("MY_PROJECTS_{}", i));
+        }
+        let name = next_available_copy_name("MY_PROJECTS", set.path()).unwrap();
+        assert!(name.chars().count() <= 12);
+        assert!(!set.path().join(&name).exists());
+        assert!(name.starts_with("MY_PROJ"));
+    }
+
+    #[test]
+    fn copy_name_keeps_full_base_when_it_fits() {
+        let set = tmp_dir();
+        // base="MY_PROJECT" (10) + "_2" (2) = 12 → exact fit, no truncation
+        let name = next_available_copy_name("MY_PROJECT", set.path()).unwrap();
+        assert_eq!(name, "MY_PROJECT_2");
     }
 
     #[test]
