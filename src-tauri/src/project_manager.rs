@@ -1,6 +1,11 @@
 //! Project management commands: create, copy, rename, move, delete, rescan.
 //! See `docs/superpowers/specs/2026-04-25-project-management-design.md`.
 
+/// Characters allowed in Octatrack project names, transcribed from MKII hardware.
+/// Source of truth: hardware screenshots captured during the 2026-04-25 brainstorm.
+/// Before shipping any UI that consumes this constant, verify each row below
+/// against the hardware. Adding or removing characters here changes the contract
+/// honoured by every create/copy/rename flow.
 pub const OT_CHARSET: &str = concat!(
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
     "abcdefghijklmnopqrstuvwxyz",
@@ -11,10 +16,20 @@ pub const OT_CHARSET: &str = concat!(
     "¡¢£¤¥¦§¨©ª«¬®¯°±²³´µ¶·¸¹º»¼½¾¿×÷",
 );
 
+/// Subset of `OT_CHARSET` that the host filesystem cannot accept in a folder name.
+/// These chars get a more specific error so the user understands why an
+/// otherwise-legal Octatrack character is rejected at the desktop layer.
 const FS_FORBIDDEN: &[char] = &['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
 
-pub const MAX_NAME_LEN: usize = 12;
+/// Hardware-imposed maximum length of an Octatrack project folder name.
+pub(crate) const MAX_NAME_LEN: usize = 12;
 
+/// Validates a candidate Octatrack project folder name against the hardware
+/// charset, the host filesystem's forbidden characters, and the 12-character
+/// limit. Order matters: empty → length → fs-forbidden → not-in-charset.
+/// The fs-forbidden check intentionally fires before the charset check so that
+/// characters like `/` (which are in `OT_CHARSET` but illegal in folder names)
+/// produce the more specific "cannot be used in a folder name" message.
 pub fn validate_project_name(name: &str) -> Result<(), String> {
     if name.is_empty() {
         return Err("Name is required".to_string());
@@ -123,6 +138,22 @@ mod tests {
         assert!(
             err.contains("not supported on Octatrack"),
             "unexpected: {err}"
+        );
+    }
+
+    #[test]
+    fn fs_forbidden_check_runs_before_charset_check() {
+        // `/` is in OT_CHARSET (line " !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~") but
+        // also in FS_FORBIDDEN. The fs-forbidden message must win.
+        assert!(OT_CHARSET.contains('/'));
+        let err = validate_project_name("a/b").unwrap_err();
+        assert!(
+            err.contains("cannot be used in a folder name"),
+            "expected fs-forbidden message, got: {err}"
+        );
+        assert!(
+            !err.contains("not supported on Octatrack"),
+            "got charset message instead of fs-forbidden: {err}"
         );
     }
 }
