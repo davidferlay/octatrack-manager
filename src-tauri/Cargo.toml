@@ -28,6 +28,7 @@ serde_json = "1"
 ot-tools-io = { git = "https://gitlab.com/ot-tools/ot-tools-io.git", tag = "0.6.0" }
 sysinfo = "0.32"
 walkdir = "2"
+fs2 = "0.4"
 dirs = "5"
 hound = "3.5"
 aifc = "0.6"
