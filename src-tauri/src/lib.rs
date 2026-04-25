@@ -3,7 +3,7 @@
 
 mod audio_pool;
 mod device_detection;
-mod project_manager;
+pub mod project_manager;
 mod project_reader;
 
 use audio_pool::{
