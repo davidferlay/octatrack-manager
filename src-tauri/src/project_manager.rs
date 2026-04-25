@@ -76,6 +76,12 @@ pub fn check_free_space(path: &Path, required_bytes: u64) -> Result<(), String> 
 }
 
 /// Returns the total size in bytes of all regular files under `path` (recursive).
+///
+/// Walk errors (permission denied, broken entry, loop) are propagated so that
+/// callers — typically a pre-flight space check before a copy — never
+/// under-report the directory's true size. The upfront existence check exists
+/// only to produce a clean `NotFound` error; a TOCTOU between the check and
+/// the walk surfaces as a walk error, not silent success.
 pub fn dir_size(path: &Path) -> std::io::Result<u64> {
     if !path.exists() {
         return Err(std::io::Error::new(
@@ -84,7 +90,8 @@ pub fn dir_size(path: &Path) -> std::io::Result<u64> {
         ));
     }
     let mut total: u64 = 0;
-    for entry in WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(path) {
+        let entry = entry.map_err(std::io::Error::from)?;
         if entry.file_type().is_file() {
             total = total.saturating_add(entry.metadata()?.len());
         }
@@ -95,6 +102,7 @@ pub fn dir_size(path: &Path) -> std::io::Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use std::path::PathBuf;
 
     fn tmp_dir() -> tempfile::TempDir {
@@ -236,8 +244,6 @@ mod tests {
         );
     }
 
-    use std::fs;
-
     #[test]
     fn dir_size_empty_dir_is_zero() {
         let dir = tmp_dir();
@@ -267,6 +273,7 @@ mod tests {
 
     #[test]
     fn dir_size_errors_on_missing_path() {
-        assert!(dir_size(Path::new("/no/such/path/here")).is_err());
+        let err = dir_size(Path::new("/no/such/path/here")).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
     }
 }
