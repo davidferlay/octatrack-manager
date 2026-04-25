@@ -5353,7 +5353,7 @@ mod tests {
                 let bank_path = temp_dir.path().join(format!("bank{:02}.work", bank_num));
                 bank_file
                     .to_data_file(&bank_path)
-                    .expect(&format!("Failed to create bank{:02}.work", bank_num));
+                    .unwrap_or_else(|_| panic!("Failed to create bank{:02}.work", bank_num));
             }
 
             TestProject {
