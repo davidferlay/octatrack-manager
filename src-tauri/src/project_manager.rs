@@ -193,6 +193,94 @@ pub async fn create_project(set_path: String, name: String) -> Result<String, St
         .map_err(|e| format!("Background task failed: {}", e))?
 }
 
+/// Maximum number of projects allowed in a single Octatrack Set.
+const MAX_PROJECTS_PER_SET: usize = 128;
+
+/// Counts project subdirectories in `set_path` (excluding `AUDIO`).
+fn count_projects_in_set(set: &Path) -> usize {
+    fs::read_dir(set)
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .filter(|e| {
+                    let p = e.path();
+                    p.is_dir() && p.file_name().and_then(|n| n.to_str()) != Some("AUDIO")
+                })
+                .count()
+        })
+        .unwrap_or(0)
+}
+
+/// Recursively copies `src` directory to `dest`. Stops on first error.
+fn copy_dir_recursive(src: &Path, dest: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(dest)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let from = entry.path();
+        let to = dest.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir_recursive(&from, &to)?;
+        } else {
+            fs::copy(&from, &to)?;
+        }
+    }
+    Ok(())
+}
+
+/// Synchronous core of [`copy_project`].
+pub(crate) fn copy_project_sync(src: &Path, dest_set: &Path) -> Result<String, String> {
+    if !src.is_dir() {
+        return Err(format!("Source project does not exist: {}", src.display()));
+    }
+    if !dest_set.is_dir() {
+        return Err(format!(
+            "Destination Set does not exist: {}",
+            dest_set.display()
+        ));
+    }
+
+    if count_projects_in_set(dest_set) >= MAX_PROJECTS_PER_SET {
+        return Err(format!(
+            "Destination Set is at the {}-project limit",
+            MAX_PROJECTS_PER_SET
+        ));
+    }
+
+    let base = src
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| "Source path has no valid name".to_string())?;
+
+    // Cross-set copy keeps the original name when free; same-set copy generates _N.
+    let dest_name = if !dest_set.join(base).exists() {
+        base.to_string()
+    } else {
+        next_available_copy_name(base, dest_set)?
+    };
+    let dest_path = dest_set.join(&dest_name);
+
+    let size = dir_size(src).map_err(|e| format!("Could not measure source size: {}", e))?;
+    check_free_space(dest_set, size)?;
+
+    copy_dir_recursive(src, &dest_path).map_err(|e| {
+        let _ = fs::remove_dir_all(&dest_path);
+        format!("Copy failed: {}", e)
+    })?;
+
+    Ok(dest_path.to_string_lossy().into_owned())
+}
+
+/// Copies `src_path` into `dest_set_path` with an auto-generated `_N` suffix.
+/// Runs on the blocking thread pool.
+#[tauri::command]
+pub async fn copy_project(src_path: String, dest_set_path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        copy_project_sync(Path::new(&src_path), Path::new(&dest_set_path))
+    })
+    .await
+    .map_err(|e| format!("Background task failed: {}", e))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -208,6 +296,61 @@ mod tests {
         let p = set.join(name);
         fs::create_dir_all(&p).unwrap();
         fs::write(p.join("project.work"), b"x").unwrap();
+    }
+
+    fn populate_project(p: &Path) {
+        fs::create_dir_all(p).unwrap();
+        fs::write(p.join("project.work"), vec![0u8; 1024]).unwrap();
+        for i in 1..=16 {
+            fs::write(p.join(format!("bank{:02}.work", i)), vec![i as u8; 100]).unwrap();
+        }
+    }
+
+    #[test]
+    fn copy_project_creates_independent_copy() {
+        let set = tmp_dir();
+        let src = set.path().join("ORIG");
+        populate_project(&src);
+
+        let new_path = copy_project_sync(&src, set.path()).unwrap();
+
+        let new = Path::new(&new_path);
+        assert_eq!(new.file_name().unwrap().to_string_lossy(), "ORIG_2");
+        assert!(new.join("project.work").is_file());
+        assert_eq!(
+            fs::read(src.join("project.work")).unwrap(),
+            fs::read(new.join("project.work")).unwrap(),
+        );
+    }
+
+    #[test]
+    fn copy_project_advances_suffix() {
+        let set = tmp_dir();
+        populate_project(&set.path().join("ORIG"));
+        populate_project(&set.path().join("ORIG_2"));
+        let new_path = copy_project_sync(&set.path().join("ORIG"), set.path()).unwrap();
+        assert!(new_path.ends_with("ORIG_3"));
+    }
+
+    #[test]
+    fn copy_project_works_cross_set() {
+        let src_set = tmp_dir();
+        let dst_set = tmp_dir();
+        populate_project(&src_set.path().join("ORIG"));
+        let new_path = copy_project_sync(&src_set.path().join("ORIG"), dst_set.path()).unwrap();
+        assert!(new_path.ends_with("ORIG"));
+        assert!(Path::new(&new_path).join("project.work").is_file());
+    }
+
+    #[test]
+    fn copy_project_fails_at_128_project_limit() {
+        let set = tmp_dir();
+        for i in 0..128 {
+            populate_project(&set.path().join(format!("P{:03}", i)));
+        }
+        let src = set.path().join("P000");
+        let err = copy_project_sync(&src, set.path()).unwrap_err();
+        assert!(err.contains("128"), "expected limit error, got: {}", err);
     }
 
     #[test]
