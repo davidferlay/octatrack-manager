@@ -281,6 +281,49 @@ pub async fn copy_project(src_path: String, dest_set_path: String) -> Result<Str
     .map_err(|e| format!("Background task failed: {}", e))?
 }
 
+/// Synchronous core of [`rename_project`].
+pub(crate) fn rename_project_sync(src: &Path, new_name: &str) -> Result<String, String> {
+    if !src.is_dir() {
+        return Err(format!("Project does not exist: {}", src.display()));
+    }
+
+    validate_project_name(new_name)?;
+
+    let current_name = src
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| "Project path has no valid name".to_string())?;
+
+    if current_name == new_name {
+        return Ok(src.to_string_lossy().into_owned());
+    }
+
+    let parent = src
+        .parent()
+        .ok_or_else(|| "Project has no parent directory".to_string())?;
+    let dest = parent.join(new_name);
+    if dest.exists() {
+        return Err(format!(
+            "A project named '{}' already exists in this Set",
+            new_name
+        ));
+    }
+
+    fs::rename(src, &dest).map_err(|e| format!("Rename failed: {}", e))?;
+    Ok(dest.to_string_lossy().into_owned())
+}
+
+/// Renames an existing project directory in place (same parent Set).
+/// Runs on the blocking thread pool.
+#[tauri::command]
+pub async fn rename_project(project_path: String, new_name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        rename_project_sync(Path::new(&project_path), &new_name)
+    })
+    .await
+    .map_err(|e| format!("Background task failed: {}", e))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -616,5 +659,41 @@ mod tests {
     fn create_project_rejects_missing_set_path() {
         let err = create_project_sync(Path::new("/no/such/set/path"), "FOO").unwrap_err();
         assert!(err.contains("Set path does not exist"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn rename_project_changes_dir_name() {
+        let set = tmp_dir();
+        populate_project(&set.path().join("OLD"));
+        let new_path = rename_project_sync(&set.path().join("OLD"), "NEW").unwrap();
+        assert!(new_path.ends_with("NEW"));
+        assert!(!set.path().join("OLD").exists());
+        assert!(set.path().join("NEW").join("project.work").is_file());
+    }
+
+    #[test]
+    fn rename_project_rejects_invalid_name() {
+        let set = tmp_dir();
+        populate_project(&set.path().join("OLD"));
+        let err = rename_project_sync(&set.path().join("OLD"), "BAD/NAME").unwrap_err();
+        assert!(err.contains("cannot be used in a folder name"));
+    }
+
+    #[test]
+    fn rename_project_rejects_conflict() {
+        let set = tmp_dir();
+        populate_project(&set.path().join("OLD"));
+        populate_project(&set.path().join("EXISTS"));
+        let err = rename_project_sync(&set.path().join("OLD"), "EXISTS").unwrap_err();
+        assert!(err.contains("already exists"));
+    }
+
+    #[test]
+    fn rename_project_same_name_is_noop() {
+        let set = tmp_dir();
+        populate_project(&set.path().join("SAME"));
+        let path = set.path().join("SAME");
+        let new_path = rename_project_sync(&path, "SAME").unwrap();
+        assert_eq!(new_path, path.to_string_lossy());
     }
 }
