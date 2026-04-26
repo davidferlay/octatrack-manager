@@ -125,9 +125,10 @@ pub fn next_available_copy_name(base: &str, dest_set: &Path) -> Result<String, S
     Err("Could not find an available copy name (tried up to _999)".to_string())
 }
 
-/// Approximate size of a default empty project on disk (project.work + 16 bank files).
-/// Used as the required-space estimate in `create_project`. Generous, leaves headroom.
-const DEFAULT_PROJECT_SIZE_BYTES: u64 = 4 * 1024 * 1024; // 4 MB
+/// Approximate size of a default empty project on disk.
+/// Breakdown: project.work (~150 KB) + 16 × bank files (~150 KB each) ≈ 2.5 MB.
+/// 4 MB gives ~60 % headroom for filesystem metadata and format evolution.
+const DEFAULT_PROJECT_SIZE_BYTES: u64 = 4 * 1024 * 1024;
 
 /// Creates a new project under `set_path/name` with default ProjectFile + 16 BankFiles.
 /// Returns the new project's absolute path.
@@ -150,8 +151,15 @@ pub fn create_project(set_path: String, name: String) -> Result<String, String> 
 
     check_free_space(set, DEFAULT_PROJECT_SIZE_BYTES)?;
 
-    fs::create_dir(&project_path)
-        .map_err(|e| format!("Failed to create project directory: {}", e))?;
+    fs::create_dir(&project_path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::AlreadyExists {
+            // TOCTOU: another process created the directory between our exists()
+            // check above and this mkdir. Surface the same user-facing message.
+            format!("A project named '{}' already exists in this Set", name)
+        } else {
+            format!("Failed to create project directory: {}", e)
+        }
+    })?;
 
     let project_file = ProjectFile::default();
     project_file
@@ -177,9 +185,7 @@ pub fn create_project(set_path: String, name: String) -> Result<String, String> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ot_tools_io::BankFile;
-    use ot_tools_io::OctatrackFileIO;
-    use ot_tools_io::ProjectFile;
+    use ot_tools_io::{BankFile, OctatrackFileIO, ProjectFile};
     use std::fs;
     use std::path::PathBuf;
 
@@ -467,6 +473,6 @@ mod tests {
     #[test]
     fn create_project_rejects_missing_set_path() {
         let err = create_project("/no/such/set/path".to_string(), "FOO".to_string()).unwrap_err();
-        assert!(!err.is_empty());
+        assert!(err.contains("Set path does not exist"), "unexpected: {err}");
     }
 }
