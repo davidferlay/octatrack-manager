@@ -72,7 +72,7 @@ fn is_system_path(path: &Path) -> bool {
 
 /// Checks if AUDIO directory contains actual audio samples (WAV or AIFF files)
 /// Checks both the immediate directory and one level of subdirectories
-fn has_valid_audio_pool(audio_path: &Path) -> bool {
+pub(crate) fn has_valid_audio_pool(audio_path: &Path) -> bool {
     if !audio_path.is_dir() {
         return false;
     }
@@ -103,7 +103,7 @@ fn has_valid_audio_pool(audio_path: &Path) -> bool {
 ///
 /// Note: A directory without an AUDIO directory is NOT considered a Set,
 /// even if it contains multiple projects - those are individual projects
-fn is_octatrack_set(path: &Path) -> bool {
+pub(crate) fn is_octatrack_set(path: &Path) -> bool {
     if !path.is_dir() {
         return false;
     }
@@ -156,7 +156,7 @@ fn is_octatrack_project(path: &Path) -> bool {
 }
 
 /// Scans a Set directory for Projects
-fn scan_for_projects(set_path: &Path) -> Vec<OctatrackProject> {
+pub(crate) fn scan_for_projects(set_path: &Path) -> Vec<OctatrackProject> {
     let mut projects = Vec::new();
 
     // Look for subdirectories that contain .work files

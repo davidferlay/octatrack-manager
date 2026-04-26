@@ -17,6 +17,7 @@ const sidebars = {
       label: 'Features',
       items: [
         'features/project-discovery',
+        'features/project-management',
         'features/audio-pool',
         'features/project-detail',
         'features/navigation',
