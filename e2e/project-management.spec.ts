@@ -168,19 +168,21 @@ test('delete cancellation keeps project', async ({ page }) => {
 test('copy + paste produces _2 suffix', async ({ page }) => {
   await page.getByText('PROJ_A').click({ button: 'right' })
   await page.getByText(/^copy$/i).click()
-  await page.locator('.projects-grid').first().click({ button: 'right' })
+  // Right-click on the set-header to get set context menu
+  await page.locator('.set-header').first().click({ button: 'right' })
   await page.getByText(/paste/i).click()
   await expect(page.getByText('PROJ_A_2')).toBeVisible()
 })
 
 test('keyboard: Delete key opens confirmation', async ({ page }) => {
-  await page.getByText('PROJ_A').focus()
+  // Focus the project-card div, not the inner text
+  await page.locator('.project-card.clickable-project', { hasText: 'PROJ_A' }).first().focus()
   await page.keyboard.press('Delete')
   await expect(page.getByText(/cannot be undone/i)).toBeVisible()
 })
 
 test('keyboard: F2 opens rename modal', async ({ page }) => {
-  await page.getByText('PROJ_A').focus()
+  await page.locator('.project-card.clickable-project', { hasText: 'PROJ_A' }).first().focus()
   await page.keyboard.press('F2')
   await expect(page.getByRole('textbox', { name: /new project name/i })).toBeVisible()
 })
@@ -197,10 +199,18 @@ test('context menu on set-card header shows set actions', async ({ page }) => {
 })
 
 test('keyboard: Ctrl+C then Ctrl+V on Set grid pastes', async ({ page }) => {
-  await page.getByText('PROJ_A').focus()
+  // First, open SetB by clicking its header
+  await page.locator('.set-header').nth(1).click()
+  await expect(page.getByText('PROJ_C')).toBeVisible()
+
+  // Focus the project card (not inner text) and copy
+  await page.locator('.project-card.clickable-project', { hasText: 'PROJ_A' }).first().focus()
   await page.keyboard.press('Control+c')
-  await page.getByText('PROJ_C').focus() // a card in SetB's grid
+
+  // Focus a card in SetB and paste
+  await page.locator('.project-card.clickable-project', { hasText: 'PROJ_C' }).first().focus()
   await page.keyboard.press('Control+v')
+
   // PROJ_A pasted into SetB; in this mock state, name is unique so no _2 suffix.
-  await expect(page.locator('.projects-grid').nth(1).getByText('PROJ_A')).toBeVisible()
+  await expect(page.locator('.project-card', { hasText: 'PROJ_A' })).toHaveCount(2)
 })
