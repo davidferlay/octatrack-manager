@@ -1,6 +1,9 @@
 //! Project management commands: create, copy, rename, move, delete, rescan.
 //! See `docs/superpowers/specs/2026-04-25-project-management-design.md`.
 
+use crate::device_detection::{
+    has_valid_audio_pool, is_octatrack_set, scan_for_projects, OctatrackSet,
+};
 use fs2::available_space;
 use ot_tools_io::{BankFile, OctatrackFileIO, ProjectFile};
 use std::fs;
@@ -322,6 +325,210 @@ pub async fn rename_project(project_path: String, new_name: String) -> Result<St
     })
     .await
     .map_err(|e| format!("Background task failed: {}", e))?
+}
+
+/// Synchronous core of [`move_project`].
+/// Same filesystem → atomic `fs::rename`. Cross-filesystem → copy → verify → delete (Task 10).
+pub(crate) fn move_project_sync(src: &Path, dest_set: &Path) -> Result<String, String> {
+    if !src.is_dir() {
+        return Err(format!("Source project does not exist: {}", src.display()));
+    }
+    if !dest_set.is_dir() {
+        return Err(format!(
+            "Destination Set does not exist: {}",
+            dest_set.display()
+        ));
+    }
+
+    if count_projects_in_set(dest_set) >= MAX_PROJECTS_PER_SET {
+        return Err(format!(
+            "Destination Set is at the {}-project limit",
+            MAX_PROJECTS_PER_SET
+        ));
+    }
+
+    let name = src
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| "Source path has no valid name".to_string())?
+        .to_string();
+    let dest_path = dest_set.join(&name);
+    if dest_path.exists() {
+        return Err(format!(
+            "A project named '{}' already exists in this Set",
+            name
+        ));
+    }
+
+    // Try atomic rename first (works iff same filesystem).
+    match fs::rename(src, &dest_path) {
+        Ok(()) => Ok(dest_path.to_string_lossy().into_owned()),
+        Err(e) if e.raw_os_error() == Some(libc_ex_dev()) => {
+            // Cross-device: handled in Task 10 (currently a stub).
+            move_project_cross_fs(src, &dest_path)
+        }
+        Err(e) => Err(format!("Move failed: {}", e)),
+    }
+}
+
+/// Returns the platform-specific errno for cross-device rename failures.
+/// Linux/macOS: EXDEV (18). Windows: ERROR_NOT_SAME_DEVICE (17).
+#[cfg(unix)]
+fn libc_ex_dev() -> i32 {
+    18 // EXDEV
+}
+#[cfg(windows)]
+fn libc_ex_dev() -> i32 {
+    17 // ERROR_NOT_SAME_DEVICE
+}
+
+/// Cross-filesystem move: delegates to the inner implementation.
+fn move_project_cross_fs(src: &Path, dest: &Path) -> Result<String, String> {
+    move_project_cross_fs_impl(src, dest)
+}
+
+/// Cross-filesystem move: pre-flight space check → recursive copy → verify file count
+/// and total size match → only then delete source. On any failure, leaves source intact
+/// and removes the partial destination.
+fn move_project_cross_fs_impl(src: &Path, dest: &Path) -> Result<String, String> {
+    if dest.exists() {
+        return Err(format!("Destination already exists: {}", dest.display()));
+    }
+
+    let dest_parent = dest
+        .parent()
+        .ok_or_else(|| "Destination has no parent".to_string())?;
+
+    let size = dir_size(src).map_err(|e| format!("Could not measure source size: {}", e))?;
+    check_free_space(dest_parent, size)?;
+
+    let (src_count, src_size) =
+        walk_count_size(src).map_err(|e| format!("Could not enumerate source: {}", e))?;
+
+    if let Err(e) = copy_dir_recursive(src, dest) {
+        let _ = fs::remove_dir_all(dest);
+        return Err(format!("Copy failed: {}", e));
+    }
+
+    let (dst_count, dst_size) = match walk_count_size(dest) {
+        Ok(x) => x,
+        Err(e) => {
+            let _ = fs::remove_dir_all(dest);
+            return Err(format!("Could not verify destination: {}", e));
+        }
+    };
+
+    if src_count != dst_count || src_size != dst_size {
+        let _ = fs::remove_dir_all(dest);
+        return Err(format!(
+            "Verification failed: src={}/{} bytes, dst={}/{} bytes",
+            src_count, src_size, dst_count, dst_size
+        ));
+    }
+
+    fs::remove_dir_all(src)
+        .map_err(|e| format!("Copy succeeded but source could not be deleted: {}", e))?;
+
+    Ok(dest.to_string_lossy().into_owned())
+}
+
+fn walk_count_size(p: &Path) -> std::io::Result<(usize, u64)> {
+    let mut count = 0usize;
+    let mut size = 0u64;
+    for entry in WalkDir::new(p) {
+        let entry = entry.map_err(std::io::Error::from)?;
+        if entry.file_type().is_file() {
+            count += 1;
+            size = size.saturating_add(entry.metadata()?.len());
+        }
+    }
+    Ok((count, size))
+}
+
+/// Moves a project directory into a different Set.
+/// Runs on the blocking thread pool.
+#[tauri::command]
+pub async fn move_project(src_path: String, dest_set_path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        move_project_sync(Path::new(&src_path), Path::new(&dest_set_path))
+    })
+    .await
+    .map_err(|e| format!("Background task failed: {}", e))?
+}
+
+/// Returns true if `path` looks like an OT project (contains a `.work` file).
+fn is_project_dir(path: &Path) -> bool {
+    if !path.is_dir() {
+        return false;
+    }
+    if let Ok(entries) = fs::read_dir(path) {
+        for entry in entries.flatten() {
+            if entry.path().extension().is_some_and(|e| e == "work") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Synchronous core of [`delete_project`]. Refuses anything that doesn't look
+/// like an OT project (contains no `.work` file) to avoid catastrophic mistakes.
+pub(crate) fn delete_project_sync(p: &Path) -> Result<(), String> {
+    if !p.exists() {
+        return Err(format!("Project does not exist: {}", p.display()));
+    }
+    if !is_project_dir(p) {
+        return Err(format!(
+            "Refusing to delete: '{}' is not an Octatrack project directory",
+            p.display()
+        ));
+    }
+    fs::remove_dir_all(p).map_err(|e| format!("Delete failed: {}", e))
+}
+
+/// Recursively deletes a project directory.
+/// Runs on the blocking thread pool.
+#[tauri::command]
+pub async fn delete_project(project_path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || delete_project_sync(Path::new(&project_path)))
+        .await
+        .map_err(|e| format!("Background task failed: {}", e))?
+}
+
+// ── rescan_set ──────────────────────────────────────────────────────────
+
+/// Re-scans an Octatrack Set directory and returns its current state.
+///
+/// Validates that `path` is a valid Octatrack Set, then rebuilds the
+/// [`OctatrackSet`] struct with fresh project and audio-pool information.
+pub(crate) fn rescan_set_sync(path: &Path) -> Result<OctatrackSet, String> {
+    if !is_octatrack_set(path) {
+        return Err(format!(
+            "Path is not a valid Octatrack Set: {}",
+            path.display()
+        ));
+    }
+    let audio_pool_path = path.join("AUDIO");
+    let has_audio_pool = audio_pool_path.is_dir() && has_valid_audio_pool(&audio_pool_path);
+    let projects = scan_for_projects(path);
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("Unknown")
+        .to_string();
+    Ok(OctatrackSet {
+        name,
+        path: path.to_string_lossy().into_owned(),
+        has_audio_pool,
+        projects,
+    })
+}
+
+#[tauri::command]
+pub async fn rescan_set(set_path: String) -> Result<OctatrackSet, String> {
+    tauri::async_runtime::spawn_blocking(move || rescan_set_sync(Path::new(&set_path)))
+        .await
+        .map_err(|e| format!("Background task failed: {}", e))?
 }
 
 #[cfg(test)]
@@ -695,5 +902,179 @@ mod tests {
         let path = set.path().join("SAME");
         let new_path = rename_project_sync(&path, "SAME").unwrap();
         assert_eq!(new_path, path.to_string_lossy());
+    }
+
+    #[test]
+    fn move_project_same_fs_renames_atomically() {
+        let root = tmp_dir();
+        let src_set = root.path().join("SetA");
+        let dst_set = root.path().join("SetB");
+        fs::create_dir_all(&src_set).unwrap();
+        fs::create_dir_all(&dst_set).unwrap();
+        populate_project(&src_set.join("PROJ"));
+
+        let new_path = move_project_sync(&src_set.join("PROJ"), &dst_set).unwrap();
+
+        assert_eq!(new_path, dst_set.join("PROJ").to_string_lossy());
+        assert!(!src_set.join("PROJ").exists());
+        assert!(dst_set.join("PROJ").join("project.work").is_file());
+    }
+
+    #[test]
+    fn move_project_rejects_name_conflict() {
+        let root = tmp_dir();
+        let src_set = root.path().join("SetA");
+        let dst_set = root.path().join("SetB");
+        fs::create_dir_all(&src_set).unwrap();
+        fs::create_dir_all(&dst_set).unwrap();
+        populate_project(&src_set.join("PROJ"));
+        populate_project(&dst_set.join("PROJ"));
+
+        let err = move_project_sync(&src_set.join("PROJ"), &dst_set).unwrap_err();
+        assert!(err.contains("already exists"));
+        // Source must remain.
+        assert!(src_set.join("PROJ").join("project.work").is_file());
+    }
+
+    #[test]
+    fn move_project_rejects_at_128_limit() {
+        let root = tmp_dir();
+        let src_set = root.path().join("SetA");
+        let dst_set = root.path().join("SetB");
+        fs::create_dir_all(&src_set).unwrap();
+        fs::create_dir_all(&dst_set).unwrap();
+        populate_project(&src_set.join("PROJ"));
+        for i in 0..128 {
+            populate_project(&dst_set.join(format!("P{:03}", i)));
+        }
+        let err = move_project_sync(&src_set.join("PROJ"), &dst_set).unwrap_err();
+        assert!(err.contains("128"));
+        assert!(src_set.join("PROJ").exists());
+    }
+
+    /// Helper: count files recursively, return (count, total_size).
+    fn file_count_and_size(p: &Path) -> (usize, u64) {
+        let mut count = 0;
+        let mut size = 0u64;
+        for entry in WalkDir::new(p) {
+            let entry = entry.unwrap();
+            if entry.file_type().is_file() {
+                count += 1;
+                size += entry.metadata().unwrap().len();
+            }
+        }
+        (count, size)
+    }
+
+    #[test]
+    fn move_cross_fs_helper_copies_verifies_deletes() {
+        // We can't easily simulate a real cross-fs move, but we can call the inner
+        // helper directly with two distinct directories.
+        let root = tmp_dir();
+        let src = root.path().join("SRC");
+        let dest = root.path().join("DST");
+        populate_project(&src);
+        let (src_count, src_size) = file_count_and_size(&src);
+
+        let result = move_project_cross_fs_impl(&src, &dest).unwrap();
+        assert_eq!(result, dest.to_string_lossy());
+        assert!(
+            !src.exists(),
+            "source should be deleted after successful copy+verify"
+        );
+        let (dst_count, dst_size) = file_count_and_size(&dest);
+        assert_eq!(src_count, dst_count);
+        assert_eq!(src_size, dst_size);
+    }
+
+    #[test]
+    fn move_cross_fs_helper_leaves_source_when_dest_pre_exists() {
+        let root = tmp_dir();
+        let src = root.path().join("SRC");
+        let dest = root.path().join("DST");
+        populate_project(&src);
+        fs::create_dir_all(&dest).unwrap();
+        fs::write(dest.join("intruder.txt"), b"x").unwrap();
+
+        let err = move_project_cross_fs_impl(&src, &dest).unwrap_err();
+        assert!(!err.is_empty());
+        // Source intact.
+        assert!(src.join("project.work").is_file());
+        // Untouched intruder still there.
+        assert!(dest.join("intruder.txt").is_file());
+    }
+
+    #[test]
+    fn delete_project_removes_directory() {
+        let set = tmp_dir();
+        populate_project(&set.path().join("DOOMED"));
+        delete_project_sync(&set.path().join("DOOMED")).unwrap();
+        assert!(!set.path().join("DOOMED").exists());
+    }
+
+    #[test]
+    fn delete_project_refuses_non_project_dir() {
+        let set = tmp_dir();
+        let bogus = set.path().join("not_a_project");
+        fs::create_dir(&bogus).unwrap();
+        // No .work files inside.
+        let err = delete_project_sync(&bogus).unwrap_err();
+        assert!(err.to_lowercase().contains("not") && err.to_lowercase().contains("project"));
+        assert!(bogus.exists(), "non-project directory must not be deleted");
+    }
+
+    #[test]
+    fn delete_project_errors_on_missing_path() {
+        let err = delete_project_sync(Path::new("/no/such/path")).unwrap_err();
+        assert!(err.contains("does not exist"), "unexpected: {err}");
+    }
+
+    // ── rescan_set tests ────────────────────────────────────────────────
+
+    /// Helper: create a minimal valid Octatrack Set directory structure.
+    fn make_set(root: &Path) -> PathBuf {
+        // A valid set needs an AUDIO dir + at least one project dir with a .work file
+        fs::create_dir_all(root.join("AUDIO")).unwrap();
+        let proj = root.join("PROJ_A");
+        fs::create_dir_all(&proj).unwrap();
+        let pf = ProjectFile::default();
+        OctatrackFileIO::to_data_file(&pf, &proj.join("project.work")).unwrap();
+        root.to_path_buf()
+    }
+
+    #[test]
+    fn rescan_set_returns_current_projects() {
+        let set = tmp_dir();
+        make_set(set.path());
+        let result = rescan_set_sync(set.path()).unwrap();
+        assert_eq!(result.projects.len(), 1);
+        assert_eq!(result.projects[0].name, "PROJ_A");
+    }
+
+    #[test]
+    fn rescan_set_reflects_deletions() {
+        let set = tmp_dir();
+        make_set(set.path());
+        // Add a second project, scan, then delete it, rescan
+        let proj_b = set.path().join("PROJ_B");
+        fs::create_dir_all(&proj_b).unwrap();
+        let pf = ProjectFile::default();
+        OctatrackFileIO::to_data_file(&pf, &proj_b.join("project.work")).unwrap();
+        let r1 = rescan_set_sync(set.path()).unwrap();
+        assert_eq!(r1.projects.len(), 2);
+        fs::remove_dir_all(&proj_b).unwrap();
+        let r2 = rescan_set_sync(set.path()).unwrap();
+        assert_eq!(r2.projects.len(), 1);
+    }
+
+    #[test]
+    fn rescan_set_errors_on_non_set_dir() {
+        let dir = tmp_dir();
+        // Empty dir is not a valid set
+        let err = rescan_set_sync(dir.path()).unwrap_err();
+        assert!(
+            err.contains("not a valid Octatrack Set"),
+            "unexpected: {err}"
+        );
     }
 }
