@@ -130,18 +130,17 @@ pub fn next_available_copy_name(base: &str, dest_set: &Path) -> Result<String, S
 /// 4 MB gives ~60 % headroom for filesystem metadata and format evolution.
 const DEFAULT_PROJECT_SIZE_BYTES: u64 = 4 * 1024 * 1024;
 
-/// Creates a new project under `set_path/name` with default ProjectFile + 16 BankFiles.
-/// Returns the new project's absolute path.
-#[tauri::command]
-pub fn create_project(set_path: String, name: String) -> Result<String, String> {
-    let set = Path::new(&set_path);
+/// Synchronous core of [`create_project`]. Tests call this directly so they
+/// can assert behaviour without an async runtime; the public [`create_project`]
+/// command is a thin wrapper that runs this on the blocking thread pool.
+pub(crate) fn create_project_sync(set: &Path, name: &str) -> Result<String, String> {
     if !set.is_dir() {
-        return Err(format!("Set path does not exist: {}", set_path));
+        return Err(format!("Set path does not exist: {}", set.display()));
     }
 
-    validate_project_name(&name)?;
+    validate_project_name(name)?;
 
-    let project_path: PathBuf = set.join(&name);
+    let project_path: PathBuf = set.join(name);
     if project_path.exists() {
         return Err(format!(
             "A project named '{}' already exists in this Set",
@@ -180,6 +179,18 @@ pub fn create_project(set_path: String, name: String) -> Result<String, String> 
     }
 
     Ok(project_path.to_string_lossy().into_owned())
+}
+
+/// Creates a new project under `set_path/name` with default ProjectFile + 16 BankFiles.
+/// Returns the new project's absolute path.
+///
+/// Runs on the blocking thread pool so the Tauri async runtime stays
+/// responsive while the 17 file writes hit (potentially slow) SD media.
+#[tauri::command]
+pub async fn create_project(set_path: String, name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || create_project_sync(Path::new(&set_path), &name))
+        .await
+        .map_err(|e| format!("Background task failed: {}", e))?
 }
 
 #[cfg(test)]
@@ -427,11 +438,7 @@ mod tests {
     #[test]
     fn create_project_creates_dir_and_files() {
         let set = tmp_dir();
-        let path = create_project(
-            set.path().to_string_lossy().into_owned(),
-            "MYPROJ".to_string(),
-        )
-        .unwrap();
+        let path = create_project_sync(set.path(), "MYPROJ").unwrap();
         let p = Path::new(&path);
         assert!(p.is_dir());
         assert!(p.join("project.work").is_file());
@@ -450,11 +457,7 @@ mod tests {
     #[test]
     fn create_project_rejects_invalid_name() {
         let set = tmp_dir();
-        let err = create_project(
-            set.path().to_string_lossy().into_owned(),
-            "BAD/NAME".to_string(),
-        )
-        .unwrap_err();
+        let err = create_project_sync(set.path(), "BAD/NAME").unwrap_err();
         assert!(err.contains("cannot be used in a folder name"));
     }
 
@@ -462,17 +465,13 @@ mod tests {
     fn create_project_rejects_duplicate_name() {
         let set = tmp_dir();
         make_project(set.path(), "EXISTS");
-        let err = create_project(
-            set.path().to_string_lossy().into_owned(),
-            "EXISTS".to_string(),
-        )
-        .unwrap_err();
+        let err = create_project_sync(set.path(), "EXISTS").unwrap_err();
         assert!(err.contains("already exists"));
     }
 
     #[test]
     fn create_project_rejects_missing_set_path() {
-        let err = create_project("/no/such/set/path".to_string(), "FOO".to_string()).unwrap_err();
+        let err = create_project_sync(Path::new("/no/such/set/path"), "FOO").unwrap_err();
         assert!(err.contains("Set path does not exist"), "unexpected: {err}");
     }
 }
