@@ -2,7 +2,9 @@
 //! See `docs/superpowers/specs/2026-04-25-project-management-design.md`.
 
 use fs2::available_space;
-use std::path::Path;
+use ot_tools_io::{BankFile, OctatrackFileIO, ProjectFile};
+use std::fs;
+use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 /// Characters allowed in Octatrack project names, transcribed from MKII hardware.
@@ -123,9 +125,61 @@ pub fn next_available_copy_name(base: &str, dest_set: &Path) -> Result<String, S
     Err("Could not find an available copy name (tried up to _999)".to_string())
 }
 
+/// Approximate size of a default empty project on disk (project.work + 16 bank files).
+/// Used as the required-space estimate in `create_project`. Generous, leaves headroom.
+const DEFAULT_PROJECT_SIZE_BYTES: u64 = 4 * 1024 * 1024; // 4 MB
+
+/// Creates a new project under `set_path/name` with default ProjectFile + 16 BankFiles.
+/// Returns the new project's absolute path.
+#[tauri::command]
+pub fn create_project(set_path: String, name: String) -> Result<String, String> {
+    let set = Path::new(&set_path);
+    if !set.is_dir() {
+        return Err(format!("Set path does not exist: {}", set_path));
+    }
+
+    validate_project_name(&name)?;
+
+    let project_path: PathBuf = set.join(&name);
+    if project_path.exists() {
+        return Err(format!(
+            "A project named '{}' already exists in this Set",
+            name
+        ));
+    }
+
+    check_free_space(set, DEFAULT_PROJECT_SIZE_BYTES)?;
+
+    fs::create_dir(&project_path)
+        .map_err(|e| format!("Failed to create project directory: {}", e))?;
+
+    let project_file = ProjectFile::default();
+    project_file
+        .to_data_file(&project_path.join("project.work"))
+        .map_err(|e| {
+            // Best-effort cleanup on partial failure.
+            let _ = fs::remove_dir_all(&project_path);
+            format!("Failed to write project.work: {}", e)
+        })?;
+
+    for i in 1u8..=16 {
+        let bank = BankFile::default();
+        let bank_path: PathBuf = project_path.join(format!("bank{:02}.work", i));
+        bank.to_data_file(&bank_path).map_err(|e| {
+            let _ = fs::remove_dir_all(&project_path);
+            format!("Failed to write bank{:02}.work: {}", i, e)
+        })?;
+    }
+
+    Ok(project_path.to_string_lossy().into_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ot_tools_io::BankFile;
+    use ot_tools_io::OctatrackFileIO;
+    use ot_tools_io::ProjectFile;
     use std::fs;
     use std::path::PathBuf;
 
@@ -362,5 +416,57 @@ mod tests {
     fn dir_size_errors_on_missing_path() {
         let err = dir_size(Path::new("/no/such/path/here")).unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn create_project_creates_dir_and_files() {
+        let set = tmp_dir();
+        let path = create_project(
+            set.path().to_string_lossy().into_owned(),
+            "MYPROJ".to_string(),
+        )
+        .unwrap();
+        let p = Path::new(&path);
+        assert!(p.is_dir());
+        assert!(p.join("project.work").is_file());
+        for i in 1..=16 {
+            assert!(
+                p.join(format!("bank{:02}.work", i)).is_file(),
+                "bank{:02}.work missing",
+                i
+            );
+        }
+        // Can read back the default project / banks.
+        ProjectFile::from_data_file(&p.join("project.work")).unwrap();
+        BankFile::from_data_file(&p.join("bank01.work")).unwrap();
+    }
+
+    #[test]
+    fn create_project_rejects_invalid_name() {
+        let set = tmp_dir();
+        let err = create_project(
+            set.path().to_string_lossy().into_owned(),
+            "BAD/NAME".to_string(),
+        )
+        .unwrap_err();
+        assert!(err.contains("cannot be used in a folder name"));
+    }
+
+    #[test]
+    fn create_project_rejects_duplicate_name() {
+        let set = tmp_dir();
+        make_project(set.path(), "EXISTS");
+        let err = create_project(
+            set.path().to_string_lossy().into_owned(),
+            "EXISTS".to_string(),
+        )
+        .unwrap_err();
+        assert!(err.contains("already exists"));
+    }
+
+    #[test]
+    fn create_project_rejects_missing_set_path() {
+        let err = create_project("/no/such/set/path".to_string(), "FOO".to_string()).unwrap_err();
+        assert!(!err.is_empty());
     }
 }
