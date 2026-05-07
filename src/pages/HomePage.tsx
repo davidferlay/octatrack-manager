@@ -65,12 +65,16 @@ export function HomePage() {
   const [clipboard, setClipboard] = useState<ClipboardState | null>(null);
   const [renamingProject, setRenamingProject] = useState<{ project: OctatrackProject; setPath: string } | null>(null);
   const [draggedProject, setDraggedProject] = useState<DraggedProject | null>(null);
-  const [copyToast, setCopyToast] = useState<string | null>(null);
+  const [copyToast, setCopyToast] = useState<{ message: string; icon: string } | null>(null);
   const pageRef = useRef<HTMLElement>(null);
 
   function copyToClipboard(path: string, name: string) {
     setClipboard({ path, name });
-    setCopyToast(name);
+    showToast(`Copied "${name}"`, 'fa-copy');
+  }
+
+  function showToast(message: string, icon: string) {
+    setCopyToast({ message, icon });
     setTimeout(() => setCopyToast(null), 1500);
   }
 
@@ -341,7 +345,12 @@ export function HomePage() {
                         });
                       }}
                       onKeyDown={(e) => {
-                        if (e.key === 'F2') {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          startTransition(() => {
+                            navigate(`/project?path=${encodeURIComponent(project.path)}&name=${encodeURIComponent(project.name)}`);
+                          });
+                        } else if (e.key === 'F2') {
                           e.preventDefault();
                           const setPath = project.path.substring(0, project.path.lastIndexOf('/'));
                           setRenamingProject({ project, setPath });
@@ -353,23 +362,39 @@ export function HomePage() {
                           copyToClipboard(project.path, project.name);
                         } else if (['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(e.key)) {
                           const cards = Array.from(
-                            e.currentTarget.parentElement?.querySelectorAll('.project-card') ?? []
+                            e.currentTarget.parentElement?.querySelectorAll('.project-card.clickable-project') ?? []
                           ) as HTMLElement[];
                           const idx = cards.indexOf(e.currentTarget);
                           if (idx === -1) return;
                           let target: HTMLElement | undefined;
+                          const currentLeft = e.currentTarget.offsetLeft;
+                          const currentTop = e.currentTarget.offsetTop;
                           if (e.key === 'ArrowRight') target = cards[idx + 1] ?? cards[0];
                           else if (e.key === 'ArrowLeft') target = cards[idx - 1] ?? cards[cards.length - 1];
-                          else {
-                            const cols = cards.filter(c => c.offsetTop === cards[0].offsetTop).length;
-                            if (e.key === 'ArrowDown') target = cards[idx + cols] ?? cards[cards.length - 1];
-                            else target = cards[idx - cols] ?? cards[0];
+                          else if (e.key === 'ArrowDown') {
+                            const below = cards.filter(c => c.offsetTop > currentTop + 10);
+                            if (below.length > 0) {
+                              const nextRowTop = below[0].offsetTop;
+                              const nextRow = below.filter(c => Math.abs(c.offsetTop - nextRowTop) < 10);
+                              target = nextRow.reduce((best, c) => Math.abs(c.offsetLeft - currentLeft) < Math.abs(best.offsetLeft - currentLeft) ? c : best);
+                            } else {
+                              target = cards[cards.length - 1];
+                            }
+                          } else {
+                            const above = cards.filter(c => c.offsetTop < currentTop - 10);
+                            if (above.length > 0) {
+                              const prevRowTop = above[above.length - 1].offsetTop;
+                              const prevRow = above.filter(c => Math.abs(c.offsetTop - prevRowTop) < 10);
+                              target = prevRow.reduce((best, c) => Math.abs(c.offsetLeft - currentLeft) < Math.abs(best.offsetLeft - currentLeft) ? c : best);
+                            } else {
+                              target = cards[0];
+                            }
                           }
                           e.preventDefault();
                           target?.focus();
                         }
                       }}
-                      title="Click to view project details"
+                      title={`Click to view project details:\n${project.path}`}
                     >
                       <div className="project-name">{project.name}</div>
                       <div className="project-info">
@@ -433,6 +458,28 @@ export function HomePage() {
                                 const isSetOpen = openSets.has(setKey);
                                 return (
                                 <div key={setIdx} className="set-card" title={set.path}
+                                  onDragOver={(e) => {
+                                    if (draggedProject && draggedProject.sourceSetPath !== set.path) {
+                                      e.preventDefault();
+                                      e.dataTransfer.dropEffect = 'move';
+                                    }
+                                  }}
+                                  onDrop={(e) => {
+                                    if (!draggedProject || draggedProject.sourceSetPath === set.path) return;
+                                    e.preventDefault();
+                                    const sourceProjectPath = draggedProject.path;
+                                    const sourceSetPath = draggedProject.sourceSetPath;
+                                    setDraggedProject(null);
+                                    (async () => {
+                                      try {
+                                        await invoke('move_project', { srcPath: sourceProjectPath, destSetPath: set.path });
+                                        await rescanSet(sourceSetPath);
+                                        await rescanSet(set.path);
+                                      } catch (err) {
+                                        alert(`Move failed: ${err}`);
+                                      }
+                                    })();
+                                  }}
                                   onContextMenu={(e) => {
                                     e.preventDefault();
                                     // Don't show set menu when clicking on a project card (handled by ProjectGrid)
@@ -558,6 +605,7 @@ export function HomePage() {
                                               try {
                                                 await invoke('copy_project', { srcPath: clipboard.path, destSetPath: set.path });
                                                 await rescanSet(set.path);
+                                                showToast(`Pasted "${clipboard.name}"`, 'fa-paste');
                                               } catch (err) {
                                                 alert(`Paste failed: ${err}`);
                                               }
@@ -626,6 +674,7 @@ export function HomePage() {
                 destSetPath: setPath,
               });
               await rescanSet(setPath);
+              showToast(`Pasted "${clipboard.name}"`, 'fa-paste');
             } catch (err) {
               alert(`Paste failed: ${err}`);
             }
@@ -705,7 +754,7 @@ export function HomePage() {
 
       {copyToast && (
         <div className="copy-toast">
-          <i className="fas fa-copy"></i> Copied "{copyToast}"
+          <i className={`fas ${copyToast.icon}`}></i> {copyToast.message}
         </div>
       )}
     </main>

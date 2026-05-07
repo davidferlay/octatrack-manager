@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { filterProjectName, MAX_PROJECT_NAME_LEN } from '../utils/otCharset'
+import { filterProjectName, isCharAllowed, MAX_PROJECT_NAME_LEN } from '../utils/otCharset'
 import { CharsetInfoIcon } from './CharsetInfoIcon'
 
 export interface CreateProjectModalProps {
@@ -22,6 +22,11 @@ export function CreateProjectModal({
 
   useEffect(() => {
     inputRef.current?.focus()
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === 'Escape') onCancel()
+    }
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
   }, [])
 
   const empty = name.length === 0
@@ -37,7 +42,8 @@ export function CreateProjectModal({
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const [filtered, wasFiltered] = filterProjectName(e.target.value)
-    if (wasFiltered) {
+    const wasTruncated = [...e.target.value].filter(ch => isCharAllowed(ch)).length > MAX_PROJECT_NAME_LEN
+    if (wasFiltered || wasTruncated) {
       triggerShake()
     }
     setName_(filtered)

@@ -74,13 +74,18 @@ export function ProjectGrid({
     }
 
     // Arrow nav within this grid only.
+    const gridEl = e.currentTarget.parentElement
+    if (!gridEl) return
     const cards = Array.from(
-      e.currentTarget.parentElement?.querySelectorAll('.project-card') ?? []
+      gridEl.querySelectorAll('.project-card.clickable-project')
     ) as HTMLElement[]
     const idx = cards.indexOf(e.currentTarget)
     if (idx === -1) return
 
     let target: HTMLElement | undefined
+    const currentLeft = e.currentTarget.offsetLeft
+    const currentTop = e.currentTarget.offsetTop
+
     switch (e.key) {
       case 'ArrowRight':
         target = cards[idx + 1] ?? cards[0]
@@ -89,13 +94,31 @@ export function ProjectGrid({
         target = cards[idx - 1] ?? cards[cards.length - 1]
         break
       case 'ArrowDown': {
-        const cols = cards.filter((c) => c.offsetTop === cards[0].offsetTop).length
-        target = cards[idx + cols] ?? cards[cards.length - 1]
+        // Find cards in the immediately next row, then pick closest by offsetLeft
+        const below = cards.filter(c => c.offsetTop > currentTop + 10)
+        if (below.length > 0) {
+          const nextRowTop = below[0].offsetTop
+          const nextRow = below.filter(c => Math.abs(c.offsetTop - nextRowTop) < 10)
+          target = nextRow.reduce((best, c) =>
+            Math.abs(c.offsetLeft - currentLeft) < Math.abs(best.offsetLeft - currentLeft) ? c : best
+          )
+        } else {
+          target = cards[cards.length - 1]
+        }
         break
       }
       case 'ArrowUp': {
-        const cols = cards.filter((c) => c.offsetTop === cards[0].offsetTop).length
-        target = cards[idx - cols] ?? cards[0]
+        // Find cards in the immediately previous row, then pick closest by offsetLeft
+        const above = cards.filter(c => c.offsetTop < currentTop - 10)
+        if (above.length > 0) {
+          const prevRowTop = above[above.length - 1].offsetTop
+          const prevRow = above.filter(c => Math.abs(c.offsetTop - prevRowTop) < 10)
+          target = prevRow.reduce((best, c) =>
+            Math.abs(c.offsetLeft - currentLeft) < Math.abs(best.offsetLeft - currentLeft) ? c : best
+          )
+        } else {
+          target = cards[0]
+        }
         break
       }
       default:
