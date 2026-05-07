@@ -168,7 +168,7 @@ h1 {
 }
 
 .location-card:hover {
-  background-color: var(--elektron-medium-gray);
+  border-color: #555555;
   border-left-color: var(--elektron-orange-hover);
 }
 
@@ -198,7 +198,6 @@ h1 {
 }
 
 .location-header.clickable:hover {
-  opacity: 0.8;
 }
 
 .location-header-left {
