@@ -1119,7 +1119,7 @@ h1 {
 
 .charset-info-icon {
   color: var(--elektron-text-secondary);
-  font-size: 0.85rem;
+  font-size: 1rem;
   opacity: 0.6;
   transition: opacity 0.2s;
 }
@@ -1137,8 +1137,9 @@ h1 {
 .charset-tooltip {
   display: none;
   position: absolute;
-  bottom: calc(100% + 8px);
-  left: 0;
+  top: 50%;
+  left: calc(100% + 42px);
+  transform: translateY(-50%);
   background: var(--elektron-dark-gray);
   border: 1px solid var(--elektron-border);
   border-radius: 6px;
