@@ -30,8 +30,23 @@ const initialState = {
 async function setupTauriMocks(page: Page) {
   await page.addInitScript((state) => {
     let currentState = JSON.parse(JSON.stringify(state)) as typeof state
+    // Mock event plugin internals for listen/unlisten
+    ;(window as any).__TAURI_EVENT_PLUGIN_INTERNALS__ = {
+      unregisterListener: () => {},
+    }
     ;(window as any).__TAURI_INTERNALS__ = {
+      transformCallback: (cb: any) => {
+        // Return a callback ID (just a number)
+        return 0
+      },
       invoke: async (cmd: string, args: any) => {
+        // Handle Tauri internal event plugin commands
+        if (cmd === 'plugin:event|listen') {
+          return 0 // return a listener id
+        }
+        if (cmd === 'plugin:event|unlisten') {
+          return null
+        }
         switch (cmd) {
           case 'scan_devices':
             return {
@@ -40,7 +55,7 @@ async function setupTauriMocks(page: Page) {
                   name: 'TestLoc',
                   path: '/mock',
                   device_type: 'LocalCopy',
-                  sets: [currentState.setA, currentState.setB],
+                  sets: Object.values(currentState),
                 },
               ],
               standalone_projects: [],
@@ -73,7 +88,7 @@ async function setupTauriMocks(page: Page) {
             }
             throw new Error('Not found')
           }
-          case 'copy_project': {
+          case 'copy_project_with_progress': {
             const src = Object.values(currentState)
               .flatMap((s) => s.projects)
               .find((p) => p.path === args.srcPath)!
@@ -110,6 +125,58 @@ async function setupTauriMocks(page: Page) {
           case 'rescan_set': {
             return Object.values(currentState).find((s) => s.path === args.setPath)
           }
+          case 'create_set': {
+            const newSet: MockSet = {
+              name: args.name,
+              path: `${args.locationPath}/${args.name}`,
+              has_audio_pool: true,
+              projects: [],
+            }
+            ;(currentState as any)[args.name] = newSet
+            return newSet.path
+          }
+          case 'rename_set': {
+            const set = Object.values(currentState).find((s) => s.path === args.setPath)
+            if (set) {
+              const parentPath = args.setPath.substring(0, args.setPath.lastIndexOf('/'))
+              set.name = args.newName
+              set.path = `${parentPath}/${args.newName}`
+              return set.path
+            }
+            throw new Error('Not found')
+          }
+          case 'delete_set': {
+            for (const key of Object.keys(currentState)) {
+              if ((currentState as any)[key].path === args.setPath) {
+                delete (currentState as any)[key]
+                break
+              }
+            }
+            return null
+          }
+          case 'copy_set': {
+            const srcSet = Object.values(currentState).find((s) => s.path === args.srcPath)!
+            const baseName = srcSet.name
+            let newName = baseName
+            let n = 2
+            while (Object.values(currentState).some((s) => s.name === newName)) {
+              newName = `${baseName}_${n}`
+              n++
+            }
+            const newSet: MockSet = {
+              name: newName,
+              path: `${args.destLocationPath}/${newName}`,
+              has_audio_pool: srcSet.has_audio_pool,
+              projects: srcSet.projects.map((p) => ({
+                ...p,
+                path: `${args.destLocationPath}/${newName}/${p.name}`,
+              })),
+            }
+            ;(currentState as any)[newName] = newSet
+            return newSet.path
+          }
+          case 'cancel_copy_operation':
+            return null
           default:
             return null
         }
@@ -124,6 +191,8 @@ test.beforeEach(async ({ page }) => {
   await page.getByRole('button', { name: /scan/i }).click()
   await expect(page.getByText('PROJ_A')).toBeVisible()
 })
+
+// --- Project operations ---
 
 test('create project via + card', async ({ page }) => {
   await page.getByLabel('New project in SetA').click()
@@ -167,8 +236,7 @@ test('delete cancellation keeps project', async ({ page }) => {
 
 test('copy + paste produces _2 suffix', async ({ page }) => {
   await page.getByText('PROJ_A').click({ button: 'right' })
-  await page.getByText(/^copy$/i).click()
-  // Right-click on the set-header to get set context menu
+  await page.getByRole('button', { name: 'Copy', exact: true }).click()
   await page.locator('.set-header').first().click({ button: 'right' })
   await page.getByText(/paste/i).click()
   await expect(page.getByText('PROJ_A_2')).toBeVisible()
@@ -189,13 +257,15 @@ test('keyboard: F2 opens rename modal', async ({ page }) => {
 
 test('copy shows confirmation toast', async ({ page }) => {
   await page.getByText('PROJ_A').click({ button: 'right' })
-  await page.getByText(/^copy$/i).click()
+  await page.getByRole('button', { name: 'Copy', exact: true }).click()
   await expect(page.locator('.copy-toast')).toContainText('PROJ_A')
 })
 
 test('context menu on set-card header shows set actions', async ({ page }) => {
   await page.locator('.set-header').first().click({ button: 'right' })
-  await expect(page.getByText(/new project/i)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Copy Set' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Rename Set' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Delete Set' })).toBeVisible()
 })
 
 test('keyboard: Ctrl+C then Ctrl+V on Set grid pastes', async ({ page }) => {
@@ -213,4 +283,62 @@ test('keyboard: Ctrl+C then Ctrl+V on Set grid pastes', async ({ page }) => {
 
   // PROJ_A pasted into SetB; in this mock state, name is unique so no _2 suffix.
   await expect(page.locator('.project-card', { hasText: 'PROJ_A' })).toHaveCount(2)
+})
+
+// --- Set operations ---
+
+test('context menu on set header shows set operations', async ({ page }) => {
+  await page.locator('.set-header').first().click({ button: 'right' })
+  await expect(page.getByText(/copy set/i)).toBeVisible()
+  await expect(page.getByText(/rename set/i)).toBeVisible()
+  await expect(page.getByText(/delete set/i)).toBeVisible()
+})
+
+test('rename set via context menu', async ({ page }) => {
+  await page.locator('.set-header').first().click({ button: 'right' })
+  await page.getByText(/rename set/i).click()
+  const input = page.getByRole('textbox')
+  await input.fill('NEWSET')
+  await page.getByRole('button', { name: /^rename$/i }).click()
+  await expect(page.locator('.set-name', { hasText: 'NEWSET' })).toBeVisible()
+  await expect(page.locator('.set-name', { hasText: 'SetA' })).not.toBeVisible()
+})
+
+test('delete set via context menu', async ({ page }) => {
+  await page.locator('.set-header').first().click({ button: 'right' })
+  await page.getByRole('button', { name: 'Delete Set' }).click()
+  await expect(page.getByRole('button', { name: /^delete$/i })).toBeVisible()
+  await page.getByRole('button', { name: /^delete$/i }).click()
+  await expect(page.locator('.set-name', { hasText: 'SetA' })).not.toBeVisible()
+})
+
+test('delete set cancellation keeps set', async ({ page }) => {
+  await page.locator('.set-header').first().click({ button: 'right' })
+  await page.getByText(/delete set/i).click()
+  await page.getByRole('button', { name: /cancel/i }).click()
+  await expect(page.locator('.set-name', { hasText: 'SetA' })).toBeVisible()
+})
+
+test('create set via location context menu', async ({ page }) => {
+  await page.locator('.location-header').first().click({ button: 'right' })
+  await page.getByText(/new set/i).click()
+  const input = page.getByRole('textbox')
+  await input.fill('BRAND_NEW')
+  await page.getByRole('button', { name: /^create$/i }).click()
+  await expect(page.locator('.set-name', { hasText: 'BRAND_NEW' })).toBeVisible()
+})
+
+test('copy set shows toast', async ({ page }) => {
+  await page.locator('.set-header').first().click({ button: 'right' })
+  await page.getByText(/copy set/i).click()
+  await expect(page.locator('.copy-toast')).toContainText('SetA')
+})
+
+test('location context menu shows paste set when set copied', async ({ page }) => {
+  // Copy a set first
+  await page.locator('.set-header').first().click({ button: 'right' })
+  await page.getByText(/copy set/i).click()
+  // Right-click location header
+  await page.locator('.location-header').first().click({ button: 'right' })
+  await expect(page.getByText(/paste set/i)).toBeVisible()
 })
