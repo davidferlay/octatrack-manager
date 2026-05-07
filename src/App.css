@@ -1119,7 +1119,7 @@ h1 {
 
 .charset-info-icon {
   color: var(--elektron-text-secondary);
-  font-size: 1rem;
+  font-size: 1.15rem;
   opacity: 0.6;
   transition: opacity 0.2s;
 }
