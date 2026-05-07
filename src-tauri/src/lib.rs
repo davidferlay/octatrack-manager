@@ -769,10 +769,16 @@ pub fn run() {
             // Project Management
             project_manager::create_project,
             project_manager::copy_project,
+            project_manager::copy_project_with_progress,
+            project_manager::copy_set,
+            project_manager::cancel_copy_operation,
             project_manager::rename_project,
             project_manager::move_project,
             project_manager::delete_project,
             project_manager::rescan_set,
+            project_manager::create_set,
+            project_manager::rename_set,
+            project_manager::delete_set,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

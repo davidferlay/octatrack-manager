@@ -12,24 +12,24 @@ const baseProps = {
 }
 
 describe('CreateProjectModal', () => {
-  it('renders with empty input and 0 / 12 counter', () => {
+  it('renders with empty input and 0 / 32 counter', () => {
     render(<CreateProjectModal {...baseProps} />)
     expect(screen.getByRole('textbox')).toHaveValue('')
-    expect(screen.getByText(/0\s*\/\s*12/)).toBeInTheDocument()
+    expect(screen.getByText(/0\s*\/\s*32/)).toBeInTheDocument()
   })
 
   it('updates counter as the user types', async () => {
     const u = userEvent.setup()
     render(<CreateProjectModal {...baseProps} />)
     await u.type(screen.getByRole('textbox'), 'HELLO')
-    expect(screen.getByText(/5\s*\/\s*12/)).toBeInTheDocument()
+    expect(screen.getByText(/5\s*\/\s*32/)).toBeInTheDocument()
   })
 
-  it('caps input at 12 chars', async () => {
+  it('caps input at 32 chars', async () => {
     const u = userEvent.setup()
     render(<CreateProjectModal {...baseProps} />)
-    await u.type(screen.getByRole('textbox'), 'ABCDEFGHIJKLMNO')
-    expect(screen.getByRole('textbox')).toHaveValue('ABCDEFGHIJKL')
+    await u.type(screen.getByRole('textbox'), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567')
+    expect(screen.getByRole('textbox')).toHaveValue('ABCDEFGHIJKLMNOPQRSTUVWXYZ123456')
   })
 
   it('silently filters unsupported OT chars', async () => {

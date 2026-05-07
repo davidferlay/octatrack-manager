@@ -1,10 +1,12 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 
 export interface DeleteProjectDialogProps {
   projectName: string
   setName: string
   onConfirm: () => void
   onCancel: () => void
+  title?: string
+  message?: ReactNode
 }
 
 export function DeleteProjectDialog({
@@ -12,6 +14,8 @@ export function DeleteProjectDialog({
   setName,
   onConfirm,
   onCancel,
+  title = 'Delete Project',
+  message,
 }: DeleteProjectDialogProps) {
   const cancelRef = useRef<HTMLButtonElement>(null)
 
@@ -31,14 +35,14 @@ export function DeleteProjectDialog({
     <div className="modal-overlay" onClick={onCancel}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3><i className="fas fa-trash" style={{ color: '#dc3545', marginRight: '0.5rem' }}></i>Delete Project</h3>
+          <h3><i className="fas fa-trash" style={{ color: '#dc3545', marginRight: '0.5rem' }}></i>{title}</h3>
         </div>
         <div className="modal-body">
           <p>
-            Are you sure you want to delete <strong>"{projectName}"</strong> from{' '}
-            <strong>{setName}</strong>?
+            {message ?? <>Are you sure you want to delete <strong>"{projectName}"</strong> from{' '}
+            <strong>{setName}</strong>?</>}
           </p>
-          <p style={{ color: '#dc3545' }}>This action cannot be undone.</p>
+          <p style={{ color: '#dc3545', textAlign: 'center' }}>This action cannot be undone.</p>
         </div>
         <div className="modal-footer">
           <div className="modal-buttons-row">

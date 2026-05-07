@@ -51,13 +51,13 @@ describe('RenameProjectModal', () => {
     expect(onCancel).toHaveBeenCalled()
   })
 
-  it('caps input at 12 chars', async () => {
+  it('caps input at 32 chars', async () => {
     const u = userEvent.setup()
     render(<RenameProjectModal {...baseProps} />)
     const input = screen.getByRole('textbox')
     await u.clear(input)
-    await u.type(input, 'ABCDEFGHIJKLMNO')
-    expect(input).toHaveValue('ABCDEFGHIJKL')
+    await u.type(input, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567')
+    expect(input).toHaveValue('ABCDEFGHIJKLMNOPQRSTUVWXYZ123456')
   })
 
   it('silently filters invalid OT characters', async () => {

@@ -7,11 +7,16 @@ export interface ProjectContextMenuProps {
   target: ContextTarget
   clipboard: ClipboardState | null
   onCopy: () => void
+  onCopySet: () => void
   onRename: () => void
   onDelete: () => void
   onOpenInFileManager: () => void
   onPaste: () => void
+  onPasteSet: () => void
   onCreateNew: () => void
+  onRenameSet: () => void
+  onDeleteSet: () => void
+  onCreateSet: () => void
   onClose: () => void
 }
 
@@ -73,14 +78,40 @@ export function ProjectContextMenu(props: ProjectContextMenuProps) {
       )}
       {target.kind === 'set' && (
         <>
+          <button className="context-menu-item" onClick={fire(props.onCopySet)}>
+            <i className="fas fa-copy"></i> Copy Set
+          </button>
+          <button className="context-menu-item" onClick={fire(props.onRenameSet)}>
+            <i className="fas fa-edit"></i> Rename Set
+          </button>
+          <div className="context-menu-separator"></div>
           <button className="context-menu-item" onClick={fire(props.onCreateNew)}>
             <i className="fas fa-plus"></i> New Project
           </button>
-          {clipboard && (
+          {clipboard && clipboard.kind === 'project' && (
             <>
               <div className="context-menu-separator"></div>
               <button className="context-menu-item" onClick={fire(props.onPaste)}>
                 <i className="fas fa-paste"></i> Paste Project
+              </button>
+            </>
+          )}
+          <div className="context-menu-separator"></div>
+          <button className="context-menu-item danger" onClick={fire(props.onDeleteSet)}>
+            <i className="fas fa-trash"></i> Delete Set
+          </button>
+        </>
+      )}
+      {target.kind === 'location' && (
+        <>
+          <button className="context-menu-item" onClick={fire(props.onCreateSet)}>
+            <i className="fas fa-plus"></i> New Set
+          </button>
+          {clipboard && clipboard.kind === 'set' && (
+            <>
+              <div className="context-menu-separator"></div>
+              <button className="context-menu-item" onClick={fire(props.onPasteSet)}>
+                <i className="fas fa-paste"></i> Paste Set
               </button>
             </>
           )}

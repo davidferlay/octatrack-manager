@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { filterProjectName, isCharAllowed, MAX_PROJECT_NAME_LEN } from '../utils/otCharset'
 import { CharsetInfoIcon } from './CharsetInfoIcon'
 
@@ -8,6 +8,11 @@ export interface CreateProjectModalProps {
   existingNames: string[]
   onConfirm: (name: string) => void
   onCancel: () => void
+  title?: string
+  prompt?: ReactNode
+  placeholder?: string
+  duplicateMessage?: string
+  buttonLabel?: string
 }
 
 export function CreateProjectModal({
@@ -15,6 +20,11 @@ export function CreateProjectModal({
   existingNames,
   onConfirm,
   onCancel,
+  title = 'New Project',
+  prompt: promptText,
+  placeholder = 'Project name',
+  duplicateMessage,
+  buttonLabel = 'Create',
 }: CreateProjectModalProps) {
   const [name, setName_] = useState('')
   const [shaking, setShaking] = useState(false)
@@ -31,7 +41,7 @@ export function CreateProjectModal({
 
   const empty = name.length === 0
   const duplicate = !empty && existingNames.includes(name)
-  const error = empty ? 'Name is required' : duplicate ? `A project named '${name}' already exists in this Set` : null
+  const error = empty ? 'Name is required' : duplicate ? (duplicateMessage ?? `A project named '${name}' already exists in this Set`) : null
   const canSubmit = !empty && !duplicate
 
   function triggerShake() {
@@ -63,10 +73,10 @@ export function CreateProjectModal({
     <div className="modal-overlay" onClick={onCancel}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3><i className="fas fa-plus" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>New Project</h3>
+          <h3><i className="fas fa-plus" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>{title}</h3>
         </div>
         <div className="modal-body">
-          <p>Create a new project in <strong>{setName}</strong>:</p>
+          <p>{promptText ?? <>Create a new project in <strong>{setName}</strong>:</>}</p>
           <div className="modal-input-wrapper">
             <input
               ref={inputRef}
@@ -75,8 +85,8 @@ export function CreateProjectModal({
               value={name}
               onChange={handleChange}
               onKeyDown={handleKeyDown}
-              placeholder="Project name"
-              aria-label="Project name"
+              placeholder={placeholder}
+              aria-label={placeholder}
             />
             <CharsetInfoIcon />
           </div>
@@ -89,7 +99,7 @@ export function CreateProjectModal({
               Cancel
             </button>
             <button className="modal-button primary" onClick={() => canSubmit && onConfirm(name)} disabled={!canSubmit}>
-              Create
+              {buttonLabel}
             </button>
           </div>
         </div>

@@ -7,6 +7,9 @@ export interface RenameProjectModalProps {
   existingNames?: string[]
   onConfirm: (newName: string) => void
   onCancel: () => void
+  title?: string
+  duplicateMessage?: string
+  buttonLabel?: string
 }
 
 export function RenameProjectModal({
@@ -14,6 +17,9 @@ export function RenameProjectModal({
   existingNames = [],
   onConfirm,
   onCancel,
+  title = 'Rename Project',
+  duplicateMessage,
+  buttonLabel = 'Rename',
 }: RenameProjectModalProps) {
   const [name, setName] = useState(projectName)
   const [shaking, setShaking] = useState(false)
@@ -32,7 +38,7 @@ export function RenameProjectModal({
   const unchanged = name === projectName
   const duplicate = !unchanged && existingNames.includes(name)
   const empty = name.length === 0
-  const error = empty ? 'Name is required' : duplicate ? `A project named '${name}' already exists` : null
+  const error = empty ? 'Name is required' : duplicate ? (duplicateMessage ?? `A project named '${name}' already exists`) : null
   const canSubmit = !empty && !unchanged && !duplicate
 
   function triggerShake() {
@@ -65,7 +71,7 @@ export function RenameProjectModal({
     <div className="modal-overlay" onClick={onCancel}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3><i className="fas fa-edit" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>Rename Project</h3>
+          <h3><i className="fas fa-edit" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>{title}</h3>
         </div>
         <div className="modal-body">
           <p>Enter new name for <strong>"{projectName}"</strong>:</p>
@@ -95,7 +101,7 @@ export function RenameProjectModal({
               disabled={!canSubmit}
               title={unchanged ? 'Name is unchanged' : undefined}
             >
-              Rename
+              {buttonLabel}
             </button>
           </div>
         </div>

@@ -10,6 +10,7 @@ import { CreateProjectModal } from "../components/CreateProjectModal";
 import { DeleteProjectDialog } from "../components/DeleteProjectDialog";
 import { RenameProjectModal } from "../components/RenameProjectModal";
 import { ProjectContextMenu } from "../components/ProjectContextMenu";
+import { CopyProgressModal } from "../components/CopyProgressModal";
 import type {
   ClipboardState,
   ContextMenuState,
@@ -66,11 +67,20 @@ export function HomePage() {
   const [renamingProject, setRenamingProject] = useState<{ project: OctatrackProject; setPath: string } | null>(null);
   const [draggedProject, setDraggedProject] = useState<DraggedProject | null>(null);
   const [copyToast, setCopyToast] = useState<{ message: string; icon: string } | null>(null);
+  const [copyProgress, setCopyProgress] = useState<{ transferId: string; label: string; command: string; commandArgs: Record<string, unknown>; setPath?: string; locationPath?: string } | null>(null);
+  const [renamingSet, setRenamingSet] = useState<{ setPath: string; setName: string; locationPath: string } | null>(null);
+  const [deleteSetTarget, setDeleteSetTarget] = useState<{ setPath: string; setName: string; locationPath: string } | null>(null);
+  const [createSetTarget, setCreateSetTarget] = useState<{ locationPath: string; locationName: string } | null>(null);
   const pageRef = useRef<HTMLElement>(null);
 
   function copyToClipboard(path: string, name: string) {
-    setClipboard({ path, name });
+    setClipboard({ kind: 'project', path, name });
     showToast(`Copied "${name}"`, 'fa-copy');
+  }
+
+  function copySetToClipboard(path: string, name: string) {
+    setClipboard({ kind: 'set', path, name });
+    showToast(`Copied set "${name}"`, 'fa-copy');
   }
 
   function showToast(message: string, icon: string) {
@@ -432,6 +442,15 @@ export function HomePage() {
                         <div
                           className="location-header clickable"
                           onClick={() => toggleLocation(locIdx)}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setContextMenu({
+                              x: e.clientX,
+                              y: e.clientY,
+                              target: { kind: 'location', locationPath: location.path, locationName: location.name },
+                            });
+                          }}
                         >
                           <div className="location-header-left">
                             <span className="collapse-indicator">{isOpen ? '▼' : '▶'}</span>
@@ -600,15 +619,16 @@ export function HomePage() {
                                             }}
                                             clipboard={clipboard}
                                             onCopy={(p) => copyToClipboard(p.path, p.name)}
-                                            onPaste={async () => {
-                                              if (!clipboard) return;
-                                              try {
-                                                await invoke('copy_project', { srcPath: clipboard.path, destSetPath: set.path });
-                                                await rescanSet(set.path);
-                                                showToast(`Pasted "${clipboard.name}"`, 'fa-paste');
-                                              } catch (err) {
-                                                alert(`Paste failed: ${err}`);
-                                              }
+                                            onPaste={() => {
+                                              if (!clipboard || clipboard.kind !== 'project') return;
+                                              const transferId = crypto.randomUUID();
+                                              setCopyProgress({
+                                                transferId,
+                                                label: `Copying project ${clipboard.name}...`,
+                                                command: 'copy_project_with_progress',
+                                                commandArgs: { srcPath: clipboard.path, destSetPath: set.path },
+                                                setPath: set.path,
+                                              });
                                             }}
                                             onDeleteRequest={(p) => setDeleteTarget({ project: p, setName: set.name })}
                                             onRenameRequest={(p) => setRenamingProject({ project: p, setPath: set.path })}
@@ -647,6 +667,11 @@ export function HomePage() {
               );
             }
           }}
+          onCopySet={() => {
+            if (contextMenu.target.kind === 'set') {
+              copySetToClipboard(contextMenu.target.setPath, contextMenu.target.setName);
+            }
+          }}
           onRename={() => {
             if (contextMenu.target.kind === 'project') {
               setRenamingProject({ project: contextMenu.target.project, setPath: contextMenu.target.setPath });
@@ -666,24 +691,64 @@ export function HomePage() {
             }
           }}
           onPaste={async () => {
-            if (!clipboard) return;
+            if (!clipboard || clipboard.kind !== 'project' || contextMenu.target.kind !== 'set') return;
             const setPath = contextMenu.target.setPath;
-            try {
-              await invoke('copy_project', {
-                srcPath: clipboard.path,
-                destSetPath: setPath,
-              });
-              await rescanSet(setPath);
-              showToast(`Pasted "${clipboard.name}"`, 'fa-paste');
-            } catch (err) {
-              alert(`Paste failed: ${err}`);
-            }
+            const transferId = crypto.randomUUID();
+            setCopyProgress({
+              transferId,
+              label: `Copying project ${clipboard.name}...`,
+              command: 'copy_project_with_progress',
+              commandArgs: { srcPath: clipboard.path, destSetPath: setPath },
+              setPath,
+            });
+          }}
+          onPasteSet={() => {
+            if (!clipboard || clipboard.kind !== 'set' || contextMenu.target.kind !== 'location') return;
+            const locationPath = contextMenu.target.locationPath;
+            const transferId = crypto.randomUUID();
+            setCopyProgress({
+              transferId,
+              label: `Copying set ${clipboard.name}...`,
+              command: 'copy_set',
+              commandArgs: { srcPath: clipboard.path, destLocationPath: locationPath },
+              locationPath,
+            });
           }}
           onCreateNew={() => {
             if (contextMenu.target.kind === 'set') {
               setCreateModalTarget({
                 setPath: contextMenu.target.setPath,
                 setName: contextMenu.target.setName,
+              });
+            }
+          }}
+          onRenameSet={() => {
+            if (contextMenu.target.kind === 'set') {
+              const t = contextMenu.target;
+              const locationPath = locations.find(l => l.sets.some(s => s.path === t.setPath))?.path ?? '';
+              setRenamingSet({
+                setPath: t.setPath,
+                setName: t.setName,
+                locationPath,
+              });
+            }
+          }}
+          onDeleteSet={() => {
+            if (contextMenu.target.kind === 'set') {
+              const t = contextMenu.target;
+              const locationPath = locations.find(l => l.sets.some(s => s.path === t.setPath))?.path ?? '';
+              setDeleteSetTarget({
+                setPath: t.setPath,
+                setName: t.setName,
+                locationPath,
+              });
+            }
+          }}
+          onCreateSet={() => {
+            if (contextMenu.target.kind === 'location') {
+              setCreateSetTarget({
+                locationPath: contextMenu.target.locationPath,
+                locationName: contextMenu.target.locationName,
               });
             }
           }}
@@ -750,7 +815,134 @@ export function HomePage() {
         />
       )}
 
+      {renamingSet && (
+        <RenameProjectModal
+          projectName={renamingSet.setName}
+          existingNames={
+            locations.find(l => l.path === renamingSet.locationPath)?.sets.map(s => s.name) ?? []
+          }
+          title="Rename Set"
+          duplicateMessage={`A set named '${renamingSet.setName}' already exists`}
+          buttonLabel="Rename"
+          onConfirm={async (newName) => {
+            setRenamingSet(null);
+            try {
+              const newPath = await invoke<string>('rename_set', { setPath: renamingSet.setPath, newName });
+              setLocations((prev) =>
+                prev.map((loc) => ({
+                  ...loc,
+                  sets: loc.sets.map((s) =>
+                    s.path === renamingSet.setPath
+                      ? { ...s, name: newName, path: newPath }
+                      : s
+                  ),
+                }))
+              );
+              showToast(`Renamed set to "${newName}"`, 'fa-edit');
+            } catch (err) {
+              alert(`Rename set failed: ${err}`);
+            }
+          }}
+          onCancel={() => setRenamingSet(null)}
+        />
+      )}
+
+      {deleteSetTarget && (
+        <DeleteProjectDialog
+          projectName={deleteSetTarget.setName}
+          setName={deleteSetTarget.locationPath.split('/').pop() ?? 'location'}
+          title="Delete Set"
+          message={<>Are you sure you want to delete set <strong>"{deleteSetTarget.setName}"</strong> and all its projects? This action cannot be undone.</>}
+          onConfirm={async () => {
+            try {
+              await invoke('delete_set', { setPath: deleteSetTarget.setPath });
+              setLocations((prev) =>
+                prev.map((loc) => ({
+                  ...loc,
+                  sets: loc.sets.filter((s) => s.path !== deleteSetTarget.setPath),
+                }))
+              );
+              showToast(`Deleted set "${deleteSetTarget.setName}"`, 'fa-trash');
+            } catch (err) {
+              alert(`Delete set failed: ${err}`);
+            }
+            setDeleteSetTarget(null);
+          }}
+          onCancel={() => setDeleteSetTarget(null)}
+        />
+      )}
+
+      {createSetTarget && (
+        <CreateProjectModal
+          setPath={createSetTarget.locationPath}
+          setName={createSetTarget.locationName}
+          existingNames={
+            locations.find(l => l.path === createSetTarget.locationPath)?.sets.map(s => s.name) ?? []
+          }
+          title="New Set"
+          prompt={<>Create a new set in <strong>{createSetTarget.locationName}</strong>:</>}
+          placeholder="Set name"
+          duplicateMessage={`A set with this name already exists`}
+          buttonLabel="Create"
+          onConfirm={async (name) => {
+            try {
+              const newSetPath = await invoke<string>('create_set', { locationPath: createSetTarget.locationPath, name });
+              const newSet = await invoke<OctatrackSet>('rescan_set', { setPath: newSetPath });
+              setLocations((prev) =>
+                prev.map((loc) =>
+                  loc.path === createSetTarget.locationPath
+                    ? { ...loc, sets: [...loc.sets, newSet] }
+                    : loc
+                )
+              );
+              showToast(`Created set "${name}"`, 'fa-plus');
+            } catch (err) {
+              alert(`Create set failed: ${err}`);
+            }
+            setCreateSetTarget(null);
+          }}
+          onCancel={() => setCreateSetTarget(null)}
+        />
+      )}
+
       <ScrollToTop />
+
+      {copyProgress && (
+        <CopyProgressModal
+          transferId={copyProgress.transferId}
+          label={copyProgress.label}
+          command={copyProgress.command}
+          commandArgs={copyProgress.commandArgs}
+          onComplete={async (result) => {
+            const cp = copyProgress;
+            setCopyProgress(null);
+            if (cp.setPath) {
+              await rescanSet(cp.setPath);
+              showToast(`Pasted successfully`, 'fa-paste');
+            } else if (cp.locationPath) {
+              // result is the new set path from copy_set
+              try {
+                const newSet = await invoke<OctatrackSet>('rescan_set', { setPath: result });
+                setLocations((prev) =>
+                  prev.map((loc) =>
+                    loc.path === cp.locationPath
+                      ? { ...loc, sets: [...loc.sets, newSet] }
+                      : loc
+                  )
+                );
+              } catch {
+                await scanDevices();
+              }
+              showToast(`Set pasted successfully`, 'fa-paste');
+            }
+          }}
+          onCancel={() => setCopyProgress(null)}
+          onError={(err) => {
+            setCopyProgress(null);
+            alert(`Copy failed: ${err}`);
+          }}
+        />
+      )}
 
       {copyToast && (
         <div className="copy-toast">

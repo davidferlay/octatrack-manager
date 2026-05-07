@@ -13,6 +13,7 @@ export interface OctatrackSet {
 }
 
 export interface ClipboardState {
+  kind: 'project' | 'set'
   path: string
   name: string
 }
@@ -26,6 +27,7 @@ export interface DraggedProject {
 export type ContextTarget =
   | { kind: 'project'; project: OctatrackProject; setPath: string; setName: string }
   | { kind: 'set'; setPath: string; setName: string }
+  | { kind: 'location'; locationPath: string; locationName: string }
 
 export interface ContextMenuState {
   x: number

@@ -14,11 +14,16 @@ const setTarget: ContextTarget = { kind: 'set', setPath: '/s', setName: 'S' }
 
 const handlers = {
   onCopy: vi.fn(),
+  onCopySet: vi.fn(),
   onRename: vi.fn(),
   onDelete: vi.fn(),
   onOpenInFileManager: vi.fn(),
   onPaste: vi.fn(),
+  onPasteSet: vi.fn(),
   onCreateNew: vi.fn(),
+  onRenameSet: vi.fn(),
+  onDeleteSet: vi.fn(),
+  onCreateSet: vi.fn(),
   onClose: vi.fn(),
 }
 
@@ -68,7 +73,7 @@ describe('ProjectContextMenu', () => {
   })
 
   it('shows Paste when clipboard is set', () => {
-    const clipboard: ClipboardState = { path: '/p/A', name: 'A' }
+    const clipboard: ClipboardState = { kind: 'project', path: '/p/A', name: 'A' }
     render(
       <ProjectContextMenu
         x={0}
@@ -137,7 +142,7 @@ describe('ProjectContextMenu', () => {
   })
 
   it('does not show Paste on project target even with clipboard', () => {
-    const clipboard: ClipboardState = { path: '/p/A', name: 'A' }
+    const clipboard: ClipboardState = { kind: 'project', path: '/p/A', name: 'A' }
     render(
       <ProjectContextMenu
         x={0}

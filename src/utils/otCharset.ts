@@ -26,7 +26,7 @@ export const OT_CHARSET =
 export const FS_FORBIDDEN = ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
 
 /** Maximum project name length on the Octatrack. */
-export const MAX_PROJECT_NAME_LEN = 12
+export const MAX_PROJECT_NAME_LEN = 32
 
 /**
  * The usable character set: OT-supported minus filesystem-forbidden.

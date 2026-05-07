@@ -1,13 +1,20 @@
 //! Project management commands: create, copy, rename, move, delete, rescan.
 //! See `docs/superpowers/specs/2026-04-25-project-management-design.md`.
 
+use crate::audio_pool::{
+    cancel_transfer, is_cancelled, register_cancellation_token, remove_cancellation_token,
+};
 use crate::device_detection::{
     has_valid_audio_pool, is_octatrack_set, scan_for_projects, OctatrackSet,
 };
 use fs2::available_space;
 use ot_tools_io::{BankFile, OctatrackFileIO, ProjectFile};
+use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+use tauri::{AppHandle, Emitter};
 use walkdir::WalkDir;
 
 /// Characters allowed in Octatrack project names, transcribed from MKII hardware.
@@ -31,10 +38,10 @@ pub const OT_CHARSET: &str = concat!(
 const FS_FORBIDDEN: &[char] = &['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
 
 /// Hardware-imposed maximum length of an Octatrack project folder name.
-pub(crate) const MAX_NAME_LEN: usize = 12;
+pub(crate) const MAX_NAME_LEN: usize = 32;
 
 /// Validates a candidate Octatrack project folder name against the hardware
-/// charset, the host filesystem's forbidden characters, and the 12-character
+/// charset, the host filesystem's forbidden characters, and the 32-character
 /// limit. Order matters: empty → length → fs-forbidden → not-in-charset.
 /// The fs-forbidden check intentionally fires before the charset check so that
 /// characters like `/` (which are in `OT_CHARSET` but illegal in folder names)
@@ -106,7 +113,7 @@ pub fn dir_size(path: &Path) -> std::io::Result<u64> {
 
 /// Generates a non-colliding copy name in `dest_set` based on `base`.
 /// Format: `"{base}_{n}"` for n = 2, 3, 4, …
-/// If `"{base}_{n}"` exceeds 12 chars, the base is truncated until it fits.
+/// If `"{base}_{n}"` exceeds 32 chars, the base is truncated until it fits.
 pub fn next_available_copy_name(base: &str, dest_set: &Path) -> Result<String, String> {
     if base.is_empty() {
         return Err("Cannot generate copy name from empty base".to_string());
@@ -118,7 +125,7 @@ pub fn next_available_copy_name(base: &str, dest_set: &Path) -> Result<String, S
         let max_base_len = MAX_NAME_LEN.saturating_sub(suffix_len);
         let truncated_base: String = base.chars().take(max_base_len).collect();
         if truncated_base.is_empty() {
-            return Err("Suffix too long to fit in 12-char limit".to_string());
+            return Err("Suffix too long to fit in 32-char limit".to_string());
         }
         let candidate = format!("{}{}", truncated_base, suffix);
         if !dest_set.join(&candidate).exists() {
@@ -215,6 +222,82 @@ fn count_projects_in_set(set: &Path) -> usize {
 }
 
 /// Recursively copies `src` directory to `dest`. Stops on first error.
+#[derive(Clone, Serialize)]
+struct ProjectCopyProgress {
+    transfer_id: String,
+    label: String,
+    progress: f32, // 0.0 to 1.0
+    stage: String, // "copying", "complete", "cancelled", "error"
+}
+
+/// Count total files in a directory tree.
+fn count_files_recursive(path: &Path) -> u64 {
+    WalkDir::new(path)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+        .count() as u64
+}
+
+/// Copy a directory recursively with progress events and cancel support.
+fn copy_dir_recursive_with_progress(
+    src: &Path,
+    dest: &Path,
+    app: &AppHandle,
+    transfer_id: &str,
+    label: &str,
+    cancel_token: &Arc<AtomicBool>,
+    total_files: u64,
+    copied_so_far: &mut u64,
+) -> Result<(), String> {
+    fs::create_dir_all(dest).map_err(|e| format!("Failed to create directory: {}", e))?;
+    let entries: Vec<_> = fs::read_dir(src)
+        .map_err(|e| format!("Failed to read directory: {}", e))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("Failed to read entry: {}", e))?;
+
+    for entry in entries {
+        if is_cancelled(cancel_token) {
+            return Err("Cancelled".to_string());
+        }
+        let from = entry.path();
+        let to = dest.join(entry.file_name());
+        if entry.file_type().map_err(|e| e.to_string())?.is_dir() {
+            copy_dir_recursive_with_progress(
+                &from,
+                &to,
+                app,
+                transfer_id,
+                label,
+                cancel_token,
+                total_files,
+                copied_so_far,
+            )?;
+        } else {
+            fs::copy(&from, &to).map_err(|e| format!("Copy failed: {}", e))?;
+            *copied_so_far += 1;
+            let progress = if total_files > 0 {
+                *copied_so_far as f32 / total_files as f32
+            } else {
+                0.0
+            };
+            let emit_result = app.emit(
+                "copy-progress",
+                ProjectCopyProgress {
+                    transfer_id: transfer_id.to_string(),
+                    label: label.to_string(),
+                    progress,
+                    stage: "copying".to_string(),
+                },
+            );
+            if let Err(_e) = emit_result {
+                // emit failed, but we continue copying
+            }
+        }
+    }
+    Ok(())
+}
+
 fn copy_dir_recursive(src: &Path, dest: &Path) -> std::io::Result<()> {
     fs::create_dir_all(dest)?;
     for entry in fs::read_dir(src)? {
@@ -282,6 +365,215 @@ pub async fn copy_project(src_path: String, dest_set_path: String) -> Result<Str
     })
     .await
     .map_err(|e| format!("Background task failed: {}", e))?
+}
+
+/// Copies a project with progress events and cancel support.
+#[tauri::command]
+pub async fn copy_project_with_progress(
+    app: AppHandle,
+    src_path: String,
+    dest_set_path: String,
+    transfer_id: String,
+) -> Result<String, String> {
+    let cancel_token = register_cancellation_token(&transfer_id);
+    let tid = transfer_id.clone();
+
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let src = Path::new(&src_path);
+        let dest_set = Path::new(&dest_set_path);
+
+        if !src.is_dir() {
+            return Err(format!("Source project does not exist: {}", src.display()));
+        }
+        if !dest_set.is_dir() {
+            return Err(format!(
+                "Destination Set does not exist: {}",
+                dest_set.display()
+            ));
+        }
+        if count_projects_in_set(dest_set) >= MAX_PROJECTS_PER_SET {
+            return Err(format!(
+                "Destination Set is at the {}-project limit",
+                MAX_PROJECTS_PER_SET
+            ));
+        }
+
+        let base = src
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| "Source path has no valid name".to_string())?;
+        let dest_name = if !dest_set.join(base).exists() {
+            base.to_string()
+        } else {
+            next_available_copy_name(base, dest_set)?
+        };
+        let dest_path = dest_set.join(&dest_name);
+        let size = dir_size(src).map_err(|e| format!("Could not measure source size: {}", e))?;
+        check_free_space(dest_set, size)?;
+
+        let total_files = count_files_recursive(src);
+        let label = format!("Copying project {}...", base);
+        let mut copied = 0u64;
+
+        let result = copy_dir_recursive_with_progress(
+            src,
+            &dest_path,
+            &app,
+            &tid,
+            &label,
+            &cancel_token,
+            total_files,
+            &mut copied,
+        );
+
+        match result {
+            Ok(()) => {
+                let _ = app.emit(
+                    "copy-progress",
+                    ProjectCopyProgress {
+                        transfer_id: tid.clone(),
+                        label,
+                        progress: 1.0,
+                        stage: "complete".to_string(),
+                    },
+                );
+                Ok(dest_path.to_string_lossy().into_owned())
+            }
+            Err(e) if e == "Cancelled" => {
+                let _ = fs::remove_dir_all(&dest_path);
+                let _ = app.emit(
+                    "copy-progress",
+                    ProjectCopyProgress {
+                        transfer_id: tid.clone(),
+                        label,
+                        progress: 0.0,
+                        stage: "cancelled".to_string(),
+                    },
+                );
+                Err("Cancelled".to_string())
+            }
+            Err(e) => {
+                let _ = fs::remove_dir_all(&dest_path);
+                Err(format!("Copy failed: {}", e))
+            }
+        }
+    })
+    .await
+    .map_err(|e| format!("Background task failed: {}", e))?;
+
+    remove_cancellation_token(&transfer_id);
+    result
+}
+
+/// Generates the next available name for a set copy (e.g. SetA → SetA_2).
+fn next_available_set_name(base: &str, dest_location: &Path) -> String {
+    let mut n = 2;
+    loop {
+        let candidate = format!("{}_{}", base, n);
+        if !dest_location.join(&candidate).exists() {
+            return candidate;
+        }
+        n += 1;
+    }
+}
+
+/// Copies an entire Set folder to a destination location with progress and cancel.
+#[tauri::command]
+pub async fn copy_set(
+    app: AppHandle,
+    src_path: String,
+    dest_location_path: String,
+    transfer_id: String,
+) -> Result<String, String> {
+    let cancel_token = register_cancellation_token(&transfer_id);
+    let tid = transfer_id.clone();
+
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let src = Path::new(&src_path);
+        let dest_loc = Path::new(&dest_location_path);
+
+        if !src.is_dir() {
+            return Err(format!("Source Set does not exist: {}", src.display()));
+        }
+        if !dest_loc.is_dir() {
+            return Err(format!(
+                "Destination location does not exist: {}",
+                dest_loc.display()
+            ));
+        }
+
+        let base = src
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| "Source path has no valid name".to_string())?;
+        let dest_name = if !dest_loc.join(base).exists() {
+            base.to_string()
+        } else {
+            next_available_set_name(base, dest_loc)
+        };
+        let dest_path = dest_loc.join(&dest_name);
+
+        let size = dir_size(src).map_err(|e| format!("Could not measure source size: {}", e))?;
+        check_free_space(dest_loc, size)?;
+
+        let total_files = count_files_recursive(src);
+        let label = format!("Copying set {}...", base);
+        let mut copied = 0u64;
+
+        let result = copy_dir_recursive_with_progress(
+            src,
+            &dest_path,
+            &app,
+            &tid,
+            &label,
+            &cancel_token,
+            total_files,
+            &mut copied,
+        );
+
+        match result {
+            Ok(()) => {
+                let _ = app.emit(
+                    "copy-progress",
+                    ProjectCopyProgress {
+                        transfer_id: tid.clone(),
+                        label,
+                        progress: 1.0,
+                        stage: "complete".to_string(),
+                    },
+                );
+                Ok(dest_path.to_string_lossy().into_owned())
+            }
+            Err(e) if e == "Cancelled" => {
+                let _ = fs::remove_dir_all(&dest_path);
+                let _ = app.emit(
+                    "copy-progress",
+                    ProjectCopyProgress {
+                        transfer_id: tid.clone(),
+                        label,
+                        progress: 0.0,
+                        stage: "cancelled".to_string(),
+                    },
+                );
+                Err("Cancelled".to_string())
+            }
+            Err(e) => {
+                let _ = fs::remove_dir_all(&dest_path);
+                Err(format!("Copy failed: {}", e))
+            }
+        }
+    })
+    .await
+    .map_err(|e| format!("Background task failed: {}", e))?;
+
+    remove_cancellation_token(&transfer_id);
+    result
+}
+
+/// Cancel a running copy operation.
+#[tauri::command]
+pub fn cancel_copy_operation(transfer_id: String) -> bool {
+    cancel_transfer(&transfer_id)
 }
 
 /// Synchronous core of [`rename_project`].
@@ -531,6 +823,113 @@ pub async fn rescan_set(set_path: String) -> Result<OctatrackSet, String> {
         .map_err(|e| format!("Background task failed: {}", e))?
 }
 
+// ── Set management (create / rename / delete) ─────────────────────────
+
+/// Creates a new empty Set directory with an AUDIO subdirectory.
+/// The name is validated with the same charset/length rules as projects.
+pub(crate) fn create_set_sync(location: &Path, name: &str) -> Result<String, String> {
+    if !location.is_dir() {
+        return Err(format!(
+            "Location path does not exist: {}",
+            location.display()
+        ));
+    }
+
+    validate_project_name(name)?;
+
+    let set_path = location.join(name);
+    if set_path.exists() {
+        return Err(format!(
+            "A set named '{}' already exists in this location",
+            name
+        ));
+    }
+
+    fs::create_dir(&set_path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::AlreadyExists {
+            format!("A set named '{}' already exists in this location", name)
+        } else {
+            format!("Failed to create set directory: {}", e)
+        }
+    })?;
+
+    // Every Octatrack Set needs an AUDIO directory
+    fs::create_dir(set_path.join("AUDIO")).map_err(|e| {
+        let _ = fs::remove_dir_all(&set_path);
+        format!("Failed to create AUDIO directory: {}", e)
+    })?;
+
+    Ok(set_path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub async fn create_set(location_path: String, name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || create_set_sync(Path::new(&location_path), &name))
+        .await
+        .map_err(|e| format!("Background task failed: {}", e))?
+}
+
+/// Renames an existing Set directory in place.
+pub(crate) fn rename_set_sync(src: &Path, new_name: &str) -> Result<String, String> {
+    if !src.is_dir() {
+        return Err(format!("Set does not exist: {}", src.display()));
+    }
+
+    validate_project_name(new_name)?;
+
+    let current_name = src
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| "Set path has no valid name".to_string())?;
+
+    if current_name == new_name {
+        return Ok(src.to_string_lossy().into_owned());
+    }
+
+    let parent = src
+        .parent()
+        .ok_or_else(|| "Set has no parent directory".to_string())?;
+    let dest = parent.join(new_name);
+    if dest.exists() {
+        return Err(format!(
+            "A set named '{}' already exists in this location",
+            new_name
+        ));
+    }
+
+    fs::rename(src, &dest).map_err(|e| format!("Rename failed: {}", e))?;
+    Ok(dest.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub async fn rename_set(set_path: String, new_name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || rename_set_sync(Path::new(&set_path), &new_name))
+        .await
+        .map_err(|e| format!("Background task failed: {}", e))?
+}
+
+/// Deletes a Set directory. Requires the directory to contain an AUDIO
+/// subdirectory (the defining characteristic of an OT Set) as a safety check.
+pub(crate) fn delete_set_sync(p: &Path) -> Result<(), String> {
+    if !p.exists() {
+        return Err(format!("Set does not exist: {}", p.display()));
+    }
+    if !p.join("AUDIO").is_dir() {
+        return Err(format!(
+            "Refusing to delete: '{}' does not look like an Octatrack Set (no AUDIO directory)",
+            p.display()
+        ));
+    }
+    fs::remove_dir_all(p).map_err(|e| format!("Delete failed: {}", e))
+}
+
+#[tauri::command]
+pub async fn delete_set(set_path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || delete_set_sync(Path::new(&set_path)))
+        .await
+        .map_err(|e| format!("Background task failed: {}", e))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -631,12 +1030,13 @@ mod tests {
     }
 
     #[test]
-    fn copy_name_truncates_when_base_plus_suffix_exceeds_12() {
+    fn copy_name_truncates_when_base_plus_suffix_exceeds_32() {
         let set = tmp_dir();
-        // base="LONG_PROJECT" (12) + "_2" (2) = 14 → truncate base to 10 → "LONG_PROJE_2" (12)
-        let name = next_available_copy_name("LONG_PROJECT", set.path()).unwrap();
-        assert_eq!(name, "LONG_PROJE_2");
-        assert!(name.chars().count() <= 12);
+        // base="ABCDEFGHIJKLMNOPQRSTUVWXYZ123456" (32) + "_2" (2) = 34 → truncate base to 30
+        let name =
+            next_available_copy_name("ABCDEFGHIJKLMNOPQRSTUVWXYZ123456", set.path()).unwrap();
+        assert_eq!(name, "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234_2");
+        assert!(name.chars().count() <= 32);
     }
 
     #[test]
@@ -644,12 +1044,12 @@ mod tests {
         let set = tmp_dir();
         // Pre-fill _2..=_9 so we land on _10.
         for i in 2..=9 {
-            make_project(set.path(), &format!("MY_PROJECTS_{}", i));
+            make_project(set.path(), &format!("ABCDEFGHIJKLMNOPQRSTUVWXYZ12345{}", i));
         }
-        let name = next_available_copy_name("MY_PROJECTS", set.path()).unwrap();
-        assert!(name.chars().count() <= 12);
+        let name =
+            next_available_copy_name("ABCDEFGHIJKLMNOPQRSTUVWXYZ123456", set.path()).unwrap();
+        assert!(name.chars().count() <= 32);
         assert!(!set.path().join(&name).exists());
-        assert!(name.starts_with("MY_PROJ"));
     }
 
     #[test]
@@ -728,17 +1128,17 @@ mod tests {
     #[test]
     fn rejects_too_long() {
         // 13 ASCII characters
-        let err = validate_project_name("ABCDEFGHIJKLM").unwrap_err();
-        assert!(err.contains("12 characters or less"), "unexpected: {err}");
+        let err = validate_project_name("ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567").unwrap_err();
+        assert!(err.contains("32 characters or less"), "unexpected: {err}");
     }
 
     #[test]
     fn rejects_too_long_unicode() {
-        // 13 accented characters — byte length != char count
-        let name: String = "é".repeat(13);
-        assert_eq!(name.chars().count(), 13);
+        // 33 accented characters — byte length != char count
+        let name: String = "é".repeat(33);
+        assert_eq!(name.chars().count(), 33);
         let err = validate_project_name(&name).unwrap_err();
-        assert!(err.contains("12 characters or less"), "unexpected: {err}");
+        assert!(err.contains("32 characters or less"), "unexpected: {err}");
     }
 
     #[test]
@@ -1076,5 +1476,88 @@ mod tests {
             err.contains("not a valid Octatrack Set"),
             "unexpected: {err}"
         );
+    }
+
+    // ── Set create / rename / delete tests ────────────────────────────
+
+    fn make_named_set(location: &Path, name: &str) -> PathBuf {
+        let set = location.join(name);
+        fs::create_dir_all(set.join("AUDIO")).unwrap();
+        make_project(&set, "PROJ");
+        set
+    }
+
+    #[test]
+    fn create_set_creates_dir_with_audio() {
+        let loc = tmp_dir();
+        let result = create_set_sync(loc.path(), "MySet").unwrap();
+        let set = PathBuf::from(&result);
+        assert!(set.is_dir());
+        assert!(set.join("AUDIO").is_dir());
+    }
+
+    #[test]
+    fn create_set_rejects_invalid_name() {
+        let loc = tmp_dir();
+        let err = create_set_sync(loc.path(), "").unwrap_err();
+        assert!(err.contains("required"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn create_set_rejects_duplicate() {
+        let loc = tmp_dir();
+        create_set_sync(loc.path(), "SetA").unwrap();
+        let err = create_set_sync(loc.path(), "SetA").unwrap_err();
+        assert!(err.contains("already exists"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn rename_set_changes_dir_name() {
+        let loc = tmp_dir();
+        let set = make_named_set(loc.path(), "OldSet");
+        let result = rename_set_sync(&set, "NewSet").unwrap();
+        assert!(PathBuf::from(&result).is_dir());
+        assert!(!set.exists());
+    }
+
+    #[test]
+    fn rename_set_rejects_invalid_name() {
+        let loc = tmp_dir();
+        let set = make_named_set(loc.path(), "SetA");
+        let err = rename_set_sync(&set, "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567").unwrap_err();
+        assert!(err.contains("32"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn rename_set_rejects_conflict() {
+        let loc = tmp_dir();
+        let set_a = make_named_set(loc.path(), "SetA");
+        make_named_set(loc.path(), "SetB");
+        let err = rename_set_sync(&set_a, "SetB").unwrap_err();
+        assert!(err.contains("already exists"), "unexpected: {err}");
+    }
+
+    #[test]
+    fn delete_set_removes_directory() {
+        let loc = tmp_dir();
+        let set = make_named_set(loc.path(), "DOOMED");
+        delete_set_sync(&set).unwrap();
+        assert!(!set.exists());
+    }
+
+    #[test]
+    fn delete_set_refuses_non_set_dir() {
+        let loc = tmp_dir();
+        let bogus = loc.path().join("not_a_set");
+        fs::create_dir(&bogus).unwrap();
+        let err = delete_set_sync(&bogus).unwrap_err();
+        assert!(err.contains("does not look like"), "unexpected: {err}");
+        assert!(bogus.exists());
+    }
+
+    #[test]
+    fn delete_set_errors_on_missing_path() {
+        let err = delete_set_sync(Path::new("/no/such/path")).unwrap_err();
+        assert!(err.contains("does not exist"), "unexpected: {err}");
     }
 }
