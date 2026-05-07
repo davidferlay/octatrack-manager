@@ -460,18 +460,16 @@ h1 {
 .project-card:focus {
   outline: none;
   border-color: var(--elektron-orange);
-  box-shadow: 0 0 0 1px var(--elektron-orange);
 }
 
 .project-card.clickable-project:focus {
   transform: translateY(-2px);
-  box-shadow: 0 0 0 1px var(--elektron-orange), 0 4px 8px rgba(255, 102, 0, 0.2);
+  box-shadow: 0 4px 8px rgba(255, 102, 0, 0.2);
 }
 
 .project-card.new-project-card:focus {
   outline: none;
   border-color: var(--elektron-orange);
-  box-shadow: 0 0 0 1px var(--elektron-orange);
 }
 
 /* New Project Card */
@@ -919,7 +917,7 @@ h1 {
   max-width: 500px;
   width: 90%;
   max-height: 80vh;
-  overflow-y: auto;
+  overflow: visible;
 }
 
 .modal-content.warning-modal {
@@ -992,7 +990,7 @@ h1 {
 .modal-body p {
   margin: 0 0 1rem 0;
   color: var(--elektron-text-primary);
-  font-size: 1rem;
+  font-size: 1.1rem;
   line-height: 1.5;
 }
 
@@ -1087,7 +1085,7 @@ h1 {
   border: 1px solid var(--elektron-border-gray);
   padding: 0.6rem 0.75rem;
   border-radius: 4px;
-  font-size: 0.9rem;
+  font-size: 1.05rem;
   margin-top: 0.5rem;
   box-sizing: border-box;
   transition: border-color 0.2s;
@@ -1113,11 +1111,14 @@ h1 {
   padding-right: 2.2rem;
 }
 
-.charset-info-icon {
+.charset-info-wrapper {
   position: absolute;
   right: 0.6rem;
   top: 50%;
   transform: translateY(-50%);
+}
+
+.charset-info-icon {
   color: var(--elektron-text-secondary);
   font-size: 0.85rem;
   opacity: 0.6;
@@ -1127,6 +1128,33 @@ h1 {
 .charset-info-icon:hover {
   opacity: 1;
   color: var(--elektron-orange);
+}
+
+.charset-info-wrapper:hover .charset-info-icon {
+  opacity: 1;
+  color: var(--elektron-orange);
+}
+
+.charset-tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  background: var(--elektron-dark-gray);
+  border: 1px solid var(--elektron-border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  font-family: monospace;
+  font-size: 1.05rem;
+  line-height: 1.3;
+  color: var(--elektron-text-primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  z-index: 10000;
+  width: max-content;
+}
+
+.charset-info-wrapper:hover .charset-tooltip {
+  display: block;
 }
 
 @keyframes inputShake {
@@ -1140,7 +1168,7 @@ h1 {
 }
 
 .modal-char-counter {
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   color: var(--elektron-text-secondary);
   text-align: right;
   margin-top: 0.25rem;

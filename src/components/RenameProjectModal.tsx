@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { filterProjectName, MAX_PROJECT_NAME_LEN } from '../utils/otCharset'
+import { filterProjectName, isCharAllowed, MAX_PROJECT_NAME_LEN } from '../utils/otCharset'
 import { CharsetInfoIcon } from './CharsetInfoIcon'
 
 export interface RenameProjectModalProps {
@@ -22,12 +22,17 @@ export function RenameProjectModal({
   useEffect(() => {
     inputRef.current?.focus()
     inputRef.current?.select()
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === 'Escape') onCancel()
+    }
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
   }, [])
 
   const unchanged = name === projectName
   const duplicate = !unchanged && existingNames.includes(name)
   const empty = name.length === 0
-  const error = empty ? 'Name is required' : unchanged ? 'Name is unchanged' : duplicate ? `A project named '${name}' already exists` : null
+  const error = empty ? 'Name is required' : duplicate ? `A project named '${name}' already exists` : null
   const canSubmit = !empty && !unchanged && !duplicate
 
   function triggerShake() {
@@ -39,7 +44,8 @@ export function RenameProjectModal({
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const [filtered, wasFiltered] = filterProjectName(e.target.value)
-    if (wasFiltered) {
+    const wasTruncated = [...e.target.value].filter(ch => isCharAllowed(ch)).length > MAX_PROJECT_NAME_LEN
+    if (wasFiltered || wasTruncated) {
       triggerShake()
     }
     setName(filtered)
@@ -76,14 +82,19 @@ export function RenameProjectModal({
             <CharsetInfoIcon />
           </div>
           <div className={`modal-char-counter${[...name].length >= MAX_PROJECT_NAME_LEN ? ' at-limit' : ''}`}>{[...name].length} / {MAX_PROJECT_NAME_LEN}</div>
-          {error && !empty && <div className="modal-error">{error}</div>}
+          {error && <div className="modal-error">{error}</div>}
         </div>
         <div className="modal-footer">
           <div className="modal-buttons-row">
             <button className="modal-button" onClick={onCancel}>
               Cancel
             </button>
-            <button className="modal-button primary" onClick={() => canSubmit && onConfirm(name)} disabled={!canSubmit}>
+            <button
+              className="modal-button primary"
+              onClick={() => canSubmit && onConfirm(name)}
+              disabled={!canSubmit}
+              title={unchanged ? 'Name is unchanged' : undefined}
+            >
               Rename
             </button>
           </div>

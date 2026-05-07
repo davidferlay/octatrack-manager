@@ -224,6 +224,18 @@ export function ProjectDetail() {
 
   // Load machine types for the selected bank's active part
   useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        // Don't navigate if a modal/dialog is open
+        if (document.querySelector('.modal-overlay')) return;
+        navigate('/');
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [navigate]);
+
+  useEffect(() => {
     if (!projectPath || selectedBankIndex < 0 || selectedBankIndex >= 16) {
       setAudioTrackMachineTypes({});
       return;
