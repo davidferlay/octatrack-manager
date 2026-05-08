@@ -102,7 +102,9 @@ pub(crate) fn has_valid_audio_pool(audio_path: &Path) -> bool {
 /// - Must not be a system directory
 ///
 /// Note: A directory without an AUDIO directory is NOT considered a Set,
-/// even if it contains multiple projects - those are individual projects
+/// even if it contains multiple projects - those are individual projects.
+/// Empty Sets (AUDIO dir but no projects yet) are valid — they may have been
+/// freshly created and not yet populated.
 pub(crate) fn is_octatrack_set(path: &Path) -> bool {
     if !path.is_dir() {
         return false;
@@ -114,25 +116,7 @@ pub(crate) fn is_octatrack_set(path: &Path) -> bool {
     }
 
     // Check for AUDIO directory - this is the defining characteristic of a Set
-    let has_audio_dir = path.join("AUDIO").is_dir();
-    if !has_audio_dir {
-        return false;
-    }
-
-    // Must also have at least one project subdirectory
-    if let Ok(entries) = fs::read_dir(path) {
-        for entry in entries.flatten() {
-            let entry_path = entry.path();
-            if entry_path.is_dir()
-                && entry_path.file_name().and_then(|n| n.to_str()) != Some("AUDIO")
-                && is_octatrack_project(&entry_path)
-            {
-                return true; // Found a Set: has AUDIO dir + at least one project
-            }
-        }
-    }
-
-    false // Has AUDIO dir but no projects - not a valid Set
+    path.join("AUDIO").is_dir()
 }
 
 /// Checks if a directory is an Octatrack Project (contains .work files)
