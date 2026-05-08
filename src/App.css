@@ -244,7 +244,6 @@ h1 {
   cursor: pointer;
   padding: 0.25rem;
   font-size: 0.85rem;
-  opacity: 0.4;
   transition: all 0.15s ease;
 }
 
