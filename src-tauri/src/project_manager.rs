@@ -5,7 +5,7 @@ use crate::audio_pool::{
     cancel_transfer, is_cancelled, register_cancellation_token, remove_cancellation_token,
 };
 use crate::device_detection::{
-    has_valid_audio_pool, is_octatrack_set, scan_for_projects, OctatrackSet,
+    has_valid_audio_pool, scan_for_projects, OctatrackSet,
 };
 use fs2::available_space;
 use ot_tools_io::{BankFile, OctatrackFileIO, ProjectFile};
@@ -794,7 +794,9 @@ pub async fn delete_project(project_path: String) -> Result<(), String> {
 /// Validates that `path` is a valid Octatrack Set, then rebuilds the
 /// [`OctatrackSet`] struct with fresh project and audio-pool information.
 pub(crate) fn rescan_set_sync(path: &Path) -> Result<OctatrackSet, String> {
-    if !is_octatrack_set(path) {
+    // Accept any directory with an AUDIO subfolder as a valid set
+    // (newly created sets may have no projects yet)
+    if !path.is_dir() || !path.join("AUDIO").is_dir() {
         return Err(format!(
             "Path is not a valid Octatrack Set: {}",
             path.display()

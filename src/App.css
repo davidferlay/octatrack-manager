@@ -237,6 +237,22 @@ h1 {
   gap: 0.5rem;
 }
 
+.location-add-set-btn {
+  background: none;
+  border: none;
+  color: var(--elektron-text-secondary);
+  cursor: pointer;
+  padding: 0.25rem;
+  font-size: 0.85rem;
+  opacity: 0.4;
+  transition: all 0.15s ease;
+}
+
+.location-add-set-btn:hover {
+  color: var(--elektron-orange);
+  opacity: 1;
+}
+
 .sets-count {
   background-color: transparent;
   color: var(--elektron-text-secondary);
@@ -678,6 +694,8 @@ h1 {
   margin-bottom: 0.5rem;
   color: var(--elektron-text-primary);
   font-family: 'Courier New', monospace;
+  word-break: break-all;
+  overflow-wrap: break-word;
 }
 
 .project-info {
@@ -1169,7 +1187,7 @@ h1 {
 
 .copy-progress-bar-fill {
   height: 100%;
-  background: var(--elektron-orange);
+  background: #4caf50;
   border-radius: 3px;
   transition: width 0.2s ease;
 }

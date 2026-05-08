@@ -438,7 +438,19 @@ export function HomePage() {
                   {locations.map((location, locIdx) => {
                     const isOpen = openLocations.has(locIdx);
                     return (
-                      <div key={locIdx} className={`location-card location-type-${location.device_type.toLowerCase()}`}>
+                      <div key={locIdx} className={`location-card location-type-${location.device_type.toLowerCase()}`}
+                        onContextMenu={(e) => {
+                          // Show location context menu on any location-card background area
+                          if ((e.target as HTMLElement).closest('.set-card') || (e.target as HTMLElement).closest('.location-header')) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setContextMenu({
+                            x: e.clientX,
+                            y: e.clientY,
+                            target: { kind: 'location', locationPath: location.path, locationName: location.name },
+                          });
+                        }}
+                      >
                         <div
                           className="location-header clickable"
                           onClick={() => toggleLocation(locIdx)}
@@ -458,6 +470,17 @@ export function HomePage() {
                             <span className="location-path-inline">{location.path}</span>
                           </div>
                           <div className="location-header-right">
+                            <button
+                              className="location-add-set-btn"
+                              title={`New set in ${location.name}`}
+                              aria-label={`New set in ${location.name}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCreateSetTarget({ locationPath: location.path, locationName: location.name });
+                              }}
+                            >
+                              <i className="fas fa-plus"></i>
+                            </button>
                             <span className="device-type">{getDeviceTypeLabel(location.device_type)}</span>
                             <span className="sets-count">{location.sets.length} Set{location.sets.length !== 1 ? 's' : ''}</span>
                           </div>
@@ -465,7 +488,19 @@ export function HomePage() {
 
                         {location.sets.length > 0 && (
                           <div className={`sets-section ${isOpen ? 'open' : 'closed'}`}>
-                            <div className="sets-section-content">
+                            <div className="sets-section-content"
+                              onContextMenu={(e) => {
+                                // Show location context menu when clicking on background between set cards
+                                if ((e.target as HTMLElement).closest('.set-card')) return;
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setContextMenu({
+                                  x: e.clientX,
+                                  y: e.clientY,
+                                  target: { kind: 'location', locationPath: location.path, locationName: location.name },
+                                });
+                              }}
+                            >
                               {[...location.sets].sort((a, b) => {
                                 const aIsPresets = a.name.toLowerCase() === 'presets';
                                 const bIsPresets = b.name.toLowerCase() === 'presets';
@@ -688,6 +723,10 @@ export function HomePage() {
           onOpenInFileManager={() => {
             if (contextMenu.target.kind === 'project') {
               invoke('open_in_file_manager', { path: contextMenu.target.project.path });
+            } else if (contextMenu.target.kind === 'set') {
+              invoke('open_in_file_manager', { path: contextMenu.target.setPath });
+            } else if (contextMenu.target.kind === 'location') {
+              invoke('open_in_file_manager', { path: contextMenu.target.locationPath });
             }
           }}
           onPaste={async () => {
