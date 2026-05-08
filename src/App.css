@@ -1192,11 +1192,20 @@ h1 {
   transition: width 0.2s ease;
 }
 
-.copy-progress-percent {
+.copy-progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.25rem;
   font-size: 0.85rem;
   color: var(--elektron-text-secondary);
-  text-align: right;
-  margin-top: 0.25rem;
+}
+
+.copy-progress-percent {
+}
+
+.copy-progress-size {
+  opacity: 0.7;
 }
 
 @keyframes inputShake {

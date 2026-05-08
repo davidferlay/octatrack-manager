@@ -4,9 +4,7 @@
 use crate::audio_pool::{
     cancel_transfer, is_cancelled, register_cancellation_token, remove_cancellation_token,
 };
-use crate::device_detection::{
-    has_valid_audio_pool, scan_for_projects, OctatrackSet,
-};
+use crate::device_detection::{has_valid_audio_pool, scan_for_projects, OctatrackSet};
 use fs2::available_space;
 use ot_tools_io::{BankFile, OctatrackFileIO, ProjectFile};
 use serde::Serialize;
@@ -228,6 +226,8 @@ struct ProjectCopyProgress {
     label: String,
     progress: f32, // 0.0 to 1.0
     stage: String, // "copying", "complete", "cancelled", "error"
+    copied_bytes: u64,
+    total_bytes: u64,
 }
 
 /// Count total files in a directory tree.
@@ -249,6 +249,8 @@ fn copy_dir_recursive_with_progress(
     cancel_token: &Arc<AtomicBool>,
     total_files: u64,
     copied_so_far: &mut u64,
+    total_bytes: u64,
+    copied_bytes: &mut u64,
 ) -> Result<(), String> {
     fs::create_dir_all(dest).map_err(|e| format!("Failed to create directory: {}", e))?;
     let entries: Vec<_> = fs::read_dir(src)
@@ -272,10 +274,13 @@ fn copy_dir_recursive_with_progress(
                 cancel_token,
                 total_files,
                 copied_so_far,
+                total_bytes,
+                copied_bytes,
             )?;
         } else {
             fs::copy(&from, &to).map_err(|e| format!("Copy failed: {}", e))?;
             *copied_so_far += 1;
+            *copied_bytes += from.metadata().map(|m| m.len()).unwrap_or(0);
             let progress = if total_files > 0 {
                 *copied_so_far as f32 / total_files as f32
             } else {
@@ -288,6 +293,8 @@ fn copy_dir_recursive_with_progress(
                     label: label.to_string(),
                     progress,
                     stage: "copying".to_string(),
+                    copied_bytes: *copied_bytes,
+                    total_bytes,
                 },
             );
             if let Err(_e) = emit_result {
@@ -414,6 +421,7 @@ pub async fn copy_project_with_progress(
         let total_files = count_files_recursive(src);
         let label = format!("Copying project {}...", base);
         let mut copied = 0u64;
+        let mut copied_bytes = 0u64;
 
         let result = copy_dir_recursive_with_progress(
             src,
@@ -424,6 +432,8 @@ pub async fn copy_project_with_progress(
             &cancel_token,
             total_files,
             &mut copied,
+            size,
+            &mut copied_bytes,
         );
 
         match result {
@@ -435,6 +445,8 @@ pub async fn copy_project_with_progress(
                         label,
                         progress: 1.0,
                         stage: "complete".to_string(),
+                        copied_bytes: size,
+                        total_bytes: size,
                     },
                 );
                 Ok(dest_path.to_string_lossy().into_owned())
@@ -448,6 +460,8 @@ pub async fn copy_project_with_progress(
                         label,
                         progress: 0.0,
                         stage: "cancelled".to_string(),
+                        copied_bytes,
+                        total_bytes: size,
                     },
                 );
                 Err("Cancelled".to_string())
@@ -519,6 +533,7 @@ pub async fn copy_set(
         let total_files = count_files_recursive(src);
         let label = format!("Copying set {}...", base);
         let mut copied = 0u64;
+        let mut copied_bytes = 0u64;
 
         let result = copy_dir_recursive_with_progress(
             src,
@@ -529,6 +544,8 @@ pub async fn copy_set(
             &cancel_token,
             total_files,
             &mut copied,
+            size,
+            &mut copied_bytes,
         );
 
         match result {
@@ -540,6 +557,8 @@ pub async fn copy_set(
                         label,
                         progress: 1.0,
                         stage: "complete".to_string(),
+                        copied_bytes: size,
+                        total_bytes: size,
                     },
                 );
                 Ok(dest_path.to_string_lossy().into_owned())
@@ -553,6 +572,8 @@ pub async fn copy_set(
                         label,
                         progress: 0.0,
                         stage: "cancelled".to_string(),
+                        copied_bytes,
+                        total_bytes: size,
                     },
                 );
                 Err("Cancelled".to_string())

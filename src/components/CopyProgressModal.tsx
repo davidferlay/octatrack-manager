@@ -1,12 +1,15 @@
 import { useState, useEffect, useRef } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
+import { formatBytes } from '../utils/format'
 
 interface CopyProgressEvent {
   transfer_id: string
   label: string
   progress: number
   stage: string
+  copied_bytes: number
+  total_bytes: number
 }
 
 export interface CopyProgressModalProps {
@@ -26,6 +29,8 @@ export function CopyProgressModal({ transferId, label, command, commandArgs, onC
   const [currentLabel, setCurrentLabel] = useState(label)
   const [error, setError] = useState<string | null>(null)
   const [cancelled, setCancelled] = useState(false)
+  const [copiedBytes, setCopiedBytes] = useState(0)
+  const [totalBytes, setTotalBytes] = useState(0)
 
   // Use refs for callbacks to avoid re-registering the listener on every render
   const onCompleteRef = useRef(onComplete)
@@ -55,6 +60,8 @@ export function CopyProgressModal({ transferId, label, command, commandArgs, onC
         } else {
           setProgress(event.payload.progress)
           setCurrentLabel(event.payload.label)
+          setCopiedBytes(event.payload.copied_bytes)
+          setTotalBytes(event.payload.total_bytes)
         }
       })
 
@@ -114,7 +121,10 @@ export function CopyProgressModal({ transferId, label, command, commandArgs, onC
               <div className="copy-progress-bar">
                 <div className="copy-progress-bar-fill" style={{ width: `${percent}%` }}></div>
               </div>
-              <div className="copy-progress-percent">{percent}%</div>
+              <div className="copy-progress-info">
+                <span className="copy-progress-size">{totalBytes > 0 ? `${formatBytes(copiedBytes)} / ${formatBytes(totalBytes)}` : ''}</span>
+                <span className="copy-progress-percent">{percent}%</span>
+              </div>
             </>
           )}
         </div>
