@@ -32,7 +32,9 @@ If you insert a CF card or move files while the app is open, click the **Refresh
 
 ## Navigating the Results
 
-Results are organized by **Location**, which corresponds to a Set on your CF card or computer.
+Results are organized by **Location**, which corresponds to a physical drive or folder on your system. Each location contains one or more **Sets**.
+
+A directory is recognized as a Set if it contains an `AUDIO/` subfolder — even if it has no projects yet (e.g. a freshly created Set).
 
 ### Set Locations
 Each location card provides key information at a glance:

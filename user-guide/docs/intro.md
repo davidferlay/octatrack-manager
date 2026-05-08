@@ -35,7 +35,7 @@ If you are new to the Octatrack or just need a refresher, here is how the Octatr
 
 | Concept | What it is |
 |---------|-------------|
-| **Set** | The top-level folder on your CF card. It contains an `AUDIO/` folder and multiple projects. |
+| **Set** | The top-level folder on your CF card. It is identified by the presence of an `AUDIO/` subfolder and may contain zero or more projects. |
 | **Audio Pool** | The `AUDIO/` folder inside a Set. This is the shared directory where samples can be shared and used from a single location across projects. |
 | **Project** | A collection of 16 banks. It also stores global settings like the mixer and MIDI configuration. |
 | **Bank** | A collection of 16 patterns and 4 parts. Banks are named A through P. |

@@ -625,6 +625,31 @@ mod tests {
         assert!(found_something, "Should find projects");
     }
 
+    #[test]
+    fn test_scan_directory_finds_empty_set() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create a Set with AUDIO dir but no projects
+        create_set(temp_dir.path(), "EmptySet", false);
+
+        let result = scan_directory(&temp_dir.path().to_string_lossy());
+
+        assert!(
+            !result.locations.is_empty(),
+            "Should find location containing the empty set"
+        );
+        let sets: Vec<_> = result.locations.iter().flat_map(|l| &l.sets).collect();
+        assert!(
+            sets.iter().any(|s| s.name == "EmptySet"),
+            "Should detect the empty set (AUDIO dir only, no projects)"
+        );
+        let empty_set = sets.iter().find(|s| s.name == "EmptySet").unwrap();
+        assert!(
+            empty_set.projects.is_empty(),
+            "Empty set should have no projects"
+        );
+    }
+
     // ==================== IS SYSTEM PATH TESTS ====================
 
     #[test]

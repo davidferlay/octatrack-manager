@@ -98,3 +98,6 @@
 | **Copy Progress Size** | | | | |
 | PM82 | Copy | Size displayed in progress modal | Paste a project with sample files | Progress modal shows copied/total size (e.g. "52 MB / 523 MB") on the left, percentage on the right |
 | PM83 | Copy Set | Size displayed in progress modal | Paste a Set with multiple projects | Progress modal shows copied/total size alongside percentage |
+| **Set Detection** | | | | |
+| PM84 | Discovery | Empty set detected on scan | Create a folder with only an AUDIO/ subfolder, scan that directory | Empty Set appears in the location with 0 projects |
+| PM85 | Discovery | Empty set persists after rescan | Create an empty Set via the app, click Refresh | Empty Set still appears after rescan |
