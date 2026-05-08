@@ -6,7 +6,7 @@ export interface CreateProjectModalProps {
   setPath: string
   setName: string
   existingNames: string[]
-  onConfirm: (name: string) => void
+  onConfirm: (name: string) => Promise<void> | void
   onCancel: () => void
   title?: string
   prompt?: ReactNode
@@ -28,6 +28,7 @@ export function CreateProjectModal({
 }: CreateProjectModalProps) {
   const [name, setName_] = useState('')
   const [shaking, setShaking] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -42,7 +43,7 @@ export function CreateProjectModal({
   const empty = name.length === 0
   const duplicate = !empty && existingNames.includes(name)
   const error = empty ? 'Name is required' : duplicate ? (duplicateMessage ?? `A project named '${name}' already exists in this Set`) : null
-  const canSubmit = !empty && !duplicate
+  const canSubmit = !empty && !duplicate && !submitting
 
   function triggerShake() {
     setShaking(false)
@@ -59,18 +60,28 @@ export function CreateProjectModal({
     setName_(filtered)
   }
 
+  async function handleSubmit() {
+    if (!canSubmit) return
+    setSubmitting(true)
+    try {
+      await onConfirm(name)
+    } catch {
+      setSubmitting(false)
+    }
+  }
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Escape') {
       e.preventDefault()
       onCancel()
     } else if (e.key === 'Enter' && canSubmit) {
       e.preventDefault()
-      onConfirm(name)
+      handleSubmit()
     }
   }
 
   return (
-    <div className="modal-overlay" onClick={onCancel}>
+    <div className="modal-overlay" onClick={submitting ? undefined : onCancel}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3><i className="fas fa-plus" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>{title}</h3>
@@ -87,6 +98,7 @@ export function CreateProjectModal({
               onKeyDown={handleKeyDown}
               placeholder={placeholder}
               aria-label={placeholder}
+              disabled={submitting}
             />
             <CharsetInfoIcon />
           </div>
@@ -95,11 +107,11 @@ export function CreateProjectModal({
         </div>
         <div className="modal-footer">
           <div className="modal-buttons-row">
-            <button className="modal-button" onClick={onCancel}>
+            <button className="modal-button" onClick={onCancel} disabled={submitting}>
               Cancel
             </button>
-            <button className="modal-button primary" onClick={() => canSubmit && onConfirm(name)} disabled={!canSubmit}>
-              {buttonLabel}
+            <button className="modal-button primary" onClick={handleSubmit} disabled={!canSubmit}>
+              {submitting ? <><i className="fas fa-spinner fa-spin" style={{ marginRight: '0.4rem' }}></i>Creating...</> : buttonLabel}
             </button>
           </div>
         </div>
