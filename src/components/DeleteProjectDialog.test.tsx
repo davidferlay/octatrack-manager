@@ -64,4 +64,16 @@ describe('DeleteProjectDialog', () => {
     await u.keyboard('{Enter}')
     expect(onConfirm).toHaveBeenCalled()
   })
+
+  it('shows spinner and disables buttons while deleting', async () => {
+    let resolveDelete: () => void
+    const onConfirm = () => new Promise<void>((r) => { resolveDelete = r })
+    const u = userEvent.setup()
+    render(<DeleteProjectDialog {...baseProps} onConfirm={onConfirm} />)
+    await u.click(screen.getByRole('button', { name: /^delete$/i }))
+    // During deletion: spinner visible, buttons disabled
+    expect(screen.getByRole('button', { name: /deleting/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /cancel/i })).toBeDisabled()
+    resolveDelete!()
+  })
 })

@@ -68,4 +68,18 @@ describe('RenameProjectModal', () => {
     await u.type(input, 'BAD€')
     expect(input).toHaveValue('BAD')
   })
+
+  it('shows spinner and disables input while submitting', async () => {
+    let resolveRename: () => void
+    const onConfirm = () => new Promise<void>((r) => { resolveRename = r })
+    const u = userEvent.setup()
+    render(<RenameProjectModal {...baseProps} onConfirm={onConfirm} />)
+    const input = screen.getByRole('textbox')
+    await u.clear(input)
+    await u.type(input, 'RENAMED{Enter}')
+    // During submission: input disabled, spinner visible
+    expect(input).toBeDisabled()
+    expect(screen.getByText(/renaming\.\.\./i)).toBeInTheDocument()
+    resolveRename!()
+  })
 })

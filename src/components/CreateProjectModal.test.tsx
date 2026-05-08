@@ -75,4 +75,16 @@ describe('CreateProjectModal', () => {
     fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Escape' })
     expect(onCancel).toHaveBeenCalled()
   })
+
+  it('shows spinner and disables input while submitting', async () => {
+    let resolveCreate: () => void
+    const onConfirm = () => new Promise<void>((r) => { resolveCreate = r })
+    const u = userEvent.setup()
+    render(<CreateProjectModal {...baseProps} onConfirm={onConfirm} />)
+    await u.type(screen.getByRole('textbox'), 'NEW{Enter}')
+    // During submission: input disabled, spinner visible
+    expect(screen.getByRole('textbox')).toBeDisabled()
+    expect(screen.getByText(/creating\.\.\./i)).toBeInTheDocument()
+    resolveCreate!()
+  })
 })

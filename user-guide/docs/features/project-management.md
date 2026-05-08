@@ -11,8 +11,8 @@ Manage Octatrack projects and Sets directly from Projects List — create, copy,
 Right-click to access management actions depending on the target:
 
 - **On a project card:** Copy, Rename, Open in File Manager, Delete.
-- **On a Set header or grid background:** Copy Set, Rename Set, New Project, Paste Project (when a project has been copied), Delete Set.
-- **On a location header:** New Set, Paste Set (when a set has been copied).
+- **On a Set header or grid background:** Copy Set, Rename Set, New Project, Paste Project (when a project has been copied), Open in File Manager, Delete Set.
+- **On a location header or background:** New Set, Paste Set (when a set has been copied), Open in File Manager.
 
 ## Naming Rules
 
@@ -41,7 +41,7 @@ A new project is created with a default `project.work` and 16 empty `bank01.work
 1. Right-click a project → **Copy**, or focus the card and press **Ctrl+C**. A confirmation toast briefly appears at the bottom of the screen.
 2. Right-click a Set header, Set area, or grid background → **Paste Project**, or focus a card in that Set and press **Ctrl+V**.
 
-A **progress modal** appears during the copy, showing the current file being copied and a progress bar. You can **cancel** the operation at any time — partial files are cleaned up automatically.
+A **progress modal** appears during the copy, showing the current file being copied, a progress bar, and the total size copied so far (e.g. "52 MB / 523 MB"). You can **cancel** the operation at any time — partial files are cleaned up automatically.
 
 The pasted copy is renamed `_2`, `_3`, … if the name is already taken in the destination Set. Long names are truncated to keep within the 32-character limit.
 
@@ -60,20 +60,20 @@ If the destination is on the same disk, the move is atomic. Across disks, Manage
 
 Right-click → **Delete**, or focus the card and press **Delete**.
 
-A confirmation dialog appears — delete is destructive and cannot be undone. Cancel is the default focus, so pressing Enter immediately on the dialog will not delete the project.
+A confirmation dialog appears — delete is destructive and cannot be undone. Cancel is the default focus, so pressing Enter immediately on the dialog will not delete the project. A spinner is shown while the deletion is in progress.
 
 ## Set Operations
 
 ### Creating a Set
 
-Right-click a **location header** → **New Set**. Enter a name following the naming rules above. A new empty Set folder is created with an `AUDIO` subfolder.
+Right-click a **location header** → **New Set**, or click the **+** button in the location header. Enter a name following the naming rules above. A new empty Set folder is created with an `AUDIO` subfolder.
 
 ### Copying a Set
 
 1. Right-click a Set header → **Copy Set**. A confirmation toast briefly appears.
 2. Right-click a **location header** → **Paste Set**.
 
-A **progress modal** appears showing copy progress across all projects and samples. You can **cancel** at any time.
+A **progress modal** appears showing copy progress across all projects and samples, including the total size (e.g. "120 MB / 1.2 GB"). You can **cancel** at any time.
 
 The pasted Set is renamed `_2`, `_3`, … if the name already exists in the target location.
 

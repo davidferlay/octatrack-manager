@@ -11,6 +11,7 @@ const projectTarget: ContextTarget = {
   setName: 'S',
 }
 const setTarget: ContextTarget = { kind: 'set', setPath: '/s', setName: 'S' }
+const locationTarget: ContextTarget = { kind: 'location', locationPath: '/loc', locationName: 'L' }
 
 const handlers = {
   onCopy: vi.fn(),
@@ -153,5 +154,47 @@ describe('ProjectContextMenu', () => {
       />
     )
     expect(screen.queryByText(/paste/i)).not.toBeInTheDocument()
+  })
+
+  it('shows Open in File Manager on set target', () => {
+    render(
+      <ProjectContextMenu
+        x={0}
+        y={0}
+        target={setTarget}
+        clipboard={null}
+        {...handlers}
+      />
+    )
+    expect(screen.getByText(/open in file manager/i)).toBeInTheDocument()
+  })
+
+  it('shows location items when target.kind = location', () => {
+    render(
+      <ProjectContextMenu
+        x={0}
+        y={0}
+        target={locationTarget}
+        clipboard={null}
+        {...handlers}
+      />
+    )
+    expect(screen.getByText(/new set/i)).toBeInTheDocument()
+    expect(screen.getByText(/open in file manager/i)).toBeInTheDocument()
+    expect(screen.queryByText(/paste/i)).not.toBeInTheDocument()
+  })
+
+  it('shows Paste Set on location target when set is in clipboard', () => {
+    const clipboard: ClipboardState = { kind: 'set', path: '/s', name: 'S' }
+    render(
+      <ProjectContextMenu
+        x={0}
+        y={0}
+        target={locationTarget}
+        clipboard={clipboard}
+        {...handlers}
+      />
+    )
+    expect(screen.getByText(/paste set/i)).toBeInTheDocument()
   })
 })

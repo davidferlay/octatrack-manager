@@ -6,12 +6,12 @@
 |---|-----------|------|-------|---------------|
 | **Context Menu** | | | | |
 | PM1 | Context Menu | Right-click project card | Right-click on any project card | Context menu appears with: Copy, Rename, Open in File Manager, Delete |
-| PM2 | Context Menu | Right-click set header | Right-click on a Set header area | Context menu appears with: Copy Set, Rename Set, New Project, Delete Set |
-| PM3 | Context Menu | Right-click set area | Right-click on the Set card background (not on a project card) | Context menu appears with: Copy Set, Rename Set, New Project, Delete Set |
-| PM4 | Context Menu | Right-click grid background | Right-click on the projects-grid background (between cards) | Context menu appears with: Copy Set, Rename Set, New Project, Delete Set |
+| PM2 | Context Menu | Right-click set header | Right-click on a Set header area | Context menu appears with: Copy Set, Rename Set, New Project, Open in File Manager, Delete Set |
+| PM3 | Context Menu | Right-click set area | Right-click on the Set card background (not on a project card) | Context menu appears with: Copy Set, Rename Set, New Project, Open in File Manager, Delete Set |
+| PM4 | Context Menu | Right-click grid background | Right-click on the projects-grid background (between cards) | Context menu appears with: Copy Set, Rename Set, New Project, Open in File Manager, Delete Set |
 | PM5 | Context Menu | Paste project appears after copy | Copy a project, then right-click set header | "Paste Project" option appears alongside other Set actions |
 | PM6 | Context Menu | No paste on project card | Copy a project, then right-click another project card | No "Paste Project" option in the menu |
-| PM7 | Context Menu | Right-click location header | Right-click on a location header | Context menu appears with: New Set |
+| PM7 | Context Menu | Right-click location header | Right-click on a location header | Context menu appears with: New Set, Open in File Manager |
 | PM8 | Context Menu | Paste set appears after copy | Copy a Set, then right-click location header | "Paste Set" option appears alongside "New Set" |
 | PM9 | Context Menu | Escape closes menu | Open context menu, press Escape | Menu disappears |
 | PM10 | Context Menu | Click outside closes menu | Open context menu, click elsewhere | Menu disappears |
@@ -38,7 +38,7 @@
 | PM29 | Copy | Paste duplicate name | Copy "PROJ_A" to a Set that already has "PROJ_A" | Pasted project gets "_2" suffix; "_3" if "_2" also exists |
 | PM30 | Copy | Paste via Ctrl+V | Copy with Ctrl+C, focus a card in another Set, press Ctrl+V | Project is pasted into that Set |
 | PM31 | Copy | Name truncation | Copy a project with a long name to a Set where it already exists | Suffix "_2" applied; name truncated to fit 32-char limit |
-| PM32 | Copy | Progress modal shows progress | Paste a project with many samples | Progress bar advances from 0% to 100%, label shows current operation |
+| PM32 | Copy | Progress modal shows progress and size | Paste a project with many samples | Progress bar advances from 0% to 100%; size shown (e.g. "52 MB / 523 MB"); label shows current operation |
 | PM33 | Copy | Cancel copy | Click Cancel during copy progress | Copy operation stops, partial files cleaned up, modal closes |
 | **Rename Project** | | | | |
 | PM34 | Rename | Via context menu | Right-click project → Rename | Rename modal opens with current name pre-filled and selected |
@@ -64,25 +64,37 @@
 | PM52 | Delete | Escape cancels | Press Escape on confirmation dialog | Dialog closes, project remains |
 | **Set Operations** | | | | |
 | PM53 | Create Set | Via location context menu | Right-click location header → New Set | Create Set modal opens with empty input |
-| PM54 | Create Set | Valid name | Type "MYSET" and click Create | Set card appears in the location with empty project grid |
-| PM55 | Create Set | AUDIO folder created | Create Set, open in file manager | Set folder contains an AUDIO subfolder |
-| PM56 | Create Set | Duplicate name error | Type a Set name that already exists in the location | Error message shown, Create button disabled |
-| PM57 | Create Set | Naming rules apply | Type invalid characters or exceed 32 chars | Same filtering and shake behavior as project create |
-| PM58 | Copy Set | Via context menu | Right-click Set header → Copy Set | Toast appears: "Copied set 'SET_NAME'" |
-| PM59 | Copy Set | Paste via location menu | Copy Set, right-click location header → Paste Set | Progress modal appears; Set copy with all projects appears after completion |
-| PM60 | Copy Set | Duplicate name suffix | Paste Set in same location | Pasted Set gets "_2" suffix |
-| PM61 | Copy Set | Progress and cancel | Paste a Set with many projects/samples | Progress bar shows advancement; Cancel stops operation and cleans up |
-| PM62 | Rename Set | Via context menu | Right-click Set header → Rename Set | Rename modal opens with current Set name |
-| PM63 | Rename Set | Valid rename | Change name to "NEWSET", click Rename | Set header updates to show new name |
-| PM64 | Rename Set | Naming rules apply | Type invalid characters or exceed 32 chars | Same filtering and limits as project rename |
-| PM65 | Delete Set | Via context menu | Right-click Set header → Delete Set | Confirmation dialog appears mentioning the Set name |
-| PM66 | Delete Set | Confirm delete | Click Delete in confirmation dialog | Set card disappears, all projects and folder removed |
-| PM67 | Delete Set | Cancel delete | Click Cancel in confirmation dialog | Dialog closes, Set remains |
+| PM54 | Create Set | Via + button | Click the "+" button in a location header | Create Set modal opens with empty input |
+| PM55 | Create Set | Valid name | Type "MYSET" and click Create | Set card appears in the location with empty project grid |
+| PM56 | Create Set | AUDIO folder created | Create Set, open in file manager | Set folder contains an AUDIO subfolder |
+| PM57 | Create Set | Duplicate name error | Type a Set name that already exists in the location | Error message shown, Create button disabled |
+| PM58 | Create Set | Naming rules apply | Type invalid characters or exceed 32 chars | Same filtering and shake behavior as project create |
+| PM59 | Copy Set | Via context menu | Right-click Set header → Copy Set | Toast appears: "Copied set 'SET_NAME'" |
+| PM60 | Copy Set | Paste via location menu | Copy Set, right-click location header → Paste Set | Progress modal appears; Set copy with all projects appears after completion |
+| PM61 | Copy Set | Duplicate name suffix | Paste Set in same location | Pasted Set gets "_2" suffix |
+| PM62 | Copy Set | Progress and cancel | Paste a Set with many projects/samples | Progress bar shows advancement with size info; Cancel stops operation and cleans up |
+| PM63 | Rename Set | Via context menu | Right-click Set header → Rename Set | Rename modal opens with current Set name |
+| PM64 | Rename Set | Valid rename | Change name to "NEWSET", click Rename | Set header updates to show new name |
+| PM65 | Rename Set | Naming rules apply | Type invalid characters or exceed 32 chars | Same filtering and limits as project rename |
+| PM66 | Delete Set | Via context menu | Right-click Set header → Delete Set | Confirmation dialog appears mentioning the Set name |
+| PM67 | Delete Set | Confirm delete | Click Delete in confirmation dialog | Set card disappears, all projects and folder removed |
+| PM68 | Delete Set | Cancel delete | Click Cancel in confirmation dialog | Dialog closes, Set remains |
 | **Keyboard Navigation** | | | | |
-| PM68 | Navigation | Tab navigates cards | Press Tab repeatedly on the projects page | Focus moves between project cards with visible orange border |
-| PM69 | Navigation | Shift+Tab reverse | Press Shift+Tab | Focus moves backward through cards |
-| PM70 | Navigation | Arrow keys within grid | Focus a card, press arrow keys | Focus moves to adjacent card in the expected direction |
-| PM71 | Navigation | Enter opens project | Focus a project card, press Enter | Navigates to the project detail page |
-| PM72 | Navigation | Focus style visible | Tab to a project card | Orange border and subtle lift effect visible on focused card |
+| PM69 | Navigation | Tab navigates cards | Press Tab repeatedly on the projects page | Focus moves between project cards with visible orange border |
+| PM70 | Navigation | Shift+Tab reverse | Press Shift+Tab | Focus moves backward through cards |
+| PM71 | Navigation | Arrow keys within grid | Focus a card, press arrow keys | Focus moves to adjacent card in the expected direction |
+| PM72 | Navigation | Enter opens project | Focus a project card, press Enter | Navigates to the project detail page |
+| PM73 | Navigation | Focus style visible | Tab to a project card | Orange border and subtle lift effect visible on focused card |
 | **Open in File Manager** | | | | |
-| PM73 | File Manager | Via context menu | Right-click project → Open in File Manager | System file manager opens showing the project folder |
+| PM74 | File Manager | Via context menu on project | Right-click project → Open in File Manager | System file manager opens showing the project folder |
+| PM75 | File Manager | Via context menu on set | Right-click Set header → Open in File Manager | System file manager opens showing the Set folder |
+| PM76 | File Manager | Via context menu on location | Right-click location header → Open in File Manager | System file manager opens showing the location folder |
+| **Loading States** | | | | |
+| PM77 | Loading | Delete spinner | Delete a project on a slow disk | "Deleting..." spinner shown, both buttons disabled until complete |
+| PM78 | Loading | Delete double-click prevented | Click Delete twice quickly in confirmation dialog | Only one delete operation runs; second click is ignored |
+| PM79 | Loading | Create spinner | Create a project on a slow disk | "Creating..." spinner shown, input and buttons disabled until complete |
+| PM80 | Loading | Rename spinner | Rename a project on a slow disk | "Renaming..." spinner shown, input and buttons disabled until complete |
+| PM81 | Loading | Overlay click blocked during operation | While any modal shows a spinner, click the overlay background | Modal stays open (click is ignored) |
+| **Copy Progress Size** | | | | |
+| PM82 | Copy | Size displayed in progress modal | Paste a project with sample files | Progress modal shows copied/total size (e.g. "52 MB / 523 MB") on the left, percentage on the right |
+| PM83 | Copy Set | Size displayed in progress modal | Paste a Set with multiple projects | Progress modal shows copied/total size alongside percentage |
