@@ -5,7 +5,7 @@ import { CharsetInfoIcon } from './CharsetInfoIcon'
 export interface RenameProjectModalProps {
   projectName: string
   existingNames?: string[]
-  onConfirm: (newName: string) => void
+  onConfirm: (newName: string) => Promise<void> | void
   onCancel: () => void
   title?: string
   duplicateMessage?: string
@@ -23,6 +23,7 @@ export function RenameProjectModal({
 }: RenameProjectModalProps) {
   const [name, setName] = useState(projectName)
   const [shaking, setShaking] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -39,11 +40,10 @@ export function RenameProjectModal({
   const duplicate = !unchanged && existingNames.includes(name)
   const empty = name.length === 0
   const error = empty ? 'Name is required' : duplicate ? (duplicateMessage ?? `A project named '${name}' already exists`) : null
-  const canSubmit = !empty && !unchanged && !duplicate
+  const canSubmit = !empty && !unchanged && !duplicate && !submitting
 
   function triggerShake() {
     setShaking(false)
-    // Force reflow to restart animation
     requestAnimationFrame(() => setShaking(true))
     setTimeout(() => setShaking(false), 400)
   }
@@ -57,18 +57,28 @@ export function RenameProjectModal({
     setName(filtered)
   }
 
+  async function handleSubmit() {
+    if (!canSubmit) return
+    setSubmitting(true)
+    try {
+      await onConfirm(name)
+    } catch {
+      setSubmitting(false)
+    }
+  }
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Escape') {
       e.preventDefault()
       onCancel()
     } else if (e.key === 'Enter' && canSubmit) {
       e.preventDefault()
-      onConfirm(name)
+      handleSubmit()
     }
   }
 
   return (
-    <div className="modal-overlay" onClick={onCancel}>
+    <div className="modal-overlay" onClick={submitting ? undefined : onCancel}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3><i className="fas fa-edit" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>{title}</h3>
@@ -84,6 +94,7 @@ export function RenameProjectModal({
               onChange={handleChange}
               onKeyDown={handleKeyDown}
               aria-label="New project name"
+              disabled={submitting}
             />
             <CharsetInfoIcon />
           </div>
@@ -92,16 +103,16 @@ export function RenameProjectModal({
         </div>
         <div className="modal-footer">
           <div className="modal-buttons-row">
-            <button className="modal-button" onClick={onCancel}>
+            <button className="modal-button" onClick={onCancel} disabled={submitting}>
               Cancel
             </button>
             <button
               className="modal-button primary"
-              onClick={() => canSubmit && onConfirm(name)}
+              onClick={handleSubmit}
               disabled={!canSubmit}
               title={unchanged ? 'Name is unchanged' : undefined}
             >
-              {buttonLabel}
+              {submitting ? <><i className="fas fa-spinner fa-spin" style={{ marginRight: '0.4rem' }}></i>Renaming...</> : buttonLabel}
             </button>
           </div>
         </div>
