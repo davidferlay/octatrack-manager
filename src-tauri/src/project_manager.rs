@@ -6,7 +6,7 @@ use crate::audio_pool::{
 };
 use crate::device_detection::{has_valid_audio_pool, scan_for_projects, OctatrackSet};
 use fs2::available_space;
-use ot_tools_io::{BankFile, OctatrackFileIO, ProjectFile};
+use ot_tools_io::{ArrangementFile, BankFile, MarkersFile, OctatrackFileIO, ProjectFile};
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -134,9 +134,9 @@ pub fn next_available_copy_name(base: &str, dest_set: &Path) -> Result<String, S
 }
 
 /// Approximate size of a default empty project on disk.
-/// Breakdown: project.work (~150 KB) + 16 × bank files (~150 KB each) ≈ 2.5 MB.
-/// 4 MB gives ~60 % headroom for filesystem metadata and format evolution.
-const DEFAULT_PROJECT_SIZE_BYTES: u64 = 4 * 1024 * 1024;
+/// Breakdown: project.work (~3 KB) + 16 × bank files (~622 KB each) + 8 × arr files (~11 KB each)
+/// + markers.work (~207 KB) ≈ 10.2 MB. 12 MB gives headroom for filesystem metadata.
+const DEFAULT_PROJECT_SIZE_BYTES: u64 = 12 * 1024 * 1024;
 
 /// Synchronous core of [`create_project`]. Tests call this directly so they
 /// can assert behaviour without an async runtime; the public [`create_project`]
@@ -185,6 +185,23 @@ pub(crate) fn create_project_sync(set: &Path, name: &str) -> Result<String, Stri
             format!("Failed to write bank{:02}.work: {}", i, e)
         })?;
     }
+
+    for i in 1u8..=8 {
+        let arr = ArrangementFile::default();
+        let arr_path: PathBuf = project_path.join(format!("arr{:02}.work", i));
+        arr.to_data_file(&arr_path).map_err(|e| {
+            let _ = fs::remove_dir_all(&project_path);
+            format!("Failed to write arr{:02}.work: {}", i, e)
+        })?;
+    }
+
+    let markers = MarkersFile::default();
+    markers
+        .to_data_file(&project_path.join("markers.work"))
+        .map_err(|e| {
+            let _ = fs::remove_dir_all(&project_path);
+            format!("Failed to write markers.work: {}", e)
+        })?;
 
     Ok(project_path.to_string_lossy().into_owned())
 }
