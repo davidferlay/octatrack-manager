@@ -115,8 +115,16 @@ pub(crate) fn is_octatrack_set(path: &Path) -> bool {
         return false;
     }
 
-    // Check for AUDIO directory - this is the defining characteristic of a Set
-    path.join("AUDIO").is_dir()
+    // Check for AUDIO directory (must be uppercase) - this is the defining characteristic of a Set.
+    // On case-insensitive filesystems (macOS HFS+/APFS), path.join("AUDIO").is_dir() would match
+    // "audio" or "Audio", so we also verify the actual directory entry name is exactly "AUDIO".
+    if let Ok(entries) = fs::read_dir(path) {
+        entries
+            .flatten()
+            .any(|e| e.file_name() == "AUDIO" && e.path().is_dir())
+    } else {
+        false
+    }
 }
 
 /// Checks if a directory is an Octatrack Project (contains .work files)
