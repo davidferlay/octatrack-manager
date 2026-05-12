@@ -68,7 +68,7 @@ export function HomePage() {
   const [clipboard, setClipboard] = useState<ClipboardState | null>(null);
   const [renamingProject, setRenamingProject] = useState<{ project: OctatrackProject; setPath: string } | null>(null);
   const [draggedProject, setDraggedProject] = useState<DraggedProject | null>(null);
-  const [copyToast, setCopyToast] = useState<{ message: string; icon: string } | null>(null);
+  const [toast, setToast] = useState<{ message: string; icon: string } | null>(null);
   const [copyProgress, setCopyProgress] = useState<{ transferId: string; label: string; command: string; commandArgs: Record<string, unknown>; setPath?: string; locationPath?: string } | null>(null);
   const [renamingSet, setRenamingSet] = useState<{ setPath: string; setName: string; locationPath: string } | null>(null);
   const [deleteSetTarget, setDeleteSetTarget] = useState<{ setPath: string; setName: string; locationPath: string } | null>(null);
@@ -86,8 +86,8 @@ export function HomePage() {
   }
 
   function showToast(message: string, icon: string) {
-    setCopyToast({ message, icon });
-    setTimeout(() => setCopyToast(null), 1500);
+    setToast({ message, icon });
+    setTimeout(() => setToast(null), 1500);
   }
 
   // Suppress the native Tauri WebView context menu on this page.
@@ -1082,9 +1082,9 @@ export function HomePage() {
         />
       )}
 
-      {copyToast && (
-        <div className="copy-toast">
-          <i className={`fas ${copyToast.icon}`}></i> {copyToast.message}
+      {toast && (
+        <div className="toast-notification">
+          <i className={`fas ${toast.icon}`}></i> {toast.message}
         </div>
       )}
     </main>

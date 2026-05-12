@@ -111,6 +111,7 @@ export function ProjectDetail() {
   const [allBanksLoaded, setAllBanksLoaded] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState<string>("Initializing...");
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>("overview");
   const [selectedBankIndex, setSelectedBankIndex] = useState<number>(0);
   const [selectedTrackIndex, setSelectedTrackIndex] = useState<number>(0); // Default to track 0, will be set to active track
@@ -435,6 +436,8 @@ export function ProjectDetail() {
           <h1 ref={titleRef} className={isTitleTruncated ? 'truncated' : ''} title={projectPath || ''} style={{ cursor: 'pointer' }} onClick={() => {
             if (projectPath) {
               navigator.clipboard.writeText(projectPath);
+              setToast("Path copied!");
+              setTimeout(() => setToast(null), 1500);
             }
           }}>{projectName}</h1>
           {/* View/Edit mode toggle - hidden during loading */}
@@ -1497,6 +1500,11 @@ export function ProjectDetail() {
         </div>
       )}
       <ScrollToTop />
+      {toast && (
+        <div className="toast-notification">
+          <i className="fas fa-check"></i> {toast}
+        </div>
+      )}
     </main>
   );
 }
