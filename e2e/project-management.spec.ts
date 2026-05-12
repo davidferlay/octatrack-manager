@@ -258,7 +258,7 @@ test('keyboard: F2 opens rename modal', async ({ page }) => {
 test('copy shows confirmation toast', async ({ page }) => {
   await page.getByText('PROJ_A').click({ button: 'right' })
   await page.getByRole('button', { name: 'Copy', exact: true }).click()
-  await expect(page.locator('.copy-toast')).toContainText('PROJ_A')
+  await expect(page.locator('.toast-notification')).toContainText('PROJ_A')
 })
 
 test('context menu on set-card header shows set actions', async ({ page }) => {
@@ -331,7 +331,7 @@ test('create set via location context menu', async ({ page }) => {
 test('copy set shows toast', async ({ page }) => {
   await page.locator('.set-header').first().click({ button: 'right' })
   await page.getByText(/copy set/i).click()
-  await expect(page.locator('.copy-toast')).toContainText('SetA')
+  await expect(page.locator('.toast-notification')).toContainText('SetA')
 })
 
 test('location context menu shows paste set when set copied', async ({ page }) => {
