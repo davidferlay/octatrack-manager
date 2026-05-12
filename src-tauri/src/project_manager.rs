@@ -1285,9 +1285,18 @@ mod tests {
                 i
             );
         }
+        for i in 1..=8 {
+            assert!(
+                p.join(format!("arr{:02}.work", i)).is_file(),
+                "arr{:02}.work missing",
+                i
+            );
+        }
+        assert!(p.join("markers.work").is_file(), "markers.work missing");
         // Can read back the default project / banks.
         ProjectFile::from_data_file(&p.join("project.work")).unwrap();
         BankFile::from_data_file(&p.join("bank01.work")).unwrap();
+        MarkersFile::from_data_file(&p.join("markers.work")).unwrap();
     }
 
     #[test]
