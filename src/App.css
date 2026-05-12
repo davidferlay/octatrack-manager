@@ -420,6 +420,12 @@ h1 {
   background-color: #252525;
 }
 
+.set-card.drag-over {
+  border-color: var(--elektron-orange);
+  background-color: #252525;
+  box-shadow: inset 0 0 0 1px var(--elektron-orange);
+}
+
 .set-header {
   display: flex;
   justify-content: space-between;

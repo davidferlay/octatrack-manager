@@ -68,6 +68,7 @@ export function HomePage() {
   const [clipboard, setClipboard] = useState<ClipboardState | null>(null);
   const [renamingProject, setRenamingProject] = useState<{ project: OctatrackProject; setPath: string } | null>(null);
   const [draggedProject, setDraggedProject] = useState<DraggedProject | null>(null);
+  const [dragOverSetPath, setDragOverSetPath] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; icon: string; type?: 'warning' } | null>(null);
   const [copyProgress, setCopyProgress] = useState<{ transferId: string; label: string; command: string; commandArgs: Record<string, unknown>; setPath?: string; locationPath?: string } | null>(null);
   const [renamingSet, setRenamingSet] = useState<{ setPath: string; setName: string; locationPath: string } | null>(null);
@@ -608,12 +609,19 @@ export function HomePage() {
                                 const setKey = `${locIdx}-${set.name}`;
                                 const isSetOpen = openSets.has(setKey);
                                 return (
-                                <div key={setIdx} className="set-card" title={set.path}
+                                <div key={setIdx} className={`set-card ${dragOverSetPath === set.path ? 'drag-over' : ''}`} title={set.path}
                                   onDragOver={(e) => {
                                     if (e.dataTransfer.types.includes('text/plain') &&
                                         (!draggedProject || draggedProject.sourceSetPath !== set.path)) {
                                       e.preventDefault();
                                       e.dataTransfer.dropEffect = 'move';
+                                      setDragOverSetPath(set.path);
+                                    }
+                                  }}
+                                  onDragLeave={(e) => {
+                                    // Only clear if leaving the set-card itself, not entering a child
+                                    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                                      setDragOverSetPath(null);
                                     }
                                   }}
                                   onDrop={(e) => {
@@ -625,6 +633,7 @@ export function HomePage() {
                                     const sourceProjectPath = data.path;
                                     const sourceSetPath = data.sourceSetPath;
                                     setDraggedProject(null);
+                                    setDragOverSetPath(null);
                                     (async () => {
                                       try {
                                         await invoke('move_project', { srcPath: sourceProjectPath, destSetPath: set.path });
@@ -709,6 +718,7 @@ export function HomePage() {
                                             const sourceProjectPath = data.path;
                                             const sourceSetPath = data.sourceSetPath;
                                             setDraggedProject(null);
+                                            setDragOverSetPath(null);
                                             (async () => {
                                               try {
                                                 await invoke('move_project', { srcPath: sourceProjectPath, destSetPath: set.path });
@@ -748,9 +758,10 @@ export function HomePage() {
                                             onContextMenu={setContextMenu}
                                             draggedProject={draggedProject ? { path: draggedProject.path, sourceSetPath: draggedProject.sourceSetPath } : null}
                                             onDragStart={(p) => setDraggedProject({ path: p.path, name: p.name, sourceSetPath: set.path })}
-                                            onDragEnd={() => setDraggedProject(null)}
+                                            onDragEnd={() => { setDraggedProject(null); setDragOverSetPath(null); }}
                                             onDropOnSet={async (sourceProjectPath, sourceSetPath, destSetPath) => {
                                               setDraggedProject(null);
+                                              setDragOverSetPath(null);
                                               try {
                                                 await invoke('move_project', { srcPath: sourceProjectPath, destSetPath });
                                                 await rescanSet(sourceSetPath);
