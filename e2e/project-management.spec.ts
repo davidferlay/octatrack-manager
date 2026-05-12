@@ -125,6 +125,21 @@ async function setupTauriMocks(page: Page) {
           case 'rescan_set': {
             return Object.values(currentState).find((s) => s.path === args.setPath)
           }
+          case 'move_set': {
+            // Find and remove from source location state, update path
+            for (const s of Object.values(currentState)) {
+              if (s.path === args.srcPath) {
+                const destPath = `${args.destLocationPath}/${s.name}`
+                s.path = destPath
+                s.projects = s.projects.map((p) => ({
+                  ...p,
+                  path: `${destPath}/${p.name}`,
+                }))
+                return destPath
+              }
+            }
+            throw new Error('Not found')
+          }
           case 'create_set': {
             const newSet: MockSet = {
               name: args.name,

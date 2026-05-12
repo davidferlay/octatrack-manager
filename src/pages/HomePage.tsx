@@ -15,6 +15,7 @@ import type {
   ClipboardState,
   ContextMenuState,
   DraggedProject,
+  DraggedSet,
   OctatrackProject,
   OctatrackSet,
 } from "../types/projectManagement";
@@ -68,7 +69,9 @@ export function HomePage() {
   const [clipboard, setClipboard] = useState<ClipboardState | null>(null);
   const [renamingProject, setRenamingProject] = useState<{ project: OctatrackProject; setPath: string } | null>(null);
   const [draggedProject, setDraggedProject] = useState<DraggedProject | null>(null);
+  const [draggedSet, setDraggedSet] = useState<DraggedSet | null>(null);
   const [dragOverSetPath, setDragOverSetPath] = useState<string | null>(null);
+  const [dragOverLocationPath, setDragOverLocationPath] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; icon: string; type?: 'warning' } | null>(null);
   const [copyProgress, setCopyProgress] = useState<{ transferId: string; label: string; command: string; commandArgs: Record<string, unknown>; setPath?: string; locationPath?: string } | null>(null);
   const [renamingSet, setRenamingSet] = useState<{ setPath: string; setName: string; locationPath: string } | null>(null);
@@ -323,7 +326,7 @@ export function HomePage() {
       )}
 
       {(locations.length > 0 || standaloneProjects.length > 0) && (
-        <div className={`devices-list ${draggedProject ? 'is-dragging' : ''}`}>
+        <div className={`devices-list ${draggedProject || draggedSet ? 'is-dragging' : ''}`}>
           {standaloneProjects.length > 0 && (() => {
             // Group standalone projects by parent directory
             const byParent = new Map<string, OctatrackProject[]>();
@@ -536,7 +539,39 @@ export function HomePage() {
                   {locations.map((location, locIdx) => {
                     const isOpen = openLocations.has(locIdx);
                     return (
-                      <div key={locIdx} className={`location-card location-type-${location.device_type.toLowerCase()}`}
+                      <div key={locIdx} className={`location-card location-type-${location.device_type.toLowerCase()} ${dragOverLocationPath === location.path ? 'drag-over' : ''}`}
+                        onDragOver={(e) => {
+                          if (e.dataTransfer.types.includes('application/x-otm-set') &&
+                              (!draggedSet || draggedSet.sourceLocationPath !== location.path)) {
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = 'move';
+                            setDragOverLocationPath(location.path);
+                          }
+                        }}
+                        onDragLeave={(e) => {
+                          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                            setDragOverLocationPath(null);
+                          }
+                        }}
+                        onDrop={(e) => {
+                          if (!e.dataTransfer.types.includes('application/x-otm-set')) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const raw = e.dataTransfer.getData('application/x-otm-set');
+                          const data = raw ? JSON.parse(raw) : draggedSet;
+                          if (!data || data.sourceLocationPath === location.path) return;
+                          setDraggedSet(null);
+                          setDragOverLocationPath(null);
+                          (async () => {
+                            try {
+                              await invoke('move_set', { srcPath: data.path, destLocationPath: location.path });
+                              await scanDevices();
+                            } catch (err) {
+                              setToast({ message: `Move failed: ${err}`, icon: 'fa-exclamation-triangle', type: 'warning' });
+                              setTimeout(() => setToast(null), 3000);
+                            }
+                          })();
+                        }}
                         onContextMenu={(e) => {
                           // Show location context menu on any location-card background area
                           if ((e.target as HTMLElement).closest('.set-card') || (e.target as HTMLElement).closest('.location-header')) return;
@@ -658,6 +693,15 @@ export function HomePage() {
                                 >
                                   <div
                                     className="set-header clickable"
+                                    draggable
+                                    onDragStart={(e) => {
+                                      e.stopPropagation();
+                                      e.dataTransfer.effectAllowed = 'move';
+                                      e.dataTransfer.setData('text/plain', set.path);
+                                      e.dataTransfer.setData('application/x-otm-set', JSON.stringify({ path: set.path, name: set.name, sourceLocationPath: location.path }));
+                                      setDraggedSet({ path: set.path, name: set.name, sourceLocationPath: location.path });
+                                    }}
+                                    onDragEnd={() => { setDraggedSet(null); setDragOverLocationPath(null); }}
                                     onClick={() => {
                                       setOpenSets(prev => {
                                         const next = new Set(prev);
