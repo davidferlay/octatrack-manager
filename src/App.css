@@ -420,6 +420,16 @@ h1 {
   background-color: #252525;
 }
 
+.devices-list.is-dragging {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.devices-list.is-dragging * {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .set-card.drag-over {
   border-color: var(--elektron-orange);
   background-color: #252525;

@@ -323,7 +323,7 @@ export function HomePage() {
       )}
 
       {(locations.length > 0 || standaloneProjects.length > 0) && (
-        <div className="devices-list">
+        <div className={`devices-list ${draggedProject ? 'is-dragging' : ''}`}>
           {standaloneProjects.length > 0 && (() => {
             // Group standalone projects by parent directory
             const byParent = new Map<string, OctatrackProject[]>();
