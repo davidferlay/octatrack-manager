@@ -109,7 +109,8 @@ async function setupTauriMocks(page: Page) {
             dest.projects.push(newProj)
             return newProj.path
           }
-          case 'move_project': {
+          case 'move_project':
+          case 'move_project_with_progress': {
             const dest = Object.values(currentState).find((s) => s.path === args.destSetPath)!
             for (const s of Object.values(currentState)) {
               const i = s.projects.findIndex((p) => p.path === args.srcPath)
@@ -125,7 +126,8 @@ async function setupTauriMocks(page: Page) {
           case 'rescan_set': {
             return Object.values(currentState).find((s) => s.path === args.setPath)
           }
-          case 'move_set': {
+          case 'move_set':
+          case 'move_set_with_progress': {
             // Find and remove from source location state, update path
             for (const s of Object.values(currentState)) {
               if (s.path === args.srcPath) {

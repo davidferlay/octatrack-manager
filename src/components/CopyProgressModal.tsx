@@ -99,6 +99,7 @@ export function CopyProgressModal({ transferId, label, command, commandArgs, onC
     }
   }
 
+  const isMove = command.includes('move')
   const percent = Math.round(progress * 100)
 
   if (cancelled) return null
@@ -108,8 +109,8 @@ export function CopyProgressModal({ transferId, label, command, commandArgs, onC
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>
-            <i className="fas fa-copy" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>
-            {error ? 'Copy Failed' : 'Copying...'}
+            <i className={`fas ${isMove ? 'fa-arrows-alt' : 'fa-copy'}`} style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>
+            {error ? (isMove ? 'Move Failed' : 'Copy Failed') : (isMove ? 'Moving...' : 'Copying...')}
           </h3>
         </div>
         <div className="modal-body">

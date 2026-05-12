@@ -73,7 +73,7 @@ export function HomePage() {
   const [dragOverSetPath, setDragOverSetPath] = useState<string | null>(null);
   const [dragOverLocationPath, setDragOverLocationPath] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; icon: string; type?: 'warning' } | null>(null);
-  const [copyProgress, setCopyProgress] = useState<{ transferId: string; label: string; command: string; commandArgs: Record<string, unknown>; setPath?: string; locationPath?: string } | null>(null);
+  const [copyProgress, setCopyProgress] = useState<{ transferId: string; label: string; command: string; commandArgs: Record<string, unknown>; setPath?: string; locationPath?: string; sourceSetPath?: string; isMove?: boolean } | null>(null);
   const [renamingSet, setRenamingSet] = useState<{ setPath: string; setName: string; locationPath: string } | null>(null);
   const [deleteSetTarget, setDeleteSetTarget] = useState<{ setPath: string; setName: string; locationPath: string } | null>(null);
   const [createSetTarget, setCreateSetTarget] = useState<{ locationPath: string; locationName: string } | null>(null);
@@ -562,15 +562,14 @@ export function HomePage() {
                           if (!data || data.sourceLocationPath === location.path) return;
                           setDraggedSet(null);
                           setDragOverLocationPath(null);
-                          (async () => {
-                            try {
-                              await invoke('move_set', { srcPath: data.path, destLocationPath: location.path });
-                              await scanDevices();
-                            } catch (err) {
-                              setToast({ message: `Move failed: ${err}`, icon: 'fa-exclamation-triangle', type: 'warning' });
-                              setTimeout(() => setToast(null), 3000);
-                            }
-                          })();
+                          setCopyProgress({
+                            transferId: crypto.randomUUID(),
+                            label: `Moving set ${data.name}...`,
+                            command: 'move_set_with_progress',
+                            commandArgs: { srcPath: data.path, destLocationPath: location.path },
+                            locationPath: location.path,
+                            isMove: true,
+                          });
                         }}
                         onContextMenu={(e) => {
                           // Show location context menu on any location-card background area
@@ -665,20 +664,17 @@ export function HomePage() {
                                     const raw = e.dataTransfer.getData('application/x-otm-project');
                                     const data = raw ? JSON.parse(raw) : draggedProject;
                                     if (!data || data.sourceSetPath === set.path) return;
-                                    const sourceProjectPath = data.path;
-                                    const sourceSetPath = data.sourceSetPath;
                                     setDraggedProject(null);
                                     setDragOverSetPath(null);
-                                    (async () => {
-                                      try {
-                                        await invoke('move_project', { srcPath: sourceProjectPath, destSetPath: set.path });
-                                        await rescanSet(sourceSetPath);
-                                        await rescanSet(set.path);
-                                      } catch (err) {
-                                        setToast({ message: `Move failed: ${err}`, icon: 'fa-exclamation-triangle', type: 'warning' });
-                                        setTimeout(() => setToast(null), 3000);
-                                      }
-                                    })();
+                                    setCopyProgress({
+                                      transferId: crypto.randomUUID(),
+                                      label: `Moving project ${data.name || data.path.split('/').pop()}...`,
+                                      command: 'move_project_with_progress',
+                                      commandArgs: { srcPath: data.path, destSetPath: set.path },
+                                      setPath: set.path,
+                                      sourceSetPath: data.sourceSetPath,
+                                      isMove: true,
+                                    });
                                   }}
                                   onContextMenu={(e) => {
                                     e.preventDefault();
@@ -759,20 +755,17 @@ export function HomePage() {
                                             const raw = e.dataTransfer.getData('application/x-otm-project');
                                             const data = raw ? JSON.parse(raw) : draggedProject;
                                             if (!data || data.sourceSetPath === set.path) return;
-                                            const sourceProjectPath = data.path;
-                                            const sourceSetPath = data.sourceSetPath;
                                             setDraggedProject(null);
                                             setDragOverSetPath(null);
-                                            (async () => {
-                                              try {
-                                                await invoke('move_project', { srcPath: sourceProjectPath, destSetPath: set.path });
-                                                await rescanSet(sourceSetPath);
-                                                await rescanSet(set.path);
-                                              } catch (err) {
-                                                setToast({ message: `Move failed: ${err}`, icon: 'fa-exclamation-triangle', type: 'warning' });
-                                                setTimeout(() => setToast(null), 3000);
-                                              }
-                                            })();
+                                            setCopyProgress({
+                                              transferId: crypto.randomUUID(),
+                                              label: `Moving project ${data.name || data.path.split('/').pop()}...`,
+                                              command: 'move_project_with_progress',
+                                              commandArgs: { srcPath: data.path, destSetPath: set.path },
+                                              setPath: set.path,
+                                              sourceSetPath: data.sourceSetPath,
+                                              isMove: true,
+                                            });
                                           }}
                                         >
                                           <div
@@ -803,17 +796,19 @@ export function HomePage() {
                                             draggedProject={draggedProject ? { path: draggedProject.path, sourceSetPath: draggedProject.sourceSetPath } : null}
                                             onDragStart={(p) => setDraggedProject({ path: p.path, name: p.name, sourceSetPath: set.path })}
                                             onDragEnd={() => { setDraggedProject(null); setDragOverSetPath(null); }}
-                                            onDropOnSet={async (sourceProjectPath, sourceSetPath, destSetPath) => {
+                                            onDropOnSet={(sourceProjectPath, sourceSetPath, destSetPath) => {
                                               setDraggedProject(null);
                                               setDragOverSetPath(null);
-                                              try {
-                                                await invoke('move_project', { srcPath: sourceProjectPath, destSetPath });
-                                                await rescanSet(sourceSetPath);
-                                                await rescanSet(destSetPath);
-                                              } catch (err) {
-                                                setToast({ message: `Move failed: ${err}`, icon: 'fa-exclamation-triangle', type: 'warning' });
-                                                setTimeout(() => setToast(null), 3000);
-                                              }
+                                              const name = sourceProjectPath.split('/').pop() || 'project';
+                                              setCopyProgress({
+                                                transferId: crypto.randomUUID(),
+                                                label: `Moving project ${name}...`,
+                                                command: 'move_project_with_progress',
+                                                commandArgs: { srcPath: sourceProjectPath, destSetPath },
+                                                setPath: destSetPath,
+                                                sourceSetPath,
+                                                isMove: true,
+                                              });
                                             }}
                                             clipboard={clipboard}
                                             onCopy={(p) => copyToClipboard(p.path, p.name)}
@@ -1120,7 +1115,16 @@ export function HomePage() {
           onComplete={async (result) => {
             const cp = copyProgress;
             setCopyProgress(null);
-            if (cp.setPath) {
+            if (cp.isMove && cp.sourceSetPath && cp.setPath) {
+              // Project move: rescan both source and destination sets
+              await rescanSet(cp.sourceSetPath);
+              await rescanSet(cp.setPath);
+              showToast(`Moved successfully`, 'fa-arrows-alt');
+            } else if (cp.isMove && cp.locationPath) {
+              // Set move: full rescan
+              await scanDevices();
+              showToast(`Set moved successfully`, 'fa-arrows-alt');
+            } else if (cp.setPath) {
               await rescanSet(cp.setPath);
               showToast(`Pasted successfully`, 'fa-paste');
             } else if (cp.locationPath) {
@@ -1142,8 +1146,10 @@ export function HomePage() {
           }}
           onCancel={() => setCopyProgress(null)}
           onError={(err) => {
+            const isMove = copyProgress?.isMove;
             setCopyProgress(null);
-            alert(`Copy failed: ${err}`);
+            setToast({ message: `${isMove ? 'Move' : 'Copy'} failed: ${err}`, icon: 'fa-exclamation-triangle', type: 'warning' });
+            setTimeout(() => setToast(null), 3000);
           }}
         />
       )}

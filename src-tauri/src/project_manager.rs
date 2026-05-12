@@ -836,6 +836,308 @@ pub async fn move_set(src_path: String, dest_location_path: String) -> Result<St
     .map_err(|e| format!("Background task failed: {}", e))?
 }
 
+/// Moves a project with progress events and cancel support.
+/// Same-filesystem: instant atomic rename + single "complete" event.
+/// Cross-filesystem: copy with progress → verify → delete source.
+#[tauri::command]
+pub async fn move_project_with_progress(
+    app: AppHandle,
+    src_path: String,
+    dest_set_path: String,
+    transfer_id: String,
+) -> Result<String, String> {
+    let cancel_token = register_cancellation_token(&transfer_id);
+    let tid = transfer_id.clone();
+
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let src = Path::new(&src_path);
+        let dest_set = Path::new(&dest_set_path);
+
+        if !src.is_dir() {
+            return Err(format!("Source project does not exist: {}", src.display()));
+        }
+        if !dest_set.is_dir() {
+            return Err(format!(
+                "Destination Set does not exist: {}",
+                dest_set.display()
+            ));
+        }
+        if count_projects_in_set(dest_set) >= MAX_PROJECTS_PER_SET {
+            return Err(format!(
+                "Destination Set is at the {}-project limit",
+                MAX_PROJECTS_PER_SET
+            ));
+        }
+
+        let name = src
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| "Source path has no valid name".to_string())?
+            .to_string();
+        let dest_path = dest_set.join(&name);
+        if dest_path.exists() {
+            return Err(format!(
+                "A project named '{}' already exists in this Set",
+                name
+            ));
+        }
+
+        // Try atomic rename first (same filesystem).
+        match fs::rename(src, &dest_path) {
+            Ok(()) => {
+                let _ = app.emit(
+                    "copy-progress",
+                    ProjectCopyProgress {
+                        transfer_id: tid.clone(),
+                        label: format!("Moving project {}...", name),
+                        progress: 1.0,
+                        stage: "complete".to_string(),
+                        copied_bytes: 0,
+                        total_bytes: 0,
+                    },
+                );
+                return Ok(dest_path.to_string_lossy().into_owned());
+            }
+            Err(e) if e.raw_os_error() == Some(libc_ex_dev()) => {
+                // Cross-device: fall through to copy+verify+delete
+            }
+            Err(e) => return Err(format!("Move failed: {}", e)),
+        }
+
+        // Cross-filesystem move: copy with progress → verify → delete source
+        let size = dir_size(src).map_err(|e| format!("Could not measure source size: {}", e))?;
+        check_free_space(dest_set, size)?;
+
+        let total_files = count_files_recursive(src);
+        let label = format!("Moving project {}...", name);
+        let mut copied = 0u64;
+        let mut copied_bytes = 0u64;
+
+        let result = copy_dir_recursive_with_progress(
+            src,
+            &dest_path,
+            &app,
+            &tid,
+            &label,
+            &cancel_token,
+            total_files,
+            &mut copied,
+            size,
+            &mut copied_bytes,
+        );
+
+        match result {
+            Ok(()) => {
+                // Verify copy
+                let (src_count, src_size) = walk_count_size(src)
+                    .map_err(|e| format!("Could not enumerate source: {}", e))?;
+                let (dst_count, dst_size) = match walk_count_size(&dest_path) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        let _ = fs::remove_dir_all(&dest_path);
+                        return Err(format!("Could not verify destination: {}", e));
+                    }
+                };
+                if src_count != dst_count || src_size != dst_size {
+                    let _ = fs::remove_dir_all(&dest_path);
+                    return Err(format!(
+                        "Verification failed: src={}/{} bytes, dst={}/{} bytes",
+                        src_count, src_size, dst_count, dst_size
+                    ));
+                }
+                // Delete source
+                fs::remove_dir_all(src).map_err(|e| {
+                    format!("Copy succeeded but source could not be deleted: {}", e)
+                })?;
+                let _ = app.emit(
+                    "copy-progress",
+                    ProjectCopyProgress {
+                        transfer_id: tid.clone(),
+                        label,
+                        progress: 1.0,
+                        stage: "complete".to_string(),
+                        copied_bytes: size,
+                        total_bytes: size,
+                    },
+                );
+                Ok(dest_path.to_string_lossy().into_owned())
+            }
+            Err(e) if e == "Cancelled" => {
+                let _ = fs::remove_dir_all(&dest_path);
+                let _ = app.emit(
+                    "copy-progress",
+                    ProjectCopyProgress {
+                        transfer_id: tid.clone(),
+                        label,
+                        progress: 0.0,
+                        stage: "cancelled".to_string(),
+                        copied_bytes,
+                        total_bytes: size,
+                    },
+                );
+                Err("Cancelled".to_string())
+            }
+            Err(e) => {
+                let _ = fs::remove_dir_all(&dest_path);
+                Err(format!("Move failed: {}", e))
+            }
+        }
+    })
+    .await
+    .map_err(|e| format!("Background task failed: {}", e))?;
+
+    remove_cancellation_token(&transfer_id);
+    result
+}
+
+/// Moves a Set with progress events and cancel support.
+/// Same-filesystem: instant atomic rename + single "complete" event.
+/// Cross-filesystem: copy with progress → verify → delete source.
+#[tauri::command]
+pub async fn move_set_with_progress(
+    app: AppHandle,
+    src_path: String,
+    dest_location_path: String,
+    transfer_id: String,
+) -> Result<String, String> {
+    let cancel_token = register_cancellation_token(&transfer_id);
+    let tid = transfer_id.clone();
+
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let src = Path::new(&src_path);
+        let dest_loc = Path::new(&dest_location_path);
+
+        if !src.is_dir() {
+            return Err(format!("Source Set does not exist: {}", src.display()));
+        }
+        if !dest_loc.is_dir() {
+            return Err(format!(
+                "Destination location does not exist: {}",
+                dest_loc.display()
+            ));
+        }
+
+        let name = src
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| "Source path has no valid name".to_string())?
+            .to_string();
+        let dest_path = dest_loc.join(&name);
+        if dest_path.exists() {
+            return Err(format!(
+                "A Set named '{}' already exists in this location",
+                name
+            ));
+        }
+
+        // Try atomic rename first (same filesystem).
+        match fs::rename(src, &dest_path) {
+            Ok(()) => {
+                let _ = app.emit(
+                    "copy-progress",
+                    ProjectCopyProgress {
+                        transfer_id: tid.clone(),
+                        label: format!("Moving set {}...", name),
+                        progress: 1.0,
+                        stage: "complete".to_string(),
+                        copied_bytes: 0,
+                        total_bytes: 0,
+                    },
+                );
+                return Ok(dest_path.to_string_lossy().into_owned());
+            }
+            Err(e) if e.raw_os_error() == Some(libc_ex_dev()) => {
+                // Cross-device: fall through to copy+verify+delete
+            }
+            Err(e) => return Err(format!("Move failed: {}", e)),
+        }
+
+        // Cross-filesystem move
+        let size = dir_size(src).map_err(|e| format!("Could not measure source size: {}", e))?;
+        check_free_space(dest_loc, size)?;
+
+        let total_files = count_files_recursive(src);
+        let label = format!("Moving set {}...", name);
+        let mut copied = 0u64;
+        let mut copied_bytes = 0u64;
+
+        let result = copy_dir_recursive_with_progress(
+            src,
+            &dest_path,
+            &app,
+            &tid,
+            &label,
+            &cancel_token,
+            total_files,
+            &mut copied,
+            size,
+            &mut copied_bytes,
+        );
+
+        match result {
+            Ok(()) => {
+                // Verify copy
+                let (src_count, src_size) = walk_count_size(src)
+                    .map_err(|e| format!("Could not enumerate source: {}", e))?;
+                let (dst_count, dst_size) = match walk_count_size(&dest_path) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        let _ = fs::remove_dir_all(&dest_path);
+                        return Err(format!("Could not verify destination: {}", e));
+                    }
+                };
+                if src_count != dst_count || src_size != dst_size {
+                    let _ = fs::remove_dir_all(&dest_path);
+                    return Err(format!(
+                        "Verification failed: src={}/{} bytes, dst={}/{} bytes",
+                        src_count, src_size, dst_count, dst_size
+                    ));
+                }
+                // Delete source
+                fs::remove_dir_all(src).map_err(|e| {
+                    format!("Copy succeeded but source could not be deleted: {}", e)
+                })?;
+                let _ = app.emit(
+                    "copy-progress",
+                    ProjectCopyProgress {
+                        transfer_id: tid.clone(),
+                        label,
+                        progress: 1.0,
+                        stage: "complete".to_string(),
+                        copied_bytes: size,
+                        total_bytes: size,
+                    },
+                );
+                Ok(dest_path.to_string_lossy().into_owned())
+            }
+            Err(e) if e == "Cancelled" => {
+                let _ = fs::remove_dir_all(&dest_path);
+                let _ = app.emit(
+                    "copy-progress",
+                    ProjectCopyProgress {
+                        transfer_id: tid.clone(),
+                        label,
+                        progress: 0.0,
+                        stage: "cancelled".to_string(),
+                        copied_bytes,
+                        total_bytes: size,
+                    },
+                );
+                Err("Cancelled".to_string())
+            }
+            Err(e) => {
+                let _ = fs::remove_dir_all(&dest_path);
+                Err(format!("Move failed: {}", e))
+            }
+        }
+    })
+    .await
+    .map_err(|e| format!("Background task failed: {}", e))?;
+
+    remove_cancellation_token(&transfer_id);
+    result
+}
+
 /// Returns true if `path` looks like an OT project (contains a `.work` file).
 fn is_project_dir(path: &Path) -> bool {
     if !path.is_dir() {
