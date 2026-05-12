@@ -576,7 +576,7 @@ h1 {
 }
 
 /* Copy toast notification */
-.copy-toast {
+.toast-notification {
   position: fixed;
   bottom: 2rem;
   left: 50%;
@@ -595,7 +595,7 @@ h1 {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
-.copy-toast i {
+.toast-notification i {
   color: var(--elektron-text-primary);
 }
 
