@@ -6,7 +6,7 @@ use crate::audio_pool::{
 };
 use crate::device_detection::{has_valid_audio_pool, scan_for_projects, OctatrackSet};
 use fs2::available_space;
-use ot_tools_io::{ArrangementFile, BankFile, MarkersFile, OctatrackFileIO, ProjectFile};
+use ot_tools_io::{BankFile, MarkersFile, OctatrackFileIO, ProjectFile};
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -186,10 +186,13 @@ pub(crate) fn create_project_sync(set: &Path, name: &str) -> Result<String, Stri
         })?;
     }
 
+    // Arrangement files: use a known-good binary template from OT hardware.
+    // The ot_tools_io ArrangementFile::default() produces incorrect checksums
+    // that cause "WRONG CHECKSUM" errors on the hardware.
+    static BLANK_ARRANGEMENT: &[u8] = include_bytes!("templates/blank_arrangement.work");
     for i in 1u8..=8 {
-        let arr = ArrangementFile::default();
         let arr_path: PathBuf = project_path.join(format!("arr{:02}.work", i));
-        arr.to_data_file(&arr_path).map_err(|e| {
+        fs::write(&arr_path, BLANK_ARRANGEMENT).map_err(|e| {
             let _ = fs::remove_dir_all(&project_path);
             format!("Failed to write arr{:02}.work: {}", i, e)
         })?;
