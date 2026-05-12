@@ -569,7 +569,7 @@ export function HomePage() {
                           <div className="location-header-right">
                             <button
                               className="location-add-set-btn"
-                              title={`New set in ${location.name}`}
+                              title="Create new set"
                               aria-label={`New set in ${location.name}`}
                               onClick={(e) => {
                                 e.stopPropagation();
