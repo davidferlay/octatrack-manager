@@ -140,6 +140,7 @@ export function ProjectGrid({
           onDragStart={(e) => {
             e.dataTransfer.effectAllowed = 'move'
             e.dataTransfer.setData('text/plain', p.path)
+            e.dataTransfer.setData('application/x-otm-project', JSON.stringify({ path: p.path, sourceSetPath: setPath }))
             onDragStart?.(p)
           }}
           onDragEnd={() => onDragEnd?.()}
@@ -166,15 +167,19 @@ export function ProjectGrid({
         onClick={onCreateNew}
         onKeyDown={(e) => { if (e.key === 'Enter') onCreateNew() }}
         onDragOver={(e) => {
-          if (draggedProject && draggedProject.sourceSetPath !== setPath) {
+          if (e.dataTransfer.types.includes('text/plain') &&
+              (!draggedProject || draggedProject.sourceSetPath !== setPath)) {
             e.preventDefault()
             e.dataTransfer.dropEffect = 'move'
           }
         }}
         onDrop={(e) => {
-          if (!draggedProject || draggedProject.sourceSetPath === setPath) return
           e.preventDefault()
-          onDropOnSet?.(draggedProject.path, draggedProject.sourceSetPath, setPath)
+          e.stopPropagation()
+          const raw = e.dataTransfer.getData('application/x-otm-project')
+          const data = raw ? JSON.parse(raw) : (draggedProject ? { path: draggedProject.path, sourceSetPath: draggedProject.sourceSetPath } : null)
+          if (!data || data.sourceSetPath === setPath) return
+          onDropOnSet?.(data.path, data.sourceSetPath, setPath)
         }}
       >
         <div className="new-project-icon">+</div>

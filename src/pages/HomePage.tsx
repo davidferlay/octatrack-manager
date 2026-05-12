@@ -68,7 +68,7 @@ export function HomePage() {
   const [clipboard, setClipboard] = useState<ClipboardState | null>(null);
   const [renamingProject, setRenamingProject] = useState<{ project: OctatrackProject; setPath: string } | null>(null);
   const [draggedProject, setDraggedProject] = useState<DraggedProject | null>(null);
-  const [toast, setToast] = useState<{ message: string; icon: string } | null>(null);
+  const [toast, setToast] = useState<{ message: string; icon: string; type?: 'warning' } | null>(null);
   const [copyProgress, setCopyProgress] = useState<{ transferId: string; label: string; command: string; commandArgs: Record<string, unknown>; setPath?: string; locationPath?: string } | null>(null);
   const [renamingSet, setRenamingSet] = useState<{ setPath: string; setName: string; locationPath: string } | null>(null);
   const [deleteSetTarget, setDeleteSetTarget] = useState<{ setPath: string; setName: string; locationPath: string } | null>(null);
@@ -610,16 +610,20 @@ export function HomePage() {
                                 return (
                                 <div key={setIdx} className="set-card" title={set.path}
                                   onDragOver={(e) => {
-                                    if (draggedProject && draggedProject.sourceSetPath !== set.path) {
+                                    if (e.dataTransfer.types.includes('text/plain') &&
+                                        (!draggedProject || draggedProject.sourceSetPath !== set.path)) {
                                       e.preventDefault();
                                       e.dataTransfer.dropEffect = 'move';
                                     }
                                   }}
                                   onDrop={(e) => {
-                                    if (!draggedProject || draggedProject.sourceSetPath === set.path) return;
                                     e.preventDefault();
-                                    const sourceProjectPath = draggedProject.path;
-                                    const sourceSetPath = draggedProject.sourceSetPath;
+                                    e.stopPropagation();
+                                    const raw = e.dataTransfer.getData('application/x-otm-project');
+                                    const data = raw ? JSON.parse(raw) : draggedProject;
+                                    if (!data || data.sourceSetPath === set.path) return;
+                                    const sourceProjectPath = data.path;
+                                    const sourceSetPath = data.sourceSetPath;
                                     setDraggedProject(null);
                                     (async () => {
                                       try {
@@ -627,7 +631,8 @@ export function HomePage() {
                                         await rescanSet(sourceSetPath);
                                         await rescanSet(set.path);
                                       } catch (err) {
-                                        alert(`Move failed: ${err}`);
+                                        setToast({ message: `Move failed: ${err}`, icon: 'fa-exclamation-triangle', type: 'warning' });
+                                        setTimeout(() => setToast(null), 3000);
                                       }
                                     })();
                                   }}
@@ -689,16 +694,20 @@ export function HomePage() {
                                             });
                                           }}
                                           onDragOver={(e) => {
-                                            if (draggedProject && draggedProject.sourceSetPath !== set.path) {
+                                            if (e.dataTransfer.types.includes('text/plain') &&
+                                                (!draggedProject || draggedProject.sourceSetPath !== set.path)) {
                                               e.preventDefault();
                                               e.dataTransfer.dropEffect = 'move';
                                             }
                                           }}
                                           onDrop={(e) => {
-                                            if (!draggedProject || draggedProject.sourceSetPath === set.path) return;
                                             e.preventDefault();
-                                            const sourceProjectPath = draggedProject.path;
-                                            const sourceSetPath = draggedProject.sourceSetPath;
+                                            e.stopPropagation();
+                                            const raw = e.dataTransfer.getData('application/x-otm-project');
+                                            const data = raw ? JSON.parse(raw) : draggedProject;
+                                            if (!data || data.sourceSetPath === set.path) return;
+                                            const sourceProjectPath = data.path;
+                                            const sourceSetPath = data.sourceSetPath;
                                             setDraggedProject(null);
                                             (async () => {
                                               try {
@@ -706,7 +715,8 @@ export function HomePage() {
                                                 await rescanSet(sourceSetPath);
                                                 await rescanSet(set.path);
                                               } catch (err) {
-                                                alert(`Move failed: ${err}`);
+                                                setToast({ message: `Move failed: ${err}`, icon: 'fa-exclamation-triangle', type: 'warning' });
+                                                setTimeout(() => setToast(null), 3000);
                                               }
                                             })();
                                           }}
@@ -746,7 +756,8 @@ export function HomePage() {
                                                 await rescanSet(sourceSetPath);
                                                 await rescanSet(destSetPath);
                                               } catch (err) {
-                                                alert(`Move failed: ${err}`);
+                                                setToast({ message: `Move failed: ${err}`, icon: 'fa-exclamation-triangle', type: 'warning' });
+                                                setTimeout(() => setToast(null), 3000);
                                               }
                                             }}
                                             clipboard={clipboard}
@@ -1083,7 +1094,7 @@ export function HomePage() {
       )}
 
       {toast && (
-        <div className="toast-notification">
+        <div className={`toast-notification ${toast.type || ''}`}>
           <i className={`fas ${toast.icon}`}></i> {toast.message}
         </div>
       )}

@@ -599,6 +599,11 @@ h1 {
   color: var(--elektron-text-primary);
 }
 
+.toast-notification.warning {
+  border-color: var(--elektron-orange);
+  animation: toastIn 0.2s ease, toastOut 0.3s ease 2.5s forwards;
+}
+
 @keyframes toastIn {
   from { opacity: 0; transform: translateX(-50%) translateY(10px); }
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
