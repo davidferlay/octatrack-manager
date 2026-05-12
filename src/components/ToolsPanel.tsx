@@ -2707,8 +2707,41 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 </div>
               </div>
 
-              {/* Individual Projects (collapsible) */}
-              {standaloneProjects.some(p => p.path !== projectPath && p.has_project_file) && (
+              {/* Individual Projects (collapsible, grouped by parent dir) */}
+              {standaloneProjects.some(p => p.path !== projectPath && p.has_project_file) && (() => {
+                const filteredStandalone = standaloneProjects.filter(p => p.path !== projectPath && p.has_project_file);
+                // Group by parent directory
+                const byParent = new Map<string, OctatrackProject[]>();
+                for (const project of filteredStandalone) {
+                  const parentDir = project.path.substring(0, project.path.lastIndexOf('/'));
+                  const group = byParent.get(parentDir);
+                  if (group) group.push(project);
+                  else byParent.set(parentDir, [project]);
+                }
+                const multiGroups: [string, OctatrackProject[]][] = [];
+                const loneProjects: OctatrackProject[] = [];
+                for (const [dir, projects] of byParent) {
+                  if (projects.length > 1) multiGroups.push([dir, projects]);
+                  else loneProjects.push(projects[0]);
+                }
+                multiGroups.sort((a, b) => naturalCompare(a[0], b[0]));
+                loneProjects.sort((a, b) => naturalCompare(a.name, b.name));
+
+                const renderSelectorCard = (project: OctatrackProject) => (
+                  <div
+                    key={project.path}
+                    className={`project-card project-selector-card ${destProject === project.path ? 'selected' : ''}`}
+                    onClick={() => {
+                      setDestProject(project.path);
+                      setShowProjectSelector(false);
+                    }}
+                    title={project.path}
+                  >
+                    <div className="project-name">{project.name}</div>
+                  </div>
+                );
+
+                return (
                 <div className="project-selector-section">
                   <h4
                     className="clickable"
@@ -2716,32 +2749,41 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
                   >
                     <span className="collapse-indicator">{isIndividualProjectsOpenInModal ? '▼' : '▶'}</span>
-                    {standaloneProjects.filter(p => p.path !== projectPath && p.has_project_file).length} Individual Project{standaloneProjects.filter(p => p.path !== projectPath && p.has_project_file).length !== 1 ? 's' : ''}
+                    {filteredStandalone.length} Individual Project{filteredStandalone.length !== 1 ? 's' : ''}
                   </h4>
                   <div className={`sets-section ${isIndividualProjectsOpenInModal ? 'open' : 'closed'}`}>
                     <div className="sets-section-content">
-                      <div className="projects-grid">
-                        {[...standaloneProjects]
-                          .filter(p => p.path !== projectPath && p.has_project_file)
-                          .sort((a, b) => naturalCompare(a.name, b.name))
-                          .map((project, projIdx) => (
-                            <div
-                              key={projIdx}
-                              className={`project-card project-selector-card ${destProject === project.path ? 'selected' : ''}`}
-                              onClick={() => {
-                                setDestProject(project.path);
-                                setShowProjectSelector(false);
-                              }}
-                              title={project.path}
-                            >
-                              <div className="project-name">{project.name}</div>
-                            </div>
-                          ))}
-                      </div>
+                      {multiGroups.map(([dir, projects]) => (
+                        <div key={dir} className="standalone-group">
+                          <div className="standalone-group-label" title={dir}>
+                            {dir.substring(dir.lastIndexOf('/') + 1) || dir}
+                            <span style={{ opacity: 0.5, marginLeft: '0.5rem', textTransform: 'none', fontFamily: 'inherit', letterSpacing: 0 }}>
+                              — {projects.length} project{projects.length > 1 ? 's' : ''}
+                            </span>
+                          </div>
+                          <div className="projects-grid">
+                            {[...projects].sort((a, b) => naturalCompare(a.name, b.name)).map(renderSelectorCard)}
+                          </div>
+                        </div>
+                      ))}
+                      {loneProjects.length > 0 && (
+                        <div className="standalone-group">
+                          <div className="standalone-group-label">
+                            Other Locations
+                            <span style={{ opacity: 0.5, marginLeft: '0.5rem', textTransform: 'none', fontFamily: 'inherit', letterSpacing: 0 }}>
+                              — {loneProjects.length} project{loneProjects.length > 1 ? 's' : ''}
+                            </span>
+                          </div>
+                          <div className="projects-grid">
+                            {loneProjects.map(renderSelectorCard)}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
-              )}
+                );
+              })()}
 
               {/* Locations (collapsible, each containing sets) */}
               {locations.filter(loc => loc.sets.some(set => set.projects.some(p => p.path !== projectPath && p.has_project_file))).length > 0 && (
