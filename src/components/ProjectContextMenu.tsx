@@ -125,6 +125,13 @@ export function ProjectContextMenu(props: ProjectContextMenuProps) {
           </button>
         </>
       )}
+      {target.kind === 'standaloneGroup' && (
+        <>
+          <button className="context-menu-item" onClick={fire(props.onOpenInFileManager)}>
+            <i className="fas fa-folder-open"></i> Open in File Manager
+          </button>
+        </>
+      )}
     </div>
   )
 }

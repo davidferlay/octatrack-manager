@@ -450,8 +450,31 @@ export function HomePage() {
                   {multiGroups.map(([dir, projects]) => {
                     const isOpen = !closedStandaloneGroups.has(dir);
                     return (
-                    <div key={dir} className="standalone-group">
-                      <div className="standalone-group-label clickable" onClick={() => toggleGroup(dir)} title={dir}>
+                    <div key={dir} className="standalone-group"
+                      onContextMenu={(e) => {
+                        if ((e.target as HTMLElement).closest('.project-card')) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setContextMenu({
+                          x: e.clientX,
+                          y: e.clientY,
+                          target: { kind: 'standaloneGroup', locationPath: dir, locationName: dir.substring(dir.lastIndexOf('/') + 1) || dir },
+                        });
+                      }}
+                    >
+                      <div className="standalone-group-label clickable"
+                        onClick={() => toggleGroup(dir)}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setContextMenu({
+                            x: e.clientX,
+                            y: e.clientY,
+                            target: { kind: 'standaloneGroup', locationPath: dir, locationName: dir.substring(dir.lastIndexOf('/') + 1) || dir },
+                          });
+                        }}
+                        title={dir}
+                      >
                         {dir.substring(dir.lastIndexOf('/') + 1) || dir}
                         <span style={{ opacity: 0.5, marginLeft: '0.5rem', textTransform: 'none', fontFamily: 'inherit', letterSpacing: 0 }}>
                           — {projects.length} project{projects.length > 1 ? 's' : ''}
@@ -800,6 +823,8 @@ export function HomePage() {
             } else if (contextMenu.target.kind === 'set') {
               invoke('open_in_file_manager', { path: contextMenu.target.setPath });
             } else if (contextMenu.target.kind === 'location') {
+              invoke('open_in_file_manager', { path: contextMenu.target.locationPath });
+            } else if (contextMenu.target.kind === 'standaloneGroup') {
               invoke('open_in_file_manager', { path: contextMenu.target.locationPath });
             }
           }}

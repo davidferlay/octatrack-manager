@@ -28,6 +28,7 @@ export type ContextTarget =
   | { kind: 'project'; project: OctatrackProject; setPath: string; setName: string }
   | { kind: 'set'; setPath: string; setName: string }
   | { kind: 'location'; locationPath: string; locationName: string }
+  | { kind: 'standaloneGroup'; locationPath: string; locationName: string }
 
 export interface ContextMenuState {
   x: number
