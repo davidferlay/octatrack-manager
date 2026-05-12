@@ -330,7 +330,7 @@ export function HomePage() {
               if (group) group.push(project);
               else byParent.set(parentDir, [project]);
             }
-            // Split: multi-project groups vs lone projects → "Various Locations"
+            // Split: multi-project groups vs lone projects → "Other Locations"
             const multiGroups: [string, OctatrackProject[]][] = [];
             const loneProjects: OctatrackProject[] = [];
             for (const [dir, projects] of byParent) {
@@ -454,7 +454,7 @@ export function HomePage() {
                   {loneProjects.length > 0 && (
                     <div className="standalone-group">
                       <div className="standalone-group-label">
-                        Various Locations
+                        Other Locations
                         <span style={{ opacity: 0.5, marginLeft: '0.5rem', textTransform: 'none', fontFamily: 'inherit', letterSpacing: 0 }}>
                           — {loneProjects.length} project{loneProjects.length > 1 ? 's' : ''}
                         </span>

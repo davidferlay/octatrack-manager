@@ -341,7 +341,12 @@ h1 {
 }
 
 .standalone-group-label {
-  font-size: 0.85rem;
+  display: inline-block;
+  background: var(--elektron-medium-gray);
+  border: 1px solid var(--elektron-border-gray);
+  padding: 0.2rem 0.6rem;
+  border-radius: 2px;
+  font-size: 0.75rem;
   color: var(--elektron-text-primary);
   opacity: 0.9;
   margin: 0 0 0.6rem 0;
