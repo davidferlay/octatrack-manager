@@ -53,6 +53,8 @@ export function HomePage() {
     setOpenSets,
     setIsIndividualProjectsOpen,
     setIsLocationsOpen,
+    closedStandaloneGroups,
+    setClosedStandaloneGroups,
   } = useProjects();
   const [isScanning, setIsScanning] = useState(false);
   const [isSpinning, setIsSpinning] = useState(false);
@@ -424,6 +426,15 @@ export function HomePage() {
               </div>
             );
 
+            const toggleGroup = (key: string) => {
+              setClosedStandaloneGroups(prev => {
+                const next = new Set(prev);
+                if (next.has(key)) next.delete(key);
+                else next.add(key);
+                return next;
+              });
+            };
+
             return (
             <div style={{ marginBottom: '2rem' }}>
               <h2
@@ -436,36 +447,50 @@ export function HomePage() {
               </h2>
               <div className={`sets-section ${isIndividualProjectsOpen ? 'open' : 'closed'}`}>
                 <div className="sets-section-content">
-                  {multiGroups.map(([dir, projects]) => (
+                  {multiGroups.map(([dir, projects]) => {
+                    const isOpen = !closedStandaloneGroups.has(dir);
+                    return (
                     <div key={dir} className="standalone-group">
-                      <div className="standalone-group-label" title={dir}>
+                      <div className="standalone-group-label clickable" onClick={() => toggleGroup(dir)} title={dir}>
                         {dir.substring(dir.lastIndexOf('/') + 1) || dir}
                         <span style={{ opacity: 0.5, marginLeft: '0.5rem', textTransform: 'none', fontFamily: 'inherit', letterSpacing: 0 }}>
                           — {projects.length} project{projects.length > 1 ? 's' : ''}
                         </span>
                       </div>
+                      <div className={`standalone-group-content ${isOpen ? '' : 'closed'}`}>
+                        <div className="standalone-group-content-inner">
                       <div className="projects-grid">
                         {[...projects].sort((a, b) => naturalCompare(a.name, b.name)).map((project) =>
                           renderProjectCard(project, project.path)
                         )}
                       </div>
+                        </div>
+                      </div>
                     </div>
-                  ))}
-                  {loneProjects.length > 0 && (
+                    );
+                  })}
+                  {loneProjects.length > 0 && (() => {
+                    const isOpen = !closedStandaloneGroups.has('__other__');
+                    return (
                     <div className="standalone-group">
-                      <div className="standalone-group-label">
+                      <div className="standalone-group-label clickable" onClick={() => toggleGroup('__other__')}>
                         Other Locations
                         <span style={{ opacity: 0.5, marginLeft: '0.5rem', textTransform: 'none', fontFamily: 'inherit', letterSpacing: 0 }}>
                           — {loneProjects.length} project{loneProjects.length > 1 ? 's' : ''}
                         </span>
                       </div>
+                      <div className={`standalone-group-content ${isOpen ? '' : 'closed'}`}>
+                        <div className="standalone-group-content-inner">
                       <div className="projects-grid">
                         {loneProjects.map((project) =>
                           renderProjectCard(project, project.path)
                         )}
                       </div>
+                        </div>
+                      </div>
                     </div>
-                  )}
+                    );
+                  })()}
                 </div>
               </div>
             </div>

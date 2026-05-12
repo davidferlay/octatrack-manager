@@ -355,6 +355,33 @@ h1 {
   text-transform: uppercase;
 }
 
+.standalone-group-label.clickable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.standalone-group-label.clickable:hover {
+  border-color: var(--elektron-light-gray);
+}
+
+.standalone-group-content {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: 1;
+}
+
+.standalone-group-content.closed {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.standalone-group-content-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
 .standalone-group-label:first-child {
   margin-top: 0;
 }
