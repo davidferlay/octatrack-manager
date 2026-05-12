@@ -321,7 +321,110 @@ export function HomePage() {
 
       {(locations.length > 0 || standaloneProjects.length > 0) && (
         <div className="devices-list">
-          {standaloneProjects.length > 0 && (
+          {standaloneProjects.length > 0 && (() => {
+            // Group standalone projects by parent directory
+            const byParent = new Map<string, OctatrackProject[]>();
+            for (const project of standaloneProjects) {
+              const parentDir = project.path.substring(0, project.path.lastIndexOf('/'));
+              const group = byParent.get(parentDir);
+              if (group) group.push(project);
+              else byParent.set(parentDir, [project]);
+            }
+            // Split: multi-project groups vs lone projects → "Various Locations"
+            const multiGroups: [string, OctatrackProject[]][] = [];
+            const loneProjects: OctatrackProject[] = [];
+            for (const [dir, projects] of byParent) {
+              if (projects.length > 1) multiGroups.push([dir, projects]);
+              else loneProjects.push(projects[0]);
+            }
+            multiGroups.sort((a, b) => naturalCompare(a[0], b[0]));
+            loneProjects.sort((a, b) => naturalCompare(a.name, b.name));
+
+            const renderProjectCard = (project: OctatrackProject, key: string) => (
+              <div
+                key={key}
+                className="project-card clickable-project"
+                tabIndex={0}
+                onClick={() => {
+                  startTransition(() => {
+                    navigate(`/project?path=${encodeURIComponent(project.path)}&name=${encodeURIComponent(project.name)}`);
+                  });
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const setPath = project.path.substring(0, project.path.lastIndexOf('/'));
+                  setContextMenu({
+                    x: e.clientX,
+                    y: e.clientY,
+                    target: { kind: 'project', project, setPath, setName: 'Individual Projects' },
+                  });
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    startTransition(() => {
+                      navigate(`/project?path=${encodeURIComponent(project.path)}&name=${encodeURIComponent(project.name)}`);
+                    });
+                  } else if (e.key === 'F2') {
+                    e.preventDefault();
+                    const setPath = project.path.substring(0, project.path.lastIndexOf('/'));
+                    setRenamingProject({ project, setPath });
+                  } else if (e.key === 'Delete') {
+                    e.preventDefault();
+                    setDeleteTarget({ project, setName: 'Individual Projects' });
+                  } else if (e.key === 'c' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    copyToClipboard(project.path, project.name);
+                  } else if (['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(e.key)) {
+                    const cards = Array.from(
+                      e.currentTarget.parentElement?.querySelectorAll('.project-card.clickable-project') ?? []
+                    ) as HTMLElement[];
+                    const idx = cards.indexOf(e.currentTarget);
+                    if (idx === -1) return;
+                    let target: HTMLElement | undefined;
+                    const currentLeft = e.currentTarget.offsetLeft;
+                    const currentTop = e.currentTarget.offsetTop;
+                    if (e.key === 'ArrowRight') target = cards[idx + 1] ?? cards[0];
+                    else if (e.key === 'ArrowLeft') target = cards[idx - 1] ?? cards[cards.length - 1];
+                    else if (e.key === 'ArrowDown') {
+                      const below = cards.filter(c => c.offsetTop > currentTop + 10);
+                      if (below.length > 0) {
+                        const nextRowTop = below[0].offsetTop;
+                        const nextRow = below.filter(c => Math.abs(c.offsetTop - nextRowTop) < 10);
+                        target = nextRow.reduce((best, c) => Math.abs(c.offsetLeft - currentLeft) < Math.abs(best.offsetLeft - currentLeft) ? c : best);
+                      } else {
+                        target = cards[cards.length - 1];
+                      }
+                    } else {
+                      const above = cards.filter(c => c.offsetTop < currentTop - 10);
+                      if (above.length > 0) {
+                        const prevRowTop = above[above.length - 1].offsetTop;
+                        const prevRow = above.filter(c => Math.abs(c.offsetTop - prevRowTop) < 10);
+                        target = prevRow.reduce((best, c) => Math.abs(c.offsetLeft - currentLeft) < Math.abs(best.offsetLeft - currentLeft) ? c : best);
+                      } else {
+                        target = cards[0];
+                      }
+                    }
+                    e.preventDefault();
+                    target?.focus();
+                  }
+                }}
+                title={`Click to view project details:\n${project.path}`}
+              >
+                <div className="project-name">{project.name}</div>
+                <div className="project-info">
+                  <span className={project.has_project_file ? "status-yes" : "status-no"}>
+                    {project.has_project_file ? "✓ Project" : "✗ Project"}
+                  </span>
+                  <span className={project.has_banks ? "status-yes" : "status-no"}>
+                    {project.has_banks ? "✓ Banks" : "✗ Banks"}
+                  </span>
+                </div>
+              </div>
+            );
+
+            return (
             <div style={{ marginBottom: '2rem' }}>
               <h2
                 className="clickable"
@@ -333,95 +436,41 @@ export function HomePage() {
               </h2>
               <div className={`sets-section ${isIndividualProjectsOpen ? 'open' : 'closed'}`}>
                 <div className="sets-section-content">
-                  <div className="projects-grid">
-                    {[...standaloneProjects].sort((a, b) => naturalCompare(a.name, b.name)).map((project, projIdx) => (
-                    <div
-                      key={projIdx}
-                      className="project-card clickable-project"
-                      tabIndex={0}
-                      onClick={() => {
-                        startTransition(() => {
-                          navigate(`/project?path=${encodeURIComponent(project.path)}&name=${encodeURIComponent(project.name)}`);
-                        });
-                      }}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const setPath = project.path.substring(0, project.path.lastIndexOf('/'));
-                        setContextMenu({
-                          x: e.clientX,
-                          y: e.clientY,
-                          target: { kind: 'project', project, setPath, setName: 'Individual Projects' },
-                        });
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          startTransition(() => {
-                            navigate(`/project?path=${encodeURIComponent(project.path)}&name=${encodeURIComponent(project.name)}`);
-                          });
-                        } else if (e.key === 'F2') {
-                          e.preventDefault();
-                          const setPath = project.path.substring(0, project.path.lastIndexOf('/'));
-                          setRenamingProject({ project, setPath });
-                        } else if (e.key === 'Delete') {
-                          e.preventDefault();
-                          setDeleteTarget({ project, setName: 'Individual Projects' });
-                        } else if (e.key === 'c' && (e.ctrlKey || e.metaKey)) {
-                          e.preventDefault();
-                          copyToClipboard(project.path, project.name);
-                        } else if (['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(e.key)) {
-                          const cards = Array.from(
-                            e.currentTarget.parentElement?.querySelectorAll('.project-card.clickable-project') ?? []
-                          ) as HTMLElement[];
-                          const idx = cards.indexOf(e.currentTarget);
-                          if (idx === -1) return;
-                          let target: HTMLElement | undefined;
-                          const currentLeft = e.currentTarget.offsetLeft;
-                          const currentTop = e.currentTarget.offsetTop;
-                          if (e.key === 'ArrowRight') target = cards[idx + 1] ?? cards[0];
-                          else if (e.key === 'ArrowLeft') target = cards[idx - 1] ?? cards[cards.length - 1];
-                          else if (e.key === 'ArrowDown') {
-                            const below = cards.filter(c => c.offsetTop > currentTop + 10);
-                            if (below.length > 0) {
-                              const nextRowTop = below[0].offsetTop;
-                              const nextRow = below.filter(c => Math.abs(c.offsetTop - nextRowTop) < 10);
-                              target = nextRow.reduce((best, c) => Math.abs(c.offsetLeft - currentLeft) < Math.abs(best.offsetLeft - currentLeft) ? c : best);
-                            } else {
-                              target = cards[cards.length - 1];
-                            }
-                          } else {
-                            const above = cards.filter(c => c.offsetTop < currentTop - 10);
-                            if (above.length > 0) {
-                              const prevRowTop = above[above.length - 1].offsetTop;
-                              const prevRow = above.filter(c => Math.abs(c.offsetTop - prevRowTop) < 10);
-                              target = prevRow.reduce((best, c) => Math.abs(c.offsetLeft - currentLeft) < Math.abs(best.offsetLeft - currentLeft) ? c : best);
-                            } else {
-                              target = cards[0];
-                            }
-                          }
-                          e.preventDefault();
-                          target?.focus();
-                        }
-                      }}
-                      title={`Click to view project details:\n${project.path}`}
-                    >
-                      <div className="project-name">{project.name}</div>
-                      <div className="project-info">
-                        <span className={project.has_project_file ? "status-yes" : "status-no"}>
-                          {project.has_project_file ? "✓ Project" : "✗ Project"}
+                  {multiGroups.map(([dir, projects]) => (
+                    <div key={dir} className="standalone-group">
+                      <div className="standalone-group-label" title={dir}>
+                        {dir.substring(dir.lastIndexOf('/') + 1) || dir}
+                        <span style={{ opacity: 0.5, marginLeft: '0.5rem', textTransform: 'none', fontFamily: 'inherit', letterSpacing: 0 }}>
+                          — {projects.length} project{projects.length > 1 ? 's' : ''}
                         </span>
-                        <span className={project.has_banks ? "status-yes" : "status-no"}>
-                          {project.has_banks ? "✓ Banks" : "✗ Banks"}
-                        </span>
+                      </div>
+                      <div className="projects-grid">
+                        {[...projects].sort((a, b) => naturalCompare(a.name, b.name)).map((project) =>
+                          renderProjectCard(project, project.path)
+                        )}
                       </div>
                     </div>
                   ))}
-                  </div>
+                  {loneProjects.length > 0 && (
+                    <div className="standalone-group">
+                      <div className="standalone-group-label">
+                        Various Locations
+                        <span style={{ opacity: 0.5, marginLeft: '0.5rem', textTransform: 'none', fontFamily: 'inherit', letterSpacing: 0 }}>
+                          — {loneProjects.length} project{loneProjects.length > 1 ? 's' : ''}
+                        </span>
+                      </div>
+                      <div className="projects-grid">
+                        {loneProjects.map((project) =>
+                          renderProjectCard(project, project.path)
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {locations.length > 0 && (
             <>

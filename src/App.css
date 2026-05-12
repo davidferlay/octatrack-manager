@@ -330,6 +330,30 @@ h1 {
   min-height: 0;
 }
 
+.standalone-group {
+  border-left: 2px solid var(--elektron-border-gray);
+  padding-left: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.standalone-group:last-child {
+  margin-bottom: 0;
+}
+
+.standalone-group-label {
+  font-size: 0.85rem;
+  color: var(--elektron-text-primary);
+  opacity: 0.9;
+  margin: 0 0 0.6rem 0;
+  letter-spacing: 0.5px;
+  font-family: 'Courier New', monospace;
+  text-transform: uppercase;
+}
+
+.standalone-group-label:first-child {
+  margin-top: 0;
+}
+
 .sets-section h4 {
   margin: 0 0 1rem 0;
   font-size: 0.75rem;
