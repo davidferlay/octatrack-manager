@@ -24,6 +24,12 @@ export interface DraggedProject {
   sourceSetPath: string
 }
 
+export interface DraggedSet {
+  path: string
+  name: string
+  sourceLocationPath: string
+}
+
 export type ContextTarget =
   | { kind: 'project'; project: OctatrackProject; setPath: string; setName: string }
   | { kind: 'set'; setPath: string; setName: string }

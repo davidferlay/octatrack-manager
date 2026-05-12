@@ -789,6 +789,53 @@ pub async fn move_project(src_path: String, dest_set_path: String) -> Result<Str
     .map_err(|e| format!("Background task failed: {}", e))?
 }
 
+/// Synchronous core of [`move_set`].
+/// Same filesystem → atomic `fs::rename`. Cross-filesystem → copy → verify → delete.
+pub(crate) fn move_set_sync(src: &Path, dest_location: &Path) -> Result<String, String> {
+    if !src.is_dir() {
+        return Err(format!("Source Set does not exist: {}", src.display()));
+    }
+    if !dest_location.is_dir() {
+        return Err(format!(
+            "Destination location does not exist: {}",
+            dest_location.display()
+        ));
+    }
+
+    let name = src
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| "Source path has no valid name".to_string())?
+        .to_string();
+    let dest_path = dest_location.join(&name);
+    if dest_path.exists() {
+        return Err(format!(
+            "A Set named '{}' already exists in this location",
+            name
+        ));
+    }
+
+    // Try atomic rename first (works iff same filesystem).
+    match fs::rename(src, &dest_path) {
+        Ok(()) => Ok(dest_path.to_string_lossy().into_owned()),
+        Err(e) if e.raw_os_error() == Some(libc_ex_dev()) => {
+            move_project_cross_fs_impl(src, &dest_path)
+        }
+        Err(e) => Err(format!("Move failed: {}", e)),
+    }
+}
+
+/// Moves a Set directory into a different location.
+/// Runs on the blocking thread pool.
+#[tauri::command]
+pub async fn move_set(src_path: String, dest_location_path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        move_set_sync(Path::new(&src_path), Path::new(&dest_location_path))
+    })
+    .await
+    .map_err(|e| format!("Background task failed: {}", e))?
+}
+
 /// Returns true if `path` looks like an OT project (contains a `.work` file).
 fn is_project_dir(path: &Path) -> bool {
     if !path.is_dir() {

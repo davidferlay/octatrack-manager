@@ -774,6 +774,7 @@ pub fn run() {
             project_manager::cancel_copy_operation,
             project_manager::rename_project,
             project_manager::move_project,
+            project_manager::move_set,
             project_manager::delete_project,
             project_manager::rescan_set,
             project_manager::create_set,
