@@ -3011,7 +3011,7 @@ pub fn commit_part_data(project_path: &str, bank_id: &str, part_id: u8) -> Resul
 
     // Copy the unsaved part to saved part (deep copy)
     // This is what the Octatrack's "SAVE" command does
-    bank_data.parts.saved.0[part_idx] = bank_data.parts.unsaved.0[part_idx].clone();
+    bank_data.parts.saved.0[part_idx] = bank_data.parts.unsaved.0[part_idx];
 
     // Set parts_saved_state to indicate this part now has valid saved data
     bank_data.parts_saved_state[part_idx] = 1;
@@ -3075,7 +3075,7 @@ pub fn commit_all_parts_data(project_path: &str, bank_id: &str) -> Result<(), St
 
     // Copy all unsaved parts to saved parts
     for part_idx in 0..4 {
-        bank_data.parts.saved.0[part_idx] = bank_data.parts.unsaved.0[part_idx].clone();
+        bank_data.parts.saved.0[part_idx] = bank_data.parts.unsaved.0[part_idx];
         bank_data.parts_saved_state[part_idx] = 1;
     }
 
@@ -3153,7 +3153,7 @@ pub fn reload_part_data(
     );
 
     // Copy the saved part back to unsaved part
-    bank_data.parts.unsaved.0[part_idx] = bank_data.parts.saved.0[part_idx].clone();
+    bank_data.parts.unsaved.0[part_idx] = bank_data.parts.saved.0[part_idx];
 
     // Clear the edited bit for this part since we just reloaded it
     bank_data.parts_edited_bitmask &= !(1 << part_idx);
@@ -4319,9 +4319,9 @@ pub fn copy_parts(
     let copy_one_part =
         |dest_bank: &mut BankFile, source_bank: &BankFile, src_part: usize, dst_part: usize| {
             // Copy unsaved (working) state
-            dest_bank.parts.unsaved.0[dst_part] = source_bank.parts.unsaved.0[src_part].clone();
+            dest_bank.parts.unsaved.0[dst_part] = source_bank.parts.unsaved.0[src_part];
             // Copy saved (backup) state
-            dest_bank.parts.saved.0[dst_part] = source_bank.parts.saved.0[src_part].clone();
+            dest_bank.parts.saved.0[dst_part] = source_bank.parts.saved.0[src_part];
             // Copy part name
             dest_bank.part_names[dst_part] = source_bank.part_names[src_part];
             // Copy saved state flag
@@ -4751,10 +4751,9 @@ pub fn copy_tracks(
                     dst_parts[dst_part].audio_track_volumes[dst_idx] =
                         src_parts[src_part].audio_track_volumes[src_idx];
                     dst_parts[dst_part].audio_tracks_custom_lfo_designs[dst_idx] =
-                        src_parts[src_part].audio_tracks_custom_lfo_designs[src_idx].clone();
+                        src_parts[src_part].audio_tracks_custom_lfo_designs[src_idx];
                     dst_parts[dst_part].audio_tracks_custom_lfos_interpolation_masks[dst_idx] =
-                        src_parts[src_part].audio_tracks_custom_lfos_interpolation_masks[src_idx]
-                            .clone();
+                        src_parts[src_part].audio_tracks_custom_lfos_interpolation_masks[src_idx];
                     dst_parts[dst_part].recorder_setup[dst_idx] =
                         src_parts[src_part].recorder_setup[src_idx];
                 }
@@ -4779,12 +4778,11 @@ pub fn copy_tracks(
                     dst_parts[dst_part].midi_track_params_setup[dst_idx] =
                         src_parts[src_part].midi_track_params_setup[src_idx];
                     dst_parts[dst_part].midi_tracks_custom_lfos[dst_idx] =
-                        src_parts[src_part].midi_tracks_custom_lfos[src_idx].clone();
+                        src_parts[src_part].midi_tracks_custom_lfos[src_idx];
                     dst_parts[dst_part].midi_tracks_custom_lfos_interpolation_masks[dst_idx] =
-                        src_parts[src_part].midi_tracks_custom_lfos_interpolation_masks[src_idx]
-                            .clone();
+                        src_parts[src_part].midi_tracks_custom_lfos_interpolation_masks[src_idx];
                     dst_parts[dst_part].midi_tracks_arp_seqs[dst_idx] =
-                        src_parts[src_part].midi_tracks_arp_seqs[src_idx].clone();
+                        src_parts[src_part].midi_tracks_arp_seqs[src_idx];
                     dst_parts[dst_part].midi_tracks_arp_mute_masks[dst_idx * 2] =
                         src_parts[src_part].midi_tracks_arp_mute_masks[src_idx * 2];
                     dst_parts[dst_part].midi_tracks_arp_mute_masks[dst_idx * 2 + 1] =
@@ -5197,7 +5195,7 @@ pub fn copy_sample_slots(
                                 && dest_idx < dest_markers.static_slots.len()
                             {
                                 dest_markers.static_slots[dest_idx] =
-                                    src_markers.static_slots[src_idx].clone();
+                                    src_markers.static_slots[src_idx];
                                 markers_modified = true;
                             }
                         }
@@ -5326,8 +5324,7 @@ pub fn copy_sample_slots(
                             if src_idx < src_markers.flex_slots.len()
                                 && dest_idx < dest_markers.flex_slots.len()
                             {
-                                dest_markers.flex_slots[dest_idx] =
-                                    src_markers.flex_slots[src_idx].clone();
+                                dest_markers.flex_slots[dest_idx] = src_markers.flex_slots[src_idx];
                                 markers_modified = true;
                             }
                         }
