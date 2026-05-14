@@ -2,6 +2,18 @@ import { useState, useTransition, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useNavigate } from "react-router-dom";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+  useDraggable,
+  type DragStartEvent,
+  type DragEndEvent,
+  type Modifier,
+} from '@dnd-kit/core';
 import { useProjects } from "../context/ProjectsContext";
 import { Version } from "../components/Version";
 import { ScrollToTop } from "../components/ScrollToTop";
@@ -14,8 +26,6 @@ import { CopyProgressModal } from "../components/CopyProgressModal";
 import type {
   ClipboardState,
   ContextMenuState,
-  DraggedProject,
-  DraggedSet,
   OctatrackProject,
   OctatrackSet,
 } from "../types/projectManagement";
@@ -36,6 +46,48 @@ interface OctatrackLocation {
 interface ScanResult {
   locations: OctatrackLocation[];
   standalone_projects: OctatrackProject[];
+}
+
+function DroppableLocationCard({ locationPath, deviceType, children }: { locationPath: string; deviceType: string; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `location:${locationPath}`,
+    data: { type: 'location', locationPath },
+  });
+  return (
+    <div ref={setNodeRef} className={`location-card${isOver ? ' drag-over' : ''}`} data-device-type={deviceType}>
+      {children}
+    </div>
+  );
+}
+
+function DroppableSetCard({ setPath, set, locationPath, onContextMenu, disabled, children }: {
+  setPath: string;
+  set: OctatrackSet;
+  locationPath: string;
+  onContextMenu: (e: React.MouseEvent) => void;
+  disabled?: boolean;
+  children: (dragProps: { dragRef: React.Ref<HTMLElement>; dragAttributes: Record<string, any>; dragListeners: Record<string, any> | undefined }) => React.ReactNode;
+}) {
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `set:${setPath}`,
+    data: { type: 'set', setPath },
+    disabled,
+  });
+  const { setNodeRef: setDragRef, attributes, listeners, isDragging } = useDraggable({
+    id: `set-drag:${setPath}`,
+    data: { type: 'set', set, sourceLocationPath: locationPath },
+  });
+
+  return (
+    <div
+      ref={disabled ? undefined : setDropRef}
+      className={`set-card${isOver && !disabled ? ' drag-over' : ''}`}
+      style={{ opacity: isDragging ? 0.4 : 1 }}
+      onContextMenu={onContextMenu}
+    >
+      {children({ dragRef: setDragRef, dragAttributes: attributes, dragListeners: listeners })}
+    </div>
+  );
 }
 
 export function HomePage() {
@@ -68,10 +120,7 @@ export function HomePage() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [clipboard, setClipboard] = useState<ClipboardState | null>(null);
   const [renamingProject, setRenamingProject] = useState<{ project: OctatrackProject; setPath: string } | null>(null);
-  const [draggedProject, setDraggedProject] = useState<DraggedProject | null>(null);
-  const [draggedSet, setDraggedSet] = useState<DraggedSet | null>(null);
-  const [dragOverSetPath, setDragOverSetPath] = useState<string | null>(null);
-  const [dragOverLocationPath, setDragOverLocationPath] = useState<string | null>(null);
+  const [activeItem, setActiveItem] = useState<{ type: string; name: string } | null>(null);
   const [toast, setToast] = useState<{ message: string; icon: string; type?: 'warning' } | null>(null);
   const [copyProgress, setCopyProgress] = useState<{ transferId: string; label: string; command: string; commandArgs: Record<string, unknown>; setPath?: string; locationPath?: string; sourceSetPath?: string; isMove?: boolean } | null>(null);
   const [renamingSet, setRenamingSet] = useState<{ setPath: string; setName: string; locationPath: string } | null>(null);
@@ -92,6 +141,72 @@ export function HomePage() {
   function showToast(message: string, icon: string) {
     setToast({ message, icon });
     setTimeout(() => setToast(null), 1500);
+  }
+
+  // ── dnd-kit: pointer-based drag-and-drop ──
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
+
+  // Custom modifier: when dragging a set, snap overlay top-left to cursor
+  // (compensates for the wide set-header vs narrow overlay mismatch)
+  const snapToCursorForSets: Modifier = ({ activatorEvent, draggingNodeRect, transform }) => {
+    if (activeItem?.type !== 'set' || !activatorEvent || !draggingNodeRect) return transform;
+    const event = activatorEvent as PointerEvent;
+    return {
+      ...transform,
+      x: event.clientX - draggingNodeRect.left + transform.x - 16,
+      y: event.clientY - draggingNodeRect.top + transform.y - 16,
+    };
+  };
+
+  function handleDragStart(event: DragStartEvent) {
+    const data = event.active.data.current;
+    if (data?.type === 'project') {
+      setActiveItem({ type: 'project', name: data.project.name });
+    } else if (data?.type === 'set') {
+      setActiveItem({ type: 'set', name: data.set.name });
+    }
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveItem(null);
+    const { active, over } = event;
+    if (!over) return;
+
+    const source = active.data.current;
+    const target = over.data.current;
+    if (!source || !target) return;
+
+    // Defer state update so dnd-kit finishes its cleanup before React re-renders the modal
+    if (source.type === 'project' && target.type === 'set') {
+      if (source.sourceSetPath === target.setPath) return;
+      setTimeout(() => {
+        setCopyProgress({
+          transferId: crypto.randomUUID(),
+          label: `Moving project ${source.project.name}...`,
+          command: 'move_project_with_progress',
+          commandArgs: { srcPath: source.project.path, destSetPath: target.setPath },
+          setPath: target.setPath,
+          sourceSetPath: source.sourceSetPath,
+          isMove: true,
+        });
+      }, 0);
+    }
+
+    if (source.type === 'set' && target.type === 'location') {
+      if (source.sourceLocationPath === target.locationPath) return;
+      setTimeout(() => {
+        setCopyProgress({
+          transferId: crypto.randomUUID(),
+          label: `Moving set ${source.set.name}...`,
+          command: 'move_set_with_progress',
+          commandArgs: { srcPath: source.set.path, destLocationPath: target.locationPath },
+          locationPath: target.locationPath,
+          isMove: true,
+        });
+      }, 0);
+    }
   }
 
   // Suppress the native Tauri WebView context menu on this page.
@@ -326,7 +441,13 @@ export function HomePage() {
       )}
 
       {(locations.length > 0 || standaloneProjects.length > 0) && (
-        <div className={`devices-list ${draggedProject || draggedSet ? 'is-dragging' : ''}`}>
+        <div className="devices-list">
+          <DndContext
+            sensors={sensors}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDragCancel={() => setActiveItem(null)}
+          >
           {standaloneProjects.length > 0 && (() => {
             // Group standalone projects by parent directory
             const byParent = new Map<string, OctatrackProject[]>();
@@ -539,50 +660,7 @@ export function HomePage() {
                   {locations.map((location, locIdx) => {
                     const isOpen = openLocations.has(locIdx);
                     return (
-                      <div key={locIdx} className={`location-card location-type-${location.device_type.toLowerCase()} ${dragOverLocationPath === location.path ? 'drag-over' : ''}`}
-                        onDragOver={(e) => {
-                          if (draggedSet && e.dataTransfer.types.includes('text/plain') &&
-                              draggedSet.sourceLocationPath !== location.path) {
-                            e.preventDefault();
-                            e.dataTransfer.dropEffect = 'move';
-                            setDragOverLocationPath(location.path);
-                          }
-                        }}
-                        onDragLeave={(e) => {
-                          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                            setDragOverLocationPath(null);
-                          }
-                        }}
-                        onDrop={(e) => {
-                          if (!draggedSet && !e.dataTransfer.types.includes('application/x-otm-set')) return;
-                          e.preventDefault();
-                          e.stopPropagation();
-                          const raw = e.dataTransfer.getData('application/x-otm-set');
-                          const data = raw ? JSON.parse(raw) : draggedSet;
-                          if (!data || data.sourceLocationPath === location.path) return;
-                          setDraggedSet(null);
-                          setDragOverLocationPath(null);
-                          setCopyProgress({
-                            transferId: crypto.randomUUID(),
-                            label: `Moving set ${data.name}...`,
-                            command: 'move_set_with_progress',
-                            commandArgs: { srcPath: data.path, destLocationPath: location.path },
-                            locationPath: location.path,
-                            isMove: true,
-                          });
-                        }}
-                        onContextMenu={(e) => {
-                          // Show location context menu on any location-card background area
-                          if ((e.target as HTMLElement).closest('.set-card') || (e.target as HTMLElement).closest('.location-header')) return;
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setContextMenu({
-                            x: e.clientX,
-                            y: e.clientY,
-                            target: { kind: 'location', locationPath: location.path, locationName: location.name },
-                          });
-                        }}
-                      >
+                      <DroppableLocationCard key={locIdx} locationPath={location.path} deviceType={location.device_type}>
                         <div
                           className="location-header clickable"
                           onClick={() => toggleLocation(locIdx)}
@@ -622,7 +700,6 @@ export function HomePage() {
                           <div className={`sets-section ${isOpen ? 'open' : 'closed'}`}>
                             <div className="sets-section-content"
                               onContextMenu={(e) => {
-                                // Show location context menu when clicking on background between set cards
                                 if ((e.target as HTMLElement).closest('.set-card')) return;
                                 e.preventDefault();
                                 e.stopPropagation();
@@ -643,43 +720,9 @@ export function HomePage() {
                                 const setKey = `${locIdx}-${set.name}`;
                                 const isSetOpen = openSets.has(setKey);
                                 return (
-                                <div key={setIdx} className={`set-card ${dragOverSetPath === set.path ? 'drag-over' : ''}`} title={set.path}
-                                  onDragOver={(e) => {
-                                    if (draggedSet) return; // Only accept project drags, not set drags
-                                    if (e.dataTransfer.types.includes('text/plain') &&
-                                        (!draggedProject || draggedProject.sourceSetPath !== set.path)) {
-                                      e.preventDefault();
-                                      e.dataTransfer.dropEffect = 'move';
-                                      setDragOverSetPath(set.path);
-                                    }
-                                  }}
-                                  onDragLeave={(e) => {
-                                    // Only clear if leaving the set-card itself, not entering a child
-                                    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                                      setDragOverSetPath(null);
-                                    }
-                                  }}
-                                  onDrop={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    const raw = e.dataTransfer.getData('application/x-otm-project');
-                                    const data = raw ? JSON.parse(raw) : draggedProject;
-                                    if (!data || data.sourceSetPath === set.path) return;
-                                    setDraggedProject(null);
-                                    setDragOverSetPath(null);
-                                    setCopyProgress({
-                                      transferId: crypto.randomUUID(),
-                                      label: `Moving project ${data.name || data.path.split('/').pop()}...`,
-                                      command: 'move_project_with_progress',
-                                      commandArgs: { srcPath: data.path, destSetPath: set.path },
-                                      setPath: set.path,
-                                      sourceSetPath: data.sourceSetPath,
-                                      isMove: true,
-                                    });
-                                  }}
+                                <DroppableSetCard key={setIdx} setPath={set.path} set={set} locationPath={location.path} disabled={activeItem?.type === 'set'}
                                   onContextMenu={(e) => {
                                     e.preventDefault();
-                                    // Don't show set menu when clicking on a project card (handled by ProjectGrid)
                                     if ((e.target as HTMLElement).closest('.project-card')) return;
                                     setContextMenu({
                                       x: e.clientX,
@@ -688,17 +731,12 @@ export function HomePage() {
                                     });
                                   }}
                                 >
+                                  {({ dragRef, dragAttributes, dragListeners }) => (<>
                                   <div
+                                    ref={dragRef as React.Ref<HTMLDivElement>}
                                     className="set-header clickable"
-                                    draggable
-                                    onDragStart={(e) => {
-                                      e.stopPropagation();
-                                      e.dataTransfer.effectAllowed = 'move';
-                                      e.dataTransfer.setData('text/plain', set.path);
-                                      e.dataTransfer.setData('application/x-otm-set', JSON.stringify({ path: set.path, name: set.name, sourceLocationPath: location.path }));
-                                      setDraggedSet({ path: set.path, name: set.name, sourceLocationPath: location.path });
-                                    }}
-                                    onDragEnd={() => { setTimeout(() => { setDraggedSet(null); setDragOverLocationPath(null); }, 50); }}
+                                    {...dragAttributes}
+                                    {...dragListeners}
                                     onClick={() => {
                                       setOpenSets(prev => {
                                         const next = new Set(prev);
@@ -735,37 +773,11 @@ export function HomePage() {
                                           className="projects-grid"
                                           onContextMenu={(e) => {
                                             e.preventDefault();
-                                            // Only show Set menu when clicking on grid background, not on a project card
                                             if ((e.target as HTMLElement).closest('.project-card')) return;
                                             setContextMenu({
                                               x: e.clientX,
                                               y: e.clientY,
                                               target: { kind: 'set', setPath: set.path, setName: set.name },
-                                            });
-                                          }}
-                                          onDragOver={(e) => {
-                                            if (e.dataTransfer.types.includes('text/plain') &&
-                                                (!draggedProject || draggedProject.sourceSetPath !== set.path)) {
-                                              e.preventDefault();
-                                              e.dataTransfer.dropEffect = 'move';
-                                            }
-                                          }}
-                                          onDrop={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            const raw = e.dataTransfer.getData('application/x-otm-project');
-                                            const data = raw ? JSON.parse(raw) : draggedProject;
-                                            if (!data || data.sourceSetPath === set.path) return;
-                                            setDraggedProject(null);
-                                            setDragOverSetPath(null);
-                                            setCopyProgress({
-                                              transferId: crypto.randomUUID(),
-                                              label: `Moving project ${data.name || data.path.split('/').pop()}...`,
-                                              command: 'move_project_with_progress',
-                                              commandArgs: { srcPath: data.path, destSetPath: set.path },
-                                              setPath: set.path,
-                                              sourceSetPath: data.sourceSetPath,
-                                              isMove: true,
                                             });
                                           }}
                                         >
@@ -794,23 +806,6 @@ export function HomePage() {
                                             }}
                                             onCreateNew={() => setCreateModalTarget({ setPath: set.path, setName: set.name })}
                                             onContextMenu={setContextMenu}
-                                            draggedProject={draggedProject ? { path: draggedProject.path, sourceSetPath: draggedProject.sourceSetPath } : null}
-                                            onDragStart={(p) => setDraggedProject({ path: p.path, name: p.name, sourceSetPath: set.path })}
-                                            onDragEnd={() => { setTimeout(() => { setDraggedProject(null); setDragOverSetPath(null); }, 50); }}
-                                            onDropOnSet={(sourceProjectPath, sourceSetPath, destSetPath) => {
-                                              setDraggedProject(null);
-                                              setDragOverSetPath(null);
-                                              const name = sourceProjectPath.split('/').pop() || 'project';
-                                              setCopyProgress({
-                                                transferId: crypto.randomUUID(),
-                                                label: `Moving project ${name}...`,
-                                                command: 'move_project_with_progress',
-                                                commandArgs: { srcPath: sourceProjectPath, destSetPath },
-                                                setPath: destSetPath,
-                                                sourceSetPath,
-                                                isMove: true,
-                                              });
-                                            }}
                                             clipboard={clipboard}
                                             onCopy={(p) => copyToClipboard(p.path, p.name)}
                                             onPaste={() => {
@@ -831,19 +826,33 @@ export function HomePage() {
                                       </div>
                                     </div>
                                   )}
-                                </div>
+                                  </>)}
+                                </DroppableSetCard>
                                 );
                               })}
                             </div>
                           </div>
                         )}
-                      </div>
+                      </DroppableLocationCard>
                     );
                   })}
                 </div>
               </div>
             </>
           )}
+          <DragOverlay dropAnimation={{ duration: 150 }} modifiers={[snapToCursorForSets]}>
+            {activeItem?.type === 'project' && (
+              <div className="project-card drag-overlay">
+                <div className="project-name">{activeItem.name}</div>
+              </div>
+            )}
+            {activeItem?.type === 'set' && (
+              <div className="project-card drag-overlay">
+                <div className="project-name">{activeItem.name}</div>
+              </div>
+            )}
+          </DragOverlay>
+          </DndContext>
         </div>
       )}
 
@@ -1117,13 +1126,63 @@ export function HomePage() {
             const cp = copyProgress;
             setCopyProgress(null);
             if (cp.isMove && cp.sourceSetPath && cp.setPath) {
-              // Project move: rescan both source and destination sets
-              await rescanSet(cp.sourceSetPath);
-              await rescanSet(cp.setPath);
+              // Project move: update state locally — contents unchanged, only path differs
+              const newProjectPath = result;
+              const srcPath = (cp.commandArgs as any).srcPath as string;
+              setLocations((prev) => {
+                let movedProject: OctatrackProject | undefined;
+                for (const loc of prev) {
+                  for (const s of loc.sets) {
+                    movedProject = s.projects.find((p) => p.path === srcPath);
+                    if (movedProject) break;
+                  }
+                  if (movedProject) break;
+                }
+                if (!movedProject) return prev;
+                const updated: OctatrackProject = { ...movedProject, path: newProjectPath };
+                return prev.map((loc) => ({
+                  ...loc,
+                  sets: loc.sets.map((s) => {
+                    if (s.path === cp.sourceSetPath) {
+                      return { ...s, projects: s.projects.filter((p) => p.path !== srcPath) };
+                    }
+                    if (s.path === cp.setPath) {
+                      return { ...s, projects: [...s.projects, updated] };
+                    }
+                    return s;
+                  }),
+                }));
+              });
               showToast(`Moved successfully`, 'fa-arrows-alt');
             } else if (cp.isMove && cp.locationPath) {
-              // Set move: full rescan
-              await scanDevices();
+              // Set move: update state locally — contents unchanged, only path differs
+              const newSetPath = result;
+              const srcPath = (cp.commandArgs as any).srcPath as string;
+              setLocations((prev) => {
+                // Find the set in its old location
+                let movedSet: OctatrackSet | undefined;
+                for (const loc of prev) {
+                  movedSet = loc.sets.find((s) => s.path === srcPath);
+                  if (movedSet) break;
+                }
+                if (!movedSet) return prev;
+                // Update paths
+                const updated: OctatrackSet = {
+                  ...movedSet,
+                  path: newSetPath,
+                  projects: movedSet.projects.map((p) => ({
+                    ...p,
+                    path: `${newSetPath}/${p.name}`,
+                  })),
+                };
+                // Remove from old, add to new
+                return prev.map((loc) => ({
+                  ...loc,
+                  sets: loc.path === cp.locationPath
+                    ? [...loc.sets.filter((s) => s.path !== srcPath), updated]
+                    : loc.sets.filter((s) => s.path !== srcPath),
+                }));
+              });
               showToast(`Set moved successfully`, 'fa-arrows-alt');
             } else if (cp.setPath) {
               await rescanSet(cp.setPath);

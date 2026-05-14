@@ -51,9 +51,18 @@
 | PM41 | Rename | Escape cancels | Press Escape in rename modal | Modal closes, name unchanged |
 | PM42 | Rename | Charset info icon | Hover ⓘ icon in rename field | Same charset tooltip as in Create modal |
 | **Move Project** | | | | |
-| PM43 | Move | Drag to another set | Drag a project card to a different Set's grid | Project moves to the target Set, disappears from source |
+| PM43 | Move | Drag to another set | Drag a project card to a different Set's drop zone | Progress modal appears; project moves to the target Set, disappears from source |
 | PM44 | Move | Same-set drag ignored | Drag a project card within the same Set | Nothing happens (no error, no move) |
-| PM45 | Move | Cross-disk move safety | Move project between Sets on different disks | Project appears in destination; source removed only after verification |
+| PM45 | Move | Cross-disk move safety | Move project between Sets on different disks | Progress bar shows copy advancement; source removed only after verification |
+| PM45b | Move | Drag overlay follows cursor | Drag a project card | Compact card-sized overlay follows cursor closely |
+| PM45c | Move | Cancel move in progress | Click Cancel during a cross-disk project move | Operation stops, "Cancelling..." shown on button, partial copy cleaned up |
+| **Move Set** | | | | |
+| PM45d | Move | Drag set to another location | Drag a Set header to a different Location | Progress modal appears; Set moves to the target Location |
+| PM45e | Move | Same-location drag ignored | Drag a Set header within the same Location | Nothing happens |
+| PM45f | Move | Sets not highlighted during set drag | Drag a Set header over other Sets | Other Sets do NOT highlight as drop targets; only Locations highlight |
+| PM45g | Move | Location highlights on set hover | Drag a Set header over a Location (including over its child Sets) | Location card highlights with orange border |
+| PM45h | Move | Cross-disk set move | Move Set between Locations on different disks | Progress bar shows advancement; source removed after verification |
+| PM45i | Move | Drag overlay for set | Drag a Set header | Same compact card-sized overlay as project drag |
 | **Delete Project** | | | | |
 | PM46 | Delete | Via context menu | Right-click project → Delete | Confirmation dialog appears with project name and Set name |
 | PM47 | Delete | Via Delete key | Focus project card, press Delete | Same confirmation dialog appears |

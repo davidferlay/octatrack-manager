@@ -19,6 +19,7 @@
     "docs:watch": "npm --prefix user-guide run start"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
     "@fortawesome/fontawesome-free": "^7.1.0",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-dialog": "^2.6.0",
