@@ -29,6 +29,7 @@ export function CopyProgressModal({ transferId, label, command, commandArgs, onC
   const [currentLabel, setCurrentLabel] = useState(label)
   const [error, setError] = useState<string | null>(null)
   const [cancelled, setCancelled] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const [copiedBytes, setCopiedBytes] = useState(0)
   const [totalBytes, setTotalBytes] = useState(0)
 
@@ -92,6 +93,7 @@ export function CopyProgressModal({ transferId, label, command, commandArgs, onC
   }, [transferId, command]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleCancel() {
+    setCancelling(true)
     try {
       await invoke('cancel_copy_operation', { transferId })
     } catch {
@@ -136,8 +138,12 @@ export function CopyProgressModal({ transferId, label, command, commandArgs, onC
                 Close
               </button>
             ) : (
-              <button className="modal-button" onClick={handleCancel}>
-                Cancel
+              <button className="modal-button" onClick={handleCancel} disabled={cancelling}>
+                {cancelling ? (
+                  <><i className="fas fa-spinner fa-spin" style={{ marginRight: '0.4rem' }}></i>Cancelling...</>
+                ) : (
+                  'Cancel'
+                )}
               </button>
             )}
           </div>
