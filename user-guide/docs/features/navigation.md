@@ -1,8 +1,9 @@
 ---
 sidebar_position: 4
+sidebar_label: Navigate Projects
 ---
 
-# Project Navigation
+# Navigate Projects
 
 Navigating through an Octatrack project is intuitive and provides a much broader view of your data than is possible on the device's screen.
 

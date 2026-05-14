@@ -1,8 +1,9 @@
 ---
 sidebar_position: 1
+sidebar_label: Edit with Tools
 ---
 
-# Tools Overview
+# Edit with Tools
 
 The **Tools** tab provides powerful bulk operations for moving content between Octatrack projects. These tools let you merge live sets, copy sound designs between banks, and reorganize your sample library without manual work on the hardware.
 

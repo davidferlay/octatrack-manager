@@ -1,8 +1,9 @@
 ---
 sidebar_position: 2
+sidebar_label: View Project Details
 ---
 
-# Project Detail
+# View Project Details
 
 The Project Detail page provides a comprehensive, high-level view of an Octatrack project. From here, you can inspect your project's settings, explore its banks, parts, patterns and sample slots.
 

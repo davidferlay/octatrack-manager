@@ -1,8 +1,9 @@
 ---
 sidebar_position: 1
+sidebar_label: Discover Projects
 ---
 
-# Project Discovery
+# Discover Projects
 
 The Home page is your starting point for browsing and organizing your Octatrack work.
 
