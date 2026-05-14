@@ -541,8 +541,8 @@ export function HomePage() {
                     return (
                       <div key={locIdx} className={`location-card location-type-${location.device_type.toLowerCase()} ${dragOverLocationPath === location.path ? 'drag-over' : ''}`}
                         onDragOver={(e) => {
-                          if (e.dataTransfer.types.includes('application/x-otm-set') &&
-                              (!draggedSet || draggedSet.sourceLocationPath !== location.path)) {
+                          if (draggedSet && e.dataTransfer.types.includes('text/plain') &&
+                              draggedSet.sourceLocationPath !== location.path) {
                             e.preventDefault();
                             e.dataTransfer.dropEffect = 'move';
                             setDragOverLocationPath(location.path);
@@ -554,7 +554,7 @@ export function HomePage() {
                           }
                         }}
                         onDrop={(e) => {
-                          if (!e.dataTransfer.types.includes('application/x-otm-set')) return;
+                          if (!draggedSet && !e.dataTransfer.types.includes('application/x-otm-set')) return;
                           e.preventDefault();
                           e.stopPropagation();
                           const raw = e.dataTransfer.getData('application/x-otm-set');
@@ -645,6 +645,7 @@ export function HomePage() {
                                 return (
                                 <div key={setIdx} className={`set-card ${dragOverSetPath === set.path ? 'drag-over' : ''}`} title={set.path}
                                   onDragOver={(e) => {
+                                    if (draggedSet) return; // Only accept project drags, not set drags
                                     if (e.dataTransfer.types.includes('text/plain') &&
                                         (!draggedProject || draggedProject.sourceSetPath !== set.path)) {
                                       e.preventDefault();
@@ -697,7 +698,7 @@ export function HomePage() {
                                       e.dataTransfer.setData('application/x-otm-set', JSON.stringify({ path: set.path, name: set.name, sourceLocationPath: location.path }));
                                       setDraggedSet({ path: set.path, name: set.name, sourceLocationPath: location.path });
                                     }}
-                                    onDragEnd={() => { setDraggedSet(null); setDragOverLocationPath(null); }}
+                                    onDragEnd={() => { setTimeout(() => { setDraggedSet(null); setDragOverLocationPath(null); }, 50); }}
                                     onClick={() => {
                                       setOpenSets(prev => {
                                         const next = new Set(prev);
@@ -795,7 +796,7 @@ export function HomePage() {
                                             onContextMenu={setContextMenu}
                                             draggedProject={draggedProject ? { path: draggedProject.path, sourceSetPath: draggedProject.sourceSetPath } : null}
                                             onDragStart={(p) => setDraggedProject({ path: p.path, name: p.name, sourceSetPath: set.path })}
-                                            onDragEnd={() => { setDraggedProject(null); setDragOverSetPath(null); }}
+                                            onDragEnd={() => { setTimeout(() => { setDraggedProject(null); setDragOverSetPath(null); }, 50); }}
                                             onDropOnSet={(sourceProjectPath, sourceSetPath, destSetPath) => {
                                               setDraggedProject(null);
                                               setDragOverSetPath(null);
