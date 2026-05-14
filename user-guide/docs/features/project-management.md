@@ -52,9 +52,9 @@ The pasted copy is renamed `_2`, `_3`, … if the name is already taken in the d
 
 ### Moving a Project
 
-Drag any project card onto another Set's grid. The project moves immediately. Same-Set drops are ignored.
+Drag any project card onto another Set's drop zone. A **progress modal** appears showing the move status. Same-Set drops are ignored.
 
-If the destination is on the same disk, the move is atomic. Across disks, Manager copies the project first, verifies file count and sizes match, then deletes the source — your project is never lost.
+If the destination is on the same disk, the move is atomic and nearly instant. Across disks, Manager copies the project first, verifies file count and sizes match, then deletes the source — your project is never lost. You can **cancel** a cross-disk move at any time.
 
 ### Deleting a Project
 
@@ -80,6 +80,12 @@ The pasted Set is renamed `_2`, `_3`, … if the name already exists in the targ
 ### Renaming a Set
 
 Right-click a Set header → **Rename Set**. Type the new name and press Enter to confirm.
+
+### Moving a Set
+
+Drag any Set header onto another Location. A **progress modal** appears showing the move status. Same-Location drops are ignored. While dragging a Set, only Locations highlight as valid drop targets — other Sets do not.
+
+If the destination is on the same disk, the move is atomic and nearly instant. Across disks, Manager copies the entire Set first, verifies all files, then deletes the source. You can **cancel** a cross-disk move at any time.
 
 ### Deleting a Set
 

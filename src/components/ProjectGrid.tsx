@@ -1,3 +1,4 @@
+import { useDraggable } from '@dnd-kit/core'
 import type { OctatrackProject, ContextMenuState } from '../types/projectManagement'
 
 export interface ProjectGridProps {
@@ -7,17 +8,56 @@ export interface ProjectGridProps {
   onProjectClick: (project: OctatrackProject) => void
   onCreateNew: () => void
   onContextMenu: (state: ContextMenuState) => void
-  // Drag-and-drop
-  draggedProject?: { path: string; sourceSetPath: string } | null
-  onDragStart?: (project: OctatrackProject) => void
-  onDragEnd?: () => void
-  onDropOnSet?: (sourceProjectPath: string, sourceSetPath: string, destSetPath: string) => void
   // Keyboard shortcuts
   onCopy?: (project: OctatrackProject) => void
   onPaste?: () => void
   onDeleteRequest?: (project: OctatrackProject) => void
   onRenameRequest?: (project: OctatrackProject) => void
   clipboard?: { path: string; name: string } | null
+}
+
+function DraggableProjectCard({
+  project,
+  setPath,
+  onProjectClick,
+  onContextMenu,
+  onKeyDown,
+}: {
+  project: OctatrackProject
+  setPath: string
+  onProjectClick: () => void
+  onContextMenu: (e: React.MouseEvent) => void
+  onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void
+}) {
+  const { setNodeRef, attributes, listeners, isDragging } = useDraggable({
+    id: `project:${project.path}`,
+    data: { type: 'project', project, sourceSetPath: setPath },
+  })
+
+  return (
+    <div
+      ref={setNodeRef}
+      className="project-card clickable-project"
+      title="Click to view project details"
+      style={{ opacity: isDragging ? 0.4 : 1 }}
+      {...attributes}
+      {...listeners}
+      tabIndex={0}
+      onClick={onProjectClick}
+      onContextMenu={onContextMenu}
+      onKeyDown={onKeyDown}
+    >
+      <div className="project-name">{project.name}</div>
+      <div className="project-info">
+        <span className={project.has_project_file ? "status-yes" : "status-no"}>
+          {project.has_project_file ? "✓ Project" : "✗ Project"}
+        </span>
+        <span className={project.has_banks ? "status-yes" : "status-no"}>
+          {project.has_banks ? "✓ Banks" : "✗ Banks"}
+        </span>
+      </div>
+    </div>
+  )
 }
 
 export function ProjectGrid({
@@ -27,10 +67,6 @@ export function ProjectGrid({
   onProjectClick,
   onCreateNew,
   onContextMenu,
-  draggedProject,
-  onDragStart,
-  onDragEnd,
-  onDropOnSet,
   onCopy,
   onPaste,
   onDeleteRequest,
@@ -94,7 +130,6 @@ export function ProjectGrid({
         target = cards[idx - 1] ?? cards[cards.length - 1]
         break
       case 'ArrowDown': {
-        // Find cards in the immediately next row, then pick closest by offsetLeft
         const below = cards.filter(c => c.offsetTop > currentTop + 10)
         if (below.length > 0) {
           const nextRowTop = below[0].offsetTop
@@ -108,7 +143,6 @@ export function ProjectGrid({
         break
       }
       case 'ArrowUp': {
-        // Find cards in the immediately previous row, then pick closest by offsetLeft
         const above = cards.filter(c => c.offsetTop < currentTop - 10)
         if (above.length > 0) {
           const prevRowTop = above[above.length - 1].offsetTop
@@ -131,33 +165,14 @@ export function ProjectGrid({
   return (
     <>
       {projects.map((p) => (
-        <div
+        <DraggableProjectCard
           key={p.path}
-          className="project-card clickable-project"
-          tabIndex={0}
-          draggable
-          title="Click to view project details"
-          onDragStart={(e) => {
-            e.dataTransfer.effectAllowed = 'move'
-            e.dataTransfer.setData('text/plain', p.path)
-            e.dataTransfer.setData('application/x-otm-project', JSON.stringify({ path: p.path, sourceSetPath: setPath }))
-            onDragStart?.(p)
-          }}
-          onDragEnd={() => onDragEnd?.()}
-          onClick={() => onProjectClick(p)}
+          project={p}
+          setPath={setPath}
+          onProjectClick={() => onProjectClick(p)}
           onContextMenu={(e) => handleProjectContextMenu(e, p)}
           onKeyDown={(e) => handleCardKeyDown(e, p)}
-        >
-          <div className="project-name">{p.name}</div>
-          <div className="project-info">
-            <span className={p.has_project_file ? "status-yes" : "status-no"}>
-              {p.has_project_file ? "✓ Project" : "✗ Project"}
-            </span>
-            <span className={p.has_banks ? "status-yes" : "status-no"}>
-              {p.has_banks ? "✓ Banks" : "✗ Banks"}
-            </span>
-          </div>
-        </div>
+        />
       ))}
       <div
         className="project-card new-project-card"
@@ -166,21 +181,6 @@ export function ProjectGrid({
         aria-label={`New project in ${setName}`}
         onClick={onCreateNew}
         onKeyDown={(e) => { if (e.key === 'Enter') onCreateNew() }}
-        onDragOver={(e) => {
-          if (e.dataTransfer.types.includes('text/plain') &&
-              (!draggedProject || draggedProject.sourceSetPath !== setPath)) {
-            e.preventDefault()
-            e.dataTransfer.dropEffect = 'move'
-          }
-        }}
-        onDrop={(e) => {
-          e.preventDefault()
-          e.stopPropagation()
-          const raw = e.dataTransfer.getData('application/x-otm-project')
-          const data = raw ? JSON.parse(raw) : (draggedProject ? { path: draggedProject.path, sourceSetPath: draggedProject.sourceSetPath } : null)
-          if (!data || data.sourceSetPath === setPath) return
-          onDropOnSet?.(data.path, data.sourceSetPath, setPath)
-        }}
       >
         <div className="new-project-icon">+</div>
         <div className="new-project-label">New Project</div>
