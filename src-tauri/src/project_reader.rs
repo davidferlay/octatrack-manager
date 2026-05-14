@@ -3778,6 +3778,212 @@ pub fn search_directory(
     Ok(found)
 }
 
+/// Surgically replace specific [SAMPLE]...[/SAMPLE] blocks in a project.work file.
+/// Only blocks matching a (TYPE, SLOT) key in `block_replacements` are replaced;
+/// all other blocks and file content are preserved verbatim.
+///
+/// This avoids the ot-tools-io round-trip bug that drops TRIM_BARSx100 and
+/// converts TRIGQUANTIZATION=-1 to 255 for ALL slots.
+fn replace_sample_blocks_surgical(
+    project_file_path: &Path,
+    block_replacements: &std::collections::HashMap<(String, u16), String>,
+) -> Result<(), String> {
+    if block_replacements.is_empty() {
+        return Ok(());
+    }
+
+    // Read raw bytes and decode as Windows-1258
+    let raw_bytes = std::fs::read(project_file_path)
+        .map_err(|e| format!("Failed to read project file: {}", e))?;
+    let (decoded, _, _) = encoding_rs::WINDOWS_1258.decode(&raw_bytes);
+    let content = decoded.into_owned();
+
+    let mut result = String::with_capacity(content.len());
+    let mut pos = 0;
+    let mut applied: std::collections::HashSet<(String, u16)> = std::collections::HashSet::new();
+
+    while let Some(block_start_offset) = content[pos..].find("[SAMPLE]") {
+        let block_start = pos + block_start_offset;
+        let block_end_tag = "[/SAMPLE]";
+        let block_end = content[block_start..]
+            .find(block_end_tag)
+            .map(|i| block_start + i + block_end_tag.len())
+            .ok_or_else(|| "Malformed project file: unclosed [SAMPLE] block".to_string())?;
+
+        // Copy everything before this block
+        result.push_str(&content[pos..block_start]);
+
+        let block = &content[block_start..block_end];
+
+        // Extract TYPE= and SLOT= from this block
+        let slot_type = block
+            .lines()
+            .find(|l| l.starts_with("TYPE="))
+            .map(|l| l.trim_end_matches('\r')[5..].to_string());
+        let slot_id = block
+            .lines()
+            .find(|l| l.starts_with("SLOT="))
+            .and_then(|l| l.trim_end_matches('\r')[5..].parse::<u16>().ok());
+
+        if let (Some(ref stype), Some(sid)) = (slot_type, slot_id) {
+            let key = (stype.clone(), sid);
+            if let Some(replacement) = block_replacements.get(&key) {
+                result.push_str(replacement);
+                applied.insert(key);
+                pos = block_end;
+                continue;
+            }
+        }
+
+        // Preserve block verbatim
+        result.push_str(block);
+        pos = block_end;
+    }
+
+    // Append remainder after last block
+    let remainder = &content[pos..];
+
+    // Insert any new blocks (not found in existing file) before the footer
+    if applied.len() < block_replacements.len() {
+        // Insert new blocks at the position after the last [/SAMPLE] block
+        // (before the footer/remaining content)
+        for (key, block_content) in block_replacements {
+            if !applied.contains(key) {
+                result.push_str("\r\n\r\n");
+                result.push_str(block_content);
+            }
+        }
+    }
+
+    result.push_str(remainder);
+
+    // Encode back to Windows-1258 and write
+    let (encoded, _, _) = encoding_rs::WINDOWS_1258.encode(&result);
+    std::fs::write(project_file_path, &*encoded)
+        .map_err(|e| format!("Failed to write project file: {}", e))?;
+
+    Ok(())
+}
+
+/// Surgically update PATH= lines in a project.work file without doing a full round-trip
+/// through ot-tools-io structs. This preserves all fields verbatim (including TRIM_BARSx100,
+/// TRIGQUANTIZATION=-1, and any other unknown fields) for slots that are not being modified.
+///
+/// # Arguments
+/// * `project_file_path` - Path to the project.work (or project.strd) file
+/// * `path_updates` - Vec of (old_filename, new_path) pairs. For each [SAMPLE] block whose
+///   PATH= filename matches old_filename AND whose full path doesn't exist on disk,
+///   the PATH= line is replaced with new_path.
+/// * `project_dir` - The project directory (used to check if current path exists on disk,
+///   when `check_file_exists` is true)
+/// * `check_file_exists` - If true, only update PATH when the current file doesn't exist on disk.
+///   If false, update all matching slots unconditionally (used for move_to_pool on sibling projects).
+fn update_project_file_paths_surgical(
+    project_file_path: &Path,
+    path_updates: &[(String, String)],
+    project_dir: &Path,
+    check_file_exists: bool,
+) -> Result<bool, String> {
+    if path_updates.is_empty() {
+        return Ok(false);
+    }
+
+    // Read raw bytes and decode as Windows-1258
+    let raw_bytes = std::fs::read(project_file_path)
+        .map_err(|e| format!("Failed to read project file: {}", e))?;
+    let (decoded, _, _) = encoding_rs::WINDOWS_1258.decode(&raw_bytes);
+    let content = decoded.into_owned();
+
+    // Build a lookup: filename -> new_path
+    let updates: std::collections::HashMap<String, &str> = path_updates
+        .iter()
+        .map(|(filename, new_path)| (filename.to_lowercase(), new_path.as_str()))
+        .collect();
+
+    let mut modified = false;
+    let mut result = String::with_capacity(content.len());
+    let mut pos = 0;
+
+    while let Some(block_start) = content[pos..].find("[SAMPLE]") {
+        let block_start = pos + block_start;
+        let block_end_tag = "[/SAMPLE]";
+        let block_end = content[block_start..]
+            .find(block_end_tag)
+            .map(|i| block_start + i + block_end_tag.len())
+            .ok_or_else(|| "Malformed project file: unclosed [SAMPLE] block".to_string())?;
+
+        // Copy everything before this block
+        result.push_str(&content[pos..block_start]);
+
+        let block = &content[block_start..block_end];
+
+        // Extract PATH= value from this block
+        let path_updated = if let Some(path_line_start) = block.find("\nPATH=") {
+            let path_value_start = path_line_start + "\nPATH=".len();
+            let path_value_end = block[path_value_start..]
+                .find('\r')
+                .or_else(|| block[path_value_start..].find('\n'))
+                .map(|i| path_value_start + i)
+                .unwrap_or(block.len());
+            let current_path = &block[path_value_start..path_value_end];
+
+            // Extract filename from current path
+            let current_filename = current_path
+                .rsplit(['/', '\\'])
+                .next()
+                .unwrap_or(current_path);
+
+            if !current_filename.is_empty() {
+                if let Some(new_path) = updates.get(&current_filename.to_lowercase()) {
+                    // Only update if file doesn't exist on disk (or if check is disabled)
+                    let should_update = if check_file_exists {
+                        let full_path = project_dir.join(current_path);
+                        !full_path.exists()
+                    } else {
+                        true
+                    };
+                    if should_update {
+                        // Rebuild the block with the new PATH= line
+                        result.push_str(&block[..path_value_start]);
+                        result.push_str(new_path);
+                        result.push_str(&block[path_value_end..]);
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        if path_updated {
+            modified = true;
+        } else {
+            // Preserve block verbatim
+            result.push_str(block);
+        }
+
+        pos = block_end;
+    }
+
+    // Append remainder after last block
+    result.push_str(&content[pos..]);
+
+    if modified {
+        // Encode back to Windows-1258 and write
+        let (encoded, _, _) = encoding_rs::WINDOWS_1258.encode(&result);
+        std::fs::write(project_file_path, &*encoded)
+            .map_err(|e| format!("Failed to write project file: {}", e))?;
+    }
+
+    Ok(modified)
+}
+
 /// Apply resolved sample fixes: update paths, copy/move files, handle .ot companions.
 pub fn fix_missing_samples(
     project_path: &str,
@@ -3794,9 +4000,6 @@ pub fn fix_missing_samples(
         return Err("Project file not found".to_string());
     };
 
-    let mut project_data = ProjectFile::from_data_file(&project_file_path)
-        .map_err(|e| format!("Failed to read project: {:?}", e))?;
-
     let parent = path
         .parent()
         .ok_or_else(|| "Cannot determine parent directory".to_string())?;
@@ -3804,6 +4007,9 @@ pub fn fix_missing_samples(
     // Track which sibling projects need path updates (for move_to_pool)
     let mut sibling_updates: std::collections::HashMap<String, Vec<(String, String)>> =
         std::collections::HashMap::new();
+
+    // Collect path updates for surgical write (instead of mutating project_data)
+    let mut current_project_path_updates: Vec<(String, String)> = Vec::new();
 
     let mut files_copied: u32 = 0;
     let mut files_moved: u32 = 0;
@@ -3913,65 +4119,23 @@ pub fn fix_missing_samples(
             }
         }
 
-        // Update slot paths in current project
-        let new_path_buf = std::path::PathBuf::from(new_slot_path);
-        for idx in 0..128usize {
-            if let Some(ref mut slot_data) = project_data
-                .slots
-                .flex_slots
-                .get_mut(idx)
-                .and_then(|s| s.as_mut())
-            {
-                if let Some(ref slot_path) = slot_data.path {
-                    let slot_filename = slot_path
-                        .file_name()
-                        .map(|n| n.to_string_lossy().to_string())
-                        .unwrap_or_default();
-                    if slot_filename == resolution.filename {
-                        let slot_path_str = slot_path.to_string_lossy().to_string();
-                        let full = path.join(&slot_path_str);
-                        if !full.exists() {
-                            slot_data.path = Some(new_path_buf.clone());
-                        }
-                    }
-                }
-            }
-        }
-        for idx in 0..128usize {
-            if let Some(ref mut slot_data) = project_data
-                .slots
-                .static_slots
-                .get_mut(idx)
-                .and_then(|s| s.as_mut())
-            {
-                if let Some(ref slot_path) = slot_data.path {
-                    let slot_filename = slot_path
-                        .file_name()
-                        .map(|n| n.to_string_lossy().to_string())
-                        .unwrap_or_default();
-                    if slot_filename == resolution.filename {
-                        let slot_path_str = slot_path.to_string_lossy().to_string();
-                        let full = path.join(&slot_path_str);
-                        if !full.exists() {
-                            slot_data.path = Some(new_path_buf.clone());
-                        }
-                    }
-                }
-            }
-        }
+        // Collect path update for surgical write
+        current_project_path_updates.push((resolution.filename.clone(), new_slot_path.clone()));
 
         resolved_count += 1;
     }
 
-    // Write current project
-    let output_path = path.join("project.work");
-    project_data
-        .to_data_file(&output_path)
-        .map_err(|e| format!("Failed to write project: {:?}", e))?;
+    // Surgically update only PATH= lines in the project file (preserves all other fields)
+    update_project_file_paths_surgical(
+        &project_file_path,
+        &current_project_path_updates,
+        path,
+        true,
+    )?;
 
     let mut projects_updated = vec![project_path.to_string()];
 
-    // Update sibling projects (for move_to_pool actions)
+    // Update sibling projects using surgical write (for move_to_pool actions)
     for (sibling_path, updates) in &sibling_updates {
         let sibling = Path::new(sibling_path);
         let sibling_project_file = if sibling.join("project.work").exists() {
@@ -3980,58 +4144,10 @@ pub fn fix_missing_samples(
             sibling.join("project.strd")
         };
 
-        let mut sibling_data = ProjectFile::from_data_file(&sibling_project_file)
-            .map_err(|e| format!("Failed to read sibling project {}: {:?}", sibling_path, e))?;
+        let was_modified =
+            update_project_file_paths_surgical(&sibling_project_file, updates, sibling, false)?;
 
-        let mut modified = false;
-        for (filename, new_path) in updates {
-            let new_path_buf = std::path::PathBuf::from(new_path);
-
-            for idx in 0..128usize {
-                if let Some(ref mut slot_data) = sibling_data
-                    .slots
-                    .flex_slots
-                    .get_mut(idx)
-                    .and_then(|s| s.as_mut())
-                {
-                    if let Some(ref slot_path) = slot_data.path {
-                        let slot_filename = slot_path
-                            .file_name()
-                            .map(|n| n.to_string_lossy().to_string())
-                            .unwrap_or_default();
-                        if &slot_filename == filename {
-                            slot_data.path = Some(new_path_buf.clone());
-                            modified = true;
-                        }
-                    }
-                }
-            }
-            for idx in 0..128usize {
-                if let Some(ref mut slot_data) = sibling_data
-                    .slots
-                    .static_slots
-                    .get_mut(idx)
-                    .and_then(|s| s.as_mut())
-                {
-                    if let Some(ref slot_path) = slot_data.path {
-                        let slot_filename = slot_path
-                            .file_name()
-                            .map(|n| n.to_string_lossy().to_string())
-                            .unwrap_or_default();
-                        if &slot_filename == filename {
-                            slot_data.path = Some(new_path_buf.clone());
-                            modified = true;
-                        }
-                    }
-                }
-            }
-        }
-
-        if modified {
-            let sibling_output = sibling.join("project.work");
-            sibling_data.to_data_file(&sibling_output).map_err(|e| {
-                format!("Failed to write sibling project {}: {:?}", sibling_path, e)
-            })?;
+        if was_modified {
             projects_updated.push(sibling_path.clone());
         }
     }
@@ -5243,12 +5359,44 @@ pub fn copy_sample_slots(
         }
     }
 
-    // Write the destination project file (always write to .work)
-    // Note: ProjectFile handles its own checksum internally via to_data_file
-    let dest_final_path = dest_path.join("project.work");
-    dest_project_data
-        .to_data_file(&dest_final_path)
-        .map_err(|e| format!("Failed to write destination project: {:?}", e))?;
+    // Surgically replace only modified [SAMPLE] blocks in the destination file
+    // (preserves TRIM_BARSx100, TRIGQUANTIZATION=-1 etc. on untouched slots)
+    let dest_final_path = if dest_path.join("project.work").exists() {
+        dest_path.join("project.work")
+    } else {
+        dest_path.join("project.strd")
+    };
+    {
+        let mut block_replacements: std::collections::HashMap<(String, u16), String> =
+            std::collections::HashMap::new();
+
+        for &dest_slot_id in &dest_indices {
+            let dest_idx = (dest_slot_id - 1) as usize;
+
+            if slot_type == "static" || slot_type == "both" {
+                if dest_idx < 128 {
+                    if let Some(Some(ref slot)) = dest_project_data.slots.static_slots.get(dest_idx)
+                    {
+                        block_replacements.insert(
+                            ("STATIC".to_string(), slot.slot_id as u16),
+                            slot.to_string(),
+                        );
+                    }
+                }
+            }
+
+            if slot_type == "flex" || slot_type == "both" {
+                if dest_idx < dest_project_data.slots.flex_slots.len() {
+                    if let Some(Some(ref slot)) = dest_project_data.slots.flex_slots.get(dest_idx) {
+                        block_replacements
+                            .insert(("FLEX".to_string(), slot.slot_id as u16), slot.to_string());
+                    }
+                }
+            }
+        }
+
+        replace_sample_blocks_surgical(&dest_final_path, &block_replacements)?;
+    }
 
     // Write destination markers file if modified
     if markers_modified {
@@ -5259,26 +5407,23 @@ pub fn copy_sample_slots(
         println!("[DEBUG] Wrote markers file: {:?}", dest_markers_final);
     }
 
-    // If move_to_pool mode, also update source project paths
+    // If move_to_pool mode, also update source project paths (surgically)
     if audio_mode == "move_to_pool" {
-        // Update source project with new Audio Pool paths
-        let mut source_project_data_mut = source_project_data;
+        let mut source_path_updates: Vec<(String, String)> = Vec::new();
 
         for &src_slot_id in &source_indices {
             let src_idx = (src_slot_id - 1) as usize;
 
+            // Collect filenames that need path updates in source
             if slot_type == "static" || slot_type == "both" {
-                if let Some(Some(ref mut slot)) =
-                    source_project_data_mut.slots.static_slots.get_mut(src_idx)
-                {
-                    if let Some(ref sample_path) = slot.path.clone() {
+                if let Some(Some(ref slot)) = source_project_data.slots.static_slots.get(src_idx) {
+                    if let Some(ref sample_path) = slot.path {
                         let sample_path_str = sample_path.to_string_lossy().to_string();
                         if !sample_path_str.starts_with("../AUDIO") {
                             if let Some(file_name) = sample_path.file_name() {
-                                slot.path = Some(std::path::PathBuf::from(format!(
-                                    "../AUDIO/{}",
-                                    file_name.to_string_lossy()
-                                )));
+                                let fname = file_name.to_string_lossy().to_string();
+                                let new_path = format!("../AUDIO/{}", fname);
+                                source_path_updates.push((fname, new_path));
                             }
                         }
                     }
@@ -5286,17 +5431,14 @@ pub fn copy_sample_slots(
             }
 
             if slot_type == "flex" || slot_type == "both" {
-                if let Some(Some(ref mut slot)) =
-                    source_project_data_mut.slots.flex_slots.get_mut(src_idx)
-                {
-                    if let Some(ref sample_path) = slot.path.clone() {
+                if let Some(Some(ref slot)) = source_project_data.slots.flex_slots.get(src_idx) {
+                    if let Some(ref sample_path) = slot.path {
                         let sample_path_str = sample_path.to_string_lossy().to_string();
                         if !sample_path_str.starts_with("../AUDIO") {
                             if let Some(file_name) = sample_path.file_name() {
-                                slot.path = Some(std::path::PathBuf::from(format!(
-                                    "../AUDIO/{}",
-                                    file_name.to_string_lossy()
-                                )));
+                                let fname = file_name.to_string_lossy().to_string();
+                                let new_path = format!("../AUDIO/{}", fname);
+                                source_path_updates.push((fname, new_path));
                             }
                         }
                     }
@@ -5304,11 +5446,18 @@ pub fn copy_sample_slots(
             }
         }
 
-        // Write the updated source project (checksum handled internally by to_data_file)
-        let source_final_path = source_path.join("project.work");
-        source_project_data_mut
-            .to_data_file(&source_final_path)
-            .map_err(|e| format!("Failed to write source project: {:?}", e))?;
+        // Surgically update source project file
+        let source_project_file = if source_path.join("project.work").exists() {
+            source_path.join("project.work")
+        } else {
+            source_path.join("project.strd")
+        };
+        update_project_file_paths_surgical(
+            &source_project_file,
+            &source_path_updates,
+            source_path,
+            false,
+        )?;
     }
 
     println!(
@@ -10993,6 +11142,472 @@ mod tests {
 
             let result = create_audio_pool(&project_path.to_string_lossy());
             assert!(result.is_ok(), "Should succeed even if pool exists");
+        }
+    }
+
+    mod surgical_write_tests {
+        use super::*;
+
+        /// Creates a minimal project.work file content with custom sample blocks.
+        /// Uses raw text to include fields that ot-tools-io doesn't support (TRIM_BARSx100, TRIGQUANTIZATION=-1).
+        fn create_raw_project_work_with_custom_fields(
+            samples: &[(
+                &str,        // TYPE (FLEX/STATIC)
+                u16,         // SLOT
+                &str,        // PATH
+                Option<u16>, // BPMx24 (None = omit)
+                Option<i16>, // TRIGQUANTIZATION (allows -1)
+                Option<u16>, // TRIM_BARSx100
+            )],
+        ) -> String {
+            let mut content = String::new();
+            content.push_str("############################\r\n");
+            content.push_str("# Project Settings\r\n");
+            content.push_str("############################\r\n\r\n");
+            content.push_str("[META]\r\n");
+            content.push_str("TYPE=OCTATRACK DPS-1 PROJECT\r\n");
+            content.push_str("VERSION=19\r\n");
+            content.push_str("OS_VERSION=R0177     1.40B\r\n");
+            content.push_str("[/META]\r\n\r\n");
+            content.push_str("[SETTINGS]\r\n");
+            content.push_str("WRITEPROTECTED=0\r\n");
+            content.push_str("TEMPOx24=2880\r\n");
+            content.push_str("PATTERN_TEMPO_ENABLED=0\r\n");
+            content.push_str("MIDI_CLOCK_SEND=0\r\n");
+            content.push_str("MIDI_CLOCK_RECEIVE=0\r\n");
+            content.push_str("MIDI_TRANSPORT_SEND=0\r\n");
+            content.push_str("MIDI_TRANSPORT_RECEIVE=0\r\n");
+            content.push_str("MIDI_PROGRAM_CHANGE_SEND=0\r\n");
+            content.push_str("MIDI_PROGRAM_CHANGE_SEND_CH=-1\r\n");
+            content.push_str("MIDI_PROGRAM_CHANGE_RECEIVE=0\r\n");
+            content.push_str("MIDI_PROGRAM_CHANGE_RECEIVE_CH=-1\r\n");
+            content.push_str(
+                "MIDI_TRIG_CH1=0\r\nMIDI_TRIG_CH2=1\r\nMIDI_TRIG_CH3=2\r\nMIDI_TRIG_CH4=3\r\n",
+            );
+            content.push_str(
+                "MIDI_TRIG_CH5=4\r\nMIDI_TRIG_CH6=5\r\nMIDI_TRIG_CH7=6\r\nMIDI_TRIG_CH8=7\r\n",
+            );
+            content.push_str("MIDI_AUTO_CHANNEL=10\r\n");
+            content.push_str("MIDI_SOFT_THRU=0\r\n");
+            content.push_str("MIDI_AUDIO_TRK_CC_IN=1\r\nMIDI_AUDIO_TRK_CC_OUT=3\r\n");
+            content.push_str("MIDI_AUDIO_TRK_NOTE_IN=1\r\nMIDI_AUDIO_TRK_NOTE_OUT=3\r\n");
+            content.push_str("MIDI_MIDI_TRK_CC_IN=1\r\n");
+            content.push_str("PATTERN_CHANGE_CHAIN_BEHAVIOR=0\r\n");
+            content.push_str("PATTERN_CHANGE_AUTO_SILENCE_TRACKS=0\r\n");
+            content.push_str("PATTERN_CHANGE_AUTO_TRIG_LFOS=0\r\n");
+            content.push_str("LOAD_24BIT_FLEX=0\r\nDYNAMIC_RECORDERS=0\r\nRECORD_24BIT=0\r\n");
+            content.push_str("RESERVED_RECORDER_COUNT=8\r\nRESERVED_RECORDER_LENGTH=16\r\n");
+            content.push_str("INPUT_DELAY_COMPENSATION=0\r\n");
+            content.push_str("GATE_AB=127\r\nGATE_CD=127\r\nGAIN_AB=64\r\nGAIN_CD=64\r\n");
+            content.push_str("DIR_AB=0\r\nDIR_CD=0\r\nPHONES_MIX=64\r\nMAIN_TO_CUE=0\r\n");
+            content.push_str(
+                "MASTER_TRACK=0\r\nCUE_STUDIO_MODE=0\r\nMAIN_LEVEL=64\r\nCUE_LEVEL=64\r\n",
+            );
+            content.push_str(
+                "METRONOME_TIME_SIGNATURE=3\r\nMETRONOME_TIME_SIGNATURE_DENOMINATOR=2\r\n",
+            );
+            content.push_str(
+                "METRONOME_PREROLL=0\r\nMETRONOME_CUE_VOLUME=32\r\nMETRONOME_MAIN_VOLUME=0\r\n",
+            );
+            content.push_str("METRONOME_PITCH=12\r\nMETRONOME_TONAL=1\r\nMETRONOME_ENABLED=0\r\n");
+            content.push_str(
+                "TRIG_MODE_MIDI=0\r\nTRIG_MODE_MIDI=0\r\nTRIG_MODE_MIDI=0\r\nTRIG_MODE_MIDI=0\r\n",
+            );
+            content.push_str(
+                "TRIG_MODE_MIDI=0\r\nTRIG_MODE_MIDI=0\r\nTRIG_MODE_MIDI=0\r\nTRIG_MODE_MIDI=0\r\n",
+            );
+            content.push_str("[/SETTINGS]\r\n\r\n");
+            content.push_str("############################\r\n");
+            content.push_str("# Project States\r\n");
+            content.push_str("############################\r\n\r\n");
+            content.push_str("[STATES]\r\n");
+            content.push_str("BANK=0\r\nPATTERN=0\r\nARRANGEMENT=0\r\nARRANGEMENT_MODE=0\r\n");
+            content.push_str("PART=0\r\nTRACK=0\r\nTRACK_OTHERMODE=0\r\n");
+            content.push_str("SCENE_A_MUTE=0\r\nSCENE_B_MUTE=0\r\nTRACK_CUE_MASK=0\r\n");
+            content.push_str("TRACK_MUTE_MASK=0\r\nTRACK_SOLO_MASK=0\r\n");
+            content.push_str("MIDI_TRACK_MUTE_MASK=0\r\nMIDI_TRACK_SOLO_MASK=0\r\nMIDI_MODE=0\r\n");
+            content.push_str("[/STATES]\r\n\r\n");
+            content.push_str("############################\r\n");
+            content.push_str("# Samples\r\n");
+            content.push_str("############################\r\n\r\n");
+
+            for (stype, slot, path, bpm, trigq, trim_bars) in samples {
+                content.push_str("[SAMPLE]\r\n");
+                content.push_str(&format!("TYPE={}\r\n", stype));
+                content.push_str(&format!("SLOT={:0>3}\r\n", slot));
+                content.push_str(&format!("PATH={}\r\n", path));
+                if let Some(bpm_val) = bpm {
+                    content.push_str(&format!("BPMx24={}\r\n", bpm_val));
+                }
+                if let Some(trim) = trim_bars {
+                    content.push_str(&format!("TRIM_BARSx100={}\r\n", trim));
+                }
+                content.push_str("TSMODE=2\r\nLOOPMODE=1\r\nGAIN=48\r\n");
+                if let Some(tq) = trigq {
+                    content.push_str(&format!("TRIGQUANTIZATION={}\r\n", tq));
+                } else {
+                    content.push_str("TRIGQUANTIZATION=255\r\n");
+                }
+                content.push_str("[/SAMPLE]\r\n\r\n");
+            }
+
+            // Add recording buffer slots (required by ot-tools-io parser)
+            for slot_id in 129..=136 {
+                content.push_str("[SAMPLE]\r\n");
+                content.push_str("TYPE=FLEX\r\n");
+                content.push_str(&format!("SLOT={}\r\n", slot_id));
+                content.push_str("PATH=\r\n");
+                content.push_str("BPMx24=2880\r\nTSMODE=2\r\nLOOPMODE=0\r\nGAIN=72\r\n");
+                content.push_str("TRIGQUANTIZATION=255\r\n");
+                content.push_str("[/SAMPLE]\r\n\r\n");
+            }
+
+            content.push_str("############################\r\n\r\n");
+            content
+        }
+
+        fn write_raw_project_work(project_dir: &Path, content: &str) {
+            let (encoded, _, _) = encoding_rs::WINDOWS_1258.encode(content);
+            fs::write(project_dir.join("project.work"), &*encoded)
+                .expect("Failed to write raw project.work");
+        }
+
+        fn read_raw_project_work(project_dir: &Path) -> String {
+            let bytes =
+                fs::read(project_dir.join("project.work")).expect("Failed to read project.work");
+            let (decoded, _, _) = encoding_rs::WINDOWS_1258.decode(&bytes);
+            decoded.into_owned()
+        }
+
+        #[test]
+        fn test_fix_missing_samples_preserves_trim_bars() {
+            let temp = TempDir::new().unwrap();
+            let project_dir = temp.path();
+
+            // Create bank files
+            for bank_num in 1..=16 {
+                let bank_file = BankFile::default();
+                let bank_path = project_dir.join(format!("bank{:02}.work", bank_num));
+                bank_file.to_data_file(&bank_path).unwrap();
+            }
+
+            // Create project.work with TRIM_BARSx100 and TRIGQUANTIZATION=-1
+            let content = create_raw_project_work_with_custom_fields(&[
+                (
+                    "FLEX",
+                    1,
+                    "missing_sample.wav",
+                    Some(3408),
+                    Some(-1),
+                    Some(400),
+                ),
+                (
+                    "FLEX",
+                    2,
+                    "present_sample.wav",
+                    Some(2832),
+                    Some(-1),
+                    Some(200),
+                ),
+            ]);
+            write_raw_project_work(project_dir, &content);
+
+            // Create the "found" sample file somewhere
+            let found_dir = temp.path().join("found");
+            fs::create_dir(&found_dir).unwrap();
+            fs::write(found_dir.join("missing_sample.wav"), b"fake audio").unwrap();
+
+            // Create present_sample.wav in project dir so it's not considered missing
+            fs::write(project_dir.join("present_sample.wav"), b"fake audio").unwrap();
+
+            // Fix missing samples
+            let resolutions = vec![SampleResolution {
+                filename: "missing_sample.wav".to_string(),
+                found_path: found_dir
+                    .join("missing_sample.wav")
+                    .to_string_lossy()
+                    .to_string(),
+                action: "copy_to_project".to_string(),
+                new_slot_path: "missing_sample.wav".to_string(),
+            }];
+
+            fix_missing_samples(project_dir.to_str().unwrap(), resolutions).unwrap();
+
+            // Read the raw output and verify TRIM_BARSx100 and TRIGQUANTIZATION=-1 are preserved
+            let output = read_raw_project_work(project_dir);
+
+            // Slot 1 (fixed): should preserve TRIM_BARSx100 and TRIGQUANTIZATION=-1
+            assert!(
+                output.contains("TRIM_BARSx100=400"),
+                "TRIM_BARSx100=400 should be preserved for slot 1"
+            );
+            assert!(
+                output.contains("TRIM_BARSx100=200"),
+                "TRIM_BARSx100=200 should be preserved for slot 2"
+            );
+
+            // Both slots should preserve TRIGQUANTIZATION=-1
+            let tq_minus1_count = output.matches("TRIGQUANTIZATION=-1").count();
+            assert_eq!(
+                tq_minus1_count, 2,
+                "Both slots should preserve TRIGQUANTIZATION=-1, found {}",
+                tq_minus1_count
+            );
+
+            // BPMx24 values should be preserved
+            assert!(
+                output.contains("BPMx24=3408"),
+                "BPMx24=3408 should be preserved for slot 1"
+            );
+            assert!(
+                output.contains("BPMx24=2832"),
+                "BPMx24=2832 should be preserved for slot 2"
+            );
+        }
+
+        #[test]
+        fn test_fix_missing_samples_move_to_pool_preserves_sibling_fields() {
+            let temp = TempDir::new().unwrap();
+
+            // Create a "set" with two projects and an AUDIO pool
+            let set_dir = temp.path();
+            let project_a = set_dir.join("ProjectA");
+            let project_b = set_dir.join("ProjectB");
+            let audio_pool = set_dir.join("AUDIO");
+            fs::create_dir_all(&project_a).unwrap();
+            fs::create_dir_all(&project_b).unwrap();
+            fs::create_dir_all(&audio_pool).unwrap();
+
+            // Create bank files for both projects
+            for project_dir in [&project_a, &project_b] {
+                for bank_num in 1..=16 {
+                    let bank_file = BankFile::default();
+                    let bank_path = project_dir.join(format!("bank{:02}.work", bank_num));
+                    bank_file.to_data_file(&bank_path).unwrap();
+                }
+            }
+
+            // Both projects reference the same sample with TRIM_BARSx100 and TRIGQUANTIZATION=-1
+            let content_a = create_raw_project_work_with_custom_fields(&[(
+                "FLEX",
+                1,
+                "shared_sample.wav",
+                Some(3408),
+                Some(-1),
+                Some(800),
+            )]);
+            write_raw_project_work(&project_a, &content_a);
+
+            let content_b = create_raw_project_work_with_custom_fields(&[(
+                "FLEX",
+                1,
+                "shared_sample.wav",
+                Some(2832),
+                Some(-1),
+                Some(400),
+            )]);
+            write_raw_project_work(&project_b, &content_b);
+
+            // Create the sample file in project A
+            fs::write(project_a.join("shared_sample.wav"), b"fake audio").unwrap();
+            // Also in project B
+            fs::write(project_b.join("shared_sample.wav"), b"fake audio").unwrap();
+
+            // Fix missing samples on project A with move_to_pool
+            let resolutions = vec![SampleResolution {
+                filename: "shared_sample.wav".to_string(),
+                found_path: project_a
+                    .join("shared_sample.wav")
+                    .to_string_lossy()
+                    .to_string(),
+                action: "move_to_pool".to_string(),
+                new_slot_path: "../AUDIO/shared_sample.wav".to_string(),
+            }];
+
+            fix_missing_samples(project_a.to_str().unwrap(), resolutions).unwrap();
+
+            // Project B (sibling) should preserve TRIM_BARSx100 and TRIGQUANTIZATION=-1
+            let output_b = read_raw_project_work(&project_b);
+            assert!(
+                output_b.contains("TRIM_BARSx100=400"),
+                "Sibling project should preserve TRIM_BARSx100"
+            );
+            assert!(
+                output_b.contains("TRIGQUANTIZATION=-1"),
+                "Sibling project should preserve TRIGQUANTIZATION=-1"
+            );
+            assert!(
+                output_b.contains("BPMx24=2832"),
+                "Sibling project should preserve BPMx24"
+            );
+        }
+
+        #[test]
+        fn test_copy_sample_slots_preserves_untouched_slot_fields() {
+            let temp = TempDir::new().unwrap();
+            let source_dir = temp.path().join("Source");
+            let dest_dir = temp.path().join("Dest");
+            fs::create_dir_all(&source_dir).unwrap();
+            fs::create_dir_all(&dest_dir).unwrap();
+
+            // Create bank files
+            for project_dir in [&source_dir, &dest_dir] {
+                for bank_num in 1..=16 {
+                    let bank_file = BankFile::default();
+                    let bank_path = project_dir.join(format!("bank{:02}.work", bank_num));
+                    bank_file.to_data_file(&bank_path).unwrap();
+                }
+            }
+
+            // Source: has a sample at slot 1
+            let source_content = create_raw_project_work_with_custom_fields(&[(
+                "FLEX",
+                1,
+                "source_sample.wav",
+                Some(2880),
+                Some(-1),
+                None,
+            )]);
+            write_raw_project_work(&source_dir, &source_content);
+            fs::write(source_dir.join("source_sample.wav"), b"fake audio").unwrap();
+
+            // Destination: has samples at slot 1 and slot 2, both with TRIM_BARSx100 and TRIGQUANTIZATION=-1
+            let dest_content = create_raw_project_work_with_custom_fields(&[
+                ("FLEX", 1, "dest_slot1.wav", Some(3408), Some(-1), Some(400)),
+                ("FLEX", 2, "dest_slot2.wav", Some(2832), Some(-1), Some(200)),
+            ]);
+            write_raw_project_work(&dest_dir, &dest_content);
+            fs::write(dest_dir.join("dest_slot1.wav"), b"fake audio").unwrap();
+            fs::write(dest_dir.join("dest_slot2.wav"), b"fake audio").unwrap();
+
+            // Copy slot 1 from source → slot 1 in dest (this overwrites dest slot 1)
+            copy_sample_slots(
+                source_dir.to_str().unwrap(),
+                dest_dir.to_str().unwrap(),
+                "flex",
+                vec![1],
+                vec![1],
+                "copy",
+                true,
+            )
+            .unwrap();
+
+            // Read raw output
+            let output = read_raw_project_work(&dest_dir);
+
+            // Slot 2 (UNTOUCHED) should preserve TRIM_BARSx100 and TRIGQUANTIZATION=-1
+            assert!(
+                output.contains("TRIM_BARSx100=200"),
+                "Untouched slot 2 should preserve TRIM_BARSx100=200"
+            );
+
+            // Count TRIGQUANTIZATION=-1 — slot 2 should still have it
+            // (slot 1 was overwritten so it may have TRIGQUANTIZATION=255 from ot-tools-io)
+            assert!(
+                output.contains("TRIGQUANTIZATION=-1"),
+                "Untouched slot 2 should preserve TRIGQUANTIZATION=-1"
+            );
+
+            // BPMx24=2832 from untouched slot 2 should be preserved
+            assert!(
+                output.contains("BPMx24=2832"),
+                "Untouched slot 2 should preserve BPMx24=2832"
+            );
+        }
+
+        #[test]
+        fn test_update_project_file_paths_surgical_preserves_all_fields() {
+            let temp = TempDir::new().unwrap();
+            let project_dir = temp.path();
+
+            let content = create_raw_project_work_with_custom_fields(&[
+                ("FLEX", 1, "old_path.wav", Some(3408), Some(-1), Some(400)),
+                (
+                    "STATIC",
+                    1,
+                    "keep_this.wav",
+                    Some(2832),
+                    Some(-1),
+                    Some(800),
+                ),
+            ]);
+            write_raw_project_work(project_dir, &content);
+
+            // Update path for old_path.wav → new_path.wav
+            let updates = vec![("old_path.wav".to_string(), "new_path.wav".to_string())];
+            update_project_file_paths_surgical(
+                &project_dir.join("project.work"),
+                &updates,
+                project_dir,
+                true, // check_file_exists=true, and old_path.wav doesn't exist, so it will be updated
+            )
+            .unwrap();
+
+            let output = read_raw_project_work(project_dir);
+
+            // PATH should be updated
+            assert!(
+                output.contains("PATH=new_path.wav"),
+                "PATH should be updated to new_path.wav"
+            );
+            assert!(
+                !output.contains("PATH=old_path.wav"),
+                "Old PATH should be gone"
+            );
+
+            // All other fields must be preserved
+            assert!(
+                output.contains("TRIM_BARSx100=400"),
+                "TRIM_BARSx100=400 preserved"
+            );
+            assert!(
+                output.contains("TRIM_BARSx100=800"),
+                "TRIM_BARSx100=800 preserved"
+            );
+            assert!(output.contains("BPMx24=3408"), "BPMx24=3408 preserved");
+            assert!(output.contains("BPMx24=2832"), "BPMx24=2832 preserved");
+
+            let tq_count = output.matches("TRIGQUANTIZATION=-1").count();
+            assert_eq!(tq_count, 2, "Both TRIGQUANTIZATION=-1 values preserved");
+        }
+
+        #[test]
+        fn test_replace_sample_blocks_surgical_preserves_untouched() {
+            let temp = TempDir::new().unwrap();
+            let project_dir = temp.path();
+
+            let content = create_raw_project_work_with_custom_fields(&[
+                ("FLEX", 1, "slot1.wav", Some(3408), Some(-1), Some(400)),
+                ("FLEX", 2, "slot2.wav", Some(2832), Some(-1), Some(200)),
+            ]);
+            write_raw_project_work(project_dir, &content);
+
+            // Replace only slot 1 with new content (no TRIM_BARSx100 — simulating ot-tools-io output)
+            let mut replacements = std::collections::HashMap::new();
+            let new_block = "[SAMPLE]\r\nTYPE=FLEX\r\nSLOT=001\r\nPATH=replaced.wav\r\nBPMx24=2880\r\nTSMODE=2\r\nLOOPMODE=0\r\nGAIN=72\r\nTRIGQUANTIZATION=255\r\n[/SAMPLE]";
+            replacements.insert(("FLEX".to_string(), 1u16), new_block.to_string());
+
+            replace_sample_blocks_surgical(&project_dir.join("project.work"), &replacements)
+                .unwrap();
+
+            let output = read_raw_project_work(project_dir);
+
+            // Slot 1: replaced (no TRIM_BARSx100, TRIGQUANTIZATION=255)
+            assert!(output.contains("PATH=replaced.wav"), "Slot 1 PATH replaced");
+
+            // Slot 2: UNTOUCHED — must preserve all original fields
+            assert!(
+                output.contains("TRIM_BARSx100=200"),
+                "Untouched slot 2 TRIM_BARSx100=200 preserved"
+            );
+            assert!(
+                output.contains("TRIGQUANTIZATION=-1"),
+                "Untouched slot 2 TRIGQUANTIZATION=-1 preserved"
+            );
+            assert!(
+                output.contains("BPMx24=2832"),
+                "Untouched slot 2 BPMx24=2832 preserved"
+            );
         }
     }
 
