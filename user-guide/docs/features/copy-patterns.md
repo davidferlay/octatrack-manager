@@ -1,5 +1,5 @@
 ---
-sidebar_position: 4
+sidebar_position: 10
 ---
 
 # Copy Patterns
@@ -55,4 +55,4 @@ Visible when **All Tracks** is selected. Controls which track types are copied:
 
 - **All Tracks Affected:** Pattern data includes **of all Audio and MIDI tracks** of current bank - it's not tied to individual tracks.
 - **Destructive Operation:** Copying a pattern replaces existing sequences at the destination.
-- **Automatic Backup:** The app automatically backs up the destination bank file before executing. See [Tools Overview](./index.md) for details.
+- **Automatic Backup:** The app automatically backs up the destination bank file before executing. See [Quick Start](../getting-started/quick-start.md#8-automatic-backups) for details.

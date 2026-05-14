@@ -76,11 +76,11 @@ The **Tools** tab lets you copy content between banks and projects without touch
 
 ### Available Operations
 
-- **[Copy Banks](../features/tools/copy-bank.md):** Duplicate an entire bank (all 4 Parts + 16 Patterns) to one or more destination banks.
-- **[Copy Parts](../features/tools/copy-parts.md):** Transfer Part sound design (machines, amps, LFOs, FX) between parts and banks.
-- **[Copy Patterns](../features/tools/copy-patterns.md):** Copy patterns with configurable Part assignment and track scope.
-- **[Copy Tracks](../features/tools/copy-tracks.md):** Copy individual track data — sound design, pattern triggers, or both.
-- **[Copy Sample Slots](../features/tools/copy-sample-slots.md):** Copy sample slot assignments with optional audio file transfer and Audio Pool management.
+- **[Copy Banks](../features/copy-bank.md):** Duplicate an entire bank (all 4 Parts + 16 Patterns) to one or more destination banks.
+- **[Copy Parts](../features/copy-parts.md):** Transfer Part sound design (machines, amps, LFOs, FX) between parts and banks.
+- **[Copy Patterns](../features/copy-patterns.md):** Copy patterns with configurable Part assignment and track scope.
+- **[Copy Tracks](../features/copy-tracks.md):** Copy individual track data — sound design, pattern triggers, or both.
+- **[Copy Sample Slots](../features/copy-sample-slots.md):** Copy sample slot assignments with optional audio file transfer and Audio Pool management.
 
 All operations work within the same project or across different projects.
 
@@ -97,7 +97,7 @@ Your copy settings (selected operation, destination project, slot ranges, etc.) 
 
 ## 7. Fix Missing Samples
 
-The **Tools** tab also includes a **[Fix Missing Samples](../features/tools/fix-missing-samples.md)** operation that scans your project for broken sample slot references and automatically locates and reconnects missing audio files. It searches the project directory, Audio Pool, and sibling projects, with the option to browse additional directories manually.
+The **Tools** tab also includes a **[Fix Missing Samples](../features/fix-missing-samples.md)** operation that scans your project for broken sample slot references and automatically locates and reconnects missing audio files. It searches the project directory, Audio Pool, and sibling projects, with the option to browse additional directories manually.
 
 ## 8. Automatic Backups
 
@@ -111,7 +111,20 @@ Backups are stored inside the project directory under:
 
 For example: `backups/2026-03-26_14-30-45_copy_bank/`
 
-This means you can always revert changes by copying the backed-up files back into the project directory. See the [Tools Overview](../features/tools/index.md#automatic-backups) for details on what gets backed up for each operation.
+This means you can always revert changes by copying the backed-up files back into the project directory.
+
+**What gets backed up:**
+
+| Operation | Backed-up files |
+|-----------|----------------|
+| Copy Banks | Destination bank file(s) (e.g., `bank01.work`) |
+| Copy Parts | Destination bank file(s) |
+| Copy Patterns | Destination bank file |
+| Copy Tracks | Destination bank file |
+| Copy Sample Slots (Copy) | Destination: `project.work`, `markers.work`, and audio files (`.wav` + `.ot`) that would be overwritten |
+| Copy Sample Slots (Move to Pool) | Destination: `project.work`, `markers.work`<br/>Source: `project.work` and audio files (`.wav` + `.ot`) that will be moved/deleted |
+| Fix Missing Samples | `project.work` (and sibling projects' `project.work` when using Move to Pool) |
+| Edit mode toggle (in header)| Current bank file |
 
 
 <img src={require('@site/static/img/screenshots/project-backup-files.png').default} alt="Automated backups" style={{width: '38%', display: 'block', margin: '0 auto'}} />
