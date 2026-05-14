@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 11
 ---
 
 # Copy Tracks
@@ -55,6 +55,6 @@ When using **Both** or **Pattern Triggers** mode, you can select which patterns 
 
 - **Track Type Consistency:** Audio tracks (T1–T8) can only be copied to audio targets, and MIDI tracks (M1–M8) to MIDI targets.
 - **Part Names Not Copied:** Since Copy Tracks only modifies selected tracks, the destination Part name is preserved: Overwriting it with the source Part name would be misleading for a hybrid Part.
-- **Automatic Backup:** The app automatically backs up the destination bank file before executing. See [Tools Overview](./index.md) for details.
+- **Automatic Backup:** The app automatically backs up the destination bank file before executing. See [Quick Start](../getting-started/quick-start.md#8-automatic-backups) for details.
 - **Sample Slot References:** This tool only copies the **reference to a sample slot id** (which Slot is assigned to track), not the Sample Slot metadata, nor audio file itself. Use [Copy Sample Slots](./copy-sample-slots.md) to transfer audio files.
 

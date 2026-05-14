@@ -1,5 +1,5 @@
 ---
-sidebar_position: 2
+sidebar_position: 8
 ---
 
 # Copy Banks
@@ -28,5 +28,5 @@ sidebar_position: 2
 ## Important Notes
 
 - **Destructive Operation:** Copying a bank replaces all existing data at the destination.
-- **Automatic Backup:** The app automatically backs up destination bank files before executing. See [Tools Overview](./index.md) for details.
+- **Automatic Backup:** The app automatically backs up destination bank files before executing. See [Quick Start](../getting-started/quick-start.md#8-automatic-backups) for details.
 - **Sample Slots:** This tool copies slot **references** only. It does not move the underlying audio files. Use [Copy Sample Slots](./copy-sample-slots.md) to transfer audio files.
