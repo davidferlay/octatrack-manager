@@ -1,8 +1,9 @@
 ---
 sidebar_position: 7
+sidebar_label: View Sample Slots
 ---
 
-# Sample Slots
+# View Sample Slots
 
 The Sample Slots tabs (**Flex** and **Static**) allow you to browse and manage the 256 samples assigned to your project. This is a powerful view for finding specific sounds and understanding how your project's samples are organized.
 

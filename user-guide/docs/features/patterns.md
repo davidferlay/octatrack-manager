@@ -1,8 +1,9 @@
 ---
 sidebar_position: 6
+sidebar_label: View Patterns
 ---
 
-# Patterns
+# View Patterns
 
 The Patterns tab provides a visual representation of the sequencer data. It allows to inspect triggers, parameter locks, and trig conditions of every step in projects - all at a glance.
 

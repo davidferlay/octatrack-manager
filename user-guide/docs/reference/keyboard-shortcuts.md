@@ -23,8 +23,14 @@ These shortcuts work across the entire application:
 
 | Shortcut | Action |
 |----------|---------|
-| <kbd>↑</kbd> / <kbd>↓</kbd> | Move between different locations and projects. |
-| <kbd>Enter</kbd> | Expand a location or open the selected project. |
+| <kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd> | Navigate between project cards. |
+| <kbd>↑</kbd> / <kbd>↓</kbd> / <kbd>←</kbd> / <kbd>→</kbd> | Move focus within a Set's project grid. |
+| <kbd>Enter</kbd> | Open the focused project. |
+| <kbd>F2</kbd> | Rename the focused project. |
+| <kbd>Delete</kbd> | Delete the focused project (with confirmation). |
+| <kbd>Ctrl</kbd>+<kbd>C</kbd> | Copy the focused project to clipboard. |
+| <kbd>Ctrl</kbd>+<kbd>V</kbd> | Paste clipboard into the focused project's Set. |
+| <kbd>Escape</kbd> | Close menu, modal, or dialog. |
 
 ---
 

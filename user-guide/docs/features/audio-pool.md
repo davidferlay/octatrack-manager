@@ -1,8 +1,9 @@
 ---
 sidebar_position: 3
+sidebar_label: Manage Audio Pool
 ---
 
-# Audio Pool
+# Manage Audio Pool
 
 The Audio Pool is the shared sample library for your Octatrack Set. It is located in the **`AUDIO/`** folder at the top level of your Set. All projects within that Set can make use of samples from this directory and assign them to Static or Flex Sample Slots.
 

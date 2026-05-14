@@ -1,8 +1,9 @@
 ---
 sidebar_position: 5
+sidebar_label: Edit Parts
 ---
 
-# Parts Editor
+# Edit Parts
 
 The Parts Editor is the heart of sound design in Octatrack Manager. It allows to modify the four Parts ("snapshots" or "kits") available in each bank, giving you a powerful interface for tweaking machine parameters, effects, and LFOs.
 

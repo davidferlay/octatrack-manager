@@ -1,8 +1,9 @@
 ---
 sidebar_position: 4
+sidebar_label: Manage Projects
 ---
 
-# Project Management
+# Manage Projects
 
 Manage Octatrack projects and Sets directly from Projects List — create, copy, rename, move, and delete.
 
@@ -92,21 +93,6 @@ If the destination is on the same disk, the move is atomic and nearly instant. A
 Right-click a Set header → **Delete Set**.
 
 A confirmation dialog appears — this deletes the Set and all its projects. This action cannot be undone.
-
-## Keyboard Navigation
-
-Project cards can be navigated with the keyboard. The focused card is highlighted with an orange border.
-
-| Key | Action |
-|---|---|
-| `Tab` / `Shift+Tab` | Navigate between project cards |
-| `↑ ↓ ← →` | Move focus within a Set's grid |
-| `Enter` | Open focused project |
-| `F2` | Rename focused project |
-| `Delete` | Delete focused project (with confirmation) |
-| `Ctrl+C` | Copy focused project to clipboard |
-| `Ctrl+V` | Paste clipboard into focused Set |
-| `Escape` | Cancel rename / close menu / close dialog |
 
 ## Limits
 
