@@ -214,12 +214,15 @@
   color: #fff;
   background: #2a2a2a;
   border: 1px solid #444;
-  padding: 3px 6px;
+  padding: 3px 20px 3px 6px;
   border-radius: 4px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   cursor: pointer;
-  appearance: auto;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23888'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
   outline: none;
 }
 
@@ -239,12 +242,15 @@
   color: #fff;
   background: #2a2a2a;
   border: 1px solid #444;
-  padding: 1px 4px;
+  padding: 1px 16px 1px 4px;
   border-radius: 3px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   cursor: pointer;
-  appearance: auto;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23888'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 4px center;
   outline: none;
 }
 

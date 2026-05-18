@@ -67,6 +67,7 @@ interface PartsPanelProps {
   sharedActivePartIndex?: number;  // Optional shared active part index (persists across bank changes)
   onSharedActivePartChange?: (index: number) => void;  // Optional callback for shared active part change
   onWriteStatusChange?: (status: WriteStatus) => void;  // Optional callback to report write status to parent
+  onMachineTypeChange?: (trackId: number, newType: string) => void;  // Optional callback when a track's machine type changes
 }
 
 type AudioPageType = 'ALL' | 'SRC' | 'AMP' | 'LFO' | 'FX1' | 'FX2';
@@ -87,7 +88,8 @@ export default function PartsPanel({
   onSharedLfoTabChange,
   sharedActivePartIndex,
   onSharedActivePartChange,
-  onWriteStatusChange
+  onWriteStatusChange,
+  onMachineTypeChange
 }: PartsPanelProps) {
   const [partsData, setPartsData] = useState<PartData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -146,6 +148,16 @@ export default function PartsPanel({
   useEffect(() => {
     partsDataRef.current = partsData;
   }, [partsData]);
+
+  // Sync machine types to parent whenever partsData changes (load, reload, or user edit)
+  useEffect(() => {
+    if (!onMachineTypeChange || !partsData.length) return;
+    const part = partsData[activePartIndex];
+    if (!part) return;
+    for (const machine of part.machines) {
+      onMachineTypeChange(machine.track_id, machine.machine_type);
+    }
+  }, [partsData, activePartIndex, onMachineTypeChange]);
 
   const loadPartsData = async () => {
     try {
@@ -522,6 +534,7 @@ export default function PartsPanel({
     });
 
     setModifiedPartIds(prev => new Set([...prev, partId]));
+    onMachineTypeChange?.(trackId, newType);
 
     onWriteStatusChange?.(writeStatus.writing());
     invoke('save_parts', {
@@ -537,7 +550,7 @@ export default function PartsPanel({
       onWriteStatusChange?.(writeStatus.error('Save failed'));
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
     });
-  }, [projectPath, bankId, partsData, partNames, onWriteStatusChange]);
+  }, [projectPath, bankId, partsData, partNames, onWriteStatusChange, onMachineTypeChange]);
 
   const updateFxType = useCallback((partId: number, trackId: number, slot: 1 | 2, newTypeId: number) => {
     const partIndex = partsData.findIndex(p => p.part_id === partId);

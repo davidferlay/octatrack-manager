@@ -923,6 +923,9 @@ export function ProjectDetail() {
                           sharedActivePartIndex={sharedPartsActivePartIndex}
                           onSharedActivePartChange={setSharedPartsActivePartIndex}
                           onWriteStatusChange={handleWriteStatusChange}
+                          onMachineTypeChange={(trackId, newType) =>
+                            setAudioTrackMachineTypes(prev => ({ ...prev, [trackId]: newType }))
+                          }
                         />
                       );
                     });
