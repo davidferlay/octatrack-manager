@@ -99,10 +99,10 @@
 | FMS-15 | Fix Missing Samples | Confirmation — not found section | Some files not found anywhere | Red "Not found" section lists unresolved filenames |
 | FMS-16 | Fix Missing Samples | Cancel from confirmation | Click Cancel on confirmation screen | Modal closes. No files modified. No backups created |
 | FMS-17 | Fix Missing Samples | Apply changes — backup creation | Click "Apply Changes" on confirmation | Backup directory created under project/backups/ with label "fix_missing_samples" |
-| FMS-18 | Fix Missing Samples | Apply changes — file copy | Apply with "Copy to Project" resolutions | Audio files (+.ot companions) copied to project root. Slot paths updated |
+| FMS-18 | Fix Missing Samples | Apply changes — file copy | Apply with "Copy to Project" resolutions | Audio files copied to project root (.ot NOT copied — project has own AED data). Slot paths updated |
 | FMS-19 | Fix Missing Samples | Apply changes — move to pool cross-project | Apply with "Move to Pool" from sibling project | File in AUDIO/. Original deleted from sibling. All sibling project paths updated |
 | FMS-20 | Fix Missing Samples | Final summary | After Apply completes | Resolved count and not-found count displayed. Expandable details show per-file actions. Close returns to Tools panel |
-| FMS-21 | Fix Missing Samples | .ot companion files handled | Missing file has .ot companion in found location | Both .wav and .ot are copied/moved together |
+| FMS-21 | Fix Missing Samples | .ot companion files NOT copied | Missing file has .ot companion in found location | Only .wav is copied/moved. .ot is never imported (project has own AED data in project.work + markers.work) |
 | FMS-22 | Fix Missing Samples | Auto-apply (Skip Review ON) | Enable "Skip Review" option (default). Execute fix with all samples found | Search completes → Apply starts automatically (no confirmation screen). Done phase shows resolved count |
 | FMS-23 | Fix Missing Samples | Manual review (Skip Review OFF) | Enable "Review before applying". Execute fix | Search completes → progress view with Browse/Review buttons. Click "Review changes" → confirmation table shown. Must click "Apply Changes" to proceed |
 | FMS-24 | Fix Missing Samples | Previous button in confirmation | In confirmation screen, click "Previous" | Returns to progress view with Browse/Review buttons. Can click "Review changes" to go back to confirmation |

@@ -4015,18 +4015,6 @@ pub fn fix_missing_samples(
     let mut files_moved: u32 = 0;
     let mut resolved_count: u32 = 0;
 
-    // Helper: copy .ot metadata file alongside an audio file
-    fn copy_ot_file(src_audio: &Path, dest_audio: &Path) {
-        let ot_src = src_audio.with_extension("ot");
-        if ot_src.exists() {
-            let ot_dest = dest_audio.with_extension("ot");
-            if let Some(parent) = ot_dest.parent() {
-                let _ = std::fs::create_dir_all(parent);
-            }
-            let _ = std::fs::copy(&ot_src, &ot_dest);
-        }
-    }
-
     for resolution in &resolutions {
         let found = Path::new(&resolution.found_path);
         let new_slot_path = &resolution.new_slot_path;
@@ -4040,7 +4028,8 @@ pub fn fix_missing_samples(
                 if found.exists() {
                     std::fs::copy(found, &dest)
                         .map_err(|e| format!("Failed to copy {}: {}", resolution.filename, e))?;
-                    copy_ot_file(found, &dest);
+                    // Do NOT copy .ot files — project has its own AED data in
+                    // project.work, markers.work, and possibly its own .ot files
                     files_copied += 1;
                 }
             }
@@ -4055,7 +4044,7 @@ pub fn fix_missing_samples(
                     std::fs::copy(found, &dest).map_err(|e| {
                         format!("Failed to copy to pool {}: {}", resolution.filename, e)
                     })?;
-                    copy_ot_file(found, &dest);
+                    // Do NOT copy .ot files — OT ignores .ot in Audio Pool
                     files_copied += 1;
                 }
             }
@@ -4070,7 +4059,7 @@ pub fn fix_missing_samples(
                     std::fs::copy(found, &dest).map_err(|e| {
                         format!("Failed to copy to pool {}: {}", resolution.filename, e)
                     })?;
-                    copy_ot_file(found, &dest);
+                    // Do NOT copy .ot files — OT ignores .ot in Audio Pool
                     files_moved += 1;
                 }
 
@@ -12004,6 +11993,8 @@ mod tests {
 
         #[test]
         fn test_fix_copy_to_project_with_ot_companion() {
+            // .ot file should NOT be copied — project has its own AED data in
+            // project.work, markers.work, and possibly its own .ot files
             let temp_dir = TempDir::new().unwrap();
             let source_dir = temp_dir.path().join("source");
             fs::create_dir(&source_dir).unwrap();
@@ -12032,7 +12023,10 @@ mod tests {
             .unwrap();
 
             assert!(project_path.join("kick.wav").exists());
-            assert!(project_path.join("kick.ot").exists());
+            assert!(
+                !project_path.join("kick.ot").exists(),
+                ".ot file should NOT be copied — project has its own AED data"
+            );
         }
 
         #[test]

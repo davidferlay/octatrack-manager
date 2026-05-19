@@ -67,3 +67,23 @@ You can customize which columns are visible. Click the column menu icon in the t
 
 ![Sample Slots - Column visibility menu](/img/screenshots/sample-slots-flex-filters-bis.png)
 
+---
+
+## How Sample Settings Are Stored
+
+The Octatrack stores Audio Editor (AED) settings for each sample slot across multiple files:
+
+| Data | File | Format |
+|------|------|--------|
+| Gain, BPM, loop mode, timestretch, trig quantization | `project.work` / `project.strd` | Text (per-slot `[SAMPLE]` blocks) |
+| Trim points, loop points, slices | `markers.work` / `markers.strd` | Binary (per-slot entries) |
+
+These files live inside the project directory and are always used by the Octatrack when loading a project.
+
+### About `.ot` Files
+
+`.ot` files are optional sidecar files created explicitly by the user on the Octatrack hardware via the Audio Editor's **FILE** menu (**Save Sample Settings**, **Save Sample Copy**, or **Save and Assign Sample**). They bundle both attributes and markers into a single file alongside the audio file.
+
+:::important
+**`.ot` files are only recognized by the Octatrack when located inside a project directory, next to their audio file.** The Octatrack ignores `.ot` files placed in the Audio Pool (`AUDIO/` folder) or in other projects' directories. Each project maintains its own independent settings in `project.work` and `markers.work`.
+:::
