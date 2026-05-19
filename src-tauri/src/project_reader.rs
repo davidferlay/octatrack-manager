@@ -2,7 +2,11 @@
 #![allow(clippy::collapsible_if)]
 #![allow(clippy::collapsible_match)]
 
-use ot_tools_io::{BankFile, HasChecksumField, MarkersFile, OctatrackFileIO, ProjectFile};
+use ot_tools_io::settings::{LoopMode, TimeStretchMode, TrigQuantizationMode};
+use ot_tools_io::types::{Slice, SlotAttributes, SlotMarkers, SlotType};
+use ot_tools_io::{
+    BankFile, HasChecksumField, MarkersFile, OctatrackFileIO, ProjectFile, SampleSettingsFile,
+};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use walkdir::WalkDir;
@@ -4900,6 +4904,84 @@ pub fn copy_tracks(
 }
 
 /// Result of a copy_sample_slots operation
+/// Resolved Audio Editor attributes for a sample slot, read from .ot file (priority) or
+/// project.work + markers.work (fallback).
+#[derive(Debug, Clone)]
+struct ResolvedAttributes {
+    gain: u8,
+    bpm: u16,
+    timestretch_mode: TimeStretchMode,
+    loop_mode: LoopMode,
+    trig_quantization: TrigQuantizationMode,
+    trim_offset: u32,
+    trim_end: u32,
+    loop_point: u32,
+    slices: [Slice; 64],
+    slice_count: u32,
+}
+
+/// Read Audio Editor attributes for a slot, prioritizing .ot file if it exists in the project dir.
+/// Falls back to SlotAttributes + SlotMarkers from project.work / markers.work.
+fn read_slot_attributes_with_ot_priority(
+    project_path: &Path,
+    slot_attrs: &SlotAttributes,
+    slot_markers: &SlotMarkers,
+) -> ResolvedAttributes {
+    // Try to find and read .ot file
+    if let Some(ref sample_path) = slot_attrs.path {
+        let sample_path_str = sample_path.to_string_lossy().to_string();
+        // Only check for .ot files within the project directory (not ../AUDIO pool)
+        if !sample_path_str.starts_with("../") {
+            let audio_file_path = project_path.join(&sample_path_str);
+            let ot_path = audio_file_path.with_extension("ot");
+            if ot_path.exists() {
+                if let Ok(ot) = SampleSettingsFile::from_data_file(&ot_path) {
+                    return ResolvedAttributes {
+                        gain: ot.gain as u8,
+                        bpm: (ot.tempo / 24) as u16,
+                        timestretch_mode: TimeStretchMode::try_from(ot.stretch).unwrap_or_default(),
+                        loop_mode: LoopMode::try_from(ot.loop_mode).unwrap_or_default(),
+                        trig_quantization: TrigQuantizationMode::try_from(ot.quantization as u32)
+                            .unwrap_or_default(),
+                        trim_offset: ot.trim_start,
+                        trim_end: ot.trim_end,
+                        loop_point: ot.loop_start,
+                        slices: ot.slices,
+                        slice_count: ot.slices_len,
+                    };
+                }
+            }
+        }
+    }
+
+    // Fallback: use project.work + markers.work data
+    ResolvedAttributes {
+        gain: slot_attrs.gain,
+        bpm: slot_attrs.bpm,
+        timestretch_mode: slot_attrs.timestrech_mode,
+        loop_mode: slot_attrs.loop_mode,
+        trig_quantization: slot_attrs.trig_quantization_mode,
+        trim_offset: slot_markers.trim_offset,
+        trim_end: slot_markers.trim_end,
+        loop_point: slot_markers.loop_point,
+        slices: slot_markers.slices,
+        slice_count: slot_markers.slice_count,
+    }
+}
+
+/// Read .ot file data for a project-local sample. Returns None if no .ot exists or file is in Audio Pool.
+fn read_ot_file(project_path: &Path, sample_path_str: &str) -> Option<SampleSettingsFile> {
+    if sample_path_str.starts_with("../") {
+        return None;
+    }
+    let audio_file_path = project_path.join(sample_path_str);
+    let ot_path = audio_file_path.with_extension("ot");
+    if !ot_path.exists() {
+        return None;
+    }
+    SampleSettingsFile::from_data_file(&ot_path).ok()
+}
+
 #[derive(serde::Serialize, Default, Debug)]
 pub struct CopySlotsResult {
     /// Number of source files that were NOT deleted because they are also
@@ -4915,8 +4997,10 @@ pub struct CopySlotsResult {
 /// * `slot_type` - "static", "flex", or "both"
 /// * `source_indices` - Source slot indices (1-128)
 /// * `dest_indices` - Destination slot indices (must match length of source_indices)
-/// * `audio_mode` - "none", "copy", or "move_to_pool"
-/// * `include_editor_settings` - Whether to copy Gain, loop mode, timestretch settings
+/// * `copy_assignments` - Whether to copy sample path assignments
+/// * `audio_mode` - "mirror", "copy", or "move_to_pool" (only used when copy_assignments=true)
+/// * `copy_attributes` - Whether to copy Audio Editor attributes
+/// * `attribute_selection` - Which attributes to copy
 ///
 /// Note: For "move_to_pool" mode, both projects must be in the same Set.
 pub fn copy_sample_slots(
@@ -4925,8 +5009,10 @@ pub fn copy_sample_slots(
     slot_type: &str,
     source_indices: Vec<u8>,
     dest_indices: Vec<u8>,
+    copy_assignments: bool,
     audio_mode: &str,
-    include_editor_settings: bool,
+    copy_attributes: bool,
+    attribute_selection: Vec<String>,
 ) -> Result<CopySlotsResult, String> {
     // Validate inputs
     if source_indices.len() != dest_indices.len() {
@@ -4946,15 +5032,23 @@ pub fn copy_sample_slots(
         ));
     }
 
-    if !["none", "copy", "move_to_pool"].contains(&audio_mode) {
-        return Err(format!(
-            "Invalid audio_mode: {}. Must be 'none', 'copy', or 'move_to_pool'",
-            audio_mode
-        ));
+    if copy_assignments {
+        if !["mirror", "copy", "move_to_pool"].contains(&audio_mode) {
+            return Err(format!(
+                "Invalid audio_mode: {}. Must be 'mirror', 'copy', or 'move_to_pool'",
+                audio_mode
+            ));
+        }
+    }
+
+    if !copy_assignments && !copy_attributes {
+        return Err(
+            "Nothing to copy: both copy_assignments and copy_attributes are false".to_string(),
+        );
     }
 
     // For move_to_pool mode, verify projects are in the same Set
-    if audio_mode == "move_to_pool" {
+    if copy_assignments && audio_mode == "move_to_pool" {
         if !are_projects_in_same_set(source_project, dest_project)? {
             return Err("Projects must be in the same Set for 'move_to_pool' mode".to_string());
         }
@@ -4995,7 +5089,7 @@ pub fn copy_sample_slots(
 
     // Get Audio Pool path for move_to_pool mode (only when copying between different projects)
     let same_project = source_project == dest_project;
-    let audio_pool_path = if audio_mode == "move_to_pool" && !same_project {
+    let audio_pool_path = if copy_assignments && audio_mode == "move_to_pool" && !same_project {
         let status = get_audio_pool_status(source_project)?;
         if !status.exists {
             // Create Audio Pool if it doesn't exist
@@ -5011,7 +5105,7 @@ pub fn copy_sample_slots(
     // opposite slot type so we can avoid deleting shared files.
     let mut shared_files_kept: u32 = 0;
     let other_type_paths: std::collections::HashSet<String> =
-        if audio_mode == "move_to_pool" && slot_type != "both" {
+        if copy_assignments && audio_mode == "move_to_pool" && slot_type != "both" {
             if slot_type == "static" {
                 source_project_data
                     .slots
@@ -5033,7 +5127,7 @@ pub fn copy_sample_slots(
             std::collections::HashSet::new()
         };
 
-    // Read source markers file for editor settings
+    // Read source markers file (needed for attribute copying)
     let source_markers_work = source_path.join("markers.work");
     let source_markers_strd = source_path.join("markers.strd");
     let source_markers_path = if source_markers_work.exists() {
@@ -5067,278 +5161,183 @@ pub fn copy_sample_slots(
     };
     let mut markers_modified = false;
 
-    // Helper: copy .ot metadata file alongside an audio file
-    fn copy_ot_file(src_audio: &Path, dest_audio: &Path) {
-        let ot_src = src_audio.with_extension("ot");
-        if ot_src.exists() {
-            let ot_dest = dest_audio.with_extension("ot");
-            if let Some(parent) = ot_dest.parent() {
-                let _ = std::fs::create_dir_all(parent);
-            }
-            let _ = std::fs::copy(&ot_src, &ot_dest);
-        }
-    }
+    // For move_to_pool: prepare to re-integrate .ot files into source project
+    let mut source_markers_for_reintegration = if copy_assignments && audio_mode == "move_to_pool" {
+        let src_m_work = source_path.join("markers.work");
+        let src_m_strd = source_path.join("markers.strd");
+        let src_m_path = if src_m_work.exists() {
+            Some(src_m_work)
+        } else if src_m_strd.exists() {
+            Some(src_m_strd)
+        } else {
+            None
+        };
+        Some(if let Some(ref p) = src_m_path {
+            MarkersFile::from_data_file(p)
+                .map_err(|e| format!("Failed to read source markers for reintegration: {:?}", e))?
+        } else {
+            MarkersFile::default()
+        })
+    } else {
+        None
+    };
+    let mut source_markers_reintegration_modified = false;
+    let mut source_reintegration_blocks: std::collections::HashMap<(String, u16), String> =
+        std::collections::HashMap::new();
+    let mut ot_files_to_delete: Vec<std::path::PathBuf> = Vec::new();
 
-    // Process each slot
+    // Helper to check if an attribute is selected
+    let attr_selected = |name: &str| -> bool { attribute_selection.iter().any(|s| s == name) };
+
+    // Process each slot pair
     for (&src_slot_id, &dest_slot_id) in source_indices.iter().zip(dest_indices.iter()) {
         let src_idx = (src_slot_id - 1) as usize;
         let dest_idx = (dest_slot_id - 1) as usize;
 
-        // Copy Static slots
+        // Process Static slots
         if slot_type == "static" || slot_type == "both" {
             if let Some(src_slot) = source_project_data.slots.static_slots.get(src_idx) {
                 if let Some(ref src_slot_data) = src_slot {
-                    // Clone the slot and fix the slot_id to match destination position
-                    let mut new_slot = src_slot_data.clone();
-                    new_slot.slot_id = dest_slot_id;
-
-                    // Handle audio file based on mode
-                    if let Some(ref sample_path) = new_slot.path {
-                        let sample_path_str = sample_path.to_string_lossy().to_string();
-
-                        match audio_mode {
-                            "copy" => {
-                                // Copy audio file to destination project root
-                                let src_full_path = source_path.join(&sample_path_str);
-                                if src_full_path.exists() {
-                                    let file_name = src_full_path
-                                        .file_name()
-                                        .map(|n| n.to_string_lossy().to_string())
-                                        .unwrap_or_default();
-                                    let dest_full_path = dest_path.join(&file_name);
-                                    // Avoid copying a file onto itself
-                                    if std::fs::canonicalize(&src_full_path).ok()
-                                        != std::fs::canonicalize(&dest_full_path).ok()
-                                    {
-                                        let _ = std::fs::copy(&src_full_path, &dest_full_path);
-                                        if include_editor_settings {
-                                            copy_ot_file(&src_full_path, &dest_full_path);
-                                        }
-                                    }
-                                    // Update slot path to flat filename in project root
-                                    new_slot.path = Some(std::path::PathBuf::from(&file_name));
-                                    println!(
-                                        "[DEBUG] Copied audio file: {} -> {}",
-                                        sample_path_str, file_name
-                                    );
-                                } else {
-                                    eprintln!("[WARN] Source audio file not found: {:?} (resolved from '{}')", src_full_path, sample_path_str);
-                                }
-                            }
-                            "move_to_pool" => {
-                                // Move file to Audio Pool and update path
-                                if let Some(ref pool_path) = audio_pool_path {
-                                    if !sample_path_str.starts_with("../AUDIO") {
-                                        let src_full_path = source_path.join(&sample_path_str);
-                                        let file_name = src_full_path
-                                            .file_name()
-                                            .map(|n| n.to_string_lossy().to_string())
-                                            .unwrap_or_default();
-                                        let pool_dest = Path::new(pool_path).join(&file_name);
-
-                                        if src_full_path.exists() {
-                                            // Copy to Audio Pool
-                                            if std::fs::copy(&src_full_path, &pool_dest).is_ok() {
-                                                // Only delete original if NOT referenced by the other slot type
-                                                if other_type_paths.contains(&sample_path_str) {
-                                                    shared_files_kept += 1;
-                                                    println!("[DEBUG] Kept shared file (referenced by other slot type): {}", file_name);
-                                                } else {
-                                                    let _ = std::fs::remove_file(&src_full_path);
-                                                }
-                                            }
-
-                                            // Always move .ot file alongside audio (it's a relocation)
-                                            let ot_src = src_full_path.with_extension("ot");
-                                            if ot_src.exists() {
-                                                let ot_dest = pool_dest.with_extension("ot");
-                                                if std::fs::copy(&ot_src, &ot_dest).is_ok() {
-                                                    if !other_type_paths.contains(&sample_path_str)
-                                                    {
-                                                        let _ = std::fs::remove_file(&ot_src);
-                                                    }
-                                                }
-                                            }
-
-                                            println!("[DEBUG] Moved to Audio Pool: {}", file_name);
-                                        }
-
-                                        // Update path to reference Audio Pool
-                                        // (also handles case where file was already moved by the other slot type)
-                                        new_slot.path = Some(std::path::PathBuf::from(format!(
-                                            "../AUDIO/{}",
-                                            file_name
-                                        )));
-                                    }
-                                }
-                            }
-                            _ => {} // "none" - just copy slot data
-                        }
-                    }
-
-                    // Handle editor settings and markers
-                    if include_editor_settings {
-                        // Copy markers from source to destination
-                        if let Some(ref src_markers) = source_markers {
-                            if src_idx < src_markers.static_slots.len()
-                                && dest_idx < dest_markers.static_slots.len()
-                            {
-                                dest_markers.static_slots[dest_idx] =
-                                    src_markers.static_slots[src_idx];
-                                markers_modified = true;
-                            }
-                        }
+                    // Start with destination slot if it exists, otherwise create from source
+                    let mut new_slot = if let Some(Some(ref existing)) =
+                        dest_project_data.slots.static_slots.get(dest_idx)
+                    {
+                        existing.clone()
+                    } else if copy_assignments && !copy_attributes {
+                        // No existing dest slot + only copying assignments:
+                        // create slot with source path but default attributes
+                        let mut s = src_slot_data.clone();
+                        s.gain = 72;
+                        s.bpm = 2880;
+                        s.loop_mode = Default::default();
+                        s.timestrech_mode = Default::default();
+                        s.trig_quantization_mode = Default::default();
+                        s
                     } else {
-                        // Reset all editor settings to defaults
-                        new_slot.gain = 72;
-                        new_slot.loop_mode = Default::default();
-                        new_slot.timestrech_mode = Default::default();
-                        new_slot.trig_quantization_mode = Default::default();
-                        new_slot.bpm = 2880;
+                        src_slot_data.clone()
+                    };
+                    new_slot.slot_id = dest_slot_id;
+                    new_slot.slot_type = SlotType::Static;
 
-                        // Reset markers to default (full sample, no slices)
-                        if dest_idx < dest_markers.static_slots.len() {
-                            dest_markers.static_slots[dest_idx] = Default::default();
-                            markers_modified = true;
+                    if copy_assignments {
+                        new_slot.path = src_slot_data.path.clone();
+                        if let Some(ref sample_path) = src_slot_data.path {
+                            let sample_path_str = sample_path.to_string_lossy().to_string();
+                            handle_audio_file(
+                                &sample_path_str,
+                                audio_mode,
+                                source_path,
+                                dest_path,
+                                &audio_pool_path,
+                                &other_type_paths,
+                                &mut shared_files_kept,
+                                &mut new_slot,
+                                src_slot_data,
+                                true,
+                                src_slot_id,
+                                &mut source_markers_for_reintegration,
+                                &mut source_markers_reintegration_modified,
+                                &mut source_reintegration_blocks,
+                                &mut ot_files_to_delete,
+                            );
                         }
                     }
 
-                    // Static slots are a fixed-size array (128 slots)
+                    if copy_attributes {
+                        let default_markers = SlotMarkers::default();
+                        let src_markers_data = source_markers
+                            .as_ref()
+                            .map(|m| m.static_slots.get(src_idx).unwrap_or(&default_markers))
+                            .unwrap_or(&default_markers);
+                        let resolved = read_slot_attributes_with_ot_priority(
+                            source_path,
+                            src_slot_data,
+                            src_markers_data,
+                        );
+                        apply_selected_attributes(
+                            &mut new_slot,
+                            &resolved,
+                            &attr_selected,
+                            &mut dest_markers.static_slots[dest_idx],
+                            &mut markers_modified,
+                        );
+                    }
+
                     if dest_idx < 128 {
                         dest_project_data.slots.static_slots[dest_idx] = Some(new_slot);
-                        println!(
-                            "[DEBUG] Copied Static slot {} to slot {}",
-                            src_slot_id, dest_slot_id
-                        );
                     }
                 }
             }
         }
 
-        // Copy Flex slots
+        // Process Flex slots
         if slot_type == "flex" || slot_type == "both" {
             if let Some(src_slot) = source_project_data.slots.flex_slots.get(src_idx) {
                 if let Some(ref src_slot_data) = src_slot {
-                    // Clone the slot and fix the slot_id to match destination position
-                    let mut new_slot = src_slot_data.clone();
-                    new_slot.slot_id = dest_slot_id;
-
-                    // Handle audio file based on mode
-                    if let Some(ref sample_path) = new_slot.path {
-                        let sample_path_str = sample_path.to_string_lossy().to_string();
-
-                        match audio_mode {
-                            "copy" => {
-                                // Copy audio file to destination project root
-                                let src_full_path = source_path.join(&sample_path_str);
-                                if src_full_path.exists() {
-                                    let file_name = src_full_path
-                                        .file_name()
-                                        .map(|n| n.to_string_lossy().to_string())
-                                        .unwrap_or_default();
-                                    let dest_full_path = dest_path.join(&file_name);
-                                    // Avoid copying a file onto itself
-                                    if std::fs::canonicalize(&src_full_path).ok()
-                                        != std::fs::canonicalize(&dest_full_path).ok()
-                                    {
-                                        let _ = std::fs::copy(&src_full_path, &dest_full_path);
-                                        if include_editor_settings {
-                                            copy_ot_file(&src_full_path, &dest_full_path);
-                                        }
-                                    }
-                                    // Update slot path to flat filename in project root
-                                    new_slot.path = Some(std::path::PathBuf::from(&file_name));
-                                    println!(
-                                        "[DEBUG] Copied audio file: {} -> {}",
-                                        sample_path_str, file_name
-                                    );
-                                } else {
-                                    eprintln!("[WARN] Source audio file not found: {:?} (resolved from '{}')", src_full_path, sample_path_str);
-                                }
-                            }
-                            "move_to_pool" => {
-                                if let Some(ref pool_path) = audio_pool_path {
-                                    if !sample_path_str.starts_with("../AUDIO") {
-                                        let src_full_path = source_path.join(&sample_path_str);
-                                        let file_name = src_full_path
-                                            .file_name()
-                                            .map(|n| n.to_string_lossy().to_string())
-                                            .unwrap_or_default();
-                                        let pool_dest = Path::new(pool_path).join(&file_name);
-
-                                        if src_full_path.exists() {
-                                            // Copy to Audio Pool
-                                            if std::fs::copy(&src_full_path, &pool_dest).is_ok() {
-                                                // Only delete original if NOT referenced by the other slot type
-                                                if other_type_paths.contains(&sample_path_str) {
-                                                    shared_files_kept += 1;
-                                                    println!("[DEBUG] Kept shared file (referenced by other slot type): {}", file_name);
-                                                } else {
-                                                    let _ = std::fs::remove_file(&src_full_path);
-                                                }
-                                            }
-
-                                            // Always move .ot file alongside audio (it's a relocation)
-                                            let ot_src = src_full_path.with_extension("ot");
-                                            if ot_src.exists() {
-                                                let ot_dest = pool_dest.with_extension("ot");
-                                                if std::fs::copy(&ot_src, &ot_dest).is_ok() {
-                                                    if !other_type_paths.contains(&sample_path_str)
-                                                    {
-                                                        let _ = std::fs::remove_file(&ot_src);
-                                                    }
-                                                }
-                                            }
-
-                                            println!("[DEBUG] Moved to Audio Pool: {}", file_name);
-                                        }
-
-                                        // Update path to reference Audio Pool
-                                        // (also handles case where file was already moved by the other slot type)
-                                        new_slot.path = Some(std::path::PathBuf::from(format!(
-                                            "../AUDIO/{}",
-                                            file_name
-                                        )));
-                                    }
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-
-                    // Handle editor settings and markers
-                    if include_editor_settings {
-                        // Copy markers from source to destination
-                        if let Some(ref src_markers) = source_markers {
-                            if src_idx < src_markers.flex_slots.len()
-                                && dest_idx < dest_markers.flex_slots.len()
-                            {
-                                dest_markers.flex_slots[dest_idx] = src_markers.flex_slots[src_idx];
-                                markers_modified = true;
-                            }
-                        }
+                    let mut new_slot = if let Some(Some(ref existing)) =
+                        dest_project_data.slots.flex_slots.get(dest_idx)
+                    {
+                        existing.clone()
+                    } else if copy_assignments && !copy_attributes {
+                        let mut s = src_slot_data.clone();
+                        s.gain = 72;
+                        s.bpm = 2880;
+                        s.loop_mode = Default::default();
+                        s.timestrech_mode = Default::default();
+                        s.trig_quantization_mode = Default::default();
+                        s
                     } else {
-                        // Reset all editor settings to defaults
-                        new_slot.gain = 72;
-                        new_slot.loop_mode = Default::default();
-                        new_slot.timestrech_mode = Default::default();
-                        new_slot.trig_quantization_mode = Default::default();
-                        new_slot.bpm = 2880;
+                        src_slot_data.clone()
+                    };
+                    new_slot.slot_id = dest_slot_id;
+                    new_slot.slot_type = SlotType::Flex;
 
-                        // Reset markers to default
-                        if dest_idx < dest_markers.flex_slots.len() {
-                            dest_markers.flex_slots[dest_idx] = Default::default();
-                            markers_modified = true;
+                    if copy_assignments {
+                        new_slot.path = src_slot_data.path.clone();
+                        if let Some(ref sample_path) = src_slot_data.path {
+                            let sample_path_str = sample_path.to_string_lossy().to_string();
+                            handle_audio_file(
+                                &sample_path_str,
+                                audio_mode,
+                                source_path,
+                                dest_path,
+                                &audio_pool_path,
+                                &other_type_paths,
+                                &mut shared_files_kept,
+                                &mut new_slot,
+                                src_slot_data,
+                                false,
+                                src_slot_id,
+                                &mut source_markers_for_reintegration,
+                                &mut source_markers_reintegration_modified,
+                                &mut source_reintegration_blocks,
+                                &mut ot_files_to_delete,
+                            );
                         }
                     }
 
-                    // Flex slots are a fixed-size array (128 slots - though internal array is 136)
+                    if copy_attributes {
+                        let default_markers = SlotMarkers::default();
+                        let src_markers_data = source_markers
+                            .as_ref()
+                            .map(|m| m.flex_slots.get(src_idx).unwrap_or(&default_markers))
+                            .unwrap_or(&default_markers);
+                        let resolved = read_slot_attributes_with_ot_priority(
+                            source_path,
+                            src_slot_data,
+                            src_markers_data,
+                        );
+                        apply_selected_attributes(
+                            &mut new_slot,
+                            &resolved,
+                            &attr_selected,
+                            &mut dest_markers.flex_slots[dest_idx],
+                            &mut markers_modified,
+                        );
+                    }
+
                     if dest_idx < dest_project_data.slots.flex_slots.len() {
                         dest_project_data.slots.flex_slots[dest_idx] = Some(new_slot);
-                        println!(
-                            "[DEBUG] Copied Flex slot {} to slot {}",
-                            src_slot_id, dest_slot_id
-                        );
                     }
                 }
             }
@@ -5393,8 +5392,40 @@ pub fn copy_sample_slots(
         println!("[DEBUG] Wrote markers file: {:?}", dest_markers_final);
     }
 
-    // If move_to_pool mode, also update source project paths (surgically)
-    if audio_mode == "move_to_pool" {
+    // If move_to_pool mode, also update source project
+    if copy_assignments && audio_mode == "move_to_pool" {
+        // Write reintegrated .ot data to source project.work
+        if !source_reintegration_blocks.is_empty() {
+            let source_project_file = if source_path.join("project.work").exists() {
+                source_path.join("project.work")
+            } else {
+                source_path.join("project.strd")
+            };
+            replace_sample_blocks_surgical(&source_project_file, &source_reintegration_blocks)?;
+            println!("[DEBUG] Re-integrated .ot data to source project.work");
+        }
+
+        // Write source markers if reintegration modified them
+        if source_markers_reintegration_modified {
+            if let Some(ref src_markers) = source_markers_for_reintegration {
+                let src_markers_final = source_path.join("markers.work");
+                src_markers
+                    .to_data_file(&src_markers_final)
+                    .map_err(|e| format!("Failed to write source markers file: {:?}", e))?;
+                println!("[DEBUG] Wrote source markers file after .ot reintegration");
+            }
+        }
+
+        // Delete .ot files after reintegration
+        for ot_path in &ot_files_to_delete {
+            let _ = std::fs::remove_file(ot_path);
+            println!(
+                "[DEBUG] Deleted .ot file after reintegration: {:?}",
+                ot_path
+            );
+        }
+
+        // Update source project paths to point to Audio Pool
         let mut source_path_updates: Vec<(String, String)> = Vec::new();
 
         for &src_slot_id in &source_indices {
@@ -5454,6 +5485,203 @@ pub fn copy_sample_slots(
     );
 
     Ok(CopySlotsResult { shared_files_kept })
+}
+
+/// Handle audio file operations (mirror/copy/move_to_pool) for a single slot.
+#[allow(clippy::too_many_arguments)]
+fn handle_audio_file(
+    sample_path_str: &str,
+    audio_mode: &str,
+    source_path: &Path,
+    dest_path: &Path,
+    audio_pool_path: &Option<String>,
+    other_type_paths: &std::collections::HashSet<String>,
+    shared_files_kept: &mut u32,
+    new_slot: &mut SlotAttributes,
+    src_slot_data: &SlotAttributes,
+    is_static: bool,
+    src_slot_id: u8,
+    source_markers_for_reintegration: &mut Option<MarkersFile>,
+    source_markers_reintegration_modified: &mut bool,
+    source_reintegration_blocks: &mut std::collections::HashMap<(String, u16), String>,
+    ot_files_to_delete: &mut Vec<std::path::PathBuf>,
+) {
+    let slot_type_str = if is_static { "STATIC" } else { "FLEX" };
+
+    match audio_mode {
+        "mirror" => {
+            // Mirror source references:
+            // - Pool files (../AUDIO/...) → keep path as-is
+            // - Project-local files → copy to dest project dir
+            if !sample_path_str.starts_with("../") {
+                let src_full_path = source_path.join(sample_path_str);
+                if src_full_path.exists() {
+                    let file_name = src_full_path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    let dest_full_path = dest_path.join(&file_name);
+                    if std::fs::canonicalize(&src_full_path).ok()
+                        != std::fs::canonicalize(&dest_full_path).ok()
+                    {
+                        let _ = std::fs::copy(&src_full_path, &dest_full_path);
+                    }
+                    new_slot.path = Some(std::path::PathBuf::from(&file_name));
+                    println!(
+                        "[DEBUG] Mirror: copied project-local file: {} -> {}",
+                        sample_path_str, file_name
+                    );
+                }
+            }
+        }
+        "copy" => {
+            // Copy ALL audio files to destination project root
+            let src_full_path = source_path.join(sample_path_str);
+            if src_full_path.exists() {
+                let file_name = src_full_path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                let dest_full_path = dest_path.join(&file_name);
+                if std::fs::canonicalize(&src_full_path).ok()
+                    != std::fs::canonicalize(&dest_full_path).ok()
+                {
+                    let _ = std::fs::copy(&src_full_path, &dest_full_path);
+                }
+                new_slot.path = Some(std::path::PathBuf::from(&file_name));
+                println!(
+                    "[DEBUG] Copied audio file: {} -> {}",
+                    sample_path_str, file_name
+                );
+            } else {
+                eprintln!(
+                    "[WARN] Source audio file not found: {:?} (resolved from '{}')",
+                    src_full_path, sample_path_str
+                );
+            }
+        }
+        "move_to_pool" => {
+            if let Some(ref pool_path) = audio_pool_path {
+                if !sample_path_str.starts_with("../AUDIO") {
+                    let src_full_path = source_path.join(sample_path_str);
+                    let file_name = src_full_path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    let pool_dest = Path::new(pool_path).join(&file_name);
+
+                    // Re-integrate .ot data before moving
+                    if let Some(ot) = read_ot_file(source_path, sample_path_str) {
+                        if let Some(ref mut src_markers) = source_markers_for_reintegration {
+                            let markers = SlotMarkers {
+                                trim_offset: ot.trim_start,
+                                trim_end: ot.trim_end,
+                                loop_point: ot.loop_start,
+                                slices: ot.slices,
+                                slice_count: ot.slices_len,
+                            };
+                            let src_idx_for_markers = (src_slot_id - 1) as usize;
+                            if is_static {
+                                if src_idx_for_markers < src_markers.static_slots.len() {
+                                    src_markers.static_slots[src_idx_for_markers] = markers;
+                                    *source_markers_reintegration_modified = true;
+                                }
+                            } else if src_idx_for_markers < src_markers.flex_slots.len() {
+                                src_markers.flex_slots[src_idx_for_markers] = markers;
+                                *source_markers_reintegration_modified = true;
+                            }
+                        }
+
+                        // Build surgical block for source project.work with .ot attrs
+                        let mut reintegrated_slot = src_slot_data.clone();
+                        reintegrated_slot.gain = ot.gain as u8;
+                        reintegrated_slot.bpm = (ot.tempo / 24) as u16;
+                        reintegrated_slot.timestrech_mode =
+                            TimeStretchMode::try_from(ot.stretch).unwrap_or_default();
+                        reintegrated_slot.loop_mode =
+                            LoopMode::try_from(ot.loop_mode).unwrap_or_default();
+                        reintegrated_slot.trig_quantization_mode =
+                            TrigQuantizationMode::try_from(ot.quantization as u32)
+                                .unwrap_or_default();
+                        reintegrated_slot.path =
+                            Some(std::path::PathBuf::from(format!("../AUDIO/{}", file_name)));
+                        source_reintegration_blocks.insert(
+                            (slot_type_str.to_string(), src_slot_id as u16),
+                            reintegrated_slot.to_string(),
+                        );
+                    }
+
+                    // Always schedule .ot file for deletion on move_to_pool
+                    // (OT ignores .ot in Audio Pool anyway)
+                    let ot_path = src_full_path.with_extension("ot");
+                    if ot_path.exists() {
+                        ot_files_to_delete.push(ot_path);
+                    }
+
+                    if src_full_path.exists() {
+                        if std::fs::copy(&src_full_path, &pool_dest).is_ok() {
+                            if other_type_paths.contains(sample_path_str) {
+                                *shared_files_kept += 1;
+                                println!(
+                                    "[DEBUG] Kept shared file (referenced by other slot type): {}",
+                                    file_name
+                                );
+                            } else {
+                                let _ = std::fs::remove_file(&src_full_path);
+                            }
+                        }
+                        println!("[DEBUG] Moved to Audio Pool: {}", file_name);
+                    }
+
+                    new_slot.path =
+                        Some(std::path::PathBuf::from(format!("../AUDIO/{}", file_name)));
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Apply selected attributes from resolved source to destination slot and markers.
+fn apply_selected_attributes(
+    new_slot: &mut SlotAttributes,
+    resolved: &ResolvedAttributes,
+    attr_selected: &dyn Fn(&str) -> bool,
+    dest_markers_slot: &mut SlotMarkers,
+    markers_modified: &mut bool,
+) {
+    if attr_selected("gain") {
+        new_slot.gain = resolved.gain;
+    }
+    if attr_selected("bpm") {
+        new_slot.bpm = resolved.bpm;
+    }
+    if attr_selected("timestretch") {
+        new_slot.timestrech_mode = resolved.timestretch_mode;
+    }
+    if attr_selected("loop") {
+        new_slot.loop_mode = resolved.loop_mode;
+    }
+    if attr_selected("trig_quant") {
+        new_slot.trig_quantization_mode = resolved.trig_quantization;
+    }
+
+    let needs_marker_update =
+        attr_selected("trim") || attr_selected("loop_point") || attr_selected("slices");
+    if needs_marker_update {
+        if attr_selected("trim") {
+            dest_markers_slot.trim_offset = resolved.trim_offset;
+            dest_markers_slot.trim_end = resolved.trim_end;
+        }
+        if attr_selected("loop_point") {
+            dest_markers_slot.loop_point = resolved.loop_point;
+        }
+        if attr_selected("slices") {
+            dest_markers_slot.slices = resolved.slices;
+            dest_markers_slot.slice_count = resolved.slice_count;
+        }
+        *markers_modified = true;
+    }
 }
 
 #[cfg(test)]
@@ -8247,8 +8475,19 @@ mod tests {
                 "both",
                 vec![1],
                 vec![1],
-                "none",
                 true,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             );
             assert!(
                 result.is_ok(),
@@ -8269,8 +8508,19 @@ mod tests {
                 "both",
                 (1..=10).collect(),
                 (1..=10).collect(),
-                "none",
                 true,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             );
             assert!(
                 result.is_ok(),
@@ -8291,8 +8541,19 @@ mod tests {
                 "both",
                 (1..=128).collect(),
                 (1..=128).collect(),
-                "none",
                 true,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             );
             assert!(
                 result.is_ok(),
@@ -8313,8 +8574,19 @@ mod tests {
                 "both",
                 (1..=10).collect(),
                 (50..=59).collect(),
-                "none",
                 true,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             );
             assert!(
                 result.is_ok(),
@@ -8335,8 +8607,19 @@ mod tests {
                 "both",
                 vec![1, 2, 3],
                 vec![1, 2, 3],
-                "none",
                 true,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             );
             assert!(
                 result.is_ok(),
@@ -8357,8 +8640,19 @@ mod tests {
                 "static",
                 vec![1],
                 vec![1],
-                "none",
                 true,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             );
             assert!(result.is_ok(), "Static only should succeed: {:?}", result);
         }
@@ -8375,8 +8669,19 @@ mod tests {
                 "flex",
                 vec![1],
                 vec![1],
-                "none",
                 true,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             );
             assert!(result.is_ok(), "Flex only should succeed: {:?}", result);
         }
@@ -8393,8 +8698,19 @@ mod tests {
                 "both",
                 vec![1],
                 vec![1],
-                "none",
                 true,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             );
             assert!(result.is_ok(), "Both types should succeed: {:?}", result);
         }
@@ -8411,8 +8727,19 @@ mod tests {
                 "both",
                 vec![1],
                 vec![1],
-                "none",
                 true,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             );
             assert!(
                 result.is_ok(),
@@ -8433,8 +8760,19 @@ mod tests {
                 "both",
                 vec![1],
                 vec![1],
+                true,
                 "copy",
                 true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             );
             assert!(
                 result.is_ok(),
@@ -8455,8 +8793,19 @@ mod tests {
                 "both",
                 vec![1],
                 vec![1],
-                "none",
                 true,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             );
             assert!(result.is_ok());
         }
@@ -8473,8 +8822,10 @@ mod tests {
                 "both",
                 vec![1],
                 vec![1],
-                "none",
+                true,
+                "mirror",
                 false,
+                vec![],
             );
             assert!(result.is_ok());
         }
@@ -8490,8 +8841,19 @@ mod tests {
                 "both",
                 vec![1, 2, 3],
                 vec![1, 2], // Mismatch
-                "none",
                 true,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             );
             assert!(result.is_err());
             assert!(result.unwrap_err().contains("same length"));
@@ -8508,8 +8870,19 @@ mod tests {
                 "both",
                 vec![0], // Invalid - slots are 1-128
                 vec![1],
-                "none",
                 true,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             );
             assert!(result.is_err());
             assert!(result
@@ -8528,8 +8901,19 @@ mod tests {
                 "both",
                 vec![129], // Invalid
                 vec![1],
-                "none",
                 true,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             );
             assert!(result.is_err());
             assert!(result
@@ -8548,8 +8932,19 @@ mod tests {
                 "invalid_type",
                 vec![1],
                 vec![1],
-                "none",
                 true,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             );
             assert!(result.is_err());
             assert!(result.unwrap_err().contains("Invalid slot_type"));
@@ -8566,8 +8961,10 @@ mod tests {
                 "both",
                 vec![1],
                 vec![1],
+                true,
                 "invalid_mode",
                 true,
+                vec![],
             );
             assert!(result.is_err());
             assert!(result.unwrap_err().contains("Invalid audio_mode"));
@@ -8601,8 +8998,19 @@ mod tests {
                 "both",
                 vec![1],
                 vec![1],
+                true,
                 "move_to_pool",
                 true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             );
             assert!(
                 result.is_err(),
@@ -8622,8 +9030,10 @@ mod tests {
                 "static",
                 vec![1],
                 vec![2],
-                "none",
+                true,
+                "mirror",
                 false,
+                vec![],
             );
             assert!(
                 result.is_ok(),
@@ -8644,8 +9054,10 @@ mod tests {
                 "static",
                 vec![128],
                 vec![128],
-                "none",
+                true,
+                "mirror",
                 false,
+                vec![],
             );
             assert!(result.is_ok(), "Slot 128 should be valid: {:?}", result);
         }
@@ -8662,8 +9074,10 @@ mod tests {
                 "static",
                 vec![129],
                 vec![1],
-                "none",
+                true,
+                "mirror",
                 false,
+                vec![],
             );
             assert!(result.is_err(), "Slot 129 should be invalid");
             assert!(
@@ -8684,8 +9098,10 @@ mod tests {
                 "static",
                 vec![0],
                 vec![0],
-                "none",
+                true,
+                "mirror",
                 false,
+                vec![],
             );
             assert!(result.is_err(), "Slot 0 should be invalid");
             assert!(
@@ -8706,8 +9122,10 @@ mod tests {
                 "both",
                 vec![1, 2, 3],
                 vec![5, 6, 7],
-                "none",
+                true,
+                "mirror",
                 false,
+                vec![],
             );
             assert!(
                 result.is_ok(),
@@ -8728,8 +9146,10 @@ mod tests {
                 "static",
                 vec![], // Empty source
                 vec![1],
-                "none",
+                true,
+                "mirror",
                 false,
+                vec![],
             );
             assert!(result.is_err(), "Empty source should fail");
         }
@@ -8746,8 +9166,10 @@ mod tests {
                 "static",
                 vec![1, 2],    // 2 sources
                 vec![1, 2, 3], // 3 destinations
-                "none",
+                true,
+                "mirror",
                 false,
+                vec![],
             );
             assert!(
                 result.is_err(),
@@ -8767,8 +9189,10 @@ mod tests {
                 "static",
                 vec![1],             // 1 source
                 vec![1, 2, 3, 4, 5], // 5 destinations - mismatched
-                "none",
+                true,
+                "mirror",
                 false,
+                vec![],
             );
             assert!(
                 result.is_err(),
@@ -8815,8 +9239,10 @@ mod tests {
                 "static",
                 vec![1],
                 vec![1],
-                "none",
-                false, // Editor settings OFF
+                true,
+                "mirror",
+                false,
+                vec![], // Editor settings OFF
             )
             .unwrap();
 
@@ -8846,8 +9272,19 @@ mod tests {
                 "static",
                 vec![1],
                 vec![1],
-                "none",
-                true, // Editor settings ON
+                true,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ], // Editor settings ON
             )
             .unwrap();
 
@@ -8887,8 +9324,19 @@ mod tests {
                 "static",
                 vec![1],
                 vec![3],
-                "none",
-                true, // Editor settings ON - should copy markers
+                true,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ], // Editor settings ON - should copy markers
             )
             .unwrap();
 
@@ -8908,8 +9356,8 @@ mod tests {
         }
 
         #[test]
-        fn test_copy_slots_markers_reset_when_editor_settings_off() {
-            // CSS-MRK-02: Markers reset to default when editor settings OFF
+        fn test_copy_slots_markers_preserved_when_attributes_off() {
+            // CSS-MRK-02: Markers preserved when copy_attributes=false
             let source = project_with_static_slot(0, 72);
 
             // Create source markers with non-default data
@@ -8933,19 +9381,21 @@ mod tests {
                 "static",
                 vec![1],
                 vec![3],
-                "none",
-                false, // Editor settings OFF - should reset markers
+                true,
+                "mirror",
+                false,
+                vec![], // Attributes OFF - should preserve dest markers
             )
             .unwrap();
 
             let dest_markers_result = MarkersFile::from_data_file(&dest_markers_path).unwrap();
             assert_eq!(
-                dest_markers_result.static_slots[2].trim_offset, 0,
-                "trim_offset should be reset to 0"
+                dest_markers_result.static_slots[2].trim_offset, 9999,
+                "trim_offset should be preserved (not reset)"
             );
             assert_eq!(
-                dest_markers_result.static_slots[2].trim_end, 0,
-                "trim_end should be reset to 0"
+                dest_markers_result.static_slots[2].trim_end, 8888,
+                "trim_end should be preserved (not reset)"
             );
         }
 
@@ -8989,8 +9439,19 @@ mod tests {
                 "flex",
                 vec![1],
                 vec![5],
-                "none",
                 true,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             )
             .unwrap();
 
@@ -9010,8 +9471,9 @@ mod tests {
         }
 
         #[test]
-        fn test_copy_slots_audio_copy_with_ot_file() {
-            // CSS-OT-01: .ot metadata file is copied alongside audio file
+        fn test_copy_slots_audio_copy_ot_file_not_copied() {
+            // CSS-OT-01: .ot file is NOT copied — audio operations don't handle .ot files
+            // .ot files are part of Audio Editor settings, handled separately via Sample Attributes
             let source = TestProject::new();
 
             // Create source audio file and .ot file
@@ -9045,8 +9507,19 @@ mod tests {
                 "static",
                 vec![1],
                 vec![1],
+                true,
                 "copy",
                 true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             )
             .unwrap();
 
@@ -9058,8 +9531,8 @@ mod tests {
                 "Audio file should be copied to project root"
             );
             assert!(
-                dest_ot.exists(),
-                ".ot file should be copied alongside audio when editor settings ON"
+                !dest_ot.exists(),
+                ".ot file should NOT be copied — audio operations don't handle .ot files"
             );
         }
 
@@ -9099,8 +9572,10 @@ mod tests {
                 "static",
                 vec![1],
                 vec![1],
+                true,
                 "copy",
-                false, // editor settings OFF
+                false,
+                vec![], // editor settings OFF
             )
             .unwrap();
 
@@ -9171,8 +9646,19 @@ mod tests {
                 "static",
                 vec![1],
                 vec![1],
+                true,
                 "move_to_pool",
                 true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             );
             assert!(result.is_ok(), "Move to pool should succeed: {:?}", result);
 
@@ -9238,8 +9724,19 @@ mod tests {
                 "static",
                 vec![1],
                 vec![1],
+                true,
                 "move_to_pool",
                 true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             );
             assert!(result.is_ok(), "Move to pool should succeed: {:?}", result);
 
@@ -9289,6 +9786,7 @@ mod tests {
         #[test]
         fn test_copy_slots_creates_markers_file_if_absent() {
             // CSS-MRK-04: markers.work should be created if it doesn't exist
+            // When copy_attributes=true, markers.work should be created
             let source = TestProject::new();
             let dest = TestProject::new();
 
@@ -9316,14 +9814,21 @@ mod tests {
             pf.slots.static_slots[0] = Some(slot);
             pf.to_data_file(&source_project_path).unwrap();
 
+            // With copy_attributes=true and marker attrs selected, markers.work should be created
             let result = copy_sample_slots(
                 &source.path,
                 &dest.path,
                 "static",
                 vec![1],
                 vec![1],
-                "none",
-                false, // Editor settings OFF triggers markers reset
+                true,
+                "mirror",
+                true,
+                vec![
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             );
             assert!(
                 result.is_ok(),
@@ -9365,8 +9870,19 @@ mod tests {
                 "static",
                 vec![1],
                 vec![5],
-                "none",
                 true,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             )
             .unwrap();
 
@@ -9411,8 +9927,19 @@ mod tests {
                 "flex",
                 vec![1],
                 vec![10],
-                "none",
                 true,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             )
             .unwrap();
 
@@ -9488,8 +10015,19 @@ mod tests {
                 "static",
                 vec![1],
                 vec![1],
+                true,
                 "move_to_pool",
                 true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             )
             .unwrap();
 
@@ -9553,8 +10091,19 @@ mod tests {
                 "static",
                 vec![1],
                 vec![1],
+                true,
                 "move_to_pool",
                 true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             )
             .unwrap();
 
@@ -9628,8 +10177,19 @@ mod tests {
                 "both",
                 vec![1],
                 vec![1],
+                true,
                 "move_to_pool",
                 true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             );
             assert!(result.is_ok(), "Move to pool should succeed: {:?}", result);
 
@@ -9694,6 +10254,282 @@ mod tests {
             assert!(
                 !src_dir.join("shared.wav").exists(),
                 "Original file should be deleted from source"
+            );
+        }
+
+        #[test]
+        fn test_copy_slots_attributes_only_no_assignments() {
+            // CSS-ATTR-ONLY: Copy attributes without assignments — dest path untouched
+            let source = project_with_static_slot(0, 96);
+            let dest = project_with_static_slot(0, 50);
+
+            // Set a specific path on dest to verify it's untouched
+            let dest_project_path = Path::new(&dest.path).join("project.work");
+            let mut dest_pf = ProjectFile::from_data_file(&dest_project_path).unwrap();
+            dest_pf.slots.static_slots[0].as_mut().unwrap().path =
+                Some(std::path::PathBuf::from("original_dest.wav"));
+            dest_pf.to_data_file(&dest_project_path).unwrap();
+
+            copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "static",
+                vec![1],
+                vec![1],
+                false, // Don't copy assignments
+                "mirror",
+                true, // Copy attributes
+                vec!["gain".to_string()],
+            )
+            .unwrap();
+
+            let dest_pf2 = ProjectFile::from_data_file(&dest_project_path).unwrap();
+            let slot = dest_pf2.slots.static_slots[0].as_ref().unwrap();
+            assert_eq!(slot.gain, 96, "Gain should be copied from source");
+            assert_eq!(
+                slot.path.as_ref().unwrap().to_string_lossy(),
+                "original_dest.wav",
+                "Path should be untouched when copy_assignments=false"
+            );
+        }
+
+        #[test]
+        fn test_copy_slots_selective_attributes() {
+            // CSS-SEL-ATTR: Only selected attributes copied, others untouched
+            let source = project_with_static_slot(0, 96);
+            let dest = project_with_static_slot(0, 50);
+
+            copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "static",
+                vec![1],
+                vec![1],
+                true,
+                "mirror",
+                true,
+                vec!["gain".to_string()], // Only gain selected
+            )
+            .unwrap();
+
+            let dest_project_path = Path::new(&dest.path).join("project.work");
+            let dest_pf = ProjectFile::from_data_file(&dest_project_path).unwrap();
+            let slot = dest_pf.slots.static_slots[0].as_ref().unwrap();
+            assert_eq!(slot.gain, 96, "Gain should be copied (selected)");
+            // BPM should remain at dest's original value (3600 = 150 BPM from project_with_static_slot)
+            assert_eq!(slot.bpm, 3600, "BPM should be untouched (not selected)");
+        }
+
+        #[test]
+        fn test_copy_slots_both_dont_copy_rejected() {
+            // CSS-BOTH-OFF: Both assignments and attributes off → returns error
+            let source = project_with_static_slot(0, 96);
+            let dest = TestProject::new();
+
+            let result = copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "static",
+                vec![1],
+                vec![1],
+                false, // Don't copy assignments
+                "mirror",
+                false, // Don't copy attributes
+                vec![],
+            );
+            assert!(result.is_err(), "Should return error when both are off");
+            assert!(
+                result.unwrap_err().contains("Nothing to copy"),
+                "Error should mention nothing to copy"
+            );
+        }
+
+        #[test]
+        fn test_copy_slots_assignments_only_preserves_dest_attributes() {
+            // CSS-ASSIGN-ONLY: Copy assignments only — dest attributes preserved
+            let source = project_with_static_slot(0, 96);
+            let dest = project_with_static_slot(0, 50);
+
+            // Give source a path
+            let src_project_path = Path::new(&source.path).join("project.work");
+            let mut src_pf = ProjectFile::from_data_file(&src_project_path).unwrap();
+            src_pf.slots.static_slots[0].as_mut().unwrap().path =
+                Some(std::path::PathBuf::from("source_sample.wav"));
+            src_pf.to_data_file(&src_project_path).unwrap();
+
+            copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "static",
+                vec![1],
+                vec![1],
+                true, // Copy assignments
+                "mirror",
+                false, // Don't copy attributes
+                vec![],
+            )
+            .unwrap();
+
+            let dest_project_path = Path::new(&dest.path).join("project.work");
+            let dest_pf = ProjectFile::from_data_file(&dest_project_path).unwrap();
+            let slot = dest_pf.slots.static_slots[0].as_ref().unwrap();
+            assert_eq!(
+                slot.path.as_ref().unwrap().to_string_lossy(),
+                "source_sample.wav",
+                "Path should be copied from source"
+            );
+            assert_eq!(
+                slot.gain, 50,
+                "Gain should be preserved from dest (attributes not copied)"
+            );
+        }
+
+        #[test]
+        fn test_copy_slots_mirror_audio_mode() {
+            // CSS-MIRROR: Mirror mode copies project-local files, keeps pool refs as-is
+            let set_dir = TempDir::new().unwrap();
+            let src_dir = set_dir.path().join("Source");
+            let dest_dir = set_dir.path().join("Dest");
+            let audio_dir = set_dir.path().join("AUDIO");
+            fs::create_dir_all(&src_dir).unwrap();
+            fs::create_dir_all(&dest_dir).unwrap();
+            fs::create_dir_all(&audio_dir).unwrap();
+
+            // Create local audio file in source
+            fs::write(src_dir.join("local.wav"), b"local audio data").unwrap();
+            // Create pool audio file
+            fs::write(audio_dir.join("pool.wav"), b"pool audio data").unwrap();
+
+            // Set up source: slot 1 = local file, slot 2 = pool file
+            let mut src_pf = ProjectFile::default();
+            let slot1 = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Static,
+                1,
+                Some(std::path::PathBuf::from("local.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            let slot2 = ot_tools_io::projects::SlotAttributes::new(
+                ot_tools_io::settings::SlotType::Static,
+                2,
+                Some(std::path::PathBuf::from("../AUDIO/pool.wav")),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            src_pf.slots.static_slots[0] = Some(slot1);
+            src_pf.slots.static_slots[1] = Some(slot2);
+            src_pf.to_data_file(&src_dir.join("project.work")).unwrap();
+
+            let dest_pf = ProjectFile::default();
+            dest_pf
+                .to_data_file(&dest_dir.join("project.work"))
+                .unwrap();
+
+            for project_dir in [&src_dir, &dest_dir] {
+                for bank_num in 1..=16 {
+                    let bank = BankFile::default();
+                    bank.to_data_file(&project_dir.join(format!("bank{:02}.work", bank_num)))
+                        .unwrap();
+                }
+            }
+
+            let result = copy_sample_slots(
+                &src_dir.to_string_lossy(),
+                &dest_dir.to_string_lossy(),
+                "static",
+                vec![1, 2],
+                vec![1, 2],
+                true,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
+            );
+            assert!(result.is_ok(), "Mirror copy should succeed: {:?}", result);
+
+            // Local file should be copied to dest
+            assert!(
+                dest_dir.join("local.wav").exists(),
+                "Local file should be copied to destination"
+            );
+
+            // Pool file should NOT be copied (stays as pool ref)
+            let dest_project = ProjectFile::from_data_file(&dest_dir.join("project.work")).unwrap();
+            let dest_slot2 = dest_project.slots.static_slots[1].as_ref().unwrap();
+            assert_eq!(
+                dest_slot2.path.as_ref().unwrap().to_string_lossy(),
+                "../AUDIO/pool.wav",
+                "Pool reference should be preserved as-is"
+            );
+        }
+
+        #[test]
+        fn test_copy_slots_selective_markers_only_trim() {
+            // CSS-SEL-MRK: Only trim markers copied when only "trim" selected
+            let source = project_with_static_slot(0, 72);
+
+            let mut src_markers = MarkersFile::default();
+            src_markers.static_slots[0].trim_offset = 1000;
+            src_markers.static_slots[0].trim_end = 50000;
+            src_markers.static_slots[0].loop_point = 25000;
+            src_markers.static_slots[0].slice_count = 4;
+            let src_markers_path = Path::new(&source.path).join("markers.work");
+            src_markers.to_data_file(&src_markers_path).unwrap();
+
+            let dest = project_with_static_slot(0, 72);
+            let mut dest_markers = MarkersFile::default();
+            dest_markers.static_slots[0].trim_offset = 500;
+            dest_markers.static_slots[0].trim_end = 10000;
+            dest_markers.static_slots[0].loop_point = 5000;
+            dest_markers.static_slots[0].slice_count = 8;
+            let dest_markers_path = Path::new(&dest.path).join("markers.work");
+            dest_markers.to_data_file(&dest_markers_path).unwrap();
+
+            copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "static",
+                vec![1],
+                vec![1],
+                true,
+                "mirror",
+                true,
+                vec!["trim".to_string()], // Only trim selected
+            )
+            .unwrap();
+
+            let result_markers = MarkersFile::from_data_file(&dest_markers_path).unwrap();
+            assert_eq!(
+                result_markers.static_slots[0].trim_offset, 1000,
+                "Trim offset should be copied"
+            );
+            assert_eq!(
+                result_markers.static_slots[0].trim_end, 50000,
+                "Trim end should be copied"
+            );
+            assert_eq!(
+                result_markers.static_slots[0].loop_point, 5000,
+                "Loop point should be preserved (not selected)"
+            );
+            assert_eq!(
+                result_markers.static_slots[0].slice_count, 8,
+                "Slice count should be preserved (not selected)"
             );
         }
     }
@@ -10121,8 +10957,19 @@ mod tests {
                 "both",
                 vec![1, 128],
                 vec![1, 128],
-                "none",
                 true,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             );
             assert!(result.is_ok(), "Slot indices 1 and 128 should be valid");
         }
@@ -10190,8 +11037,19 @@ mod tests {
                 "both",
                 vec![],
                 vec![],
-                "none",
                 true,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             );
             assert!(result.is_ok(), "Empty slots copy should succeed (no-op)");
         }
@@ -10341,8 +11199,19 @@ mod tests {
                 "both",
                 vec![1, 2, 3],
                 vec![1, 2, 3],
-                "none",
                 true,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             )
             .unwrap();
 
@@ -11473,8 +12342,19 @@ mod tests {
                 "flex",
                 vec![1],
                 vec![1],
+                true,
                 "copy",
                 true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
             )
             .unwrap();
 

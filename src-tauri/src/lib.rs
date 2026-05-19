@@ -507,8 +507,10 @@ async fn copy_sample_slots(
     slot_type: String,
     source_indices: Vec<u8>,
     dest_indices: Vec<u8>,
+    copy_assignments: bool,
     audio_mode: String,
-    include_editor_settings: bool,
+    copy_attributes: bool,
+    attribute_selection: Vec<String>,
 ) -> Result<project_reader::CopySlotsResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
         copy_sample_slots_impl(
@@ -517,8 +519,10 @@ async fn copy_sample_slots(
             &slot_type,
             source_indices,
             dest_indices,
+            copy_assignments,
             &audio_mode,
-            include_editor_settings,
+            copy_attributes,
+            attribute_selection,
         )
     })
     .await

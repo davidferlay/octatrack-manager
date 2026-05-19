@@ -466,49 +466,59 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
     await expect(staticFlexBtn).not.toHaveClass(/selected/)
   })
 
-  test('Audio Files has three toggle buttons', async ({ page }) => {
-    await expect(page.getByText('Audio Files')).toBeVisible()
+  test('Sample Assignments has Copy/Don\'t Copy toggle', async ({ page }) => {
+    await expect(page.getByText('Sample Assignments')).toBeVisible()
 
-    const copyBtn = page.locator('.tools-toggle-btn', { hasText: /^Copy$/ })
-    const moveToPoolBtn = page.locator('.tools-toggle-btn', { hasText: 'Move to Pool' })
-    const dontCopyBtn = page.locator('.tools-toggle-btn', { hasText: "Don't Copy" })
+    const copyBtn = page.locator('.tools-toggle-btn', { hasText: /^Copy$/ }).first()
+    const dontCopyBtn = page.locator('.tools-toggle-btn', { hasText: "Don't Copy" }).first()
 
     await expect(copyBtn).toBeVisible()
-    await expect(moveToPoolBtn).toBeVisible()
     await expect(dontCopyBtn).toBeVisible()
   })
 
-  test('Copy is selected by default for Audio Files', async ({ page }) => {
-    const copyBtn = page.locator('.tools-toggle-btn', { hasText: 'Copy' }).first()
+  test('Copy is selected by default for Sample Assignments', async ({ page }) => {
+    const copyBtn = page.locator('.tools-toggle-btn', { hasText: /^Copy$/ }).first()
     await expect(copyBtn).toHaveClass(/selected/)
   })
 
-  test('Include Editor Settings checkbox is visible and checked by default', async ({ page }) => {
-    const label = page.getByText('Include Editor Settings')
-    await expect(label).toBeVisible()
+  test('Audio Files sub-options visible when assignments Copy selected', async ({ page }) => {
+    await expect(page.getByText('Audio Files')).toBeVisible()
 
-    const checkbox = page.locator('.tools-checkbox input[type="checkbox"]')
-    await expect(checkbox).toBeChecked()
-  })
-
-  test('Include Editor Settings checkbox is disabled when Move to Pool is selected', async ({ page }) => {
+    const mirrorBtn = page.locator('.tools-toggle-btn', { hasText: 'Mirror' })
+    const copyAllBtn = page.locator('.tools-toggle-btn', { hasText: 'Copy to project' })
     const moveToPoolBtn = page.locator('.tools-toggle-btn', { hasText: 'Move to Pool' })
-    await moveToPoolBtn.click()
-    await page.waitForTimeout(200)
 
-    const checkbox = page.locator('.tools-checkbox input[type="checkbox"]')
-    await expect(checkbox).toBeDisabled()
-    await expect(checkbox).toBeChecked()
+    await expect(mirrorBtn).toBeVisible()
+    await expect(copyAllBtn).toBeVisible()
+    await expect(moveToPoolBtn).toBeVisible()
   })
 
-  test('Include Editor Settings checkbox is enabled when Copy is selected', async ({ page }) => {
-    // First switch to Copy mode
-    const copyBtn = page.locator('.tools-toggle-btn').filter({ hasText: /^Copy$/ })
-    await copyBtn.click()
+  test('Audio Files sub-options hidden when assignments Don\'t Copy selected', async ({ page }) => {
+    const dontCopyBtn = page.locator('.tools-toggle-btn', { hasText: "Don't Copy" }).first()
+    await dontCopyBtn.click()
     await page.waitForTimeout(200)
 
-    const checkbox = page.locator('.tools-checkbox input[type="checkbox"]')
-    await expect(checkbox).toBeEnabled()
+    await expect(page.locator('.tools-toggle-btn', { hasText: 'Mirror' })).not.toBeVisible()
+  })
+
+  test('Sample Attributes has Copy/Don\'t Copy toggle with attribute list', async ({ page }) => {
+    await expect(page.getByText('Sample Attributes')).toBeVisible()
+
+    // Attribute rows should be visible when Copy is selected (default)
+    await expect(page.locator('.tools-attr-row', { hasText: 'Gain' })).toBeVisible()
+    await expect(page.locator('.tools-attr-row', { hasText: 'BPM / Tempo' })).toBeVisible()
+    await expect(page.locator('.tools-attr-row', { hasText: 'Slices' })).toBeVisible()
+    await expect(page.getByText('Select all')).toBeVisible()
+    await expect(page.locator('.tools-attribute-actions').getByText('None')).toBeVisible()
+  })
+
+  test('Attribute list hidden when attributes Don\'t Copy selected', async ({ page }) => {
+    // Find the Don't Copy button for Sample Attributes (second one)
+    const dontCopyBtns = page.locator('.tools-toggle-btn', { hasText: "Don't Copy" })
+    await dontCopyBtns.nth(1).click()
+    await page.waitForTimeout(200)
+
+    await expect(page.locator('.tools-attr-row', { hasText: 'Gain' })).not.toBeVisible()
   })
 
   test('Move to Pool is enabled when projects are in the same Set', async ({ page }) => {
@@ -622,12 +632,20 @@ test.describe('Tools Tab - Copy Sample Slots Not Same Set', () => {
     await expect(moveToPoolBtn).toBeDisabled()
   })
 
-  test('Copy remains selected when Move to Pool is unavailable', async ({ page }) => {
-    const copyBtn = page.locator('.tools-toggle-btn', { hasText: 'Copy' }).first()
-    await expect(copyBtn).toHaveClass(/selected/)
+  test('Mirror is disabled when projects are not in the same Set', async ({ page }) => {
+    const mirrorBtn = page.locator('.tools-toggle-btn', { hasText: 'Mirror' })
+    await expect(mirrorBtn).toBeDisabled()
+  })
+
+  test('Copy to project remains selected when not in same Set', async ({ page }) => {
+    const copyAllBtn = page.locator('.tools-toggle-btn', { hasText: 'Copy to project' })
+    await expect(copyAllBtn).toHaveClass(/selected/)
 
     const moveToPoolBtn = page.locator('.tools-toggle-btn', { hasText: 'Move to Pool' })
     await expect(moveToPoolBtn).not.toHaveClass(/selected/)
+
+    const mirrorBtn = page.locator('.tools-toggle-btn', { hasText: 'Mirror' })
+    await expect(mirrorBtn).not.toHaveClass(/selected/)
   })
 })
 
