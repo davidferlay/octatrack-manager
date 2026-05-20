@@ -29,27 +29,27 @@ const FX_TYPES = [
 
 function defaultMachineParams(type: string) {
   if (type === 'Thru') {
-    return { ptch: null, strt: null, len: null, rate: null, rtrg: null, rtim: null, in_ab: 0, vol_ab: 100, in_cd: 0, vol_cd: 100, dir: null, gain: null, op: null };
+    return { ptch: null, strt: null, len: null, rate: null, rtrg: null, rtim: null, in_ab: 0, vol_ab: 64, in_cd: 0, vol_cd: 64, dir: null, gain: null, op: null };
   }
   if (type === 'Neighbor') {
     return { ptch: null, strt: null, len: null, rate: null, rtrg: null, rtim: null, in_ab: null, vol_ab: null, in_cd: null, vol_cd: null, dir: null, gain: null, op: null };
   }
   if (type === 'Pickup') {
-    return { ptch: 64, strt: null, len: 127, rate: null, rtrg: null, rtim: null, in_ab: null, vol_ab: null, in_cd: null, vol_cd: null, dir: 0, gain: 64, op: 0 };
+    return { ptch: 64, strt: null, len: 1, rate: null, rtrg: null, rtim: null, in_ab: null, vol_ab: null, in_cd: null, vol_cd: null, dir: 2, gain: 64, op: 1 };
   }
   // Static / Flex
-  return { ptch: 64, strt: 0, len: 127, rate: 64, rtrg: 0, rtim: 127, in_ab: null, vol_ab: null, in_cd: null, vol_cd: null, dir: null, gain: null, op: null };
+  return { ptch: 64, strt: 0, len: 0, rate: 127, rtrg: 0, rtim: 79, in_ab: null, vol_ab: null, in_cd: null, vol_cd: null, dir: null, gain: null, op: null };
 }
 
 function defaultMachineSetup(type: string) {
   if (type === 'Pickup') {
-    return { xloop: null, slic: null, len: null, rate: null, tstr: 0, tsns: 64 };
+    return { xloop: null, slic: null, len: null, rate: null, tstr: 1, tsns: 64 };
   }
   if (type === 'Thru' || type === 'Neighbor') {
     return { xloop: null, slic: null, len: null, rate: null, tstr: null, tsns: null };
   }
   // Static / Flex
-  return { xloop: 0, slic: 0, len: 127, rate: 64, tstr: 0, tsns: 64 };
+  return { xloop: 1, slic: 0, len: 0, rate: 0, tstr: 1, tsns: 64 };
 }
 
 interface PartsPanelProps {
