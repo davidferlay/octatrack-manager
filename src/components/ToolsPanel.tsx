@@ -161,9 +161,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
 
   // Destination selection
   const [destProject, setDestProject] = useState<string>(savedSettings.destProject || projectPath);
-  const [destBankIndex, setDestBankIndex] = useState<number>(0);
   const [destBankIndices, setDestBankIndices] = useState<number[]>([0]); // For copy_bank multi-select
   const [destPartBankIndices, setDestPartBankIndices] = useState<number[]>([0]); // For copy_parts multi-select dest banks
+  const [destPatternBankIndices, setDestPatternBankIndices] = useState<number[]>([0]); // For copy_patterns multi-select dest banks
+  const [destTrackBankIndices, setDestTrackBankIndices] = useState<number[]>([0]); // For copy_tracks multi-select dest banks
   const [destPartIndices, setDestPartIndices] = useState<number[]>([0]);
   const [destPatternIndices, setDestPatternIndices] = useState<number[]>([0]); // For copy_patterns multi-select
   const [destTrackIndices, setDestTrackIndices] = useState<number[]>([]);
@@ -472,9 +473,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           ? "Copying all parts..."
           : `Copying part to ${destPartIndices.length} destination${destPartIndices.length > 1 ? 's' : ''}...`;
       case "copy_patterns":
-        return `Copying ${sourcePatternIndices.length} pattern${sourcePatternIndices.length > 1 ? 's' : ''}...`;
+        return `Copying ${sourcePatternIndices.length} pattern${sourcePatternIndices.length > 1 ? 's' : ''} to ${destPatternBankIndices.length} bank${destPatternBankIndices.length > 1 ? 's' : ''}...`;
       case "copy_tracks":
-        return `Copying ${sourceTrackIndices.length} track${sourceTrackIndices.length > 1 ? 's' : ''}...`;
+        return `Copying ${sourceTrackIndices.length} track${sourceTrackIndices.length > 1 ? 's' : ''} to ${destTrackBankIndices.length} bank${destTrackBankIndices.length > 1 ? 's' : ''}...`;
       case "copy_sample_slots": {
         const slotCount = sourceSampleIndices.length;
         const parts = [];
@@ -507,13 +508,13 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
       case "copy_patterns":
         return [{
           project: destProject,
-          files: [bankFile(destBankIndex)],
+          files: destPatternBankIndices.map(bankFile),
           label: "copy_patterns",
         }];
       case "copy_tracks":
         return [{
           project: destProject,
-          files: [bankFile(destBankIndex)],
+          files: destTrackBankIndices.map(bankFile),
           label: "copy_tracks",
         }];
       case "copy_sample_slots": {
@@ -607,58 +608,75 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           }
           break;
 
-        case "copy_patterns":
-          await invoke("copy_patterns", {
-            sourceProject: projectPath,
-            sourceBankIndex,
-            sourcePatternIndices,
-            destProject,
-            destBankIndex,
-            destPatternIndices,
-            partAssignmentMode,
-            destPart: partAssignmentMode === "select_specific" ? destPart : null,
-            trackMode,
-            trackIndices: trackMode === "specific" ? patternsTrackIndices : null,
-            modeScope: trackMode === "all" ? modeScope : null,
-          });
-          // Success message
+        case "copy_patterns": {
+          // Process self-copy (source bank == dest bank, same project) last to avoid
+          // source data being overwritten before other banks read it.
+          const patternBanksOrdered = destProject === projectPath && destPatternBankIndices.includes(sourceBankIndex)
+            ? [...destPatternBankIndices.filter(i => i !== sourceBankIndex), sourceBankIndex]
+            : destPatternBankIndices;
+          for (const bankIdx of patternBanksOrdered) {
+            await invoke("copy_patterns", {
+              sourceProject: projectPath,
+              sourceBankIndex,
+              sourcePatternIndices,
+              destProject,
+              destBankIndex: bankIdx,
+              destPatternIndices,
+              partAssignmentMode,
+              destPart: partAssignmentMode === "select_specific" ? destPart : null,
+              trackMode,
+              trackIndices: trackMode === "specific" ? patternsTrackIndices : null,
+              modeScope: trackMode === "all" ? modeScope : null,
+            });
+          }
+          const patternCountMsg = destPatternIndices.length > 1 ? ` (${destPatternIndices.length} patterns each)` : '';
           if (sourcePatternIndices.length === 1) {
-            if (destPatternIndices.length > 1) {
+            if (destPatternBankIndices.length > 1) {
+              setStatusMessage(`Pattern copied to ${destPatternBankIndices.length} banks${patternCountMsg} successfully`);
+            } else if (destPatternIndices.length > 1) {
               setStatusMessage(`Pattern copied to ${destPatternIndices.length} destination patterns successfully`);
             } else {
               setStatusMessage("Pattern copied successfully");
             }
           } else {
-            setStatusMessage(`${sourcePatternIndices.length} patterns copied successfully`);
+            setStatusMessage(`${sourcePatternIndices.length} patterns copied to ${destPatternBankIndices.length} bank${destPatternBankIndices.length > 1 ? 's' : ''} successfully`);
           }
           if (destProject === projectPath) {
-            if (onBankUpdated) onBankUpdated(destBankIndex);
+            if (onBankUpdated) destPatternBankIndices.forEach(idx => onBankUpdated(idx));
             if (onProjectRefresh) onProjectRefresh();
           }
           break;
+        }
 
-        case "copy_tracks":
-          await invoke("copy_tracks", {
-            sourceProject: projectPath,
-            sourceBankIndex,
-            sourcePartIndex: sourcePartIndex === -1 ? null : sourcePartIndex, // null = all parts
-            sourceTrackIndices,
-            destProject,
-            destBankIndex,
-            destPartIndices: sourcePartIndex === -1 ? null : destTrackPartIndices, // null = all parts (synced with source)
-            destTrackIndices,
-            mode: copyTrackMode,
-            sourcePatternIndex: (copyTrackMode !== "part_params" && copyTrackSourcePatternIndex !== -1) ? copyTrackSourcePatternIndex : null,
-            destPatternIndices: (copyTrackMode !== "part_params" && copyTrackDestPatternIndices.length > 0) ? copyTrackDestPatternIndices : null,
-          });
+        case "copy_tracks": {
+          // Process self-copy last to avoid source data being overwritten mid-loop.
+          const trackBanksOrdered = destProject === projectPath && destTrackBankIndices.includes(sourceBankIndex)
+            ? [...destTrackBankIndices.filter(i => i !== sourceBankIndex), sourceBankIndex]
+            : destTrackBankIndices;
+          for (const bankIdx of trackBanksOrdered) {
+            await invoke("copy_tracks", {
+              sourceProject: projectPath,
+              sourceBankIndex,
+              sourcePartIndex: sourcePartIndex === -1 ? null : sourcePartIndex,
+              sourceTrackIndices,
+              destProject,
+              destBankIndex: bankIdx,
+              destPartIndices: sourcePartIndex === -1 ? null : destTrackPartIndices,
+              destTrackIndices,
+              mode: copyTrackMode,
+              sourcePatternIndex: (copyTrackMode !== "part_params" && copyTrackSourcePatternIndex !== -1) ? copyTrackSourcePatternIndex : null,
+              destPatternIndices: (copyTrackMode !== "part_params" && copyTrackDestPatternIndices.length > 0) ? copyTrackDestPatternIndices : null,
+            });
+          }
           setStatusMessage(sourceTrackIndices.length === 1
-            ? "Track copied successfully"
-            : `${sourceTrackIndices.length} tracks copied successfully`);
+            ? `Track copied to ${destTrackBankIndices.length} bank${destTrackBankIndices.length > 1 ? 's' : ''} successfully`
+            : `${sourceTrackIndices.length} tracks copied to ${destTrackBankIndices.length} bank${destTrackBankIndices.length > 1 ? 's' : ''} successfully`);
           if (destProject === projectPath) {
-            if (onBankUpdated) onBankUpdated(destBankIndex);
+            if (onBankUpdated) destTrackBankIndices.forEach(idx => onBankUpdated(idx));
             if (onProjectRefresh) onProjectRefresh();
           }
           break;
+        }
 
         case "copy_sample_slots":
           // Convert 0-based indices to 1-based for backend
@@ -1985,18 +2003,21 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             </div>
           )}
 
-          {/* Bank selector for copy_patterns - stacked layout with click-to-deselect */}
+          {/* Bank selector for copy_patterns - multi-select */}
           {operation === "copy_patterns" && (
             <div className="tools-field">
-              <label>Bank</label>
+              <label>Banks</label>
               <div className="tools-multi-select banks-stacked">
                 <div className="tools-track-row-buttons">
                   {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
                     <button
                       key={idx}
                       type="button"
-                      className={`tools-multi-btn bank-btn ${destBankIndex === idx ? "selected" : ""}`}
-                      onClick={() => setDestBankIndex(destBankIndex === idx ? -1 : idx)}
+                      className={`tools-multi-btn bank-btn ${destPatternBankIndices.includes(idx) ? "selected" : ""}`}
+                      onClick={() => destPatternBankIndices.includes(idx)
+                        ? setDestPatternBankIndices(destPatternBankIndices.filter(i => i !== idx))
+                        : setDestPatternBankIndices([...destPatternBankIndices, idx].sort((a, b) => a - b))
+                      }
                       title={`Bank ${String.fromCharCode(65 + idx)} (${idx + 1})`}
                     >
                       {String.fromCharCode(65 + idx)}
@@ -2008,13 +2029,32 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     <button
                       key={idx}
                       type="button"
-                      className={`tools-multi-btn bank-btn ${destBankIndex === idx ? "selected" : ""}`}
-                      onClick={() => setDestBankIndex(destBankIndex === idx ? -1 : idx)}
+                      className={`tools-multi-btn bank-btn ${destPatternBankIndices.includes(idx) ? "selected" : ""}`}
+                      onClick={() => destPatternBankIndices.includes(idx)
+                        ? setDestPatternBankIndices(destPatternBankIndices.filter(i => i !== idx))
+                        : setDestPatternBankIndices([...destPatternBankIndices, idx].sort((a, b) => a - b))
+                      }
                       title={`Bank ${String.fromCharCode(65 + idx)} (${idx + 1})`}
                     >
                       {String.fromCharCode(65 + idx)}
                     </button>
                   ))}
+                </div>
+                <div className="tools-select-actions">
+                  <button
+                    className="tools-multi-btn bank-btn tools-select-all"
+                    onClick={() => setDestPatternBankIndices([])}
+                    title="Deselect all banks"
+                  >
+                    None
+                  </button>
+                  <button
+                    className={`tools-multi-btn bank-btn tools-select-all ${destPatternBankIndices.length === 16 ? "selected" : ""}`}
+                    onClick={() => destPatternBankIndices.length === 16 ? setDestPatternBankIndices([]) : selectAllIndices(16, setDestPatternBankIndices)}
+                    title="Select all banks"
+                  >
+                    All
+                  </button>
                 </div>
               </div>
             </div>
@@ -2163,15 +2203,18 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           {operation === "copy_tracks" && (
             <>
               <div className="tools-field">
-                <label>Bank</label>
+                <label>Banks</label>
                 <div className="tools-multi-select banks-stacked">
                   <div className="tools-track-row-buttons">
                     {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
                       <button
                         key={idx}
                         type="button"
-                        className={`tools-multi-btn bank-btn ${destBankIndex === idx ? "selected" : ""}`}
-                        onClick={() => setDestBankIndex(destBankIndex === idx ? -1 : idx)}
+                        className={`tools-multi-btn bank-btn ${destTrackBankIndices.includes(idx) ? "selected" : ""}`}
+                        onClick={() => destTrackBankIndices.includes(idx)
+                          ? setDestTrackBankIndices(destTrackBankIndices.filter(i => i !== idx))
+                          : setDestTrackBankIndices([...destTrackBankIndices, idx].sort((a, b) => a - b))
+                        }
                         title={`Bank ${String.fromCharCode(65 + idx)} (${idx + 1})`}
                       >
                         {String.fromCharCode(65 + idx)}
@@ -2183,13 +2226,32 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       <button
                         key={idx}
                         type="button"
-                        className={`tools-multi-btn bank-btn ${destBankIndex === idx ? "selected" : ""}`}
-                        onClick={() => setDestBankIndex(destBankIndex === idx ? -1 : idx)}
+                        className={`tools-multi-btn bank-btn ${destTrackBankIndices.includes(idx) ? "selected" : ""}`}
+                        onClick={() => destTrackBankIndices.includes(idx)
+                          ? setDestTrackBankIndices(destTrackBankIndices.filter(i => i !== idx))
+                          : setDestTrackBankIndices([...destTrackBankIndices, idx].sort((a, b) => a - b))
+                        }
                         title={`Bank ${String.fromCharCode(65 + idx)} (${idx + 1})`}
                       >
                         {String.fromCharCode(65 + idx)}
                       </button>
                     ))}
+                  </div>
+                  <div className="tools-select-actions">
+                    <button
+                      className="tools-multi-btn bank-btn tools-select-all"
+                      onClick={() => setDestTrackBankIndices([])}
+                      title="Deselect all banks"
+                    >
+                      None
+                    </button>
+                    <button
+                      className={`tools-multi-btn bank-btn tools-select-all ${destTrackBankIndices.length === 16 ? "selected" : ""}`}
+                      onClick={() => destTrackBankIndices.length === 16 ? setDestTrackBankIndices([]) : selectAllIndices(16, setDestTrackBankIndices)}
+                      title="Select all banks"
+                    >
+                      All
+                    </button>
                   </div>
                 </div>
               </div>
@@ -2652,7 +2714,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         <button
           className="tools-execute-btn"
           onClick={executeOperation}
-          disabled={isExecuting || (operation === "copy_bank" && sourceBankIndex === -1) || (operation === "copy_bank" && destBankIndices.length === 0) || (operation === "copy_parts" && sourceBankIndex === -1) || (operation === "copy_parts" && destPartBankIndices.length === 0) || (operation === "copy_parts" && sourcePartIndices.length === 0) || (operation === "copy_parts" && destPartIndices.length === 0) || (operation === "copy_tracks" && sourceBankIndex === -1) || (operation === "copy_tracks" && sourceTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex === -2) || (operation === "copy_tracks" && destBankIndex === -1) || (operation === "copy_tracks" && destTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex !== -1 && destTrackPartIndices.length === 0) || (operation === "copy_patterns" && sourceBankIndex === -1) || (operation === "copy_patterns" && sourcePatternIndices.length === 0) || (operation === "copy_patterns" && destBankIndex === -1) || (operation === "copy_patterns" && destPatternIndices.length === 0) || (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1) || (operation === "copy_patterns" && trackMode === "specific" && patternsTrackIndices.length === 0) || (operation === "copy_sample_slots" && sourceSampleIndices.length + destSampleStart > 128) || (operation === "copy_sample_slots" && !copyAssignments && !copyAttributes) || (operation === "copy_sample_slots" && copyAttributes && selectedAttributes.length === 0 && !copyAssignments)}
+          disabled={isExecuting || (operation === "copy_bank" && sourceBankIndex === -1) || (operation === "copy_bank" && destBankIndices.length === 0) || (operation === "copy_parts" && sourceBankIndex === -1) || (operation === "copy_parts" && destPartBankIndices.length === 0) || (operation === "copy_parts" && sourcePartIndices.length === 0) || (operation === "copy_parts" && destPartIndices.length === 0) || (operation === "copy_tracks" && sourceBankIndex === -1) || (operation === "copy_tracks" && sourceTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex === -2) || (operation === "copy_tracks" && destTrackBankIndices.length === 0) || (operation === "copy_tracks" && destTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex !== -1 && destTrackPartIndices.length === 0) || (operation === "copy_patterns" && sourceBankIndex === -1) || (operation === "copy_patterns" && sourcePatternIndices.length === 0) || (operation === "copy_patterns" && destPatternBankIndices.length === 0) || (operation === "copy_patterns" && destPatternIndices.length === 0) || (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1) || (operation === "copy_patterns" && trackMode === "specific" && patternsTrackIndices.length === 0) || (operation === "copy_sample_slots" && sourceSampleIndices.length + destSampleStart > 128) || (operation === "copy_sample_slots" && !copyAssignments && !copyAttributes) || (operation === "copy_sample_slots" && copyAttributes && selectedAttributes.length === 0 && !copyAssignments)}
           title={
             isExecuting ? "Operation in progress..." :
             (operation === "copy_bank" && sourceBankIndex === -1 && destBankIndices.length === 0) ? "Select source and destination banks" :
@@ -2664,18 +2726,18 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             (operation === "copy_parts" && sourcePartIndices.length === 0 && destPartIndices.length === 0) ? "Select source and destination parts" :
             (operation === "copy_parts" && sourcePartIndices.length === 0) ? "Select a source part" :
             (operation === "copy_parts" && destPartIndices.length === 0) ? "Select at least one destination part" :
-            (operation === "copy_tracks" && sourceBankIndex === -1 && destBankIndex === -1) ? "Select source and destination banks" :
+            (operation === "copy_tracks" && sourceBankIndex === -1 && destTrackBankIndices.length === 0) ? "Select source and destination banks" :
             (operation === "copy_tracks" && sourceBankIndex === -1) ? "Select a source bank" :
-            (operation === "copy_tracks" && destBankIndex === -1) ? "Select a destination bank" :
+            (operation === "copy_tracks" && destTrackBankIndices.length === 0) ? "Select at least one destination bank" :
             (operation === "copy_tracks" && sourceTrackIndices.length === 0 && destTrackIndices.length === 0) ? "Select source and destination tracks" :
             (operation === "copy_tracks" && sourceTrackIndices.length === 0) ? "Select a source track" :
             (operation === "copy_tracks" && destTrackIndices.length === 0) ? "Select at least one destination track" :
             (operation === "copy_tracks" && sourcePartIndex === -2 && destTrackPartIndices.length === 0) ? "Select source and destination parts" :
             (operation === "copy_tracks" && sourcePartIndex === -2) ? "Select a source part" :
             (operation === "copy_tracks" && sourcePartIndex !== -1 && destTrackPartIndices.length === 0) ? "Select at least one destination part" :
-            (operation === "copy_patterns" && sourceBankIndex === -1 && destBankIndex === -1) ? "Select source and destination banks" :
+            (operation === "copy_patterns" && sourceBankIndex === -1 && destPatternBankIndices.length === 0) ? "Select source and destination banks" :
             (operation === "copy_patterns" && sourceBankIndex === -1) ? "Select a source bank" :
-            (operation === "copy_patterns" && destBankIndex === -1) ? "Select a destination bank" :
+            (operation === "copy_patterns" && destPatternBankIndices.length === 0) ? "Select at least one destination bank" :
             (operation === "copy_patterns" && sourcePatternIndices.length === 0 && destPatternIndices.length === 0) ? "Select source and destination patterns" :
             (operation === "copy_patterns" && sourcePatternIndices.length === 0) ? "Select a source pattern" :
             (operation === "copy_patterns" && destPatternIndices.length === 0) ? "Select at least one destination pattern" :
