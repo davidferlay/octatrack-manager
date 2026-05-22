@@ -34,7 +34,10 @@ type CopyTrackMode = "part_params" | "pattern_triggers" | "both";
 type SlotType = "static" | "flex" | "both";
 
 // Audio mode for copy_sample_slots
-type AudioMode = "none" | "copy" | "move_to_pool";
+type AudioMode = "mirror" | "copy" | "move_to_pool";
+
+// All available sample attributes
+const ALL_ATTRIBUTES = ["gain", "bpm", "timestretch", "loop", "trig_quant", "trim", "loop_point", "slices"];
 
 interface AudioPoolStatus {
   exists: boolean;
@@ -75,7 +78,9 @@ interface ToolsSettings {
   copyTrackMode: CopyTrackMode;
   slotType: SlotType;
   audioMode: AudioMode;
-  includeEditorSettings: boolean;
+  copyAssignments: boolean;
+  copyAttributes: boolean;
+  selectedAttributes: string[];
   destProject: string;
   sourceSampleStart: number;
   sourceSampleEnd: number;
@@ -181,7 +186,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   // Copy Sample Slots options
   const [slotType, setSlotType] = useState<SlotType>(savedSettings.slotType || "flex");
   const [audioMode, setAudioMode] = useState<AudioMode>(savedSettings.audioMode || "copy");
-  const [includeEditorSettings, setIncludeEditorSettings] = useState<boolean>(savedSettings.includeEditorSettings ?? true);
+  const [copyAssignments, setCopyAssignments] = useState<boolean>(savedSettings.copyAssignments ?? true);
+  const [copyAttributes, setCopyAttributes] = useState<boolean>(savedSettings.copyAttributes ?? true);
+  const [selectedAttributes, setSelectedAttributes] = useState<string[]>(savedSettings.selectedAttributes ?? [...ALL_ATTRIBUTES]);
   const [sampleSelectionMode, setSampleSelectionMode] = useState<"one" | "range">("range");
 
   // Fix Missing Samples state
@@ -303,7 +310,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
       copyTrackMode,
       slotType,
       audioMode,
-      includeEditorSettings,
+      copyAssignments,
+      copyAttributes,
+      selectedAttributes,
       destProject,
       sourceSampleStart: sourceSampleIndices[0],
       sourceSampleEnd: sourceSampleIndices[sourceSampleIndices.length - 1],
@@ -312,7 +321,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
       otherProjectOption,
       skipReview,
     });
-  }, [projectPath, operation, partAssignmentMode, trackMode, modeScope, copyTrackMode, slotType, audioMode, includeEditorSettings, destProject, sourceSampleIndices, destSampleStart, poolOption, otherProjectOption, skipReview]);
+  }, [projectPath, operation, partAssignmentMode, trackMode, modeScope, copyTrackMode, slotType, audioMode, copyAssignments, copyAttributes, selectedAttributes, destProject, sourceSampleIndices, destSampleStart, poolOption, otherProjectOption, skipReview]);
 
   // Load missing samples when Fix Missing Samples operation is selected
   useEffect(() => {
@@ -399,15 +408,15 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           }
           setSameSetStatus(sameSet);
 
-          // Fall back to "copy" if move_to_pool is no longer valid
-          if (!sameSet && audioMode === "move_to_pool") {
+          // Fall back to "copy" if mirror or move_to_pool are no longer valid (not same Set)
+          if (!sameSet && (audioMode === "move_to_pool" || audioMode === "mirror")) {
             setAudioMode("copy");
           }
         } catch (err) {
           console.error("Error checking audio pool:", err);
           setAudioPoolStatus(null);
           setSameSetStatus(false);
-          if (audioMode === "move_to_pool") {
+          if (audioMode === "move_to_pool" || audioMode === "mirror") {
             setAudioMode("copy");
           }
         }
@@ -419,7 +428,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
 
   // Check for missing source audio files when audio mode requires files
   useEffect(() => {
-    if (operation !== "copy_sample_slots" || audioMode === "none") {
+    if (operation !== "copy_sample_slots" || !copyAssignments) {
       setMissingSourceFiles(0);
       return;
     }
@@ -434,7 +443,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
       if (!cancelled) setMissingSourceFiles(0);
     });
     return () => { cancelled = true; };
-  }, [operation, audioMode, slotType, sourceSampleIndices, projectPath]);
+  }, [operation, audioMode, copyAssignments, slotType, sourceSampleIndices, projectPath]);
 
   // Derive destination sample indices from destSampleStart and source count
   const destSampleIndices = useMemo(() => {
@@ -468,8 +477,11 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         return `Copying ${sourceTrackIndices.length} track${sourceTrackIndices.length > 1 ? 's' : ''}...`;
       case "copy_sample_slots": {
         const slotCount = sourceSampleIndices.length;
-        const audioInfo = audioMode === "copy" ? " + audio files" : audioMode === "move_to_pool" ? " + moving to pool" : "";
-        return `Copying ${slotCount} sample slot${slotCount > 1 ? 's' : ''}${audioInfo}...`;
+        const parts = [];
+        if (copyAssignments) parts.push("assignments");
+        if (copyAttributes) parts.push("attributes");
+        const audioInfo = copyAssignments && audioMode === "copy" ? " + audio files" : copyAssignments && audioMode === "move_to_pool" ? " + moving to pool" : "";
+        return `Copying ${slotCount} sample slot${slotCount > 1 ? 's' : ''} (${parts.join(" + ")})${audioInfo}...`;
       }
       default:
         return "Processing...";
@@ -510,7 +522,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
 
         // Back up destination project files
         const destFiles = ["project.work", "markers.work"];
-        if (audioMode === "copy") {
+        if (copyAssignments && audioMode === "copy") {
           try {
             const audioPaths = await invoke<string[]>("get_slot_audio_paths", {
               projectPath, slotType, sourceIndices: sourceIndices1, flatten: true,
@@ -521,7 +533,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         backups.push({ project: destProject, files: destFiles, label: "copy_sample_slots" });
 
         // Back up source project files when Move to Pool (audio files get deleted, project.work gets updated)
-        if (audioMode === "move_to_pool") {
+        if (copyAssignments && audioMode === "move_to_pool") {
           try {
             const sourceAudioPaths = await invoke<string[]>("get_slot_audio_paths", {
               projectPath, slotType, sourceIndices: sourceIndices1, flatten: false,
@@ -656,8 +668,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             slotType,
             sourceIndices: sourceSampleIndices.map(i => i + 1),
             destIndices: destSampleIndices.map(i => i + 1),
-            audioMode,
-            includeEditorSettings: audioMode === "move_to_pool" ? true : includeEditorSettings,
+            copyAssignments,
+            audioMode: copyAssignments ? audioMode : "copy",
+            copyAttributes,
+            attributeSelection: copyAttributes ? selectedAttributes : [],
           });
           {
             let msg = sourceSampleIndices.length === 1
@@ -1408,7 +1422,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               <p>Copies individual track data: Part parameters (sound design per track) and/or pattern triggers (step sequence).</p>
             )}
             {operation === "copy_sample_slots" && (
-              <p>Copies sample slot assignments between projects, with optional audio file transfer and editor settings.</p>
+              <p>Copies sample slot assignments (paths, audio files) and/or Audio Editor attributes (gain, BPM, loop, trim, slices…) between projects.</p>
             )}
           </div>
 
@@ -1659,66 +1673,143 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   </button>
                 </div>
               </div>
+
+              {/* Sample Assignments */}
               <div className="tools-field">
-                <label className="tools-label-with-hint">
-                  Audio Files
-                  {audioMode !== "none" && missingSourceFiles > 0 && (
-                    <span
-                      className="tools-warning-badge"
-                      title={`${missingSourceFiles} source audio file${missingSourceFiles > 1 ? 's' : ''} not found on disk. These slots will be copied without their audio.`}
-                    >
-                      {missingSourceFiles} missing file{missingSourceFiles > 1 ? 's' : ''}
-                    </span>
-                  )}
-                  {audioMode === "move_to_pool" && sameSetStatus && !audioPoolStatus?.exists && destProject !== projectPath && (
-                    <span className="tools-hint-inline" title="Both Source and Destination projects seem to be in the same Set but the Audio Pool folder doesn't exist yet: It will be created automatically when the operation runs.">Pool will be created</span>
-                  )}
-                </label>
+                <label>Sample Assignments</label>
                 <div className="tools-toggle-group">
                   <button
                     type="button"
-                    className={`tools-toggle-btn ${audioMode === "copy" ? "selected" : ""}`}
-                    onClick={() => { setAudioMode("copy"); }}
-                    title="Copy audio files to the destination project's sample folder"
+                    className={`tools-toggle-btn ${copyAssignments ? "selected" : ""}`}
+                    onClick={() => setCopyAssignments(true)}
+                    title="Copy sample path references to destination slots"
                   >
                     Copy
                   </button>
                   <button
                     type="button"
-                    className={`tools-toggle-btn ${audioMode === "move_to_pool" ? "selected" : ""}`}
-                    onClick={() => { if (sameSetStatus) { setAudioMode("move_to_pool"); } }}
-                    disabled={!sameSetStatus}
-                    title={sameSetStatus
-                      ? "Move audio files to the Set's Audio Pool folder, shared between all projects in the Set"
-                      : "Source and destination projects must be in the same Set to use Audio Pool"
-                    }
-                  >
-                    Move to Pool
-                  </button>
-                  <button
-                    type="button"
-                    className={`tools-toggle-btn ${audioMode === "none" ? "selected" : ""}`}
-                    onClick={() => { setAudioMode("none"); }}
-                    title="Only copy slot settings, don't copy audio files (files must already exist at destination)"
+                    className={`tools-toggle-btn ${!copyAssignments ? "selected" : ""}`}
+                    onClick={() => setCopyAssignments(false)}
+                    title="Leave destination slot paths untouched"
                   >
                     Don't Copy
                   </button>
                 </div>
               </div>
-              <div className="tools-field tools-checkbox">
-                <label title={audioMode === "move_to_pool"
-                  ? "Always enabled for Move to Pool — relocating files preserves all settings and .ot metadata."
-                  : "Per-slot settings from the project file (gain, BPM, loop mode, timestretch, trig quantization), markers file (trim points, loop points, slices), and .ot metadata files. When off, all are reset to defaults and .ot files are not copied."
-                }>
-                  <input
-                    type="checkbox"
-                    checked={audioMode === "move_to_pool" ? true : includeEditorSettings}
-                    disabled={audioMode === "move_to_pool"}
-                    onChange={(e) => setIncludeEditorSettings(e.target.checked)}
-                  />
-                  Include Editor Settings
-                </label>
+              {copyAssignments && (
+                <div className="tools-field">
+                  <label className="tools-label-with-hint tools-sub-label">
+                    Audio Files
+                    {missingSourceFiles > 0 && (
+                      <span
+                        className="tools-warning-badge"
+                        title={`${missingSourceFiles} source audio file${missingSourceFiles > 1 ? 's' : ''} not found on disk. These slots will be copied without their audio.`}
+                      >
+                        {missingSourceFiles} missing file{missingSourceFiles > 1 ? 's' : ''}
+                      </span>
+                    )}
+                    {audioMode === "move_to_pool" && sameSetStatus && !audioPoolStatus?.exists && destProject !== projectPath && (
+                      <span className="tools-hint-inline" title="Both Source and Destination projects seem to be in the same Set but the Audio Pool folder doesn't exist yet: It will be created automatically when the operation runs.">Pool will be created</span>
+                    )}
+                  </label>
+                  <div className="tools-toggle-group tools-audio-files-grid">
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn ${audioMode === "mirror" ? "selected" : ""}`}
+                      onClick={() => { if (sameSetStatus) { setAudioMode("mirror"); } }}
+                      disabled={!sameSetStatus}
+                      title={sameSetStatus
+                        ? "Mirror source references: Pool files stay in Pool, project-local files are copied to destination"
+                        : "Source and destination projects must be in the same Set (pool references would be invalid otherwise)"
+                      }
+                    >
+                      Mirror
+                    </button>
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn ${audioMode === "copy" ? "selected" : ""}`}
+                      onClick={() => setAudioMode("copy")}
+                      title="Copy all referenced audio files to the destination project's root directory"
+                    >
+                      Copy to project
+                    </button>
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn ${audioMode === "move_to_pool" ? "selected" : ""}`}
+                      onClick={() => { if (sameSetStatus) { setAudioMode("move_to_pool"); } }}
+                      disabled={!sameSetStatus}
+                      title={sameSetStatus
+                        ? "Move project-local audio files to the Set's Audio Pool and update paths in both projects"
+                        : "Source and destination projects must be in the same Set to use Audio Pool"
+                      }
+                    >
+                      Move to Pool
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Sample Attributes */}
+              <div className="tools-field">
+                <label>Sample Attributes</label>
+                <div className="tools-toggle-group">
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn ${copyAttributes ? "selected" : ""}`}
+                    onClick={() => setCopyAttributes(true)}
+                    title="Copy Audio Editor settings to destination slots (reads from .ot file if available, then project.work/markers.work)"
+                  >
+                    Copy
+                  </button>
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn ${!copyAttributes ? "selected" : ""}`}
+                    onClick={() => setCopyAttributes(false)}
+                    title="Leave destination slot attributes untouched"
+                  >
+                    Don't Copy
+                  </button>
+                </div>
               </div>
+              {copyAttributes && (
+                <div className="tools-field">
+                  <div className="tools-attribute-list">
+                    {[
+                      { key: "gain", label: "Gain", tip: "Sample gain level (-24 to +24 dB)" },
+                      { key: "bpm", label: "BPM / Tempo", tip: "Sample tempo used for timestretch" },
+                      { key: "timestretch", label: "Timestretch", tip: "Timestretch mode (off, normal, beat)" },
+                      { key: "loop", label: "Loop mode", tip: "Loop playback mode (off, loop, ping-pong)" },
+                      { key: "trig_quant", label: "Trig quantization", tip: "Trig quantization setting for sample playback" },
+                      { key: "loop_point", label: "Loop point", tip: "Loop start position within the sample" },
+                      { key: "trim", label: "Trim points", tip: "Sample start and end trim positions" },
+                      { key: "slices", label: "Slices", tip: "Slice grid positions and slice count" },
+                    ].map(({ key, label, tip }) => {
+                      const isSelected = selectedAttributes.includes(key);
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          className={`tools-attr-row ${isSelected ? "selected" : ""}`}
+                          title={isSelected ? `${tip} — will be copied to destination` : `${tip} — will NOT be copied (click to include)`}
+                          onClick={() => {
+                            setSelectedAttributes(prev =>
+                              prev.includes(key) ? prev.filter(a => a !== key) : [...prev, key]
+                            );
+                          }}
+                        >
+                          <span className="tools-attr-check">{isSelected ? "✓" : ""}</span>
+                          <span>{label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="tools-attribute-actions">
+                    <a href="#" onClick={(e) => { e.preventDefault(); setSelectedAttributes([...ALL_ATTRIBUTES]); }}>Select all</a>
+                    <span className="tools-action-separator">|</span>
+                    <a href="#" onClick={(e) => { e.preventDefault(); setSelectedAttributes([]); }}>None</a>
+                  </div>
+                </div>
+              )}
             </>
           )}
 
@@ -2561,7 +2652,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         <button
           className="tools-execute-btn"
           onClick={executeOperation}
-          disabled={isExecuting || (operation === "copy_bank" && sourceBankIndex === -1) || (operation === "copy_bank" && destBankIndices.length === 0) || (operation === "copy_parts" && sourceBankIndex === -1) || (operation === "copy_parts" && destPartBankIndices.length === 0) || (operation === "copy_parts" && sourcePartIndices.length === 0) || (operation === "copy_parts" && destPartIndices.length === 0) || (operation === "copy_tracks" && sourceBankIndex === -1) || (operation === "copy_tracks" && sourceTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex === -2) || (operation === "copy_tracks" && destBankIndex === -1) || (operation === "copy_tracks" && destTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex !== -1 && destTrackPartIndices.length === 0) || (operation === "copy_patterns" && sourceBankIndex === -1) || (operation === "copy_patterns" && sourcePatternIndices.length === 0) || (operation === "copy_patterns" && destBankIndex === -1) || (operation === "copy_patterns" && destPatternIndices.length === 0) || (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1) || (operation === "copy_patterns" && trackMode === "specific" && patternsTrackIndices.length === 0) || (operation === "copy_sample_slots" && sourceSampleIndices.length + destSampleStart > 128)}
+          disabled={isExecuting || (operation === "copy_bank" && sourceBankIndex === -1) || (operation === "copy_bank" && destBankIndices.length === 0) || (operation === "copy_parts" && sourceBankIndex === -1) || (operation === "copy_parts" && destPartBankIndices.length === 0) || (operation === "copy_parts" && sourcePartIndices.length === 0) || (operation === "copy_parts" && destPartIndices.length === 0) || (operation === "copy_tracks" && sourceBankIndex === -1) || (operation === "copy_tracks" && sourceTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex === -2) || (operation === "copy_tracks" && destBankIndex === -1) || (operation === "copy_tracks" && destTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex !== -1 && destTrackPartIndices.length === 0) || (operation === "copy_patterns" && sourceBankIndex === -1) || (operation === "copy_patterns" && sourcePatternIndices.length === 0) || (operation === "copy_patterns" && destBankIndex === -1) || (operation === "copy_patterns" && destPatternIndices.length === 0) || (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1) || (operation === "copy_patterns" && trackMode === "specific" && patternsTrackIndices.length === 0) || (operation === "copy_sample_slots" && sourceSampleIndices.length + destSampleStart > 128) || (operation === "copy_sample_slots" && !copyAssignments && !copyAttributes) || (operation === "copy_sample_slots" && copyAttributes && selectedAttributes.length === 0 && !copyAssignments)}
           title={
             isExecuting ? "Operation in progress..." :
             (operation === "copy_bank" && sourceBankIndex === -1 && destBankIndices.length === 0) ? "Select source and destination banks" :
@@ -2591,6 +2682,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1) ? "Select a destination part" :
             (operation === "copy_patterns" && trackMode === "specific" && patternsTrackIndices.length === 0) ? "Select at least one track" :
             (operation === "copy_sample_slots" && sourceSampleIndices.length + destSampleStart > 128) ? "Destination slot range overflows beyond slot 128. Adjust source range or destination slots." :
+            (operation === "copy_sample_slots" && !copyAssignments && !copyAttributes) ? "Select at least one of Sample Assignments or Sample Attributes to copy" :
+            (operation === "copy_sample_slots" && copyAttributes && selectedAttributes.length === 0 && !copyAssignments) ? "Select at least one attribute or enable Sample Assignments" :
             undefined
           }
         >

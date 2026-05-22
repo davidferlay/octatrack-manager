@@ -113,5 +113,5 @@ The done screen shows a summary of all search steps and the final result.
 
 :::tip
 - **Both slot types are updated:** If a missing file is referenced by both a Static and a Flex slot, both are fixed in a single operation.
-- **Companion `.ot` files** are copied or moved alongside their `.wav` files when present.
+- **`.ot` files are not copied:** The project's own Audio Editor settings (stored in `project.work`, `markers.work`, and possibly its own `.ot` files) are preserved.
 :::
