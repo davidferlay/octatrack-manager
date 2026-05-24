@@ -185,9 +185,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
 
   // Copy Sample Slots options
   const [slotType, setSlotType] = useState<SlotType>(savedSettings.slotType || "flex");
-  const [audioMode, setAudioMode] = useState<AudioMode>(savedSettings.audioMode || "copy");
+  const [audioMode, setAudioMode] = useState<AudioMode>(savedSettings.audioMode || "mirror");
   const [copyAssignments, setCopyAssignments] = useState<boolean>(savedSettings.copyAssignments ?? true);
-  const [copyAttributes, setCopyAttributes] = useState<boolean>(savedSettings.copyAttributes ?? true);
+  const [copyAttributes, setCopyAttributes] = useState<boolean>(savedSettings.copyAttributes ?? false);
   const [selectedAttributes, setSelectedAttributes] = useState<string[]>(savedSettings.selectedAttributes ?? [...ALL_ATTRIBUTES]);
   const [sampleSelectionMode, setSampleSelectionMode] = useState<"one" | "range">("range");
 
@@ -674,9 +674,14 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             attributeSelection: copyAttributes ? selectedAttributes : [],
           });
           {
-            let msg = sourceSampleIndices.length === 1
-              ? "Sample slot copied successfully"
-              : `${sourceSampleIndices.length} sample slots copied successfully`;
+            const count = sourceSampleIndices.length;
+            const slotWord = count === 1 ? "slot" : "slots";
+            const what = copyAssignments && copyAttributes
+              ? "assignments and attributes"
+              : copyAssignments
+                ? "assignments"
+                : "attributes";
+            let msg = `${count} sample ${slotWord} ${what} copied successfully`;
             if (slotsResult.shared_files_kept > 0) {
               msg += ` (${slotsResult.shared_files_kept} source file${slotsResult.shared_files_kept > 1 ? 's' : ''} kept: also referenced by ${slotType === 'static' ? 'Flex' : 'Static'} slots)`;
             }
@@ -1422,7 +1427,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               <p>Copies individual track data: Part parameters (sound design per track) and/or pattern triggers (step sequence).</p>
             )}
             {operation === "copy_sample_slots" && (
-              <p>Copies sample slot assignments (paths, audio files) and/or Audio Editor attributes (gain, BPM, loop, trim, slices…) between projects.</p>
+              <p>Copies sample slot assignments and/or Audio Editor settings between projects.</p>
             )}
           </div>
 

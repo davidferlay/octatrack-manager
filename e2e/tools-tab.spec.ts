@@ -504,7 +504,16 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
   test('Sample Attributes has Copy/Don\'t Copy toggle with attribute list', async ({ page }) => {
     await expect(page.getByText('Sample Attributes')).toBeVisible()
 
-    // Attribute rows should be visible when Copy is selected (default)
+    // Default is Don't Copy — attribute rows should be hidden
+    await expect(page.locator('.tools-attr-row', { hasText: 'Gain' })).not.toBeVisible()
+
+    // Click Copy to show attribute list
+    const copyBtns = page.locator('.tools-toggle-btn', { hasText: 'Copy' })
+    // Sample Attributes Copy button is the third Copy button (after Slot Type options and Sample Assignments Copy)
+    await copyBtns.nth(2).click()
+    await page.waitForTimeout(200)
+
+    // Attribute rows should now be visible
     await expect(page.locator('.tools-attr-row', { hasText: 'Gain' })).toBeVisible()
     await expect(page.locator('.tools-attr-row', { hasText: 'BPM / Tempo' })).toBeVisible()
     await expect(page.locator('.tools-attr-row', { hasText: 'Slices' })).toBeVisible()
@@ -513,7 +522,13 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
   })
 
   test('Attribute list hidden when attributes Don\'t Copy selected', async ({ page }) => {
-    // Find the Don't Copy button for Sample Attributes (second one)
+    // First enable Copy for attributes
+    const copyBtns = page.locator('.tools-toggle-btn', { hasText: 'Copy' })
+    await copyBtns.nth(2).click()
+    await page.waitForTimeout(200)
+    await expect(page.locator('.tools-attr-row', { hasText: 'Gain' })).toBeVisible()
+
+    // Now click Don't Copy for Sample Attributes
     const dontCopyBtns = page.locator('.tools-toggle-btn', { hasText: "Don't Copy" })
     await dontCopyBtns.nth(1).click()
     await page.waitForTimeout(200)
