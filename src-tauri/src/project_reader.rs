@@ -4355,20 +4355,518 @@ pub fn fix_missing_samples(
 // Copy Operations
 // ============================================================================
 
+/// Result of a copy_bank operation with sample slot copying.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CopyBankResult {
+    pub slots_copied_static: u32,
+    pub slots_copied_flex: u32,
+    pub slots_deduplicated: u32,
+    pub shared_files_kept: u32,
+    pub remap_log: Vec<String>,
+}
+
+/// Validation result for bank sample slot copying.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SlotValidationResult {
+    pub static_needed: u32,
+    pub flex_needed: u32,
+    pub static_available: u32,
+    pub flex_available: u32,
+    pub static_dedup: u32,
+    pub flex_dedup: u32,
+    pub missing_files: u32,
+    pub is_valid: bool,
+    pub error_message: Option<String>,
+}
+
+/// Type alias for a pair of Static/Flex slot maps (slot_id_0based → filename).
+type SlotStatePair = (
+    std::collections::HashMap<u8, String>,
+    std::collections::HashMap<u8, String>,
+);
+
+/// Type alias for remap result: (static_remap, flex_remap, dedup_count).
+type SlotRemapResult = (
+    std::collections::HashMap<u8, u8>,
+    std::collections::HashMap<u8, u8>,
+    u32,
+);
+
+/// Collect all sample slot IDs actively referenced by a bank's Parts and Patterns.
+///
+/// Returns (static_slot_ids, flex_slot_ids) as 0-based HashSets.
+/// Only considers tracks with Static (type 0) or Flex (type 1) machines.
+/// Skips Thru (2), Neighbor (3), Pickup (4) machine types.
+/// Removes slot ID 0 (unassigned).
+fn collect_referenced_slots(
+    bank: &BankFile,
+) -> (std::collections::HashSet<u8>, std::collections::HashSet<u8>) {
+    let mut static_slots = std::collections::HashSet::new();
+    let mut flex_slots = std::collections::HashSet::new();
+
+    // Scan Parts (unsaved state — the active state)
+    for part_idx in 0..4 {
+        let part = &bank.parts.unsaved.0[part_idx];
+        for track_idx in 0..8 {
+            let machine_type = part.audio_track_machine_types[track_idx];
+            let slot = &part.audio_track_machine_slots[track_idx];
+            match machine_type {
+                0 => {
+                    // Static machine
+                    if slot.static_slot_id != 0 {
+                        static_slots.insert(slot.static_slot_id);
+                    }
+                }
+                1 => {
+                    // Flex machine
+                    if slot.flex_slot_id != 0 {
+                        flex_slots.insert(slot.flex_slot_id);
+                    }
+                }
+                _ => {} // Thru, Neighbor, Pickup — no sample slot reference
+            }
+        }
+    }
+
+    // Scan Pattern p-locks (sample locks per trig)
+    for pattern_idx in 0..16 {
+        let pattern = &bank.patterns.0[pattern_idx];
+        for track_idx in 0..8 {
+            let track_trigs = &pattern.audio_track_trigs.0[track_idx];
+            for step_idx in 0..64 {
+                let plock = &track_trigs.plocks.0[step_idx];
+                if plock.static_slot_id != 255 && plock.static_slot_id != 0 {
+                    static_slots.insert(plock.static_slot_id);
+                }
+                if plock.flex_slot_id != 255 && plock.flex_slot_id != 0 {
+                    flex_slots.insert(plock.flex_slot_id);
+                }
+            }
+        }
+    }
+
+    (static_slots, flex_slots)
+}
+
+/// Collect all configured (non-empty PATH) sample slot IDs from a project.
+///
+/// Returns (static_slot_ids, flex_slot_ids) as 0-based HashSets.
+fn collect_all_configured_slots(
+    project_path: &Path,
+) -> Result<(std::collections::HashSet<u8>, std::collections::HashSet<u8>), String> {
+    let project_file_path = if project_path.join("project.work").exists() {
+        project_path.join("project.work")
+    } else if project_path.join("project.strd").exists() {
+        project_path.join("project.strd")
+    } else {
+        return Err("Project file not found".to_string());
+    };
+
+    let raw_fields = read_raw_sample_fields(&project_file_path)?;
+    let mut static_slots = std::collections::HashSet::new();
+    let mut flex_slots = std::collections::HashSet::new();
+
+    for ((slot_type, slot_id), fields) in &raw_fields {
+        // Check if PATH is non-empty
+        if let Some(path_val) = fields.get("PATH") {
+            if !path_val.is_empty() {
+                let slot_0based = (*slot_id as u8).wrapping_sub(1);
+                if slot_0based < 128 {
+                    if slot_type == "STATIC" {
+                        static_slots.insert(slot_0based);
+                    } else if slot_type == "FLEX" {
+                        flex_slots.insert(slot_0based);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok((static_slots, flex_slots))
+}
+
+/// Get the state of all occupied destination slots.
+///
+/// Returns (static: slot_0based → filename, flex: slot_0based → filename).
+fn get_dest_slot_state(project_path: &Path) -> Result<SlotStatePair, String> {
+    let project_file_path = if project_path.join("project.work").exists() {
+        project_path.join("project.work")
+    } else if project_path.join("project.strd").exists() {
+        project_path.join("project.strd")
+    } else {
+        return Err("Destination project file not found".to_string());
+    };
+
+    let raw_fields = read_raw_sample_fields(&project_file_path)?;
+    let mut static_state = std::collections::HashMap::new();
+    let mut flex_state = std::collections::HashMap::new();
+
+    for ((slot_type, slot_id), fields) in &raw_fields {
+        if let Some(path_val) = fields.get("PATH") {
+            if !path_val.is_empty() {
+                let slot_0based = (*slot_id as u8).wrapping_sub(1);
+                if slot_0based < 128 {
+                    // Extract just the filename from the path
+                    let filename = Path::new(path_val)
+                        .file_name()
+                        .map(|f| f.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    if !filename.is_empty() {
+                        if slot_type == "STATIC" {
+                            static_state.insert(slot_0based, filename);
+                        } else if slot_type == "FLEX" {
+                            flex_state.insert(slot_0based, filename);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok((static_state, flex_state))
+}
+
+/// Get the source slot filenames for building remap tables.
+///
+/// Returns (static: slot_0based → filename, flex: slot_0based → filename).
+fn get_source_slot_filenames(
+    project_path: &Path,
+    static_slots: &std::collections::HashSet<u8>,
+    flex_slots: &std::collections::HashSet<u8>,
+) -> Result<SlotStatePair, String> {
+    let project_file_path = if project_path.join("project.work").exists() {
+        project_path.join("project.work")
+    } else if project_path.join("project.strd").exists() {
+        project_path.join("project.strd")
+    } else {
+        return Err("Source project file not found".to_string());
+    };
+
+    let raw_fields = read_raw_sample_fields(&project_file_path)?;
+    let mut static_filenames = std::collections::HashMap::new();
+    let mut flex_filenames = std::collections::HashMap::new();
+
+    for ((slot_type, slot_id), fields) in &raw_fields {
+        if let Some(path_val) = fields.get("PATH") {
+            if !path_val.is_empty() {
+                let slot_0based = (*slot_id as u8).wrapping_sub(1);
+                let filename = Path::new(path_val)
+                    .file_name()
+                    .map(|f| f.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                if !filename.is_empty() {
+                    if slot_type == "STATIC" && static_slots.contains(&slot_0based) {
+                        static_filenames.insert(slot_0based, filename);
+                    } else if slot_type == "FLEX" && flex_slots.contains(&slot_0based) {
+                        flex_filenames.insert(slot_0based, filename);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok((static_filenames, flex_filenames))
+}
+
+/// Build a remap table mapping source slot IDs to destination slot IDs.
+///
+/// Strategy per slot:
+/// 1. Dedup: if dest already has a slot with the same filename, reuse it
+/// 2. Same position: if dest slot at the same ID is free, use it
+/// 3. First available: scan 0..127 for first free slot
+///
+/// Returns (static_remap, flex_remap, dedup_count) or error if insufficient slots.
+fn build_remap_table(
+    source_slots_static: &std::collections::HashSet<u8>,
+    source_slots_flex: &std::collections::HashSet<u8>,
+    source_filenames_static: &std::collections::HashMap<u8, String>,
+    source_filenames_flex: &std::collections::HashMap<u8, String>,
+    dest_state_static: &std::collections::HashMap<u8, String>,
+    dest_state_flex: &std::collections::HashMap<u8, String>,
+) -> Result<SlotRemapResult, String> {
+    let mut dedup_count: u32 = 0;
+
+    fn build_remap_for_type(
+        source_slots: &std::collections::HashSet<u8>,
+        source_filenames: &std::collections::HashMap<u8, String>,
+        dest_state: &std::collections::HashMap<u8, String>,
+        dedup_count: &mut u32,
+        type_name: &str,
+    ) -> Result<std::collections::HashMap<u8, u8>, String> {
+        let mut remap = std::collections::HashMap::new();
+        let mut dest_occupied: std::collections::HashSet<u8> = dest_state.keys().copied().collect();
+
+        // Build a reverse index of dest: filename → slot_id for dedup lookup
+        let dest_by_filename: std::collections::HashMap<&str, u8> = dest_state
+            .iter()
+            .map(|(&slot_id, fname)| (fname.as_str(), slot_id))
+            .collect();
+
+        // Process source slots in sorted order for determinism
+        let mut sorted_slots: Vec<u8> = source_slots.iter().copied().collect();
+        sorted_slots.sort();
+
+        for src_slot in sorted_slots {
+            // 1. Dedup: check if dest already has a slot with the same filename
+            if let Some(src_filename) = source_filenames.get(&src_slot) {
+                if let Some(&existing_dest_slot) = dest_by_filename.get(src_filename.as_str()) {
+                    remap.insert(src_slot, existing_dest_slot);
+                    *dedup_count += 1;
+                    continue;
+                }
+            }
+
+            // 2. Same position: if dest slot at same ID is free, use it
+            if !dest_occupied.contains(&src_slot) {
+                remap.insert(src_slot, src_slot);
+                dest_occupied.insert(src_slot);
+                continue;
+            }
+
+            // 3. First available: scan 0..127 for first free slot
+            let mut found = false;
+            for candidate in 0..128u8 {
+                if !dest_occupied.contains(&candidate) {
+                    remap.insert(src_slot, candidate);
+                    dest_occupied.insert(candidate);
+                    found = true;
+                    break;
+                }
+            }
+
+            if !found {
+                let needed = source_slots.len();
+                let available = 128 - dest_state.len();
+                return Err(format!(
+                    "Not enough free {} slots: need {}, only {} available",
+                    type_name, needed, available
+                ));
+            }
+        }
+
+        Ok(remap)
+    }
+
+    let static_remap = build_remap_for_type(
+        source_slots_static,
+        source_filenames_static,
+        dest_state_static,
+        &mut dedup_count,
+        "Static",
+    )?;
+
+    let flex_remap = build_remap_for_type(
+        source_slots_flex,
+        source_filenames_flex,
+        dest_state_flex,
+        &mut dedup_count,
+        "Flex",
+    )?;
+
+    Ok((static_remap, flex_remap, dedup_count))
+}
+
+/// Remap all sample slot references in a bank's Parts and Patterns.
+///
+/// Updates:
+/// - Parts: audio_track_machine_slots[track].static_slot_id / flex_slot_id
+/// - Patterns: AudioTrackParameterLocks.static_slot_id / flex_slot_id (p-locks)
+///
+/// Does NOT touch recorder_slot_id.
+/// Skips 0 (unassigned) for Parts and 255 (no lock) for p-locks.
+fn remap_bank_slot_references(
+    bank: &mut BankFile,
+    static_remap: &std::collections::HashMap<u8, u8>,
+    flex_remap: &std::collections::HashMap<u8, u8>,
+) {
+    // Remap Parts (both unsaved and saved states)
+    for parts_state in [&mut bank.parts.unsaved, &mut bank.parts.saved] {
+        for part_idx in 0..4 {
+            let part = &mut parts_state.0[part_idx];
+            for track_idx in 0..8 {
+                let slot = &mut part.audio_track_machine_slots[track_idx];
+                if slot.static_slot_id != 0 {
+                    if let Some(&new_id) = static_remap.get(&slot.static_slot_id) {
+                        slot.static_slot_id = new_id;
+                    }
+                }
+                if slot.flex_slot_id != 0 {
+                    if let Some(&new_id) = flex_remap.get(&slot.flex_slot_id) {
+                        slot.flex_slot_id = new_id;
+                    }
+                }
+                // Do NOT touch recorder_slot_id
+            }
+        }
+    }
+
+    // Remap Pattern p-locks
+    for pattern_idx in 0..16 {
+        let pattern = &mut bank.patterns.0[pattern_idx];
+        for track_idx in 0..8 {
+            let track_trigs = &mut pattern.audio_track_trigs.0[track_idx];
+            for step_idx in 0..64 {
+                let plock = &mut track_trigs.plocks.0[step_idx];
+                if plock.static_slot_id != 255 && plock.static_slot_id != 0 {
+                    if let Some(&new_id) = static_remap.get(&plock.static_slot_id) {
+                        plock.static_slot_id = new_id;
+                    }
+                }
+                if plock.flex_slot_id != 255 && plock.flex_slot_id != 0 {
+                    if let Some(&new_id) = flex_remap.get(&plock.flex_slot_id) {
+                        plock.flex_slot_id = new_id;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Validate whether the destination project has enough free slots to accommodate
+/// the source bank's sample slots. Returns validation result without writing anything.
+pub fn validate_bank_sample_slots(
+    source_project: &str,
+    source_bank_index: u8,
+    dest_project: &str,
+    sample_scope: &str,
+) -> Result<SlotValidationResult, String> {
+    if source_bank_index > 15 {
+        return Err("Source bank index must be between 0 and 15".to_string());
+    }
+
+    let source_path = Path::new(source_project);
+    let dest_path = Path::new(dest_project);
+
+    // Read source bank
+    let source_bank_num = source_bank_index + 1;
+    let source_work_file = format!("bank{:02}.work", source_bank_num);
+    let source_strd_file = format!("bank{:02}.strd", source_bank_num);
+    let source_bank_path = if source_path.join(&source_work_file).exists() {
+        source_path.join(&source_work_file)
+    } else if source_path.join(&source_strd_file).exists() {
+        source_path.join(&source_strd_file)
+    } else {
+        return Err(format!("Source bank {} not found", source_bank_index));
+    };
+
+    let bank = BankFile::from_data_file(&source_bank_path)
+        .map_err(|e| format!("Failed to read source bank: {:?}", e))?;
+
+    // Collect source slots
+    let (source_static, source_flex) = match sample_scope {
+        "referenced_only" => {
+            let (referenced_static, referenced_flex) = collect_referenced_slots(&bank);
+            // Filter: only keep slots that actually have audio files in project.work
+            let (configured_static, configured_flex) =
+                collect_all_configured_slots(source_path)?;
+            (
+                referenced_static
+                    .intersection(&configured_static)
+                    .copied()
+                    .collect(),
+                referenced_flex
+                    .intersection(&configured_flex)
+                    .copied()
+                    .collect(),
+            )
+        }
+        "all_configured" => collect_all_configured_slots(source_path)?,
+        _ => return Err(format!("Invalid sample_scope: {}", sample_scope)),
+    };
+
+    // Get source filenames and dest state
+    let (src_fnames_static, src_fnames_flex) =
+        get_source_slot_filenames(source_path, &source_static, &source_flex)?;
+    let (dest_state_static, dest_state_flex) = get_dest_slot_state(dest_path)?;
+
+    // Count missing audio files in source project using existing list_missing_samples
+    let all_missing = list_missing_samples(source_project)?;
+    let missing_files = all_missing
+        .iter()
+        .filter(|m| {
+            let has_static = m
+                .static_slot_ids
+                .iter()
+                .any(|&id| source_static.contains(&((id as u8).wrapping_sub(1))));
+            let has_flex = m
+                .flex_slot_ids
+                .iter()
+                .any(|&id| source_flex.contains(&((id as u8).wrapping_sub(1))));
+            has_static || has_flex
+        })
+        .count() as u32;
+
+    // Try building remap table to check feasibility
+    match build_remap_table(
+        &source_static,
+        &source_flex,
+        &src_fnames_static,
+        &src_fnames_flex,
+        &dest_state_static,
+        &dest_state_flex,
+    ) {
+        Ok((static_remap, flex_remap, _dedup_count)) => {
+            // Count actual new slots needed (excluding deduped)
+            let static_new = static_remap
+                .iter()
+                .filter(|(src, dest)| src != dest || !dest_state_static.contains_key(dest))
+                .count() as u32;
+            let flex_new = flex_remap
+                .iter()
+                .filter(|(src, dest)| src != dest || !dest_state_flex.contains_key(dest))
+                .count() as u32;
+
+            Ok(SlotValidationResult {
+                static_needed: source_static.len() as u32,
+                flex_needed: source_flex.len() as u32,
+                static_available: (128 - dest_state_static.len()) as u32,
+                flex_available: (128 - dest_state_flex.len()) as u32,
+                static_dedup: static_remap.len() as u32 - static_new,
+                flex_dedup: flex_remap.len() as u32 - flex_new,
+                missing_files,
+                is_valid: true,
+                error_message: None,
+            })
+        }
+        Err(msg) => Ok(SlotValidationResult {
+            static_needed: source_static.len() as u32,
+            flex_needed: source_flex.len() as u32,
+            static_available: (128 - dest_state_static.len()) as u32,
+            flex_available: (128 - dest_state_flex.len()) as u32,
+            static_dedup: 0,
+            flex_dedup: 0,
+            missing_files,
+            is_valid: false,
+            error_message: Some(msg),
+        }),
+    }
+}
+
 /// Copy an entire bank from the current project to multiple destination banks.
 /// This copies all 4 Parts and their 16 Patterns each.
+/// Optionally copies referenced sample slots with automatic remapping.
 ///
 /// # Arguments
 /// * `source_project` - Path to the source (current) project
 /// * `source_bank_index` - Source bank index (0-15 for banks A-P)
 /// * `dest_project` - Path to the destination project
 /// * `dest_bank_indices` - Destination bank indices (0-15 for banks A-P)
+/// * `copy_samples` - Whether to also copy sample slots
+/// * `sample_scope` - "referenced_only" or "all_configured"
+/// * `audio_mode` - "mirror", "copy", or "move_to_pool"
+/// * `copy_attributes` - Whether to copy Audio Editor attributes
+/// * `attribute_selection` - Which attributes to copy
 pub fn copy_bank(
     source_project: &str,
     source_bank_index: u8,
     dest_project: &str,
     dest_bank_indices: &[u8],
-) -> Result<(), String> {
+    copy_samples: bool,
+    sample_scope: &str,
+    audio_mode: &str,
+    copy_attributes: bool,
+    attribute_selection: &[String],
+) -> Result<CopyBankResult, String> {
     if source_bank_index > 15 {
         return Err("Source bank index must be between 0 and 15".to_string());
     }
@@ -4402,7 +4900,176 @@ pub fn copy_bank(
     let mut bank_data = BankFile::from_data_file(&source_bank_path)
         .map_err(|e| format!("Failed to read source bank: {:?}", e))?;
 
-    // Note: Bank name/ID is determined by the file name, not a field in the data
+    let mut result = CopyBankResult {
+        slots_copied_static: 0,
+        slots_copied_flex: 0,
+        slots_deduplicated: 0,
+        shared_files_kept: 0,
+        remap_log: Vec::new(),
+    };
+
+    if copy_samples {
+        // ====================================================================
+        // Sample slot copying with remapping
+        // ====================================================================
+
+        // 1. Collect source slots based on scope
+        let (source_static, source_flex) = match sample_scope {
+            "referenced_only" => {
+                let (referenced_static, referenced_flex) = collect_referenced_slots(&bank_data);
+                // Filter: only keep slots that actually have audio files in project.work
+                let (configured_static, configured_flex) =
+                    collect_all_configured_slots(source_path)?;
+                (
+                    referenced_static
+                        .intersection(&configured_static)
+                        .copied()
+                        .collect(),
+                    referenced_flex
+                        .intersection(&configured_flex)
+                        .copied()
+                        .collect(),
+                )
+            }
+            "all_configured" => collect_all_configured_slots(source_path)?,
+            _ => return Err(format!("Invalid sample_scope: {}", sample_scope)),
+        };
+
+        if !source_static.is_empty() || !source_flex.is_empty() {
+            // 2. Get source filenames and dest state
+            let (src_fnames_static, src_fnames_flex) =
+                get_source_slot_filenames(source_path, &source_static, &source_flex)?;
+            let (dest_state_static, dest_state_flex) = get_dest_slot_state(dest_path)?;
+
+            // 3. Build remap table (validates slot availability)
+            let (static_remap, flex_remap, dedup_count) = build_remap_table(
+                &source_static,
+                &source_flex,
+                &src_fnames_static,
+                &src_fnames_flex,
+                &dest_state_static,
+                &dest_state_flex,
+            )?;
+
+            result.slots_deduplicated = dedup_count;
+
+            // 4. Copy sample data to destination project
+            // Build source/dest index pairs for copy_sample_slots-style processing
+            // Only copy non-deduped slots (deduped ones already exist in dest)
+            let mut static_pairs: Vec<(u8, u8)> = Vec::new();
+            let mut flex_pairs: Vec<(u8, u8)> = Vec::new();
+
+            for (&src_slot, &dest_slot) in &static_remap {
+                // Skip if this was a dedup match (dest already has the file)
+                if !dest_state_static.contains_key(&dest_slot) {
+                    static_pairs.push((src_slot, dest_slot));
+                }
+            }
+            for (&src_slot, &dest_slot) in &flex_remap {
+                if !dest_state_flex.contains_key(&dest_slot) {
+                    flex_pairs.push((src_slot, dest_slot));
+                }
+            }
+
+            result.slots_copied_static = static_pairs.len() as u32
+                + static_remap
+                    .iter()
+                    .filter(|(_, dest)| dest_state_static.contains_key(dest))
+                    .count() as u32;
+            result.slots_copied_flex = flex_pairs.len() as u32
+                + flex_remap
+                    .iter()
+                    .filter(|(_, dest)| dest_state_flex.contains_key(dest))
+                    .count() as u32;
+
+            // Build remap log
+            let mut sorted_static: Vec<_> = static_remap.iter().collect();
+            sorted_static.sort_by_key(|(&src, _)| src);
+            for (&src, &dest) in &sorted_static {
+                let dedup = dest_state_static.contains_key(&dest);
+                if src == dest && !dedup {
+                    result.remap_log.push(format!(
+                        "Static {} → {} (same position)",
+                        src + 1,
+                        dest + 1
+                    ));
+                } else if dedup {
+                    result.remap_log.push(format!(
+                        "Static {} → {} (deduplicated)",
+                        src + 1,
+                        dest + 1
+                    ));
+                } else {
+                    result
+                        .remap_log
+                        .push(format!("Static {} → {}", src + 1, dest + 1));
+                }
+            }
+            let mut sorted_flex: Vec<_> = flex_remap.iter().collect();
+            sorted_flex.sort_by_key(|(&src, _)| src);
+            for (&src, &dest) in &sorted_flex {
+                let dedup = dest_state_flex.contains_key(&dest);
+                if src == dest && !dedup {
+                    result.remap_log.push(format!(
+                        "Flex {} → {} (same position)",
+                        src + 1,
+                        dest + 1
+                    ));
+                } else if dedup {
+                    result.remap_log.push(format!(
+                        "Flex {} → {} (deduplicated)",
+                        src + 1,
+                        dest + 1
+                    ));
+                } else {
+                    result
+                        .remap_log
+                        .push(format!("Flex {} → {}", src + 1, dest + 1));
+                }
+            }
+
+            // Copy non-deduped samples using the same machinery as copy_sample_slots
+            if !static_pairs.is_empty() || !flex_pairs.is_empty() {
+                // We call copy_sample_slots for static and flex separately
+                if !static_pairs.is_empty() {
+                    let src: Vec<u8> = static_pairs.iter().map(|(s, _)| s + 1).collect();
+                    let dst: Vec<u8> = static_pairs.iter().map(|(_, d)| d + 1).collect();
+                    let copy_result = copy_sample_slots(
+                        source_project,
+                        dest_project,
+                        "static",
+                        src,
+                        dst,
+                        true, // always copy assignments
+                        audio_mode,
+                        copy_attributes,
+                        attribute_selection.to_vec(),
+                    )?;
+                    result.shared_files_kept += copy_result.shared_files_kept;
+                }
+
+                if !flex_pairs.is_empty() {
+                    let src: Vec<u8> = flex_pairs.iter().map(|(s, _)| s + 1).collect();
+                    let dst: Vec<u8> = flex_pairs.iter().map(|(_, d)| d + 1).collect();
+                    let copy_result = copy_sample_slots(
+                        source_project,
+                        dest_project,
+                        "flex",
+                        src,
+                        dst,
+                        true,
+                        audio_mode,
+                        copy_attributes,
+                        attribute_selection.to_vec(),
+                    )?;
+                    result.shared_files_kept += copy_result.shared_files_kept;
+                }
+            }
+
+            // 5. Remap bank data
+            remap_bank_slot_references(&mut bank_data, &static_remap, &flex_remap);
+        }
+    }
 
     // Recalculate checksum
     bank_data.checksum = bank_data
@@ -4415,7 +5082,6 @@ pub fn copy_bank(
         let dest_bank_file = format!("bank{:02}.work", dest_bank_num);
         let dest_bank_path = dest_path.join(&dest_bank_file);
 
-        // Write the bank to destination
         bank_data.to_data_file(&dest_bank_path).map_err(|e| {
             format!(
                 "Failed to write destination bank {}: {:?}",
@@ -4429,7 +5095,7 @@ pub fn copy_bank(
         );
     }
 
-    Ok(())
+    Ok(result)
 }
 
 /// Copy specific Parts from one bank to another.
@@ -6099,7 +6765,17 @@ mod tests {
                 bank.parts_edited_bitmask = 0b0001;
             });
 
-            let result = copy_bank(&project.path, 0, &project.path, &[1]);
+            let result = copy_bank(
+                &project.path,
+                0,
+                &project.path,
+                &[1],
+                false,
+                "",
+                "",
+                false,
+                &[],
+            );
             assert!(result.is_ok(), "copy_bank should succeed: {:?}", result);
 
             // Verify the destination bank now has the same edited bitmask
@@ -6119,7 +6795,17 @@ mod tests {
             });
             let dest_project = TestProject::new();
 
-            let result = copy_bank(&source_project.path, 0, &dest_project.path, &[0]);
+            let result = copy_bank(
+                &source_project.path,
+                0,
+                &dest_project.path,
+                &[0],
+                false,
+                "",
+                "",
+                false,
+                &[],
+            );
             assert!(
                 result.is_ok(),
                 "Cross-project copy should succeed: {:?}",
@@ -6142,7 +6828,17 @@ mod tests {
                 bank.parts_edited_bitmask = 0b0101;
             });
 
-            let result = copy_bank(&source_project.path, 0, &dest_project.path, &[0]);
+            let result = copy_bank(
+                &source_project.path,
+                0,
+                &dest_project.path,
+                &[0],
+                false,
+                "",
+                "",
+                false,
+                &[],
+            );
             assert!(result.is_ok());
 
             let dest_bank_path = Path::new(&dest_project.path).join("bank01.work");
@@ -6155,7 +6851,17 @@ mod tests {
         fn test_copy_bank_invalid_source_index() {
             let project = TestProject::new();
 
-            let result = copy_bank(&project.path, 16, &project.path, &[0]);
+            let result = copy_bank(
+                &project.path,
+                16,
+                &project.path,
+                &[0],
+                false,
+                "",
+                "",
+                false,
+                &[],
+            );
             assert!(result.is_err(), "Bank index 16 should be invalid");
             assert!(result
                 .unwrap_err()
@@ -6166,7 +6872,17 @@ mod tests {
         fn test_copy_bank_invalid_dest_index() {
             let project = TestProject::new();
 
-            let result = copy_bank(&project.path, 0, &project.path, &[16]);
+            let result = copy_bank(
+                &project.path,
+                0,
+                &project.path,
+                &[16],
+                false,
+                "",
+                "",
+                false,
+                &[],
+            );
             assert!(result.is_err(), "Bank index 16 should be invalid");
             assert!(result
                 .unwrap_err()
@@ -6180,7 +6896,17 @@ mod tests {
             let empty_path = temp_dir.path().to_string_lossy().to_string();
             let dest_project = TestProject::new();
 
-            let result = copy_bank(&empty_path, 0, &dest_project.path, &[0]);
+            let result = copy_bank(
+                &empty_path,
+                0,
+                &dest_project.path,
+                &[0],
+                false,
+                "",
+                "",
+                false,
+                &[],
+            );
             assert!(result.is_err(), "Should fail for non-existent source bank");
             assert!(result.unwrap_err().contains("Source bank"));
         }
@@ -6192,7 +6918,8 @@ mod tests {
             let dest = TestProject::new();
 
             for i in 0..16u8 {
-                let result = copy_bank(&source.path, i, &dest.path, &[i]);
+                let result =
+                    copy_bank(&source.path, i, &dest.path, &[i], false, "", "", false, &[]);
                 assert!(
                     result.is_ok(),
                     "Copy bank {} should succeed: {:?}",
@@ -6211,7 +6938,17 @@ mod tests {
             let dest = TestProject::new();
 
             // Copy bank 0 to banks 2, 5, and 12 in one call
-            let result = copy_bank(&source.path, 0, &dest.path, &[2, 5, 12]);
+            let result = copy_bank(
+                &source.path,
+                0,
+                &dest.path,
+                &[2, 5, 12],
+                false,
+                "",
+                "",
+                false,
+                &[],
+            );
             assert!(
                 result.is_ok(),
                 "Multi-destination copy should succeed: {:?}",
@@ -6240,7 +6977,17 @@ mod tests {
             let dest = TestProject::new();
 
             let dest_indices: Vec<u8> = (1..16).collect();
-            let result = copy_bank(&source.path, 0, &dest.path, &dest_indices);
+            let result = copy_bank(
+                &source.path,
+                0,
+                &dest.path,
+                &dest_indices,
+                false,
+                "",
+                "",
+                false,
+                &[],
+            );
             assert!(
                 result.is_ok(),
                 "Copy to all other banks should succeed: {:?}",
@@ -6266,7 +7013,7 @@ mod tests {
             let source = TestProject::new();
             let dest = TestProject::new();
 
-            let result = copy_bank(&source.path, 0, &dest.path, &[]);
+            let result = copy_bank(&source.path, 0, &dest.path, &[], false, "", "", false, &[]);
             assert!(
                 result.is_ok(),
                 "Empty destinations should succeed as no-op: {:?}",
@@ -6282,7 +7029,7 @@ mod tests {
             });
             let dest = TestProject::new();
 
-            copy_bank(&source.path, 0, &dest.path, &[0]).unwrap();
+            copy_bank(&source.path, 0, &dest.path, &[0], false, "", "", false, &[]).unwrap();
 
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
@@ -6301,7 +7048,17 @@ mod tests {
                 bank.parts_edited_bitmask = 0b1010;
             });
 
-            let result = copy_bank(&project.path, 0, &project.path, &[0]);
+            let result = copy_bank(
+                &project.path,
+                0,
+                &project.path,
+                &[0],
+                false,
+                "",
+                "",
+                false,
+                &[],
+            );
             assert!(result.is_ok(), "Self-copy should succeed: {:?}", result);
 
             // Verify data is still intact
@@ -6322,7 +7079,17 @@ mod tests {
             let dest = TestProject::new();
 
             let all_banks: Vec<u8> = (0..16).collect();
-            let result = copy_bank(&source.path, 0, &dest.path, &all_banks);
+            let result = copy_bank(
+                &source.path,
+                0,
+                &dest.path,
+                &all_banks,
+                false,
+                "",
+                "",
+                false,
+                &[],
+            );
             assert!(
                 result.is_ok(),
                 "Copy to all 16 banks should succeed: {:?}",
@@ -6340,6 +7107,247 @@ mod tests {
                     bank_idx + 1
                 );
             }
+        }
+    }
+
+    // ==================== BANK REMAP TESTS ====================
+
+    mod bank_remap_tests {
+        use super::*;
+        use std::collections::{HashMap, HashSet};
+
+        #[test]
+        fn test_collect_referenced_slots_static_and_flex() {
+            let project = TestProject::with_modified_bank(0, |bank| {
+                // Part 0, Track 0: Static machine, slot 5
+                bank.parts.unsaved.0[0].audio_track_machine_types[0] = 0; // Static
+                bank.parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id = 5;
+                // Part 0, Track 1: Flex machine, slot 10
+                bank.parts.unsaved.0[0].audio_track_machine_types[1] = 1; // Flex
+                bank.parts.unsaved.0[0].audio_track_machine_slots[1].flex_slot_id = 10;
+                // Part 0, Track 2: Thru machine — should be skipped
+                bank.parts.unsaved.0[0].audio_track_machine_types[2] = 2; // Thru
+                bank.parts.unsaved.0[0].audio_track_machine_slots[2].static_slot_id = 99;
+            });
+
+            let bank = BankFile::from_data_file(
+                &std::path::PathBuf::from(&project.path).join("bank01.work"),
+            )
+            .unwrap();
+            let (static_slots, flex_slots) = collect_referenced_slots(&bank);
+
+            assert!(static_slots.contains(&5), "Should contain Static slot 5");
+            assert!(flex_slots.contains(&10), "Should contain Flex slot 10");
+            assert!(
+                !static_slots.contains(&99),
+                "Should NOT contain Thru machine's slot"
+            );
+        }
+
+        #[test]
+        fn test_collect_referenced_slots_from_plocks() {
+            let project = TestProject::with_modified_bank(0, |bank| {
+                // Add a p-lock on pattern 0, track 0, step 5
+                bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[5].static_slot_id = 42;
+                bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[10].flex_slot_id = 77;
+            });
+
+            let bank = BankFile::from_data_file(
+                &std::path::PathBuf::from(&project.path).join("bank01.work"),
+            )
+            .unwrap();
+            let (static_slots, flex_slots) = collect_referenced_slots(&bank);
+
+            assert!(
+                static_slots.contains(&42),
+                "Should contain p-locked Static slot 42"
+            );
+            assert!(
+                flex_slots.contains(&77),
+                "Should contain p-locked Flex slot 77"
+            );
+        }
+
+        #[test]
+        fn test_collect_referenced_slots_skips_unassigned_and_no_lock() {
+            let project = TestProject::with_modified_bank(0, |bank| {
+                // Slot 0 = unassigned, 255 = no lock — both should be excluded
+                bank.parts.unsaved.0[0].audio_track_machine_types[0] = 0;
+                bank.parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id = 0;
+                bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[0].static_slot_id = 255;
+            });
+
+            let bank = BankFile::from_data_file(
+                &std::path::PathBuf::from(&project.path).join("bank01.work"),
+            )
+            .unwrap();
+            let (static_slots, _flex_slots) = collect_referenced_slots(&bank);
+
+            assert!(
+                !static_slots.contains(&0),
+                "Should NOT contain slot 0 (unassigned)"
+            );
+        }
+
+        #[test]
+        fn test_build_remap_table_same_position() {
+            let source_static: HashSet<u8> = [5, 10].iter().copied().collect();
+            let source_flex: HashSet<u8> = HashSet::new();
+            let src_fnames: HashMap<u8, String> =
+                [(5, "kick.wav".into()), (10, "snare.wav".into())]
+                    .into_iter()
+                    .collect();
+            let dest_state: HashMap<u8, String> = HashMap::new(); // empty dest
+
+            let (static_remap, _flex_remap, dedup) = build_remap_table(
+                &source_static,
+                &source_flex,
+                &src_fnames,
+                &HashMap::new(),
+                &dest_state,
+                &HashMap::new(),
+            )
+            .unwrap();
+
+            assert_eq!(static_remap[&5], 5, "Should map to same position");
+            assert_eq!(static_remap[&10], 10, "Should map to same position");
+            assert_eq!(dedup, 0);
+        }
+
+        #[test]
+        fn test_build_remap_table_finds_free_slot() {
+            let source_static: HashSet<u8> = [5].iter().copied().collect();
+            let source_flex: HashSet<u8> = HashSet::new();
+            let src_fnames: HashMap<u8, String> = [(5, "kick.wav".into())].into_iter().collect();
+            // Slot 5 is occupied in dest
+            let dest_state: HashMap<u8, String> = [(5, "other.wav".into())].into_iter().collect();
+
+            let (static_remap, _, _) = build_remap_table(
+                &source_static,
+                &source_flex,
+                &src_fnames,
+                &HashMap::new(),
+                &dest_state,
+                &HashMap::new(),
+            )
+            .unwrap();
+
+            assert_ne!(static_remap[&5], 5, "Should NOT map to occupied slot 5");
+            assert!(static_remap[&5] < 128, "Should map to a valid slot");
+        }
+
+        #[test]
+        fn test_build_remap_table_deduplicates() {
+            let source_static: HashSet<u8> = [5].iter().copied().collect();
+            let source_flex: HashSet<u8> = HashSet::new();
+            let src_fnames: HashMap<u8, String> = [(5, "kick.wav".into())].into_iter().collect();
+            // Dest already has kick.wav in slot 20
+            let dest_state: HashMap<u8, String> = [(20, "kick.wav".into())].into_iter().collect();
+
+            let (static_remap, _, dedup) = build_remap_table(
+                &source_static,
+                &source_flex,
+                &src_fnames,
+                &HashMap::new(),
+                &dest_state,
+                &HashMap::new(),
+            )
+            .unwrap();
+
+            assert_eq!(
+                static_remap[&5], 20,
+                "Should deduplicate to existing slot 20"
+            );
+            assert_eq!(dedup, 1, "Should report 1 deduplicated slot");
+        }
+
+        #[test]
+        fn test_build_remap_table_insufficient_slots() {
+            // Fill all 128 dest slots
+            let dest_state: HashMap<u8, String> =
+                (0..128).map(|i| (i, format!("file{}.wav", i))).collect();
+            let source_static: HashSet<u8> = [5].iter().copied().collect();
+            let src_fnames: HashMap<u8, String> =
+                [(5, "new_file.wav".into())].into_iter().collect();
+
+            let result = build_remap_table(
+                &source_static,
+                &HashSet::new(),
+                &src_fnames,
+                &HashMap::new(),
+                &dest_state,
+                &HashMap::new(),
+            );
+
+            assert!(result.is_err(), "Should error when no free slots");
+            assert!(
+                result.unwrap_err().contains("Not enough free Static slots"),
+                "Error message should mention Static slots"
+            );
+        }
+
+        #[test]
+        fn test_remap_bank_slot_references_parts() {
+            let project = TestProject::with_modified_bank(0, |bank| {
+                bank.parts.unsaved.0[0].audio_track_machine_types[0] = 0;
+                bank.parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id = 5;
+                bank.parts.unsaved.0[0].audio_track_machine_types[1] = 1;
+                bank.parts.unsaved.0[0].audio_track_machine_slots[1].flex_slot_id = 10;
+                // Also set recorder_slot_id — should NOT be remapped
+                bank.parts.unsaved.0[0].audio_track_machine_slots[0].recorder_slot_id = 130;
+            });
+
+            let bank_path = std::path::PathBuf::from(&project.path).join("bank01.work");
+            let mut bank = BankFile::from_data_file(&bank_path).unwrap();
+
+            let static_remap: HashMap<u8, u8> = [(5, 20)].into_iter().collect();
+            let flex_remap: HashMap<u8, u8> = [(10, 30)].into_iter().collect();
+
+            remap_bank_slot_references(&mut bank, &static_remap, &flex_remap);
+
+            assert_eq!(
+                bank.parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id, 20,
+                "Static slot should be remapped from 5 to 20"
+            );
+            assert_eq!(
+                bank.parts.unsaved.0[0].audio_track_machine_slots[1].flex_slot_id, 30,
+                "Flex slot should be remapped from 10 to 30"
+            );
+            assert_eq!(
+                bank.parts.unsaved.0[0].audio_track_machine_slots[0].recorder_slot_id, 130,
+                "Recorder slot should NOT be remapped"
+            );
+        }
+
+        #[test]
+        fn test_remap_bank_slot_references_plocks() {
+            let project = TestProject::with_modified_bank(0, |bank| {
+                bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[5].static_slot_id = 42;
+                bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[10].flex_slot_id = 77;
+                // 255 = no lock — should NOT be remapped
+                bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[20].static_slot_id = 255;
+            });
+
+            let bank_path = std::path::PathBuf::from(&project.path).join("bank01.work");
+            let mut bank = BankFile::from_data_file(&bank_path).unwrap();
+
+            let static_remap: HashMap<u8, u8> = [(42, 50)].into_iter().collect();
+            let flex_remap: HashMap<u8, u8> = [(77, 80)].into_iter().collect();
+
+            remap_bank_slot_references(&mut bank, &static_remap, &flex_remap);
+
+            assert_eq!(
+                bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[5].static_slot_id, 50,
+                "P-lock static slot should be remapped from 42 to 50"
+            );
+            assert_eq!(
+                bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[10].flex_slot_id, 80,
+                "P-lock flex slot should be remapped from 77 to 80"
+            );
+            assert_eq!(
+                bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[20].static_slot_id, 255,
+                "No-lock sentinel should NOT be remapped"
+            );
         }
     }
 
@@ -11386,7 +12394,17 @@ mod tests {
 
             // All indices 0-15 should be valid
             for i in 0..=15u8 {
-                let result = copy_bank(&project.path, i, &project.path, &[15 - i]);
+                let result = copy_bank(
+                    &project.path,
+                    i,
+                    &project.path,
+                    &[15 - i],
+                    false,
+                    "",
+                    "",
+                    false,
+                    &[],
+                );
                 assert!(result.is_ok(), "Bank index {} should be valid", i);
             }
         }
@@ -11590,7 +12608,7 @@ mod tests {
             });
             let dest = TestProject::new();
 
-            copy_bank(&source.path, 0, &dest.path, &[1]).unwrap();
+            copy_bank(&source.path, 0, &dest.path, &[1], false, "", "", false, &[]).unwrap();
 
             let dest_bank_path = Path::new(&dest.path).join("bank02.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
@@ -11684,7 +12702,18 @@ mod tests {
             let dest = TestProject::new();
 
             // Perform multiple operations in sequence
-            copy_bank(&project.path, 0, &dest.path, &[1]).unwrap();
+            copy_bank(
+                &project.path,
+                0,
+                &dest.path,
+                &[1],
+                false,
+                "",
+                "",
+                false,
+                &[],
+            )
+            .unwrap();
             copy_parts(&project.path, 0, vec![0], &project.path, 1, vec![2]).unwrap();
             copy_patterns(
                 &project.path,

@@ -228,6 +228,28 @@ async function setupTauriMocks(page: Page, overrides?: { sameSet?: boolean; with
             return { shared_files_kept: 0 }
 
           case 'copy_bank':
+            (window as any).__lastCopyBankArgs__ = args;
+            return {
+              slots_copied_static: 0,
+              slots_copied_flex: 0,
+              slots_deduplicated: 0,
+              shared_files_kept: 0,
+              remap_log: [],
+            }
+
+          case 'validate_bank_sample_slots':
+            return {
+              static_needed: 3,
+              flex_needed: 2,
+              static_available: 120,
+              flex_available: 125,
+              static_dedup: 1,
+              flex_dedup: 0,
+              missing_files: 0,
+              is_valid: true,
+              error_message: null,
+            }
+
           case 'copy_parts':
           case 'copy_patterns':
           case 'copy_tracks':
@@ -2619,13 +2641,13 @@ test.describe('Tools Tab - Operation Descriptions', () => {
     await expect(description).toContainText('Copies sample slot assignments')
   })
 
-  test('Copy Banks hides OPTIONS pane', async ({ page }) => {
+  test('Copy Banks shows OPTIONS pane', async ({ page }) => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_bank')
     await page.waitForTimeout(300)
 
     const optionsPanel = page.locator('.tools-options-panel')
-    await expect(optionsPanel).toHaveCount(0)
+    await expect(optionsPanel).toBeVisible()
   })
 
   test('Copy Parts hides OPTIONS pane', async ({ page }) => {
@@ -3144,5 +3166,149 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
 
     // Done button should be visible (auto-apply completed)
     await expect(modal.locator('.fix-done-actions .tools-execute-btn', { hasText: 'Done' })).toBeVisible()
+  })
+})
+
+test.describe('Tools Tab - Copy Banks Sample Options', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
+    await toolsTab.click()
+    await page.waitForTimeout(500)
+
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('copy_bank')
+    await page.waitForTimeout(300)
+  })
+
+  test('Copy Sample Slots toggle defaults to No', async ({ page }) => {
+    const optionsPanel = page.locator('.tools-options-panel')
+    const noBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'No' })
+    await expect(noBtn).toHaveClass(/selected/)
+  })
+
+  test('Toggling Copy Sample Slots to Yes shows additional options', async ({ page }) => {
+    const optionsPanel = page.locator('.tools-options-panel')
+
+    // Sample Scope should not be visible initially
+    await expect(optionsPanel.locator('label', { hasText: 'Sample Scope' })).toHaveCount(0)
+
+    // Click Yes
+    const yesBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'Yes' }).first()
+    await yesBtn.click()
+    await page.waitForTimeout(300)
+
+    // Now Sample Scope and Audio Files should be visible
+    await expect(optionsPanel.locator('label', { hasText: 'Sample Scope' })).toBeVisible()
+    await expect(optionsPanel.locator('label', { hasText: 'Audio Files' })).toBeVisible()
+  })
+
+  test('Toggling Copy Sample Slots back to No hides additional options', async ({ page }) => {
+    const optionsPanel = page.locator('.tools-options-panel')
+
+    // Enable
+    const yesBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'Yes' }).first()
+    await yesBtn.click()
+    await page.waitForTimeout(300)
+    await expect(optionsPanel.locator('label', { hasText: 'Sample Scope' })).toBeVisible()
+
+    // Disable
+    const noBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'No' }).first()
+    await noBtn.click()
+    await page.waitForTimeout(300)
+    await expect(optionsPanel.locator('label', { hasText: 'Sample Scope' })).toHaveCount(0)
+  })
+
+  test('Sample Scope defaults to Referenced only', async ({ page }) => {
+    const optionsPanel = page.locator('.tools-options-panel')
+    const yesBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'Yes' }).first()
+    await yesBtn.click()
+    await page.waitForTimeout(300)
+
+    const referencedBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'Referenced only' })
+    await expect(referencedBtn).toHaveClass(/selected/)
+  })
+
+  test('Sample Scope can be switched to All configured', async ({ page }) => {
+    const optionsPanel = page.locator('.tools-options-panel')
+    const yesBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'Yes' }).first()
+    await yesBtn.click()
+    await page.waitForTimeout(300)
+
+    const allConfiguredBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'All configured' })
+    await allConfiguredBtn.click()
+    await page.waitForTimeout(200)
+    await expect(allConfiguredBtn).toHaveClass(/selected/)
+  })
+
+  test('Validation status appears when Copy Sample Slots is Yes', async ({ page }) => {
+    const optionsPanel = page.locator('.tools-options-panel')
+    const yesBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'Yes' }).first()
+    await yesBtn.click()
+    await page.waitForTimeout(500)
+
+    const validationStatus = page.locator('.tools-validation-status')
+    await expect(validationStatus).toBeVisible()
+    // Mock returns is_valid=true with 5 slots to copy (3 static + 2 flex)
+    await expect(validationStatus).toContainText('5 slots to copy')
+    await expect(validationStatus).toHaveClass(/valid/)
+  })
+
+  test('Execute button disabled when validation fails', async ({ page }) => {
+    // Override mock to return invalid validation
+    await page.evaluate(() => {
+      const origInvoke = (window as any).__TAURI_INTERNALS__.invoke
+      ;(window as any).__TAURI_INTERNALS__.invoke = async (cmd: string, args?: any) => {
+        if (cmd === 'validate_bank_sample_slots') {
+          return {
+            static_needed: 10,
+            flex_needed: 5,
+            static_available: 3,
+            flex_available: 2,
+            static_dedup: 0,
+            flex_dedup: 0,
+            is_valid: false,
+            error_message: 'Not enough free Static slots: need 10, only 3 available',
+          }
+        }
+        return origInvoke(cmd, args)
+      }
+    })
+
+    const optionsPanel = page.locator('.tools-options-panel')
+    const yesBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'Yes' }).first()
+    await yesBtn.click()
+    await page.waitForTimeout(500)
+
+    const validationStatus = page.locator('.tools-validation-status')
+    await expect(validationStatus).toHaveClass(/invalid/)
+
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+  })
+
+  test('Execute sends correct parameters with sample options', async ({ page }) => {
+    const optionsPanel = page.locator('.tools-options-panel')
+
+    // Enable Copy Sample Slots
+    const yesBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'Yes' }).first()
+    await yesBtn.click()
+    await page.waitForTimeout(500)
+
+    // Click Execute
+    const executeBtn = page.locator('.tools-execute-btn')
+    await executeBtn.click()
+    await page.waitForTimeout(1000)
+
+    // Check the captured args
+    const args = await page.evaluate(() => (window as any).__lastCopyBankArgs__)
+    expect(args).toBeTruthy()
+    expect(args.copySamples).toBe(true)
+    expect(args.sampleScope).toBe('referenced_only')
+    expect(args.audioMode).toBe('copy')
+    expect(args.copyAttributes).toBe(true)
+    expect(args.attributeSelection).toEqual(expect.arrayContaining(['gain', 'bpm', 'trim', 'slices']))
   })
 })

@@ -191,6 +191,22 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [selectedAttributes, setSelectedAttributes] = useState<string[]>(savedSettings.selectedAttributes ?? [...ALL_ATTRIBUTES]);
   const [sampleSelectionMode, setSampleSelectionMode] = useState<"one" | "range">("range");
 
+  // Copy Banks with samples options
+  const [copySamples, setCopySamples] = useState<boolean>(false);
+  const [sampleScope, setSampleScope] = useState<"referenced_only" | "all_configured">("referenced_only");
+  const [bankAudioMode, setBankAudioMode] = useState<AudioMode>("copy");
+  const [slotValidation, setSlotValidation] = useState<{
+    static_needed: number;
+    flex_needed: number;
+    static_available: number;
+    flex_available: number;
+    static_dedup: number;
+    flex_dedup: number;
+    missing_files: number;
+    is_valid: boolean;
+    error_message: string | null;
+  } | null>(null);
+
   // Fix Missing Samples state
   const [missingSamples, setMissingSamples] = useState<MissingSample[]>([]);
   const [poolOption, setPoolOption] = useState<PoolOption>(
@@ -392,7 +408,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   // Check audio pool status when destination project changes
   useEffect(() => {
     async function checkAudioPool() {
-      if (destProject && (operation === "copy_sample_slots" || operation === "fix_missing_samples")) {
+      if (destProject && (operation === "copy_sample_slots" || operation === "fix_missing_samples" || operation === "copy_bank")) {
         try {
           const status = await invoke<AudioPoolStatus>("get_audio_pool_status", { projectPath });
           setAudioPoolStatus(status);
@@ -412,12 +428,18 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           if (!sameSet && (audioMode === "move_to_pool" || audioMode === "mirror")) {
             setAudioMode("copy");
           }
+          if (!sameSet && (bankAudioMode === "move_to_pool" || bankAudioMode === "mirror")) {
+            setBankAudioMode("copy");
+          }
         } catch (err) {
           console.error("Error checking audio pool:", err);
           setAudioPoolStatus(null);
           setSameSetStatus(false);
           if (audioMode === "move_to_pool" || audioMode === "mirror") {
             setAudioMode("copy");
+          }
+          if (bankAudioMode === "move_to_pool" || bankAudioMode === "mirror") {
+            setBankAudioMode("copy");
           }
         }
       }
@@ -462,6 +484,30 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     }
   }, [sourceTrackIndices]);
 
+  // Validate bank sample slots when Copy Samples is enabled
+  useEffect(() => {
+    if (operation === "copy_bank" && copySamples && destProject && sourceBankIndex >= 0) {
+      invoke<{
+        static_needed: number;
+        flex_needed: number;
+        static_available: number;
+        flex_available: number;
+        static_dedup: number;
+        flex_dedup: number;
+        missing_files: number;
+        is_valid: boolean;
+        error_message: string | null;
+      }>("validate_bank_sample_slots", {
+        sourceProject: projectPath,
+        sourceBankIndex,
+        destProject,
+        sampleScope,
+      }).then(setSlotValidation).catch(() => setSlotValidation(null));
+    } else {
+      setSlotValidation(null);
+    }
+  }, [operation, copySamples, sampleScope, sourceBankIndex, destProject, projectPath]);
+
   // Helper to get operation details for display
   function getExecutingDetails(): string {
     switch (operation) {
@@ -492,12 +538,26 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   async function getBackupFiles(): Promise<{ project: string; files: string[]; label: string }[]> {
     const bankFile = (idx: number) => `bank${String(idx + 1).padStart(2, '0')}.work`;
     switch (operation) {
-      case "copy_bank":
-        return [{
+      case "copy_bank": {
+        const files = destBankIndices.map(bankFile);
+        if (copySamples) {
+          files.push("project.work", "markers.work");
+        }
+        const backups = [{
           project: destProject,
-          files: destBankIndices.map(bankFile),
+          files,
           label: "copy_bank",
         }];
+        // Back up source project files when Move to Pool (source gets modified)
+        if (copySamples && bankAudioMode === "move_to_pool") {
+          backups.push({
+            project: projectPath,
+            files: ["project.work"],
+            label: "copy_bank_source",
+          });
+        }
+        return backups;
+      }
       case "copy_parts":
         return [{
           project: destProject,
@@ -573,19 +633,39 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
       }
 
       switch (operation) {
-        case "copy_bank":
-          await invoke("copy_bank", {
+        case "copy_bank": {
+          const bankResult = await invoke<{
+            slots_copied_static: number;
+            slots_copied_flex: number;
+            slots_deduplicated: number;
+            shared_files_kept: number;
+            remap_log: string[];
+          }>("copy_bank", {
             sourceProject: projectPath,
             sourceBankIndex,
             destProject,
             destBankIndices,
+            copySamples: copySamples || undefined,
+            sampleScope: copySamples ? sampleScope : undefined,
+            audioMode: copySamples ? bankAudioMode : undefined,
+            copyAttributes: copySamples ? true : undefined,
+            attributeSelection: copySamples ? [...ALL_ATTRIBUTES] : undefined,
           });
-          setStatusMessage(`Bank ${String.fromCharCode(65 + sourceBankIndex)} copied to ${destBankIndices.length} bank${destBankIndices.length > 1 ? 's' : ''} successfully`);
+          if (copySamples && (bankResult.slots_copied_static > 0 || bankResult.slots_copied_flex > 0)) {
+            const parts = [];
+            if (bankResult.slots_copied_static > 0) parts.push(`${bankResult.slots_copied_static} Static`);
+            if (bankResult.slots_copied_flex > 0) parts.push(`${bankResult.slots_copied_flex} Flex`);
+            const dedup = bankResult.slots_deduplicated > 0 ? ` (${bankResult.slots_deduplicated} deduplicated)` : '';
+            setStatusMessage(`Bank ${String.fromCharCode(65 + sourceBankIndex)} copied to ${destBankIndices.length} bank${destBankIndices.length > 1 ? 's' : ''} with ${parts.join(' + ')} sample slots${dedup}`);
+          } else {
+            setStatusMessage(`Bank ${String.fromCharCode(65 + sourceBankIndex)} copied to ${destBankIndices.length} bank${destBankIndices.length > 1 ? 's' : ''} successfully`);
+          }
           if (destProject === projectPath) {
             if (onBankUpdated) destBankIndices.forEach(idx => onBankUpdated(idx));
             if (onProjectRefresh) onProjectRefresh();
           }
           break;
+        }
 
         case "copy_parts":
           for (const bankIdx of destPartBankIndices) {
@@ -1415,7 +1495,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           {/* Operation Description */}
           <div className="tools-description-pane">
             {operation === "copy_bank" && (
-              <p>Copies entire bank including all 4 Parts and 16 Patterns.</p>
+              <p>Copies entire bank including all 4 Parts and 16 Patterns. Optionally copies referenced sample slots with automatic remapping.</p>
             )}
             {operation === "copy_parts" && (
               <p>Copies Part sound design (machines, amps, LFOs, FX).</p>
@@ -1431,9 +1511,137 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             )}
           </div>
 
-        {(operation === "copy_patterns" || operation === "copy_tracks" || operation === "copy_sample_slots") && (
+        {(operation === "copy_bank" || operation === "copy_patterns" || operation === "copy_tracks" || operation === "copy_sample_slots") && (
         <div className="tools-options-panel">
           <h3>Options</h3>
+
+          {/* Copy Banks options */}
+          {operation === "copy_bank" && (
+            <>
+              <div className="tools-field">
+                <label>Copy Sample Slots</label>
+                <div className="tools-toggle-group">
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn ${copySamples ? "selected" : ""}`}
+                    onClick={() => setCopySamples(true)}
+                    title="Also copy sample slots referenced by this bank's tracks and patterns"
+                  >
+                    Yes
+                  </button>
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn ${!copySamples ? "selected" : ""}`}
+                    onClick={() => setCopySamples(false)}
+                    title="Copy only bank data (Parts and Patterns) without samples"
+                  >
+                    No
+                  </button>
+                </div>
+              </div>
+              {copySamples && (
+                <>
+                  <div className="tools-field">
+                    <label className="tools-sub-label">Sample Scope</label>
+                    <div className="tools-toggle-group">
+                      <button
+                        type="button"
+                        className={`tools-toggle-btn ${sampleScope === "referenced_only" ? "selected" : ""}`}
+                        onClick={() => setSampleScope("referenced_only")}
+                        title="Only copy sample slots actively used by tracks in Parts and by sample locks in Patterns of this bank"
+                      >
+                        Referenced only
+                      </button>
+                      <button
+                        type="button"
+                        className={`tools-toggle-btn ${sampleScope === "all_configured" ? "selected" : ""}`}
+                        onClick={() => setSampleScope("all_configured")}
+                        title="Copy all configured sample slots (all slots with an audio file assigned) from the source project"
+                      >
+                        All configured
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Slot validation status */}
+                  {slotValidation && (
+                    <div
+                      className={`tools-validation-status ${slotValidation.is_valid ? 'valid' : 'invalid'}`}
+                      title={slotValidation.is_valid
+                        ? `${slotValidation.static_needed} Static slot${slotValidation.static_needed !== 1 ? 's' : ''} and ${slotValidation.flex_needed} Flex slot${slotValidation.flex_needed !== 1 ? 's' : ''} referenced in source bank.\n${slotValidation.static_available} Static and ${slotValidation.flex_available} Flex slots available in destination.\n${slotValidation.static_dedup + slotValidation.flex_dedup > 0 ? `${slotValidation.static_dedup + slotValidation.flex_dedup} slot${slotValidation.static_dedup + slotValidation.flex_dedup !== 1 ? 's' : ''} already present in destination (same filename) - will be reused.` : 'No duplicates found in destination.'}`
+                        : slotValidation.error_message || ''
+                      }
+                    >
+                      {slotValidation.is_valid ? (
+                        <span>
+                          <i className="fas fa-check-circle"></i>
+                          {' '}{slotValidation.static_needed + slotValidation.flex_needed} slot{slotValidation.static_needed + slotValidation.flex_needed !== 1 ? 's' : ''} to copy
+                          {slotValidation.static_needed > 0 && ` (${slotValidation.static_needed} Static`}
+                          {slotValidation.static_needed > 0 && slotValidation.flex_needed > 0 && `, ${slotValidation.flex_needed} Flex)`}
+                          {slotValidation.static_needed > 0 && slotValidation.flex_needed === 0 && ')'}
+                          {slotValidation.static_needed === 0 && slotValidation.flex_needed > 0 && ` (${slotValidation.flex_needed} Flex)`}
+                          {(slotValidation.static_dedup + slotValidation.flex_dedup) > 0 && ` - ${slotValidation.static_dedup + slotValidation.flex_dedup} deduplicated`}
+                        </span>
+                      ) : (
+                        <span>
+                          <i className="fas fa-exclamation-circle"></i>
+                          {' '}{slotValidation.error_message}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {slotValidation && slotValidation.missing_files > 0 && (
+                    <div className="tools-validation-status warning">
+                      <span>
+                        <i className="fas fa-exclamation-triangle"></i>
+                        {' '}{slotValidation.missing_files} audio file{slotValidation.missing_files !== 1 ? 's' : ''} missing in source project - consider using{' '}
+                        <a href="#" onClick={(e) => { e.preventDefault(); setOperation("fix_missing_samples"); }}>Fix Missing Samples</a>
+                        {' '}first
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="tools-field">
+                    <label className="tools-sub-label">Audio Files</label>
+                    <div className="tools-toggle-group tools-audio-files-grid">
+                      <button
+                        type="button"
+                        className={`tools-toggle-btn ${bankAudioMode === "mirror" ? "selected" : ""}`}
+                        onClick={() => { if (sameSetStatus) { setBankAudioMode("mirror"); } }}
+                        disabled={!sameSetStatus}
+                        title={sameSetStatus
+                          ? "Mirror source references: Pool files stay in Pool, project-local files are copied to destination"
+                          : "Source and destination projects must be in the same Set (pool references would be invalid otherwise)"
+                        }
+                      >
+                        Mirror
+                      </button>
+                      <button
+                        type="button"
+                        className={`tools-toggle-btn ${bankAudioMode === "copy" ? "selected" : ""}`}
+                        onClick={() => setBankAudioMode("copy")}
+                        title="Copy all referenced audio files to the destination project's root directory"
+                      >
+                        Copy to project
+                      </button>
+                      <button
+                        type="button"
+                        className={`tools-toggle-btn ${bankAudioMode === "move_to_pool" ? "selected" : ""}`}
+                        onClick={() => { if (sameSetStatus) { setBankAudioMode("move_to_pool"); } }}
+                        disabled={!sameSetStatus}
+                        title={sameSetStatus
+                          ? "Move project-local audio files to the Set's Audio Pool and update paths in both projects"
+                          : "Source and destination projects must be in the same Set to use Audio Pool"
+                        }
+                      >
+                        Move to Pool
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </>
+          )}
 
           {/* Copy Patterns options */}
           {operation === "copy_patterns" && (
@@ -2657,12 +2865,13 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         <button
           className="tools-execute-btn"
           onClick={executeOperation}
-          disabled={isExecuting || (operation === "copy_bank" && sourceBankIndex === -1) || (operation === "copy_bank" && destBankIndices.length === 0) || (operation === "copy_parts" && sourceBankIndex === -1) || (operation === "copy_parts" && destPartBankIndices.length === 0) || (operation === "copy_parts" && sourcePartIndices.length === 0) || (operation === "copy_parts" && destPartIndices.length === 0) || (operation === "copy_tracks" && sourceBankIndex === -1) || (operation === "copy_tracks" && sourceTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex === -2) || (operation === "copy_tracks" && destBankIndex === -1) || (operation === "copy_tracks" && destTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex !== -1 && destTrackPartIndices.length === 0) || (operation === "copy_patterns" && sourceBankIndex === -1) || (operation === "copy_patterns" && sourcePatternIndices.length === 0) || (operation === "copy_patterns" && destBankIndex === -1) || (operation === "copy_patterns" && destPatternIndices.length === 0) || (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1) || (operation === "copy_patterns" && trackMode === "specific" && patternsTrackIndices.length === 0) || (operation === "copy_sample_slots" && sourceSampleIndices.length + destSampleStart > 128) || (operation === "copy_sample_slots" && !copyAssignments && !copyAttributes) || (operation === "copy_sample_slots" && copyAttributes && selectedAttributes.length === 0 && !copyAssignments)}
+          disabled={isExecuting || (operation === "copy_bank" && sourceBankIndex === -1) || (operation === "copy_bank" && destBankIndices.length === 0) || (operation === "copy_bank" && copySamples && slotValidation !== null && !slotValidation.is_valid) || (operation === "copy_parts" && sourceBankIndex === -1) || (operation === "copy_parts" && destPartBankIndices.length === 0) || (operation === "copy_parts" && sourcePartIndices.length === 0) || (operation === "copy_parts" && destPartIndices.length === 0) || (operation === "copy_tracks" && sourceBankIndex === -1) || (operation === "copy_tracks" && sourceTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex === -2) || (operation === "copy_tracks" && destBankIndex === -1) || (operation === "copy_tracks" && destTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex !== -1 && destTrackPartIndices.length === 0) || (operation === "copy_patterns" && sourceBankIndex === -1) || (operation === "copy_patterns" && sourcePatternIndices.length === 0) || (operation === "copy_patterns" && destBankIndex === -1) || (operation === "copy_patterns" && destPatternIndices.length === 0) || (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1) || (operation === "copy_patterns" && trackMode === "specific" && patternsTrackIndices.length === 0) || (operation === "copy_sample_slots" && sourceSampleIndices.length + destSampleStart > 128) || (operation === "copy_sample_slots" && !copyAssignments && !copyAttributes) || (operation === "copy_sample_slots" && copyAttributes && selectedAttributes.length === 0 && !copyAssignments)}
           title={
             isExecuting ? "Operation in progress..." :
             (operation === "copy_bank" && sourceBankIndex === -1 && destBankIndices.length === 0) ? "Select source and destination banks" :
             (operation === "copy_bank" && sourceBankIndex === -1) ? "Select a source bank" :
             (operation === "copy_bank" && destBankIndices.length === 0) ? "Select at least one destination bank" :
+            (operation === "copy_bank" && copySamples && slotValidation !== null && !slotValidation.is_valid) ? (slotValidation.error_message || "Not enough free slots in destination project") :
             (operation === "copy_parts" && sourceBankIndex === -1 && destPartBankIndices.length === 0) ? "Select source and destination banks" :
             (operation === "copy_parts" && sourceBankIndex === -1) ? "Select a source bank" :
             (operation === "copy_parts" && destPartBankIndices.length === 0) ? "Select at least one destination bank" :

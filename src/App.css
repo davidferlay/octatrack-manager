@@ -4711,6 +4711,49 @@ h1 {
   font-size: 0.85rem;
 }
 
+/* Slot validation status for Copy Banks */
+.tools-validation-status {
+  font-size: 0.9rem;
+  padding: 6px 10px;
+  border-radius: 4px;
+  margin-top: 4px;
+  text-align: center;
+}
+
+.tools-validation-status.valid {
+  color: var(--success-color, #4caf50);
+}
+
+.tools-validation-status.valid i {
+  margin-right: 4px;
+}
+
+.tools-validation-status.invalid {
+  color: var(--elektron-orange);
+}
+
+.tools-validation-status.invalid i {
+  margin-right: 4px;
+}
+
+.tools-validation-status.warning {
+  color: var(--elektron-orange);
+}
+
+.tools-validation-status.warning i {
+  margin-right: 4px;
+}
+
+.tools-validation-status.warning a {
+  color: var(--elektron-orange);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.tools-validation-status.warning a:hover {
+  opacity: 0.8;
+}
+
 /* Missing Samples List Modal */
 .modal-content.missing-samples-list-modal {
   max-width: 850px;
