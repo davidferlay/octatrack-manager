@@ -736,14 +736,14 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             sample_rate: audio_info.sample_rate,
                         });
                     } else {
-                        // Slot exists but has no sample
+                        // Slot exists but has no sample - still show attributes
                         static_slots.push(SampleSlot {
                             slot_id,
                             slot_type: "Static".to_string(),
                             path: None,
-                            gain: None,
-                            loop_mode: None,
-                            timestretch_mode: None,
+                            gain: Some(slot.gain),
+                            loop_mode: Some(format!("{:?}", slot.loop_mode)),
+                            timestretch_mode: Some(format!("{:?}", slot.timestrech_mode)),
                             source_location: None,
                             file_exists: false,
                             compatibility: None,
@@ -817,14 +817,14 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             sample_rate: audio_info.sample_rate,
                         });
                     } else {
-                        // Slot exists but has no sample
+                        // Slot exists but has no sample - still show attributes
                         flex_slots.push(SampleSlot {
                             slot_id,
                             slot_type: "Flex".to_string(),
                             path: None,
-                            gain: None,
-                            loop_mode: None,
-                            timestretch_mode: None,
+                            gain: Some(slot.gain),
+                            loop_mode: Some(format!("{:?}", slot.loop_mode)),
+                            timestretch_mode: Some(format!("{:?}", slot.timestrech_mode)),
                             source_location: None,
                             file_exists: false,
                             compatibility: None,
@@ -3790,6 +3790,64 @@ pub fn search_directory(
 ///
 /// If a matching block is not found in the file, a new block is appended with the
 /// provided fields plus OT defaults for any missing standard fields.
+/// Read raw field values from `[SAMPLE]` blocks in a project.work file.
+/// Returns a map of (TYPE, SLOT) → (field_name_upper → raw_value_string).
+/// This bypasses ot-tools-io parsing to preserve original values like TRIGQUANTIZATION=-1.
+fn read_raw_sample_fields(
+    project_file_path: &Path,
+) -> Result<
+    std::collections::HashMap<(String, u16), std::collections::HashMap<String, String>>,
+    String,
+> {
+    let raw_bytes = std::fs::read(project_file_path)
+        .map_err(|e| format!("Failed to read project file: {}", e))?;
+    let (decoded, _, _) = encoding_rs::WINDOWS_1258.decode(&raw_bytes);
+    let content = decoded.into_owned();
+
+    let mut result: std::collections::HashMap<
+        (String, u16),
+        std::collections::HashMap<String, String>,
+    > = std::collections::HashMap::new();
+
+    let mut pos = 0;
+    while let Some(block_start_offset) = content[pos..].find("[SAMPLE]") {
+        let block_start = pos + block_start_offset;
+        let block_end = content[block_start..]
+            .find("[/SAMPLE]")
+            .map(|i| block_start + i + "[/SAMPLE]".len())
+            .ok_or_else(|| "Malformed project file: unclosed [SAMPLE] block".to_string())?;
+
+        let block = &content[block_start..block_end];
+
+        let mut fields: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
+        let mut slot_type = String::new();
+        let mut slot_id: u16 = 0;
+
+        for line in block.lines() {
+            let trimmed = line.trim_end_matches('\r');
+            if let Some(eq_pos) = trimmed.find('=') {
+                let key = trimmed[..eq_pos].to_uppercase();
+                let val = trimmed[eq_pos + 1..].to_string();
+                if key == "TYPE" {
+                    slot_type = val.clone();
+                } else if key == "SLOT" {
+                    slot_id = val.parse().unwrap_or(0);
+                }
+                fields.insert(key, val);
+            }
+        }
+
+        if !slot_type.is_empty() && slot_id > 0 {
+            result.insert((slot_type, slot_id), fields);
+        }
+
+        pos = block_end;
+    }
+
+    Ok(result)
+}
+
 ///
 /// This avoids the ot-tools-io round-trip bug that drops/corrupts fields not modeled
 /// in its `SlotAttributes` struct.
@@ -3810,20 +3868,26 @@ fn replace_sample_fields_surgical(
     let (decoded, _, _) = encoding_rs::WINDOWS_1258.decode(&raw_bytes);
     let content = decoded.into_owned();
 
-    let mut result = String::with_capacity(content.len());
-    let mut pos = 0;
+    // Phase 1: Extract all [SAMPLE] blocks and the non-sample parts of the file
+    let pre_samples; // Everything before first [SAMPLE]
+    let mut post_samples = String::new(); // Everything after last [/SAMPLE]
+    let mut existing_blocks: Vec<(String, u16, String)> = Vec::new(); // (type, slot, block_text)
     let mut applied: std::collections::HashSet<(String, u16)> = std::collections::HashSet::new();
+
+    let mut pos = 0;
+    let mut first_block_start: Option<usize> = None;
+    let mut last_block_end: usize = 0;
 
     while let Some(block_start_offset) = content[pos..].find("[SAMPLE]") {
         let block_start = pos + block_start_offset;
+        if first_block_start.is_none() {
+            first_block_start = Some(block_start);
+        }
         let block_end_tag = "[/SAMPLE]";
         let block_end = content[block_start..]
             .find(block_end_tag)
             .map(|i| block_start + i + block_end_tag.len())
             .ok_or_else(|| "Malformed project file: unclosed [SAMPLE] block".to_string())?;
-
-        // Copy everything before this block
-        result.push_str(&content[pos..block_start]);
 
         let block = &content[block_start..block_end];
 
@@ -3831,43 +3895,72 @@ fn replace_sample_fields_surgical(
         let slot_type = block
             .lines()
             .find(|l| l.starts_with("TYPE="))
-            .map(|l| l.trim_end_matches('\r')[5..].to_string());
+            .map(|l| l.trim_end_matches('\r')[5..].to_string())
+            .unwrap_or_default();
         let slot_id = block
             .lines()
             .find(|l| l.starts_with("SLOT="))
-            .and_then(|l| l.trim_end_matches('\r')[5..].parse::<u16>().ok());
+            .and_then(|l| l.trim_end_matches('\r')[5..].parse::<u16>().ok())
+            .unwrap_or(0);
 
-        if let (Some(ref stype), Some(sid)) = (slot_type, slot_id) {
-            let key = (stype.clone(), sid);
-            if let Some(updates) = field_updates.get(&key) {
-                // Patch individual lines within this block
-                let patched = patch_sample_block_fields(block, updates);
-                result.push_str(&patched);
-                applied.insert(key);
-                pos = block_end;
-                continue;
-            }
-        }
+        let key = (slot_type.clone(), slot_id);
 
-        // Preserve block verbatim
-        result.push_str(block);
+        // Apply patches if needed
+        let final_block = if let Some(updates) = field_updates.get(&key) {
+            applied.insert(key.clone());
+            patch_sample_block_fields(block, updates)
+        } else {
+            block.to_string()
+        };
+
+        existing_blocks.push((slot_type, slot_id, final_block));
+        last_block_end = block_end;
         pos = block_end;
     }
 
-    // Append remainder after last block
-    let remainder = &content[pos..];
+    // Determine pre/post content
+    if let Some(fbs) = first_block_start {
+        pre_samples = content[..fbs].to_string();
+        post_samples = content[last_block_end..].to_string();
+    } else {
+        // No existing blocks at all — put pre as everything, post as empty
+        pre_samples = content.clone();
+    }
 
-    // Insert any new blocks (not found in existing file) before the footer
-    if applied.len() < field_updates.len() {
-        for (key, fields) in field_updates {
-            if !applied.contains(key) {
-                result.push_str("\r\n\r\n");
-                result.push_str(&build_new_sample_block(&key.0, key.1, fields));
-            }
+    // Phase 2: Add new blocks for unapplied updates
+    for (key, fields) in field_updates {
+        if !applied.contains(key) {
+            let new_block = build_new_sample_block(&key.0, key.1, fields);
+            existing_blocks.push((key.0.clone(), key.1, new_block));
         }
     }
 
-    result.push_str(remainder);
+    // Phase 3: Sort ALL blocks in OT canonical order:
+    // FLEX 001-128, FLEX 129-136 (recording buffers), STATIC 001-128
+    existing_blocks.sort_by(|(type_a, slot_a, _), (type_b, slot_b, _)| {
+        let type_order = |t: &str, s: u16| -> (u8, u16) {
+            match t.to_uppercase().as_str() {
+                "FLEX" if s <= 128 => (0, s),
+                "FLEX" => (1, s),          // recording buffers 129-136
+                "STATIC" => (2, s),
+                _ => (3, s),
+            }
+        };
+        type_order(type_a, *slot_a).cmp(&type_order(type_b, *slot_b))
+    });
+
+    // Phase 4: Rebuild file
+    let mut result = String::with_capacity(content.len());
+    result.push_str(&pre_samples);
+
+    for (i, (_, _, block_text)) in existing_blocks.iter().enumerate() {
+        if i > 0 {
+            result.push_str("\r\n\r\n");
+        }
+        result.push_str(block_text);
+    }
+
+    result.push_str(&post_samples);
 
     // Encode back to Windows-1258 and write
     let (encoded, _, _) = encoding_rs::WINDOWS_1258.encode(&result);
@@ -3942,10 +4035,17 @@ fn build_new_sample_block(
         "PATH={}\r\n",
         fields.get("PATH").map(|s| s.as_str()).unwrap_or("")
     ));
-    s.push_str(&format!(
-        "BPMx24={}\r\n",
-        fields.get("BPMX24").map(|s| s.as_str()).unwrap_or("2880")
-    ));
+
+    // Only write BPMx24 if explicitly present in fields (avoid writing defaults)
+    if let Some(bpm) = fields.get("BPMX24") {
+        s.push_str(&format!("BPMx24={}\r\n", bpm));
+    }
+
+    // Write TRIM_BARSx100 if present (not modeled by ot-tools-io)
+    if let Some(trim_bars) = fields.get("TRIM_BARSX100") {
+        s.push_str(&format!("TRIM_BARSx100={}\r\n", trim_bars));
+    }
+
     s.push_str(&format!(
         "TSMODE={}\r\n",
         fields.get("TSMODE").map(|s| s.as_str()).unwrap_or("2")
@@ -3963,7 +4063,7 @@ fn build_new_sample_block(
         fields
             .get("TRIGQUANTIZATION")
             .map(|s| s.as_str())
-            .unwrap_or("255")
+            .unwrap_or("-1")
     ));
     s.push_str("[/SAMPLE]");
     s
@@ -5491,6 +5591,69 @@ pub fn copy_sample_slots(
                         );
                         if !fields.is_empty() {
                             field_updates.insert(("FLEX".to_string(), slot.slot_id as u16), fields);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Override field values with raw values from source project.work to avoid
+        // ot-tools-io round-trip issues:
+        // - TRIGQUANTIZATION=-1 normalized to 255
+        // - BPMx24 defaulting to 2880 when source has no BPMx24 line
+        // - TRIM_BARSx100 not modeled at all (lost on round-trip)
+        if copy_attributes || copy_assignments {
+            let raw_source_fields = read_raw_sample_fields(&source_project_file_path)?;
+            for (&src_slot_id_val, &dest_slot_id_val) in
+                source_indices.iter().zip(dest_indices.iter())
+            {
+                let types_to_check: Vec<&str> = match slot_type {
+                    "static" => vec!["STATIC"],
+                    "flex" => vec!["FLEX"],
+                    "both" => vec!["STATIC", "FLEX"],
+                    _ => vec![],
+                };
+                for stype in &types_to_check {
+                    let src_key = (stype.to_string(), src_slot_id_val as u16);
+                    let dest_key = (stype.to_string(), dest_slot_id_val as u16);
+                    if let Some(raw_fields) = raw_source_fields.get(&src_key) {
+                        if let Some(dest_fields) = field_updates.get_mut(&dest_key) {
+                            if copy_attributes {
+                                // For each attribute field we're writing, use the raw source value
+                                // instead of the ot-tools-io parsed value
+                                let attr_field_map: &[(&str, &str)] = &[
+                                    ("gain", "GAIN"),
+                                    ("bpm", "BPMX24"),
+                                    ("timestretch", "TSMODE"),
+                                    ("loop", "LOOPMODE"),
+                                    ("trig_quant", "TRIGQUANTIZATION"),
+                                ];
+                                for (attr_name, field_key) in attr_field_map {
+                                    if attr_selected(attr_name) {
+                                        // Find the raw value (case-insensitive key lookup)
+                                        let raw_val = raw_fields.iter().find(|(k, _)| {
+                                            k.eq_ignore_ascii_case(field_key)
+                                        });
+                                        if let Some((_, val)) = raw_val {
+                                            // Replace with raw value from source
+                                            dest_fields.insert(field_key.to_string(), val.clone());
+                                        } else {
+                                            // Source file doesn't have this field — remove
+                                            // so we don't write ot-tools-io defaults
+                                            dest_fields.remove(*field_key);
+                                        }
+                                    }
+                                }
+
+                                // Copy TRIM_BARSx100 from source if present
+                                // (not modeled by ot-tools-io, so must be read raw)
+                                if let Some(trim_val) = raw_fields.get("TRIM_BARSX100") {
+                                    dest_fields.insert(
+                                        "TRIM_BARSX100".to_string(),
+                                        trim_val.clone(),
+                                    );
+                                }
+                            }
                         }
                     }
                 }
@@ -12728,7 +12891,6 @@ mod tests {
         /// Helper: extract a specific field value from a [SAMPLE] block with given TYPE+SLOT
         fn extract_field_from_output(output: &str, slot_type: &str, slot_id: u16, field: &str) -> Option<String> {
             let blocks: Vec<&str> = output.split("[SAMPLE]").collect();
-            let field_upper = field.to_uppercase();
             for block in &blocks[1..] {
                 let type_match = block.lines().any(|l| {
                     l.trim_end_matches('\r').eq_ignore_ascii_case(&format!("TYPE={}", slot_type))
@@ -12765,8 +12927,8 @@ mod tests {
             assert_eq!(extract_field_from_output(&output, "FLEX", 1, "BPMx24"), Some("3408".to_string()));
             // TRIGQUANTIZATION should remain at dest value
             assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIGQUANTIZATION"), Some("3".to_string()));
-            // TRIM_BARSx100 should remain at dest value
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"), Some("200".to_string()));
+            // TRIM_BARSx100 should be copied from source (400) when copy_attributes=true
+            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"), Some("400".to_string()));
             // PATH should NOT change (no assignments)
             assert_eq!(extract_field_from_output(&output, "FLEX", 1, "PATH"), Some("snare.wav".to_string()));
         }
@@ -12782,8 +12944,8 @@ mod tests {
             // GAIN should stay at dest value
             assert_eq!(extract_field_from_output(&output, "FLEX", 1, "GAIN"), Some("48".to_string()));
             // Wait - both have GAIN=48 from template. Let me verify the template sets it.
-            // TRIM_BARSx100 preserved
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"), Some("200".to_string()));
+            // TRIM_BARSx100 copied from source
+            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"), Some("400".to_string()));
         }
 
         #[test]
@@ -12808,8 +12970,8 @@ mod tests {
             );
             // LOOPMODE copied from source (both are 1 from template)
             assert_eq!(extract_field_from_output(&output, "FLEX", 1, "LOOPMODE"), Some("1".to_string()));
-            // TRIM_BARSx100 preserved
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"), Some("200".to_string()));
+            // TRIM_BARSx100 copied from source
+            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"), Some("400".to_string()));
         }
 
         #[test]
@@ -12819,14 +12981,14 @@ mod tests {
                 &[("FLEX", 1, "snare.wav", Some(3408), Some(3), Some(200))],
                 false, true, &["trig_quant"], "flex", &[1],
             );
-            // TRIGQUANTIZATION: source has -1, ot-tools-io reads it as TrigQuantizationMode
-            // The field update uses (slot.trig_quantization_mode as u8).to_string()
-            // -1 in file -> parsed by ot-tools-io -> TrigQuantizationMode variant
-            // We need to check what ot-tools-io returns for -1
-            let val = extract_field_from_output(&output, "FLEX", 1, "TRIGQUANTIZATION");
-            assert!(val.is_some(), "TRIGQUANTIZATION should be present");
-            // TRIM_BARSx100 preserved
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"), Some("200".to_string()));
+            // TRIGQUANTIZATION: source has -1, should be preserved as -1 (not normalized to 255)
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "TRIGQUANTIZATION"),
+                Some("-1".to_string()),
+                "TRIGQUANTIZATION=-1 should be preserved from source, not normalized to 255"
+            );
+            // TRIM_BARSx100 copied from source
+            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"), Some("400".to_string()));
         }
 
         #[test]
@@ -12842,8 +13004,70 @@ mod tests {
             assert_eq!(extract_field_from_output(&output, "FLEX", 1, "LOOPMODE"), Some("1".to_string()));
             // PATH should NOT change
             assert_eq!(extract_field_from_output(&output, "FLEX", 1, "PATH"), Some("snare.wav".to_string()));
-            // TRIM_BARSx100 should be preserved (not a copied attribute)
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"), Some("200".to_string()));
+            // TRIM_BARSx100 should be copied from source (400), not preserved from dest (200)
+            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"), Some("400".to_string()));
+        }
+
+        #[test]
+        fn test_surgical_copy_trim_bars_from_source() {
+            // Source has TRIM_BARSx100=400 but no BPMx24
+            // Destination should get TRIM_BARSx100=400 and NOT get BPMx24
+            let src_temp = TempDir::new().unwrap();
+            let dest_temp = TempDir::new().unwrap();
+            let src_dir = src_temp.path();
+            let dest_dir = dest_temp.path();
+
+            for bank_num in 1..=16 {
+                let bank_file = BankFile::default();
+                bank_file.to_data_file(&src_dir.join(format!("bank{:02}.work", bank_num))).unwrap();
+                bank_file.to_data_file(&dest_dir.join(format!("bank{:02}.work", bank_num))).unwrap();
+            }
+            let markers = MarkersFile::default();
+            markers.to_data_file(&src_dir.join("markers.work")).unwrap();
+            markers.to_data_file(&dest_dir.join("markers.work")).unwrap();
+
+            // Source: FLEX slot 1 with TRIM_BARSx100 but NO BPMx24
+            let src_content = create_raw_project_work_with_custom_fields(
+                &[("FLEX", 1, "kick.wav", None, Some(-1), Some(400))],
+            );
+            write_raw_project_work(src_dir, &src_content);
+            fs::write(src_dir.join("kick.wav"), b"audio").unwrap();
+
+            // Dest: default project (only recording buffers)
+            let dest_project = ProjectFile::default();
+            dest_project.to_data_file(&dest_dir.join("project.work")).unwrap();
+
+            copy_sample_slots(
+                src_dir.to_str().unwrap(),
+                dest_dir.to_str().unwrap(),
+                "flex",
+                vec![1],
+                vec![1],
+                false, "mirror", true,
+                vec!["gain".to_string(), "bpm".to_string(), "timestretch".to_string(),
+                     "loop".to_string(), "trig_quant".to_string()],
+            ).unwrap();
+
+            let output = read_raw_project_work(dest_dir);
+
+            // TRIM_BARSx100 should be copied from source
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"),
+                Some("400".to_string()),
+                "TRIM_BARSx100 should be copied from source"
+            );
+            // BPMx24 should NOT be present (source didn't have it)
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "BPMX24"),
+                None,
+                "BPMx24 should not be written when source doesn't have it"
+            );
+            // TRIGQUANTIZATION should be -1 from source
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "TRIGQUANTIZATION"),
+                Some("-1".to_string()),
+                "TRIGQUANTIZATION should preserve raw -1 from source"
+            );
         }
 
         #[test]
@@ -12875,8 +13099,8 @@ mod tests {
             // GAIN and BPMx24 should be copied
             assert_eq!(extract_field_from_output(&output, "FLEX", 1, "GAIN"), Some("48".to_string()));
             assert_eq!(extract_field_from_output(&output, "FLEX", 1, "BPMX24"), Some("2880".to_string()));
-            // TRIM_BARSx100 preserved (not a selected attribute)
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"), Some("200".to_string()));
+            // TRIM_BARSx100 copied from source when copy_attributes=true
+            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"), Some("400".to_string()));
         }
 
         #[test]
@@ -12888,8 +13112,8 @@ mod tests {
             );
             assert_eq!(extract_field_from_output(&output, "STATIC", 1, "PATH"), Some("pad.wav".to_string()));
             assert_eq!(extract_field_from_output(&output, "STATIC", 1, "BPMX24"), Some("2400".to_string()));
-            // TRIM_BARSx100 preserved
-            assert_eq!(extract_field_from_output(&output, "STATIC", 1, "TRIM_BARSx100"), Some("300".to_string()));
+            // TRIM_BARSx100 copied from source (100)
+            assert_eq!(extract_field_from_output(&output, "STATIC", 1, "TRIM_BARSx100"), Some("100".to_string()));
         }
 
         #[test]
@@ -12908,16 +13132,16 @@ mod tests {
             // Slot 1: PATH and BPM copied
             assert_eq!(extract_field_from_output(&output, "FLEX", 1, "PATH"), Some("kick.wav".to_string()));
             assert_eq!(extract_field_from_output(&output, "FLEX", 1, "BPMX24"), Some("2880".to_string()));
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"), Some("50".to_string()));
+            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"), Some("400".to_string()));
             // Slot 2: PATH and BPM copied
             assert_eq!(extract_field_from_output(&output, "FLEX", 2, "PATH"), Some("snare.wav".to_string()));
             assert_eq!(extract_field_from_output(&output, "FLEX", 2, "BPMX24"), Some("3600".to_string()));
-            assert_eq!(extract_field_from_output(&output, "FLEX", 2, "TRIM_BARSx100"), Some("60".to_string()));
+            assert_eq!(extract_field_from_output(&output, "FLEX", 2, "TRIM_BARSx100"), Some("100".to_string()));
         }
 
         #[test]
-        fn test_surgical_copy_preserves_slot_ordering() {
-            // Dest has slots 3, 1, 2 - ordering should be preserved after copy
+        fn test_surgical_copy_enforces_ot_canonical_ordering() {
+            // Dest has slots 3, 1, 2 in non-canonical order - should be re-sorted to 1, 2, 3
             let src_samples = vec![
                 ("FLEX", 2, "src2.wav", Some(2880), Some(-1), Some(400)),
             ];
@@ -12959,12 +13183,65 @@ mod tests {
 
             let output = read_raw_project_work(dest_dir);
 
-            // Verify slot ordering: 3 appears before 1 which appears before 2
-            let pos3 = output.find("SLOT=003").expect("slot 3 present");
+            // Verify OT canonical ordering: 1 before 2 before 3
             let pos1 = output.find("SLOT=001").expect("slot 1 present");
             let pos2 = output.find("SLOT=002").expect("slot 2 present");
-            assert!(pos3 < pos1, "Slot 3 should appear before slot 1 (original ordering)");
-            assert!(pos1 < pos2, "Slot 1 should appear before slot 2 (original ordering)");
+            let pos3 = output.find("SLOT=003").expect("slot 3 present");
+            assert!(pos1 < pos2, "Slot 1 should appear before slot 2 (OT canonical order)");
+            assert!(pos2 < pos3, "Slot 2 should appear before slot 3 (OT canonical order)");
+        }
+
+        #[test]
+        fn test_surgical_copy_recording_buffers_after_regular_slots() {
+            // When copying to a project that has recording buffers (129-136) but no regular slots,
+            // the new regular slots should appear BEFORE the recording buffers
+            let src_temp = TempDir::new().unwrap();
+            let dest_temp = TempDir::new().unwrap();
+            let src_dir = src_temp.path();
+            let dest_dir = dest_temp.path();
+
+            for bank_num in 1..=16 {
+                let bank_file = BankFile::default();
+                bank_file.to_data_file(&src_dir.join(format!("bank{:02}.work", bank_num))).unwrap();
+                bank_file.to_data_file(&dest_dir.join(format!("bank{:02}.work", bank_num))).unwrap();
+            }
+            let markers = MarkersFile::default();
+            markers.to_data_file(&src_dir.join("markers.work")).unwrap();
+            markers.to_data_file(&dest_dir.join("markers.work")).unwrap();
+
+            // Source has FLEX slots 1 and 3
+            write_raw_project_work(
+                src_dir,
+                &create_raw_project_work_with_custom_fields(&[
+                    ("FLEX", 1, "s1.wav", Some(2880), Some(-1), Some(100)),
+                    ("FLEX", 3, "s3.wav", Some(2880), Some(-1), Some(100)),
+                ]),
+            );
+            fs::write(src_dir.join("s1.wav"), b"audio").unwrap();
+            fs::write(src_dir.join("s3.wav"), b"audio").unwrap();
+
+            // Dest is a default project (has recording buffers FLEX 129-136 only)
+            let dest_project = ProjectFile::default();
+            dest_project.to_data_file(&dest_dir.join("project.work")).unwrap();
+
+            copy_sample_slots(
+                src_dir.to_str().unwrap(),
+                dest_dir.to_str().unwrap(),
+                "flex",
+                vec![1, 3],
+                vec![1, 3],
+                true, "mirror", false, vec![],
+            ).unwrap();
+
+            let output = read_raw_project_work(dest_dir);
+
+            // FLEX 001 and 003 must appear BEFORE recording buffers 129-136
+            let pos1 = output.find("SLOT=001").expect("slot 1 present");
+            let pos3 = output.find("SLOT=003").expect("slot 3 present");
+            let pos129 = output.find("SLOT=129").expect("slot 129 present");
+            assert!(pos1 < pos129, "Regular slot 1 should appear before recording buffer 129");
+            assert!(pos3 < pos129, "Regular slot 3 should appear before recording buffer 129");
+            assert!(pos1 < pos3, "Slot 1 should appear before slot 3");
         }
 
         #[test]
@@ -12984,6 +13261,59 @@ mod tests {
                     );
                 }
             }
+        }
+
+        #[test]
+        fn test_surgical_copy_new_blocks_in_ot_order() {
+            // Copy multiple slots to empty dest - should appear in OT order: FLEX 1-N, then STATIC 1-N
+            let src_temp = TempDir::new().unwrap();
+            let dest_temp = TempDir::new().unwrap();
+            let src_dir = src_temp.path();
+            let dest_dir = dest_temp.path();
+
+            for bank_num in 1..=16 {
+                let bank_file = BankFile::default();
+                bank_file.to_data_file(&src_dir.join(format!("bank{:02}.work", bank_num))).unwrap();
+                bank_file.to_data_file(&dest_dir.join(format!("bank{:02}.work", bank_num))).unwrap();
+            }
+            let markers = MarkersFile::default();
+            markers.to_data_file(&src_dir.join("markers.work")).unwrap();
+            markers.to_data_file(&dest_dir.join("markers.work")).unwrap();
+
+            // Source has slots 3, 1, 5 (out of order)
+            write_raw_project_work(
+                src_dir,
+                &create_raw_project_work_with_custom_fields(&[
+                    ("FLEX", 3, "s3.wav", Some(2880), Some(-1), Some(100)),
+                    ("FLEX", 1, "s1.wav", Some(2880), Some(-1), Some(100)),
+                    ("FLEX", 5, "s5.wav", Some(2880), Some(-1), Some(100)),
+                ]),
+            );
+            fs::write(src_dir.join("s1.wav"), b"audio").unwrap();
+            fs::write(src_dir.join("s3.wav"), b"audio").unwrap();
+            fs::write(src_dir.join("s5.wav"), b"audio").unwrap();
+
+            // Dest is empty (default project.work with no sample blocks except recording buffers)
+            let dest_project = ProjectFile::default();
+            dest_project.to_data_file(&dest_dir.join("project.work")).unwrap();
+
+            copy_sample_slots(
+                src_dir.to_str().unwrap(),
+                dest_dir.to_str().unwrap(),
+                "flex",
+                vec![1, 3, 5],
+                vec![1, 3, 5],
+                true, "mirror", false, vec![],
+            ).unwrap();
+
+            let output = read_raw_project_work(dest_dir);
+
+            // Verify ordering: FLEX slot 1 before 3 before 5
+            let pos1 = output.find("SLOT=001").expect("slot 1 present");
+            let pos3 = output.find("SLOT=003").expect("slot 3 present");
+            let pos5 = output.find("SLOT=005").expect("slot 5 present");
+            assert!(pos1 < pos3, "Slot 1 should appear before slot 3");
+            assert!(pos3 < pos5, "Slot 3 should appear before slot 5");
         }
 
         #[test]
