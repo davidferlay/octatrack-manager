@@ -57,11 +57,11 @@
 | SM42 OK | Copy Sample Slots | Static + Flex | Select "Static + Flex", copy slots, execute | Both slot types copied |
 | SM43 OK | Copy Sample Slots | Static only | Select "Static", copy slots, execute | Only Static slot data copied; Flex untouched |
 | SM44 OK | Copy Sample Slots | Flex only | Select "Flex", copy slots, execute | Only Flex slot data copied; Static untouched |
-| SM83 | Copy Sample Slots | Execute disabled on overflow | Range mode, source 1-50, set dest start to 100 | Warning "Some slots will overflow" shown; Execute button disabled with tooltip |
+| SM83 OK | Copy Sample Slots | Execute disabled on overflow | Range mode, source 1-50, set dest start to 100 | Warning "Some slots will overflow" shown; Execute button disabled with tooltip |
 | **Sample Assignments** | | | | |
-| SM-SA1 | Copy Sample Slots | Assignments Copy — paths copied | Assignments=Copy, execute | Destination slot paths match source paths |
-| SM-SA2 | Copy Sample Slots | Assignments Don't Copy — paths untouched | Assignments=Don't Copy, Attributes=Copy, execute | Destination slot paths unchanged; only attributes updated |
-| SM-SA3 | Copy Sample Slots | Both Don't Copy — Execute disabled | Set both Assignments and Attributes to Don't Copy | Execute button disabled with tooltip "Select at least one…" |
+| SM-SA1 OK | Copy Sample Slots | Assignments Copy — paths copied | Assignments=Copy, execute | Destination slot paths match source paths |
+| SM-SA2 OK | Copy Sample Slots | Assignments Don't Copy — paths untouched | Assignments=Don't Copy, Attributes=Copy, execute | Destination slot paths unchanged; only attributes updated |
+| SM-SA3 OK | Copy Sample Slots | Both Don't Copy — Execute disabled | Set both Assignments and Attributes to Don't Copy | Execute button disabled with tooltip "Select at least one…" |
 | SM-SA4 | Copy Sample Slots | Missing source files warning | Assignments=Copy, source slots reference missing .wav files | Warning badge shows "N missing file(s)" next to Audio Files label |
 | SM-SA5 | Copy Sample Slots | Warning hidden when Assignments=Don't Copy | Set Assignments=Don't Copy | No missing files badge visible |
 | **Audio Files (sub-option of Assignments=Copy)** | | | | |
@@ -78,15 +78,22 @@
 | SM-AF10 | Copy Sample Slots | .ot files never copied with audio | Assignments=Copy, any audio mode, source slot has .ot file | Only .wav copied; .ot file NOT present in destination |
 | SM-AF11 | Copy Sample Slots | Move to Pool reintegrates .ot | Move to Pool, source slot has .ot sidecar file | .ot data re-integrated into source project.work + markers.work; .ot file deleted |
 | **Sample Attributes** | | | | |
-| SM-AT1 | Copy Sample Slots | Attributes Copy — all selected by default | Attributes=Copy, all attribute buttons selected (default), execute | All AED settings (gain, BPM, timestretch, loop, trig quant, trim, loop point, slices) copied |
-| SM-AT2 | Copy Sample Slots | Attributes Don't Copy — dest attrs untouched | Attributes=Don't Copy, Assignments=Copy, execute | Destination slot attributes preserved (gain, BPM, etc. unchanged from destination values) |
-| SM-AT3 | Copy Sample Slots | Selective attributes — gain only | Attributes=Copy, only "Gain" selected, execute | Only gain copied; BPM, loop, trim etc. remain at destination values |
-| SM-AT4 | Copy Sample Slots | Selective attributes — markers only | Attributes=Copy, only "Trim points" + "Slices" selected, execute | Only trim and slices markers copied; gain, BPM, loop mode unchanged |
-| SM-AT5 | Copy Sample Slots | None button deselects all | Click "None" button | All attribute buttons deselected |
-| SM-AT6 | Copy Sample Slots | All button selects all | Click "None" then "All" | All attribute buttons re-selected |
+| SM-AT1 OK | Copy Sample Slots | Attributes Copy — all selected by default | Attributes=Copy, all attribute buttons selected (default), execute | All AED settings (gain, BPM, timestretch, loop, trig quant, trim, loop point, slices) copied |
+| SM-AT2 OK | Copy Sample Slots | Attributes Don't Copy — dest attrs untouched | Attributes=Don't Copy, Assignments=Copy, execute | Destination slot attributes preserved (gain, BPM, etc. unchanged from destination values) |
+| SM-AT3 OK | Copy Sample Slots | Selective attributes — gain only | Attributes=Copy, only "Gain" selected, execute | Only gain copied; BPM, loop, trim etc. remain at destination values |
+| SM-AT4 OK | Copy Sample Slots | Selective attributes — markers only | Attributes=Copy, only "Trim points" + "Slices" selected, execute | Only trim and slices markers copied; gain, BPM, loop mode unchanged |
+| SM-AT5 OK | Copy Sample Slots | None button deselects all | Click "None" button | All attribute buttons deselected |
+| SM-AT6 OK | Copy Sample Slots | All button selects all | Click "None" then "All" | All attribute buttons re-selected |
 | SM-AT7 | Copy Sample Slots | .ot priority for attributes | Source slot has .ot file with gain=90, project.work has gain=50. Attributes=Copy with Gain selected | Destination gets gain=90 (.ot value takes priority) |
 | SM-AT8 | Copy Sample Slots | Fallback to project.work when no .ot | Source slot has no .ot file, project.work has gain=80. Attributes=Copy with Gain selected | Destination gets gain=80 (project.work fallback) |
 | SM-AT9 | Copy Sample Slots | Attributes written to work files only | Copy attributes to dest | Dest project.work and/or markers.work updated; no .ot file created in destination |
+| SM-AT10 OK | Copy Sample Slots | Selective: loop_point only | Attributes=Copy, only "Loop point" selected, execute | Only loop_point copied in markers.work; trim, slices, project.work attrs unchanged |
+| SM-AT11 OK | Copy Sample Slots | Assignments OFF + Attributes ON | Assignments=Don't Copy, Attributes=Copy, execute | Dest path unchanged; selected attributes copied from source |
+| SM-AT12 OK | Copy Sample Slots | Assignments ON + Attributes OFF | Assignments=Copy, Attributes=Don't Copy, execute | Path copied; dest attributes and markers preserved at original values |
+| SM-AT13 OK | Copy Sample Slots | Copy slot with slices | Source slot has 16 slices. Attributes=Copy with Slices selected | All slice data (start/end/loop per slice + count) transferred correctly |
+| SM-AT14 OK | Copy Sample Slots | Raw field preservation | Source has TRIGQUANTIZATION=-1. Copy with trig_quant selected | Dest gets TRIGQUANTIZATION=-1 (not corrupted to 255); TRIM_BARSx100 preserved |
+| SM-AT15 OK | Copy Sample Slots | No spurious BPMx24 | Source slot has no BPMx24 line. Copy with bpm selected | Dest preserves its existing BPMx24 value (no spurious 2880 written) |
+| SM-AT16 | Copy Sample Slots | Recording buffers not affected | Copy flex slots 1-128 between projects | Recording buffers (flex slots 129-136) are untouched in both source and destination |
 | **Backup Feature** | | | | |
 | SM75 OK | All operations | Backup before copy execute | Execute any copy operation | `backups/` directory created in dest project with timestamped subfolder containing destination files |
 | SM81 OK | Copy Sample Slots | Backup source on Move to Pool | Execute Move to Pool | Source project `backups/` contains `project.work` and audio files that were moved/deleted; AUDIO pool files not backed up |

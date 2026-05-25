@@ -72,6 +72,10 @@ When **Copy** is selected, individual attribute toggle buttons let you select ex
 Use **None** to deselect all, or **All** to select all attributes.
 
 :::note
+Recording buffers (Flex slots 129–136) are not affected by Copy Sample Slots — only user-selectable slots 1–128 are copied.
+:::
+
+:::note
 The **Execute** button is disabled when both Sample Assignments and Sample Attributes are set to "Don't Copy" (nothing to do).
 :::
 
