@@ -224,6 +224,7 @@ async function setupTauriMocks(page: Page, overrides?: { sameSet?: boolean; with
           }
 
           case 'copy_sample_slots':
+            (window as any).__lastInvokeArgs__ = args
             return { shared_files_kept: 0 }
 
           case 'copy_bank':
@@ -508,9 +509,8 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
     await expect(page.locator('.tools-attr-row', { hasText: 'Gain' })).not.toBeVisible()
 
     // Click Copy to show attribute list
-    const copyBtns = page.locator('.tools-toggle-btn', { hasText: 'Copy' })
-    // Sample Attributes Copy button is the third Copy button (after Slot Type options and Sample Assignments Copy)
-    await copyBtns.nth(2).click()
+    const attrSection = page.locator('.tools-field:has(label:text("Sample Attributes"))')
+    await attrSection.locator('.tools-toggle-btn', { hasText: /^Copy$/ }).click()
     await page.waitForTimeout(200)
 
     // Attribute rows should now be visible
@@ -523,17 +523,105 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
 
   test('Attribute list hidden when attributes Don\'t Copy selected', async ({ page }) => {
     // First enable Copy for attributes
-    const copyBtns = page.locator('.tools-toggle-btn', { hasText: 'Copy' })
-    await copyBtns.nth(2).click()
+    const attrSection = page.locator('.tools-field:has(label:text("Sample Attributes"))')
+    await attrSection.locator('.tools-toggle-btn', { hasText: /^Copy$/ }).click()
     await page.waitForTimeout(200)
     await expect(page.locator('.tools-attr-row', { hasText: 'Gain' })).toBeVisible()
 
     // Now click Don't Copy for Sample Attributes
-    const dontCopyBtns = page.locator('.tools-toggle-btn', { hasText: "Don't Copy" })
-    await dontCopyBtns.nth(1).click()
+    await attrSection.locator('.tools-toggle-btn', { hasText: "Don't Copy" }).click()
     await page.waitForTimeout(200)
 
     await expect(page.locator('.tools-attr-row', { hasText: 'Gain' })).not.toBeVisible()
+  })
+
+  test('Individual attribute toggles work independently', async ({ page }) => {
+    // Enable Copy for attributes by clicking the Copy button next to "Sample Attributes" label
+    const attrSection = page.locator('.tools-field:has(label:text("Sample Attributes"))')
+    const attrCopyBtn = attrSection.locator('.tools-toggle-btn', { hasText: /^Copy$/ })
+    await attrCopyBtn.click()
+    await page.waitForTimeout(300)
+
+    // All attributes should be selected by default
+    const gainBtn = page.locator('button.tools-attr-row', { hasText: 'Gain' })
+    await expect(gainBtn).toBeVisible()
+    await expect(gainBtn).toHaveClass(/selected/)
+
+    // Click Gain to deselect it
+    await gainBtn.click()
+    await page.waitForTimeout(200)
+
+    // Gain should be deselected, but BPM should still be selected
+    await expect(gainBtn).not.toHaveClass(/selected/)
+    const bpmBtn = page.locator('button.tools-attr-row', { hasText: 'BPM / Tempo' })
+    await expect(bpmBtn).toHaveClass(/selected/)
+  })
+
+  test('None button deselects all, then individual select works', async ({ page }) => {
+    // Enable Copy for attributes
+    const attrSection = page.locator('.tools-field:has(label:text("Sample Attributes"))')
+    await attrSection.locator('.tools-toggle-btn', { hasText: /^Copy$/ }).click()
+    await page.waitForTimeout(300)
+
+    // Click None to deselect all
+    await page.locator('.tools-attribute-actions').getByText('None').click()
+    await page.waitForTimeout(200)
+
+    // All should be deselected
+    const selectedAttrs = page.locator('button.tools-attr-row.selected')
+    await expect(selectedAttrs).toHaveCount(0)
+
+    // Click Gain to select it individually
+    const gainBtn = page.locator('button.tools-attr-row', { hasText: 'Gain' })
+    await gainBtn.click()
+    await page.waitForTimeout(200)
+
+    await expect(gainBtn).toHaveClass(/selected/)
+    // Only 1 should be selected
+    await expect(page.locator('button.tools-attr-row.selected')).toHaveCount(1)
+  })
+
+  test('Execute sends correct attribute_selection with partial selection', async ({ page }) => {
+    // Enable Copy for attributes
+    const attrSection = page.locator('.tools-field:has(label:text("Sample Attributes"))')
+    await attrSection.locator('.tools-toggle-btn', { hasText: /^Copy$/ }).click()
+    await page.waitForTimeout(300)
+
+    // Click None, then select only Gain and Slices
+    await page.locator('.tools-attribute-actions').getByText('None').click()
+    await page.waitForTimeout(200)
+    await page.locator('button.tools-attr-row', { hasText: 'Gain' }).click()
+    await page.locator('button.tools-attr-row', { hasText: 'Slices' }).click()
+    await page.waitForTimeout(200)
+
+    // Execute and check the invoke args
+    const executeBtn = page.locator('.tools-execute-btn')
+    await executeBtn.click()
+    await page.waitForTimeout(1000)
+
+    const lastCall = await page.evaluate(() => (window as any).__lastInvokeArgs__)
+    expect(lastCall?.attributeSelection).toEqual(['gain', 'slices'])
+  })
+
+  test('Execute sends empty attributeSelection when attributes Don\'t Copy', async ({ page }) => {
+    // Attributes default to Don't Copy, just execute
+    const executeBtn = page.locator('.tools-execute-btn')
+    await executeBtn.click()
+    await page.waitForTimeout(1000)
+
+    const lastCall = await page.evaluate(() => (window as any).__lastInvokeArgs__)
+    expect(lastCall?.attributeSelection).toEqual([])
+  })
+
+  test('Both Don\'t Copy disables Execute button', async ({ page }) => {
+    // Set Assignments to Don't Copy
+    const dontCopyBtns = page.locator('.tools-toggle-btn', { hasText: "Don't Copy" })
+    await dontCopyBtns.first().click()
+    await page.waitForTimeout(200)
+
+    // Attributes already defaults to Don't Copy
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
   })
 
   test('Move to Pool is enabled when projects are in the same Set', async ({ page }) => {

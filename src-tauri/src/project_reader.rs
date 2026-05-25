@@ -3941,7 +3941,7 @@ fn replace_sample_fields_surgical(
         let type_order = |t: &str, s: u16| -> (u8, u16) {
             match t.to_uppercase().as_str() {
                 "FLEX" if s <= 128 => (0, s),
-                "FLEX" => (1, s),          // recording buffers 129-136
+                "FLEX" => (1, s), // recording buffers 129-136
                 "STATIC" => (2, s),
                 _ => (3, s),
             }
@@ -5631,9 +5631,9 @@ pub fn copy_sample_slots(
                                 for (attr_name, field_key) in attr_field_map {
                                     if attr_selected(attr_name) {
                                         // Find the raw value (case-insensitive key lookup)
-                                        let raw_val = raw_fields.iter().find(|(k, _)| {
-                                            k.eq_ignore_ascii_case(field_key)
-                                        });
+                                        let raw_val = raw_fields
+                                            .iter()
+                                            .find(|(k, _)| k.eq_ignore_ascii_case(field_key));
                                         if let Some((_, val)) = raw_val {
                                             // Replace with raw value from source
                                             dest_fields.insert(field_key.to_string(), val.clone());
@@ -5648,10 +5648,8 @@ pub fn copy_sample_slots(
                                 // Copy TRIM_BARSx100 from source if present
                                 // (not modeled by ot-tools-io, so must be read raw)
                                 if let Some(trim_val) = raw_fields.get("TRIM_BARSX100") {
-                                    dest_fields.insert(
-                                        "TRIM_BARSX100".to_string(),
-                                        trim_val.clone(),
-                                    );
+                                    dest_fields
+                                        .insert("TRIM_BARSX100".to_string(), trim_val.clone());
                                 }
                             }
                         }
@@ -10868,6 +10866,195 @@ mod tests {
                 "Slice count should be preserved (not selected)"
             );
         }
+
+        #[test]
+        fn test_copy_slots_slices_copied() {
+            // CSS-MRK-04: Slices are correctly copied to destination
+            let source = project_with_static_slot(0, 72);
+
+            let mut src_markers = MarkersFile::default();
+            src_markers.static_slots[0].slice_count = 16;
+            for i in 0..16 {
+                src_markers.static_slots[0].slices[i].trim_start = (i as u32) * 2000;
+                src_markers.static_slots[0].slices[i].trim_end = (i as u32) * 2000 + 1000;
+                src_markers.static_slots[0].slices[i].loop_start = (i as u32) * 2000 + 500;
+            }
+            let src_markers_path = Path::new(&source.path).join("markers.work");
+            src_markers.to_data_file(&src_markers_path).unwrap();
+
+            let dest = project_with_static_slot(0, 72);
+            let dest_markers = MarkersFile::default();
+            let dest_markers_path = Path::new(&dest.path).join("markers.work");
+            dest_markers.to_data_file(&dest_markers_path).unwrap();
+
+            copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "static",
+                vec![1],
+                vec![1],
+                true,
+                "mirror",
+                true,
+                vec!["slices".to_string()],
+            )
+            .unwrap();
+
+            let result_markers = MarkersFile::from_data_file(&dest_markers_path).unwrap();
+            assert_eq!(
+                result_markers.static_slots[0].slice_count, 16,
+                "Slice count should be copied"
+            );
+            assert_eq!(
+                result_markers.static_slots[0].slices[0].trim_start, 0,
+                "Slice 0 start correct"
+            );
+            assert_eq!(
+                result_markers.static_slots[0].slices[0].trim_end, 1000,
+                "Slice 0 end correct"
+            );
+            assert_eq!(
+                result_markers.static_slots[0].slices[15].trim_start, 30000,
+                "Slice 15 start correct"
+            );
+            assert_eq!(
+                result_markers.static_slots[0].slices[15].loop_start, 30500,
+                "Slice 15 loop_start correct"
+            );
+        }
+
+        #[test]
+        fn test_copy_slots_selective_loop_point_only() {
+            // CSS-SEL-LOOP: Only loop_point copied when only "loop_point" selected
+            let source = project_with_static_slot(0, 72);
+
+            let mut src_markers = MarkersFile::default();
+            src_markers.static_slots[0].trim_offset = 1000;
+            src_markers.static_slots[0].trim_end = 50000;
+            src_markers.static_slots[0].loop_point = 25000;
+            src_markers.static_slots[0].slice_count = 4;
+            let src_markers_path = Path::new(&source.path).join("markers.work");
+            src_markers.to_data_file(&src_markers_path).unwrap();
+
+            let dest = project_with_static_slot(0, 72);
+            let mut dest_markers = MarkersFile::default();
+            dest_markers.static_slots[0].trim_offset = 500;
+            dest_markers.static_slots[0].trim_end = 10000;
+            dest_markers.static_slots[0].loop_point = 5000;
+            dest_markers.static_slots[0].slice_count = 8;
+            let dest_markers_path = Path::new(&dest.path).join("markers.work");
+            dest_markers.to_data_file(&dest_markers_path).unwrap();
+
+            copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "static",
+                vec![1],
+                vec![1],
+                true,
+                "mirror",
+                true,
+                vec!["loop_point".to_string()],
+            )
+            .unwrap();
+
+            let result_markers = MarkersFile::from_data_file(&dest_markers_path).unwrap();
+            assert_eq!(
+                result_markers.static_slots[0].loop_point, 25000,
+                "Loop point should be copied"
+            );
+            assert_eq!(
+                result_markers.static_slots[0].trim_offset, 500,
+                "Trim offset should be preserved"
+            );
+            assert_eq!(
+                result_markers.static_slots[0].trim_end, 10000,
+                "Trim end should be preserved"
+            );
+            assert_eq!(
+                result_markers.static_slots[0].slice_count, 8,
+                "Slice count should be preserved"
+            );
+        }
+
+        #[test]
+        fn test_copy_slots_all_eight_attributes() {
+            // CSS-ALL-8: Copy all 8 attributes — verify every attribute is transferred
+            let source = project_with_static_slot(0, 96);
+
+            // Set source markers with specific values
+            let mut src_markers = MarkersFile::default();
+            src_markers.static_slots[0].trim_offset = 2000;
+            src_markers.static_slots[0].trim_end = 80000;
+            src_markers.static_slots[0].loop_point = 15000;
+            src_markers.static_slots[0].slice_count = 8;
+            for i in 0..8 {
+                src_markers.static_slots[0].slices[i].trim_start = (i as u32) * 10000;
+                src_markers.static_slots[0].slices[i].trim_end = (i as u32) * 10000 + 5000;
+            }
+            let src_markers_path = Path::new(&source.path).join("markers.work");
+            src_markers.to_data_file(&src_markers_path).unwrap();
+
+            let dest = project_with_static_slot(0, 50);
+            let mut dest_markers = MarkersFile::default();
+            dest_markers.static_slots[0].trim_offset = 100;
+            dest_markers.static_slots[0].trim_end = 200;
+            dest_markers.static_slots[0].loop_point = 300;
+            dest_markers.static_slots[0].slice_count = 0;
+            let dest_markers_path = Path::new(&dest.path).join("markers.work");
+            dest_markers.to_data_file(&dest_markers_path).unwrap();
+
+            copy_sample_slots(
+                &source.path,
+                &dest.path,
+                "static",
+                vec![1],
+                vec![1],
+                false, // Don't copy assignments
+                "mirror",
+                true, // Copy all attributes
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                    "trim".to_string(),
+                    "loop_point".to_string(),
+                    "slices".to_string(),
+                ],
+            )
+            .unwrap();
+
+            // Check project.work attributes
+            let dest_project_path = Path::new(&dest.path).join("project.work");
+            let dest_pf = ProjectFile::from_data_file(&dest_project_path).unwrap();
+            let slot = dest_pf.slots.static_slots[0].as_ref().unwrap();
+            assert_eq!(slot.gain, 96, "Gain should be copied");
+
+            // Check markers.work attributes
+            let result_markers = MarkersFile::from_data_file(&dest_markers_path).unwrap();
+            assert_eq!(
+                result_markers.static_slots[0].trim_offset, 2000,
+                "Trim offset copied"
+            );
+            assert_eq!(
+                result_markers.static_slots[0].trim_end, 80000,
+                "Trim end copied"
+            );
+            assert_eq!(
+                result_markers.static_slots[0].loop_point, 15000,
+                "Loop point copied"
+            );
+            assert_eq!(
+                result_markers.static_slots[0].slice_count, 8,
+                "Slice count copied"
+            );
+            assert_eq!(
+                result_markers.static_slots[0].slices[7].trim_start, 70000,
+                "Slice 7 start copied"
+            );
+        }
     }
 
     // ==================== CHECK MISSING SOURCE FILES TESTS ====================
@@ -12341,7 +12528,7 @@ mod tests {
 
         /// Creates a minimal project.work file content with custom sample blocks.
         /// Uses raw text to include fields that ot-tools-io doesn't support (TRIM_BARSx100, TRIGQUANTIZATION=-1).
-        fn create_raw_project_work_with_custom_fields(
+        pub(super) fn create_raw_project_work_with_custom_fields(
             samples: &[(
                 &str,        // TYPE (FLEX/STATIC)
                 u16,         // SLOT
@@ -12457,13 +12644,13 @@ mod tests {
             content
         }
 
-        fn write_raw_project_work(project_dir: &Path, content: &str) {
+        pub(super) fn write_raw_project_work(project_dir: &Path, content: &str) {
             let (encoded, _, _) = encoding_rs::WINDOWS_1258.encode(content);
             fs::write(project_dir.join("project.work"), &*encoded)
                 .expect("Failed to write raw project.work");
         }
 
-        fn read_raw_project_work(project_dir: &Path) -> String {
+        pub(super) fn read_raw_project_work(project_dir: &Path) -> String {
             let bytes =
                 fs::read(project_dir.join("project.work")).expect("Failed to read project.work");
             let (decoded, _, _) = encoding_rs::WINDOWS_1258.decode(&bytes);
@@ -12850,14 +13037,15 @@ mod tests {
 
             // Create markers.work for both
             let markers = MarkersFile::default();
-            markers
-                .to_data_file(&src_dir.join("markers.work"))
-                .unwrap();
+            markers.to_data_file(&src_dir.join("markers.work")).unwrap();
             markers
                 .to_data_file(&dest_dir.join("markers.work"))
                 .unwrap();
 
-            write_raw_project_work(src_dir, &create_raw_project_work_with_custom_fields(src_samples));
+            write_raw_project_work(
+                src_dir,
+                &create_raw_project_work_with_custom_fields(src_samples),
+            );
             write_raw_project_work(
                 dest_dir,
                 &create_raw_project_work_with_custom_fields(dest_samples),
@@ -12889,15 +13077,22 @@ mod tests {
         }
 
         /// Helper: extract a specific field value from a [SAMPLE] block with given TYPE+SLOT
-        fn extract_field_from_output(output: &str, slot_type: &str, slot_id: u16, field: &str) -> Option<String> {
+        pub(super) fn extract_field_from_output(
+            output: &str,
+            slot_type: &str,
+            slot_id: u16,
+            field: &str,
+        ) -> Option<String> {
             let blocks: Vec<&str> = output.split("[SAMPLE]").collect();
             for block in &blocks[1..] {
                 let type_match = block.lines().any(|l| {
-                    l.trim_end_matches('\r').eq_ignore_ascii_case(&format!("TYPE={}", slot_type))
+                    l.trim_end_matches('\r')
+                        .eq_ignore_ascii_case(&format!("TYPE={}", slot_type))
                 });
                 let slot_match = block.lines().any(|l| {
                     let trimmed = l.trim_end_matches('\r');
-                    trimmed == format!("SLOT={:0>3}", slot_id) || trimmed == format!("SLOT={}", slot_id)
+                    trimmed == format!("SLOT={:0>3}", slot_id)
+                        || trimmed == format!("SLOT={}", slot_id)
                 });
                 if type_match && slot_match {
                     for line in block.lines() {
@@ -12919,18 +13114,37 @@ mod tests {
             let output = run_surgical_copy(
                 &[("FLEX", 1, "kick.wav", Some(2880), Some(-1), Some(400))],
                 &[("FLEX", 1, "snare.wav", Some(3408), Some(3), Some(200))],
-                false, true, &["gain"], "flex", &[1],
+                false,
+                true,
+                &["gain"],
+                "flex",
+                &[1],
             );
             // GAIN should be copied (source has GAIN=48 from template)
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "GAIN"), Some("48".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "GAIN"),
+                Some("48".to_string())
+            );
             // BPMx24 should remain at dest value
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "BPMx24"), Some("3408".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "BPMx24"),
+                Some("3408".to_string())
+            );
             // TRIGQUANTIZATION should remain at dest value
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIGQUANTIZATION"), Some("3".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "TRIGQUANTIZATION"),
+                Some("3".to_string())
+            );
             // TRIM_BARSx100 should be copied from source (400) when copy_attributes=true
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"), Some("400".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"),
+                Some("400".to_string())
+            );
             // PATH should NOT change (no assignments)
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "PATH"), Some("snare.wav".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "PATH"),
+                Some("snare.wav".to_string())
+            );
         }
 
         #[test]
@@ -12938,14 +13152,27 @@ mod tests {
             let output = run_surgical_copy(
                 &[("FLEX", 1, "kick.wav", Some(2880), Some(-1), Some(400))],
                 &[("FLEX", 1, "snare.wav", Some(3408), Some(3), Some(200))],
-                false, true, &["bpm"], "flex", &[1],
+                false,
+                true,
+                &["bpm"],
+                "flex",
+                &[1],
             );
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "BPMX24"), Some("2880".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "BPMX24"),
+                Some("2880".to_string())
+            );
             // GAIN should stay at dest value
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "GAIN"), Some("48".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "GAIN"),
+                Some("48".to_string())
+            );
             // Wait - both have GAIN=48 from template. Let me verify the template sets it.
             // TRIM_BARSx100 copied from source
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"), Some("400".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"),
+                Some("400".to_string())
+            );
         }
 
         #[test]
@@ -12953,12 +13180,22 @@ mod tests {
             let output = run_surgical_copy(
                 &[("FLEX", 1, "kick.wav", Some(2880), Some(-1), Some(400))],
                 &[("FLEX", 1, "snare.wav", Some(3408), Some(3), Some(200))],
-                false, true, &["timestretch"], "flex", &[1],
+                false,
+                true,
+                &["timestretch"],
+                "flex",
+                &[1],
             );
             // TSMODE copied from source (both are 2 from template, so value should be 2)
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TSMODE"), Some("2".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "TSMODE"),
+                Some("2".to_string())
+            );
             // PATH unchanged
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "PATH"), Some("snare.wav".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "PATH"),
+                Some("snare.wav".to_string())
+            );
         }
 
         #[test]
@@ -12966,12 +13203,22 @@ mod tests {
             let output = run_surgical_copy(
                 &[("FLEX", 1, "kick.wav", Some(2880), Some(-1), Some(400))],
                 &[("FLEX", 1, "snare.wav", Some(3408), Some(3), Some(200))],
-                false, true, &["loop"], "flex", &[1],
+                false,
+                true,
+                &["loop"],
+                "flex",
+                &[1],
             );
             // LOOPMODE copied from source (both are 1 from template)
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "LOOPMODE"), Some("1".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "LOOPMODE"),
+                Some("1".to_string())
+            );
             // TRIM_BARSx100 copied from source
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"), Some("400".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"),
+                Some("400".to_string())
+            );
         }
 
         #[test]
@@ -12979,7 +13226,11 @@ mod tests {
             let output = run_surgical_copy(
                 &[("FLEX", 1, "kick.wav", Some(2880), Some(-1), Some(400))],
                 &[("FLEX", 1, "snare.wav", Some(3408), Some(3), Some(200))],
-                false, true, &["trig_quant"], "flex", &[1],
+                false,
+                true,
+                &["trig_quant"],
+                "flex",
+                &[1],
             );
             // TRIGQUANTIZATION: source has -1, should be preserved as -1 (not normalized to 255)
             assert_eq!(
@@ -12988,7 +13239,10 @@ mod tests {
                 "TRIGQUANTIZATION=-1 should be preserved from source, not normalized to 255"
             );
             // TRIM_BARSx100 copied from source
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"), Some("400".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"),
+                Some("400".to_string())
+            );
         }
 
         #[test]
@@ -12996,16 +13250,38 @@ mod tests {
             let output = run_surgical_copy(
                 &[("FLEX", 1, "kick.wav", Some(2880), Some(-1), Some(400))],
                 &[("FLEX", 1, "snare.wav", Some(3408), Some(3), Some(200))],
-                false, true, &["gain", "bpm", "timestretch", "loop", "trig_quant"], "flex", &[1],
+                false,
+                true,
+                &["gain", "bpm", "timestretch", "loop", "trig_quant"],
+                "flex",
+                &[1],
             );
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "GAIN"), Some("48".to_string()));
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "BPMX24"), Some("2880".to_string()));
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TSMODE"), Some("2".to_string()));
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "LOOPMODE"), Some("1".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "GAIN"),
+                Some("48".to_string())
+            );
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "BPMX24"),
+                Some("2880".to_string())
+            );
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "TSMODE"),
+                Some("2".to_string())
+            );
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "LOOPMODE"),
+                Some("1".to_string())
+            );
             // PATH should NOT change
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "PATH"), Some("snare.wav".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "PATH"),
+                Some("snare.wav".to_string())
+            );
             // TRIM_BARSx100 should be copied from source (400), not preserved from dest (200)
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"), Some("400".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"),
+                Some("400".to_string())
+            );
         }
 
         #[test]
@@ -13019,23 +13295,36 @@ mod tests {
 
             for bank_num in 1..=16 {
                 let bank_file = BankFile::default();
-                bank_file.to_data_file(&src_dir.join(format!("bank{:02}.work", bank_num))).unwrap();
-                bank_file.to_data_file(&dest_dir.join(format!("bank{:02}.work", bank_num))).unwrap();
+                bank_file
+                    .to_data_file(&src_dir.join(format!("bank{:02}.work", bank_num)))
+                    .unwrap();
+                bank_file
+                    .to_data_file(&dest_dir.join(format!("bank{:02}.work", bank_num)))
+                    .unwrap();
             }
             let markers = MarkersFile::default();
             markers.to_data_file(&src_dir.join("markers.work")).unwrap();
-            markers.to_data_file(&dest_dir.join("markers.work")).unwrap();
+            markers
+                .to_data_file(&dest_dir.join("markers.work"))
+                .unwrap();
 
             // Source: FLEX slot 1 with TRIM_BARSx100 but NO BPMx24
-            let src_content = create_raw_project_work_with_custom_fields(
-                &[("FLEX", 1, "kick.wav", None, Some(-1), Some(400))],
-            );
+            let src_content = create_raw_project_work_with_custom_fields(&[(
+                "FLEX",
+                1,
+                "kick.wav",
+                None,
+                Some(-1),
+                Some(400),
+            )]);
             write_raw_project_work(src_dir, &src_content);
             fs::write(src_dir.join("kick.wav"), b"audio").unwrap();
 
             // Dest: default project (only recording buffers)
             let dest_project = ProjectFile::default();
-            dest_project.to_data_file(&dest_dir.join("project.work")).unwrap();
+            dest_project
+                .to_data_file(&dest_dir.join("project.work"))
+                .unwrap();
 
             copy_sample_slots(
                 src_dir.to_str().unwrap(),
@@ -13043,10 +13332,18 @@ mod tests {
                 "flex",
                 vec![1],
                 vec![1],
-                false, "mirror", true,
-                vec!["gain".to_string(), "bpm".to_string(), "timestretch".to_string(),
-                     "loop".to_string(), "trig_quant".to_string()],
-            ).unwrap();
+                false,
+                "mirror",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                    "loop".to_string(),
+                    "trig_quant".to_string(),
+                ],
+            )
+            .unwrap();
 
             let output = read_raw_project_work(dest_dir);
 
@@ -13075,16 +13372,32 @@ mod tests {
             let output = run_surgical_copy(
                 &[("FLEX", 1, "kick.wav", Some(2880), Some(-1), Some(400))],
                 &[("FLEX", 1, "snare.wav", Some(3408), Some(3), Some(200))],
-                true, false, &[], "flex", &[1],
+                true,
+                false,
+                &[],
+                "flex",
+                &[1],
             );
             // PATH should change to source path
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "PATH"), Some("kick.wav".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "PATH"),
+                Some("kick.wav".to_string())
+            );
             // BPMx24 should stay at dest value
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "BPMx24"), Some("3408".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "BPMx24"),
+                Some("3408".to_string())
+            );
             // TRIGQUANTIZATION should stay at dest value
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIGQUANTIZATION"), Some("3".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "TRIGQUANTIZATION"),
+                Some("3".to_string())
+            );
             // TRIM_BARSx100 preserved
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"), Some("200".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"),
+                Some("200".to_string())
+            );
         }
 
         #[test]
@@ -13092,15 +13405,31 @@ mod tests {
             let output = run_surgical_copy(
                 &[("FLEX", 1, "kick.wav", Some(2880), Some(-1), Some(400))],
                 &[("FLEX", 1, "snare.wav", Some(3408), Some(3), Some(200))],
-                true, true, &["gain", "bpm"], "flex", &[1],
+                true,
+                true,
+                &["gain", "bpm"],
+                "flex",
+                &[1],
             );
             // PATH should change
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "PATH"), Some("kick.wav".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "PATH"),
+                Some("kick.wav".to_string())
+            );
             // GAIN and BPMx24 should be copied
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "GAIN"), Some("48".to_string()));
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "BPMX24"), Some("2880".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "GAIN"),
+                Some("48".to_string())
+            );
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "BPMX24"),
+                Some("2880".to_string())
+            );
             // TRIM_BARSx100 copied from source when copy_attributes=true
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"), Some("400".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"),
+                Some("400".to_string())
+            );
         }
 
         #[test]
@@ -13108,12 +13437,25 @@ mod tests {
             let output = run_surgical_copy(
                 &[("STATIC", 1, "pad.wav", Some(2400), Some(2), Some(100))],
                 &[("STATIC", 1, "bass.wav", Some(3600), Some(0), Some(300))],
-                true, true, &["gain", "bpm", "trig_quant"], "static", &[1],
+                true,
+                true,
+                &["gain", "bpm", "trig_quant"],
+                "static",
+                &[1],
             );
-            assert_eq!(extract_field_from_output(&output, "STATIC", 1, "PATH"), Some("pad.wav".to_string()));
-            assert_eq!(extract_field_from_output(&output, "STATIC", 1, "BPMX24"), Some("2400".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "STATIC", 1, "PATH"),
+                Some("pad.wav".to_string())
+            );
+            assert_eq!(
+                extract_field_from_output(&output, "STATIC", 1, "BPMX24"),
+                Some("2400".to_string())
+            );
             // TRIM_BARSx100 copied from source (100)
-            assert_eq!(extract_field_from_output(&output, "STATIC", 1, "TRIM_BARSx100"), Some("100".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "STATIC", 1, "TRIM_BARSx100"),
+                Some("100".to_string())
+            );
         }
 
         #[test]
@@ -13127,24 +13469,44 @@ mod tests {
                     ("FLEX", 1, "old1.wav", Some(1200), Some(0), Some(50)),
                     ("FLEX", 2, "old2.wav", Some(1400), Some(1), Some(60)),
                 ],
-                true, true, &["bpm"], "flex", &[1, 2],
+                true,
+                true,
+                &["bpm"],
+                "flex",
+                &[1, 2],
             );
             // Slot 1: PATH and BPM copied
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "PATH"), Some("kick.wav".to_string()));
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "BPMX24"), Some("2880".to_string()));
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"), Some("400".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "PATH"),
+                Some("kick.wav".to_string())
+            );
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "BPMX24"),
+                Some("2880".to_string())
+            );
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "TRIM_BARSx100"),
+                Some("400".to_string())
+            );
             // Slot 2: PATH and BPM copied
-            assert_eq!(extract_field_from_output(&output, "FLEX", 2, "PATH"), Some("snare.wav".to_string()));
-            assert_eq!(extract_field_from_output(&output, "FLEX", 2, "BPMX24"), Some("3600".to_string()));
-            assert_eq!(extract_field_from_output(&output, "FLEX", 2, "TRIM_BARSx100"), Some("100".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 2, "PATH"),
+                Some("snare.wav".to_string())
+            );
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 2, "BPMX24"),
+                Some("3600".to_string())
+            );
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 2, "TRIM_BARSx100"),
+                Some("100".to_string())
+            );
         }
 
         #[test]
         fn test_surgical_copy_enforces_ot_canonical_ordering() {
             // Dest has slots 3, 1, 2 in non-canonical order - should be re-sorted to 1, 2, 3
-            let src_samples = vec![
-                ("FLEX", 2, "src2.wav", Some(2880), Some(-1), Some(400)),
-            ];
+            let src_samples = vec![("FLEX", 2, "src2.wav", Some(2880), Some(-1), Some(400))];
             let dest_content = create_raw_project_work_with_custom_fields(&[
                 ("FLEX", 3, "d3.wav", Some(1000), Some(0), Some(10)),
                 ("FLEX", 1, "d1.wav", Some(1100), Some(1), Some(20)),
@@ -13158,12 +13520,18 @@ mod tests {
 
             for bank_num in 1..=16 {
                 let bank_file = BankFile::default();
-                bank_file.to_data_file(&src_dir.join(format!("bank{:02}.work", bank_num))).unwrap();
-                bank_file.to_data_file(&dest_dir.join(format!("bank{:02}.work", bank_num))).unwrap();
+                bank_file
+                    .to_data_file(&src_dir.join(format!("bank{:02}.work", bank_num)))
+                    .unwrap();
+                bank_file
+                    .to_data_file(&dest_dir.join(format!("bank{:02}.work", bank_num)))
+                    .unwrap();
             }
             let markers = MarkersFile::default();
             markers.to_data_file(&src_dir.join("markers.work")).unwrap();
-            markers.to_data_file(&dest_dir.join("markers.work")).unwrap();
+            markers
+                .to_data_file(&dest_dir.join("markers.work"))
+                .unwrap();
 
             write_raw_project_work(
                 src_dir,
@@ -13178,8 +13546,12 @@ mod tests {
                 "flex",
                 vec![2],
                 vec![2],
-                true, "mirror", true, vec!["bpm".to_string()],
-            ).unwrap();
+                true,
+                "mirror",
+                true,
+                vec!["bpm".to_string()],
+            )
+            .unwrap();
 
             let output = read_raw_project_work(dest_dir);
 
@@ -13187,8 +13559,14 @@ mod tests {
             let pos1 = output.find("SLOT=001").expect("slot 1 present");
             let pos2 = output.find("SLOT=002").expect("slot 2 present");
             let pos3 = output.find("SLOT=003").expect("slot 3 present");
-            assert!(pos1 < pos2, "Slot 1 should appear before slot 2 (OT canonical order)");
-            assert!(pos2 < pos3, "Slot 2 should appear before slot 3 (OT canonical order)");
+            assert!(
+                pos1 < pos2,
+                "Slot 1 should appear before slot 2 (OT canonical order)"
+            );
+            assert!(
+                pos2 < pos3,
+                "Slot 2 should appear before slot 3 (OT canonical order)"
+            );
         }
 
         #[test]
@@ -13202,12 +13580,18 @@ mod tests {
 
             for bank_num in 1..=16 {
                 let bank_file = BankFile::default();
-                bank_file.to_data_file(&src_dir.join(format!("bank{:02}.work", bank_num))).unwrap();
-                bank_file.to_data_file(&dest_dir.join(format!("bank{:02}.work", bank_num))).unwrap();
+                bank_file
+                    .to_data_file(&src_dir.join(format!("bank{:02}.work", bank_num)))
+                    .unwrap();
+                bank_file
+                    .to_data_file(&dest_dir.join(format!("bank{:02}.work", bank_num)))
+                    .unwrap();
             }
             let markers = MarkersFile::default();
             markers.to_data_file(&src_dir.join("markers.work")).unwrap();
-            markers.to_data_file(&dest_dir.join("markers.work")).unwrap();
+            markers
+                .to_data_file(&dest_dir.join("markers.work"))
+                .unwrap();
 
             // Source has FLEX slots 1 and 3
             write_raw_project_work(
@@ -13222,7 +13606,9 @@ mod tests {
 
             // Dest is a default project (has recording buffers FLEX 129-136 only)
             let dest_project = ProjectFile::default();
-            dest_project.to_data_file(&dest_dir.join("project.work")).unwrap();
+            dest_project
+                .to_data_file(&dest_dir.join("project.work"))
+                .unwrap();
 
             copy_sample_slots(
                 src_dir.to_str().unwrap(),
@@ -13230,8 +13616,12 @@ mod tests {
                 "flex",
                 vec![1, 3],
                 vec![1, 3],
-                true, "mirror", false, vec![],
-            ).unwrap();
+                true,
+                "mirror",
+                false,
+                vec![],
+            )
+            .unwrap();
 
             let output = read_raw_project_work(dest_dir);
 
@@ -13239,8 +13629,14 @@ mod tests {
             let pos1 = output.find("SLOT=001").expect("slot 1 present");
             let pos3 = output.find("SLOT=003").expect("slot 3 present");
             let pos129 = output.find("SLOT=129").expect("slot 129 present");
-            assert!(pos1 < pos129, "Regular slot 1 should appear before recording buffer 129");
-            assert!(pos3 < pos129, "Regular slot 3 should appear before recording buffer 129");
+            assert!(
+                pos1 < pos129,
+                "Regular slot 1 should appear before recording buffer 129"
+            );
+            assert!(
+                pos3 < pos129,
+                "Regular slot 3 should appear before recording buffer 129"
+            );
             assert!(pos1 < pos3, "Slot 1 should appear before slot 3");
         }
 
@@ -13249,7 +13645,11 @@ mod tests {
             let output = run_surgical_copy(
                 &[("FLEX", 1, "kick.wav", Some(2880), Some(-1), Some(400))],
                 &[("FLEX", 1, "snare.wav", Some(3408), Some(3), Some(200))],
-                true, true, &["gain"], "flex", &[1],
+                true,
+                true,
+                &["gain"],
+                "flex",
+                &[1],
             );
             // Every line should end with \r\n
             for line in output.split('\n') {
@@ -13273,12 +13673,18 @@ mod tests {
 
             for bank_num in 1..=16 {
                 let bank_file = BankFile::default();
-                bank_file.to_data_file(&src_dir.join(format!("bank{:02}.work", bank_num))).unwrap();
-                bank_file.to_data_file(&dest_dir.join(format!("bank{:02}.work", bank_num))).unwrap();
+                bank_file
+                    .to_data_file(&src_dir.join(format!("bank{:02}.work", bank_num)))
+                    .unwrap();
+                bank_file
+                    .to_data_file(&dest_dir.join(format!("bank{:02}.work", bank_num)))
+                    .unwrap();
             }
             let markers = MarkersFile::default();
             markers.to_data_file(&src_dir.join("markers.work")).unwrap();
-            markers.to_data_file(&dest_dir.join("markers.work")).unwrap();
+            markers
+                .to_data_file(&dest_dir.join("markers.work"))
+                .unwrap();
 
             // Source has slots 3, 1, 5 (out of order)
             write_raw_project_work(
@@ -13295,7 +13701,9 @@ mod tests {
 
             // Dest is empty (default project.work with no sample blocks except recording buffers)
             let dest_project = ProjectFile::default();
-            dest_project.to_data_file(&dest_dir.join("project.work")).unwrap();
+            dest_project
+                .to_data_file(&dest_dir.join("project.work"))
+                .unwrap();
 
             copy_sample_slots(
                 src_dir.to_str().unwrap(),
@@ -13303,8 +13711,12 @@ mod tests {
                 "flex",
                 vec![1, 3, 5],
                 vec![1, 3, 5],
-                true, "mirror", false, vec![],
-            ).unwrap();
+                true,
+                "mirror",
+                false,
+                vec![],
+            )
+            .unwrap();
 
             let output = read_raw_project_work(dest_dir);
 
@@ -13322,13 +13734,410 @@ mod tests {
             let output = run_surgical_copy(
                 &[("FLEX", 1, "kick.wav", Some(2880), Some(-1), Some(400))],
                 &[("FLEX", 2, "snare.wav", Some(3408), Some(3), Some(200))],
-                true, true, &["gain", "bpm"], "flex", &[1],
+                true,
+                true,
+                &["gain", "bpm"],
+                "flex",
+                &[1],
             );
             // New block for slot 1 should exist with source PATH
-            assert_eq!(extract_field_from_output(&output, "FLEX", 1, "PATH"), Some("kick.wav".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 1, "PATH"),
+                Some("kick.wav".to_string())
+            );
             // Original slot 2 should be untouched
-            assert_eq!(extract_field_from_output(&output, "FLEX", 2, "PATH"), Some("snare.wav".to_string()));
-            assert_eq!(extract_field_from_output(&output, "FLEX", 2, "TRIM_BARSx100"), Some("200".to_string()));
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 2, "PATH"),
+                Some("snare.wav".to_string())
+            );
+            assert_eq!(
+                extract_field_from_output(&output, "FLEX", 2, "TRIM_BARSx100"),
+                Some("200".to_string())
+            );
+        }
+    }
+
+    mod surgical_markers_tests {
+        use super::*;
+
+        /// Helper: runs copy_sample_slots with custom markers data and returns (project.work text, dest MarkersFile)
+        fn run_copy_with_markers(
+            src_samples: &[(&str, u16, &str, Option<u16>, Option<i16>, Option<u16>)],
+            dest_samples: &[(&str, u16, &str, Option<u16>, Option<i16>, Option<u16>)],
+            src_markers_setup: impl FnOnce(&mut MarkersFile),
+            dest_markers_setup: impl FnOnce(&mut MarkersFile),
+            copy_assignments: bool,
+            copy_attributes: bool,
+            selected_attrs: &[&str],
+            slot_type: &str,
+            slots: &[u16],
+        ) -> (String, MarkersFile) {
+            use super::surgical_write_tests::*;
+
+            let src_temp = TempDir::new().unwrap();
+            let dest_temp = TempDir::new().unwrap();
+            let src_dir = src_temp.path();
+            let dest_dir = dest_temp.path();
+
+            for bank_num in 1..=16 {
+                let bank_file = BankFile::default();
+                bank_file
+                    .to_data_file(&src_dir.join(format!("bank{:02}.work", bank_num)))
+                    .unwrap();
+                bank_file
+                    .to_data_file(&dest_dir.join(format!("bank{:02}.work", bank_num)))
+                    .unwrap();
+            }
+
+            let mut src_markers = MarkersFile::default();
+            src_markers_setup(&mut src_markers);
+            src_markers
+                .to_data_file(&src_dir.join("markers.work"))
+                .unwrap();
+
+            let mut dest_markers = MarkersFile::default();
+            dest_markers_setup(&mut dest_markers);
+            dest_markers
+                .to_data_file(&dest_dir.join("markers.work"))
+                .unwrap();
+
+            write_raw_project_work(
+                src_dir,
+                &create_raw_project_work_with_custom_fields(src_samples),
+            );
+            write_raw_project_work(
+                dest_dir,
+                &create_raw_project_work_with_custom_fields(dest_samples),
+            );
+
+            for (_, _, path, _, _, _) in src_samples {
+                if !path.is_empty() {
+                    let _ = fs::write(src_dir.join(path), b"fake audio");
+                }
+            }
+
+            let selected: Vec<String> = selected_attrs.iter().map(|s| s.to_string()).collect();
+            let indices: Vec<u8> = slots.iter().map(|&s| s as u8).collect();
+            copy_sample_slots(
+                src_dir.to_str().unwrap(),
+                dest_dir.to_str().unwrap(),
+                slot_type,
+                indices.clone(),
+                indices,
+                copy_assignments,
+                "mirror",
+                copy_attributes,
+                selected,
+            )
+            .unwrap();
+
+            let project_text = read_raw_project_work(dest_dir);
+            let result_markers =
+                MarkersFile::from_data_file(&dest_dir.join("markers.work")).unwrap();
+            (project_text, result_markers)
+        }
+
+        #[test]
+        fn test_surgical_copy_trim_only() {
+            // Copy only "trim" attribute — trim_offset + trim_end should change,
+            // loop_point and slices should be preserved from dest
+            let (output, markers) = run_copy_with_markers(
+                &[("FLEX", 1, "kick.wav", Some(2880), Some(-1), Some(400))],
+                &[("FLEX", 1, "snare.wav", Some(3408), Some(3), Some(200))],
+                |m| {
+                    m.flex_slots[0].trim_offset = 5000;
+                    m.flex_slots[0].trim_end = 90000;
+                    m.flex_slots[0].loop_point = 7777;
+                    m.flex_slots[0].slice_count = 4;
+                },
+                |m| {
+                    m.flex_slots[0].trim_offset = 100;
+                    m.flex_slots[0].trim_end = 200;
+                    m.flex_slots[0].loop_point = 300;
+                    m.flex_slots[0].slice_count = 2;
+                },
+                false,
+                true,
+                &["trim"],
+                "flex",
+                &[1],
+            );
+            assert_eq!(
+                markers.flex_slots[0].trim_offset, 5000,
+                "trim_offset should be copied from source"
+            );
+            assert_eq!(
+                markers.flex_slots[0].trim_end, 90000,
+                "trim_end should be copied from source"
+            );
+            assert_eq!(
+                markers.flex_slots[0].loop_point, 300,
+                "loop_point should be preserved from dest"
+            );
+            assert_eq!(
+                markers.flex_slots[0].slice_count, 2,
+                "slice_count should be preserved from dest"
+            );
+            // project.work attrs should be unchanged (only trim selected)
+            let gain = surgical_write_tests::extract_field_from_output(&output, "FLEX", 1, "GAIN");
+            assert_eq!(
+                gain,
+                Some("48".to_string()),
+                "GAIN should be dest value (unchanged)"
+            );
+        }
+
+        #[test]
+        fn test_surgical_copy_loop_point_only() {
+            let (_output, markers) = run_copy_with_markers(
+                &[("FLEX", 1, "kick.wav", Some(2880), Some(-1), Some(400))],
+                &[("FLEX", 1, "snare.wav", Some(3408), Some(3), Some(200))],
+                |m| {
+                    m.flex_slots[0].trim_offset = 5000;
+                    m.flex_slots[0].trim_end = 90000;
+                    m.flex_slots[0].loop_point = 42000;
+                    m.flex_slots[0].slice_count = 8;
+                },
+                |m| {
+                    m.flex_slots[0].trim_offset = 100;
+                    m.flex_slots[0].trim_end = 200;
+                    m.flex_slots[0].loop_point = 300;
+                    m.flex_slots[0].slice_count = 2;
+                },
+                false,
+                true,
+                &["loop_point"],
+                "flex",
+                &[1],
+            );
+            assert_eq!(
+                markers.flex_slots[0].loop_point, 42000,
+                "loop_point should be copied from source"
+            );
+            assert_eq!(
+                markers.flex_slots[0].trim_offset, 100,
+                "trim_offset should be preserved from dest"
+            );
+            assert_eq!(
+                markers.flex_slots[0].trim_end, 200,
+                "trim_end should be preserved from dest"
+            );
+            assert_eq!(
+                markers.flex_slots[0].slice_count, 2,
+                "slice_count should be preserved from dest"
+            );
+        }
+
+        #[test]
+        fn test_surgical_copy_slices_only() {
+            let (_output, markers) = run_copy_with_markers(
+                &[("FLEX", 1, "kick.wav", Some(2880), Some(-1), Some(400))],
+                &[("FLEX", 1, "snare.wav", Some(3408), Some(3), Some(200))],
+                |m| {
+                    m.flex_slots[0].trim_offset = 5000;
+                    m.flex_slots[0].trim_end = 90000;
+                    m.flex_slots[0].loop_point = 7777;
+                    m.flex_slots[0].slice_count = 16;
+                    for i in 0..16 {
+                        m.flex_slots[0].slices[i].trim_start = (i as u32) * 1000;
+                        m.flex_slots[0].slices[i].trim_end = (i as u32) * 1000 + 500;
+                        m.flex_slots[0].slices[i].loop_start = (i as u32) * 1000 + 250;
+                    }
+                },
+                |m| {
+                    m.flex_slots[0].trim_offset = 100;
+                    m.flex_slots[0].trim_end = 200;
+                    m.flex_slots[0].loop_point = 300;
+                    m.flex_slots[0].slice_count = 0;
+                },
+                false,
+                true,
+                &["slices"],
+                "flex",
+                &[1],
+            );
+            assert_eq!(
+                markers.flex_slots[0].slice_count, 16,
+                "slice_count should be copied from source"
+            );
+            assert_eq!(
+                markers.flex_slots[0].slices[0].trim_start, 0,
+                "slice 0 start should be from source"
+            );
+            assert_eq!(
+                markers.flex_slots[0].slices[15].trim_start, 15000,
+                "slice 15 start should be from source"
+            );
+            assert_eq!(
+                markers.flex_slots[0].slices[15].trim_end, 15500,
+                "slice 15 end should be from source"
+            );
+            assert_eq!(
+                markers.flex_slots[0].trim_offset, 100,
+                "trim_offset should be preserved from dest"
+            );
+            assert_eq!(
+                markers.flex_slots[0].loop_point, 300,
+                "loop_point should be preserved from dest"
+            );
+        }
+
+        #[test]
+        fn test_surgical_copy_markers_only_no_project_attrs() {
+            // Select only markers attributes — project.work fields should be untouched
+            let (output, markers) = run_copy_with_markers(
+                &[("FLEX", 1, "kick.wav", Some(2880), Some(-1), Some(400))],
+                &[("FLEX", 1, "snare.wav", Some(3408), Some(3), Some(200))],
+                |m| {
+                    m.flex_slots[0].trim_offset = 5000;
+                    m.flex_slots[0].trim_end = 90000;
+                    m.flex_slots[0].loop_point = 42000;
+                    m.flex_slots[0].slice_count = 4;
+                },
+                |m| {
+                    m.flex_slots[0].trim_offset = 100;
+                    m.flex_slots[0].trim_end = 200;
+                    m.flex_slots[0].loop_point = 300;
+                    m.flex_slots[0].slice_count = 0;
+                },
+                false,
+                true,
+                &["trim", "loop_point", "slices"],
+                "flex",
+                &[1],
+            );
+            // Markers should be updated
+            assert_eq!(markers.flex_slots[0].trim_offset, 5000);
+            assert_eq!(markers.flex_slots[0].loop_point, 42000);
+            assert_eq!(markers.flex_slots[0].slice_count, 4);
+            // project.work fields should be unchanged (dest values)
+            let gain = surgical_write_tests::extract_field_from_output(&output, "FLEX", 1, "GAIN");
+            let bpm = surgical_write_tests::extract_field_from_output(&output, "FLEX", 1, "BPMx24");
+            let tsmode =
+                surgical_write_tests::extract_field_from_output(&output, "FLEX", 1, "TSMODE");
+            assert_eq!(gain, Some("48".to_string()), "GAIN should be unchanged");
+            assert_eq!(bpm, Some("3408".to_string()), "BPMx24 should be dest value");
+            assert_eq!(tsmode, Some("2".to_string()), "TSMODE should be unchanged");
+        }
+
+        #[test]
+        fn test_surgical_copy_project_and_markers_combined() {
+            // Select gain (project.work) + trim + slices (markers) — only those should change
+            let (output, markers) = run_copy_with_markers(
+                &[("FLEX", 1, "kick.wav", Some(2880), Some(-1), Some(400))],
+                &[("FLEX", 1, "snare.wav", Some(3408), Some(3), Some(200))],
+                |m| {
+                    m.flex_slots[0].trim_offset = 5000;
+                    m.flex_slots[0].trim_end = 90000;
+                    m.flex_slots[0].loop_point = 7777;
+                    m.flex_slots[0].slice_count = 8;
+                },
+                |m| {
+                    m.flex_slots[0].trim_offset = 100;
+                    m.flex_slots[0].trim_end = 200;
+                    m.flex_slots[0].loop_point = 300;
+                    m.flex_slots[0].slice_count = 0;
+                },
+                false,
+                true,
+                &["gain", "trim", "slices"],
+                "flex",
+                &[1],
+            );
+            // GAIN should be copied (from source project.work raw value = 48)
+            let gain = surgical_write_tests::extract_field_from_output(&output, "FLEX", 1, "GAIN");
+            assert_eq!(
+                gain,
+                Some("48".to_string()),
+                "GAIN should be copied from source"
+            );
+            // BPM should remain dest value
+            let bpm = surgical_write_tests::extract_field_from_output(&output, "FLEX", 1, "BPMx24");
+            assert_eq!(
+                bpm,
+                Some("3408".to_string()),
+                "BPMx24 should be dest value (not selected)"
+            );
+            // Markers: trim + slices copied, loop_point preserved
+            assert_eq!(markers.flex_slots[0].trim_offset, 5000);
+            assert_eq!(markers.flex_slots[0].trim_end, 90000);
+            assert_eq!(markers.flex_slots[0].slice_count, 8);
+            assert_eq!(
+                markers.flex_slots[0].loop_point, 300,
+                "loop_point should be preserved from dest"
+            );
+        }
+
+        #[test]
+        fn test_surgical_copy_attributes_false_preserves_markers() {
+            // copy_attributes=false — markers should NOT be modified
+            let (_output, markers) = run_copy_with_markers(
+                &[("FLEX", 1, "kick.wav", Some(2880), Some(-1), Some(400))],
+                &[("FLEX", 1, "snare.wav", Some(3408), Some(3), Some(200))],
+                |m| {
+                    m.flex_slots[0].trim_offset = 5000;
+                    m.flex_slots[0].trim_end = 90000;
+                    m.flex_slots[0].loop_point = 42000;
+                    m.flex_slots[0].slice_count = 16;
+                },
+                |m| {
+                    m.flex_slots[0].trim_offset = 100;
+                    m.flex_slots[0].trim_end = 200;
+                    m.flex_slots[0].loop_point = 300;
+                    m.flex_slots[0].slice_count = 2;
+                },
+                true,
+                false,
+                &[],
+                "flex",
+                &[1],
+            );
+            assert_eq!(
+                markers.flex_slots[0].trim_offset, 100,
+                "trim_offset should be preserved"
+            );
+            assert_eq!(
+                markers.flex_slots[0].trim_end, 200,
+                "trim_end should be preserved"
+            );
+            assert_eq!(
+                markers.flex_slots[0].loop_point, 300,
+                "loop_point should be preserved"
+            );
+            assert_eq!(
+                markers.flex_slots[0].slice_count, 2,
+                "slice_count should be preserved"
+            );
+        }
+
+        #[test]
+        fn test_surgical_copy_static_trim_only() {
+            // Verify trim works for STATIC slots too
+            let (_output, markers) = run_copy_with_markers(
+                &[("STATIC", 1, "kick.wav", Some(2880), Some(-1), Some(400))],
+                &[("STATIC", 1, "snare.wav", Some(3408), Some(3), Some(200))],
+                |m| {
+                    m.static_slots[0].trim_offset = 8000;
+                    m.static_slots[0].trim_end = 75000;
+                },
+                |m| {
+                    m.static_slots[0].trim_offset = 100;
+                    m.static_slots[0].trim_end = 200;
+                },
+                false,
+                true,
+                &["trim"],
+                "static",
+                &[1],
+            );
+            assert_eq!(
+                markers.static_slots[0].trim_offset, 8000,
+                "static trim_offset should be copied"
+            );
+            assert_eq!(
+                markers.static_slots[0].trim_end, 75000,
+                "static trim_end should be copied"
+            );
         }
     }
 
@@ -13939,6 +14748,315 @@ mod tests {
                 missing_after.len(),
                 0,
                 "No samples should be missing after fix"
+            );
+        }
+    }
+
+    mod fixture_integration_tests {
+        use super::*;
+
+        /// Sets up a temp copy of fixtures, creates bank files and markers, returns (src_dir, dest_dir, _temps)
+        fn setup_fixture_projects() -> (std::path::PathBuf, std::path::PathBuf, TempDir, TempDir) {
+            let src_temp = TempDir::new().unwrap();
+            let dest_temp = TempDir::new().unwrap();
+            let src_dir = src_temp.path().to_path_buf();
+            let dest_dir = dest_temp.path().to_path_buf();
+
+            // Copy fixture project.work files
+            let fixture_dir =
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+            fs::copy(
+                fixture_dir.join("source_project/project.work"),
+                src_dir.join("project.work"),
+            )
+            .unwrap();
+            fs::copy(
+                fixture_dir.join("dest_project/project.work"),
+                dest_dir.join("project.work"),
+            )
+            .unwrap();
+
+            // Create bank files
+            for bank_num in 1..=16 {
+                let bank_file = BankFile::default();
+                bank_file
+                    .to_data_file(&src_dir.join(format!("bank{:02}.work", bank_num)))
+                    .unwrap();
+                bank_file
+                    .to_data_file(&dest_dir.join(format!("bank{:02}.work", bank_num)))
+                    .unwrap();
+            }
+
+            // Create markers with non-default values for source
+            let mut src_markers = MarkersFile::default();
+            src_markers.flex_slots[0].trim_offset = 5000;
+            src_markers.flex_slots[0].trim_end = 80000;
+            src_markers.flex_slots[0].loop_point = 20000;
+            src_markers.flex_slots[0].slice_count = 4;
+            for i in 0..4 {
+                src_markers.flex_slots[0].slices[i].trim_start = (i as u32) * 20000;
+                src_markers.flex_slots[0].slices[i].trim_end = (i as u32) * 20000 + 10000;
+            }
+            src_markers.static_slots[0].trim_offset = 1000;
+            src_markers.static_slots[0].trim_end = 60000;
+            src_markers.static_slots[0].loop_point = 30000;
+            src_markers
+                .to_data_file(&src_dir.join("markers.work"))
+                .unwrap();
+
+            // Default markers for dest
+            let dest_markers = MarkersFile::default();
+            dest_markers
+                .to_data_file(&dest_dir.join("markers.work"))
+                .unwrap();
+
+            // Create fake audio files referenced by source
+            fs::write(src_dir.join("bass_loop.wav"), b"fake audio").unwrap();
+            fs::write(src_dir.join("drum_hit.wav"), b"fake audio").unwrap();
+
+            (src_dir, dest_dir, src_temp, dest_temp)
+        }
+
+        fn read_fixture_project_work(dir: &std::path::Path) -> String {
+            let bytes = fs::read(dir.join("project.work")).expect("Failed to read project.work");
+            let (decoded, _, _) = encoding_rs::WINDOWS_1258.decode(&bytes);
+            decoded.into_owned()
+        }
+
+        #[test]
+        fn test_real_data_copy_all_attrs() {
+            let (src_dir, dest_dir, _src_temp, _dest_temp) = setup_fixture_projects();
+
+            copy_sample_slots(
+                src_dir.to_str().unwrap(),
+                dest_dir.to_str().unwrap(),
+                "flex",
+                vec![1],
+                vec![1],
+                true,
+                "mirror",
+                true,
+                vec![
+                    "gain".into(),
+                    "bpm".into(),
+                    "timestretch".into(),
+                    "loop".into(),
+                    "trig_quant".into(),
+                    "trim".into(),
+                    "loop_point".into(),
+                    "slices".into(),
+                ],
+            )
+            .unwrap();
+
+            let output = read_fixture_project_work(&dest_dir);
+            // Verify raw field values from source fixture
+            let field = |f: &str| -> Option<String> {
+                surgical_write_tests::extract_field_from_output(&output, "FLEX", 1, f)
+            };
+            assert_eq!(field("PATH"), Some("bass_loop.wav".to_string()));
+            assert_eq!(field("GAIN"), Some("48".to_string()));
+            assert_eq!(field("TSMODE"), Some("2".to_string()));
+            assert_eq!(field("LOOPMODE"), Some("1".to_string()));
+            assert_eq!(field("TRIM_BARSx100"), Some("800".to_string()));
+            assert_eq!(field("TRIGQUANTIZATION"), Some("-1".to_string()));
+            // Source has no BPMx24 for slot 1 — dest keeps its existing value
+            assert_eq!(
+                field("BPMx24"),
+                Some("2880".to_string()),
+                "Dest BPMx24 should be preserved when source lacks it"
+            );
+
+            // Check markers
+            let markers = MarkersFile::from_data_file(&dest_dir.join("markers.work")).unwrap();
+            assert_eq!(markers.flex_slots[0].trim_offset, 5000);
+            assert_eq!(markers.flex_slots[0].trim_end, 80000);
+            assert_eq!(markers.flex_slots[0].loop_point, 20000);
+            assert_eq!(markers.flex_slots[0].slice_count, 4);
+        }
+
+        #[test]
+        fn test_real_data_preserves_trigquant_minus1() {
+            let (src_dir, dest_dir, _src_temp, _dest_temp) = setup_fixture_projects();
+
+            copy_sample_slots(
+                src_dir.to_str().unwrap(),
+                dest_dir.to_str().unwrap(),
+                "flex",
+                vec![1, 2],
+                vec![1, 2],
+                true,
+                "mirror",
+                true,
+                vec!["trig_quant".into()],
+            )
+            .unwrap();
+
+            let output = read_fixture_project_work(&dest_dir);
+            let tq1 = surgical_write_tests::extract_field_from_output(
+                &output,
+                "FLEX",
+                1,
+                "TRIGQUANTIZATION",
+            );
+            let tq2 = surgical_write_tests::extract_field_from_output(
+                &output,
+                "FLEX",
+                2,
+                "TRIGQUANTIZATION",
+            );
+            assert_eq!(
+                tq1,
+                Some("-1".to_string()),
+                "TRIGQUANTIZATION=-1 must be preserved for slot 1"
+            );
+            assert_eq!(
+                tq2,
+                Some("-1".to_string()),
+                "TRIGQUANTIZATION=-1 must be preserved for slot 2"
+            );
+        }
+
+        #[test]
+        fn test_real_data_preserves_trim_bars() {
+            let (src_dir, dest_dir, _src_temp, _dest_temp) = setup_fixture_projects();
+
+            copy_sample_slots(
+                src_dir.to_str().unwrap(),
+                dest_dir.to_str().unwrap(),
+                "flex",
+                vec![1],
+                vec![1],
+                true,
+                "mirror",
+                true,
+                vec!["gain".into()], // Only gain, but TRIM_BARSx100 should still be preserved
+            )
+            .unwrap();
+
+            let output = read_fixture_project_work(&dest_dir);
+            let trim_bars = surgical_write_tests::extract_field_from_output(
+                &output,
+                "FLEX",
+                1,
+                "TRIM_BARSx100",
+            );
+            assert_eq!(
+                trim_bars,
+                Some("800".to_string()),
+                "TRIM_BARSx100 must be copied from source"
+            );
+        }
+
+        #[test]
+        fn test_real_data_no_spurious_bpm() {
+            // Source slot 1 has no BPMx24 — dest should not get BPMx24=2880
+            let (src_dir, dest_dir, _src_temp, _dest_temp) = setup_fixture_projects();
+
+            copy_sample_slots(
+                src_dir.to_str().unwrap(),
+                dest_dir.to_str().unwrap(),
+                "flex",
+                vec![1],
+                vec![1],
+                true,
+                "mirror",
+                true,
+                vec!["bpm".into()],
+            )
+            .unwrap();
+
+            let output = read_fixture_project_work(&dest_dir);
+            let bpm = surgical_write_tests::extract_field_from_output(&output, "FLEX", 1, "BPMx24");
+            // Source slot 1 has no BPMx24 — dest's existing BPMx24=2880 should be preserved (not removed)
+            assert_eq!(
+                bpm,
+                Some("2880".to_string()),
+                "Dest BPMx24 preserved when source lacks it"
+            );
+        }
+
+        #[test]
+        fn test_real_data_selective_gain_only() {
+            let (src_dir, dest_dir, _src_temp, _dest_temp) = setup_fixture_projects();
+
+            copy_sample_slots(
+                src_dir.to_str().unwrap(),
+                dest_dir.to_str().unwrap(),
+                "flex",
+                vec![2],
+                vec![1], // Copy src slot 2 → dest slot 1
+                false,
+                "mirror",
+                true,
+                vec!["gain".into()],
+            )
+            .unwrap();
+
+            let output = read_fixture_project_work(&dest_dir);
+            let field = |f: &str| -> Option<String> {
+                surgical_write_tests::extract_field_from_output(&output, "FLEX", 1, f)
+            };
+            // Gain should be from source slot 2 (72)
+            assert_eq!(
+                field("GAIN"),
+                Some("72".to_string()),
+                "Gain should be copied from source"
+            );
+            // Path should be unchanged (copy_assignments=false) — dest originally had "old_file.wav"
+            assert_eq!(
+                field("PATH"),
+                Some("old_file.wav".to_string()),
+                "Path should be unchanged"
+            );
+            // BPMx24 should be dest original (2880)
+            assert_eq!(
+                field("BPMx24"),
+                Some("2880".to_string()),
+                "BPMx24 should be unchanged"
+            );
+        }
+
+        #[test]
+        fn test_real_data_static_slot_copy() {
+            let (src_dir, dest_dir, _src_temp, _dest_temp) = setup_fixture_projects();
+
+            copy_sample_slots(
+                src_dir.to_str().unwrap(),
+                dest_dir.to_str().unwrap(),
+                "static",
+                vec![1],
+                vec![1],
+                true,
+                "mirror",
+                true,
+                vec!["gain".into(), "bpm".into(), "trig_quant".into()],
+            )
+            .unwrap();
+
+            let output = read_fixture_project_work(&dest_dir);
+            let field = |f: &str| -> Option<String> {
+                surgical_write_tests::extract_field_from_output(&output, "STATIC", 1, f)
+            };
+            assert_eq!(
+                field("GAIN"),
+                Some("64".to_string()),
+                "GAIN copied from source"
+            );
+            assert_eq!(
+                field("BPMx24"),
+                Some("2880".to_string()),
+                "BPMx24 copied from source"
+            );
+            assert_eq!(
+                field("TRIGQUANTIZATION"),
+                Some("-1".to_string()),
+                "TRIGQUANT=-1 preserved"
+            );
+            assert_eq!(
+                field("TRIM_BARSx100"),
+                Some("400".to_string()),
+                "TRIM_BARSx100 preserved from source"
             );
         }
     }
