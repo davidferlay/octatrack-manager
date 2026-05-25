@@ -353,13 +353,42 @@ async fn copy_bank(
     source_bank_index: u8,
     dest_project: String,
     dest_bank_indices: Vec<u8>,
-) -> Result<(), String> {
+    copy_samples: Option<bool>,
+    sample_scope: Option<String>,
+    audio_mode: Option<String>,
+    copy_attributes: Option<bool>,
+    attribute_selection: Option<Vec<String>>,
+) -> Result<project_reader::CopyBankResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
         copy_bank_impl(
             &source_project,
             source_bank_index,
             &dest_project,
             &dest_bank_indices,
+            copy_samples.unwrap_or(false),
+            &sample_scope.unwrap_or_default(),
+            &audio_mode.unwrap_or_default(),
+            copy_attributes.unwrap_or(false),
+            &attribute_selection.unwrap_or_default(),
+        )
+    })
+    .await
+    .unwrap()
+}
+
+#[tauri::command]
+async fn validate_bank_sample_slots(
+    source_project: String,
+    source_bank_index: u8,
+    dest_project: String,
+    sample_scope: String,
+) -> Result<project_reader::SlotValidationResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        project_reader::validate_bank_sample_slots(
+            &source_project,
+            source_bank_index,
+            &dest_project,
+            &sample_scope,
         )
     })
     .await
@@ -755,6 +784,7 @@ pub fn run() {
             create_audio_pool,
             // Tools Tab - Copy Operations
             copy_bank,
+            validate_bank_sample_slots,
             copy_parts,
             copy_patterns,
             copy_tracks,
