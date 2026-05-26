@@ -1548,17 +1548,17 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         type="button"
                         className={`tools-toggle-btn ${sampleScope === "referenced_only" ? "selected" : ""}`}
                         onClick={() => setSampleScope("referenced_only")}
-                        title="Only copy sample slots actively used by tracks in Parts and by sample locks in Patterns of this bank"
+                        title="Only copy sample slots actively used by tracks in Parts and by sample locks in Patterns of source bank"
                       >
-                        Referenced only
+                        Used by bank
                       </button>
                       <button
                         type="button"
                         className={`tools-toggle-btn ${sampleScope === "all_configured" ? "selected" : ""}`}
                         onClick={() => setSampleScope("all_configured")}
-                        title="Copy all configured sample slots (all slots with an audio file assigned) from the source project"
+                        title="Copy all slots from source project with an audio file assigned"
                       >
-                        All configured
+                        All assigned
                       </button>
                     </div>
                   </div>

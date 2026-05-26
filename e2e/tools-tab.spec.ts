@@ -3221,23 +3221,23 @@ test.describe('Tools Tab - Copy Banks Sample Options', () => {
     await expect(optionsPanel.locator('label', { hasText: 'Sample Scope' })).toHaveCount(0)
   })
 
-  test('Sample Scope defaults to Referenced only', async ({ page }) => {
+  test('Sample Scope defaults to Used by bank', async ({ page }) => {
     const optionsPanel = page.locator('.tools-options-panel')
     const yesBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'Yes' }).first()
     await yesBtn.click()
     await page.waitForTimeout(300)
 
-    const referencedBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'Referenced only' })
+    const referencedBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'Used by bank' })
     await expect(referencedBtn).toHaveClass(/selected/)
   })
 
-  test('Sample Scope can be switched to All configured', async ({ page }) => {
+  test('Sample Scope can be switched to All assigned', async ({ page }) => {
     const optionsPanel = page.locator('.tools-options-panel')
     const yesBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'Yes' }).first()
     await yesBtn.click()
     await page.waitForTimeout(300)
 
-    const allConfiguredBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'All configured' })
+    const allConfiguredBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'All assigned' })
     await allConfiguredBtn.click()
     await page.waitForTimeout(200)
     await expect(allConfiguredBtn).toHaveClass(/selected/)
