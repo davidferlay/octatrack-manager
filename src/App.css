@@ -1081,6 +1081,10 @@ h1 {
   color: #FFAA32;
 }
 
+.modal-header h3 .loading-spinner-small {
+  margin-right: 0.75rem;
+}
+
 .modal-close {
   background: none;
   border: none;
