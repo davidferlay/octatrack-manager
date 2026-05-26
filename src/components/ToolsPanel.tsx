@@ -230,7 +230,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   // UI state
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
   const [showProgress, setShowProgress] = useState<boolean>(false);
-  const [progressFading, setProgressFading] = useState<boolean>(false);
   const [executingDetails, setExecutingDetails] = useState<string>("");
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [statusType, setStatusType] = useState<"success" | "error" | "info" | "">("");
@@ -614,7 +613,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   async function executeOperation() {
     setIsExecuting(true);
     setShowProgress(true);
-    setProgressFading(false);
     setExecutingDetails(getExecutingDetails());
     setStatusMessage("");
     setStatusType("");
@@ -778,10 +776,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
       setStatusType("error");
     } finally {
       setIsExecuting(false);
-      setProgressFading(true);
       setTimeout(() => {
         setShowProgress(false);
-        setProgressFading(false);
         setExecutingDetails("");
       }, 300);
     }
@@ -2915,15 +2911,19 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         </button>
 
         {showProgress && (
-          <details className={`tools-progress-details ${progressFading ? 'fading-out' : ''}`} open>
-            <summary>Progress</summary>
-            <div className="tools-progress-content">
-              <div className="tools-progress-item">
-                <span className="loading-spinner-small"></span>
-                <span>{executingDetails}</span>
+          <div className="modal-overlay">
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>
+                  <span className="loading-spinner-small"></span>
+                  Processing
+                </h3>
+              </div>
+              <div className="modal-body">
+                <p>{executingDetails}</p>
               </div>
             </div>
-          </details>
+          </div>
         )}
       </div>
       )}
