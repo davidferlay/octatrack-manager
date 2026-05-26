@@ -4757,8 +4757,7 @@ pub fn validate_bank_sample_slots(
         "referenced_only" => {
             let (referenced_static, referenced_flex) = collect_referenced_slots(&bank);
             // Filter: only keep slots that actually have audio files in project.work
-            let (configured_static, configured_flex) =
-                collect_all_configured_slots(source_path)?;
+            let (configured_static, configured_flex) = collect_all_configured_slots(source_path)?;
             (
                 referenced_static
                     .intersection(&configured_static)
