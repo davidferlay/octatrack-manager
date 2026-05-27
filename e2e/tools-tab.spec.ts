@@ -3187,26 +3187,26 @@ test.describe('Tools Tab - Copy Banks Sample Options', () => {
     await page.waitForTimeout(300)
   })
 
-  test('Copy Sample Slots toggle defaults to No', async ({ page }) => {
+  test('Copy Sample Slots toggle defaults to Yes', async ({ page }) => {
     const optionsPanel = page.locator('.tools-options-panel')
-    const noBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'No' })
-    await expect(noBtn).toHaveClass(/selected/)
+    const yesBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'Yes' }).first()
+    await expect(yesBtn).toHaveClass(/selected/)
   })
 
-  test('Toggling Copy Sample Slots to Yes shows additional options', async ({ page }) => {
+  test('Additional options are visible by default when Copy Sample Slots is Yes', async ({ page }) => {
     const optionsPanel = page.locator('.tools-options-panel')
 
-    // Sample Scope should not be visible initially
-    await expect(optionsPanel.locator('label', { hasText: 'Sample Scope' })).toHaveCount(0)
-
-    // Click Yes
-    const yesBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'Yes' }).first()
-    await yesBtn.click()
-    await page.waitForTimeout(300)
-
-    // Now Sample Scope and Audio Files should be visible
+    // Sample Scope and Audio Files should be visible by default
     await expect(optionsPanel.locator('label', { hasText: 'Sample Scope' })).toBeVisible()
     await expect(optionsPanel.locator('label', { hasText: 'Audio Files' })).toBeVisible()
+
+    // Click No to hide them
+    const noBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'No' }).first()
+    await noBtn.click()
+    await page.waitForTimeout(300)
+
+    // Now Sample Scope should be hidden
+    await expect(optionsPanel.locator('label', { hasText: 'Sample Scope' })).toHaveCount(0)
   })
 
   test('Toggling Copy Sample Slots back to No hides additional options', async ({ page }) => {
@@ -3275,13 +3275,21 @@ test.describe('Tools Tab - Copy Banks Sample Options', () => {
             flex_dedup: 0,
             is_valid: false,
             error_message: 'Not enough free Static slots: need 10, only 3 available',
+            flex_ram_free_mb: 44.0,
+            flex_ram_new_mb: 5.0,
+            flex_ram_free_after_copy_mb: 39.0,
+            flex_memory_warning: null,
           }
         }
         return origInvoke(cmd, args)
       }
     })
 
+    // Toggle No then Yes to re-trigger validation with new mock
     const optionsPanel = page.locator('.tools-options-panel')
+    const noBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'No' }).first()
+    await noBtn.click()
+    await page.waitForTimeout(200)
     const yesBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'Yes' }).first()
     await yesBtn.click()
     await page.waitForTimeout(500)
@@ -3296,9 +3304,7 @@ test.describe('Tools Tab - Copy Banks Sample Options', () => {
   test('Execute sends correct parameters with sample options', async ({ page }) => {
     const optionsPanel = page.locator('.tools-options-panel')
 
-    // Enable Copy Sample Slots
-    const yesBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'Yes' }).first()
-    await yesBtn.click()
+    // Default is Copy Sample Slots = Yes, so just wait for validation
     await page.waitForTimeout(500)
 
     // Click Execute
@@ -3311,7 +3317,8 @@ test.describe('Tools Tab - Copy Banks Sample Options', () => {
     expect(args).toBeTruthy()
     expect(args.copySamples).toBe(true)
     expect(args.sampleScope).toBe('referenced_only')
-    expect(args.audioMode).toBe('copy')
+    expect(args.audioMode).toBe('mirror')
+    expect(args.slotPlacement).toBe('keep_position')
     expect(args.copyAttributes).toBe(true)
     expect(args.attributeSelection).toEqual(expect.arrayContaining(['gain', 'bpm', 'trim', 'slices']))
   })
