@@ -4587,8 +4587,10 @@ fn build_remap_table(
     source_filenames_flex: &std::collections::HashMap<u8, String>,
     dest_state_static: &std::collections::HashMap<u8, String>,
     dest_state_flex: &std::collections::HashMap<u8, String>,
+    slot_placement: &str,
 ) -> Result<SlotRemapResult, String> {
     let mut dedup_count: u32 = 0;
+    let keep_position = slot_placement != "stack_from_first";
 
     fn build_remap_for_type(
         source_slots: &std::collections::HashSet<u8>,
@@ -4596,6 +4598,7 @@ fn build_remap_table(
         dest_state: &std::collections::HashMap<u8, String>,
         dedup_count: &mut u32,
         type_name: &str,
+        keep_position: bool,
     ) -> Result<std::collections::HashMap<u8, u8>, String> {
         let mut remap = std::collections::HashMap::new();
         let mut dest_occupied: std::collections::HashSet<u8> = dest_state.keys().copied().collect();
@@ -4620,8 +4623,8 @@ fn build_remap_table(
                 }
             }
 
-            // 2. Same position: if dest slot at same ID is free, use it
-            if !dest_occupied.contains(&src_slot) {
+            // 2. Same position: if dest slot at same ID is free, use it (only in keep_position mode)
+            if keep_position && !dest_occupied.contains(&src_slot) {
                 remap.insert(src_slot, src_slot);
                 dest_occupied.insert(src_slot);
                 continue;
@@ -4658,6 +4661,7 @@ fn build_remap_table(
         dest_state_static,
         &mut dedup_count,
         "Static",
+        keep_position,
     );
 
     let flex_result = build_remap_for_type(
@@ -4666,6 +4670,7 @@ fn build_remap_table(
         dest_state_flex,
         &mut dedup_count,
         "Flex",
+        keep_position,
     );
 
     match (static_result, flex_result) {
@@ -5051,6 +5056,7 @@ pub fn validate_bank_sample_slots(
     source_bank_index: u8,
     dest_project: &str,
     sample_scope: &str,
+    slot_placement: &str,
 ) -> Result<SlotValidationResult, String> {
     if source_bank_index > 15 {
         return Err("Source bank index must be between 0 and 15".to_string());
@@ -5139,6 +5145,7 @@ pub fn validate_bank_sample_slots(
         &src_fnames_flex,
         &dest_state_static,
         &dest_state_flex,
+        slot_placement,
     ) {
         Ok((static_remap, flex_remap, _dedup_count)) => {
             // Count actual new slots needed (excluding deduped)
@@ -5228,6 +5235,7 @@ pub fn copy_bank(
     copy_samples: bool,
     sample_scope: &str,
     audio_mode: &str,
+    slot_placement: &str,
     copy_attributes: bool,
     attribute_selection: &[String],
 ) -> Result<CopyBankResult, String> {
@@ -5313,6 +5321,7 @@ pub fn copy_bank(
                 &src_fnames_flex,
                 &dest_state_static,
                 &dest_state_flex,
+                slot_placement,
             )?;
 
             result.slots_deduplicated = dedup_count;
@@ -7137,6 +7146,7 @@ mod tests {
                 false,
                 "",
                 "",
+                "keep_position",
                 false,
                 &[],
             );
@@ -7167,6 +7177,7 @@ mod tests {
                 false,
                 "",
                 "",
+                "keep_position",
                 false,
                 &[],
             );
@@ -7200,6 +7211,7 @@ mod tests {
                 false,
                 "",
                 "",
+                "keep_position",
                 false,
                 &[],
             );
@@ -7223,6 +7235,7 @@ mod tests {
                 false,
                 "",
                 "",
+                "keep_position",
                 false,
                 &[],
             );
@@ -7244,6 +7257,7 @@ mod tests {
                 false,
                 "",
                 "",
+                "keep_position",
                 false,
                 &[],
             );
@@ -7268,6 +7282,7 @@ mod tests {
                 false,
                 "",
                 "",
+                "keep_position",
                 false,
                 &[],
             );
@@ -7283,7 +7298,7 @@ mod tests {
 
             for i in 0..16u8 {
                 let result =
-                    copy_bank(&source.path, i, &dest.path, &[i], false, "", "", false, &[]);
+                    copy_bank(&source.path, i, &dest.path, &[i], false, "", "", "keep_position", false, &[]);
                 assert!(
                     result.is_ok(),
                     "Copy bank {} should succeed: {:?}",
@@ -7310,6 +7325,7 @@ mod tests {
                 false,
                 "",
                 "",
+                "keep_position",
                 false,
                 &[],
             );
@@ -7349,6 +7365,7 @@ mod tests {
                 false,
                 "",
                 "",
+                "keep_position",
                 false,
                 &[],
             );
@@ -7377,7 +7394,7 @@ mod tests {
             let source = TestProject::new();
             let dest = TestProject::new();
 
-            let result = copy_bank(&source.path, 0, &dest.path, &[], false, "", "", false, &[]);
+            let result = copy_bank(&source.path, 0, &dest.path, &[], false, "", "", "keep_position", false, &[]);
             assert!(
                 result.is_ok(),
                 "Empty destinations should succeed as no-op: {:?}",
@@ -7393,7 +7410,7 @@ mod tests {
             });
             let dest = TestProject::new();
 
-            copy_bank(&source.path, 0, &dest.path, &[0], false, "", "", false, &[]).unwrap();
+            copy_bank(&source.path, 0, &dest.path, &[0], false, "", "", "keep_position", false, &[]).unwrap();
 
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
@@ -7420,6 +7437,7 @@ mod tests {
                 false,
                 "",
                 "",
+                "keep_position",
                 false,
                 &[],
             );
@@ -7451,6 +7469,7 @@ mod tests {
                 false,
                 "",
                 "",
+                "keep_position",
                 false,
                 &[],
             );
@@ -7570,6 +7589,7 @@ mod tests {
                 &HashMap::new(),
                 &dest_state,
                 &HashMap::new(),
+                "keep_position",
             )
             .unwrap();
 
@@ -7593,6 +7613,7 @@ mod tests {
                 &HashMap::new(),
                 &dest_state,
                 &HashMap::new(),
+                "keep_position",
             )
             .unwrap();
 
@@ -7615,6 +7636,7 @@ mod tests {
                 &HashMap::new(),
                 &dest_state,
                 &HashMap::new(),
+                "keep_position",
             )
             .unwrap();
 
@@ -7641,6 +7663,7 @@ mod tests {
                 &HashMap::new(),
                 &dest_state,
                 &HashMap::new(),
+                "keep_position",
             );
 
             assert!(result.is_err(), "Should error when no free slots");
@@ -12766,6 +12789,7 @@ mod tests {
                     false,
                     "",
                     "",
+                    "keep_position",
                     false,
                     &[],
                 );
@@ -12972,7 +12996,7 @@ mod tests {
             });
             let dest = TestProject::new();
 
-            copy_bank(&source.path, 0, &dest.path, &[1], false, "", "", false, &[]).unwrap();
+            copy_bank(&source.path, 0, &dest.path, &[1], false, "", "", "keep_position", false, &[]).unwrap();
 
             let dest_bank_path = Path::new(&dest.path).join("bank02.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
@@ -13074,6 +13098,7 @@ mod tests {
                 false,
                 "",
                 "",
+                "keep_position",
                 false,
                 &[],
             )

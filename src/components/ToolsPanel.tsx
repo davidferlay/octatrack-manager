@@ -192,9 +192,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [sampleSelectionMode, setSampleSelectionMode] = useState<"one" | "range">("range");
 
   // Copy Banks with samples options
-  const [copySamples, setCopySamples] = useState<boolean>(false);
+  const [copySamples, setCopySamples] = useState<boolean>(true);
   const [sampleScope, setSampleScope] = useState<"referenced_only" | "all_configured">("referenced_only");
-  const [bankAudioMode, setBankAudioMode] = useState<AudioMode>("copy");
+  const [bankAudioMode, setBankAudioMode] = useState<AudioMode>("mirror");
+  const [slotPlacement, setSlotPlacement] = useState<"keep_position" | "stack_from_first">("keep_position");
   const [slotValidation, setSlotValidation] = useState<{
     static_needed: number;
     flex_needed: number;
@@ -509,11 +510,12 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         sourceBankIndex,
         destProject,
         sampleScope,
+        slotPlacement,
       }).then(setSlotValidation).catch(() => setSlotValidation(null));
     } else {
       setSlotValidation(null);
     }
-  }, [operation, copySamples, sampleScope, sourceBankIndex, destProject, projectPath]);
+  }, [operation, copySamples, sampleScope, slotPlacement, sourceBankIndex, destProject, projectPath]);
 
   // Helper to get operation details for display
   function getExecutingDetails(): string {
@@ -654,6 +656,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             copySamples: copySamples || undefined,
             sampleScope: copySamples ? sampleScope : undefined,
             audioMode: copySamples ? bankAudioMode : undefined,
+            slotPlacement: copySamples ? slotPlacement : undefined,
             copyAttributes: copySamples ? true : undefined,
             attributeSelection: copySamples ? [...ALL_ATTRIBUTES] : undefined,
           });
@@ -1647,6 +1650,28 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         }
                       >
                         Move to Pool
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="tools-field">
+                    <label className="tools-sub-label">Slot Placement</label>
+                    <div className="tools-toggle-group">
+                      <button
+                        type="button"
+                        className={`tools-toggle-btn ${slotPlacement === "keep_position" ? "selected" : ""}`}
+                        onClick={() => setSlotPlacement("keep_position")}
+                        title="Place samples at the same slot ID as in source when available, otherwise use first free slot"
+                      >
+                        Keep position
+                      </button>
+                      <button
+                        type="button"
+                        className={`tools-toggle-btn ${slotPlacement === "stack_from_first" ? "selected" : ""}`}
+                        onClick={() => setSlotPlacement("stack_from_first")}
+                        title="Place samples in first available slots starting from slot 1, filling gaps in destination"
+                      >
+                        Stack from first
                       </button>
                     </div>
                   </div>
