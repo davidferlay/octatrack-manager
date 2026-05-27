@@ -356,6 +356,7 @@ async fn copy_bank(
     copy_samples: Option<bool>,
     sample_scope: Option<String>,
     audio_mode: Option<String>,
+    slot_placement: Option<String>,
     copy_attributes: Option<bool>,
     attribute_selection: Option<Vec<String>>,
 ) -> Result<project_reader::CopyBankResult, String> {
@@ -368,6 +369,7 @@ async fn copy_bank(
             copy_samples.unwrap_or(false),
             &sample_scope.unwrap_or_default(),
             &audio_mode.unwrap_or_default(),
+            &slot_placement.unwrap_or_else(|| "keep_position".to_string()),
             copy_attributes.unwrap_or(false),
             &attribute_selection.unwrap_or_default(),
         )
@@ -382,6 +384,7 @@ async fn validate_bank_sample_slots(
     source_bank_index: u8,
     dest_project: String,
     sample_scope: String,
+    slot_placement: String,
 ) -> Result<project_reader::SlotValidationResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
         project_reader::validate_bank_sample_slots(
@@ -389,6 +392,7 @@ async fn validate_bank_sample_slots(
             source_bank_index,
             &dest_project,
             &sample_scope,
+            &slot_placement,
         )
     })
     .await
