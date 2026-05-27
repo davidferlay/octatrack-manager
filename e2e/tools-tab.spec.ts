@@ -246,6 +246,10 @@ async function setupTauriMocks(page: Page, overrides?: { sameSet?: boolean; with
               static_dedup: 1,
               flex_dedup: 0,
               missing_files: 0,
+              flex_ram_total_mb: 64.0,
+              flex_ram_used_mb: 20.0,
+              flex_ram_after_copy_mb: 25.0,
+              flex_memory_warning: null,
               is_valid: true,
               error_message: null,
             }
