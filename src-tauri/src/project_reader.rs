@@ -4641,9 +4641,10 @@ fn build_remap_table(
             if !found {
                 let needed = source_slots.len();
                 let available = 128 - dest_state.len();
+                let only = if available > 0 { "only " } else { "" };
                 return Err(format!(
-                    "Not enough free {} slots: need {}, only {} available",
-                    type_name, needed, available
+                    "Not enough free {} slots: need {}, {}{} available",
+                    type_name, needed, only, available
                 ));
             }
         }
@@ -5122,13 +5123,13 @@ pub fn validate_bank_sample_slots(
     let flex_ram_used = sum_flex_sample_sizes(dest_path, dest_memory_settings.load_24bit_flex)?;
     let flex_ram_free = flex_ram_capacity.saturating_sub(flex_ram_used);
 
-    // Truncate to 2 decimal places (floor) to match Octatrack display behavior
-    let truncate_mb = |bytes: u64| -> f64 {
+    // Round to 2 decimal places to match Octatrack display behavior
+    let round_mb = |bytes: u64| -> f64 {
         let mb = bytes as f64 / (1024.0 * 1024.0);
-        (mb * 100.0).floor() / 100.0
+        (mb * 100.0 + 0.5).floor() / 100.0
     };
 
-    let flex_ram_free_mb = truncate_mb(flex_ram_free);
+    let flex_ram_free_mb = round_mb(flex_ram_free);
 
     // Try building remap table to check feasibility
     match build_remap_table(
@@ -5158,9 +5159,9 @@ pub fn validate_bank_sample_slots(
                 &dest_state_flex,
                 dest_memory_settings.load_24bit_flex,
             )?;
-            let flex_ram_new_mb = truncate_mb(new_flex_bytes);
+            let flex_ram_new_mb = round_mb(new_flex_bytes);
             let flex_ram_free_after = flex_ram_free.saturating_sub(new_flex_bytes);
-            let flex_ram_free_after_copy_mb = truncate_mb(flex_ram_free_after);
+            let flex_ram_free_after_copy_mb = round_mb(flex_ram_free_after);
 
             let flex_memory_warning = if new_flex_bytes > flex_ram_free {
                 Some(format!(

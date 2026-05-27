@@ -4736,8 +4736,14 @@ h1 {
   color: var(--elektron-orange);
 }
 
+.tools-validation-status.invalid span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .tools-validation-status.invalid i {
-  margin-right: 4px;
+  flex-shrink: 0;
 }
 
 .tools-validation-status.warning {
