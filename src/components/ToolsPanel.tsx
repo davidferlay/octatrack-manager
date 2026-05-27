@@ -203,6 +203,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     static_dedup: number;
     flex_dedup: number;
     missing_files: number;
+    flex_ram_total_mb: number;
+    flex_ram_used_mb: number;
+    flex_ram_after_copy_mb: number;
+    flex_memory_warning: string | null;
     is_valid: boolean;
     error_message: string | null;
   } | null>(null);
@@ -494,6 +498,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         static_dedup: number;
         flex_dedup: number;
         missing_files: number;
+        flex_ram_total_mb: number;
+        flex_ram_used_mb: number;
+        flex_ram_after_copy_mb: number;
+        flex_memory_warning: string | null;
         is_valid: boolean;
         error_message: string | null;
       }>("validate_bank_sample_slots", {
@@ -1564,7 +1572,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     <div
                       className={`tools-validation-status ${slotValidation.is_valid ? 'valid' : 'invalid'}`}
                       title={slotValidation.is_valid
-                        ? `${slotValidation.static_needed} Static slot${slotValidation.static_needed !== 1 ? 's' : ''} and ${slotValidation.flex_needed} Flex slot${slotValidation.flex_needed !== 1 ? 's' : ''} referenced in source bank.\n${slotValidation.static_available} Static and ${slotValidation.flex_available} Flex slots available in destination.\n${slotValidation.static_dedup + slotValidation.flex_dedup > 0 ? `${slotValidation.static_dedup + slotValidation.flex_dedup} slot${slotValidation.static_dedup + slotValidation.flex_dedup !== 1 ? 's' : ''} already present in destination (same filename) - will be reused.` : 'No duplicates found in destination.'}`
+                        ? `${slotValidation.static_needed} Static slot${slotValidation.static_needed !== 1 ? 's' : ''} and ${slotValidation.flex_needed} Flex slot${slotValidation.flex_needed !== 1 ? 's' : ''} referenced in source bank.\n${slotValidation.static_available} Static and ${slotValidation.flex_available} Flex slots available in destination.\n${slotValidation.static_dedup + slotValidation.flex_dedup > 0 ? `${slotValidation.static_dedup + slotValidation.flex_dedup} slot${slotValidation.static_dedup + slotValidation.flex_dedup !== 1 ? 's' : ''} already present in destination (same filename) - will be reused.` : 'No duplicates found in destination.'}\nFlex RAM: ${slotValidation.flex_ram_after_copy_mb.toFixed(1)} MB after copy / ${slotValidation.flex_ram_total_mb.toFixed(1)} MB available`
                         : slotValidation.error_message || ''
                       }
                     >
@@ -1593,6 +1601,14 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         {' '}{slotValidation.missing_files} audio file{slotValidation.missing_files !== 1 ? 's' : ''} missing in source project - consider using{' '}
                         <a href="#" onClick={(e) => { e.preventDefault(); setOperation("fix_missing_samples"); }}>Fix Missing Samples</a>
                         {' '}first
+                      </span>
+                    </div>
+                  )}
+                  {slotValidation && slotValidation.flex_memory_warning && (
+                    <div className="tools-validation-status error">
+                      <span>
+                        <i className="fas fa-exclamation-circle"></i>
+                        {' '}Flex RAM: {slotValidation.flex_ram_after_copy_mb.toFixed(1)} MB needed, {slotValidation.flex_ram_total_mb.toFixed(1)} MB available - Octatrack will show OUT OF MEMORY error
                       </span>
                     </div>
                   )}
@@ -2861,13 +2877,13 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         <button
           className="tools-execute-btn"
           onClick={executeOperation}
-          disabled={isExecuting || (operation === "copy_bank" && sourceBankIndex === -1) || (operation === "copy_bank" && destBankIndices.length === 0) || (operation === "copy_bank" && copySamples && slotValidation !== null && !slotValidation.is_valid) || (operation === "copy_parts" && sourceBankIndex === -1) || (operation === "copy_parts" && destPartBankIndices.length === 0) || (operation === "copy_parts" && sourcePartIndices.length === 0) || (operation === "copy_parts" && destPartIndices.length === 0) || (operation === "copy_tracks" && sourceBankIndex === -1) || (operation === "copy_tracks" && sourceTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex === -2) || (operation === "copy_tracks" && destBankIndex === -1) || (operation === "copy_tracks" && destTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex !== -1 && destTrackPartIndices.length === 0) || (operation === "copy_patterns" && sourceBankIndex === -1) || (operation === "copy_patterns" && sourcePatternIndices.length === 0) || (operation === "copy_patterns" && destBankIndex === -1) || (operation === "copy_patterns" && destPatternIndices.length === 0) || (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1) || (operation === "copy_patterns" && trackMode === "specific" && patternsTrackIndices.length === 0) || (operation === "copy_sample_slots" && sourceSampleIndices.length + destSampleStart > 128) || (operation === "copy_sample_slots" && !copyAssignments && !copyAttributes) || (operation === "copy_sample_slots" && copyAttributes && selectedAttributes.length === 0 && !copyAssignments)}
+          disabled={isExecuting || (operation === "copy_bank" && sourceBankIndex === -1) || (operation === "copy_bank" && destBankIndices.length === 0) || (operation === "copy_bank" && copySamples && slotValidation !== null && !slotValidation.is_valid) || (operation === "copy_bank" && copySamples && slotValidation !== null && slotValidation.flex_memory_warning !== null) || (operation === "copy_parts" && sourceBankIndex === -1) || (operation === "copy_parts" && destPartBankIndices.length === 0) || (operation === "copy_parts" && sourcePartIndices.length === 0) || (operation === "copy_parts" && destPartIndices.length === 0) || (operation === "copy_tracks" && sourceBankIndex === -1) || (operation === "copy_tracks" && sourceTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex === -2) || (operation === "copy_tracks" && destBankIndex === -1) || (operation === "copy_tracks" && destTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex !== -1 && destTrackPartIndices.length === 0) || (operation === "copy_patterns" && sourceBankIndex === -1) || (operation === "copy_patterns" && sourcePatternIndices.length === 0) || (operation === "copy_patterns" && destBankIndex === -1) || (operation === "copy_patterns" && destPatternIndices.length === 0) || (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1) || (operation === "copy_patterns" && trackMode === "specific" && patternsTrackIndices.length === 0) || (operation === "copy_sample_slots" && sourceSampleIndices.length + destSampleStart > 128) || (operation === "copy_sample_slots" && !copyAssignments && !copyAttributes) || (operation === "copy_sample_slots" && copyAttributes && selectedAttributes.length === 0 && !copyAssignments)}
           title={
             isExecuting ? "Operation in progress..." :
             (operation === "copy_bank" && sourceBankIndex === -1 && destBankIndices.length === 0) ? "Select source and destination banks" :
             (operation === "copy_bank" && sourceBankIndex === -1) ? "Select a source bank" :
             (operation === "copy_bank" && destBankIndices.length === 0) ? "Select at least one destination bank" :
-            (operation === "copy_bank" && copySamples && slotValidation !== null && !slotValidation.is_valid) ? (slotValidation.error_message || "Not enough free slots in destination project") :
+            (operation === "copy_bank" && copySamples && slotValidation !== null && !slotValidation.is_valid) || (operation === "copy_bank" && copySamples && slotValidation !== null && slotValidation.flex_memory_warning !== null) ? (slotValidation.error_message || "Not enough free slots in destination project") :
             (operation === "copy_parts" && sourceBankIndex === -1 && destPartBankIndices.length === 0) ? "Select source and destination banks" :
             (operation === "copy_parts" && sourceBankIndex === -1) ? "Select a source bank" :
             (operation === "copy_parts" && destPartBankIndices.length === 0) ? "Select at least one destination bank" :

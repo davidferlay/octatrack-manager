@@ -4375,6 +4375,10 @@ pub struct SlotValidationResult {
     pub static_dedup: u32,
     pub flex_dedup: u32,
     pub missing_files: u32,
+    pub flex_ram_total_mb: f64,
+    pub flex_ram_used_mb: f64,
+    pub flex_ram_after_copy_mb: f64,
+    pub flex_memory_warning: Option<String>,
     pub is_valid: bool,
     pub error_message: Option<String>,
 }
@@ -4647,23 +4651,27 @@ fn build_remap_table(
         Ok(remap)
     }
 
-    let static_remap = build_remap_for_type(
+    let static_result = build_remap_for_type(
         source_slots_static,
         source_filenames_static,
         dest_state_static,
         &mut dedup_count,
         "Static",
-    )?;
+    );
 
-    let flex_remap = build_remap_for_type(
+    let flex_result = build_remap_for_type(
         source_slots_flex,
         source_filenames_flex,
         dest_state_flex,
         &mut dedup_count,
         "Flex",
-    )?;
+    );
 
-    Ok((static_remap, flex_remap, dedup_count))
+    match (static_result, flex_result) {
+        (Ok(static_remap), Ok(flex_remap)) => Ok((static_remap, flex_remap, dedup_count)),
+        (Err(e1), Err(e2)) => Err(format!("{}. {}", e1, e2)),
+        (Err(e), _) | (_, Err(e)) => Err(e),
+    }
 }
 
 /// Remap all sample slot references in a bank's Parts and Patterns.
@@ -4720,6 +4728,319 @@ fn remap_bank_slot_references(
             }
         }
     }
+}
+
+/// Total Octatrack RAM in bytes (85.5 MB).
+const OT_TOTAL_RAM_BYTES: u64 = 89_652_480;
+
+/// Audio PCM metadata needed for RAM calculation.
+struct AudioPcmInfo {
+    num_channels: u16,
+    num_sample_frames: u64,
+    bits_per_sample: u16,
+}
+
+/// Read PCM metadata from a WAV file by parsing the RIFF/WAV header.
+fn read_wav_pcm_info(path: &Path) -> Option<AudioPcmInfo> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = std::fs::File::open(path).ok()?;
+    let mut buf4 = [0u8; 4];
+    let mut buf2 = [0u8; 2];
+
+    // RIFF header
+    f.read_exact(&mut buf4).ok()?;
+    if &buf4 != b"RIFF" {
+        return None;
+    }
+    f.seek(SeekFrom::Current(4)).ok()?; // skip file size
+    f.read_exact(&mut buf4).ok()?;
+    if &buf4 != b"WAVE" {
+        return None;
+    }
+
+    let mut num_channels: u16 = 0;
+    let mut bits_per_sample: u16 = 0;
+    let mut block_align: u16 = 0;
+    let mut data_chunk_size: Option<u64> = None;
+
+    // Scan chunks
+    loop {
+        if f.read_exact(&mut buf4).is_err() {
+            break;
+        }
+        let chunk_id = buf4;
+        if f.read_exact(&mut buf4).is_err() {
+            break;
+        }
+        let chunk_size = u32::from_le_bytes(buf4) as u64;
+
+        if &chunk_id == b"fmt " {
+            // audio_format (2 bytes)
+            f.seek(SeekFrom::Current(2)).ok()?;
+            // num_channels (2 bytes)
+            f.read_exact(&mut buf2).ok()?;
+            num_channels = u16::from_le_bytes(buf2);
+            // sample_rate (4 bytes)
+            f.seek(SeekFrom::Current(4)).ok()?;
+            // byte_rate (4 bytes)
+            f.seek(SeekFrom::Current(4)).ok()?;
+            // block_align (2 bytes)
+            f.read_exact(&mut buf2).ok()?;
+            block_align = u16::from_le_bytes(buf2);
+            // bits_per_sample (2 bytes)
+            f.read_exact(&mut buf2).ok()?;
+            bits_per_sample = u16::from_le_bytes(buf2);
+            // Seek to end of fmt chunk (may have extra bytes)
+            let remaining = chunk_size.saturating_sub(16);
+            if remaining > 0 {
+                f.seek(SeekFrom::Current(remaining as i64)).ok()?;
+            }
+        } else if &chunk_id == b"data" {
+            data_chunk_size = Some(chunk_size);
+            break;
+        } else {
+            // Skip unknown chunk (pad to even boundary)
+            let skip = if chunk_size % 2 == 1 {
+                chunk_size + 1
+            } else {
+                chunk_size
+            };
+            f.seek(SeekFrom::Current(skip as i64)).ok()?;
+        }
+    }
+
+    let data_size = data_chunk_size?;
+    if num_channels == 0 || block_align == 0 {
+        return None;
+    }
+
+    let num_sample_frames = data_size / block_align as u64;
+
+    Some(AudioPcmInfo {
+        num_channels,
+        num_sample_frames,
+        bits_per_sample,
+    })
+}
+
+/// Read PCM metadata from an AIFF/AIFF-C file.
+fn read_aiff_pcm_info(path: &Path) -> Option<AudioPcmInfo> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = std::fs::File::open(path).ok()?;
+    let mut buf4 = [0u8; 4];
+    let mut buf2 = [0u8; 2];
+
+    // FORM header
+    f.read_exact(&mut buf4).ok()?;
+    if &buf4 != b"FORM" {
+        return None;
+    }
+    f.seek(SeekFrom::Current(4)).ok()?; // skip file size
+    f.read_exact(&mut buf4).ok()?;
+    if &buf4 != b"AIFF" && &buf4 != b"AIFC" {
+        return None;
+    }
+
+    let mut num_channels: u16 = 0;
+    let mut num_sample_frames: u32 = 0;
+    let mut bits_per_sample: u16 = 0;
+    let mut found_comm = false;
+
+    // Scan chunks (AIFF uses big-endian)
+    loop {
+        if f.read_exact(&mut buf4).is_err() {
+            break;
+        }
+        let chunk_id = buf4;
+        if f.read_exact(&mut buf4).is_err() {
+            break;
+        }
+        let chunk_size = u32::from_be_bytes(buf4) as u64;
+
+        if &chunk_id == b"COMM" {
+            // num_channels (2 bytes)
+            f.read_exact(&mut buf2).ok()?;
+            num_channels = u16::from_be_bytes(buf2);
+            // num_sample_frames (4 bytes)
+            f.read_exact(&mut buf4).ok()?;
+            num_sample_frames = u32::from_be_bytes(buf4);
+            // bits_per_sample (2 bytes)
+            f.read_exact(&mut buf2).ok()?;
+            bits_per_sample = u16::from_be_bytes(buf2);
+            found_comm = true;
+            // Skip rest of COMM chunk
+            let remaining = chunk_size.saturating_sub(8);
+            if remaining > 0 {
+                f.seek(SeekFrom::Current(remaining as i64)).ok()?;
+            }
+        } else {
+            // Skip chunk (pad to even boundary)
+            let skip = if chunk_size % 2 == 1 {
+                chunk_size + 1
+            } else {
+                chunk_size
+            };
+            f.seek(SeekFrom::Current(skip as i64)).ok()?;
+        }
+    }
+
+    if !found_comm || num_channels == 0 {
+        return None;
+    }
+
+    Some(AudioPcmInfo {
+        num_channels,
+        num_sample_frames: num_sample_frames as u64,
+        bits_per_sample,
+    })
+}
+
+/// Calculate the exact RAM footprint of an audio file as loaded by the Octatrack.
+///
+/// The Octatrack loads all flex samples into RAM. The RAM usage depends on:
+/// - Number of sample frames × number of channels
+/// - Bit depth: 16-bit = 2 bytes per sample, 24-bit = 3 bytes per sample
+/// - If load_24bit_flex is false, 24-bit samples are downsampled to 16-bit
+///   (2 bytes per sample instead of 3)
+///
+/// Falls back to file size on disk if audio header parsing fails.
+fn get_flex_ram_usage(path: &Path, load_24bit_flex: bool) -> u64 {
+    let pcm_info = read_wav_pcm_info(path).or_else(|| read_aiff_pcm_info(path));
+
+    if let Some(info) = pcm_info {
+        let bytes_per_sample: u64 = if info.bits_per_sample > 16 && load_24bit_flex {
+            3 // 24-bit kept as 24-bit in RAM
+        } else {
+            2 // 16-bit, or 24-bit downsampled to 16-bit
+        };
+        info.num_sample_frames * info.num_channels as u64 * bytes_per_sample
+    } else {
+        // Fallback: use file size (overestimates due to headers)
+        std::fs::metadata(path).map(|m| m.len()).unwrap_or(0)
+    }
+}
+
+/// Calculate available Flex RAM in bytes for a project based on its memory settings.
+///
+/// Formula: Total RAM - recorder buffer allocation
+/// Recorder buffer = reserved_recorder_count × reserved_recorder_length (seconds) × 44100 Hz × 2 channels × bytes_per_sample
+/// bytes_per_sample = 2 (16-bit) or 4 (24-bit, based on record_24bit setting)
+fn calculate_flex_ram_bytes(memory_settings: &MemorySettings) -> u64 {
+    let bytes_per_sample: u64 = if memory_settings.record_24bit { 4 } else { 2 };
+    let recorder_bytes = memory_settings.reserved_recorder_count as u64
+        * memory_settings.reserved_recorder_length as u64
+        * 44100
+        * 2 // stereo
+        * bytes_per_sample;
+    OT_TOTAL_RAM_BYTES.saturating_sub(recorder_bytes)
+}
+
+/// Sum the RAM usage of all flex samples in a project (all 128 flex slots).
+/// Uses actual PCM data size from WAV headers, accounting for load_24bit_flex setting.
+fn sum_flex_sample_sizes(project_path: &Path, load_24bit_flex: bool) -> Result<u64, String> {
+    let project_file_path = if project_path.join("project.work").exists() {
+        project_path.join("project.work")
+    } else if project_path.join("project.strd").exists() {
+        project_path.join("project.strd")
+    } else {
+        return Ok(0);
+    };
+
+    let project_data = ProjectFile::from_data_file(&project_file_path)
+        .map_err(|e| format!("Failed to read project for flex RAM check: {:?}", e))?;
+
+    let mut total_bytes: u64 = 0;
+    for idx in 0..128usize {
+        if let Some(Some(ref slot_data)) = project_data.slots.flex_slots.get(idx) {
+            if let Some(ref sample_path) = slot_data.path {
+                let rel = sample_path.to_string_lossy().to_string();
+                if rel.is_empty() {
+                    continue;
+                }
+                let full_path = project_path.join(&rel);
+                if full_path.exists() {
+                    total_bytes += get_flex_ram_usage(&full_path, load_24bit_flex);
+                }
+            }
+        }
+    }
+
+    Ok(total_bytes)
+}
+
+/// Sum RAM usage of specific flex slots from a source project that would be NEW
+/// (not deduplicated) in the destination. Takes the flex remap and dest state to
+/// determine which slots are truly new copies.
+fn sum_new_flex_sample_sizes(
+    source_path: &Path,
+    source_flex_slots: &std::collections::HashSet<u8>,
+    flex_remap: &std::collections::HashMap<u8, u8>,
+    dest_state_flex: &std::collections::HashMap<u8, String>,
+    load_24bit_flex: bool,
+) -> Result<u64, String> {
+    let project_file_path = if source_path.join("project.work").exists() {
+        source_path.join("project.work")
+    } else if source_path.join("project.strd").exists() {
+        source_path.join("project.strd")
+    } else {
+        return Ok(0);
+    };
+
+    let project_data = ProjectFile::from_data_file(&project_file_path)
+        .map_err(|e| format!("Failed to read source project for flex RAM check: {:?}", e))?;
+
+    let mut total_bytes: u64 = 0;
+    for &slot_0based in source_flex_slots {
+        // Check if this slot is deduplicated (dest already has same file)
+        if let Some(&dest_id) = flex_remap.get(&slot_0based) {
+            if dest_state_flex.contains_key(&dest_id) {
+                // Deduped - already in dest RAM, skip
+                continue;
+            }
+        }
+
+        let idx = slot_0based as usize;
+        if let Some(Some(ref slot_data)) = project_data.slots.flex_slots.get(idx) {
+            if let Some(ref sample_path) = slot_data.path {
+                let rel = sample_path.to_string_lossy().to_string();
+                if rel.is_empty() {
+                    continue;
+                }
+                let full_path = source_path.join(&rel);
+                if full_path.exists() {
+                    total_bytes += get_flex_ram_usage(&full_path, load_24bit_flex);
+                }
+            }
+        }
+    }
+
+    Ok(total_bytes)
+}
+
+/// Read memory settings from a project's project.work/project.strd file.
+fn read_project_memory_settings(project_path: &Path) -> Result<MemorySettings, String> {
+    let project_file_path = if project_path.join("project.work").exists() {
+        project_path.join("project.work")
+    } else if project_path.join("project.strd").exists() {
+        project_path.join("project.strd")
+    } else {
+        return Err("Project file not found".to_string());
+    };
+
+    let project_data = ProjectFile::from_data_file(&project_file_path)
+        .map_err(|e| format!("Failed to read project settings: {:?}", e))?;
+
+    Ok(MemorySettings {
+        load_24bit_flex: project_data.settings.control.memory.load_24bit_flex,
+        dynamic_recorders: project_data.settings.control.memory.dynamic_recorders,
+        record_24bit: project_data.settings.control.memory.record_24bit,
+        reserved_recorder_count: project_data.settings.control.memory.reserved_recorder_count,
+        reserved_recorder_length: project_data
+            .settings
+            .control
+            .memory
+            .reserved_recorder_length,
+    })
 }
 
 /// Validate whether the destination project has enough free slots to accommodate
@@ -4795,6 +5116,13 @@ pub fn validate_bank_sample_slots(
         })
         .count() as u32;
 
+    // Calculate Flex RAM memory status for destination project
+    let dest_memory_settings = read_project_memory_settings(dest_path)?;
+    let flex_ram_total = calculate_flex_ram_bytes(&dest_memory_settings);
+    let flex_ram_used = sum_flex_sample_sizes(dest_path, dest_memory_settings.load_24bit_flex)?;
+    let flex_ram_total_mb = flex_ram_total as f64 / (1024.0 * 1024.0);
+    let flex_ram_used_mb = flex_ram_used as f64 / (1024.0 * 1024.0);
+
     // Try building remap table to check feasibility
     match build_remap_table(
         &source_static,
@@ -4815,6 +5143,26 @@ pub fn validate_bank_sample_slots(
                 .filter(|(src, dest)| src != dest || !dest_state_flex.contains_key(dest))
                 .count() as u32;
 
+            // Calculate flex RAM after copy
+            let new_flex_bytes = sum_new_flex_sample_sizes(
+                source_path,
+                &source_flex,
+                &flex_remap,
+                &dest_state_flex,
+                dest_memory_settings.load_24bit_flex,
+            )?;
+            let flex_ram_after_copy_mb =
+                (flex_ram_used + new_flex_bytes) as f64 / (1024.0 * 1024.0);
+
+            let flex_memory_warning = if flex_ram_used + new_flex_bytes > flex_ram_total {
+                Some(format!(
+                    "Flex RAM would exceed available memory: {:.1} MB used of {:.1} MB available - Octatrack will show OUT OF MEMORY error",
+                    flex_ram_after_copy_mb, flex_ram_total_mb
+                ))
+            } else {
+                None
+            };
+
             Ok(SlotValidationResult {
                 static_needed: source_static.len() as u32,
                 flex_needed: source_flex.len() as u32,
@@ -4823,6 +5171,10 @@ pub fn validate_bank_sample_slots(
                 static_dedup: static_remap.len() as u32 - static_new,
                 flex_dedup: flex_remap.len() as u32 - flex_new,
                 missing_files,
+                flex_ram_total_mb,
+                flex_ram_used_mb,
+                flex_ram_after_copy_mb,
+                flex_memory_warning,
                 is_valid: true,
                 error_message: None,
             })
@@ -4835,6 +5187,10 @@ pub fn validate_bank_sample_slots(
             static_dedup: 0,
             flex_dedup: 0,
             missing_files,
+            flex_ram_total_mb,
+            flex_ram_used_mb,
+            flex_ram_after_copy_mb: 0.0,
+            flex_memory_warning: None,
             is_valid: false,
             error_message: Some(msg),
         }),

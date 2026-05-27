@@ -4758,6 +4758,14 @@ h1 {
   opacity: 0.8;
 }
 
+.tools-validation-status.error {
+  color: #e74c3c;
+}
+
+.tools-validation-status.error i {
+  margin-right: 4px;
+}
+
 /* Missing Samples List Modal */
 .modal-content.missing-samples-list-modal {
   max-width: 850px;
