@@ -4375,9 +4375,9 @@ pub struct SlotValidationResult {
     pub static_dedup: u32,
     pub flex_dedup: u32,
     pub missing_files: u32,
-    pub flex_ram_total_mb: f64,
-    pub flex_ram_used_mb: f64,
-    pub flex_ram_after_copy_mb: f64,
+    pub flex_ram_free_mb: f64,
+    pub flex_ram_new_mb: f64,
+    pub flex_ram_free_after_copy_mb: f64,
     pub flex_memory_warning: Option<String>,
     pub is_valid: bool,
     pub error_message: Option<String>,
@@ -5118,10 +5118,17 @@ pub fn validate_bank_sample_slots(
 
     // Calculate Flex RAM memory status for destination project
     let dest_memory_settings = read_project_memory_settings(dest_path)?;
-    let flex_ram_total = calculate_flex_ram_bytes(&dest_memory_settings);
+    let flex_ram_capacity = calculate_flex_ram_bytes(&dest_memory_settings);
     let flex_ram_used = sum_flex_sample_sizes(dest_path, dest_memory_settings.load_24bit_flex)?;
-    let flex_ram_total_mb = flex_ram_total as f64 / (1024.0 * 1024.0);
-    let flex_ram_used_mb = flex_ram_used as f64 / (1024.0 * 1024.0);
+    let flex_ram_free = flex_ram_capacity.saturating_sub(flex_ram_used);
+
+    // Truncate to 2 decimal places (floor) to match Octatrack display behavior
+    let truncate_mb = |bytes: u64| -> f64 {
+        let mb = bytes as f64 / (1024.0 * 1024.0);
+        (mb * 100.0).floor() / 100.0
+    };
+
+    let flex_ram_free_mb = truncate_mb(flex_ram_free);
 
     // Try building remap table to check feasibility
     match build_remap_table(
@@ -5151,13 +5158,14 @@ pub fn validate_bank_sample_slots(
                 &dest_state_flex,
                 dest_memory_settings.load_24bit_flex,
             )?;
-            let flex_ram_after_copy_mb =
-                (flex_ram_used + new_flex_bytes) as f64 / (1024.0 * 1024.0);
+            let flex_ram_new_mb = truncate_mb(new_flex_bytes);
+            let flex_ram_free_after = flex_ram_free.saturating_sub(new_flex_bytes);
+            let flex_ram_free_after_copy_mb = truncate_mb(flex_ram_free_after);
 
-            let flex_memory_warning = if flex_ram_used + new_flex_bytes > flex_ram_total {
+            let flex_memory_warning = if new_flex_bytes > flex_ram_free {
                 Some(format!(
-                    "Flex RAM would exceed available memory: {:.1} MB used of {:.1} MB available - Octatrack will show OUT OF MEMORY error",
-                    flex_ram_after_copy_mb, flex_ram_total_mb
+                    "Not enough Flex RAM: {:.2} MB to load, {:.2} MB free - Octatrack will show OUT OF MEMORY error",
+                    flex_ram_new_mb, flex_ram_free_mb
                 ))
             } else {
                 None
@@ -5171,9 +5179,9 @@ pub fn validate_bank_sample_slots(
                 static_dedup: static_remap.len() as u32 - static_new,
                 flex_dedup: flex_remap.len() as u32 - flex_new,
                 missing_files,
-                flex_ram_total_mb,
-                flex_ram_used_mb,
-                flex_ram_after_copy_mb,
+                flex_ram_free_mb,
+                flex_ram_new_mb,
+                flex_ram_free_after_copy_mb,
                 flex_memory_warning,
                 is_valid: true,
                 error_message: None,
@@ -5187,9 +5195,9 @@ pub fn validate_bank_sample_slots(
             static_dedup: 0,
             flex_dedup: 0,
             missing_files,
-            flex_ram_total_mb,
-            flex_ram_used_mb,
-            flex_ram_after_copy_mb: 0.0,
+            flex_ram_free_mb,
+            flex_ram_new_mb: 0.0,
+            flex_ram_free_after_copy_mb: flex_ram_free_mb,
             flex_memory_warning: None,
             is_valid: false,
             error_message: Some(msg),

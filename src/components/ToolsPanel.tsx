@@ -203,9 +203,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     static_dedup: number;
     flex_dedup: number;
     missing_files: number;
-    flex_ram_total_mb: number;
-    flex_ram_used_mb: number;
-    flex_ram_after_copy_mb: number;
+    flex_ram_free_mb: number;
+    flex_ram_new_mb: number;
+    flex_ram_free_after_copy_mb: number;
     flex_memory_warning: string | null;
     is_valid: boolean;
     error_message: string | null;
@@ -498,9 +498,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         static_dedup: number;
         flex_dedup: number;
         missing_files: number;
-        flex_ram_total_mb: number;
-        flex_ram_used_mb: number;
-        flex_ram_after_copy_mb: number;
+        flex_ram_free_mb: number;
+        flex_ram_new_mb: number;
+        flex_ram_free_after_copy_mb: number;
         flex_memory_warning: string | null;
         is_valid: boolean;
         error_message: string | null;
@@ -1572,7 +1572,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     <div
                       className={`tools-validation-status ${slotValidation.is_valid ? 'valid' : 'invalid'}`}
                       title={slotValidation.is_valid
-                        ? `${slotValidation.static_needed} Static slot${slotValidation.static_needed !== 1 ? 's' : ''} and ${slotValidation.flex_needed} Flex slot${slotValidation.flex_needed !== 1 ? 's' : ''} referenced in source bank.\n${slotValidation.static_available} Static and ${slotValidation.flex_available} Flex slots available in destination.\n${slotValidation.static_dedup + slotValidation.flex_dedup > 0 ? `${slotValidation.static_dedup + slotValidation.flex_dedup} slot${slotValidation.static_dedup + slotValidation.flex_dedup !== 1 ? 's' : ''} already present in destination (same filename) - will be reused.` : 'No duplicates found in destination.'}\nFlex RAM: ${slotValidation.flex_ram_after_copy_mb.toFixed(1)} MB after copy / ${slotValidation.flex_ram_total_mb.toFixed(1)} MB available`
+                        ? `${slotValidation.static_needed} Static slot${slotValidation.static_needed !== 1 ? 's' : ''} and ${slotValidation.flex_needed} Flex slot${slotValidation.flex_needed !== 1 ? 's' : ''} referenced in source bank.\n${slotValidation.static_available} Static and ${slotValidation.flex_available} Flex slots available in destination.\n${slotValidation.static_dedup + slotValidation.flex_dedup > 0 ? `${slotValidation.static_dedup + slotValidation.flex_dedup} slot${slotValidation.static_dedup + slotValidation.flex_dedup !== 1 ? 's' : ''} already present in destination (same filename) - will be reused.` : 'No duplicates found in destination.'}\nFlex RAM: ${slotValidation.flex_ram_free_mb.toFixed(2)} MB free${slotValidation.flex_ram_new_mb > 0 ? `, ${slotValidation.flex_ram_free_after_copy_mb.toFixed(2)} MB free after copy` : ''}`
                         : slotValidation.error_message || ''
                       }
                     >
@@ -1608,7 +1608,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     <div className="tools-validation-status error">
                       <span>
                         <i className="fas fa-exclamation-circle"></i>
-                        {' '}Flex RAM: {slotValidation.flex_ram_after_copy_mb.toFixed(1)} MB needed, {slotValidation.flex_ram_total_mb.toFixed(1)} MB available - Octatrack will show OUT OF MEMORY error
+                        {' '}Not enough Flex RAM: {slotValidation.flex_ram_new_mb.toFixed(2)} MB to load, {slotValidation.flex_ram_free_mb.toFixed(2)} MB free - Octatrack will show OUT OF MEMORY error
                       </span>
                     </div>
                   )}
