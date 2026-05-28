@@ -1592,7 +1592,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       ) : (
                         <span>
                           <i className="fas fa-exclamation-circle"></i>
-                          {' '}{slotValidation.error_message}
+                          {' '}{slotValidation.error_message?.split('\n').map((line, i) => (
+                            <span key={i}>{i > 0 && <br />}{line}</span>
+                          ))}
                         </span>
                       )}
                     </div>
@@ -1611,7 +1613,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     <div className="tools-validation-status error">
                       <span>
                         <i className="fas fa-exclamation-circle"></i>
-                        {' '}Not enough Flex RAM: {slotValidation.flex_ram_new_mb.toFixed(2)} MB to load, {slotValidation.flex_ram_free_mb.toFixed(2)} MB free - Octatrack will show OUT OF MEMORY error
+                        {' '}<strong>Not enough Flex RAM:</strong> {slotValidation.flex_ram_new_mb.toFixed(2)} MB to load, {slotValidation.flex_ram_free_mb.toFixed(2)} MB free
                       </span>
                     </div>
                   )}
