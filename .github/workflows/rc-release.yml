@@ -1,0 +1,189 @@
+name: RC Release Build
+
+on:
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.create_release.outputs.id }}
+      version: ${{ steps.version.outputs.version }}
+      tag_name: ${{ steps.version.outputs.tag_name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Get version info
+        id: version
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          RC_VERSION="0.0.0"
+          TAG_NAME="v0.0.0-rc"
+
+          echo "version=${RC_VERSION}" >> $GITHUB_OUTPUT
+          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "Created RC build (version: ${RC_VERSION}, tag: ${TAG_NAME}, commit: ${SHORT_SHA})"
+
+      - name: Delete existing release and tag
+        run: |
+          TAG_NAME="${{ steps.version.outputs.tag_name }}"
+
+          # Delete existing release if it exists
+          if gh release view "$TAG_NAME" &>/dev/null; then
+            echo "Deleting existing release: $TAG_NAME"
+            gh release delete "$TAG_NAME" --yes
+          fi
+
+          # Delete existing tag if it exists
+          if git ls-remote --tags origin | grep -q "refs/tags/$TAG_NAME"; then
+            echo "Deleting existing tag: $TAG_NAME"
+            git push origin --delete "$TAG_NAME" || true
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag_name }}
+          name: "Release Candidate ${{ steps.version.outputs.tag_name }}"
+          body: |
+            ## Release Candidate for Testers
+
+            This is a pre-release build intended for testers.
+            This release is automatically overwritten on each RC build.
+
+            - Version: `${{ steps.version.outputs.version }}` (`${{ steps.version.outputs.short_sha }}`)
+            - Commit: `${{ github.sha }}`
+            - Branch: `${{ github.ref_name }}`
+            - Built: `${{ github.event.repository.updated_at }}`
+
+            > This build may be unstable. Please report any issues you find.
+          draft: false
+          prerelease: true
+          make_latest: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-tauri:
+    needs: create-release
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            args: '--target x86_64-unknown-linux-gnu'
+          - platform: windows-latest
+            args: ''
+          - platform: macos-latest
+            args: '--target x86_64-apple-darwin'
+          - platform: macos-latest
+            args: '--target aarch64-apple-darwin'
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Install dependencies (Ubuntu)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Update version for RC build
+        shell: bash
+        run: |
+          VERSION="${{ needs.create-release.outputs.version }}"
+          echo "Setting version to $VERSION"
+
+          # Update Cargo.toml
+          sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+
+          # Update tauri.conf.json
+          sed -i.bak "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" src-tauri/tauri.conf.json
+
+          # Show the changes
+          echo "Updated Cargo.toml:"
+          grep "^version" src-tauri/Cargo.toml
+          echo "Updated tauri.conf.json:"
+          grep "\"version\"" src-tauri/tauri.conf.json
+
+      - name: Disable auto-updater for RC builds
+        shell: bash
+        run: |
+          # Point updater endpoint to a non-existent URL so RC builds never auto-update
+          sed -i.bak 's|https://github.com/davidferlay/octatrack-manager/releases/latest/download/latest.json|https://localhost/disabled|' src-tauri/tauri.conf.json
+          echo "Updater endpoint disabled:"
+          grep -A2 '"endpoints"' src-tauri/tauri.conf.json
+
+      - name: Build and upload artifacts (Ubuntu)
+        if: matrix.platform == 'ubuntu-22.04'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NO_STRIP: 1
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          tagName: ${{ needs.create-release.outputs.tag_name }}
+          args: ${{ matrix.args }}
+
+      - name: Build and upload artifacts (Windows/macOS)
+        if: matrix.platform != 'ubuntu-22.04'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          tagName: ${{ needs.create-release.outputs.tag_name }}
+          args: ${{ matrix.args }}
+
+      - name: Retry upload on failure
+        if: failure()
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 5
+          max_attempts: 2
+          retry_wait_seconds: 30
+          shell: bash
+          command: |
+            cd src-tauri/target
+
+            # Upload any built artifacts that may have failed
+            if [[ "${{ matrix.platform }}" == "ubuntu-22.04" ]]; then
+              find release/bundle -name "*.deb" -o -name "*.AppImage" | xargs -I {} gh release upload "${{ needs.create-release.outputs.tag_name }}" {} --clobber || true
+            elif [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
+              find release/bundle -name "*.msi" -o -name "*.exe" | xargs -I {} gh release upload "${{ needs.create-release.outputs.tag_name }}" {} --clobber || true
+            else
+              find . -name "*.dmg" | xargs -I {} gh release upload "${{ needs.create-release.outputs.tag_name }}" {} --clobber || true
+            fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
