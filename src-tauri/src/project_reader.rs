@@ -4675,7 +4675,7 @@ fn build_remap_table(
 
     match (static_result, flex_result) {
         (Ok(static_remap), Ok(flex_remap)) => Ok((static_remap, flex_remap, dedup_count)),
-        (Err(e1), Err(e2)) => Err(format!("{}. {}", e1, e2)),
+        (Err(e1), Err(e2)) => Err(format!("{}.\n{}", e1, e2)),
         (Err(e), _) | (_, Err(e)) => Err(e),
     }
 }
@@ -5172,7 +5172,7 @@ pub fn validate_bank_sample_slots(
 
             let flex_memory_warning = if new_flex_bytes > flex_ram_free {
                 Some(format!(
-                    "Not enough Flex RAM: {:.2} MB to load, {:.2} MB free - Octatrack will show OUT OF MEMORY error",
+                    "Not enough Flex RAM: {:.2} MB to load, {:.2} MB free",
                     flex_ram_new_mb, flex_ram_free_mb
                 ))
             } else {
