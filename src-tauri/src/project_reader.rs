@@ -7297,8 +7297,18 @@ mod tests {
             let dest = TestProject::new();
 
             for i in 0..16u8 {
-                let result =
-                    copy_bank(&source.path, i, &dest.path, &[i], false, "", "", "keep_position", false, &[]);
+                let result = copy_bank(
+                    &source.path,
+                    i,
+                    &dest.path,
+                    &[i],
+                    false,
+                    "",
+                    "",
+                    "keep_position",
+                    false,
+                    &[],
+                );
                 assert!(
                     result.is_ok(),
                     "Copy bank {} should succeed: {:?}",
@@ -7394,7 +7404,18 @@ mod tests {
             let source = TestProject::new();
             let dest = TestProject::new();
 
-            let result = copy_bank(&source.path, 0, &dest.path, &[], false, "", "", "keep_position", false, &[]);
+            let result = copy_bank(
+                &source.path,
+                0,
+                &dest.path,
+                &[],
+                false,
+                "",
+                "",
+                "keep_position",
+                false,
+                &[],
+            );
             assert!(
                 result.is_ok(),
                 "Empty destinations should succeed as no-op: {:?}",
@@ -7410,7 +7431,19 @@ mod tests {
             });
             let dest = TestProject::new();
 
-            copy_bank(&source.path, 0, &dest.path, &[0], false, "", "", "keep_position", false, &[]).unwrap();
+            copy_bank(
+                &source.path,
+                0,
+                &dest.path,
+                &[0],
+                false,
+                "",
+                "",
+                "keep_position",
+                false,
+                &[],
+            )
+            .unwrap();
 
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
@@ -12996,7 +13029,19 @@ mod tests {
             });
             let dest = TestProject::new();
 
-            copy_bank(&source.path, 0, &dest.path, &[1], false, "", "", "keep_position", false, &[]).unwrap();
+            copy_bank(
+                &source.path,
+                0,
+                &dest.path,
+                &[1],
+                false,
+                "",
+                "",
+                "keep_position",
+                false,
+                &[],
+            )
+            .unwrap();
 
             let dest_bank_path = Path::new(&dest.path).join("bank02.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
