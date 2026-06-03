@@ -5280,6 +5280,8 @@ pub fn copy_bank(
         remap_log: Vec::new(),
     };
 
+    let mut bank_modified = false;
+
     if copy_samples {
         // ====================================================================
         // Sample slot copying with remapping
@@ -5441,15 +5443,16 @@ pub fn copy_bank(
 
             // 5. Remap bank data
             remap_bank_slot_references(&mut bank_data, &static_remap, &flex_remap);
+            bank_modified = true;
         }
     }
 
-    // Recalculate checksum
-    bank_data.checksum = bank_data
-        .calculate_checksum()
-        .map_err(|e| format!("Failed to calculate checksum: {:?}", e))?;
+    if bank_modified {
+        bank_data.checksum = bank_data
+            .calculate_checksum()
+            .map_err(|e| format!("Failed to calculate checksum: {:?}", e))?;
+    }
 
-    // Write to each destination bank
     for &dest_bank_index in dest_bank_indices {
         let dest_bank_num = dest_bank_index + 1;
         let dest_bank_file = format!("bank{:02}.work", dest_bank_num);
@@ -7060,6 +7063,7 @@ mod tests {
     use super::*;
     use ot_tools_io::{BankFile, MarkersFile, OctatrackFileIO, ProjectFile};
     use std::fs;
+    use std::path::PathBuf;
     use tempfile::TempDir;
 
     /// Helper struct to manage test project fixtures
@@ -16520,5 +16524,558 @@ mod tests {
                 "TRIM_BARSx100 preserved from source"
             );
         }
+    }
+
+    // ============================================================================
+    // Pure function tests: calculate_flex_ram_bytes
+    // ============================================================================
+
+    #[test]
+    fn test_flex_ram_zero_recorders() {
+        let settings = MemorySettings {
+            load_24bit_flex: false,
+            dynamic_recorders: false,
+            record_24bit: false,
+            reserved_recorder_count: 0,
+            reserved_recorder_length: 0,
+        };
+        assert_eq!(calculate_flex_ram_bytes(&settings), OT_TOTAL_RAM_BYTES);
+    }
+
+    #[test]
+    fn test_flex_ram_one_recorder_16bit() {
+        let settings = MemorySettings {
+            load_24bit_flex: false,
+            dynamic_recorders: false,
+            record_24bit: false,
+            reserved_recorder_count: 1,
+            reserved_recorder_length: 1,
+        };
+        // 1 × 1s × 44100 × 2ch × 2 bytes = 176,400
+        assert_eq!(
+            calculate_flex_ram_bytes(&settings),
+            OT_TOTAL_RAM_BYTES - 176_400
+        );
+    }
+
+    #[test]
+    fn test_flex_ram_one_recorder_24bit() {
+        let settings = MemorySettings {
+            load_24bit_flex: false,
+            dynamic_recorders: false,
+            record_24bit: true,
+            reserved_recorder_count: 1,
+            reserved_recorder_length: 1,
+        };
+        // 1 × 1s × 44100 × 2ch × 4 bytes = 352,800
+        assert_eq!(
+            calculate_flex_ram_bytes(&settings),
+            OT_TOTAL_RAM_BYTES - 352_800
+        );
+    }
+
+    #[test]
+    fn test_flex_ram_saturates_to_zero() {
+        let settings = MemorySettings {
+            load_24bit_flex: false,
+            dynamic_recorders: false,
+            record_24bit: true,
+            reserved_recorder_count: 255,
+            reserved_recorder_length: u32::MAX,
+        };
+        assert_eq!(calculate_flex_ram_bytes(&settings), 0);
+    }
+
+    // ============================================================================
+    // Pure function tests: patch_sample_block_fields
+    // ============================================================================
+
+    #[test]
+    fn test_patch_replace_existing_key() {
+        let block = "[SAMPLE]\r\nTYPE=STATIC\r\nPATH=old.wav\r\n[/SAMPLE]";
+        let mut updates = std::collections::HashMap::new();
+        updates.insert("PATH".to_string(), "new.wav".to_string());
+        let result = patch_sample_block_fields(block, &updates);
+        assert!(result.contains("PATH=new.wav\r"));
+        assert!(!result.contains("old.wav"));
+    }
+
+    #[test]
+    fn test_patch_case_insensitive_match() {
+        let block = "[SAMPLE]\r\npath=old.wav\r\n[/SAMPLE]";
+        let mut updates = std::collections::HashMap::new();
+        updates.insert("PATH".to_string(), "new.wav".to_string());
+        let result = patch_sample_block_fields(block, &updates);
+        // Original field name preserved, value updated
+        assert!(result.contains("path=new.wav"));
+    }
+
+    #[test]
+    fn test_patch_inserts_missing_key() {
+        let block = "[SAMPLE]\r\nTYPE=STATIC\r\n[/SAMPLE]";
+        let mut updates = std::collections::HashMap::new();
+        updates.insert("GAIN".to_string(), "100".to_string());
+        let result = patch_sample_block_fields(block, &updates);
+        assert!(result.contains("GAIN=100"));
+        // Should be before [/SAMPLE]
+        let gain_pos = result.find("GAIN=100").unwrap();
+        let end_pos = result.find("[/SAMPLE]").unwrap();
+        assert!(gain_pos < end_pos);
+    }
+
+    #[test]
+    fn test_patch_empty_updates_unchanged() {
+        let block = "[SAMPLE]\r\nTYPE=STATIC\r\nPATH=kick.wav\r\n[/SAMPLE]";
+        let updates = std::collections::HashMap::new();
+        let result = patch_sample_block_fields(block, &updates);
+        assert_eq!(result, block);
+    }
+
+    #[test]
+    fn test_patch_multiple_updates() {
+        let block = "[SAMPLE]\r\nTYPE=STATIC\r\nPATH=old.wav\r\nGAIN=72\r\n[/SAMPLE]";
+        let mut updates = std::collections::HashMap::new();
+        updates.insert("PATH".to_string(), "new.wav".to_string());
+        updates.insert("GAIN".to_string(), "100".to_string());
+        let result = patch_sample_block_fields(block, &updates);
+        assert!(result.contains("PATH=new.wav"));
+        assert!(result.contains("GAIN=100"));
+    }
+
+    #[test]
+    fn test_patch_value_with_equals() {
+        let block = "[SAMPLE]\r\nPATH=../AUDIO/foo=bar.wav\r\n[/SAMPLE]";
+        let mut updates = std::collections::HashMap::new();
+        updates.insert("PATH".to_string(), "new=baz.wav".to_string());
+        let result = patch_sample_block_fields(block, &updates);
+        assert!(result.contains("PATH=new=baz.wav"));
+    }
+
+    // ============================================================================
+    // Pure function tests: build_new_sample_block
+    // ============================================================================
+
+    #[test]
+    fn test_build_block_minimal() {
+        let mut fields = std::collections::HashMap::new();
+        fields.insert("PATH".to_string(), "kick.wav".to_string());
+        let block = build_new_sample_block("STATIC", 1, &fields);
+        assert!(block.starts_with("[SAMPLE]\r\n"));
+        assert!(block.ends_with("[/SAMPLE]"));
+        assert!(block.contains("TYPE=STATIC\r\n"));
+        assert!(block.contains("SLOT=001\r\n"));
+        assert!(block.contains("PATH=kick.wav\r\n"));
+        assert!(block.contains("GAIN=72\r\n")); // default
+        assert!(block.contains("TRIGQUANTIZATION=-1\r\n")); // default
+        assert!(!block.contains("BPMx24")); // not present
+        assert!(!block.contains("TRIM_BARSx100")); // not present
+    }
+
+    #[test]
+    fn test_build_block_slot_padding() {
+        let fields = std::collections::HashMap::new();
+        let block1 = build_new_sample_block("STATIC", 1, &fields);
+        let block128 = build_new_sample_block("FLEX", 128, &fields);
+        assert!(block1.contains("SLOT=001\r\n"));
+        assert!(block128.contains("SLOT=128\r\n"));
+    }
+
+    #[test]
+    fn test_build_block_with_bpm() {
+        let mut fields = std::collections::HashMap::new();
+        fields.insert("BPMX24".to_string(), "2880".to_string());
+        let block = build_new_sample_block("STATIC", 1, &fields);
+        assert!(block.contains("BPMx24=2880\r\n"));
+    }
+
+    #[test]
+    fn test_build_block_gain_override() {
+        let mut fields = std::collections::HashMap::new();
+        fields.insert("GAIN".to_string(), "100".to_string());
+        let block = build_new_sample_block("STATIC", 1, &fields);
+        assert!(block.contains("GAIN=100\r\n"));
+        assert!(!block.contains("GAIN=72"));
+    }
+
+    #[test]
+    fn test_build_block_type_passthrough() {
+        let fields = std::collections::HashMap::new();
+        let block = build_new_sample_block("FLEX", 42, &fields);
+        assert!(block.contains("TYPE=FLEX\r\n"));
+    }
+
+    // ============================================================================
+    // Audio parsing: WAV helpers and tests
+    // ============================================================================
+
+    /// Write a minimal valid WAV file to the given directory.
+    fn write_minimal_wav(
+        dir: &Path,
+        name: &str,
+        channels: u16,
+        sample_rate: u32,
+        bits: u16,
+        num_frames: u32,
+    ) -> PathBuf {
+        let path = dir.join(name);
+        let block_align = channels * (bits / 8);
+        let data_size = num_frames * block_align as u32;
+        let fmt_size: u32 = 16;
+        let file_size = 4 + (8 + fmt_size) + (8 + data_size); // WAVE + fmt chunk + data chunk
+
+        let mut buf = Vec::new();
+        // RIFF header
+        buf.extend_from_slice(b"RIFF");
+        buf.extend_from_slice(&file_size.to_le_bytes());
+        buf.extend_from_slice(b"WAVE");
+        // fmt chunk
+        buf.extend_from_slice(b"fmt ");
+        buf.extend_from_slice(&fmt_size.to_le_bytes());
+        buf.extend_from_slice(&1u16.to_le_bytes()); // PCM format
+        buf.extend_from_slice(&channels.to_le_bytes());
+        buf.extend_from_slice(&sample_rate.to_le_bytes());
+        let byte_rate = sample_rate * block_align as u32;
+        buf.extend_from_slice(&byte_rate.to_le_bytes());
+        buf.extend_from_slice(&block_align.to_le_bytes());
+        buf.extend_from_slice(&bits.to_le_bytes());
+        // data chunk
+        buf.extend_from_slice(b"data");
+        buf.extend_from_slice(&data_size.to_le_bytes());
+        buf.resize(buf.len() + data_size as usize, 0); // silence
+
+        fs::write(&path, &buf).unwrap();
+        path
+    }
+
+    /// Write a minimal valid AIFF file.
+    fn write_minimal_aiff(
+        dir: &Path,
+        name: &str,
+        form_type: &[u8; 4], // b"AIFF" or b"AIFC"
+        channels: u16,
+        num_frames: u32,
+        bits: u16,
+    ) -> PathBuf {
+        let path = dir.join(name);
+        // COMM chunk: 2 (channels) + 4 (frames) + 2 (bits) + 10 (sample rate 80-bit) = 18 bytes
+        let comm_data_size: u32 = 18;
+        // SSND chunk: 8 (offset+block) + frame data
+        let frame_bytes = num_frames * channels as u32 * (bits / 8) as u32;
+        let ssnd_data_size: u32 = 8 + frame_bytes;
+        let form_size: u32 = 4 + (8 + comm_data_size) + (8 + ssnd_data_size);
+
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"FORM");
+        buf.extend_from_slice(&form_size.to_be_bytes());
+        buf.extend_from_slice(form_type);
+        // COMM chunk
+        buf.extend_from_slice(b"COMM");
+        buf.extend_from_slice(&comm_data_size.to_be_bytes());
+        buf.extend_from_slice(&channels.to_be_bytes());
+        buf.extend_from_slice(&num_frames.to_be_bytes());
+        buf.extend_from_slice(&bits.to_be_bytes());
+        // 80-bit extended float for 44100 Hz: 0x400D AC44 0000 0000 0000
+        buf.extend_from_slice(&[0x40, 0x0D, 0xAC, 0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+        // SSND chunk
+        buf.extend_from_slice(b"SSND");
+        buf.extend_from_slice(&ssnd_data_size.to_be_bytes());
+        buf.extend_from_slice(&[0u8; 8]); // offset + block size
+        buf.resize(buf.len() + frame_bytes as usize, 0); // silence
+
+        fs::write(&path, &buf).unwrap();
+        path
+    }
+
+    #[test]
+    fn test_wav_16bit_stereo() {
+        let dir = TempDir::new().unwrap();
+        let path = write_minimal_wav(dir.path(), "test.wav", 2, 44100, 16, 100);
+        let info = read_wav_pcm_info(&path).unwrap();
+        assert_eq!(info.num_channels, 2);
+        assert_eq!(info.bits_per_sample, 16);
+        assert_eq!(info.num_sample_frames, 100);
+    }
+
+    #[test]
+    fn test_wav_24bit_mono() {
+        let dir = TempDir::new().unwrap();
+        let path = write_minimal_wav(dir.path(), "test.wav", 1, 44100, 24, 50);
+        let info = read_wav_pcm_info(&path).unwrap();
+        assert_eq!(info.num_channels, 1);
+        assert_eq!(info.bits_per_sample, 24);
+        assert_eq!(info.num_sample_frames, 50);
+    }
+
+    #[test]
+    fn test_wav_nonexistent_path() {
+        assert!(read_wav_pcm_info(Path::new("/nonexistent/file.wav")).is_none());
+    }
+
+    #[test]
+    fn test_wav_empty_file() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("empty.wav");
+        fs::write(&path, b"").unwrap();
+        assert!(read_wav_pcm_info(&path).is_none());
+    }
+
+    #[test]
+    fn test_wav_not_riff() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("bad.wav");
+        fs::write(&path, b"NOT_RIFF_HEADER_DATA_HERE").unwrap();
+        assert!(read_wav_pcm_info(&path).is_none());
+    }
+
+    #[test]
+    fn test_wav_zero_data() {
+        let dir = TempDir::new().unwrap();
+        let path = write_minimal_wav(dir.path(), "zero.wav", 2, 44100, 16, 0);
+        let info = read_wav_pcm_info(&path).unwrap();
+        assert_eq!(info.num_sample_frames, 0);
+    }
+
+    // ============================================================================
+    // Audio parsing: AIFF tests
+    // ============================================================================
+
+    #[test]
+    fn test_aiff_16bit_stereo() {
+        let dir = TempDir::new().unwrap();
+        let path = write_minimal_aiff(dir.path(), "test.aiff", b"AIFF", 2, 100, 16);
+        let info = read_aiff_pcm_info(&path).unwrap();
+        assert_eq!(info.num_channels, 2);
+        assert_eq!(info.bits_per_sample, 16);
+        assert_eq!(info.num_sample_frames, 100);
+    }
+
+    #[test]
+    fn test_aifc_accepted() {
+        let dir = TempDir::new().unwrap();
+        let path = write_minimal_aiff(dir.path(), "test.aif", b"AIFC", 1, 50, 24);
+        let info = read_aiff_pcm_info(&path).unwrap();
+        assert_eq!(info.num_channels, 1);
+        assert_eq!(info.bits_per_sample, 24);
+        assert_eq!(info.num_sample_frames, 50);
+    }
+
+    #[test]
+    fn test_aiff_nonexistent_path() {
+        assert!(read_aiff_pcm_info(Path::new("/nonexistent/file.aiff")).is_none());
+    }
+
+    #[test]
+    fn test_aiff_not_form() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("bad.aiff");
+        fs::write(&path, b"NOT_FORM_HEADER_DATA_HERE").unwrap();
+        assert!(read_aiff_pcm_info(&path).is_none());
+    }
+
+    #[test]
+    fn test_aiff_no_comm_chunk() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("no_comm.aiff");
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"FORM");
+        buf.extend_from_slice(&20u32.to_be_bytes()); // form size
+        buf.extend_from_slice(b"AIFF");
+        // SSND chunk only, no COMM
+        buf.extend_from_slice(b"SSND");
+        buf.extend_from_slice(&8u32.to_be_bytes());
+        buf.extend_from_slice(&[0u8; 8]);
+        fs::write(&path, &buf).unwrap();
+        assert!(read_aiff_pcm_info(&path).is_none());
+    }
+
+    // ============================================================================
+    // read_project_memory_settings tests
+    // ============================================================================
+
+    #[test]
+    fn test_memory_settings_default_project() {
+        let project = TestProject::new();
+        let settings =
+            read_project_memory_settings(Path::new(&project.path)).expect("should read settings");
+        // Default ProjectFile has default memory settings
+        assert_eq!(settings.reserved_recorder_count, 8);
+        assert!(!settings.record_24bit);
+    }
+
+    #[test]
+    fn test_memory_settings_no_project_file() {
+        let dir = TempDir::new().unwrap();
+        let err = read_project_memory_settings(dir.path()).unwrap_err();
+        assert!(err.contains("not found"), "got: {}", err);
+    }
+
+    #[test]
+    fn test_memory_settings_strd_fallback() {
+        let project = TestProject::new();
+        let project_path = Path::new(&project.path);
+        // Rename project.work to project.strd
+        fs::rename(
+            project_path.join("project.work"),
+            project_path.join("project.strd"),
+        )
+        .unwrap();
+        let settings = read_project_memory_settings(project_path).expect("should read from .strd");
+        assert_eq!(settings.reserved_recorder_count, 8);
+    }
+
+    // ============================================================================
+    // get_slot_audio_paths tests
+    // ============================================================================
+
+    #[test]
+    fn test_slot_audio_paths_empty_indices() {
+        let project = TestProject::new();
+        let result = get_slot_audio_paths(&project.path, "static", vec![], true).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_slot_audio_paths_no_project_file() {
+        let dir = TempDir::new().unwrap();
+        let err = get_slot_audio_paths(&dir.path().to_string_lossy(), "static", vec![1], true)
+            .unwrap_err();
+        assert!(err.contains("not found"), "got: {}", err);
+    }
+
+    #[test]
+    fn test_slot_audio_paths_empty_slot_not_returned() {
+        let project = TestProject::new();
+        // Default project has no sample slots configured
+        let result = get_slot_audio_paths(&project.path, "static", vec![1], true).unwrap();
+        assert!(result.is_empty());
+    }
+
+    // ============================================================================
+    // read_ot_file tests
+    // ============================================================================
+
+    #[test]
+    fn test_read_ot_file_audio_pool_path() {
+        let dir = TempDir::new().unwrap();
+        assert!(read_ot_file(dir.path(), "../AUDIO/kick.wav").is_none());
+    }
+
+    #[test]
+    fn test_read_ot_file_no_ot_on_disk() {
+        let dir = TempDir::new().unwrap();
+        // Create the wav but not the .ot
+        fs::write(dir.path().join("kick.wav"), b"data").unwrap();
+        assert!(read_ot_file(dir.path(), "kick.wav").is_none());
+    }
+
+    #[test]
+    fn test_read_ot_file_valid() {
+        let dir = TempDir::new().unwrap();
+        // Create a valid .ot file using ot-tools-io
+        use ot_tools_io::SampleSettingsFile;
+        let markers = ot_tools_io::types::SlotMarkers::default();
+        let sample =
+            SampleSettingsFile::new(markers, None, None, None, None, None, None, None).unwrap();
+        sample
+            .to_data_file(&dir.path().join("kick.ot"))
+            .expect("write .ot");
+        let result = read_ot_file(dir.path(), "kick.wav");
+        assert!(result.is_some());
+    }
+
+    // ============================================================================
+    // validate_bank_sample_slots tests
+    // ============================================================================
+
+    #[test]
+    fn test_validate_empty_banks() {
+        let src = TestProject::new();
+        let dst = TestProject::new();
+        let result =
+            validate_bank_sample_slots(&src.path, 0, &dst.path, "referenced_only", "keep_position")
+                .unwrap();
+        assert!(result.is_valid);
+        assert_eq!(result.static_needed, 0);
+        assert_eq!(result.flex_needed, 0);
+    }
+
+    #[test]
+    fn test_validate_invalid_bank_index() {
+        let src = TestProject::new();
+        let dst = TestProject::new();
+        let err = validate_bank_sample_slots(
+            &src.path,
+            16,
+            &dst.path,
+            "referenced_only",
+            "keep_position",
+        )
+        .unwrap_err();
+        assert!(err.contains("0 and 15"), "got: {}", err);
+    }
+
+    #[test]
+    fn test_validate_invalid_scope() {
+        let src = TestProject::new();
+        let dst = TestProject::new();
+        let err =
+            validate_bank_sample_slots(&src.path, 0, &dst.path, "invalid_scope", "keep_position")
+                .unwrap_err();
+        assert!(err.contains("Invalid sample_scope"), "got: {}", err);
+    }
+
+    // ============================================================================
+    // sum_flex_sample_sizes tests
+    // ============================================================================
+
+    #[test]
+    fn test_sum_flex_no_project_file() {
+        let dir = TempDir::new().unwrap();
+        assert_eq!(sum_flex_sample_sizes(dir.path(), false).unwrap(), 0);
+    }
+
+    #[test]
+    fn test_sum_flex_no_slots() {
+        let project = TestProject::new();
+        assert_eq!(
+            sum_flex_sample_sizes(Path::new(&project.path), false).unwrap(),
+            0
+        );
+    }
+
+    // ============================================================================
+    // sum_new_flex_sample_sizes tests
+    // ============================================================================
+
+    #[test]
+    fn test_sum_new_flex_empty_slots() {
+        let project = TestProject::new();
+        let empty_set = std::collections::HashSet::new();
+        let empty_remap = std::collections::HashMap::new();
+        let empty_state = std::collections::HashMap::new();
+        assert_eq!(
+            sum_new_flex_sample_sizes(
+                Path::new(&project.path),
+                &empty_set,
+                &empty_remap,
+                &empty_state,
+                false,
+            )
+            .unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    fn test_sum_new_flex_no_project_file() {
+        let dir = TempDir::new().unwrap();
+        let empty_set = std::collections::HashSet::new();
+        let empty_remap = std::collections::HashMap::new();
+        let empty_state = std::collections::HashMap::new();
+        assert_eq!(
+            sum_new_flex_sample_sizes(dir.path(), &empty_set, &empty_remap, &empty_state, false)
+                .unwrap(),
+            0
+        );
     }
 }

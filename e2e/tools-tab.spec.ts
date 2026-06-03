@@ -8,10 +8,11 @@ import { test, expect, Page } from '@playwright/test'
  */
 
 // Helper to inject Tauri mocks before page load
-async function setupTauriMocks(page: Page, overrides?: { sameSet?: boolean; withOtherProject?: boolean }) {
+async function setupTauriMocks(page: Page, overrides?: { sameSet?: boolean; withOtherProject?: boolean; withAudioPool?: boolean }) {
   const sameSet = overrides?.sameSet ?? true
   const withOtherProject = overrides?.withOtherProject ?? false
-  await page.addInitScript((opts: { sameSet: boolean; withOtherProject: boolean }) => {
+  const withAudioPool = overrides?.withAudioPool ?? false
+  await page.addInitScript((opts: { sameSet: boolean; withOtherProject: boolean; withAudioPool: boolean }) => {
     // Mock Tauri internals
     (window as any).__TAURI_INTERNALS__ = {
       invoke: async (cmd: string, args?: any) => {
@@ -167,7 +168,9 @@ async function setupTauriMocks(page: Page, overrides?: { sameSet?: boolean; with
             return opts.sameSet
 
           case 'get_audio_pool_status':
-            return { exists: false, path: null, set_path: '/test/set' }
+            return opts.withAudioPool
+              ? { exists: true, path: '/test/set/AUDIO', set_path: '/test/set' }
+              : { exists: false, path: null, set_path: '/test/set' }
 
           case 'get_system_resources':
             return { cpu_cores: 4, available_memory_mb: 8000, recommended_concurrency: 4 }
@@ -293,7 +296,7 @@ async function setupTauriMocks(page: Page, overrides?: { sameSet?: boolean; with
     ;(window as any).__TAURI__ = {
       invoke: (window as any).__TAURI_INTERNALS__.invoke,
     }
-  }, { sameSet, withOtherProject })
+  }, { sameSet, withOtherProject, withAudioPool })
 }
 
 test.describe('Tools Tab - UI Tests', () => {
@@ -3321,5 +3324,36 @@ test.describe('Tools Tab - Copy Banks Sample Options', () => {
     expect(args.slotPlacement).toBe('keep_position')
     expect(args.copyAttributes).toBe(true)
     expect(args.attributeSelection).toEqual(expect.arrayContaining(['gain', 'bpm', 'trim', 'slices']))
+  })
+})
+
+test.describe('Tools Tab - Audio Pool Present', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page, { withAudioPool: true })
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
+    await toolsTab.click()
+    await page.waitForTimeout(500)
+  })
+
+  test('Copy Sample Slots shows Move to Pool option when Audio Pool exists', async ({ page }) => {
+    // Select Copy Sample Slots operation
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('copy_sample_slots')
+    // Move to Pool should be available (not disabled)
+    const moveToPool = page.locator('.tools-toggle-btn', { hasText: 'Move to Pool' })
+    await expect(moveToPool).toBeVisible()
+    await expect(moveToPool).not.toBeDisabled()
+  })
+
+  test('Copy Sample Slots Move to Pool activates when clicked', async ({ page }) => {
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('copy_sample_slots')
+    const moveToPool = page.locator('.tools-toggle-btn', { hasText: 'Move to Pool' })
+    await expect(moveToPool).toBeVisible()
+    // Click it to verify it activates
+    await moveToPool.click()
+    await expect(moveToPool).toHaveClass(/selected/)
   })
 })

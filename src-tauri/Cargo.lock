@@ -2610,8 +2610,8 @@ dependencies = [
 
 [[package]]
 name = "ot-tools-io"
-version = "0.6.2"
-source = "git+https://gitlab.com/ot-tools/ot-tools-io.git?tag=0.6.2#06876fa3d2cbdcbc973bc9a23cf7b2f55663452a"
+version = "0.7.0"
+source = "git+https://gitlab.com/davidferlay/ot-tools-io.git?branch=fix%2Fchecksum-algorithms#aaa626e558ba95b9be44421e025203fe90be9d80"
 dependencies = [
  "bincode",
  "encoding_rs",
@@ -2626,8 +2626,8 @@ dependencies = [
 
 [[package]]
 name = "ot-tools-io-derive"
-version = "0.6.2"
-source = "git+https://gitlab.com/ot-tools/ot-tools-io.git?tag=0.6.2#06876fa3d2cbdcbc973bc9a23cf7b2f55663452a"
+version = "0.7.0"
+source = "git+https://gitlab.com/davidferlay/ot-tools-io.git?branch=fix%2Fchecksum-algorithms#aaa626e558ba95b9be44421e025203fe90be9d80"
 dependencies = [
  "quote",
  "syn 2.0.117",
