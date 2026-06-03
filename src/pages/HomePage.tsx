@@ -36,6 +36,14 @@ function naturalCompare(a: string, b: string): number {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
 }
 
+// Sort locations: external devices (CompactFlash, Usb) first, then local, alphabetically within each group
+function compareLocations(a: { name: string; device_type: string }, b: { name: string; device_type: string }): number {
+  const aIsLocal = a.device_type === "LocalCopy";
+  const bIsLocal = b.device_type === "LocalCopy";
+  if (aIsLocal !== bIsLocal) return aIsLocal ? 1 : -1;
+  return naturalCompare(a.name, b.name);
+}
+
 interface OctatrackLocation {
   name: string;
   path: string;
@@ -257,9 +265,7 @@ export function HomePage() {
       const result = await invoke<ScanResult>("scan_devices");
       // Sort locations alphabetically by name and projects within each set
       const sortedLocations = sortProjectsInLocations(
-        [...result.locations].sort((a, b) =>
-          naturalCompare(a.name, b.name)
-        )
+        [...result.locations].sort(compareLocations)
       );
       // Sort standalone projects alphabetically
       const sortedStandaloneProjects = [...result.standalone_projects].sort((a, b) =>
@@ -337,9 +343,7 @@ export function HomePage() {
 
             // Sort locations alphabetically by name and projects within each set
             const sortedMerged = sortProjectsInLocations(
-              merged.sort((a, b) =>
-                naturalCompare(a.name, b.name)
-              )
+              merged.sort(compareLocations)
             );
 
             // Update open locations to include new ones

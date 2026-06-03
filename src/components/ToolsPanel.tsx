@@ -15,6 +15,14 @@ function naturalCompare(a: string, b: string): number {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
 }
 
+// Sort locations: external devices (CompactFlash, Usb) first, then local, alphabetically within each group
+function compareLocations(a: { name: string; device_type: string }, b: { name: string; device_type: string }): number {
+  const aIsLocal = a.device_type === "LocalCopy";
+  const bIsLocal = b.device_type === "LocalCopy";
+  if (aIsLocal !== bIsLocal) return aIsLocal ? 1 : -1;
+  return naturalCompare(a.name, b.name);
+}
+
 // Operation types
 type OperationType = "copy_bank" | "copy_parts" | "copy_patterns" | "copy_tracks" | "copy_sample_slots" | "fix_missing_samples";
 
@@ -251,9 +259,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     setIsScanning(true);
     try {
       const result = await invoke<ScanResult>("scan_devices");
-      const sortedLocations = [...result.locations].sort((a, b) =>
-        naturalCompare(a.name, b.name)
-      );
+      const sortedLocations = [...result.locations].sort(compareLocations);
       const sortedStandaloneProjects = [...result.standalone_projects].sort((a, b) =>
         naturalCompare(a.name, b.name)
       );
