@@ -4930,9 +4930,9 @@ fn get_flex_ram_usage(path: &Path, load_24bit_flex: bool) -> u64 {
 ///
 /// Formula: Total RAM - recorder buffer allocation
 /// Recorder buffer = reserved_recorder_count × reserved_recorder_length (seconds) × 44100 Hz × 2 channels × bytes_per_sample
-/// bytes_per_sample = 2 (16-bit) or 4 (24-bit, based on record_24bit setting)
+/// bytes_per_sample = 2 (16-bit) or 3 (24-bit, based on record_24bit setting)
 fn calculate_flex_ram_bytes(memory_settings: &MemorySettings) -> u64 {
-    let bytes_per_sample: u64 = if memory_settings.record_24bit { 4 } else { 2 };
+    let bytes_per_sample: u64 = if memory_settings.record_24bit { 3 } else { 2 };
     let recorder_bytes = memory_settings.reserved_recorder_count as u64
         * memory_settings.reserved_recorder_length as u64
         * 44100
@@ -16567,10 +16567,10 @@ mod tests {
             reserved_recorder_count: 1,
             reserved_recorder_length: 1,
         };
-        // 1 × 1s × 44100 × 2ch × 4 bytes = 352,800
+        // 1 × 1s × 44100 × 2ch × 3 bytes = 264,600
         assert_eq!(
             calculate_flex_ram_bytes(&settings),
-            OT_TOTAL_RAM_BYTES - 352_800
+            OT_TOTAL_RAM_BYTES - 264_600
         );
     }
 
