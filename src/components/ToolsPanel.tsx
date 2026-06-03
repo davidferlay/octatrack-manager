@@ -7,6 +7,7 @@ import { formatBankName } from "./BankSelector";
 import "../App.css";
 import { FixMissingSamplesModal } from "./FixMissingSamplesModal";
 import { MissingSamplesListModal } from "./MissingSamplesListModal";
+import { CreateProjectModal } from "./CreateProjectModal";
 
 const TOOLS_STORAGE_KEY_PREFIX = "octatrack-tools-settings-";
 
@@ -249,6 +250,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [showProjectSelector, setShowProjectSelector] = useState<boolean>(false);
   const [openSetsInModal, setOpenSetsInModal] = useState<Set<string>>(new Set()); // Track which sets are open in modal
   const [openLocationsInModal, setOpenLocationsInModal] = useState<Set<number>>(new Set()); // Track which locations are open in modal
+  const [createModalTarget, setCreateModalTarget] = useState<{ setPath: string; setName: string } | null>(null);
   const [isIndividualProjectsOpenInModal, setIsIndividualProjectsOpenInModal] = useState<boolean>(false);
   const [isLocationsOpenInModal, setIsLocationsOpenInModal] = useState<boolean>(true);
   const [isScanning, setIsScanning] = useState<boolean>(false);
@@ -3253,6 +3255,17 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                                           <div className="project-name">{project.name}</div>
                                         </div>
                                       ))}
+                                      <div
+                                        className="project-card new-project-card"
+                                        role="button"
+                                        tabIndex={0}
+                                        aria-label={`New project in ${set.name}`}
+                                        onClick={() => setCreateModalTarget({ setPath: set.path, setName: set.name })}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') setCreateModalTarget({ setPath: set.path, setName: set.name }) }}
+                                      >
+                                        <div className="new-project-icon">+</div>
+                                        <div className="new-project-label">New Project</div>
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
@@ -3272,6 +3285,36 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             </div>
           </div>
         </div>
+      )}
+
+      {/* Create Project Modal (from destination selector) */}
+      {createModalTarget && (
+        <CreateProjectModal
+          setPath={createModalTarget.setPath}
+          setName={createModalTarget.setName}
+          existingNames={
+            locations
+              .flatMap((l) => l.sets)
+              .find((s) => s.path === createModalTarget.setPath)?.projects.map((p) => p.name) ?? []
+          }
+          onConfirm={async (name) => {
+            try {
+              const newPath = await invoke<string>('create_project', { setPath: createModalTarget.setPath, name });
+              // Rescan to pick up the new project
+              const result = await invoke<ScanResult>("scan_devices");
+              const sortedLocations = [...result.locations].sort(compareLocations);
+              setLocations(sortedLocations);
+              setStandaloneProjects([...result.standalone_projects].sort((a, b) => naturalCompare(a.name, b.name)));
+              // Auto-select the new project as destination
+              setDestProject(newPath);
+              setShowProjectSelector(false);
+            } catch (err) {
+              alert(`Create failed: ${err}`);
+            }
+            setCreateModalTarget(null);
+          }}
+          onCancel={() => setCreateModalTarget(null)}
+        />
       )}
 
       {/* Missing Samples List Modal */}
