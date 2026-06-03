@@ -1478,7 +1478,7 @@ export function ProjectDetail() {
   )}
 
             {activeTab === "flex-slots" && (
-              <SampleSlotsTable slots={metadata.sample_slots.flex_slots} slotPrefix="F" tableType="flex" projectPath={projectPath} />
+              <SampleSlotsTable slots={metadata.sample_slots.flex_slots} slotPrefix="F" tableType="flex" projectPath={projectPath} memorySettings={metadata.memory_settings} />
             )}
 
             {activeTab === "static-slots" && (

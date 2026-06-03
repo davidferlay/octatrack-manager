@@ -17,11 +17,18 @@ interface SampleSlot {
   sample_rate: number | null; // 44100, 48000, etc.
 }
 
+interface MemorySettings {
+  record_24bit: boolean;
+  reserved_recorder_count: number;
+  reserved_recorder_length: number;
+}
+
 interface SampleSlotsTableProps {
   slots: SampleSlot[];
   slotPrefix: string; // "F" for Flex, "S" for Static
   tableType: 'flex' | 'static'; // Identify which table this is
   projectPath?: string | null; // Project path for tooltip display
+  memorySettings?: MemorySettings; // Memory settings for Flex RAM capacity display
 }
 
 type SortColumn = 'slot' | 'sample' | 'status' | 'source' | 'gain' | 'timestretch' | 'loop' | 'compatibility' | 'format' | 'bitdepth' | 'samplerate';
@@ -55,7 +62,16 @@ function getSetRelativePath(projectPath: string | null): string {
   return projectPath;
 }
 
-export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: SampleSlotsTableProps) {
+const OT_TOTAL_RAM_BYTES = 89_652_480;
+
+function calculateFlexRamMb(settings: MemorySettings): number {
+  const bytesPerSample = settings.record_24bit ? 4 : 2;
+  const recorderBytes = settings.reserved_recorder_count * settings.reserved_recorder_length * 44100 * 2 * bytesPerSample;
+  const flexRamBytes = Math.max(0, OT_TOTAL_RAM_BYTES - recorderBytes);
+  return flexRamBytes / (1024 * 1024);
+}
+
+export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, memorySettings }: SampleSlotsTableProps) {
   const { flexPreferences, staticPreferences, setFlexPreferences, setStaticPreferences } = useTablePreferences();
 
   // Get the preferences for this table type
@@ -502,6 +518,11 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath }: 
         <div className="filter-results-info">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
             <span>Showing {sortedSlots.length} of {slots.length} slots</span>
+            {memorySettings && (
+              <span className="ram-info" title="Flex RAM available for sample loading">
+                FREE MEM: {calculateFlexRamMb(memorySettings).toFixed(1)} MB
+              </span>
+            )}
             {compatibilityFilter !== 'all' && <span className="filter-badge">Compat: {compatibilityFilter}</span>}
             {statusFilter !== 'all' && <span className="filter-badge">Status: {statusFilter}</span>}
             {sourceFilter !== 'all' && <span className="filter-badge">Source: {sourceFilter}</span>}

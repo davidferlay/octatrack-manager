@@ -1571,7 +1571,15 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   </div>
 
                   {/* Slot validation status */}
-                  {slotValidation && (
+                  {slotValidation && slotValidation.flex_memory_warning && (
+                    <div className="tools-validation-status error">
+                      <span>
+                        <i className="fas fa-exclamation-circle"></i>
+                        {' '}<strong>Not enough Flex RAM: {slotValidation.flex_ram_new_mb.toFixed(2)} MB to load, {slotValidation.flex_ram_free_mb.toFixed(2)} MB free</strong>
+                      </span>
+                    </div>
+                  )}
+                  {slotValidation && !slotValidation.flex_memory_warning && (
                     <div
                       className={`tools-validation-status ${slotValidation.is_valid ? 'valid' : 'invalid'}`}
                       title={slotValidation.is_valid
@@ -1592,28 +1600,22 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       ) : (
                         <span>
                           <i className="fas fa-exclamation-circle"></i>
-                          {' '}{slotValidation.error_message?.split('\n').map((line, i) => (
-                            <span key={i}>{i > 0 && <br />}{line}</span>
-                          ))}
+                          <span style={{ display: 'inline-block' }}>
+                            {slotValidation.error_message?.split('\n').map((line, i) => (
+                              <span key={i} style={{ display: 'block' }}>{line}</span>
+                            ))}
+                          </span>
                         </span>
                       )}
                     </div>
                   )}
-                  {slotValidation && slotValidation.missing_files > 0 && (
+                  {slotValidation && !slotValidation.flex_memory_warning && slotValidation.missing_files > 0 && (
                     <div className="tools-validation-status warning">
                       <span>
                         <i className="fas fa-exclamation-triangle"></i>
                         {' '}{slotValidation.missing_files} audio file{slotValidation.missing_files !== 1 ? 's' : ''} missing in source project - consider using{' '}
                         <a href="#" onClick={(e) => { e.preventDefault(); setOperation("fix_missing_samples"); }}>Fix Missing Samples</a>
                         {' '}first
-                      </span>
-                    </div>
-                  )}
-                  {slotValidation && slotValidation.flex_memory_warning && (
-                    <div className="tools-validation-status error">
-                      <span>
-                        <i className="fas fa-exclamation-circle"></i>
-                        {' '}<strong>Not enough Flex RAM:</strong> {slotValidation.flex_ram_new_mb.toFixed(2)} MB to load, {slotValidation.flex_ram_free_mb.toFixed(2)} MB free
                       </span>
                     </div>
                   )}
