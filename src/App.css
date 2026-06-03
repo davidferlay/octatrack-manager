@@ -2174,7 +2174,7 @@ h1 {
 }
 
 /* Filter Results Info */
-.filter-results-info {
+.samples-section > .filter-results-info {
   margin-bottom: 0.5rem;
   padding: 0.25rem 0;
   display: flex;
@@ -2183,7 +2183,7 @@ h1 {
   justify-content: space-between;
   flex-wrap: wrap;
   color: var(--elektron-text-secondary);
-  font-size: 0.85rem;
+  font-size: 0.95rem;
 }
 
 .filter-badge {
@@ -2193,6 +2193,12 @@ h1 {
   border-radius: 3px;
   font-size: 0.75rem;
   color: var(--elektron-orange);
+}
+
+.ram-info {
+  font-size: 0.85rem;
+  color: #4caf50;
+  letter-spacing: 0.03em;
 }
 
 /* Reset Filters Button */
@@ -4741,6 +4747,7 @@ h1 {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  flex-wrap: wrap;
 }
 
 .tools-validation-status.invalid i {
