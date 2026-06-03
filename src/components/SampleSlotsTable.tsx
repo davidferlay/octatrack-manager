@@ -65,7 +65,7 @@ function getSetRelativePath(projectPath: string | null): string {
 const OT_TOTAL_RAM_BYTES = 89_652_480;
 
 function calculateFlexRamMb(settings: MemorySettings): number {
-  const bytesPerSample = settings.record_24bit ? 4 : 2;
+  const bytesPerSample = settings.record_24bit ? 3 : 2;
   const recorderBytes = settings.reserved_recorder_count * settings.reserved_recorder_length * 44100 * 2 * bytesPerSample;
   const flexRamBytes = Math.max(0, OT_TOTAL_RAM_BYTES - recorderBytes);
   return flexRamBytes / (1024 * 1024);
