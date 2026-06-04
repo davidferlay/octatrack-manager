@@ -38,6 +38,7 @@ These shortcuts work across the entire application:
 
 | Shortcut | Action |
 |----------|---------|
+| <kbd>E</kbd> | Toggle between View and Edit mode. |
 | <kbd>←</kbd> / <kbd>→</kbd> | Move between bank buttons (A–P), parts (1–4), or patterns (1–16). |
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Move between the bank, track, and pattern selector groups. |
 | <kbd>Enter</kbd> | Select the currently focused bank, part, or pattern. |
