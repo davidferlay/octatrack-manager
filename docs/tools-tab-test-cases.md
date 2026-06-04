@@ -21,6 +21,9 @@
 | SM11 OK | Copy Patterns | Copy All patterns 1-to-1 | Source All, execute | All 16 Patterns copied to destination 1-to-1 |
 | SM12 OK | Copy Patterns | Copy single to multiple | Copy Pattern 1 → Patterns 5, 8, 12 | All 3 destination patterns match source Pattern 1 |
 | SM13 OK | Copy Patterns | Cross-bank pattern copy | Copy Pattern 1 Bank A → Pattern 3 Bank C | Bank C Pattern 3 matches Bank A Pattern 1 |
+| SM13b | Copy Patterns | Multi-bank pattern copy | Copy Pattern 1 → Banks A, B, C | Pattern 1 copied to all 3 destination banks |
+| SM13c | Copy Patterns | All banks pattern copy | Click "All" bank button, execute | Pattern copied to all 16 banks |
+| SM13d | Copy Patterns | Self-copy last ordering | Copy Pattern 1 Bank A → Banks A, B (same project) | Both banks updated; source bank (A) processed last to avoid overwriting before other banks read it |
 | SM14 OK | Copy Patterns | Keep Original Part mode | Copy pattern with "Keep Original" | Copied pattern retains the destination pattern's existing Part assignment (not the source's) |
 | SM15 OK | Copy Patterns | Copy Source Part mode | Copy pattern with "Copy Source" | Part data also copied, pattern references copied Part |
 | SM16 OK | Copy Patterns | User Selection Part mode | Copy pattern with "User Selection" Part = Part 3 | Copied pattern assigned to Part 3 |
@@ -36,6 +39,9 @@
 | SM24 OK | Copy Tracks | MIDI single track | Copy M1 → M2 (Part params) | MIDI params, arp sequences, custom LFO match source |
 | SM25 OK | Copy Tracks | MIDI All tracks | Source/Dest All MIDI, execute | All 8 MIDI tracks copied |
 | SM26 OK | Copy Tracks | Cross-bank track copy | Copy T1 Bank A → T3 Bank B | Bank B T3 matches Bank A T1 |
+| SM26b | Copy Tracks | Multi-bank track copy | Copy T1 → T3, Banks A, B, C | T3 copied to all 3 destination banks |
+| SM26c | Copy Tracks | All banks track copy | Click "All" bank button, execute | Track copied to all 16 banks |
+| SM26d | Copy Tracks | Self-copy last ordering | Copy T1 → T3, Banks A, B (source=A, same project) | Both banks updated; source bank (A) processed last to avoid overwriting before other banks read it |
 | SM27 OK | Copy Tracks | Part Parameters mode | Execute with "Part Parameters" mode | Machine types, amp, LFO, FX, volumes, recorder setup copied; pattern trigs unchanged |
 | SM28 OK | Copy Tracks | Both mode | Execute with "Both" mode | Sound design AND pattern triggers copied |
 | SM29 OK | Copy Tracks | Pattern Triggers mode | Execute with "Pattern Triggers" mode | Only step data copied (trigs, trigless, P-locks, swing); Part params unchanged |

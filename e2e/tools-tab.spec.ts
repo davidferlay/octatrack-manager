@@ -3357,3 +3357,193 @@ test.describe('Tools Tab - Audio Pool Present', () => {
     await expect(moveToPool).toHaveClass(/selected/)
   })
 })
+
+test.describe('Tools Tab - Copy Patterns Multi-Select Destination Banks', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
+    await toolsTab.click()
+    await page.waitForTimeout(500)
+
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('copy_patterns')
+    await page.waitForTimeout(300)
+  })
+
+  test('Destination Banks label is plural (multi-select)', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const banksLabel = destPanel.locator('.tools-field label', { hasText: 'Banks' })
+    await expect(banksLabel).toBeVisible()
+  })
+
+  test('Destination banks allow multiple selection', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const bankA = destPanel.locator('.tools-multi-btn.bank-btn', { hasText: /^A$/ })
+    const bankB = destPanel.locator('.tools-multi-btn.bank-btn', { hasText: /^B$/ })
+
+    // Bank A should be selected by default
+    await expect(bankA).toHaveClass(/selected/)
+
+    // Click bank B to add it
+    await bankB.click()
+    await page.waitForTimeout(200)
+
+    // Both should be selected
+    await expect(bankA).toHaveClass(/selected/)
+    await expect(bankB).toHaveClass(/selected/)
+  })
+
+  test('Destination banks has All and None buttons', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const bankField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Banks' }) })
+    const allButton = bankField.locator('.tools-multi-btn.tools-select-all', { hasText: 'All' })
+    const noneButton = bankField.locator('.tools-multi-btn.tools-select-all', { hasText: 'None' })
+    await expect(allButton).toBeVisible()
+    await expect(noneButton).toBeVisible()
+  })
+
+  test('All button selects all 16 banks', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const bankField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Banks' }) })
+    const allButton = bankField.locator('.tools-multi-btn.tools-select-all', { hasText: 'All' })
+    await allButton.click()
+    await page.waitForTimeout(200)
+
+    const selectedBanks = bankField.locator('.tools-multi-btn.bank-btn.selected')
+    // All 16 bank buttons + the All button itself
+    await expect(selectedBanks).toHaveCount(17)
+  })
+
+  test('None button deselects all banks', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const bankField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Banks' }) })
+    const noneButton = bankField.locator('.tools-multi-btn.tools-select-all', { hasText: 'None' })
+    await noneButton.click()
+    await page.waitForTimeout(200)
+
+    const selectedBanks = bankField.locator('.tools-multi-btn.bank-btn.selected:not(.tools-select-all)')
+    await expect(selectedBanks).toHaveCount(0)
+  })
+
+  test('Execute disabled when no destination bank selected', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const bankField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Banks' }) })
+    const noneButton = bankField.locator('.tools-multi-btn.tools-select-all', { hasText: 'None' })
+    await noneButton.click()
+    await page.waitForTimeout(200)
+
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+  })
+
+  test('Deselecting a bank removes it from selection', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const bankA = destPanel.locator('.tools-multi-btn.bank-btn', { hasText: /^A$/ })
+
+    // Bank A is selected by default
+    await expect(bankA).toHaveClass(/selected/)
+
+    // Click to deselect
+    await bankA.click()
+    await page.waitForTimeout(200)
+
+    await expect(bankA).not.toHaveClass(/selected/)
+  })
+})
+
+test.describe('Tools Tab - Copy Tracks Multi-Select Destination Banks', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
+    await toolsTab.click()
+    await page.waitForTimeout(500)
+
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('copy_tracks')
+    await page.waitForTimeout(300)
+  })
+
+  test('Destination Banks label is plural (multi-select)', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const banksLabel = destPanel.locator('.tools-field label', { hasText: 'Banks' })
+    await expect(banksLabel).toBeVisible()
+  })
+
+  test('Destination banks allow multiple selection', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const bankA = destPanel.locator('.tools-multi-btn.bank-btn', { hasText: /^A$/ })
+    const bankC = destPanel.locator('.tools-multi-btn.bank-btn', { hasText: /^C$/ })
+
+    // Bank A should be selected by default
+    await expect(bankA).toHaveClass(/selected/)
+
+    // Click bank C to add it
+    await bankC.click()
+    await page.waitForTimeout(200)
+
+    // Both should be selected
+    await expect(bankA).toHaveClass(/selected/)
+    await expect(bankC).toHaveClass(/selected/)
+  })
+
+  test('Destination banks has All and None buttons', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const bankField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Banks' }) })
+    const allButton = bankField.locator('.tools-multi-btn.tools-select-all', { hasText: 'All' })
+    const noneButton = bankField.locator('.tools-multi-btn.tools-select-all', { hasText: 'None' })
+    await expect(allButton).toBeVisible()
+    await expect(noneButton).toBeVisible()
+  })
+
+  test('All button selects all 16 banks', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const bankField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Banks' }) })
+    const allButton = bankField.locator('.tools-multi-btn.tools-select-all', { hasText: 'All' })
+    await allButton.click()
+    await page.waitForTimeout(200)
+
+    const selectedBanks = bankField.locator('.tools-multi-btn.bank-btn.selected')
+    // All 16 bank buttons + the All button itself
+    await expect(selectedBanks).toHaveCount(17)
+  })
+
+  test('None button deselects all banks', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const bankField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Banks' }) })
+    const noneButton = bankField.locator('.tools-multi-btn.tools-select-all', { hasText: 'None' })
+    await noneButton.click()
+    await page.waitForTimeout(200)
+
+    const selectedBanks = bankField.locator('.tools-multi-btn.bank-btn.selected:not(.tools-select-all)')
+    await expect(selectedBanks).toHaveCount(0)
+  })
+
+  test('Execute disabled when no destination bank selected', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const bankField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Banks' }) })
+    const noneButton = bankField.locator('.tools-multi-btn.tools-select-all', { hasText: 'None' })
+    await noneButton.click()
+    await page.waitForTimeout(200)
+
+    const executeBtn = page.locator('.tools-execute-btn')
+    await expect(executeBtn).toBeDisabled()
+  })
+
+  test('Deselecting a bank removes it from selection', async ({ page }) => {
+    const destPanel = page.locator('.tools-dest-panel')
+    const bankA = destPanel.locator('.tools-multi-btn.bank-btn', { hasText: /^A$/ })
+
+    // Bank A is selected by default
+    await expect(bankA).toHaveClass(/selected/)
+
+    // Click to deselect
+    await bankA.click()
+    await page.waitForTimeout(200)
+
+    await expect(bankA).not.toHaveClass(/selected/)
+  })
+})
