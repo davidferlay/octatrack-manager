@@ -150,6 +150,23 @@ export function ProjectDetail() {
     setPartsWriteStatus(status);
   }, []);
 
+  // Toggle edit mode (backup bank file on entering edit mode)
+  const toggleEditMode = useCallback(async () => {
+    if (!isEditMode && projectPath) {
+      const bankFile = `bank${String(selectedBankIndex + 1).padStart(2, '0')}.work`;
+      try {
+        await invoke("backup_project_files", {
+          projectPath,
+          files: [bankFile],
+          label: "edit_mode",
+        });
+      } catch (err) {
+        console.error("Backup failed:", err);
+      }
+    }
+    setIsEditMode(prev => !prev);
+  }, [isEditMode, projectPath, selectedBankIndex]);
+
   // Refresh metadata + reload all banks in-place (without unmounting the UI)
   const refreshProjectData = useCallback(async () => {
     if (!projectPath) return;
@@ -226,15 +243,21 @@ export function ProjectDetail() {
   // Load machine types for the selected bank's active part
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      // Don't handle shortcuts when typing in an input/textarea
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      // Don't handle shortcuts when a modal/dialog is open
+      if (document.querySelector('.modal-overlay')) return;
+
       if (e.key === 'Escape') {
-        // Don't navigate if a modal/dialog is open
-        if (document.querySelector('.modal-overlay')) return;
         navigate('/');
+      } else if (e.key === 'e' || e.key === 'E') {
+        if (!isLoading) toggleEditMode();
       }
     }
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [navigate]);
+  }, [navigate, isLoading, toggleEditMode]);
 
   useEffect(() => {
     if (!projectPath || selectedBankIndex < 0 || selectedBankIndex >= 16) {
@@ -442,22 +465,7 @@ export function ProjectDetail() {
           }}>{projectName}</h1>
           {/* View/Edit mode toggle - hidden during loading */}
           {!isLoading && (
-            <div className="mode-toggle" onClick={async () => {
-              if (!isEditMode && projectPath) {
-                // Back up current bank file before entering edit mode
-                const bankFile = `bank${String(selectedBankIndex + 1).padStart(2, '0')}.work`;
-                try {
-                  await invoke("backup_project_files", {
-                    projectPath,
-                    files: [bankFile],
-                    label: "edit_mode",
-                  });
-                } catch (err) {
-                  console.error("Backup failed:", err);
-                }
-              }
-              setIsEditMode(!isEditMode);
-            }}>
+            <div className="mode-toggle" onClick={toggleEditMode}>
               <span className={`mode-toggle-btn ${!isEditMode ? 'active' : ''}`}>
                 View
               </span>
