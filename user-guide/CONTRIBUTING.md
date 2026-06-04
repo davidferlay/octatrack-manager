@@ -1,5 +1,18 @@
 # User Guide — Contributing Guidelines
 
+## Useful Commands
+
+All commands run from the `user-guide/` directory:
+
+| Command | Description |
+|---------|-------------|
+| `npm start` | Start local dev server with hot reload |
+| `npm run build` | Production build (validates all links, images) |
+| `npm run serve` | Serve the production build locally |
+| `npm run optimize-images` | Optimize screenshot file sizes with sharp |
+| `npm run generate-pdf` | Generate PDF from docs (uses Puppeteer) |
+| `npm run clear` | Clear Docusaurus cache (useful after config changes) |
+
 ## Image Sizing in Documentation
 
 ### Full-app screenshots (2940px native @2x)
