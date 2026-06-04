@@ -11,7 +11,7 @@ sidebar_position: 10
 ## Workflow
 
 1. **Source:** Select the bank (A–P) and pattern (1–16, or All for 1-to-1 copy).
-2. **Destination:** Choose the target project, bank, and target pattern(s).
+2. **Destination:** Choose the target project, one or more destination banks (A–P), and target pattern(s).
 3. **Configure Options:** Set part assignment, track scope, and mode scope.
 4. **Execute:** Perform the copy.
 
@@ -54,5 +54,6 @@ Visible when **All Tracks** is selected. Controls which track types are copied:
 ## Important Notes
 
 - **All Tracks Affected:** Pattern data includes **of all Audio and MIDI tracks** of current bank - it's not tied to individual tracks.
+- **Multi-bank Destination:** You can select multiple destination banks to copy patterns to several banks at once.
 - **Destructive Operation:** Copying a pattern replaces existing sequences at the destination.
-- **Automatic Backup:** The app automatically backs up the destination bank file before executing. See [Quick Start](../getting-started/quick-start.md#8-automatic-backups) for details.
+- **Automatic Backup:** The app automatically backs up the destination bank file(s) before executing. See [Quick Start](../getting-started/quick-start.md#8-automatic-backups) for details.

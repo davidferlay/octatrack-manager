@@ -15,7 +15,7 @@ Tracks aren’t treated as first-class entities in the [Octatrack's architecture
 ## Workflow
 
 1. **Source:** Select the bank (A–P), part (1–4), and track (T1–T8 for audio, M1–M8 for MIDI).
-2. **Destination:** Choose the target project, bank, part(s), and track(s).
+2. **Destination:** Choose the target project, one or more destination banks (A–P), part(s), and track(s).
 3. **Copy Mode:** Choose what data to copy — Part Parameters, Pattern Triggers, or Both.
 4. **Execute:** Perform the track copy.
 
@@ -53,6 +53,7 @@ When using **Both** or **Pattern Triggers** mode, you can select which patterns 
 
 ## Important Notes
 
+- **Multi-bank Destination:** You can select multiple destination banks to copy tracks to several banks at once.
 - **Track Type Consistency:** Audio tracks (T1–T8) can only be copied to audio targets, and MIDI tracks (M1–M8) to MIDI targets.
 - **Part Names Not Copied:** Since Copy Tracks only modifies selected tracks, the destination Part name is preserved: Overwriting it with the source Part name would be misleading for a hybrid Part.
 - **Automatic Backup:** The app automatically backs up the destination bank file before executing. See [Quick Start](../getting-started/quick-start.md#8-automatic-backups) for details.
