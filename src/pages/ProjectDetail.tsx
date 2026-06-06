@@ -641,24 +641,24 @@ export function ProjectDetail() {
                     <h2>Memory</h2>
                     <div className="compact-grid">
                       <div className="compact-item">
-                        <span className="compact-label">24-bit Flex</span>
-                        <span className="compact-value">{metadata.memory_settings.load_24bit_flex ? "Yes" : "No"}</span>
+                        <span className="compact-label">Flex Format</span>
+                        <span className="compact-value">{metadata.memory_settings.load_24bit_flex ? "24-bit" : "16-bit"}</span>
                       </div>
                       <div className="compact-item">
-                        <span className="compact-label">Dyn Rec</span>
+                        <span className="compact-label">Dynamic Recorders</span>
                         <span className="compact-value">{metadata.memory_settings.dynamic_recorders ? "Yes" : "No"}</span>
                       </div>
                       <div className="compact-item">
-                        <span className="compact-label">24-bit Rec</span>
-                        <span className="compact-value">{metadata.memory_settings.record_24bit ? "Yes" : "No"}</span>
+                        <span className="compact-label">Recorder Format</span>
+                        <span className="compact-value">{metadata.memory_settings.record_24bit ? "24-bit" : "16-bit"}</span>
                       </div>
                       <div className="compact-item">
-                        <span className="compact-label">Res Rec #</span>
-                        <span className="compact-value">{metadata.memory_settings.reserved_recorder_count}</span>
+                        <span className="compact-label">Reserve Recordings</span>
+                        <span className="compact-value">{metadata.memory_settings.reserved_recorder_count === 0 ? "Off" : `R1-R${metadata.memory_settings.reserved_recorder_count}`}</span>
                       </div>
                       <div className="compact-item">
-                        <span className="compact-label">Rec Len</span>
-                        <span className="compact-value">{metadata.memory_settings.reserved_recorder_length}</span>
+                        <span className="compact-label">Reserve Length</span>
+                        <span className="compact-value">{metadata.memory_settings.reserved_recorder_length} s</span>
                       </div>
                     </div>
                   </section>
