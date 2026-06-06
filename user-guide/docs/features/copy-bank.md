@@ -4,7 +4,7 @@ sidebar_position: 8
 
 # Copy Banks
 
-**Copy Banks** copies an entire bank — all 16 patterns and all 4 parts — from one project to another. Use it to merge live sets or reorganize banks across your projects.
+**Copy Banks** copies an entire bank — all 4 Parts and 16 Patterns — with optional sample slot transfer and automatic remapping. Useful to merge live sets or reorganize banks across your projects.
 
 ![Tools - Copy Banks](/img/screenshots/tools-copy-bank.png)
 
@@ -29,7 +29,7 @@ sidebar_position: 8
 
 ## Copy Sample Slots Option
 
-When **Copy Sample Slots** is set to **Yes** (default), the tool also copies the sample slots referenced by the source bank's tracks and patterns to the destination project.
+When **Copy Sample Slots** is set to **Yes** (default), the app also copies the sample slots referenced by the source bank's tracks and patterns to the destination project.
 
 ### Sample Scope
 
@@ -61,7 +61,7 @@ Controls where copied samples are placed in the destination's slot list:
 
 ### Slot Validation
 
-Before executing, the tool validates the destination project and shows a status indicator:
+Before executing, the app validates the destination project and shows a status indicator:
 
 - **Green checkmark:** Sufficient free slots and Flex RAM available. Shows the number of slots to copy, with deduplication count if some files already exist at the destination.
 - **Red error:** Not enough free slots or insufficient Flex RAM. The Execute button is disabled with details in the tooltip.
@@ -69,7 +69,7 @@ Before executing, the tool validates the destination project and shows a status 
 
 ### Automatic Remapping
 
-When copying samples, the tool automatically remaps all slot references in the copied bank data (Parts and Patterns) to point to the new slot positions in the destination. If a file with the same name already exists in the destination, the existing slot is reused instead of creating a duplicate.
+When copying samples, the app automatically remaps all slot references in the copied bank data (Parts and Patterns) to point to the new slot positions in the destination. If a file with the same name already exists in the destination, the existing slot is reused instead of creating a duplicate.
 
 ---
 

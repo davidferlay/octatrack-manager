@@ -76,7 +76,7 @@ The **Tools** tab lets you copy content between banks and projects without touch
 
 ### Available Operations
 
-- **[Copy Banks](../features/copy-bank.md):** Duplicate an entire bank (all 4 Parts + 16 Patterns) to one or more destination banks.
+- **[Copy Banks](../features/copy-bank.md):** Copy an entire bank (all 4 Parts + 16 Patterns) with optional sample slot transfer and automatic remapping.
 - **[Copy Parts](../features/copy-parts.md):** Transfer Part sound design (machines, amps, LFOs, FX) between parts and banks.
 - **[Copy Patterns](../features/copy-patterns.md):** Copy patterns with configurable Part assignment and track scope.
 - **[Copy Tracks](../features/copy-tracks.md):** Copy individual track data — sound design, pattern triggers, or both.
