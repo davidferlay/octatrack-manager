@@ -110,3 +110,8 @@
 | **Set Detection** | | | | |
 | PM84 | Discovery | Empty set detected on scan | Create a folder with only an AUDIO/ subfolder, scan that directory | Empty Set appears in the location with 0 projects |
 | PM85 | Discovery | Empty set persists after rescan | Create an empty Set via the app, click Refresh | Empty Set still appears after rescan |
+| **Flex RAM Display** | | | | |
+| PM86 | Flex RAM | FREE MEM shown on Flex tab | Open a project with Flex samples loaded, go to Flex tab | "FREE MEM: XX.X MB" badge shown in toolbar, value accounts for loaded samples |
+| PM87 | Flex RAM | FREE MEM matches Octatrack | Compare FREE MEM value with Octatrack's Flex slot list menu | Values match (same memory settings, same loaded samples) |
+| PM88 | Flex RAM | FREE MEM not shown on Static tab | Open a project, go to Static tab | No FREE MEM badge displayed |
+| PM89 | Flex RAM | FREE MEM reflects recorder settings | Open projects with different recorder buffer settings | FREE MEM value differs according to reserved recorder count and length |

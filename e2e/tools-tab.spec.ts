@@ -55,6 +55,7 @@ async function setupTauriMocks(page: Page, overrides?: { sameSet?: boolean; with
                 record_24bit: false,
                 reserved_recorder_count: 8,
                 reserved_recorder_length: 16,
+                flex_ram_free_mb: 85.5,
               },
               midi_settings: {
                 trig_channels: [1, 2, 3, 4, 5, 6, 7, 8],
