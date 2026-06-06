@@ -103,7 +103,7 @@ describe('SampleSlotsTable', () => {
         slots={mockSlots}
         slotPrefix="F"
         tableType="flex"
-        memorySettings={{ record_24bit: false, reserved_recorder_count: 8, reserved_recorder_length: 16 }}
+        memorySettings={{ record_24bit: false, reserved_recorder_count: 8, reserved_recorder_length: 16, flex_ram_free_mb: 42.5 }}
       />
     )
     // Default settings: 8 recorders × 16s × 44100 × 2 × 2 = 90,316,800 → exceeds total → 0 MB
