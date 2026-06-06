@@ -4,7 +4,7 @@ sidebar_position: 9
 
 # Copy Parts
 
-**Copy Parts** transfers Parts (sound design snapshots — the equivalent of a "kit") between different banks and projects. Use it to quickly move a sound you've developed to a new part.
+**Copy Parts** transfers Parts (sound design snapshots — the equivalent of a "kit") between different banks and projects. Useful to quickly move a sound you've developed to a new part.
 
 ![Tools - Copy Parts](/img/screenshots/tools-copy-parts.png)
 
