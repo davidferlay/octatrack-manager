@@ -654,7 +654,8 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
 
             // Compute flex RAM free: capacity minus loaded sample sizes
             let flex_ram_capacity = calculate_flex_ram_bytes(&memory_settings);
-            let flex_ram_used = sum_flex_sample_sizes(path, memory_settings.load_24bit_flex).unwrap_or(0);
+            let flex_ram_used =
+                sum_flex_sample_sizes(path, memory_settings.load_24bit_flex).unwrap_or(0);
             let flex_ram_free = flex_ram_capacity.saturating_sub(flex_ram_used);
             let flex_ram_free_mb = {
                 let mb = flex_ram_free as f64 / (1024.0 * 1024.0);
