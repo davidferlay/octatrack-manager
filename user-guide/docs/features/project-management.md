@@ -12,8 +12,28 @@ Manage Octatrack projects and Sets directly from Projects List — create, copy,
 Right-click to access management actions depending on the target:
 
 - **On a project card:** Copy, Rename, Open in File Manager, Delete.
+
+<img
+  src={require('@site/static/img/screenshots/manage-context-menu-project.png').default}
+  alt="Project card context menu"
+  style={{width: '57%', display: 'block', margin: '0 auto'}}
+/>
+
 - **On a Set header or grid background:** Copy Set, Rename Set, New Project, Paste Project (when a project has been copied), Open in File Manager, Delete Set.
+
+<img
+  src={require('@site/static/img/screenshots/manage-context-menu-set.png').default}
+  alt="Set header context menu"
+  style={{width: '55%', display: 'block', margin: '0 auto'}}
+/>
+
 - **On a location header or background:** New Set, Paste Set (when a set has been copied), Open in File Manager.
+
+<img
+  src={require('@site/static/img/screenshots/manage-context-menu-location.png').default}
+  alt="Location header context menu"
+  style={{width: '71%', display: 'block', margin: '0 auto'}}
+/>
 
 ## Naming Rules
 
@@ -35,6 +55,12 @@ The same rules apply to both project and Set names:
 
 Click the **+** card at the end of any Set's grid, or right-click a Set header and choose **New Project**.
 
+<img
+  src={require('@site/static/img/screenshots/manage-create-project.png').default}
+  alt="New Project dialog with allowed characters"
+  style={{width: '100%', display: 'block', margin: '0 auto'}}
+/>
+
 A new project is created with a default `project.work` and 16 empty `bank01.work` … `bank16.work` files, ready to load on the device.
 
 ### Copying a Project
@@ -51,6 +77,12 @@ The pasted copy is renamed `_2`, `_3`, … if the name is already taken in the d
 - Right-click → **Rename**, or focus the card and press **F2**.
 - Type the new name. Press **Enter** to confirm, **Escape** to cancel.
 
+<img
+  src={require('@site/static/img/screenshots/manage-rename-project.png').default}
+  alt="Rename Project dialog"
+  style={{width: '77%', display: 'block', margin: '0 auto'}}
+/>
+
 ### Moving a Project
 
 Drag any project card onto another Set's drop zone. A **progress modal** appears showing the move status. Same-Set drops are ignored.
@@ -63,11 +95,23 @@ Right-click → **Delete**, or focus the card and press **Delete**.
 
 A confirmation dialog appears — delete is destructive and cannot be undone. Cancel is the default focus, so pressing Enter immediately on the dialog will not delete the project. A spinner is shown while the deletion is in progress.
 
+<img
+  src={require('@site/static/img/screenshots/manage-delete-project.png').default}
+  alt="Delete Project confirmation dialog"
+  style={{width: '79%', display: 'block', margin: '0 auto'}}
+/>
+
 ## Set Operations
 
 ### Creating a Set
 
 Right-click a **location header** → **New Set**, or click the **+** button in the location header. Enter a name following the naming rules above. A new empty Set folder is created with an `AUDIO` subfolder.
+
+<img
+  src={require('@site/static/img/screenshots/manage-create-set.png').default}
+  alt="New Set dialog"
+  style={{width: '75%', display: 'block', margin: '0 auto'}}
+/>
 
 ### Copying a Set
 
@@ -82,6 +126,12 @@ The pasted Set is renamed `_2`, `_3`, … if the name already exists in the targ
 
 Right-click a Set header → **Rename Set**. Type the new name and press Enter to confirm.
 
+<img
+  src={require('@site/static/img/screenshots/manage-rename-set.png').default}
+  alt="Rename Set dialog"
+  style={{width: '82%', display: 'block', margin: '0 auto'}}
+/>
+
 ### Moving a Set
 
 Drag any Set header onto another Location. A **progress modal** appears showing the move status. Same-Location drops are ignored. While dragging a Set, only Locations highlight as valid drop targets — other Sets do not.
@@ -93,6 +143,12 @@ If the destination is on the same disk, the move is atomic and nearly instant. A
 Right-click a Set header → **Delete Set**.
 
 A confirmation dialog appears — this deletes the Set and all its projects. This action cannot be undone.
+
+<img
+  src={require('@site/static/img/screenshots/manage-delete-set.png').default}
+  alt="Delete Set confirmation dialog"
+  style={{width: '81%', display: 'block', margin: '0 auto'}}
+/>
 
 ## Limits
 
