@@ -5066,6 +5066,51 @@ fn read_project_memory_settings(project_path: &Path) -> Result<MemorySettings, S
     })
 }
 
+/// Save memory settings to a project's project.work file.
+/// Returns the recomputed flex_ram_free_mb after the change.
+pub fn save_memory_settings_data(
+    project_path: &str,
+    settings: MemorySettings,
+) -> Result<f64, String> {
+    let path = Path::new(project_path);
+
+    let project_file_path = if path.join("project.work").exists() {
+        path.join("project.work")
+    } else if path.join("project.strd").exists() {
+        path.join("project.strd")
+    } else {
+        return Err("Project file not found".to_string());
+    };
+
+    let mut project_data = ProjectFile::from_data_file(&project_file_path)
+        .map_err(|e| format!("Failed to read project file: {:?}", e))?;
+
+    // Update memory settings
+    project_data.settings.control.memory.load_24bit_flex = settings.load_24bit_flex;
+    project_data.settings.control.memory.dynamic_recorders = settings.dynamic_recorders;
+    project_data.settings.control.memory.record_24bit = settings.record_24bit;
+    project_data.settings.control.memory.reserved_recorder_count = settings.reserved_recorder_count;
+    project_data
+        .settings
+        .control
+        .memory
+        .reserved_recorder_length = settings.reserved_recorder_length;
+
+    // Write back to disk
+    project_data
+        .to_data_file(&project_file_path)
+        .map_err(|e| format!("Failed to write project file: {:?}", e))?;
+
+    // Recompute flex RAM free
+    let flex_ram_capacity = calculate_flex_ram_bytes(&settings);
+    let flex_ram_used = sum_flex_sample_sizes(path, settings.load_24bit_flex).unwrap_or(0);
+    let flex_ram_free = flex_ram_capacity.saturating_sub(flex_ram_used);
+    let mb = flex_ram_free as f64 / (1024.0 * 1024.0);
+    let flex_ram_free_mb = (mb * 100.0 + 0.5).floor() / 100.0;
+
+    Ok(flex_ram_free_mb)
+}
+
 /// Validate whether the destination project has enough free slots to accommodate
 /// the source bank's sample slots. Returns validation result without writing anything.
 pub fn validate_bank_sample_slots(
@@ -16942,6 +16987,164 @@ mod tests {
         .unwrap();
         let settings = read_project_memory_settings(project_path).expect("should read from .strd");
         assert_eq!(settings.reserved_recorder_count, 8);
+    }
+
+    // ============================================================================
+    // save_memory_settings_data tests
+    // ============================================================================
+
+    #[test]
+    fn test_save_memory_settings_roundtrip() {
+        let project = TestProject::new();
+        let original =
+            read_project_memory_settings(Path::new(&project.path)).expect("should read settings");
+
+        // Modify all fields
+        let new_settings = MemorySettings {
+            load_24bit_flex: !original.load_24bit_flex,
+            dynamic_recorders: !original.dynamic_recorders,
+            record_24bit: !original.record_24bit,
+            reserved_recorder_count: 4,
+            reserved_recorder_length: 100,
+            flex_ram_free_mb: 0.0, // Will be recomputed
+        };
+
+        let _returned_mb =
+            save_memory_settings_data(&project.path, new_settings.clone()).expect("should save");
+
+        // Re-read and verify all fields persisted
+        let reread =
+            read_project_memory_settings(Path::new(&project.path)).expect("should re-read");
+        assert_eq!(reread.load_24bit_flex, new_settings.load_24bit_flex);
+        assert_eq!(reread.dynamic_recorders, new_settings.dynamic_recorders);
+        assert_eq!(reread.record_24bit, new_settings.record_24bit);
+        assert_eq!(
+            reread.reserved_recorder_count,
+            new_settings.reserved_recorder_count
+        );
+        assert_eq!(
+            reread.reserved_recorder_length,
+            new_settings.reserved_recorder_length
+        );
+    }
+
+    #[test]
+    fn test_save_memory_settings_returns_flex_ram() {
+        let project = TestProject::new();
+        // Default: 16-bit flex, 8 recorders at 16-bit
+        let settings = MemorySettings {
+            load_24bit_flex: false,
+            dynamic_recorders: false,
+            record_24bit: false,
+            reserved_recorder_count: 0,
+            reserved_recorder_length: 0,
+            flex_ram_free_mb: 0.0,
+        };
+
+        let free_mb =
+            save_memory_settings_data(&project.path, settings).expect("should save and return mb");
+        // With no recorders reserved, flex gets full 85.5 MB (no samples loaded in test project)
+        assert!(
+            free_mb > 85.0 && free_mb < 86.0,
+            "Expected ~85.5 MB, got {}",
+            free_mb
+        );
+    }
+
+    #[test]
+    fn test_save_memory_settings_no_project_file() {
+        let dir = TempDir::new().unwrap();
+        let settings = MemorySettings {
+            load_24bit_flex: false,
+            dynamic_recorders: false,
+            record_24bit: false,
+            reserved_recorder_count: 0,
+            reserved_recorder_length: 0,
+            flex_ram_free_mb: 0.0,
+        };
+        let err = save_memory_settings_data(&dir.path().to_string_lossy(), settings).unwrap_err();
+        assert!(err.contains("not found"), "got: {}", err);
+    }
+
+    #[test]
+    fn test_save_memory_settings_strd_fallback() {
+        let project = TestProject::new();
+        let project_path = Path::new(&project.path);
+        // Rename project.work to project.strd
+        fs::rename(
+            project_path.join("project.work"),
+            project_path.join("project.strd"),
+        )
+        .unwrap();
+
+        let settings = MemorySettings {
+            load_24bit_flex: true,
+            dynamic_recorders: true,
+            record_24bit: false,
+            reserved_recorder_count: 2,
+            reserved_recorder_length: 50,
+            flex_ram_free_mb: 0.0,
+        };
+
+        let _free_mb = save_memory_settings_data(&project.path, settings.clone())
+            .expect("should save to .strd");
+
+        // Re-read and verify
+        let reread = read_project_memory_settings(project_path).expect("should re-read .strd");
+        assert_eq!(reread.load_24bit_flex, true);
+        assert_eq!(reread.dynamic_recorders, true);
+        assert_eq!(reread.reserved_recorder_count, 2);
+        assert_eq!(reread.reserved_recorder_length, 50);
+    }
+
+    #[test]
+    #[ignore] // Requires OT CF card mounted
+    fn verify_ot_hardware_memory_settings() {
+        let base = "/run/media/dferlay/OCTATRACK32/COPY_BANKS_SMPL";
+        // (folder_name, record_24bit, count, length, expected_free_mb)
+        let cases: Vec<(&str, bool, u8, u32, f64)> = vec![
+            ("16B-R1R2-254s_free_0-0", false, 2, 254, 0.04),
+            ("16B-R1R3-169s_free_0-2", false, 3, 169, 0.21),
+            ("16B-R1R5-101s_free_0-5", false, 5, 101, 0.54),
+            ("24B-R1R5-67s_free_1-0", true, 5, 67, 0.96),
+            ("24B-R1R7-48s_free_0-7", true, 7, 48, 0.71),
+            ("24B-R1R8-42s_free_0-7", true, 8, 42, 0.71),
+            ("24B-R1R8-30s_free_24-9", true, 8, 30, 24.94),
+            ("16B-R1R8-19s_free_59-9", false, 8, 19, 59.93),
+            ("16B-R1-10s_free_ 31-1", false, 1, 10, 31.08),
+            ("24B-R1-0s_free_32-8", true, 1, 0, 32.76),
+            ("24B-R1-10s_free_30-2", true, 1, 10, 30.24),
+        ];
+
+        for (name, expected_24bit, expected_count, expected_length, expected_free) in &cases {
+            let path = format!("{}/{}", base, name);
+            let meta = read_project_metadata(&path)
+                .unwrap_or_else(|e| panic!("Failed to read {}: {}", name, e));
+            let ms = &meta.memory_settings;
+
+            assert_eq!(
+                ms.record_24bit, *expected_24bit,
+                "{}: record_24bit = {}, expected {}",
+                name, ms.record_24bit, expected_24bit
+            );
+            assert_eq!(
+                ms.reserved_recorder_count, *expected_count,
+                "{}: count = {}, expected {}",
+                name, ms.reserved_recorder_count, expected_count
+            );
+            assert_eq!(
+                ms.reserved_recorder_length, *expected_length,
+                "{}: length = {}, expected {}",
+                name, ms.reserved_recorder_length, expected_length
+            );
+            assert!(
+                (ms.flex_ram_free_mb - expected_free).abs() < 0.05,
+                "{}: free_mb = {}, expected {}",
+                name,
+                ms.flex_ram_free_mb,
+                expected_free
+            );
+        }
     }
 
     // ============================================================================

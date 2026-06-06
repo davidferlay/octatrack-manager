@@ -136,6 +136,8 @@ export function ProjectDetail() {
   const [isTitleTruncated, setIsTitleTruncated] = useState<boolean>(false); // Track if project title is truncated
   const titleRef = useRef<HTMLHeadingElement>(null); // Ref for project title h1
   const [audioTrackMachineTypes, setAudioTrackMachineTypes] = useState<Record<number, string>>({}); // Track index (0-7) -> machine type
+  const memorySaveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null); // Debounce timer for memory settings save
+  const [reserveLengthShaking, setReserveLengthShaking] = useState(false); // Shake animation for invalid reserve length
 
   // Wrapper to capture last message before going idle (for fade-out effect)
   const handleWriteStatusChange = useCallback((status: WriteStatus) => {
@@ -150,14 +152,14 @@ export function ProjectDetail() {
     setPartsWriteStatus(status);
   }, []);
 
-  // Toggle edit mode (backup bank file on entering edit mode)
+  // Toggle edit mode (backup bank file and project.work on entering edit mode)
   const toggleEditMode = useCallback(async () => {
     if (!isEditMode && projectPath) {
       const bankFile = `bank${String(selectedBankIndex + 1).padStart(2, '0')}.work`;
       try {
         await invoke("backup_project_files", {
           projectPath,
-          files: [bankFile],
+          files: [bankFile, "project.work"],
           label: "edit_mode",
         });
       } catch (err) {
@@ -166,6 +168,74 @@ export function ProjectDetail() {
     }
     setIsEditMode(prev => !prev);
   }, [isEditMode, projectPath, selectedBankIndex]);
+
+  // Compute max reserve length in seconds for the given recorder count and format
+  const getMaxReserveLength = useCallback((count: number, record24bit: boolean): number => {
+    if (count === 0) return 0;
+    const bps = record24bit ? 3 : 2;
+    return Math.floor(89_652_480 / (count * 44100 * 2 * bps));
+  }, []);
+
+  // Handle memory setting changes with debounced save
+  const handleMemorySettingChange = useCallback((field: string, value: boolean | number) => {
+    if (!metadata || !projectPath) return;
+
+    const currentSettings = metadata.memory_settings;
+    const updatedSettings = { ...currentSettings, [field]: value };
+
+    // When reserve recordings changes to 0, reserve length has no effect
+    // When recorder count or format changes, clamp reserve length to new max
+    if (field === 'reserved_recorder_count' || field === 'record_24bit') {
+      const count = field === 'reserved_recorder_count' ? (value as number) : currentSettings.reserved_recorder_count;
+      const is24bit = field === 'record_24bit' ? (value as boolean) : currentSettings.record_24bit;
+      const maxLen = getMaxReserveLength(count, is24bit);
+      if (updatedSettings.reserved_recorder_length > maxLen) {
+        updatedSettings.reserved_recorder_length = maxLen;
+      }
+    }
+
+    // Update metadata state immediately for responsive UI
+    setMetadata(prev => {
+      if (!prev) return prev;
+      return { ...prev, memory_settings: updatedSettings };
+    });
+
+    // Debounced save
+    if (memorySaveDebounceRef.current) {
+      clearTimeout(memorySaveDebounceRef.current);
+    }
+
+    handleWriteStatusChange({ state: 'writing', message: 'Saving memory settings...' });
+
+    memorySaveDebounceRef.current = setTimeout(() => {
+      // Read latest metadata at save time
+      setMetadata(currentMeta => {
+        if (!currentMeta) return currentMeta;
+        const settingsToSave = currentMeta.memory_settings;
+
+        invoke<number>('save_memory_settings', {
+          path: projectPath,
+          settings: settingsToSave,
+        }).then((flexRamFreeMb) => {
+          // Update flex_ram_free_mb with the recomputed value from backend
+          setMetadata(m => {
+            if (!m) return m;
+            return { ...m, memory_settings: { ...m.memory_settings, flex_ram_free_mb: flexRamFreeMb } };
+          });
+          handleWriteStatusChange({ state: 'success', message: 'Memory settings saved' });
+          setTimeout(() => handleWriteStatusChange({ state: 'idle' }), 2000);
+        }).catch(err => {
+          console.error('Failed to save memory settings:', err);
+          handleWriteStatusChange({ state: 'error', message: 'Failed to save memory settings' });
+          setTimeout(() => handleWriteStatusChange({ state: 'idle' }), 3000);
+        });
+
+        return currentMeta;
+      });
+
+      memorySaveDebounceRef.current = null;
+    }, 500);
+  }, [metadata, projectPath, getMaxReserveLength, handleWriteStatusChange]);
 
   // Refresh metadata + reload all banks in-place (without unmounting the UI)
   const refreshProjectData = useCallback(async () => {
@@ -642,23 +712,98 @@ export function ProjectDetail() {
                     <div className="compact-grid">
                       <div className="compact-item">
                         <span className="compact-label">Flex Format</span>
-                        <span className="compact-value">{metadata.memory_settings.load_24bit_flex ? "24-bit" : "16-bit"}</span>
+                        {isEditMode ? (
+                          <select
+                            className="compact-select"
+                            value={metadata.memory_settings.load_24bit_flex ? "true" : "false"}
+                            onChange={(e) => handleMemorySettingChange('load_24bit_flex', e.target.value === "true")}
+                          >
+                            <option value="false">16-bit</option>
+                            <option value="true">24-bit</option>
+                          </select>
+                        ) : (
+                          <span className="compact-value">{metadata.memory_settings.load_24bit_flex ? "24-bit" : "16-bit"}</span>
+                        )}
                       </div>
                       <div className="compact-item">
                         <span className="compact-label">Dynamic Recorders</span>
-                        <span className="compact-value">{metadata.memory_settings.dynamic_recorders ? "Yes" : "No"}</span>
+                        {isEditMode ? (
+                          <select
+                            className="compact-select"
+                            value={metadata.memory_settings.dynamic_recorders ? "true" : "false"}
+                            onChange={(e) => handleMemorySettingChange('dynamic_recorders', e.target.value === "true")}
+                          >
+                            <option value="false">No</option>
+                            <option value="true">Yes</option>
+                          </select>
+                        ) : (
+                          <span className="compact-value">{metadata.memory_settings.dynamic_recorders ? "Yes" : "No"}</span>
+                        )}
                       </div>
                       <div className="compact-item">
                         <span className="compact-label">Recorder Format</span>
-                        <span className="compact-value">{metadata.memory_settings.record_24bit ? "24-bit" : "16-bit"}</span>
+                        {isEditMode ? (
+                          <select
+                            className="compact-select"
+                            value={metadata.memory_settings.record_24bit ? "true" : "false"}
+                            onChange={(e) => handleMemorySettingChange('record_24bit', e.target.value === "true")}
+                          >
+                            <option value="false">16-bit</option>
+                            <option value="true">24-bit</option>
+                          </select>
+                        ) : (
+                          <span className="compact-value">{metadata.memory_settings.record_24bit ? "24-bit" : "16-bit"}</span>
+                        )}
                       </div>
                       <div className="compact-item">
                         <span className="compact-label">Reserve Recordings</span>
-                        <span className="compact-value">{metadata.memory_settings.reserved_recorder_count === 0 ? "Off" : `R1-R${metadata.memory_settings.reserved_recorder_count}`}</span>
+                        {isEditMode ? (
+                          <select
+                            className="compact-select"
+                            value={String(metadata.memory_settings.reserved_recorder_count)}
+                            onChange={(e) => handleMemorySettingChange('reserved_recorder_count', Number(e.target.value))}
+                          >
+                            <option value="0">None</option>
+                            <option value="1">R1</option>
+                            <option value="2">R1-R2</option>
+                            <option value="3">R1-R3</option>
+                            <option value="4">R1-R4</option>
+                            <option value="5">R1-R5</option>
+                            <option value="6">R1-R6</option>
+                            <option value="7">R1-R7</option>
+                            <option value="8">R1-R8</option>
+                          </select>
+                        ) : (
+                          <span className="compact-value">{metadata.memory_settings.reserved_recorder_count === 0 ? "None" : metadata.memory_settings.reserved_recorder_count === 1 ? "R1" : `R1-R${metadata.memory_settings.reserved_recorder_count}`}</span>
+                        )}
                       </div>
                       <div className="compact-item">
                         <span className="compact-label">Reserve Length</span>
-                        <span className="compact-value">{metadata.memory_settings.reserved_recorder_length} s</span>
+                        {isEditMode ? (
+                          <input
+                            type="number"
+                            className={`compact-input${reserveLengthShaking ? ' shake' : ''}`}
+                            min={0}
+                            max={getMaxReserveLength(metadata.memory_settings.reserved_recorder_count, metadata.memory_settings.record_24bit)}
+                            value={metadata.memory_settings.reserved_recorder_length}
+                            disabled={metadata.memory_settings.reserved_recorder_count === 0}
+                            onChange={(e) => {
+                              const raw = Number(e.target.value);
+                              const max = getMaxReserveLength(metadata.memory_settings.reserved_recorder_count, metadata.memory_settings.record_24bit);
+                              if (isNaN(raw) || raw < 0 || raw > max) {
+                                setReserveLengthShaking(false);
+                                requestAnimationFrame(() => setReserveLengthShaking(true));
+                                setTimeout(() => setReserveLengthShaking(false), 400);
+                              }
+                              const val = Math.max(0, Math.min(max, raw || 0));
+                              if (val !== metadata.memory_settings.reserved_recorder_length) {
+                                handleMemorySettingChange('reserved_recorder_length', val);
+                              }
+                            }}
+                          />
+                        ) : (
+                          <span className="compact-value">{metadata.memory_settings.reserved_recorder_length} s</span>
+                        )}
                       </div>
                     </div>
                   </section>

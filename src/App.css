@@ -2152,6 +2152,71 @@ h1 {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
+  /* Match select/input dimensions so layout doesn't shift on edit toggle */
+  border: 1px solid transparent;
+  padding: 0.3rem 0.4rem;
+  box-sizing: border-box;
+  line-height: 1.2;
+}
+
+.overview-section .compact-select,
+.overview-section .compact-input {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #fff;
+  font-family: 'Courier New', monospace;
+  background: #1a1a1a;
+  border: 1px solid #f59e0b;
+  border-radius: 3px;
+  padding: 0.3rem 0.4rem;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.overview-section .compact-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23f59e0b'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.4rem center;
+  padding-right: 1.5rem;
+  cursor: pointer;
+}
+
+.overview-section .compact-select:focus,
+.overview-section .compact-input:focus {
+  border-color: #fbbf24;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.3);
+}
+
+.overview-section .compact-select option {
+  background: #1a1a1a;
+  color: #fff;
+}
+
+.overview-section .compact-input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.overview-section .compact-input.shake {
+  animation: inputShake 0.4s ease;
+  border-color: #dc3545 !important;
+  box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.3) !important;
+}
+
+.overview-section .compact-input[type="number"] {
+  -moz-appearance: textfield;
+  max-width: 80px;
+}
+
+.overview-section .compact-input[type="number"]::-webkit-inner-spin-button,
+.overview-section .compact-input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .samples-tab {

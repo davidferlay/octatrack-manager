@@ -33,12 +33,14 @@ use project_reader::{
     read_project_metadata,
     read_single_bank,
     reload_part_data,
+    save_memory_settings_data,
     save_parts_data,
     AudioPoolStatus,
     Bank,
+    // Types
+    MemorySettings,
     PartData,
     PartsDataResponse,
-    // Types
     ProjectMetadata,
 };
 use serde::Serialize;
@@ -123,6 +125,13 @@ async fn save_parts(
 ) -> Result<(), String> {
     // Run on a blocking thread pool to avoid blocking the main event loop
     tauri::async_runtime::spawn_blocking(move || save_parts_data(&path, &bank_id, parts_data))
+        .await
+        .unwrap()
+}
+
+#[tauri::command]
+async fn save_memory_settings(path: String, settings: MemorySettings) -> Result<f64, String> {
+    tauri::async_runtime::spawn_blocking(move || save_memory_settings_data(&path, settings))
         .await
         .unwrap()
 }
@@ -765,6 +774,7 @@ pub fn run() {
             get_existing_banks,
             load_parts_data,
             save_parts,
+            save_memory_settings,
             commit_part,
             commit_all_parts,
             reload_part,
