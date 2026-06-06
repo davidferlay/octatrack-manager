@@ -40,6 +40,18 @@ Controls which sample slots are included:
 | **Used by bank** | Only slots actively referenced by the bank's Parts (track machines) and Patterns (sample locks). This is the most conservative option. |
 | **All assigned** | All slots in the source project that have an audio file assigned, regardless of whether this bank uses them. |
 
+<div style={{textAlign: 'center'}}>
+<img
+  src={require('@site/static/img/screenshots/tools-copy-bank-scope-used.png').default}
+  alt="Sample Scope set to Used by bank"
+  style={{width: '40%'}}
+/><img
+  src={require('@site/static/img/screenshots/tools-copy-bank-scope-all.png').default}
+  alt="Sample Scope set to All assigned"
+  style={{width: '40%'}}
+/>
+</div>
+
 ### Audio Files
 
 Controls how audio files are handled at the destination:
@@ -50,6 +62,12 @@ Controls how audio files are handled at the destination:
 | **Copy to project** | Copies all referenced audio files into the destination project's root directory. Works across different Sets. | — |
 | **Move to Pool** | Moves project-local files to the Set's Audio Pool (`AUDIO/` folder) and updates paths in both source and destination projects. | Same Set |
 
+<img
+  src={require('@site/static/img/screenshots/tools-copy-bank-audio-files.png').default}
+  alt="Audio Files options"
+  style={{width: '47%', display: 'block', margin: '0 auto'}}
+/>
+
 ### Slot Placement
 
 Controls where copied samples are placed in the destination's slot list:
@@ -59,13 +77,47 @@ Controls where copied samples are placed in the destination's slot list:
 | **Keep position** | Places samples at the same slot number as the source. Falls back to the first free slot if that position is occupied. |
 | **Stack from first** | Fills the first available slots starting from slot 1, packing samples tightly. |
 
+<img
+  src={require('@site/static/img/screenshots/tools-copy-bank-slot-placement.png').default}
+  alt="Slot Placement options"
+  style={{width: '47%', display: 'block', margin: '0 auto'}}
+/>
+
 ### Slot Validation
 
 Before executing, the app validates the destination project and shows a status indicator:
 
 - **Green checkmark:** Sufficient free slots and Flex RAM available. Shows the number of slots to copy, with deduplication count if some files already exist at the destination.
+
+<img
+  src={require('@site/static/img/screenshots/tools-copy-bank-scope-used.png').default}
+  alt="Green checkmark: sufficient free slots"
+  style={{width: '48%', display: 'block', margin: '0 auto'}}
+/>
+
+- **Orange warning:**
+  - Not enough free slots at the destination (e.g. "Not enough free Flex slots: need 70, only 1 available").
+  - Source project has missing audio files (e.g. "55 audio files missing in source project"). Consider using [Fix Missing Samples](./fix-missing-samples.md) to resolve missing files first.
+
+<div style={{textAlign: 'center'}}>
+<img
+  src={require('@site/static/img/screenshots/tools-copy-bank-validation-slots.png').default}
+  alt="Validation warning: not enough free slots"
+  style={{width: '46%'}}
+/><img
+  src={require('@site/static/img/screenshots/tools-copy-bank-validation-missing.png').default}
+  alt="Validation warning: missing audio files in source project"
+  style={{width: '48%'}}
+/>
+</div>
+
 - **Red error:** Not enough free slots or insufficient Flex RAM. The Execute button is disabled with details in the tooltip.
-- **Yellow warning:** Source project has missing audio files. Consider using [Fix Missing Samples](./fix-missing-samples.md) first.
+
+<img
+  src={require('@site/static/img/screenshots/tools-copy-bank-validation-ram.png').default}
+  alt="Validation error: not enough Flex RAM"
+  style={{width: '45%', display: 'block', margin: '0 auto'}}
+/>
 
 ### Automatic Remapping
 
