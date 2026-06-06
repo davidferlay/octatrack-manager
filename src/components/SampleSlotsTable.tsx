@@ -21,6 +21,7 @@ interface MemorySettings {
   record_24bit: boolean;
   reserved_recorder_count: number;
   reserved_recorder_length: number;
+  flex_ram_free_mb: number;
 }
 
 interface SampleSlotsTableProps {
@@ -60,15 +61,6 @@ function getSetRelativePath(projectPath: string | null): string {
     return parts[0] + '/';
   }
   return projectPath;
-}
-
-const OT_TOTAL_RAM_BYTES = 89_652_480;
-
-function calculateFlexRamMb(settings: MemorySettings): number {
-  const bytesPerSample = settings.record_24bit ? 3 : 2;
-  const recorderBytes = settings.reserved_recorder_count * settings.reserved_recorder_length * 44100 * 2 * bytesPerSample;
-  const flexRamBytes = Math.max(0, OT_TOTAL_RAM_BYTES - recorderBytes);
-  return flexRamBytes / (1024 * 1024);
 }
 
 export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, memorySettings }: SampleSlotsTableProps) {
@@ -520,7 +512,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
             <span>Showing {sortedSlots.length} of {slots.length} slots</span>
             {memorySettings && (
               <span className="ram-info" title="Flex RAM available for sample loading">
-                FREE MEM: {calculateFlexRamMb(memorySettings).toFixed(1)} MB
+                FREE MEM: {memorySettings.flex_ram_free_mb.toFixed(1)} MB
               </span>
             )}
             {compatibilityFilter !== 'all' && <span className="filter-badge">Compat: {compatibilityFilter}</span>}

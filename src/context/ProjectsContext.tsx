@@ -53,6 +53,7 @@ interface MemorySettings {
   record_24bit: boolean;
   reserved_recorder_count: number;
   reserved_recorder_length: number;
+  flex_ram_free_mb: number;
 }
 
 interface MidiSettings {

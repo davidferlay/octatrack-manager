@@ -60,6 +60,7 @@ pub struct MemorySettings {
     pub record_24bit: bool,
     pub reserved_recorder_count: u8,
     pub reserved_recorder_length: u32,
+    pub flex_ram_free_mb: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -648,6 +649,20 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                 record_24bit: project.settings.control.memory.record_24bit,
                 reserved_recorder_count: project.settings.control.memory.reserved_recorder_count,
                 reserved_recorder_length: project.settings.control.memory.reserved_recorder_length,
+                flex_ram_free_mb: 0.0, // will be computed below
+            };
+
+            // Compute flex RAM free: capacity minus loaded sample sizes
+            let flex_ram_capacity = calculate_flex_ram_bytes(&memory_settings);
+            let flex_ram_used = sum_flex_sample_sizes(path, memory_settings.load_24bit_flex).unwrap_or(0);
+            let flex_ram_free = flex_ram_capacity.saturating_sub(flex_ram_used);
+            let flex_ram_free_mb = {
+                let mb = flex_ram_free as f64 / (1024.0 * 1024.0);
+                (mb * 100.0 + 0.5).floor() / 100.0
+            };
+            let memory_settings = MemorySettings {
+                flex_ram_free_mb,
+                ..memory_settings
             };
 
             // Extract MIDI settings
@@ -5046,6 +5061,7 @@ fn read_project_memory_settings(project_path: &Path) -> Result<MemorySettings, S
             .control
             .memory
             .reserved_recorder_length,
+        flex_ram_free_mb: 0.0, // not needed for validation, computed separately
     })
 }
 
@@ -16538,6 +16554,7 @@ mod tests {
             record_24bit: false,
             reserved_recorder_count: 0,
             reserved_recorder_length: 0,
+            flex_ram_free_mb: 0.0,
         };
         assert_eq!(calculate_flex_ram_bytes(&settings), OT_TOTAL_RAM_BYTES);
     }
@@ -16550,6 +16567,7 @@ mod tests {
             record_24bit: false,
             reserved_recorder_count: 1,
             reserved_recorder_length: 1,
+            flex_ram_free_mb: 0.0,
         };
         // 1 × 1s × 44100 × 2ch × 2 bytes = 176,400
         assert_eq!(
@@ -16566,6 +16584,7 @@ mod tests {
             record_24bit: true,
             reserved_recorder_count: 1,
             reserved_recorder_length: 1,
+            flex_ram_free_mb: 0.0,
         };
         // 1 × 1s × 44100 × 2ch × 3 bytes = 264,600
         assert_eq!(
@@ -16582,6 +16601,7 @@ mod tests {
             record_24bit: true,
             reserved_recorder_count: 255,
             reserved_recorder_length: u32::MAX,
+            flex_ram_free_mb: 0.0,
         };
         assert_eq!(calculate_flex_ram_bytes(&settings), 0);
     }
