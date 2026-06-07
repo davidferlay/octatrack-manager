@@ -83,12 +83,22 @@ jobs:
         include:
           - platform: ubuntu-22.04
             args: '--target x86_64-unknown-linux-gnu'
+            rust_targets: ''
+          - platform: ubuntu-24.04-arm
+            args: '--target aarch64-unknown-linux-gnu'
+            rust_targets: ''
           - platform: windows-latest
             args: ''
+            rust_targets: ''
+          - platform: windows-latest
+            args: '--target aarch64-pc-windows-msvc'
+            rust_targets: 'aarch64-pc-windows-msvc'
           - platform: macos-latest
             args: '--target x86_64-apple-darwin'
+            rust_targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
           - platform: macos-latest
             args: '--target aarch64-apple-darwin'
+            rust_targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
 
     runs-on: ${{ matrix.platform }}
 
@@ -104,13 +114,13 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.rust_targets }}
 
       - name: Install dependencies (Ubuntu)
-        if: matrix.platform == 'ubuntu-22.04'
+        if: contains(matrix.platform, 'ubuntu')
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf xdg-utils
 
       - name: Install frontend dependencies
         run: npm install
@@ -142,7 +152,7 @@ jobs:
           grep -A2 '"endpoints"' src-tauri/tauri.conf.json
 
       - name: Build and upload artifacts (Ubuntu)
-        if: matrix.platform == 'ubuntu-22.04'
+        if: contains(matrix.platform, 'ubuntu')
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -155,7 +165,7 @@ jobs:
           args: ${{ matrix.args }}
 
       - name: Build and upload artifacts (Windows/macOS)
-        if: matrix.platform != 'ubuntu-22.04'
+        if: ${{ !contains(matrix.platform, 'ubuntu') }}
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -178,7 +188,7 @@ jobs:
             cd src-tauri/target
 
             # Upload any built artifacts that may have failed
-            if [[ "${{ matrix.platform }}" == "ubuntu-22.04" ]]; then
+            if [[ "${{ matrix.platform }}" == *"ubuntu"* ]]; then
               find release/bundle -name "*.deb" -o -name "*.AppImage" | xargs -I {} gh release upload "${{ needs.create-release.outputs.tag_name }}" {} --clobber || true
             elif [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
               find release/bundle -name "*.msi" -o -name "*.exe" | xargs -I {} gh release upload "${{ needs.create-release.outputs.tag_name }}" {} --clobber || true
