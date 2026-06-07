@@ -657,10 +657,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
             let flex_ram_used =
                 sum_flex_sample_sizes(path, memory_settings.load_24bit_flex).unwrap_or(0);
             let flex_ram_free = flex_ram_capacity.saturating_sub(flex_ram_used);
-            let flex_ram_free_mb = {
-                let mb = flex_ram_free as f64 / (1024.0 * 1024.0);
-                (mb * 100.0 + 0.5).floor() / 100.0
-            };
+            let flex_ram_free_mb = truncate_bytes_to_mib(flex_ram_free);
             let memory_settings = MemorySettings {
                 flex_ram_free_mb,
                 ..memory_settings
@@ -4752,8 +4749,8 @@ fn remap_bank_slot_references(
     }
 }
 
-/// Total Octatrack RAM in bytes (85.5 MB).
-const OT_TOTAL_RAM_BYTES: u64 = 89_652_480;
+/// Total Octatrack RAM in bytes (exactly 85.5 MiB = 0x5580000).
+const OT_TOTAL_RAM_BYTES: u64 = 89_653_248;
 
 /// Audio PCM metadata needed for RAM calculation.
 struct AudioPcmInfo {
@@ -4957,6 +4954,18 @@ fn calculate_flex_ram_bytes(memory_settings: &MemorySettings) -> u64 {
     OT_TOTAL_RAM_BYTES.saturating_sub(recorder_bytes)
 }
 
+/// Truncate a byte count to MiB for display, matching Octatrack behavior:
+/// - Values >= 10 MiB: 1 decimal place (floor)
+/// - Values < 10 MiB: 2 decimal places (floor)
+fn truncate_bytes_to_mib(bytes: u64) -> f64 {
+    let mib = bytes as f64 / (1024.0 * 1024.0);
+    if mib >= 10.0 {
+        (mib * 10.0).floor() / 10.0
+    } else {
+        (mib * 100.0).floor() / 100.0
+    }
+}
+
 /// Sum the RAM usage of all flex samples in a project (all 128 flex slots).
 /// Uses actual PCM data size from WAV headers, accounting for load_24bit_flex setting.
 fn sum_flex_sample_sizes(project_path: &Path, load_24bit_flex: bool) -> Result<u64, String> {
@@ -5105,8 +5114,7 @@ pub fn save_memory_settings_data(
     let flex_ram_capacity = calculate_flex_ram_bytes(&settings);
     let flex_ram_used = sum_flex_sample_sizes(path, settings.load_24bit_flex).unwrap_or(0);
     let flex_ram_free = flex_ram_capacity.saturating_sub(flex_ram_used);
-    let mb = flex_ram_free as f64 / (1024.0 * 1024.0);
-    let flex_ram_free_mb = (mb * 100.0 + 0.5).floor() / 100.0;
+    let flex_ram_free_mb = truncate_bytes_to_mib(flex_ram_free);
 
     Ok(flex_ram_free_mb)
 }
@@ -5191,13 +5199,7 @@ pub fn validate_bank_sample_slots(
     let flex_ram_used = sum_flex_sample_sizes(dest_path, dest_memory_settings.load_24bit_flex)?;
     let flex_ram_free = flex_ram_capacity.saturating_sub(flex_ram_used);
 
-    // Round to 2 decimal places to match Octatrack display behavior
-    let round_mb = |bytes: u64| -> f64 {
-        let mb = bytes as f64 / (1024.0 * 1024.0);
-        (mb * 100.0 + 0.5).floor() / 100.0
-    };
-
-    let flex_ram_free_mb = round_mb(flex_ram_free);
+    let flex_ram_free_mb = truncate_bytes_to_mib(flex_ram_free);
 
     // Try building remap table to check feasibility
     match build_remap_table(
@@ -5228,9 +5230,9 @@ pub fn validate_bank_sample_slots(
                 &dest_state_flex,
                 dest_memory_settings.load_24bit_flex,
             )?;
-            let flex_ram_new_mb = round_mb(new_flex_bytes);
+            let flex_ram_new_mb = truncate_bytes_to_mib(new_flex_bytes);
             let flex_ram_free_after = flex_ram_free.saturating_sub(new_flex_bytes);
-            let flex_ram_free_after_copy_mb = round_mb(flex_ram_free_after);
+            let flex_ram_free_after_copy_mb = truncate_bytes_to_mib(flex_ram_free_after);
 
             let flex_memory_warning = if new_flex_bytes > flex_ram_free {
                 Some(format!(
@@ -16652,6 +16654,27 @@ mod tests {
         assert_eq!(calculate_flex_ram_bytes(&settings), 0);
     }
 
+    #[test]
+    fn test_truncate_bytes_to_mib() {
+        // < 10 MiB: 2 decimal places (floor)
+        assert_eq!(truncate_bytes_to_mib(0), 0.0);
+        // 0.59 MiB = 618659.84 bytes → 618659 bytes would be 0.589... → 0.58
+        assert_eq!(truncate_bytes_to_mib(570_480), 0.54); // 0.54405... → 0.54
+        assert_eq!(truncate_bytes_to_mib(1_048_576), 1.0); // exactly 1 MiB
+        assert_eq!(truncate_bytes_to_mib(1_100_000), 1.04); // 1.0490... → 1.04
+        assert_eq!(truncate_bytes_to_mib(5_242_880), 5.0); // exactly 5 MiB
+
+        // >= 10 MiB: 1 decimal place (floor)
+        assert_eq!(truncate_bytes_to_mib(10_485_760), 10.0); // exactly 10 MiB
+        assert_eq!(truncate_bytes_to_mib(62_839_680), 59.9); // 59.9285... → 59.9
+        assert_eq!(truncate_bytes_to_mib(89_652_480), 85.4); // 85.4999... → 85.4
+        assert_eq!(truncate_bytes_to_mib(89_653_248), 85.5); // exactly 85.5 MiB (OT total RAM)
+
+        // Edge case: just under 10 MiB threshold
+        let just_under_10 = (10.0 * 1024.0 * 1024.0) as u64 - 1; // 10485759
+        assert_eq!(truncate_bytes_to_mib(just_under_10), 9.99);
+    }
+
     // ============================================================================
     // Pure function tests: patch_sample_block_fields
     // ============================================================================
@@ -17102,18 +17125,25 @@ mod tests {
     fn verify_ot_hardware_memory_settings() {
         let base = "/run/media/dferlay/OCTATRACK32/COPY_BANKS_SMPL";
         // (folder_name, record_24bit, count, length, expected_free_mb)
+        // Note: expected_free_mb values reflect the current project.work state on CF card.
+        // The OT may have modified project.work when loading projects, e.g. by adding
+        // static slot samples. These expected values are from the app's calculation
+        // (capacity - loaded sample sizes), not from the OT display.
         let cases: Vec<(&str, bool, u8, u32, f64)> = vec![
+            ("16B-NONE-0s_free_10-2", false, 0, 0, 10.23),
+            ("16B-NONE-0s_free_15-9", false, 0, 0, 15.93),
             ("16B-R1R2-254s_free_0-0", false, 2, 254, 0.04),
             ("16B-R1R3-169s_free_0-2", false, 3, 169, 0.21),
             ("16B-R1R5-101s_free_0-5", false, 5, 101, 0.54),
-            ("24B-R1R5-67s_free_1-0", true, 5, 67, 0.96),
-            ("24B-R1R7-48s_free_0-7", true, 7, 48, 0.71),
-            ("24B-R1R8-42s_free_0-7", true, 8, 42, 0.71),
-            ("24B-R1R8-30s_free_24-9", true, 8, 30, 24.94),
+            ("16B-R1R8-16s_free_0-0", false, 8, 16, 0.00),
             ("16B-R1R8-19s_free_59-9", false, 8, 19, 59.93),
             ("16B-R1-10s_free_ 31-1", false, 1, 10, 31.08),
             ("24B-R1-0s_free_32-8", true, 1, 0, 32.76),
-            ("24B-R1-10s_free_30-2", true, 1, 10, 30.24),
+            ("24B-R1R5-67s_free_1-0", true, 5, 67, 0.96),
+            ("24B-R1R7-48s_free_0-7", true, 7, 48, 0.71),
+            ("24B-R1R8-0s_free_32-8", true, 8, 0, 32.76),
+            ("24B-R1R8-30s_free_24-9", true, 8, 30, 24.94),
+            ("24B-R1R8-42s_free_0-7", true, 8, 42, 0.71),
         ];
 
         for (name, expected_24bit, expected_count, expected_length, expected_free) in &cases {
@@ -17143,6 +17173,249 @@ mod tests {
                 name,
                 ms.flex_ram_free_mb,
                 expected_free
+            );
+        }
+    }
+
+    #[test]
+    #[ignore] // Creates test projects on OT CF card for per-sample overhead measurement
+    fn create_per_sample_overhead_test_projects() {
+        use ot_tools_io::types::{SlotAttributes, SlotType};
+        use std::path::PathBuf;
+
+        let set_base = Path::new("/run/media/dferlay/OCTATRACK32/COPY_BANKS_SMPL");
+        assert!(set_base.is_dir(), "CF card not mounted at expected path");
+
+        // Collect wav files from the shared audio pool, sorted for reproducibility
+        let audio_dir = set_base.join("AUDIO");
+        let mut wav_files: Vec<PathBuf> = Vec::new();
+        fn collect_wavs(dir: &Path, out: &mut Vec<PathBuf>) {
+            if let Ok(entries) = fs::read_dir(dir) {
+                let mut sorted: Vec<_> = entries.filter_map(|e| e.ok()).collect();
+                sorted.sort_by_key(|e| e.path());
+                for entry in sorted {
+                    let p = entry.path();
+                    if p.is_dir() {
+                        collect_wavs(&p, out);
+                    } else if p.extension().map(|e| e == "wav").unwrap_or(false) {
+                        out.push(p);
+                    }
+                }
+            }
+        }
+        collect_wavs(&audio_dir, &mut wav_files);
+        assert!(
+            wav_files.len() >= 128,
+            "Need at least 128 wav files, found {}",
+            wav_files.len()
+        );
+
+        // Create projects with increasing numbers of flex samples
+        // All with: 16-bit flex, no recorders, no dynamic recorders, 16-bit record
+        // This isolates the per-sample overhead question
+        let sample_counts = [1, 2, 5, 10, 20, 50, 100, 128];
+
+        for &count in &sample_counts {
+            let project_name = format!("TEST_FLEX_{:03}", count);
+            let project_path = set_base.join(&project_name);
+
+            // Skip if already exists
+            if project_path.exists() {
+                println!("Skipping {} (already exists)", project_name);
+                continue;
+            }
+
+            // Create project directory
+            fs::create_dir(&project_path).expect("Failed to create project directory");
+
+            // Create default project file and set memory settings
+            let mut project_file = ProjectFile::default();
+            project_file.settings.control.memory.load_24bit_flex = false;
+            project_file.settings.control.memory.dynamic_recorders = false;
+            project_file.settings.control.memory.record_24bit = false;
+            project_file.settings.control.memory.reserved_recorder_count = 0;
+            project_file
+                .settings
+                .control
+                .memory
+                .reserved_recorder_length = 0;
+
+            // Assign wav files to flex slots 1..=count
+            for i in 0..count {
+                let wav_path = &wav_files[i];
+                // Path must be relative from project dir: ../AUDIO/...
+                let rel = wav_path
+                    .strip_prefix(set_base)
+                    .expect("wav not under set base");
+                let rel_path = PathBuf::from("..").join(rel);
+
+                let slot = SlotAttributes::new(
+                    SlotType::Flex,
+                    (i as u8) + 1, // 1-indexed
+                    Some(rel_path),
+                    None, // default timestretch
+                    None, // default loop mode
+                    None, // default trig quantization
+                    None, // default gain
+                    None, // default bpm
+                )
+                .expect("Failed to create slot");
+
+                project_file.slots.flex_slots[i] = Some(slot);
+            }
+
+            // Write project.work
+            project_file
+                .to_data_file(&project_path.join("project.work"))
+                .expect("Failed to write project.work");
+
+            // Write 16 default bank files
+            for bank_num in 1u8..=16 {
+                let bank = BankFile::default();
+                bank.to_data_file(&project_path.join(format!("bank{:02}.work", bank_num)))
+                    .expect("Failed to write bank file");
+            }
+
+            // Write arrangement files from template
+            static BLANK_ARRANGEMENT: &[u8] = include_bytes!("templates/blank_arrangement.work");
+            for arr_num in 1u8..=8 {
+                fs::write(
+                    project_path.join(format!("arr{:02}.work", arr_num)),
+                    BLANK_ARRANGEMENT,
+                )
+                .expect("Failed to write arrangement file");
+            }
+
+            // Write markers file
+            let markers = MarkersFile::default();
+            markers
+                .to_data_file(&project_path.join("markers.work"))
+                .expect("Failed to write markers.work");
+
+            // Compute what app thinks free is
+            let ms = MemorySettings {
+                load_24bit_flex: false,
+                dynamic_recorders: false,
+                record_24bit: false,
+                reserved_recorder_count: 0,
+                reserved_recorder_length: 0,
+                flex_ram_free_mb: 0.0,
+            };
+            let capacity = calculate_flex_ram_bytes(&ms);
+            let used = sum_flex_sample_sizes(&project_path, false).unwrap_or(0);
+            let free_bytes = capacity.saturating_sub(used);
+            let free_mib = free_bytes as f64 / (1024.0 * 1024.0);
+
+            println!(
+                "Created {}: {} flex slots, used={} bytes, free={:.4} MiB ({:.2} MiB)",
+                project_name, count, used, free_mib, free_mib
+            );
+        }
+
+        println!("\nDone! Load each project on OT and note FREE MEM from FLEX slot list.");
+        println!("Expected app values (our formula):");
+        for &count in &sample_counts {
+            let project_name = format!("TEST_FLEX_{:03}", count);
+            let project_path = set_base.join(&project_name);
+            if project_path.exists() {
+                let used = sum_flex_sample_sizes(&project_path, false).unwrap_or(0);
+                let free_bytes = OT_TOTAL_RAM_BYTES.saturating_sub(used);
+                let free_mib = free_bytes as f64 / (1024.0 * 1024.0);
+                println!(
+                    "  {}: samples={}, used={}, free={:.4} MiB",
+                    project_name, count, used, free_mib
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[ignore] // Creates test projects on OT CF card for recorder capacity measurement
+    fn create_recorder_capacity_test_projects() {
+        let set_base = Path::new("/run/media/dferlay/OCTATRACK32/COPY_BANKS_SMPL");
+        assert!(set_base.is_dir(), "CF card not mounted at expected path");
+
+        // Test recorder allocation at NON-max lengths
+        // Format: (name_suffix, rec24, count, length)
+        // No flex samples loaded → free = total_ram - recorder_allocation
+        let recorder_cases: Vec<(&str, bool, u8, u32)> = vec![
+            // 16-bit: max for 8 recorders = 63. Test at 10, 30, 50 (all < max)
+            ("16B-R1R8-10s", false, 8, 10),
+            ("16B-R1R8-30s", false, 8, 30),
+            ("16B-R1R8-50s", false, 8, 50),
+            // 16-bit: max for 2 recorders = 254. Test at 100, 200
+            ("16B-R1R2-100s", false, 2, 100),
+            ("16B-R1R2-200s", false, 2, 200),
+            // 24-bit: max for 8 recorders = 42. Test at 10, 20, 30
+            ("24B-R1R8-10s", true, 8, 10),
+            ("24B-R1R8-20s", true, 8, 20),
+            ("24B-R1R8-30s", true, 8, 30),
+            // 24-bit: max for 5 recorders = 67. Test at 30, 50
+            ("24B-R1R5-30s", true, 5, 30),
+            ("24B-R1R5-50s", true, 5, 50),
+        ];
+
+        for (name, rec24, count, length) in &recorder_cases {
+            let project_name = format!("TEST_REC_{}", name);
+            let project_path = set_base.join(&project_name);
+
+            if project_path.exists() {
+                println!("Skipping {} (already exists)", project_name);
+                continue;
+            }
+
+            fs::create_dir(&project_path).expect("Failed to create project directory");
+
+            let mut project_file = ProjectFile::default();
+            project_file.settings.control.memory.load_24bit_flex = false;
+            project_file.settings.control.memory.dynamic_recorders = false;
+            project_file.settings.control.memory.record_24bit = *rec24;
+            project_file.settings.control.memory.reserved_recorder_count = *count;
+            project_file
+                .settings
+                .control
+                .memory
+                .reserved_recorder_length = *length;
+
+            project_file
+                .to_data_file(&project_path.join("project.work"))
+                .expect("Failed to write project.work");
+
+            for bank_num in 1u8..=16 {
+                let bank = BankFile::default();
+                bank.to_data_file(&project_path.join(format!("bank{:02}.work", bank_num)))
+                    .expect("Failed to write bank file");
+            }
+
+            static BLANK_ARRANGEMENT: &[u8] = include_bytes!("templates/blank_arrangement.work");
+            for arr_num in 1u8..=8 {
+                fs::write(
+                    project_path.join(format!("arr{:02}.work", arr_num)),
+                    BLANK_ARRANGEMENT,
+                )
+                .expect("Failed to write arrangement file");
+            }
+
+            let markers = MarkersFile::default();
+            markers
+                .to_data_file(&project_path.join("markers.work"))
+                .expect("Failed to write markers.work");
+
+            let bps: u64 = if *rec24 { 3 } else { 2 };
+            let rec_bytes = *count as u64 * *length as u64 * 44100 * 2 * bps;
+            let free = OT_TOTAL_RAM_BYTES.saturating_sub(rec_bytes);
+            let free_mib = free as f64 / (1024.0 * 1024.0);
+            let max_len = OT_TOTAL_RAM_BYTES / (*count as u64 * 44100 * 2 * bps);
+
+            println!(
+                "Created {}: rec{}={} count={} len={} (max={}) free={:.4} MiB",
+                project_name,
+                if *rec24 { "24" } else { "16" },
+                rec24,
+                count,
+                length,
+                max_len,
+                free_mib
             );
         }
     }

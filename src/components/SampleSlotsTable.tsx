@@ -512,7 +512,9 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
             <span>Showing {sortedSlots.length} of {slots.length} slots</span>
             {memorySettings && (
               <span className="ram-info" title="Flex RAM available for sample loading">
-                FREE MEM: {memorySettings.flex_ram_free_mb.toFixed(1)} MB
+                FREE MEM: {memorySettings.flex_ram_free_mb >= 10
+                  ? memorySettings.flex_ram_free_mb.toFixed(1)
+                  : memorySettings.flex_ram_free_mb.toFixed(2)} MB
               </span>
             )}
             {compatibilityFilter !== 'all' && <span className="filter-badge">Compat: {compatibilityFilter}</span>}
