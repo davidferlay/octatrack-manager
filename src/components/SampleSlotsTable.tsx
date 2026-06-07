@@ -1,6 +1,8 @@
-import { useState, useRef, useEffect, useTransition } from "react";
+import { useState, useRef, useEffect, useTransition, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { invoke } from "@tauri-apps/api/core";
 import { useTablePreferences } from "../context/TablePreferencesContext";
+import { AudioPoolSidebar } from "./AudioPoolSidebar";
 
 interface SampleSlot {
   slot_id: number;
@@ -24,12 +26,26 @@ interface MemorySettings {
   flex_ram_free_mb: number;
 }
 
+interface SlotAssignment {
+  slot_index: number;
+  audio_path: string;
+  set_defaults: boolean;
+}
+
+interface AssignSamplesResult {
+  assigned_count: number;
+  updated_slots: SampleSlot[];
+}
+
 interface SampleSlotsTableProps {
   slots: SampleSlot[];
   slotPrefix: string; // "F" for Flex, "S" for Static
   tableType: 'flex' | 'static'; // Identify which table this is
   projectPath?: string | null; // Project path for tooltip display
   memorySettings?: MemorySettings; // Memory settings for Flex RAM capacity display
+  isEditMode?: boolean; // Whether edit mode is active
+  audioPoolPath?: string | null; // Path to AUDIO/ directory (null if not in a Set)
+  onSlotsUpdated?: (updatedSlots: SampleSlot[]) => void; // Callback when slots are assigned
 }
 
 type SortColumn = 'slot' | 'sample' | 'status' | 'source' | 'gain' | 'timestretch' | 'loop' | 'compatibility' | 'format' | 'bitdepth' | 'samplerate';
@@ -63,7 +79,7 @@ function getSetRelativePath(projectPath: string | null): string {
   return projectPath;
 }
 
-export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, memorySettings }: SampleSlotsTableProps) {
+export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated }: SampleSlotsTableProps) {
   const { flexPreferences, staticPreferences, setFlexPreferences, setStaticPreferences } = useTablePreferences();
 
   // Get the preferences for this table type
@@ -94,6 +110,121 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
 
   // Copy to clipboard state
   const [copyFeedback, setCopyFeedback] = useState<'idle' | 'copied'>('idle');
+
+  // Audio Pool sidebar state
+  const [showAudioPool, setShowAudioPool] = useState(false);
+  const [dragOverSlotId, setDragOverSlotId] = useState<number | null>(null);
+  const [isAssigning, setIsAssigning] = useState(false);
+
+  // Build a relative path from the audio pool file path to the project directory
+  const buildRelativePath = useCallback((audioFilePath: string): string => {
+    if (!audioPoolPath) return audioFilePath;
+    // Audio Pool files are referenced as ../AUDIO/subdir/file.wav
+    // The audioPoolPath ends at the AUDIO directory root
+    const audioPoolRoot = audioPoolPath;
+    if (audioFilePath.startsWith(audioPoolRoot)) {
+      const relativePart = audioFilePath.slice(audioPoolRoot.length).replace(/^[/\\]/, '');
+      return `../AUDIO/${relativePart}`;
+    }
+    // Fallback: just use the filename
+    const parts = audioFilePath.split(/[\\/]/);
+    return parts[parts.length - 1] || audioFilePath;
+  }, [audioPoolPath]);
+
+  // Handle drop on a slot row
+  const handleSlotDrop = useCallback(async (e: React.DragEvent, targetSlot: SampleSlot) => {
+    e.preventDefault();
+    setDragOverSlotId(null);
+
+    if (!projectPath) return;
+
+    try {
+      const jsonData = e.dataTransfer.getData("application/json");
+      if (!jsonData) return;
+
+      const dragData = JSON.parse(jsonData);
+      if (dragData.source !== "audio-pool-sidebar") return;
+
+      const filePaths: string[] = dragData.files;
+      if (!filePaths || filePaths.length === 0) return;
+
+      setIsAssigning(true);
+
+      const slotType = tableType === 'flex' ? 'FLEX' : 'STATIC';
+
+      if (filePaths.length === 1) {
+        // Single file: assign to exact target slot
+        const isEmptySlot = !targetSlot.path;
+        const assignments: SlotAssignment[] = [{
+          slot_index: targetSlot.slot_id,
+          audio_path: buildRelativePath(filePaths[0]),
+          set_defaults: isEmptySlot,
+        }];
+
+        const result = await invoke<AssignSamplesResult>("assign_samples_to_slots", {
+          path: projectPath,
+          slotType,
+          assignments,
+        });
+
+        if (onSlotsUpdated && result.updated_slots.length > 0) {
+          onSlotsUpdated(result.updated_slots);
+        }
+      } else {
+        // Multiple files: fill consecutive empty slots starting from target
+        const assignments: SlotAssignment[] = [];
+        let currentSlotId = targetSlot.slot_id;
+
+        for (const filePath of filePaths) {
+          // Find next empty slot from currentSlotId
+          while (currentSlotId <= 128) {
+            const slot = slots.find(s => s.slot_id === currentSlotId);
+            if (!slot || !slot.path) break; // Empty slot found
+            currentSlotId++;
+          }
+          if (currentSlotId > 128) break; // No more slots
+
+          assignments.push({
+            slot_index: currentSlotId,
+            audio_path: buildRelativePath(filePath),
+            set_defaults: true,
+          });
+          currentSlotId++;
+        }
+
+        if (assignments.length > 0) {
+          const result = await invoke<AssignSamplesResult>("assign_samples_to_slots", {
+            path: projectPath,
+            slotType,
+            assignments,
+          });
+
+          if (onSlotsUpdated && result.updated_slots.length > 0) {
+            onSlotsUpdated(result.updated_slots);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error assigning samples to slots:", error);
+    } finally {
+      setIsAssigning(false);
+    }
+  }, [isEditMode, projectPath, tableType, slots, buildRelativePath, onSlotsUpdated]);
+
+  const handleSlotDragOver = useCallback((e: React.DragEvent, slotId: number) => {
+    // Always prevent default to avoid text selection during drag
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    setDragOverSlotId(slotId);
+  }, []);
+
+  const handleSlotDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+  }, []);
+
+  const handleSlotDragLeave = useCallback(() => {
+    setDragOverSlotId(null);
+  }, []);
 
   // Save preferences whenever they change
   useEffect(() => {
@@ -505,11 +636,36 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
   };
 
   return (
-    <div className="samples-tab">
+    <div className={`samples-tab ${showAudioPool ? 'with-sidebar' : ''}`}>
+      {showAudioPool && audioPoolPath && (
+        <AudioPoolSidebar
+          audioPoolPath={audioPoolPath}
+          isEditMode={isEditMode ?? false}
+          toggleButton={
+            <button
+              className={`audio-pool-toggle-btn ${showAudioPool ? 'active' : ''}`}
+              onClick={() => setShowAudioPool(!showAudioPool)}
+              title="Hide Audio Pool"
+            >
+              <i className="fas fa-columns"></i>
+            </button>
+          }
+        />
+      )}
       <section className="samples-section">
         <div className="filter-results-info">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <span>Showing {sortedSlots.length} of {slots.length} slots</span>
+            {!showAudioPool && audioPoolPath && (
+              <button
+                className="audio-pool-toggle-btn"
+                onClick={() => setShowAudioPool(true)}
+                title="Show Audio Pool"
+              >
+                <i className="fas fa-columns"></i>
+              </button>
+            )}
+            <span>{sortedSlots.length}/{slots.length} slots</span>
+            {isAssigning && <span className="filter-badge" style={{ background: 'rgba(245, 158, 11, 0.3)' }}>Assigning...</span>}
             {memorySettings && (
               <span className="ram-info" title="Flex RAM available for sample loading">
                 FREE MEM: {memorySettings.flex_ram_free_mb >= 10
@@ -555,7 +711,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
                 </button>
               )}
             </div>
-            <label className={`toggle-switch ${isPending ? 'pending' : ''}`}>
+            <label className={`toggle-switch ${isPending ? 'pending' : ''}`} title="Hide slots with no sample assigned">
               <span className="toggle-label">Hide empty</span>
               <div className="toggle-slider-container">
                 <input
@@ -1140,7 +1296,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
             </thead>
           <tbody>
             {sortedSlots.map((slot) => (
-              <tr key={slot.slot_id}>
+              <tr
+                key={slot.slot_id}
+                className={dragOverSlotId === slot.slot_id ? 'drop-target-highlight' : ''}
+                onDragEnter={handleSlotDragEnter}
+                onDragOver={(e) => handleSlotDragOver(e, slot.slot_id)}
+                onDragLeave={handleSlotDragLeave}
+                onDrop={(e) => handleSlotDrop(e, slot)}
+              >
                 {visibleColumns.slot && <td className="col-slot">{slotPrefix}{slot.slot_id}</td>}
                 {visibleColumns.sample && (
                   <td className="col-sample" title={slot.path ? getFilename(slot.path) : undefined}>

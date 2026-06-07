@@ -138,6 +138,7 @@ export function ProjectDetail() {
   const [audioTrackMachineTypes, setAudioTrackMachineTypes] = useState<Record<number, string>>({}); // Track index (0-7) -> machine type
   const memorySaveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null); // Debounce timer for memory settings save
   const [reserveLengthShaking, setReserveLengthShaking] = useState(false); // Shake animation for invalid reserve length
+  const [audioPoolPath, setAudioPoolPath] = useState<string | null>(null); // Path to AUDIO/ directory (for sidebar)
 
   // Wrapper to capture last message before going idle (for fade-out effect)
   const handleWriteStatusChange = useCallback((status: WriteStatus) => {
@@ -408,6 +409,15 @@ export function ProjectDetail() {
 
       // Step 2: Show UI immediately with metadata loaded
       setIsLoading(false);
+
+      // Step 2b: Check audio pool status (async, non-blocking)
+      invoke<{ exists: boolean; path: string | null; set_path: string | null }>("get_audio_pool_status", { projectPath })
+        .then(status => {
+          setAudioPoolPath(status.exists ? status.path : null);
+        })
+        .catch(() => {
+          setAudioPoolPath(null);
+        });
 
       // Step 3: Get list of existing bank files (skip non-existent banks early)
       const existingBankIndices = await invoke<number[]>("get_existing_banks", { path: projectPath });
@@ -1660,11 +1670,66 @@ export function ProjectDetail() {
   )}
 
             {activeTab === "flex-slots" && (
-              <SampleSlotsTable slots={metadata.sample_slots.flex_slots} slotPrefix="F" tableType="flex" projectPath={projectPath} memorySettings={metadata.memory_settings} />
+              <SampleSlotsTable
+                slots={metadata.sample_slots.flex_slots}
+                slotPrefix="F"
+                tableType="flex"
+                projectPath={projectPath}
+                memorySettings={metadata.memory_settings}
+                isEditMode={isEditMode}
+                audioPoolPath={audioPoolPath}
+                onSlotsUpdated={(updatedSlots) => {
+                  // Merge updated slots into metadata
+                  setMetadata(prev => {
+                    if (!prev) return prev;
+                    const newFlexSlots = [...prev.sample_slots.flex_slots];
+                    for (const updated of updatedSlots) {
+                      const idx = newFlexSlots.findIndex(s => s.slot_id === updated.slot_id);
+                      if (idx >= 0) {
+                        newFlexSlots[idx] = updated;
+                      }
+                    }
+                    return {
+                      ...prev,
+                      sample_slots: {
+                        ...prev.sample_slots,
+                        flex_slots: newFlexSlots,
+                      },
+                    };
+                  });
+                }}
+              />
             )}
 
             {activeTab === "static-slots" && (
-              <SampleSlotsTable slots={metadata.sample_slots.static_slots} slotPrefix="S" tableType="static" projectPath={projectPath} />
+              <SampleSlotsTable
+                slots={metadata.sample_slots.static_slots}
+                slotPrefix="S"
+                tableType="static"
+                projectPath={projectPath}
+                isEditMode={isEditMode}
+                audioPoolPath={audioPoolPath}
+                onSlotsUpdated={(updatedSlots) => {
+                  // Merge updated slots into metadata
+                  setMetadata(prev => {
+                    if (!prev) return prev;
+                    const newStaticSlots = [...prev.sample_slots.static_slots];
+                    for (const updated of updatedSlots) {
+                      const idx = newStaticSlots.findIndex(s => s.slot_id === updated.slot_id);
+                      if (idx >= 0) {
+                        newStaticSlots[idx] = updated;
+                      }
+                    }
+                    return {
+                      ...prev,
+                      sample_slots: {
+                        ...prev.sample_slots,
+                        static_slots: newStaticSlots,
+                      },
+                    };
+                  });
+                }}
+              />
             )}
 
             {activeTab === "tools" && projectPath && (

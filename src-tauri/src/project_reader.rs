@@ -3981,6 +3981,117 @@ fn replace_sample_fields_surgical(
     Ok(())
 }
 
+/// Input for assigning audio files to sample slots.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SlotAssignment {
+    /// Slot index (1-128)
+    pub slot_index: u16,
+    /// Relative path to the audio file (e.g. "../AUDIO/kick.wav" or "kick.wav")
+    pub audio_path: String,
+    /// If true, sets OT defaults (GAIN=72, TSMODE=2, LOOPMODE=0, TRIGQUANTIZATION=-1).
+    /// If false, only updates PATH.
+    pub set_defaults: bool,
+}
+
+/// Result of assigning samples to slots.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AssignSamplesResult {
+    pub assigned_count: usize,
+    pub updated_slots: Vec<SampleSlot>,
+}
+
+/// Assign audio files to sample slots in a project.
+///
+/// For each assignment:
+/// - If `set_defaults` is true (typically for empty slots): sets PATH + OT defaults
+///   (GAIN=72, TSMODE=2, LOOPMODE=0, TRIGQUANTIZATION=-1)
+/// - If `set_defaults` is false (non-empty slot re-assignment): only updates PATH
+///
+/// Uses `replace_sample_fields_surgical` internally for batch write.
+pub fn assign_samples_to_slots(
+    project_path: &str,
+    slot_type: &str,
+    assignments: Vec<SlotAssignment>,
+) -> Result<AssignSamplesResult, String> {
+    // Validate slot_type
+    let slot_type_upper = slot_type.to_uppercase();
+    if !["FLEX", "STATIC"].contains(&slot_type_upper.as_str()) {
+        return Err(format!(
+            "Invalid slot_type: {}. Must be 'FLEX' or 'STATIC'",
+            slot_type
+        ));
+    }
+
+    // Validate all indices
+    for a in &assignments {
+        if !(1..=128).contains(&a.slot_index) {
+            return Err(format!(
+                "Slot index {} out of range. Must be 1-128",
+                a.slot_index
+            ));
+        }
+    }
+
+    if assignments.is_empty() {
+        return Ok(AssignSamplesResult {
+            assigned_count: 0,
+            updated_slots: Vec::new(),
+        });
+    }
+
+    let path = Path::new(project_path);
+    let project_file_path = if path.join("project.work").exists() {
+        path.join("project.work")
+    } else if path.join("project.strd").exists() {
+        path.join("project.strd")
+    } else {
+        return Err("No project file found".to_string());
+    };
+
+    // Build field_updates map for replace_sample_fields_surgical
+    let mut field_updates: std::collections::HashMap<
+        (String, u16),
+        std::collections::HashMap<String, String>,
+    > = std::collections::HashMap::new();
+
+    for a in &assignments {
+        let mut fields = std::collections::HashMap::new();
+        fields.insert("PATH".to_string(), a.audio_path.clone());
+
+        if a.set_defaults {
+            fields.insert("GAIN".to_string(), "72".to_string());
+            fields.insert("TSMODE".to_string(), "2".to_string());
+            fields.insert("LOOPMODE".to_string(), "0".to_string());
+            fields.insert("TRIGQUANTIZATION".to_string(), "-1".to_string());
+        }
+
+        field_updates.insert((slot_type_upper.clone(), a.slot_index), fields);
+    }
+
+    // Write all assignments in one batch
+    replace_sample_fields_surgical(&project_file_path, &field_updates)?;
+
+    // Re-read the affected slots to return updated state
+    let metadata = read_project_metadata(project_path)?;
+    let all_slots = match slot_type_upper.as_str() {
+        "FLEX" => metadata.sample_slots.flex_slots,
+        "STATIC" => metadata.sample_slots.static_slots,
+        _ => unreachable!(),
+    };
+
+    let assigned_indices: std::collections::HashSet<u16> =
+        assignments.iter().map(|a| a.slot_index).collect();
+    let updated_slots: Vec<SampleSlot> = all_slots
+        .into_iter()
+        .filter(|s| assigned_indices.contains(&(s.slot_id as u16)))
+        .collect();
+
+    Ok(AssignSamplesResult {
+        assigned_count: assignments.len(),
+        updated_slots,
+    })
+}
+
 /// Patch individual field lines within a `[SAMPLE]...[/SAMPLE]` block.
 /// Only lines whose field name (before `=`) matches an entry in `updates` are replaced.
 /// If a field in `updates` doesn't exist in the block, it is inserted before `[/SAMPLE]`.
@@ -17697,5 +17808,271 @@ mod tests {
                 .unwrap(),
             0
         );
+    }
+
+    mod assign_samples_to_slots_tests {
+        use super::*;
+
+        fn setup_project_for_assign(samples: &[(&str, u16, &str)]) -> TempDir {
+            let dir = TempDir::new().unwrap();
+            let project_dir = dir.path();
+
+            // Build sample tuples for the helper
+            let sample_tuples: Vec<(&str, u16, &str, Option<u16>, Option<i16>, Option<u16>)> =
+                samples
+                    .iter()
+                    .map(|(stype, slot, path)| (*stype, *slot, *path, None, Some(-1), None))
+                    .collect();
+
+            let content =
+                surgical_write_tests::create_raw_project_work_with_custom_fields(&sample_tuples);
+            surgical_write_tests::write_raw_project_work(project_dir, &content);
+            dir
+        }
+
+        #[test]
+        fn test_assign_single_slot_sets_defaults() {
+            let dir = setup_project_for_assign(&[]);
+            let project_path = dir.path().to_str().unwrap();
+
+            let result = assign_samples_to_slots(
+                project_path,
+                "FLEX",
+                vec![SlotAssignment {
+                    slot_index: 1,
+                    audio_path: "../AUDIO/kick.wav".to_string(),
+                    set_defaults: true,
+                }],
+            )
+            .unwrap();
+
+            assert_eq!(result.assigned_count, 1);
+            assert_eq!(result.updated_slots.len(), 1);
+            let slot = &result.updated_slots[0];
+            assert_eq!(slot.slot_id, 1);
+            assert_eq!(slot.path.as_deref(), Some("../AUDIO/kick.wav"));
+            assert_eq!(slot.gain, Some(72));
+
+            // Verify raw file has OT defaults
+            let raw = surgical_write_tests::read_raw_project_work(dir.path());
+            assert!(raw.contains("GAIN=72"));
+            assert!(raw.contains("TSMODE=2"));
+            assert!(raw.contains("LOOPMODE=0"));
+            assert!(raw.contains("TRIGQUANTIZATION=-1"));
+        }
+
+        #[test]
+        fn test_assign_single_slot_path_only() {
+            // Pre-existing slot with custom attributes
+            let dir = setup_project_for_assign(&[("FLEX", 1, "old_sample.wav")]);
+            let project_path = dir.path().to_str().unwrap();
+
+            // Verify existing attributes before assignment
+            let raw_before = surgical_write_tests::read_raw_project_work(dir.path());
+            assert!(raw_before.contains("GAIN=48")); // Non-default gain from setup
+            assert!(raw_before.contains("LOOPMODE=1")); // Non-default loop from setup
+
+            let result = assign_samples_to_slots(
+                project_path,
+                "FLEX",
+                vec![SlotAssignment {
+                    slot_index: 1,
+                    audio_path: "../AUDIO/new_kick.wav".to_string(),
+                    set_defaults: false, // PATH only
+                }],
+            )
+            .unwrap();
+
+            assert_eq!(result.assigned_count, 1);
+            let slot = &result.updated_slots[0];
+            assert_eq!(slot.path.as_deref(), Some("../AUDIO/new_kick.wav"));
+
+            // Verify existing attributes are preserved
+            let raw = surgical_write_tests::read_raw_project_work(dir.path());
+            assert!(raw.contains("GAIN=48")); // Preserved
+            assert!(raw.contains("LOOPMODE=1")); // Preserved
+            assert!(raw.contains("PATH=../AUDIO/new_kick.wav")); // Updated
+        }
+
+        #[test]
+        fn test_assign_multiple_slots() {
+            let dir = setup_project_for_assign(&[]);
+            let project_path = dir.path().to_str().unwrap();
+
+            let result = assign_samples_to_slots(
+                project_path,
+                "FLEX",
+                vec![
+                    SlotAssignment {
+                        slot_index: 1,
+                        audio_path: "../AUDIO/kick.wav".to_string(),
+                        set_defaults: true,
+                    },
+                    SlotAssignment {
+                        slot_index: 5,
+                        audio_path: "../AUDIO/snare.wav".to_string(),
+                        set_defaults: true,
+                    },
+                    SlotAssignment {
+                        slot_index: 10,
+                        audio_path: "hihat.wav".to_string(),
+                        set_defaults: true,
+                    },
+                ],
+            )
+            .unwrap();
+
+            assert_eq!(result.assigned_count, 3);
+            assert_eq!(result.updated_slots.len(), 3);
+
+            // Verify all slots have correct paths
+            let paths: Vec<_> = result
+                .updated_slots
+                .iter()
+                .map(|s| s.path.as_deref().unwrap())
+                .collect();
+            assert!(paths.contains(&"../AUDIO/kick.wav"));
+            assert!(paths.contains(&"../AUDIO/snare.wav"));
+            assert!(paths.contains(&"hihat.wav"));
+        }
+
+        #[test]
+        fn test_assign_invalid_slot_index_zero() {
+            let dir = setup_project_for_assign(&[]);
+            let project_path = dir.path().to_str().unwrap();
+
+            let result = assign_samples_to_slots(
+                project_path,
+                "FLEX",
+                vec![SlotAssignment {
+                    slot_index: 0,
+                    audio_path: "test.wav".to_string(),
+                    set_defaults: true,
+                }],
+            );
+
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("out of range"));
+        }
+
+        #[test]
+        fn test_assign_invalid_slot_index_129() {
+            let dir = setup_project_for_assign(&[]);
+            let project_path = dir.path().to_str().unwrap();
+
+            let result = assign_samples_to_slots(
+                project_path,
+                "FLEX",
+                vec![SlotAssignment {
+                    slot_index: 129,
+                    audio_path: "test.wav".to_string(),
+                    set_defaults: true,
+                }],
+            );
+
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("out of range"));
+        }
+
+        #[test]
+        fn test_assign_invalid_slot_type() {
+            let dir = setup_project_for_assign(&[]);
+            let project_path = dir.path().to_str().unwrap();
+
+            let result = assign_samples_to_slots(
+                project_path,
+                "INVALID",
+                vec![SlotAssignment {
+                    slot_index: 1,
+                    audio_path: "test.wav".to_string(),
+                    set_defaults: true,
+                }],
+            );
+
+            assert!(result.is_err());
+            assert!(result.unwrap_err().contains("Invalid slot_type"));
+        }
+
+        #[test]
+        fn test_assign_empty_assignments() {
+            let dir = setup_project_for_assign(&[]);
+            let project_path = dir.path().to_str().unwrap();
+
+            let result = assign_samples_to_slots(project_path, "FLEX", vec![]).unwrap();
+
+            assert_eq!(result.assigned_count, 0);
+            assert!(result.updated_slots.is_empty());
+        }
+
+        #[test]
+        fn test_assign_creates_new_block_for_empty_slot() {
+            let dir = setup_project_for_assign(&[]);
+            let project_path = dir.path().to_str().unwrap();
+
+            // No FLEX slot 42 existed before
+            let raw_before = surgical_write_tests::read_raw_project_work(dir.path());
+            assert!(!raw_before.contains("SLOT=042"));
+
+            let result = assign_samples_to_slots(
+                project_path,
+                "FLEX",
+                vec![SlotAssignment {
+                    slot_index: 42,
+                    audio_path: "../AUDIO/perc.wav".to_string(),
+                    set_defaults: true,
+                }],
+            )
+            .unwrap();
+
+            assert_eq!(result.assigned_count, 1);
+
+            // New block should exist in correct OT order
+            let raw = surgical_write_tests::read_raw_project_work(dir.path());
+            assert!(raw.contains("SLOT=042"));
+            assert!(raw.contains("TYPE=FLEX"));
+            assert!(raw.contains("PATH=../AUDIO/perc.wav"));
+        }
+
+        #[test]
+        fn test_assign_static_slot() {
+            let dir = setup_project_for_assign(&[]);
+            let project_path = dir.path().to_str().unwrap();
+
+            let result = assign_samples_to_slots(
+                project_path,
+                "STATIC",
+                vec![SlotAssignment {
+                    slot_index: 1,
+                    audio_path: "../AUDIO/pad.wav".to_string(),
+                    set_defaults: true,
+                }],
+            )
+            .unwrap();
+
+            assert_eq!(result.assigned_count, 1);
+            let slot = &result.updated_slots[0];
+            assert_eq!(slot.slot_type, "Static");
+            assert_eq!(slot.path.as_deref(), Some("../AUDIO/pad.wav"));
+        }
+
+        #[test]
+        fn test_assign_case_insensitive_slot_type() {
+            let dir = setup_project_for_assign(&[]);
+            let project_path = dir.path().to_str().unwrap();
+
+            // Lowercase should work
+            let result = assign_samples_to_slots(
+                project_path,
+                "flex",
+                vec![SlotAssignment {
+                    slot_index: 1,
+                    audio_path: "test.wav".to_string(),
+                    set_defaults: true,
+                }],
+            )
+            .unwrap();
+
+            assert_eq!(result.assigned_count, 1);
+        }
     }
 }

@@ -14,6 +14,7 @@ use audio_pool::{
 use device_detection::{discover_devices, scan_directory, ScanResult};
 use project_reader::{
     are_projects_in_same_set,
+    assign_samples_to_slots as assign_samples_to_slots_impl,
     check_missing_source_files as check_missing_source_files_impl,
     commit_all_parts_data,
     commit_part_data,
@@ -35,6 +36,8 @@ use project_reader::{
     reload_part_data,
     save_memory_settings_data,
     save_parts_data,
+    // Slot assignment types
+    AssignSamplesResult,
     AudioPoolStatus,
     Bank,
     // Types
@@ -42,6 +45,7 @@ use project_reader::{
     PartData,
     PartsDataResponse,
     ProjectMetadata,
+    SlotAssignment,
 };
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
@@ -134,6 +138,19 @@ async fn save_memory_settings(path: String, settings: MemorySettings) -> Result<
     tauri::async_runtime::spawn_blocking(move || save_memory_settings_data(&path, settings))
         .await
         .unwrap()
+}
+
+#[tauri::command]
+async fn assign_samples_to_slots(
+    path: String,
+    slot_type: String,
+    assignments: Vec<SlotAssignment>,
+) -> Result<AssignSamplesResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        assign_samples_to_slots_impl(&path, &slot_type, assignments)
+    })
+    .await
+    .unwrap()
 }
 
 #[tauri::command]
@@ -814,6 +831,8 @@ pub fn run() {
             search_parent_projects,
             search_directory,
             fix_missing_samples,
+            // Sample slot assignment
+            assign_samples_to_slots,
             // Project Management
             project_manager::create_project,
             project_manager::copy_project,

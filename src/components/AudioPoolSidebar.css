@@ -1,0 +1,139 @@
+.audio-pool-sidebar {
+  width: 50%;
+  min-width: 250px;
+  max-width: 70%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--elektron-dark-gray, #1a1a1a);
+  position: relative;
+}
+
+.sidebar-back-btn {
+  background: none;
+  border: 1px solid var(--elektron-border-gray, #555);
+  color: var(--elektron-muted-text, #999);
+  cursor: pointer;
+  padding: 0.3rem 0.5rem;
+  border-radius: 3px;
+  font-size: 1.1rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+}
+
+.sidebar-back-btn:hover:not(:disabled) {
+  background: var(--elektron-medium-gray, #333);
+  border-color: var(--elektron-orange);
+  color: var(--elektron-orange);
+}
+
+.sidebar-back-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.sidebar-path {
+  font-size: 1rem;
+  color: var(--elektron-text-secondary, #999);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: 'Courier New', monospace;
+}
+
+/* Override AudioFileTable styles within sidebar context to match samples-table */
+.audio-pool-sidebar .audio-file-table-container {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.audio-pool-sidebar .filter-results-info {
+  padding: 0.5rem 0.75rem;
+  font-size: 1rem;
+  font-family: 'Courier New', monospace;
+  min-height: 40px;
+  box-sizing: border-box;
+  border-bottom: 1px solid #333;
+  background: #222;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.audio-pool-sidebar .table-wrapper {
+  flex: 1;
+  overflow: auto;
+}
+
+/* Match samples-table styling */
+.audio-pool-sidebar .audio-files-table {
+  min-width: 100%;
+  width: auto;
+  font-size: 0.875rem;
+  font-family: 'Courier New', monospace;
+}
+
+.audio-pool-sidebar .audio-files-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: var(--elektron-dark-gray, #1a1a1a);
+  border-bottom: 1px solid var(--elektron-border-gray, #333);
+}
+
+.audio-pool-sidebar .audio-files-table th {
+  padding: 0;
+  color: var(--elektron-orange);
+  height: 32px;
+  line-height: 32px;
+  border-bottom: none;
+}
+
+.audio-pool-sidebar .audio-files-table td {
+  padding: 0 10px;
+  border-bottom: none;
+  height: 32px;
+  line-height: 32px;
+}
+
+.audio-pool-sidebar .audio-files-table tbody tr {
+  height: 32px;
+  border-bottom: 1px solid var(--elektron-border-gray, #333);
+}
+
+/* Compact column widths for sidebar */
+.audio-pool-sidebar .col-format,
+.audio-pool-sidebar .col-bitrate,
+.audio-pool-sidebar .col-samplerate {
+  width: 50px;
+}
+
+.audio-pool-sidebar .col-size {
+  width: 65px;
+}
+
+/* Resize handle on the right edge */
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 5px;
+  height: 100%;
+  cursor: col-resize;
+  background: #444;
+  transition: background 0.15s ease;
+  z-index: 20;
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle:active {
+  background: var(--elektron-orange);
+}

@@ -1458,6 +1458,10 @@ h1 {
 .project-content {
   padding: 0;
   overflow: visible;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .project-content section {
@@ -2071,6 +2075,10 @@ h1 {
 .tab-content {
   padding: 0;
   overflow: visible;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .overview-tab,
@@ -2270,8 +2278,96 @@ h1 {
 }
 
 .samples-tab {
-  padding: 1rem 2rem;
+  padding: 0;
   overflow: visible;
+}
+
+.samples-tab.with-sidebar {
+  display: flex;
+  padding: 0;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.samples-tab.with-sidebar .samples-section {
+  flex: 1;
+  overflow: hidden;
+  padding: 0;
+  min-width: 0; /* Allow flex shrink */
+  display: flex;
+  flex-direction: column;
+}
+
+.samples-tab.with-sidebar .samples-section > .filter-results-info {
+  flex-shrink: 0;
+  flex-wrap: nowrap;
+}
+
+.samples-tab.with-sidebar .samples-section > .table-wrapper {
+  flex: 1;
+  overflow: auto;
+}
+
+.samples-tab.with-sidebar .samples-table {
+  min-width: 100%;
+  width: auto;
+}
+
+.samples-tab.with-sidebar .samples-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.samples-tab.with-sidebar .samples-table th {
+  padding: 0 10px;
+  height: 32px;
+  line-height: 32px;
+}
+
+.samples-tab.with-sidebar .samples-table td {
+  padding: 0 10px;
+  height: 32px;
+  line-height: 32px;
+}
+
+/* Audio Pool toggle button */
+.audio-pool-toggle-btn {
+  background: none;
+  border: 1px solid var(--elektron-border-gray);
+  color: var(--elektron-muted-text);
+  cursor: pointer;
+  padding: 0.3rem 0.5rem;
+  border-radius: 3px;
+  font-size: 1.1rem;
+  line-height: 1;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+}
+
+.audio-pool-toggle-btn:hover {
+  background-color: var(--elektron-medium-gray);
+  border-color: var(--elektron-orange);
+  color: var(--elektron-orange);
+}
+
+.audio-pool-toggle-btn.active {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+/* Drop target highlight on slot rows */
+.samples-table tbody tr.drop-target-highlight {
+  outline: 2px dashed #f59e0b;
+  outline-offset: -2px;
+  background: rgba(245, 158, 11, 0.1) !important;
 }
 
 .banks-tab,
@@ -2291,15 +2387,19 @@ h1 {
 
 /* Filter Results Info */
 .samples-section > .filter-results-info {
-  margin-bottom: 0.5rem;
-  padding: 0.25rem 0;
+  margin-bottom: 0;
+  padding: 0.5rem 0.75rem;
   display: flex;
   gap: 0.5rem;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   color: var(--elektron-text-secondary);
-  font-size: 0.95rem;
+  font-size: 1rem;
+  min-height: 40px;
+  box-sizing: border-box;
+  background: #222;
+  border-bottom: 1px solid #333;
 }
 
 .filter-badge {
@@ -2721,11 +2821,13 @@ h1 {
   font-family: 'Courier New', monospace;
   font-size: 0.875rem;
   table-layout: fixed;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .samples-table thead {
-  background-color: var(--elektron-black);
-  border-bottom: 2px solid var(--elektron-orange);
+  background-color: var(--elektron-dark-gray);
+  border-bottom: 1px solid var(--elektron-border-gray);
   overflow: visible;
 }
 
@@ -2784,7 +2886,8 @@ h1 {
 }
 
 .col-source {
-  width: 120px;
+  width: 100px;
+  white-space: nowrap;
 }
 
 .col-gain {
