@@ -130,3 +130,6 @@
 | PM101 | Memory Edit | Reserve Length empty when zero | Enter Edit mode with Reserve Length = 0 | Field shows empty (placeholder "0"), not the character "0"; typing "10" shows "10" (not "010") |
 | PM102 | Memory Edit | Reserve Length rejects letters | Focus Reserve Length field, press letter keys (e.g. "e", "a") | No effect on field — letters are not accepted; "e" key propagates to toggle Edit mode off |
 | PM103 | Memory Edit | Reserve Length only digits | Attempt to type "1e5" or "abc" in Reserve Length | Only digit characters accepted; non-digits silently rejected |
+| PM104 | Memory Edit | "e" toggles edit mode from selects | Focus any Memory dropdown (Flex Format, Reserve Recordings, etc.), press "e" | Edit mode toggles off — "e" is not consumed by the select |
+| PM105 | Memory Edit | Reserve Length "s" suffix in edit mode | Enter Edit mode, set Reserve Length to any value (e.g. 16) | "s" unit label displayed inside the field next to digits, at same position as in view mode |
+| PM106 | Memory Edit | No vertical layout shift on toggle | Toggle Edit mode on and off on Overview tab | Reserve Length field does not shift vertically between edit and view modes |
