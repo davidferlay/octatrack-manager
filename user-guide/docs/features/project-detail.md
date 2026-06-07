@@ -38,7 +38,7 @@ The **Mixer** section mirrors the Octatrack's project-level gain and routing con
 ### MIDI & Memory
 - **MIDI Sync:** View whether Clock, Transport, and Program Change messages were enabled for send or receive.
 - **MIDI Channels:** Shows the MIDI channel assigned to each track and the **Auto Channel**.
-- **Memory:** Displays critical RAM allocation settings, such as **24-bit Flex** loading and **Dynamic Recorder** status.
+- **Memory:** Displays RAM allocation settings including **Flex Format** (16/24-bit), **Dynamic Recorders**, **Recorder Format** (16/24-bit), **Reserve Recordings** (None to R1–R8), and **Reserve Length** (in seconds). In **Edit Mode**, these settings become editable — changes are saved to the project file with the FREE MEM value updating in real time on the Flex tab.
 
 ### Metronome
 The **Metronome** section displays all click track settings, including volume, pitch, and tonal/noise click preferences.

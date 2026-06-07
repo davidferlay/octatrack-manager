@@ -112,6 +112,21 @@
 | PM85 | Discovery | Empty set persists after rescan | Create an empty Set via the app, click Refresh | Empty Set still appears after rescan |
 | **Flex RAM Display** | | | | |
 | PM86 | Flex RAM | FREE MEM shown on Flex tab | Open a project with Flex samples loaded, go to Flex tab | "FREE MEM: XX.X MB" badge shown in toolbar, value accounts for loaded samples |
-| PM87 | Flex RAM | FREE MEM matches Octatrack | Compare FREE MEM value with Octatrack's Flex slot list menu | Values match (same memory settings, same loaded samples) |
+| PM87 | Flex RAM | FREE MEM matches Octatrack | Compare FREE MEM value with Octatrack's Flex slot list menu | Values match within ±0.1 MiB (same memory settings, same loaded samples) |
 | PM88 | Flex RAM | FREE MEM not shown on Static tab | Open a project, go to Static tab | No FREE MEM badge displayed |
 | PM89 | Flex RAM | FREE MEM reflects recorder settings | Open projects with different recorder buffer settings | FREE MEM value differs according to reserved recorder count and length |
+| PM90 | Flex RAM | Truncation display ≥10 MiB | Open a project where free RAM is ≥10 MiB | Value shown with 1 decimal place, truncated (floor), e.g. 72.04→72.0 |
+| PM91 | Flex RAM | Truncation display <10 MiB | Open a project where free RAM is <10 MiB | Value shown with 2 decimal places, truncated (floor), e.g. 9.997→9.99 |
+| PM92 | Flex RAM | Empty project shows 85.5 | Open a project with no flex samples and no reserved recorders | FREE MEM shows exactly 85.5 MB (total OT RAM) |
+| PM93 | Flex RAM | 16-bit recorders reduce RAM | Open project with 8×16-bit recorders at 30s | FREE MEM shows 45.1 MB (formula: 8×30×44100×2×2 bytes reserved) |
+| PM94 | Flex RAM | 24-bit recorders reduce RAM more | Open project with 8×24-bit recorders at 30s | FREE MEM shows 24.9 MB (formula: 8×30×44100×2×3 bytes reserved) |
+| **Memory Settings (Edit Mode)** | | | | |
+| PM95 | Memory Edit | Settings editable in Edit mode | Toggle Edit mode on Overview tab | Memory fields (Flex Format, Dynamic Recorders, Recorder Format, Reserve Recordings, Reserve Length) become editable dropdowns/inputs |
+| PM96 | Memory Edit | Settings read-only in View mode | Toggle Edit mode off on Overview tab | Memory fields revert to read-only labels |
+| PM97 | Memory Edit | Changing recorder count updates FREE MEM | In Edit mode, change Reserve Recordings from "None" to "R1-R8" | FREE MEM badge on Flex tab updates to reflect new recorder allocation |
+| PM98 | Memory Edit | Reserve Length disabled when None | Set Reserve Recordings to "None" in Edit mode | Reserve Length input is disabled/greyed out |
+| PM99 | Memory Edit | Reserve Length clamped to max | Set Reserve Recordings to "R1-R8" with 16-bit recorder format | Reserve Length max is clamped to 63 (floor(89652480/(8×44100×2×2))) |
+| PM100 | Memory Edit | Changes saved with debounce | Change a memory setting in Edit mode | "Writing..." status appears briefly, then "Saved" — changes persist after page reload |
+| PM101 | Memory Edit | Reserve Length empty when zero | Enter Edit mode with Reserve Length = 0 | Field shows empty (placeholder "0"), not the character "0"; typing "10" shows "10" (not "010") |
+| PM102 | Memory Edit | Reserve Length rejects letters | Focus Reserve Length field, press letter keys (e.g. "e", "a") | No effect on field — letters are not accepted; "e" key propagates to toggle Edit mode off |
+| PM103 | Memory Edit | Reserve Length only digits | Attempt to type "1e5" or "abc" in Reserve Length | Only digit characters accepted; non-digits silently rejected |

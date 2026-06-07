@@ -313,16 +313,29 @@ export function ProjectDetail() {
   // Load machine types for the selected bank's active part
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      // Don't handle shortcuts when typing in an input/textarea
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       // Don't handle shortcuts when a modal/dialog is open
       if (document.querySelector('.modal-overlay')) return;
 
+      const target = e.target as HTMLElement;
+      const tag = target?.tagName;
+
+      // For 'e'/'E' (edit toggle): allow even when SELECT, checkbox, or numeric-only input is focused
+      // Only block when in a real text input (search bars, text areas, contenteditable)
+      if (e.key === 'e' || e.key === 'E') {
+        const isTextInput = tag === 'TEXTAREA' ||
+          (tag === 'INPUT' && !['checkbox', 'radio'].includes((target as HTMLInputElement).type) &&
+           !(target as HTMLElement).classList.contains('compact-input'));
+        if (tag === 'SELECT' || !isTextInput) {
+          if (!isLoading) toggleEditMode();
+        }
+        return;
+      }
+
+      // For all other shortcuts: don't handle when typing in an input/textarea/select
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
       if (e.key === 'Escape') {
         navigate('/');
-      } else if (e.key === 'e' || e.key === 'E') {
-        if (!isLoading) toggleEditMode();
       }
     }
     document.addEventListener('keydown', handleKeyDown);
@@ -780,27 +793,43 @@ export function ProjectDetail() {
                       <div className="compact-item">
                         <span className="compact-label">Reserve Length</span>
                         {isEditMode ? (
-                          <input
-                            type="number"
-                            className={`compact-input${reserveLengthShaking ? ' shake' : ''}`}
-                            min={0}
-                            max={getMaxReserveLength(metadata.memory_settings.reserved_recorder_count, metadata.memory_settings.record_24bit)}
-                            value={metadata.memory_settings.reserved_recorder_length}
-                            disabled={metadata.memory_settings.reserved_recorder_count === 0}
+                          <span className="compact-input-with-suffix">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              placeholder="0"
+                              className={`compact-input${reserveLengthShaking ? ' shake' : ''}`}
+                              value={metadata.memory_settings.reserved_recorder_length === 0 ? '' : String(metadata.memory_settings.reserved_recorder_length)}
+                              size={Math.max(1, String(metadata.memory_settings.reserved_recorder_length || '').length)}
+                              disabled={metadata.memory_settings.reserved_recorder_count === 0}
+                            onKeyDown={(e) => {
+                              // Only allow digits, Backspace, Delete, Tab, arrows, Home, End
+                              if (!/^[0-9]$/.test(e.key) && !['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+                                e.preventDefault();
+                              }
+                            }}
                             onChange={(e) => {
-                              const raw = Number(e.target.value);
+                              const text = e.target.value.replace(/[^0-9]/g, '');
+                              const raw = text === '' ? 0 : parseInt(text, 10);
                               const max = getMaxReserveLength(metadata.memory_settings.reserved_recorder_count, metadata.memory_settings.record_24bit);
-                              if (isNaN(raw) || raw < 0 || raw > max) {
+                              if (raw > max) {
                                 setReserveLengthShaking(false);
                                 requestAnimationFrame(() => setReserveLengthShaking(true));
                                 setTimeout(() => setReserveLengthShaking(false), 400);
                               }
-                              const val = Math.max(0, Math.min(max, raw || 0));
+                              const val = Math.min(max, raw);
                               if (val !== metadata.memory_settings.reserved_recorder_length) {
                                 handleMemorySettingChange('reserved_recorder_length', val);
                               }
                             }}
+                            onBlur={() => {
+                              // Ensure 0 is committed on blur if field was emptied
+                              if (metadata.memory_settings.reserved_recorder_length !== 0) return;
+                              handleMemorySettingChange('reserved_recorder_length', 0);
+                            }}
                           />
+                          <span className="compact-input-suffix">s</span>
+                          </span>
                         ) : (
                           <span className="compact-value">{metadata.memory_settings.reserved_recorder_length} s</span>
                         )}

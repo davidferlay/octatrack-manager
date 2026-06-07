@@ -16676,6 +16676,133 @@ mod tests {
     }
 
     // ============================================================================
+    // Hardware-validated tests: recorder RAM allocation matches OT display
+    // Tests derived from 10 projects created and verified on Octatrack hardware.
+    // Formula: recorder_bytes = count × length × 44100 × 2 × bps
+    // Free = truncate_bytes_to_mib(OT_TOTAL_RAM_BYTES - recorder_bytes)
+    // ============================================================================
+
+    #[test]
+    fn test_hardware_rec_16b_r1r8_10s() {
+        // TEST_REC_16B-R1R8-10s: 8 recorders, 10s, 16-bit → OT shows 72.0
+        let settings = MemorySettings {
+            load_24bit_flex: false,
+            dynamic_recorders: false,
+            record_24bit: false,
+            reserved_recorder_count: 8,
+            reserved_recorder_length: 10,
+            flex_ram_free_mb: 0.0,
+        };
+        let capacity = calculate_flex_ram_bytes(&settings);
+        assert_eq!(truncate_bytes_to_mib(capacity), 72.0);
+    }
+
+    #[test]
+    fn test_hardware_rec_16b_r1r8_30s() {
+        // TEST_REC_16B-R1R8-30s: 8 recorders, 30s, 16-bit → OT shows 45.1
+        let settings = MemorySettings {
+            load_24bit_flex: false,
+            dynamic_recorders: false,
+            record_24bit: false,
+            reserved_recorder_count: 8,
+            reserved_recorder_length: 30,
+            flex_ram_free_mb: 0.0,
+        };
+        let capacity = calculate_flex_ram_bytes(&settings);
+        assert_eq!(truncate_bytes_to_mib(capacity), 45.1);
+    }
+
+    #[test]
+    fn test_hardware_rec_16b_r1r8_50s() {
+        // TEST_REC_16B-R1R8-50s: 8 recorders, 50s, 16-bit → OT shows 18.2
+        let settings = MemorySettings {
+            load_24bit_flex: false,
+            dynamic_recorders: false,
+            record_24bit: false,
+            reserved_recorder_count: 8,
+            reserved_recorder_length: 50,
+            flex_ram_free_mb: 0.0,
+        };
+        let capacity = calculate_flex_ram_bytes(&settings);
+        assert_eq!(truncate_bytes_to_mib(capacity), 18.2);
+    }
+
+    #[test]
+    fn test_hardware_rec_16b_r1r2_200s() {
+        // TEST_REC_16B-R1R2-200s: 2 recorders, 200s, 16-bit → OT shows 18.2
+        let settings = MemorySettings {
+            load_24bit_flex: false,
+            dynamic_recorders: false,
+            record_24bit: false,
+            reserved_recorder_count: 2,
+            reserved_recorder_length: 200,
+            flex_ram_free_mb: 0.0,
+        };
+        let capacity = calculate_flex_ram_bytes(&settings);
+        assert_eq!(truncate_bytes_to_mib(capacity), 18.2);
+    }
+
+    #[test]
+    fn test_hardware_rec_24b_r1r8_10s() {
+        // TEST_REC_24B-R1R8-10s: 8 recorders, 10s, 24-bit → OT shows 65.3
+        let settings = MemorySettings {
+            load_24bit_flex: false,
+            dynamic_recorders: false,
+            record_24bit: true,
+            reserved_recorder_count: 8,
+            reserved_recorder_length: 10,
+            flex_ram_free_mb: 0.0,
+        };
+        let capacity = calculate_flex_ram_bytes(&settings);
+        assert_eq!(truncate_bytes_to_mib(capacity), 65.3);
+    }
+
+    #[test]
+    fn test_hardware_rec_24b_r1r8_20s() {
+        // TEST_REC_24B-R1R8-20s: 8 recorders, 20s, 24-bit → OT shows 45.1
+        let settings = MemorySettings {
+            load_24bit_flex: false,
+            dynamic_recorders: false,
+            record_24bit: true,
+            reserved_recorder_count: 8,
+            reserved_recorder_length: 20,
+            flex_ram_free_mb: 0.0,
+        };
+        let capacity = calculate_flex_ram_bytes(&settings);
+        assert_eq!(truncate_bytes_to_mib(capacity), 45.1);
+    }
+
+    #[test]
+    fn test_hardware_rec_24b_r1r8_30s() {
+        // TEST_REC_24B-R1R8-30s: 8 recorders, 30s, 24-bit → OT shows 24.9
+        let settings = MemorySettings {
+            load_24bit_flex: false,
+            dynamic_recorders: false,
+            record_24bit: true,
+            reserved_recorder_count: 8,
+            reserved_recorder_length: 30,
+            flex_ram_free_mb: 0.0,
+        };
+        let capacity = calculate_flex_ram_bytes(&settings);
+        assert_eq!(truncate_bytes_to_mib(capacity), 24.9);
+    }
+
+    #[test]
+    fn test_hardware_rec_24b_r1r5_50s() {
+        // TEST_REC_24B-R1R5-50s: 5 recorders, 50s, 24-bit → OT shows 22.4
+        let settings = MemorySettings {
+            load_24bit_flex: false,
+            dynamic_recorders: false,
+            record_24bit: true,
+            reserved_recorder_count: 5,
+            reserved_recorder_length: 50,
+            flex_ram_free_mb: 0.0,
+        };
+        let capacity = calculate_flex_ram_bytes(&settings);
+        assert_eq!(truncate_bytes_to_mib(capacity), 22.4);
+    }
+
+    // ============================================================================
     // Pure function tests: patch_sample_block_fields
     // ============================================================================
 
@@ -17066,12 +17193,8 @@ mod tests {
 
         let free_mb =
             save_memory_settings_data(&project.path, settings).expect("should save and return mb");
-        // With no recorders reserved, flex gets full 85.5 MB (no samples loaded in test project)
-        assert!(
-            free_mb > 85.0 && free_mb < 86.0,
-            "Expected ~85.5 MB, got {}",
-            free_mb
-        );
+        // With no recorders reserved, flex gets full 85.5 MiB (no samples loaded in test project)
+        assert_eq!(free_mb, 85.5, "Expected exactly 85.5 MiB, got {}", free_mb);
     }
 
     #[test]

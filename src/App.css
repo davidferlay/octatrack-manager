@@ -2219,6 +2219,56 @@ h1 {
   margin: 0;
 }
 
+.overview-section .compact-input-with-suffix {
+  display: flex;
+  align-items: center;
+  max-width: 80px;
+  width: 100%;
+  background: #1a1a1a;
+  border: 1px solid #f59e0b;
+  border-radius: 3px;
+  padding: 0.3rem 0.4rem;
+  box-sizing: border-box;
+  line-height: 1.2;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.overview-section .compact-input-with-suffix:focus-within {
+  border-color: #fbbf24;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.3);
+}
+
+.overview-section .compact-input-with-suffix .compact-input {
+  border: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  outline: none;
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 1ch;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #fff;
+  font-family: 'Courier New', monospace;
+  line-height: 1.2;
+}
+
+.overview-section .compact-input-with-suffix .compact-input:focus {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.overview-section .compact-input-suffix {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #999;
+  font-family: 'Courier New', monospace;
+  margin-left: 0.3rem;
+  flex-shrink: 0;
+}
+
 .samples-tab {
   padding: 1rem 2rem;
   overflow: visible;

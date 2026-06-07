@@ -18,7 +18,14 @@ The Octatrack manages memory in two distinct ways:
 
 ### Flex RAM Capacity
 
-The Flex sample slots table displays the available Flex RAM in the toolbar (e.g., **FREE MEM: 57.4 MB**). This reproduces the exact behavior of the Octatrack's free memory indicator displayed in its Flex Sample Slot list menu. The value accounts for reserved recorder buffers, 24-bit recording settings, and RAM already consumed by loaded Flex samples.
+The Flex sample slots table displays the available Flex RAM in the toolbar (e.g., **FREE MEM: 57.4 MB**). This reproduces the exact behavior of the Octatrack's free memory indicator displayed in its Flex Sample Slot list menu.
+
+The total Octatrack RAM is 85.5 MB. The available capacity for Flex samples depends on:
+
+- **Reserved Recorder Buffers:** Each recorder reserves `length × 44100 × 2 channels × bytes_per_sample` bytes. The byte depth is 2 for 16-bit recording or 3 for 24-bit recording.
+- **Loaded Flex samples:** The PCM data size of every sample currently assigned to a Flex slot is subtracted from available RAM.
+
+The value is displayed with 1 decimal place (for values ≥ 10 MB) or 2 decimal places (for values < 10 MB), using floor truncation — matching the Octatrack's own display precision.
 
 ![Sample Slots - Static Table](/img/screenshots/sample-slots-static.png)
 
