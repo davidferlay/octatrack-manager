@@ -37,34 +37,36 @@ export function useAudioPoolTransfer(options?: { onComplete?: (destinationPath: 
   // Listen for copy progress events from Rust backend
   useEffect(() => {
     let unlisten: UnlistenFn | null = null;
+    let cancelled = false;
 
-    const setupListener = async () => {
-      unlisten = await listen<CopyProgressEvent>("copy-progress", (event) => {
-        const { file_path, transfer_id, stage, progress } = event.payload;
+    listen<CopyProgressEvent>("copy-progress", (event) => {
+      const { file_path, transfer_id, stage, progress } = event.payload;
 
-        setTransfers(prev => prev.map(t => {
-          // Match by transfer_id if available, otherwise fall back to sourcePath
-          // Only update if still in copying status (not cancelled)
-          const matches = transfer_id ? t.id === transfer_id : t.sourcePath === file_path;
-          if (matches && t.status === "copying") {
-            return {
-              ...t,
-              stage,
-              progress,
-              bytesTransferred: progress * (t.fileSize || 1),
-            };
-          }
-          return t;
-        }));
-      });
-    };
-
-    setupListener();
+      setTransfers(prev => prev.map(t => {
+        // Match by transfer_id if available, otherwise fall back to sourcePath
+        // Only update if still in copying status (not cancelled)
+        const matches = transfer_id ? t.id === transfer_id : t.sourcePath === file_path;
+        if (matches && t.status === "copying") {
+          return {
+            ...t,
+            stage,
+            progress,
+            bytesTransferred: progress * (t.fileSize || 1),
+          };
+        }
+        return t;
+      }));
+    }).then(fn => {
+      if (cancelled) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
+    });
 
     return () => {
-      if (unlisten) {
-        unlisten();
-      }
+      cancelled = true;
+      unlisten?.();
     };
   }, []);
 

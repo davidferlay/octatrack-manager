@@ -273,31 +273,31 @@ export function AudioPoolPage() {
   // Listen for external file drops from system (Tauri drag-drop)
   useEffect(() => {
     let unlisten: (() => void) | undefined;
+    let cancelled = false;
 
-    async function setupDragDropListener() {
-      const window = getCurrentWindow();
-      unlisten = await window.onDragDropEvent(async (event) => {
-        if (event.payload.type === 'over') {
-          setIsOverDropZone(true);
-        } else if (event.payload.type === 'leave') {
-          setIsOverDropZone(false);
-        } else if (event.payload.type === 'drop') {
-          setIsOverDropZone(false);
-          const paths = event.payload.paths;
-          if (paths && paths.length > 0 && destinationPathRef.current) {
-            // Use copyFilesToPool which handles parallel processing
-            await copyFilesToPool(paths, destinationPathRef.current);
-          }
+    getCurrentWindow().onDragDropEvent(async (event) => {
+      if (event.payload.type === 'over') {
+        setIsOverDropZone(true);
+      } else if (event.payload.type === 'leave') {
+        setIsOverDropZone(false);
+      } else if (event.payload.type === 'drop') {
+        setIsOverDropZone(false);
+        const paths = event.payload.paths;
+        if (paths && paths.length > 0 && destinationPathRef.current) {
+          await copyFilesToPool(paths, destinationPathRef.current);
         }
-      });
-    }
-
-    setupDragDropListener();
+      }
+    }).then(fn => {
+      if (cancelled) {
+        fn();
+      } else {
+        unlisten = fn;
+      }
+    });
 
     return () => {
-      if (unlisten) {
-        unlisten();
-      }
+      cancelled = true;
+      unlisten?.();
     };
   }, []);
 

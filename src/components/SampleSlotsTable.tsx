@@ -428,10 +428,10 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
     if (!isEditMode) return;
 
     let unlisten: (() => void) | undefined;
+    let cancelled = false;
 
-    async function setupOsDragDrop() {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
-      unlisten = await getCurrentWindow().onDragDropEvent(async (event) => {
+    import('@tauri-apps/api/window').then(({ getCurrentWindow }) => {
+      getCurrentWindow().onDragDropEvent(async (event) => {
         const scale = window.devicePixelRatio || 1;
 
         if (event.payload.type === 'over') {
@@ -558,12 +558,19 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
             }
           }
         }
+      }).then(fn => {
+        if (cancelled) {
+          fn();
+        } else {
+          unlisten = fn;
+        }
       });
-    }
+    });
 
-    setupOsDragDrop();
-
-    return () => { unlisten?.(); };
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
   }, [isEditMode, tableType]);
 
   // Toggle column visibility
