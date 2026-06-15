@@ -149,6 +149,20 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
   const [visibleColumns, setVisibleColumns] = useState(prefs.visibleColumns);
   const [showColumnMenu, setShowColumnMenu] = useState(false);
 
+  // Column sizing state (initialized from CSS values; inline style overrides CSS class widths)
+  const [columnSizing, setColumnSizing] = useState<Record<string, number>>({
+    slot: 80, sample: 200, compatibility: 100, status: 90,
+    source: 100, gain: 80, timestretch: 140, loop: 120,
+    format: 80, bitdepth: 60, samplerate: 70,
+  });
+  const resizingColRef = useRef<string | null>(null);
+  const resizeStartXRef = useRef<number>(0);
+  const resizeStartSizeRef = useRef<number>(0);
+
+  // Column order and drag-over state for column reorder
+  const [columnOrder, setColumnOrder] = useState<string[]>(['slot', 'sample', 'compatibility', 'status', 'source', 'gain', 'timestretch', 'loop', 'format', 'bitdepth', 'samplerate']);
+  const [dragOverColId, setDragOverColId] = useState<string | null>(null);
+
   // Copy to clipboard state
   const [copyFeedback, setCopyFeedback] = useState<'idle' | 'copied'>('idle');
 
@@ -381,6 +395,55 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
       [column]: !prev[column]
     }));
   };
+
+  // Column resize handler — tracks mouse movement until mouseup
+  function startResize(e: React.MouseEvent, colId: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    resizingColRef.current = colId;
+    resizeStartXRef.current = e.clientX;
+    resizeStartSizeRef.current = columnSizing[colId] ?? 80;
+    function onMove(me: MouseEvent) {
+      if (!resizingColRef.current) return;
+      const newSize = Math.max(30, resizeStartSizeRef.current + me.clientX - resizeStartXRef.current);
+      setColumnSizing(prev => ({ ...prev, [resizingColRef.current!]: newSize }));
+    }
+    function onUp() {
+      resizingColRef.current = null;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  function handleColDragStart(e: React.DragEvent, colId: string) {
+    e.dataTransfer.setData('text/plain', colId);
+    e.dataTransfer.effectAllowed = 'move';
+  }
+  function handleColDragOver(e: React.DragEvent, colId: string) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverColId(colId);
+  }
+  function handleColDrop(e: React.DragEvent, targetColId: string) {
+    e.preventDefault();
+    setDragOverColId(null);
+    const srcColId = e.dataTransfer.getData('text/plain');
+    if (!srcColId || srcColId === targetColId) return;
+    setColumnOrder(prev => {
+      const next = [...prev];
+      const from = next.indexOf(srcColId);
+      const to = next.indexOf(targetColId);
+      if (from < 0 || to < 0) return prev;
+      next.splice(from, 1);
+      next.splice(to, 0, srcColId);
+      return next;
+    });
+  }
+  function handleColDragLeave() {
+    setDragOverColId(null);
+  }
 
   // Copy table data to clipboard in TSV format (for Excel/Google Sheets)
   const copyTableToClipboard = async (slotsData: SampleSlot[]) => {
@@ -662,6 +725,10 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
   const filteredSlots = filterSlots(slots);
   const sortedSlots = sortSlots(filteredSlots);
 
+  // Compute visible column IDs respecting current column order
+  const visibleColIds = columnOrder.filter(id => visibleColumns[id as keyof typeof visibleColumns]);
+  const totalTableWidth = visibleColIds.reduce((sum, id) => sum + (columnSizing[id] ?? 80), 0);
+
   // Check if any filter is active
   const hasActiveFilters = compatibilityFilter !== 'all' || statusFilter !== 'all' ||
     sourceFilter !== 'all' || gainFilter !== 'all' || timestretchFilter !== 'all' ||
@@ -680,6 +747,198 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
     setBitDepthFilter('all');
     setSampleRateFilter('all');
   };
+
+  function renderColHeader(colId: string) {
+    const COL_LABELS: Record<string, string> = {
+      slot: 'Slot', sample: 'Sample', compatibility: 'Compat', status: 'Status',
+      source: 'Source', gain: 'Gain', timestretch: 'Timestretch', loop: 'Loop',
+      format: 'Format', bitdepth: 'Bit', samplerate: 'kHz',
+    };
+    const FILTERABLE = ['compatibility', 'status', 'source', 'gain', 'timestretch', 'loop', 'format', 'bitdepth', 'samplerate'];
+    const hasFilter = FILTERABLE.includes(colId);
+    const isFilterActive: boolean = ({
+      compatibility: compatibilityFilter !== 'all',
+      status: statusFilter !== 'all',
+      source: sourceFilter !== 'all',
+      gain: gainFilter !== 'all',
+      timestretch: timestretchFilter !== 'all',
+      loop: loopFilter !== 'all',
+      format: formatFilter !== 'all',
+      bitdepth: bitDepthFilter !== 'all',
+      samplerate: sampleRateFilter !== 'all',
+    } as Record<string, boolean>)[colId] ?? false;
+
+    function renderDropdownOptions() {
+      switch (colId) {
+        case 'compatibility': return (
+          <>
+            <label className="dropdown-option"><input type="radio" name="compatibility" checked={compatibilityFilter === 'all'} onChange={() => { setCompatibilityFilter('all'); closeDropdown(); }} /><span>All</span></label>
+            <label className="dropdown-option"><input type="radio" name="compatibility" checked={compatibilityFilter === 'compatible'} onChange={() => { setCompatibilityFilter('compatible'); closeDropdown(); }} /><span>Compatible :)</span></label>
+            <label className="dropdown-option"><input type="radio" name="compatibility" checked={compatibilityFilter === 'wrong_rate'} onChange={() => { setCompatibilityFilter('wrong_rate'); closeDropdown(); }} /><span>Wrong Rate :|</span></label>
+            <label className="dropdown-option"><input type="radio" name="compatibility" checked={compatibilityFilter === 'incompatible'} onChange={() => { setCompatibilityFilter('incompatible'); closeDropdown(); }} /><span>Incompatible :(</span></label>
+            <label className="dropdown-option"><input type="radio" name="compatibility" checked={compatibilityFilter === 'unknown'} onChange={() => { setCompatibilityFilter('unknown'); closeDropdown(); }} /><span>Unknown ??</span></label>
+          </>
+        );
+        case 'status': return (
+          <>
+            <label className="dropdown-option"><input type="radio" name="status" checked={statusFilter === 'all'} onChange={() => { setStatusFilter('all'); closeDropdown(); }} /><span>All</span></label>
+            <label className="dropdown-option"><input type="radio" name="status" checked={statusFilter === 'exists'} onChange={() => { setStatusFilter('exists'); closeDropdown(); }} /><span>File Exists</span></label>
+            <label className="dropdown-option"><input type="radio" name="status" checked={statusFilter === 'missing'} onChange={() => { setStatusFilter('missing'); closeDropdown(); }} /><span>File Missing</span></label>
+          </>
+        );
+        case 'source': return (
+          <>
+            <label className="dropdown-option"><input type="radio" name="source" checked={sourceFilter === 'all'} onChange={() => { setSourceFilter('all'); closeDropdown(); }} /><span>All</span></label>
+            {getUniqueSources().map((source) => (
+              <label key={source} className="dropdown-option"><input type="radio" name="source" checked={sourceFilter === source} onChange={() => { setSourceFilter(source); closeDropdown(); }} /><span>{source}</span></label>
+            ))}
+          </>
+        );
+        case 'gain': return (
+          <>
+            <label className="dropdown-option"><input type="radio" name="gain" checked={gainFilter === 'all'} onChange={() => { setGainFilter('all'); closeDropdown(); }} /><span>All</span></label>
+            {getUniqueGains().map((gain) => (
+              <label key={gain} className="dropdown-option"><input type="radio" name="gain" checked={gainFilter === gain.toString()} onChange={() => { setGainFilter(gain.toString()); closeDropdown(); }} /><span>{gain}</span></label>
+            ))}
+          </>
+        );
+        case 'timestretch': return (
+          <>
+            <label className="dropdown-option"><input type="radio" name="timestretch" checked={timestretchFilter === 'all'} onChange={() => { setTimestretchFilter('all'); closeDropdown(); }} /><span>All</span></label>
+            {getUniqueTimestretches().map((mode) => (
+              <label key={mode} className="dropdown-option"><input type="radio" name="timestretch" checked={timestretchFilter === mode} onChange={() => { setTimestretchFilter(mode); closeDropdown(); }} /><span>{mode}</span></label>
+            ))}
+          </>
+        );
+        case 'loop': return (
+          <>
+            <label className="dropdown-option"><input type="radio" name="loop" checked={loopFilter === 'all'} onChange={() => { setLoopFilter('all'); closeDropdown(); }} /><span>All</span></label>
+            {getUniqueLoopModes().map((mode) => (
+              <label key={mode} className="dropdown-option"><input type="radio" name="loop" checked={loopFilter === mode} onChange={() => { setLoopFilter(mode); closeDropdown(); }} /><span>{mode}</span></label>
+            ))}
+          </>
+        );
+        case 'format': return (
+          <>
+            <label className="dropdown-option"><input type="radio" name="format" checked={formatFilter === 'all'} onChange={() => { setFormatFilter('all'); closeDropdown(); }} /><span>All</span></label>
+            {getUniqueFormats().map((format) => (
+              <label key={format} className="dropdown-option"><input type="radio" name="format" checked={formatFilter === format} onChange={() => { setFormatFilter(format); closeDropdown(); }} /><span>{format}</span></label>
+            ))}
+          </>
+        );
+        case 'bitdepth': return (
+          <>
+            <label className="dropdown-option"><input type="radio" name="bitdepth" checked={bitDepthFilter === 'all'} onChange={() => { setBitDepthFilter('all'); closeDropdown(); }} /><span>All</span></label>
+            {getUniqueBitDepths().map((bitDepth) => (
+              <label key={bitDepth} className="dropdown-option"><input type="radio" name="bitdepth" checked={bitDepthFilter === bitDepth.toString()} onChange={() => { setBitDepthFilter(bitDepth.toString()); closeDropdown(); }} /><span>{bitDepth}</span></label>
+            ))}
+          </>
+        );
+        case 'samplerate': return (
+          <>
+            <label className="dropdown-option"><input type="radio" name="samplerate" checked={sampleRateFilter === 'all'} onChange={() => { setSampleRateFilter('all'); closeDropdown(); }} /><span>All</span></label>
+            {getUniqueSampleRates().map((sampleRate) => (
+              <label key={sampleRate} className="dropdown-option"><input type="radio" name="samplerate" checked={sampleRateFilter === sampleRate.toString()} onChange={() => { setSampleRateFilter(sampleRate.toString()); closeDropdown(); }} /><span>{(sampleRate / 1000).toFixed(1)} kHz</span></label>
+            ))}
+          </>
+        );
+        default: return null;
+      }
+    }
+
+    return (
+      <th
+        key={colId}
+        className={`filterable-header col-${colId}${dragOverColId === colId ? ' col-drag-over' : ''}`}
+        style={{ position: 'relative', width: columnSizing[colId] ?? 80 }}
+        onDragOver={(e) => handleColDragOver(e, colId)}
+        onDrop={(e) => handleColDrop(e, colId)}
+        onDragLeave={handleColDragLeave}
+      >
+        <div
+          className="header-content"
+          draggable
+          onDragStart={(e) => handleColDragStart(e, colId)}
+          style={{ cursor: 'grab' }}
+        >
+          <span className="sort-indicator" onClick={() => handleSort(colId as SortColumn)}>
+            {sortColumn === colId && (sortDirection === 'asc' ? '▲' : '▼')}
+          </span>
+          <span onClick={() => handleSort(colId as SortColumn)} className="sortable-label">
+            {COL_LABELS[colId] ?? colId}
+          </span>
+          {hasFilter && (
+            <button
+              className={`filter-icon ${openDropdown === colId || isFilterActive ? 'active' : ''}`}
+              onClick={(e) => handleDropdownToggle(colId, e)}
+            >
+              ⋮
+            </button>
+          )}
+        </div>
+        {hasFilter && openDropdown === colId && dropdownPosition && createPortal(
+          <div className="filter-dropdown" style={{ top: dropdownPosition.top, left: dropdownPosition.left }}>
+            <div className="dropdown-options">
+              {renderDropdownOptions()}
+            </div>
+          </div>,
+          document.body
+        )}
+        <div className="col-resize-handle" onMouseDown={(e) => startResize(e, colId)} onClick={(e) => e.stopPropagation()} />
+      </th>
+    );
+  }
+
+  function renderColCell(colId: string, slot: SampleSlot) {
+    switch (colId) {
+      case 'slot':
+        return <td key={colId} className="col-slot">{slotPrefix}{slot.slot_id}</td>;
+      case 'sample':
+        return (
+          <td key={colId} className="col-sample" title={slot.path ? getFilename(slot.path) : undefined}>
+            {slot.path ? getFilename(slot.path) : <em>Empty</em>}
+          </td>
+        );
+      case 'compatibility':
+        return (
+          <td key={colId} className="compatibility-cell col-compatibility">
+            {slot.file_exists && slot.compatibility === 'compatible' && <span className="compat-badge compat-compatible" title="Compatible (WAV/AIFF, 16/24-bit, 44.1kHz)">:)</span>}
+            {slot.file_exists && slot.compatibility === 'wrong_rate' && <span className="compat-badge compat-wrong-rate" title="Wrong sample rate (plays at wrong speed)">:|</span>}
+            {slot.file_exists && slot.compatibility === 'incompatible' && <span className="compat-badge compat-incompatible" title="Incompatible bit depth)">:(</span>}
+            {slot.file_exists && slot.compatibility === 'unknown' && <span className="compat-badge compat-unknown" title="Unrecognized format (not WAV or AIFF)">??</span>}
+          </td>
+        );
+      case 'status':
+        return (
+          <td key={colId} className="status-cell col-status">
+            {slot.path && (
+              <span
+                className={`file-status-badge ${slot.file_exists ? 'file-exists' : 'file-missing'}`}
+                title={slot.file_exists ? 'File exists on disk' : 'File is missing from disk'}
+              >
+                {slot.file_exists ? '✓' : '✗'}
+              </span>
+            )}
+          </td>
+        );
+      case 'source':
+        return <td key={colId} className="col-source" title={slot.source_location === 'Project' ? getSetRelativePath(projectPath ?? null) : getDirectoryPath(slot.path)}>{slot.source_location || '-'}</td>;
+      case 'gain':
+        return <td key={colId} className="col-gain">{slot.gain !== null && slot.gain !== undefined ? slot.gain : '-'}</td>;
+      case 'timestretch':
+        return <td key={colId} className="col-timestretch">{slot.timestretch_mode || '-'}</td>;
+      case 'loop':
+        return <td key={colId} className="col-loop">{slot.loop_mode || '-'}</td>;
+      case 'format':
+        return <td key={colId} className="col-format">{slot.file_format || '-'}</td>;
+      case 'bitdepth':
+        return <td key={colId} className="col-bitdepth">{slot.bit_depth !== null && slot.bit_depth !== undefined ? slot.bit_depth : '-'}</td>;
+      case 'samplerate':
+        return <td key={colId} className="col-samplerate">{slot.sample_rate !== null && slot.sample_rate !== undefined ? (slot.sample_rate / 1000).toFixed(1) : '-'}</td>;
+      default:
+        return null;
+    }
+  }
 
   return (
     <DndContext
@@ -896,457 +1155,11 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
             </div>
           </div>
         </div>
-        <div className="table-wrapper" ref={dropdownRef}>
-          <table className="samples-table">
+        <div className="table-wrapper" ref={dropdownRef} style={{ overflowX: 'auto' }}>
+          <table className="samples-table" style={{ width: totalTableWidth, minWidth: '100%' }}>
             <thead>
               <tr>
-                {visibleColumns.slot && (
-                  <th onClick={() => handleSort('slot')} className="sortable col-slot">
-                    Slot {sortColumn === 'slot' && (sortDirection === 'asc' ? '▲' : '▼')}
-                  </th>
-                )}
-                {visibleColumns.sample && (
-                  <th onClick={() => handleSort('sample')} className="sortable col-sample">
-                    Sample {sortColumn === 'sample' && (sortDirection === 'asc' ? '▲' : '▼')}
-                  </th>
-                )}
-                {visibleColumns.compatibility && (
-                <th className="filterable-header col-compatibility">
-                  <div className="header-content">
-                    <span className="sort-indicator" onClick={() => handleSort('compatibility')}>
-                      {sortColumn === 'compatibility' && (sortDirection === 'asc' ? '▲' : '▼')}
-                    </span>
-                    <span onClick={() => handleSort('compatibility')} className="sortable-label">
-                      Compat
-                    </span>
-                    <button
-                      className={`filter-icon ${openDropdown === 'compatibility' || compatibilityFilter !== 'all' ? 'active' : ''}`}
-                      onClick={(e) => handleDropdownToggle('compatibility', e)}
-                    >
-                      ⋮
-                    </button>
-                  </div>
-                  {openDropdown === 'compatibility' && dropdownPosition && createPortal(
-                    <div className="filter-dropdown" style={{ top: dropdownPosition.top, left: dropdownPosition.left }}>
-                      <div className="dropdown-options">
-                        <label className="dropdown-option">
-                          <input
-                            type="radio"
-                            name="compatibility"
-                            checked={compatibilityFilter === 'all'}
-                            onChange={() => { setCompatibilityFilter('all'); closeDropdown(); }}
-                          />
-                          <span>All</span>
-                        </label>
-                        <label className="dropdown-option">
-                          <input
-                            type="radio"
-                            name="compatibility"
-                            checked={compatibilityFilter === 'compatible'}
-                            onChange={() => { setCompatibilityFilter('compatible'); closeDropdown(); }}
-                          />
-                          <span>Compatible :)</span>
-                        </label>
-                        <label className="dropdown-option">
-                          <input
-                            type="radio"
-                            name="compatibility"
-                            checked={compatibilityFilter === 'wrong_rate'}
-                            onChange={() => { setCompatibilityFilter('wrong_rate'); closeDropdown(); }}
-                          />
-                          <span>Wrong Rate :|</span>
-                        </label>
-                        <label className="dropdown-option">
-                          <input
-                            type="radio"
-                            name="compatibility"
-                            checked={compatibilityFilter === 'incompatible'}
-                            onChange={() => { setCompatibilityFilter('incompatible'); closeDropdown(); }}
-                          />
-                          <span>Incompatible :(</span>
-                        </label>
-                        <label className="dropdown-option">
-                          <input
-                            type="radio"
-                            name="compatibility"
-                            checked={compatibilityFilter === 'unknown'}
-                            onChange={() => { setCompatibilityFilter('unknown'); closeDropdown(); }}
-                          />
-                          <span>Unknown ??</span>
-                        </label>
-                      </div>
-                    </div>,
-                    document.body
-                  )}
-                </th>
-                )}
-                {visibleColumns.status && (
-                <th className="filterable-header col-status">
-                  <div className="header-content">
-                    <span className="sort-indicator" onClick={() => handleSort('status')}>
-                      {sortColumn === 'status' && (sortDirection === 'asc' ? '▲' : '▼')}
-                    </span>
-                    <span onClick={() => handleSort('status')} className="sortable-label">
-                      Status
-                    </span>
-                    <button
-                      className={`filter-icon ${openDropdown === 'status' || statusFilter !== 'all' ? 'active' : ''}`}
-                      onClick={(e) => handleDropdownToggle('status', e)}
-                    >
-                      ⋮
-                    </button>
-                  </div>
-                  {openDropdown === 'status' && dropdownPosition && createPortal(
-                    <div className="filter-dropdown" style={{ top: dropdownPosition.top, left: dropdownPosition.left }}>
-                      <div className="dropdown-options">
-                        <label className="dropdown-option">
-                          <input
-                            type="radio"
-                            name="status"
-                            checked={statusFilter === 'all'}
-                            onChange={() => { setStatusFilter('all'); closeDropdown(); }}
-                          />
-                          <span>All</span>
-                        </label>
-                        <label className="dropdown-option">
-                          <input
-                            type="radio"
-                            name="status"
-                            checked={statusFilter === 'exists'}
-                            onChange={() => { setStatusFilter('exists'); closeDropdown(); }}
-                          />
-                          <span>File Exists</span>
-                        </label>
-                        <label className="dropdown-option">
-                          <input
-                            type="radio"
-                            name="status"
-                            checked={statusFilter === 'missing'}
-                            onChange={() => { setStatusFilter('missing'); closeDropdown(); }}
-                          />
-                          <span>File Missing</span>
-                        </label>
-                      </div>
-                    </div>,
-                    document.body
-                  )}
-                </th>
-                )}
-                {visibleColumns.source && (
-                <th className="filterable-header col-source">
-                  <div className="header-content">
-                    <span className="sort-indicator" onClick={() => handleSort('source')}>
-                      {sortColumn === 'source' && (sortDirection === 'asc' ? '▲' : '▼')}
-                    </span>
-                    <span onClick={() => handleSort('source')} className="sortable-label">
-                      Source
-                    </span>
-                    <button
-                      className={`filter-icon ${openDropdown === 'source' || sourceFilter !== 'all' ? 'active' : ''}`}
-                      onClick={(e) => handleDropdownToggle('source', e)}
-                    >
-                      ⋮
-                    </button>
-                  </div>
-                  {openDropdown === 'source' && dropdownPosition && createPortal(
-                    <div className="filter-dropdown" style={{ top: dropdownPosition.top, left: dropdownPosition.left }}>
-                      <div className="dropdown-options">
-                        <label className="dropdown-option">
-                          <input
-                            type="radio"
-                            name="source"
-                            checked={sourceFilter === 'all'}
-                            onChange={() => { setSourceFilter('all'); closeDropdown(); }}
-                          />
-                          <span>All</span>
-                        </label>
-                        {getUniqueSources().map((source) => (
-                          <label key={source} className="dropdown-option">
-                            <input
-                              type="radio"
-                              name="source"
-                              checked={sourceFilter === source}
-                              onChange={() => { setSourceFilter(source); closeDropdown(); }}
-                            />
-                            <span>{source}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>,
-                    document.body
-                  )}
-                </th>
-                )}
-                {visibleColumns.gain && (
-                <th className="filterable-header col-gain">
-                  <div className="header-content">
-                    <span className="sort-indicator" onClick={() => handleSort('gain')}>
-                      {sortColumn === 'gain' && (sortDirection === 'asc' ? '▲' : '▼')}
-                    </span>
-                    <span onClick={() => handleSort('gain')} className="sortable-label">
-                      Gain
-                    </span>
-                    <button
-                      className={`filter-icon ${openDropdown === 'gain' || gainFilter !== 'all' ? 'active' : ''}`}
-                      onClick={(e) => handleDropdownToggle('gain', e)}
-                    >
-                      ⋮
-                    </button>
-                  </div>
-                  {openDropdown === 'gain' && dropdownPosition && createPortal(
-                    <div className="filter-dropdown" style={{ top: dropdownPosition.top, left: dropdownPosition.left }}>
-                      <div className="dropdown-options">
-                        <label className="dropdown-option">
-                          <input
-                            type="radio"
-                            name="gain"
-                            checked={gainFilter === 'all'}
-                            onChange={() => { setGainFilter('all'); closeDropdown(); }}
-                          />
-                          <span>All</span>
-                        </label>
-                        {getUniqueGains().map((gain) => (
-                          <label key={gain} className="dropdown-option">
-                            <input
-                              type="radio"
-                              name="gain"
-                              checked={gainFilter === gain.toString()}
-                              onChange={() => { setGainFilter(gain.toString()); closeDropdown(); }}
-                            />
-                            <span>{gain}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>,
-                    document.body
-                  )}
-                </th>
-                )}
-                {visibleColumns.timestretch && (
-                <th className="filterable-header col-timestretch">
-                  <div className="header-content">
-                    <span className="sort-indicator" onClick={() => handleSort('timestretch')}>
-                      {sortColumn === 'timestretch' && (sortDirection === 'asc' ? '▲' : '▼')}
-                    </span>
-                    <span onClick={() => handleSort('timestretch')} className="sortable-label">
-                      Timestretch
-                    </span>
-                    <button
-                      className={`filter-icon ${openDropdown === 'timestretch' || timestretchFilter !== 'all' ? 'active' : ''}`}
-                      onClick={(e) => handleDropdownToggle('timestretch', e)}
-                    >
-                      ⋮
-                    </button>
-                  </div>
-                  {openDropdown === 'timestretch' && dropdownPosition && createPortal(
-                    <div className="filter-dropdown" style={{ top: dropdownPosition.top, left: dropdownPosition.left }}>
-                      <div className="dropdown-options">
-                        <label className="dropdown-option">
-                          <input
-                            type="radio"
-                            name="timestretch"
-                            checked={timestretchFilter === 'all'}
-                            onChange={() => { setTimestretchFilter('all'); closeDropdown(); }}
-                          />
-                          <span>All</span>
-                        </label>
-                        {getUniqueTimestretches().map((mode) => (
-                          <label key={mode} className="dropdown-option">
-                            <input
-                              type="radio"
-                              name="timestretch"
-                              checked={timestretchFilter === mode}
-                              onChange={() => { setTimestretchFilter(mode); closeDropdown(); }}
-                            />
-                            <span>{mode}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>,
-                    document.body
-                  )}
-                </th>
-                )}
-                {visibleColumns.loop && (
-                <th className="filterable-header col-loop">
-                  <div className="header-content">
-                    <span className="sort-indicator" onClick={() => handleSort('loop')}>
-                      {sortColumn === 'loop' && (sortDirection === 'asc' ? '▲' : '▼')}
-                    </span>
-                    <span onClick={() => handleSort('loop')} className="sortable-label">
-                      Loop
-                    </span>
-                    <button
-                      className={`filter-icon ${openDropdown === 'loop' || loopFilter !== 'all' ? 'active' : ''}`}
-                      onClick={(e) => handleDropdownToggle('loop', e)}
-                    >
-                      ⋮
-                    </button>
-                  </div>
-                  {openDropdown === 'loop' && dropdownPosition && createPortal(
-                    <div className="filter-dropdown" style={{ top: dropdownPosition.top, left: dropdownPosition.left }}>
-                      <div className="dropdown-options">
-                        <label className="dropdown-option">
-                          <input
-                            type="radio"
-                            name="loop"
-                            checked={loopFilter === 'all'}
-                            onChange={() => { setLoopFilter('all'); closeDropdown(); }}
-                          />
-                          <span>All</span>
-                        </label>
-                        {getUniqueLoopModes().map((mode) => (
-                          <label key={mode} className="dropdown-option">
-                            <input
-                              type="radio"
-                              name="loop"
-                              checked={loopFilter === mode}
-                              onChange={() => { setLoopFilter(mode); closeDropdown(); }}
-                            />
-                            <span>{mode}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>,
-                    document.body
-                  )}
-                </th>
-                )}
-                {visibleColumns.format && (
-                <th className="filterable-header col-format">
-                  <div className="header-content">
-                    <span className="sort-indicator" onClick={() => handleSort('format')}>
-                      {sortColumn === 'format' && (sortDirection === 'asc' ? '▲' : '▼')}
-                    </span>
-                    <span onClick={() => handleSort('format')} className="sortable-label">
-                      Format
-                    </span>
-                    <button
-                      className={`filter-icon ${openDropdown === 'format' || formatFilter !== 'all' ? 'active' : ''}`}
-                      onClick={(e) => handleDropdownToggle('format', e)}
-                    >
-                      ⋮
-                    </button>
-                  </div>
-                  {openDropdown === 'format' && dropdownPosition && createPortal(
-                    <div className="filter-dropdown" style={{ top: dropdownPosition.top, left: dropdownPosition.left }}>
-                      <div className="dropdown-options">
-                        <label className="dropdown-option">
-                          <input
-                            type="radio"
-                            name="format"
-                            checked={formatFilter === 'all'}
-                            onChange={() => { setFormatFilter('all'); closeDropdown(); }}
-                          />
-                          <span>All</span>
-                        </label>
-                        {getUniqueFormats().map((format) => (
-                          <label key={format} className="dropdown-option">
-                            <input
-                              type="radio"
-                              name="format"
-                              checked={formatFilter === format}
-                              onChange={() => { setFormatFilter(format); closeDropdown(); }}
-                            />
-                            <span>{format}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>,
-                    document.body
-                  )}
-                </th>
-                )}
-                {visibleColumns.bitdepth && (
-                <th className="filterable-header col-bitdepth">
-                  <div className="header-content">
-                    <span className="sort-indicator" onClick={() => handleSort('bitdepth')}>
-                      {sortColumn === 'bitdepth' && (sortDirection === 'asc' ? '▲' : '▼')}
-                    </span>
-                    <span onClick={() => handleSort('bitdepth')} className="sortable-label">
-                      Bit
-                    </span>
-                    <button
-                      className={`filter-icon ${openDropdown === 'bitdepth' || bitDepthFilter !== 'all' ? 'active' : ''}`}
-                      onClick={(e) => handleDropdownToggle('bitdepth', e)}
-                    >
-                      ⋮
-                    </button>
-                  </div>
-                  {openDropdown === 'bitdepth' && dropdownPosition && createPortal(
-                    <div className="filter-dropdown" style={{ top: dropdownPosition.top, left: dropdownPosition.left }}>
-                      <div className="dropdown-options">
-                        <label className="dropdown-option">
-                          <input
-                            type="radio"
-                            name="bitdepth"
-                            checked={bitDepthFilter === 'all'}
-                            onChange={() => { setBitDepthFilter('all'); closeDropdown(); }}
-                          />
-                          <span>All</span>
-                        </label>
-                        {getUniqueBitDepths().map((bitDepth) => (
-                          <label key={bitDepth} className="dropdown-option">
-                            <input
-                              type="radio"
-                              name="bitdepth"
-                              checked={bitDepthFilter === bitDepth.toString()}
-                              onChange={() => { setBitDepthFilter(bitDepth.toString()); closeDropdown(); }}
-                            />
-                            <span>{bitDepth}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>,
-                    document.body
-                  )}
-                </th>
-                )}
-                {visibleColumns.samplerate && (
-                <th className="filterable-header col-samplerate">
-                  <div className="header-content">
-                    <span className="sort-indicator" onClick={() => handleSort('samplerate')}>
-                      {sortColumn === 'samplerate' && (sortDirection === 'asc' ? '▲' : '▼')}
-                    </span>
-                    <span onClick={() => handleSort('samplerate')} className="sortable-label">
-                      kHz
-                    </span>
-                    <button
-                      className={`filter-icon ${openDropdown === 'samplerate' || sampleRateFilter !== 'all' ? 'active' : ''}`}
-                      onClick={(e) => handleDropdownToggle('samplerate', e)}
-                    >
-                      ⋮
-                    </button>
-                  </div>
-                  {openDropdown === 'samplerate' && dropdownPosition && createPortal(
-                    <div className="filter-dropdown" style={{ top: dropdownPosition.top, left: dropdownPosition.left }}>
-                      <div className="dropdown-options">
-                        <label className="dropdown-option">
-                          <input
-                            type="radio"
-                            name="samplerate"
-                            checked={sampleRateFilter === 'all'}
-                            onChange={() => { setSampleRateFilter('all'); closeDropdown(); }}
-                          />
-                          <span>All</span>
-                        </label>
-                        {getUniqueSampleRates().map((sampleRate) => (
-                          <label key={sampleRate} className="dropdown-option">
-                            <input
-                              type="radio"
-                              name="samplerate"
-                              checked={sampleRateFilter === sampleRate.toString()}
-                              onChange={() => { setSampleRateFilter(sampleRate.toString()); closeDropdown(); }}
-                            />
-                            <span>{(sampleRate / 1000).toFixed(1)} kHz</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>,
-                    document.body
-                  )}
-                </th>
-                )}
+                {visibleColIds.map(colId => renderColHeader(colId))}
               </tr>
             </thead>
           <tbody>
@@ -1360,39 +1173,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
                 onDragLeave={handleSlotDragLeave}
                 onDrop={(e: React.DragEvent) => handleSlotDrop(e, slot)}
               >
-                {visibleColumns.slot && <td className="col-slot">{slotPrefix}{slot.slot_id}</td>}
-                {visibleColumns.sample && (
-                  <td className="col-sample" title={slot.path ? getFilename(slot.path) : undefined}>
-                    {slot.path ? getFilename(slot.path) : <em>Empty</em>}
-                  </td>
-                )}
-                {visibleColumns.compatibility && (
-                  <td className="compatibility-cell col-compatibility">
-                    {slot.file_exists && slot.compatibility === 'compatible' && <span className="compat-badge compat-compatible" title="Compatible (WAV/AIFF, 16/24-bit, 44.1kHz)">:)</span>}
-                    {slot.file_exists && slot.compatibility === 'wrong_rate' && <span className="compat-badge compat-wrong-rate" title="Wrong sample rate (plays at wrong speed)">:|</span>}
-                    {slot.file_exists && slot.compatibility === 'incompatible' && <span className="compat-badge compat-incompatible" title="Incompatible bit depth)">:(</span>}
-                    {slot.file_exists && slot.compatibility === 'unknown' && <span className="compat-badge compat-unknown" title="Unrecognized format (not WAV or AIFF)">??</span>}
-                  </td>
-                )}
-                {visibleColumns.status && (
-                  <td className="status-cell col-status">
-                    {slot.path && (
-                      <span
-                        className={`file-status-badge ${slot.file_exists ? 'file-exists' : 'file-missing'}`}
-                        title={slot.file_exists ? 'File exists on disk' : 'File is missing from disk'}
-                      >
-                        {slot.file_exists ? '✓' : '✗'}
-                      </span>
-                    )}
-                  </td>
-                )}
-                {visibleColumns.source && <td className="col-source" title={slot.source_location === 'Project' ? getSetRelativePath(projectPath ?? null) : getDirectoryPath(slot.path)}>{slot.source_location || '-'}</td>}
-                {visibleColumns.gain && <td className="col-gain">{slot.gain !== null && slot.gain !== undefined ? slot.gain : '-'}</td>}
-                {visibleColumns.timestretch && <td className="col-timestretch">{slot.timestretch_mode || '-'}</td>}
-                {visibleColumns.loop && <td className="col-loop">{slot.loop_mode || '-'}</td>}
-                {visibleColumns.format && <td className="col-format">{slot.file_format || '-'}</td>}
-                {visibleColumns.bitdepth && <td className="col-bitdepth">{slot.bit_depth !== null && slot.bit_depth !== undefined ? slot.bit_depth : '-'}</td>}
-                {visibleColumns.samplerate && <td className="col-samplerate">{slot.sample_rate !== null && slot.sample_rate !== undefined ? (slot.sample_rate / 1000).toFixed(1) : '-'}</td>}
+                {visibleColIds.map(colId => renderColCell(colId, slot))}
               </DroppableSlotRow>
             ))}
           </tbody>

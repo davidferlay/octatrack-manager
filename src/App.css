@@ -5284,8 +5284,69 @@ h1 {
   transition: background 0.15s;
 }
 
-.col-resize-handle:hover {
+.col-resize-handle:hover,
+.col-resize-handle.isResizing {
   background: var(--elektron-orange);
+}
+
+/* Column reorder drag-over highlight */
+th.col-drag-over {
+  background-color: rgba(255, 102, 0, 0.15) !important;
+  outline: 1px dashed var(--elektron-orange);
+}
+
+/* Column visibility menu */
+.column-menu-wrapper {
+  position: relative;
+}
+
+.column-menu-btn {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--elektron-muted-text);
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.8rem;
+  line-height: 1;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.column-menu-btn:hover,
+.column-menu-btn.active {
+  background-color: var(--elektron-medium-gray);
+  border-color: var(--elektron-border-gray);
+  color: var(--elektron-orange);
+}
+
+.column-visibility-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 130px;
+  background-color: var(--elektron-medium-gray);
+  border: 1px solid var(--elektron-orange);
+  border-radius: 4px;
+  padding: 0.5rem;
+  z-index: 9999;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.column-visibility-dropdown .dropdown-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.35rem;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--elektron-text);
+  white-space: nowrap;
+}
+
+.column-visibility-dropdown .dropdown-option:hover {
+  background-color: rgba(255, 255, 255, 0.06);
 }
 
 .fix-notfound-row td {
