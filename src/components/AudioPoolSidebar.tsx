@@ -9,9 +9,11 @@ interface AudioPoolSidebarProps {
   isEditMode: boolean;
   toggleButton?: ReactNode;
   dndMode?: boolean;
+  refreshKey?: number;
+  onCurrentPathChange?: (path: string) => void;
 }
 
-export function AudioPoolSidebar({ audioPoolPath, toggleButton, dndMode = false }: AudioPoolSidebarProps) {
+export function AudioPoolSidebar({ audioPoolPath, toggleButton, dndMode = false, refreshKey, onCurrentPathChange }: AudioPoolSidebarProps) {
   const [currentPath, setCurrentPath] = useState(audioPoolPath);
   const [files, setFiles] = useState<AudioFile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -56,10 +58,16 @@ export function AudioPoolSidebar({ audioPoolPath, toggleButton, dndMode = false 
     setCurrentPath(audioPoolPath);
   }, [audioPoolPath]);
 
-  // Load files when path changes
+  // Report path changes to parent
+  useEffect(() => {
+    onCurrentPathChange?.(currentPath);
+  }, [currentPath, onCurrentPathChange]);
+
+  // Load files when path changes or refresh is requested
   useEffect(() => {
     loadFiles(currentPath);
-  }, [currentPath]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPath, refreshKey]);
 
   async function loadFiles(path: string) {
     if (!path) return;

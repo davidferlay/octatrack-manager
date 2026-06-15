@@ -32,6 +32,7 @@ function DroppableSlotRow({
   return (
     <tr
       ref={setNodeRef}
+      data-slot-id={slotId}
       className={`${className || ''} ${isOver ? 'drop-target-highlight' : ''}`.trim()}
       {...rest}
     >
@@ -170,6 +171,26 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
   const [showAudioPool, setShowAudioPool] = useState(false);
   const [dragOverSlotId, setDragOverSlotId] = useState<number | null>(null);
   const [isAssigning, setIsAssigning] = useState(false);
+
+  // OS drag & drop state (from system file manager)
+  const [osDragOverSlotId, setOsDragOverSlotId] = useState<number | null>(null);
+  const [osDragOverSidebar, setOsDragOverSidebar] = useState(false);
+  const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
+
+  // Refs for stable access inside the OS drag async listener
+  const slotsRef = useRef(slots);
+  const projectPathRef = useRef(projectPath);
+  const audioPoolPathRef = useRef(audioPoolPath);
+  const onSlotsUpdatedRef = useRef(onSlotsUpdated);
+  const onFlexRamUpdatedRef = useRef(onFlexRamUpdated);
+  const sidebarCurrentPathRef = useRef<string | null>(null);
+  // Tracks the current OS drag target so the 'drop' handler doesn't need elementFromPoint
+  const osDragTargetRef = useRef<{ slotId: number | null; sidebar: boolean }>({ slotId: null, sidebar: false });
+  useEffect(() => { slotsRef.current = slots; }, [slots]);
+  useEffect(() => { projectPathRef.current = projectPath; }, [projectPath]);
+  useEffect(() => { audioPoolPathRef.current = audioPoolPath; }, [audioPoolPath]);
+  useEffect(() => { onSlotsUpdatedRef.current = onSlotsUpdated; }, [onSlotsUpdated]);
+  useEffect(() => { onFlexRamUpdatedRef.current = onFlexRamUpdated; }, [onFlexRamUpdated]);
 
   // Build a relative path from the audio pool file path to the project directory
   const buildRelativePath = useCallback((audioFilePath: string): string => {
@@ -387,6 +408,142 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
     document.addEventListener('mousedown', handleColumnMenuClickOutside);
     return () => document.removeEventListener('mousedown', handleColumnMenuClickOutside);
   }, []);
+
+  // OS drag & drop from system file manager (Phase 5: slot rows, Phase 6: sidebar)
+  useEffect(() => {
+    if (!isEditMode) return;
+
+    let unlisten: (() => void) | undefined;
+
+    async function setupOsDragDrop() {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      unlisten = await getCurrentWindow().onDragDropEvent(async (event) => {
+        const scale = window.devicePixelRatio || 1;
+
+        if (event.payload.type === 'over') {
+          const x = event.payload.position.x / scale;
+          const y = event.payload.position.y / scale;
+          const el = document.elementFromPoint(x, y);
+          if (el?.closest('.sidebar-os-drop-zone')) {
+            osDragTargetRef.current = { slotId: null, sidebar: true };
+            setOsDragOverSidebar(true);
+            setOsDragOverSlotId(null);
+          } else {
+            setOsDragOverSidebar(false);
+            const row = el?.closest('[data-slot-id]');
+            if (row) {
+              const id = parseInt(row.getAttribute('data-slot-id') ?? '', 10);
+              const slotId = isNaN(id) ? null : id;
+              osDragTargetRef.current = { slotId, sidebar: false };
+              setOsDragOverSlotId(slotId);
+            } else {
+              osDragTargetRef.current = { slotId: null, sidebar: false };
+              setOsDragOverSlotId(null);
+            }
+          }
+        } else if (event.payload.type === 'leave') {
+          osDragTargetRef.current = { slotId: null, sidebar: false };
+          setOsDragOverSlotId(null);
+          setOsDragOverSidebar(false);
+        } else if (event.payload.type === 'drop') {
+          const droppedPaths = event.payload.paths;
+          // Use the target tracked during 'over' events — elementFromPoint is
+          // unreliable at drop time because the OS takes control of the cursor
+          const { slotId: targetSlotId, sidebar: targetIsSidebar } = osDragTargetRef.current;
+          osDragTargetRef.current = { slotId: null, sidebar: false };
+
+          setOsDragOverSlotId(null);
+          setOsDragOverSidebar(false);
+
+          if (!droppedPaths || droppedPaths.length === 0) return;
+
+          const curProjectPath = projectPathRef.current;
+          const curAudioPoolPath = audioPoolPathRef.current;
+
+          if (targetIsSidebar && curAudioPoolPath) {
+            // Phase 6: drop on Audio Pool sidebar — import to currently browsed dir
+            const destDir = sidebarCurrentPathRef.current ?? curAudioPoolPath;
+            try {
+              await invoke('copy_audio_files', {
+                sourcePaths: droppedPaths,
+                destinationDir: destDir,
+                overwrite: false,
+              });
+              setSidebarRefreshKey(k => k + 1);
+            } catch (err) {
+              console.error('OS sidebar drop failed:', err);
+            }
+          } else if (targetSlotId != null) {
+            // Phase 5: drop on a slot row — copy to project dir then assign
+            if (curProjectPath) {
+              const slotId = targetSlotId;
+              const currentSlots = slotsRef.current;
+              const targetSlot = currentSlots.find(s => s.slot_id === slotId);
+              if (!targetSlot) return;
+
+              setIsAssigning(true);
+              try {
+                const destPaths = await invoke<string[]>('copy_audio_files_to_project', {
+                  sourcePaths: droppedPaths,
+                  destinationDir: curProjectPath,
+                });
+                if (!destPaths || destPaths.length === 0) return;
+
+                const slotType = tableType === 'flex' ? 'FLEX' : 'STATIC';
+                const assignments: SlotAssignment[] = [];
+
+                if (destPaths.length === 1) {
+                  const filename = destPaths[0].split(/[\\/]/).pop() ?? destPaths[0];
+                  assignments.push({
+                    slot_index: targetSlot.slot_id,
+                    audio_path: filename,
+                    set_defaults: !targetSlot.path,
+                  });
+                } else {
+                  let currentSlotId = targetSlot.slot_id;
+                  for (const destPath of destPaths) {
+                    while (currentSlotId <= 128) {
+                      const slot = currentSlots.find(s => s.slot_id === currentSlotId);
+                      if (!slot || !slot.path) break;
+                      currentSlotId++;
+                    }
+                    if (currentSlotId > 128) break;
+                    const filename = destPath.split(/[\\/]/).pop() ?? destPath;
+                    assignments.push({
+                      slot_index: currentSlotId,
+                      audio_path: filename,
+                      set_defaults: true,
+                    });
+                    currentSlotId++;
+                  }
+                }
+
+                if (assignments.length > 0) {
+                  const result = await invoke<AssignSamplesResult>('assign_samples_to_slots', {
+                    path: curProjectPath,
+                    slotType,
+                    assignments,
+                  });
+                  onSlotsUpdatedRef.current?.(result.updated_slots);
+                  if (onFlexRamUpdatedRef.current && result.flex_ram_free_mb != null) {
+                    onFlexRamUpdatedRef.current(result.flex_ram_free_mb);
+                  }
+                }
+              } catch (err) {
+                console.error('OS slot drop failed:', err);
+              } finally {
+                setIsAssigning(false);
+              }
+            }
+          }
+        }
+      });
+    }
+
+    setupOsDragDrop();
+
+    return () => { unlisten?.(); };
+  }, [isEditMode, tableType]);
 
   // Toggle column visibility
   const toggleColumn = (column: keyof typeof visibleColumns) => {
@@ -951,20 +1108,24 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
     >
     <div className={`samples-tab ${showAudioPool ? 'with-sidebar' : ''}`}>
       {showAudioPool && audioPoolPath && (
-        <AudioPoolSidebar
-          audioPoolPath={audioPoolPath}
-          isEditMode={isEditMode ?? false}
-          dndMode={true}
-          toggleButton={
-            <button
-              className={`audio-pool-toggle-btn ${showAudioPool ? 'active' : ''}`}
-              onClick={() => setShowAudioPool(!showAudioPool)}
-              title="Hide Audio Pool"
-            >
-              <i className="fas fa-columns"></i>
-            </button>
-          }
-        />
+        <div className={`sidebar-os-drop-zone${osDragOverSidebar ? ' os-drag-over' : ''}`}>
+          <AudioPoolSidebar
+            audioPoolPath={audioPoolPath}
+            isEditMode={isEditMode ?? false}
+            dndMode={true}
+            refreshKey={sidebarRefreshKey}
+            onCurrentPathChange={(path) => { sidebarCurrentPathRef.current = path; }}
+            toggleButton={
+              <button
+                className={`audio-pool-toggle-btn ${showAudioPool ? 'active' : ''}`}
+                onClick={() => setShowAudioPool(!showAudioPool)}
+                title="Hide Audio Pool"
+              >
+                <i className="fas fa-columns"></i>
+              </button>
+            }
+          />
+        </div>
       )}
       <section className="samples-section">
         <div className="filter-results-info">
@@ -1167,7 +1328,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
               <DroppableSlotRow
                 key={slot.slot_id}
                 slotId={slot.slot_id}
-                className={dragOverSlotId === slot.slot_id ? 'drop-target-highlight' : ''}
+                className={dragOverSlotId === slot.slot_id || osDragOverSlotId === slot.slot_id ? 'drop-target-highlight' : ''}
                 onDragEnter={handleSlotDragEnter}
                 onDragOver={(e: React.DragEvent) => handleSlotDragOver(e, slot.slot_id)}
                 onDragLeave={handleSlotDragLeave}

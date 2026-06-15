@@ -1010,6 +1010,75 @@ pub fn copy_files_with_overwrite(
     Ok(copied_files)
 }
 
+/// Compute the destination filename for a source file (accounting for audio conversion).
+/// Mirrors the logic in `copy_and_convert_audio_with_progress`.
+fn dest_filename_for(source_path: &Path) -> String {
+    let file_name = source_path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    if !is_audio_file(&file_name) {
+        return file_name;
+    }
+
+    if needs_conversion(source_path) {
+        let stem = source_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("audio");
+        format!("{}.wav", stem)
+    } else {
+        file_name
+    }
+}
+
+/// Copy source files to destination directory, skipping files that already exist there.
+/// Returns destination paths (existing or newly copied) for all sources.
+pub fn copy_audio_files_or_use_existing(
+    source_paths: Vec<String>,
+    destination_dir: &str,
+) -> Result<Vec<String>, String> {
+    let dest_path = Path::new(destination_dir);
+
+    if !dest_path.exists() {
+        return Err(format!(
+            "Destination directory does not exist: {}",
+            destination_dir
+        ));
+    }
+
+    if !dest_path.is_dir() {
+        return Err(format!(
+            "Destination is not a directory: {}",
+            destination_dir
+        ));
+    }
+
+    let mut result_paths = Vec::new();
+
+    for source_str in source_paths.iter() {
+        let source = Path::new(source_str);
+        if !source.exists() {
+            return Err(format!("Source file does not exist: {}", source_str));
+        }
+
+        let dest_name = dest_filename_for(source);
+        let dest_file = dest_path.join(&dest_name);
+
+        if dest_file.exists() {
+            // File already present — use it without copying
+            result_paths.push(dest_file.to_string_lossy().to_string());
+        } else {
+            // Copy (or convert) the file to the destination
+            let copied = copy_and_convert_audio(source, dest_path, false)?;
+            result_paths.push(copied.to_string_lossy().to_string());
+        }
+    }
+
+    Ok(result_paths)
+}
+
 /// Move files from source to destination
 pub fn move_files(source_paths: Vec<String>, destination_dir: &str) -> Result<Vec<String>, String> {
     let dest_path = Path::new(destination_dir);

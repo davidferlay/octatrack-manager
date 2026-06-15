@@ -7,9 +7,10 @@ pub mod project_manager;
 mod project_reader;
 
 use audio_pool::{
-    cancel_transfer, copy_files_with_overwrite, copy_single_file_with_progress, create_directory,
-    delete_files, get_parent_directory, list_directory, move_files, register_cancellation_token,
-    remove_cancellation_token, rename_file as rename_file_impl, AudioFileInfo,
+    cancel_transfer, copy_audio_files_or_use_existing, copy_files_with_overwrite,
+    copy_single_file_with_progress, create_directory, delete_files, get_parent_directory,
+    list_directory, move_files, register_cancellation_token, remove_cancellation_token,
+    rename_file as rename_file_impl, AudioFileInfo,
 };
 use device_detection::{discover_devices, scan_directory, ScanResult};
 use project_reader::{
@@ -205,6 +206,18 @@ async fn copy_audio_files(
     // Run on a blocking thread pool to avoid blocking the main event loop
     tauri::async_runtime::spawn_blocking(move || {
         copy_files_with_overwrite(source_paths, &destination_dir, should_overwrite)
+    })
+    .await
+    .unwrap()
+}
+
+#[tauri::command]
+async fn copy_audio_files_to_project(
+    source_paths: Vec<String>,
+    destination_dir: String,
+) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        copy_audio_files_or_use_existing(source_paths, &destination_dir)
     })
     .await
     .unwrap()
@@ -799,6 +812,7 @@ pub fn run() {
             navigate_to_parent,
             create_new_directory,
             copy_audio_files,
+            copy_audio_files_to_project,
             copy_audio_file_with_progress,
             cancel_audio_transfer,
             move_audio_files,

@@ -2370,6 +2370,17 @@ h1 {
   background: rgba(245, 158, 11, 0.1) !important;
 }
 
+/* OS drag-drop sidebar drop zone wrapper */
+.sidebar-os-drop-zone {
+  display: contents;
+}
+
+.sidebar-os-drop-zone.os-drag-over .audio-pool-sidebar {
+  outline: 2px dashed #f59e0b;
+  outline-offset: -2px;
+  background: rgba(245, 158, 11, 0.05);
+}
+
 .banks-tab,
 .tracks-tab {
   padding: 0;
