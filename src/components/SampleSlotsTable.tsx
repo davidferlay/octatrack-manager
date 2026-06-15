@@ -85,6 +85,8 @@ interface SampleSlotsTableProps {
   audioPoolPath?: string | null; // Path to AUDIO/ directory (null if not in a Set)
   onSlotsUpdated?: (updatedSlots: SampleSlot[]) => void; // Callback when slots are assigned
   onFlexRamUpdated?: (freeMb: number) => void; // Callback when flex RAM changes after assignment
+  onImportToAudioPool?: (paths: string[], destPath: string) => void; // Callback to import files to audio pool (uses parent's transfer hook)
+  sidebarRefreshTrigger?: number; // Increment to trigger sidebar refresh from parent
 }
 
 type SortColumn = 'slot' | 'sample' | 'status' | 'source' | 'gain' | 'timestretch' | 'loop' | 'compatibility' | 'format' | 'bitdepth' | 'samplerate';
@@ -118,7 +120,7 @@ function getSetRelativePath(projectPath: string | null): string {
   return projectPath;
 }
 
-export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated, onFlexRamUpdated }: SampleSlotsTableProps) {
+export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated, onFlexRamUpdated, onImportToAudioPool, sidebarRefreshTrigger }: SampleSlotsTableProps) {
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const [dndDragFiles, setDndDragFiles] = useState<string[]>([]);
 
@@ -183,6 +185,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
   const audioPoolPathRef = useRef(audioPoolPath);
   const onSlotsUpdatedRef = useRef(onSlotsUpdated);
   const onFlexRamUpdatedRef = useRef(onFlexRamUpdated);
+  const onImportToAudioPoolRef = useRef(onImportToAudioPool);
   const sidebarCurrentPathRef = useRef<string | null>(null);
   // Tracks the current OS drag target so the 'drop' handler doesn't need elementFromPoint
   const osDragTargetRef = useRef<{ slotId: number | null; sidebar: boolean }>({ slotId: null, sidebar: false });
@@ -191,6 +194,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
   useEffect(() => { audioPoolPathRef.current = audioPoolPath; }, [audioPoolPath]);
   useEffect(() => { onSlotsUpdatedRef.current = onSlotsUpdated; }, [onSlotsUpdated]);
   useEffect(() => { onFlexRamUpdatedRef.current = onFlexRamUpdated; }, [onFlexRamUpdated]);
+  useEffect(() => { onImportToAudioPoolRef.current = onImportToAudioPool; }, [onImportToAudioPool]);
+
+  // When parent increments sidebarRefreshTrigger, refresh the sidebar file list
+  useEffect(() => {
+    if (sidebarRefreshTrigger) {
+      setSidebarRefreshKey(k => k + 1);
+    }
+  }, [sidebarRefreshTrigger]);
 
   // Build a relative path from the audio pool file path to the project directory
   const buildRelativePath = useCallback((audioFilePath: string): string => {
@@ -463,15 +474,22 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
           if (targetIsSidebar && curAudioPoolPath) {
             // Phase 6: drop on Audio Pool sidebar — import to currently browsed dir
             const destDir = sidebarCurrentPathRef.current ?? curAudioPoolPath;
-            try {
-              await invoke('copy_audio_files', {
-                sourcePaths: droppedPaths,
-                destinationDir: destDir,
-                overwrite: false,
-              });
-              setSidebarRefreshKey(k => k + 1);
-            } catch (err) {
-              console.error('OS sidebar drop failed:', err);
+            if (onImportToAudioPoolRef.current) {
+              // Use parent's transfer hook for progress tracking and overwrite handling
+              onImportToAudioPoolRef.current(droppedPaths, destDir);
+              // sidebarRefreshKey will be incremented via sidebarRefreshTrigger from parent's onComplete
+            } else {
+              // Fallback: simple copy + local refresh
+              try {
+                await invoke('copy_audio_files', {
+                  sourcePaths: droppedPaths,
+                  destinationDir: destDir,
+                  overwrite: false,
+                });
+                setSidebarRefreshKey(k => k + 1);
+              } catch (err) {
+                console.error('OS sidebar drop failed:', err);
+              }
             }
           } else if (targetSlotId != null) {
             // Phase 5: drop on a slot row — copy to project dir then assign

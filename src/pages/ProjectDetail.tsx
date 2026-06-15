@@ -8,6 +8,9 @@ import { PatternSelector, ALL_PATTERNS } from "../components/PatternSelector";
 import { SampleSlotsTable } from "../components/SampleSlotsTable";
 import PartsPanel from "../components/PartsPanel";
 import ToolsPanel from "../components/ToolsPanel";
+import { OverwriteModal } from "../components/OverwriteModal";
+import { TransferProgressPanel } from "../components/TransferProgressPanel";
+import { useAudioPoolTransfer } from "../hooks/useAudioPoolTransfer";
 import { WriteStatus, IDLE_STATUS } from "../types/writeStatus";
 import { TrackBadge } from "../components/TrackBadge";
 import { ScrollToTop } from "../components/ScrollToTop";
@@ -139,6 +142,68 @@ export function ProjectDetail() {
   const memorySaveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null); // Debounce timer for memory settings save
   const [reserveLengthShaking, setReserveLengthShaking] = useState(false); // Shake animation for invalid reserve length
   const [audioPoolPath, setAudioPoolPath] = useState<string | null>(null); // Path to AUDIO/ directory (for sidebar)
+  const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0); // Incremented to trigger sidebar refresh after import
+
+  // Transfer resize state
+  const [transferPaneHeight, setTransferPaneHeight] = useState(200);
+  const [isResizingTransfer, setIsResizingTransfer] = useState(false);
+  const transferResizeStartY = useRef(0);
+  const transferResizeStartHeight = useRef(0);
+
+  // Audio transfer hook for sidebar OS drop imports
+  const {
+    transfers,
+    isTransferQueueOpen,
+    setIsTransferQueueOpen,
+    overwriteModal,
+    copyFilesToPool,
+    cancelTransfer,
+    clearAllTransfers,
+    clearFinishedTransfers,
+    handleOverwrite,
+    handleOverwriteAll,
+    handleSkip,
+    handleSkipAll,
+    handleCancelImport,
+  } = useAudioPoolTransfer({
+    onComplete: () => setSidebarRefreshTrigger(t => t + 1),
+  });
+
+  // Handle transfer pane resize
+  useEffect(() => {
+    if (!isResizingTransfer) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaY = transferResizeStartY.current - e.clientY;
+      const newHeight = Math.max(100, Math.min(500, transferResizeStartHeight.current + deltaY));
+      setTransferPaneHeight(newHeight);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingTransfer(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingTransfer]);
+
+  const handleTransferResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    transferResizeStartY.current = e.clientY;
+    transferResizeStartHeight.current = transferPaneHeight;
+    setIsResizingTransfer(true);
+  };
+
+  // Computed values for transfer panel badge
+  const activeTransfersCount = transfers.filter(t => t.status === "copying" || t.status === "pending").length;
+  const hasTransfers = transfers.length > 0;
+  const allTransfersSucceeded = hasTransfers && activeTransfersCount === 0 && transfers.every(t => t.status === "completed");
+  const hasFailedTransfers = transfers.some(t => t.status === "failed");
 
   // Wrapper to capture last message before going idle (for fade-out effect)
   const handleWriteStatusChange = useCallback((status: WriteStatus) => {
@@ -627,6 +692,18 @@ export function ProjectDetail() {
                 Tools
               </button>
             </div>
+          )}
+          {hasTransfers && (
+            <button
+              onClick={() => setIsTransferQueueOpen(!isTransferQueueOpen)}
+              className={`toolbar-button ${isTransferQueueOpen ? 'active' : ''} ${activeTransfersCount > 0 ? 'has-activity' : ''}`}
+              title={isTransferQueueOpen ? 'Hide transfers' : 'Show transfers'}
+            >
+              <i className="fas fa-exchange-alt"></i>
+              <span className={`badge ${allTransfersSucceeded ? 'badge-success' : ''} ${hasFailedTransfers ? 'badge-error' : ''}`}>
+                {transfers.length}
+              </span>
+            </button>
           )}
           <button
             onClick={handleRefresh}
@@ -1704,6 +1781,11 @@ export function ProjectDetail() {
                     return { ...prev, memory_settings: { ...prev.memory_settings, flex_ram_free_mb: freeMb } };
                   });
                 }}
+                onImportToAudioPool={(paths, destPath) => {
+                  setIsTransferQueueOpen(true);
+                  copyFilesToPool(paths, destPath);
+                }}
+                sidebarRefreshTrigger={sidebarRefreshTrigger}
               />
             )}
 
@@ -1735,6 +1817,11 @@ export function ProjectDetail() {
                     };
                   });
                 }}
+                onImportToAudioPool={(paths, destPath) => {
+                  setIsTransferQueueOpen(true);
+                  copyFilesToPool(paths, destPath);
+                }}
+                sidebarRefreshTrigger={sidebarRefreshTrigger}
               />
             )}
 
@@ -1758,6 +1845,30 @@ export function ProjectDetail() {
           <i className="fas fa-check"></i> {toast}
         </div>
       )}
+
+      {/* Transfer progress panel for audio pool imports from sidebar */}
+      <TransferProgressPanel
+        transfers={transfers}
+        isOpen={isTransferQueueOpen}
+        onClose={() => setIsTransferQueueOpen(false)}
+        onCancelTransfer={cancelTransfer}
+        onClearFinished={clearFinishedTransfers}
+        onClearAll={clearAllTransfers}
+        height={transferPaneHeight}
+        onResizeStart={handleTransferResizeStart}
+      />
+
+      {/* Overwrite confirmation modal for audio pool imports */}
+      <OverwriteModal
+        isOpen={overwriteModal.isOpen}
+        fileName={overwriteModal.fileName}
+        remainingFiles={overwriteModal.pendingFiles.slice(overwriteModal.currentIndex)}
+        onOverwrite={handleOverwrite}
+        onOverwriteAll={handleOverwriteAll}
+        onSkip={handleSkip}
+        onSkipAll={handleSkipAll}
+        onCancel={handleCancelImport}
+      />
     </main>
   );
 }

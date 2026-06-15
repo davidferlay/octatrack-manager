@@ -3,204 +3,14 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { Version } from "../components/Version";
-import { AudioFileTable, formatFileSize } from "../components/AudioFileTable";
+import { AudioFileTable } from "../components/AudioFileTable";
+import { OverwriteModal } from "../components/OverwriteModal";
+import { TransferProgressPanel } from "../components/TransferProgressPanel";
+import { useAudioPoolTransfer } from "../hooks/useAudioPoolTransfer";
 import type { AudioFile } from "../types/audioFile";
+import type { TransferItem } from "../types/transfer";
 import "./AudioPoolPage.css";
-
-interface CopyProgressEvent {
-  file_path: string;
-  transfer_id: string;
-  stage: string;  // "converting", "resampling", "writing", "copying", "complete", "cancelled"
-  progress: number;  // 0.0 to 1.0
-}
-
-
-interface TransferItem {
-  id: string;
-  fileName: string;
-  fileSize: number;
-  bytesTransferred: number;
-  status: "pending" | "copying" | "completed" | "failed" | "cancelled";
-  error?: string;
-  startTime: number;
-  speed?: number;
-  timeLeft?: number;
-  sourcePath?: string;
-  stage?: string;  // "converting", "resampling", "writing", "copying", "complete"
-  progress?: number;  // 0.0 to 1.0
-}
-
-interface OverwriteModalProps {
-  isOpen: boolean;
-  fileName: string;
-  remainingFiles: string[];
-  onOverwrite: () => void;
-  onOverwriteAll: () => void;
-  onSkip: () => void;
-  onSkipAll: () => void;
-  onCancel: () => void;
-}
-
-function OverwriteModal({ isOpen, fileName, remainingFiles, onOverwrite, onOverwriteAll, onSkip, onSkipAll, onCancel }: OverwriteModalProps) {
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const hasMultipleRemaining = remainingFiles.length > 1;
-
-  // Reset selection when modal opens/closes or when switching between single/multiple mode
-  useEffect(() => {
-    if (isOpen) {
-      setSelectedIndex(0);
-    }
-  }, [isOpen, hasMultipleRemaining]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    function handleKeyDown(e: KeyboardEvent) {
-      if (hasMultipleRemaining) {
-        // 5 buttons in grid: [Overwrite, Overwrite All], [Skip, Skip All], [Cancel]
-        // Indices: 0=Overwrite, 1=Overwrite All, 2=Skip, 3=Skip All, 4=Cancel
-        switch (e.key) {
-          case 'ArrowUp':
-            e.preventDefault();
-            if (selectedIndex === 4) setSelectedIndex(2);
-            else if (selectedIndex === 2 || selectedIndex === 3) setSelectedIndex(selectedIndex - 2);
-            break;
-          case 'ArrowDown':
-            e.preventDefault();
-            if (selectedIndex === 0 || selectedIndex === 1) setSelectedIndex(selectedIndex + 2);
-            else if (selectedIndex === 2 || selectedIndex === 3) setSelectedIndex(4);
-            break;
-          case 'ArrowLeft':
-            e.preventDefault();
-            if (selectedIndex === 1) setSelectedIndex(0);
-            else if (selectedIndex === 3) setSelectedIndex(2);
-            break;
-          case 'ArrowRight':
-            e.preventDefault();
-            if (selectedIndex === 0) setSelectedIndex(1);
-            else if (selectedIndex === 2) setSelectedIndex(3);
-            break;
-          case 'Enter':
-            e.preventDefault();
-            [onOverwrite, onOverwriteAll, onSkip, onSkipAll, onCancel][selectedIndex]();
-            break;
-          case 'Escape':
-            e.preventDefault();
-            onCancel();
-            break;
-        }
-      } else {
-        // 3 buttons: [Overwrite, Skip], [Cancel]
-        // Indices: 0=Overwrite, 1=Skip, 2=Cancel
-        switch (e.key) {
-          case 'ArrowUp':
-            e.preventDefault();
-            if (selectedIndex === 2) setSelectedIndex(0);
-            break;
-          case 'ArrowDown':
-            e.preventDefault();
-            if (selectedIndex === 0 || selectedIndex === 1) setSelectedIndex(2);
-            break;
-          case 'ArrowLeft':
-            e.preventDefault();
-            if (selectedIndex === 1) setSelectedIndex(0);
-            break;
-          case 'ArrowRight':
-            e.preventDefault();
-            if (selectedIndex === 0) setSelectedIndex(1);
-            break;
-          case 'Enter':
-            e.preventDefault();
-            [onOverwrite, onSkip, onCancel][selectedIndex]();
-            break;
-          case 'Escape':
-            e.preventDefault();
-            onCancel();
-            break;
-        }
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, selectedIndex, hasMultipleRemaining, onOverwrite, onOverwriteAll, onSkip, onSkipAll, onCancel]);
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="modal-overlay">
-      <div className="modal-content">
-        <div className="modal-header">
-          <h3><i className="fas fa-exclamation-triangle" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>File{hasMultipleRemaining ? 's' : ''} Already Exist{hasMultipleRemaining ? '' : 's'}</h3>
-        </div>
-        <div className="modal-body">
-          {hasMultipleRemaining ? (
-            <>
-              <p>The following <strong>{remainingFiles.length} files</strong> already exist in the destination folder:</p>
-              <ul style={{ maxHeight: '150px', overflowY: 'auto', margin: '0.5rem 0', paddingLeft: '1.5rem', fontSize: '0.85rem', color: 'var(--elektron-text-secondary)' }}>
-                {remainingFiles.slice(0, 15).map((path, idx) => {
-                  const name = path.split('/').pop() || path.split('\\').pop() || path;
-                  return <li key={idx}>{name}</li>;
-                })}
-                {remainingFiles.length > 15 && <li style={{ fontStyle: 'italic' }}>...and {remainingFiles.length - 15} more</li>}
-              </ul>
-            </>
-          ) : (
-            <p>The file <strong>"{fileName}"</strong> already exists in the destination folder.</p>
-          )}
-          <p>What would you like to do?</p>
-        </div>
-        <div className="modal-footer">
-          {hasMultipleRemaining ? (
-            <>
-              <div className="modal-buttons-row">
-                <button className={`modal-button primary ${selectedIndex === 0 ? 'focused' : ''}`} onClick={onOverwrite}>
-                  Overwrite
-                </button>
-                <button className={`modal-button ${selectedIndex === 1 ? 'focused' : ''}`} onClick={onOverwriteAll}>
-                  Overwrite All ({remainingFiles.length})
-                </button>
-              </div>
-              <div className="modal-buttons-row">
-                <button className={`modal-button ${selectedIndex === 2 ? 'focused' : ''}`} onClick={onSkip}>
-                  Skip
-                </button>
-                <button className={`modal-button ${selectedIndex === 3 ? 'focused' : ''}`} onClick={onSkipAll}>
-                  Skip All ({remainingFiles.length})
-                </button>
-              </div>
-              <div className="modal-buttons-row">
-                <button className={`modal-button danger ${selectedIndex === 4 ? 'focused' : ''}`} onClick={onCancel}>
-                  Cancel Import
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="modal-buttons-row">
-                <button className={`modal-button primary ${selectedIndex === 0 ? 'focused' : ''}`} onClick={onOverwrite}>
-                  Overwrite
-                </button>
-                <button className={`modal-button ${selectedIndex === 1 ? 'focused' : ''}`} onClick={onSkip}>
-                  Skip
-                </button>
-              </div>
-              <div className="modal-buttons-row">
-                <button className={`modal-button danger ${selectedIndex === 2 ? 'focused' : ''}`} onClick={onCancel}>
-                  Cancel Import
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
 
 
 
@@ -284,11 +94,7 @@ export function AudioPoolPage() {
   const [isLoadingDest, setIsLoadingDest] = useState(false);
   const [isSpinning, setIsSpinning] = useState(false);
   const [isSourcePanelOpen, setIsSourcePanelOpen] = useState(true);
-  const [isTransferQueueOpen, setIsTransferQueueOpen] = useState(false);
   const [isOverDropZone, setIsOverDropZone] = useState(false);
-  const [transfers, setTransfers] = useState<TransferItem[]>([]);
-  const [transferSortColumn, setTransferSortColumn] = useState<'num' | 'progress' | 'file' | 'size' | 'status'>('num');
-  const [transferSortDirection, setTransferSortDirection] = useState<'asc' | 'desc'>('asc');
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -343,26 +149,6 @@ export function AudioPoolPage() {
     selectedButton: 0,
   });
 
-  // Overwrite modal state
-  const [overwriteModal, setOverwriteModal] = useState<{
-    isOpen: boolean;
-    fileName: string;
-    sourcePath: string;
-    transferId: string;
-    pendingFiles: string[];
-    currentIndex: number;
-    fileSizes?: Map<string, number>;
-    transferIds?: string[];
-  }>({
-    isOpen: false,
-    fileName: '',
-    sourcePath: '',
-    transferId: '',
-    pendingFiles: [],
-    currentIndex: 0,
-  });
-  const [overwriteAllMode, setOverwriteAllMode] = useState<'none' | 'overwrite' | 'skip'>('none');
-
   // Transfer pane resize state
   const [transferPaneHeight, setTransferPaneHeight] = useState(200);
   const [isResizingTransfer, setIsResizingTransfer] = useState(false);
@@ -403,7 +189,24 @@ export function AudioPoolPage() {
   const [sourcePanelWidth, setSourcePanelWidth] = useState(50); // percentage
   const [isResizingPanels, setIsResizingPanels] = useState(false);
   const panelContainerRef = useRef<HTMLDivElement>(null);
-  const transferListRef = useRef<HTMLDivElement>(null);
+
+  // Audio transfer hook (copy to audio pool with progress, overwrite modal, etc.)
+  const {
+    transfers,
+    setTransfers,
+    isTransferQueueOpen,
+    setIsTransferQueueOpen,
+    overwriteModal,
+    copyFilesToPool,
+    cancelTransfer,
+    clearAllTransfers,
+    clearFinishedTransfers,
+    handleOverwrite,
+    handleOverwriteAll,
+    handleSkip,
+    handleSkipAll,
+    handleCancelImport,
+  } = useAudioPoolTransfer({ onComplete: (destPath) => loadDestinationFiles(destPath) });
 
   // Handle panel divider resize
   useEffect(() => {
@@ -483,7 +286,7 @@ export function AudioPoolPage() {
           const paths = event.payload.paths;
           if (paths && paths.length > 0 && destinationPathRef.current) {
             // Use copyFilesToPool which handles parallel processing
-            await copyFilesToPool(paths);
+            await copyFilesToPool(paths, destinationPathRef.current);
           }
         }
       });
@@ -503,63 +306,6 @@ export function AudioPoolPage() {
   const hasTransfers = transfers.length > 0;
   const allTransfersSucceeded = hasTransfers && activeTransfersCount === 0 && transfers.every(t => t.status === "completed");
   const hasFailedTransfers = transfers.some(t => t.status === "failed");
-
-  // Auto-close transfers pane when all transfers complete successfully
-  useEffect(() => {
-    if (transfers.length > 0 && activeTransfersCount === 0) {
-      // All transfers finished - check if all succeeded
-      const allSucceeded = transfers.every(t => t.status === "completed");
-      if (allSucceeded) {
-        // Close the pane after a brief delay to show completion
-        const timer = setTimeout(() => {
-          setIsTransferQueueOpen(false);
-        }, 1500);
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [transfers, activeTransfersCount]);
-
-  // Listen for copy progress events from Rust backend
-  useEffect(() => {
-    let unlisten: UnlistenFn | null = null;
-
-    const setupListener = async () => {
-      unlisten = await listen<CopyProgressEvent>("copy-progress", (event) => {
-        const { file_path, transfer_id, stage, progress } = event.payload;
-
-        setTransfers(prev => prev.map(t => {
-          // Match by transfer_id if available, otherwise fall back to sourcePath
-          // Only update if still in copying status (not cancelled)
-          const matches = transfer_id ? t.id === transfer_id : t.sourcePath === file_path;
-          if (matches && t.status === "copying") {
-            return {
-              ...t,
-              stage,
-              progress,
-              bytesTransferred: progress * (t.fileSize || 1),
-            };
-          }
-          return t;
-        }));
-      });
-    };
-
-    setupListener();
-
-    return () => {
-      if (unlisten) {
-        unlisten();
-      }
-    };
-  }, []);
-
-  // Auto-scroll transfer list to show the latest item
-  useEffect(() => {
-    if (transferListRef.current && transfers.length > 0) {
-      // Scroll to bottom to show the most recent transfer
-      transferListRef.current.scrollTop = transferListRef.current.scrollHeight;
-    }
-  }, [transfers.length]);
 
   // Keyboard handler for delete modal
   useEffect(() => {
@@ -654,7 +400,7 @@ export function AudioPoolPage() {
       if (selected) {
         const filePaths = Array.isArray(selected) ? selected : [selected];
         if (filePaths.length > 0) {
-          await copyFilesToPool(filePaths);
+          await copyFilesToPool(filePaths, destinationPath);
         }
       }
     } catch (error) {
@@ -672,492 +418,13 @@ export function AudioPoolPage() {
       });
 
       if (selected) {
-        await copyFilesToPool([selected]);
+        await copyFilesToPool([selected], destinationPath);
       }
     } catch (error) {
       console.error("Error importing folder:", error);
     }
   }
 
-  // Shared function to copy files to pool with parallel processing
-  async function copyFilesToPool(sourcePaths: string[], fileSizes?: Map<string, number>) {
-    setIsTransferQueueOpen(true);
-    setOverwriteAllMode('none'); // Reset overwrite mode for new batch
-
-    // First, add all files to the transfer queue with "pending" status
-    const baseTimestamp = Date.now();
-    const transferIds: string[] = [];
-    const newTransfers: TransferItem[] = sourcePaths.map((sourcePath, index) => {
-      const fileName = sourcePath.split('/').pop() || sourcePath.split('\\').pop() || sourcePath;
-      const transferId = `${baseTimestamp}-${index}-${fileName}`;
-      transferIds.push(transferId);
-      return {
-        id: transferId,
-        fileName: fileName,
-        fileSize: fileSizes?.get(sourcePath) || 0,
-        bytesTransferred: 0,
-        status: "pending" as const,
-        startTime: baseTimestamp,
-        sourcePath: sourcePath,
-      };
-    });
-
-    setTransfers(prev => [...prev, ...newTransfers]);
-
-    // Get system resources for dynamic concurrency
-    let concurrency = 2; // Default fallback
-    try {
-      const resources = await invoke<{ cpu_cores: number; available_memory_mb: number; recommended_concurrency: number }>("get_system_resources");
-      concurrency = resources.recommended_concurrency;
-      console.log(`Parallel processing with concurrency: ${concurrency} (${resources.cpu_cores} cores, ${resources.available_memory_mb}MB available)`);
-    } catch (e) {
-      console.warn('Could not get system resources, using default concurrency:', e);
-    }
-
-    // Check for existing files BEFORE starting - this allows us to ask user once and then process all in parallel
-    let existingFiles: string[] = [];
-    try {
-      const destFiles = await invoke<AudioFile[]>("list_audio_directory", { path: destinationPath });
-      const destFileNames = new Set(destFiles.map(f => f.name.toLowerCase()));
-
-      for (const sourcePath of sourcePaths) {
-        const fileName = sourcePath.split('/').pop() || sourcePath.split('\\').pop() || sourcePath;
-        // Get destination filename (will be .wav after conversion)
-        const destFileName = fileName.replace(/\.(aif|aiff|mp3|flac|ogg|m4a)$/i, '.wav');
-        if (destFileNames.has(destFileName.toLowerCase())) {
-          existingFiles.push(sourcePath);
-        }
-      }
-    } catch {
-      // Ignore errors - continue without pre-check
-    }
-
-    if (existingFiles.length > 0) {
-      console.log(`[Parallel] Found ${existingFiles.length} existing files, showing modal for batch decision`);
-      // Show modal for batch overwrite decision
-      setOverwriteModal({
-        isOpen: true,
-        fileName: existingFiles[0].split('/').pop() || existingFiles[0].split('\\').pop() || existingFiles[0],
-        sourcePath: existingFiles[0],
-        transferId: transferIds[sourcePaths.indexOf(existingFiles[0])],
-        pendingFiles: sourcePaths,
-        currentIndex: 0,
-        fileSizes: fileSizes,
-        transferIds: transferIds,
-      });
-      return; // Wait for user decision - modal handlers will call processFilesInParallel with the right flags
-    }
-
-    // No conflicts - process all files in parallel
-    await processFilesInParallel(sourcePaths, transferIds, fileSizes, concurrency, false);
-  }
-
-  // Process files in parallel with a concurrency limit
-  // When a file conflict is detected, switches to sequential mode for proper modal handling
-  async function processFilesInParallel(
-    sourcePaths: string[],
-    transferIds: string[],
-    fileSizes?: Map<string, number>,
-    concurrency: number = 2,
-    forceOverwrite: boolean = false
-  ) {
-    console.log(`[Parallel] Starting parallel processing of ${sourcePaths.length} files with concurrency ${concurrency}, forceOverwrite=${forceOverwrite}`);
-
-    let conflictDetected = false;
-    let conflictIndex = -1;
-    const completedIndices = new Set<number>();
-    const activePromises: Map<number, Promise<void>> = new Map();
-    let queueIndex = 0;
-
-    // Helper to process a single file - returns true if conflict detected
-    const processFile = async (sourcePath: string, index: number): Promise<boolean> => {
-      const transferId = transferIds[index];
-      const fileName = sourcePath.split('/').pop() || sourcePath.split('\\').pop() || sourcePath;
-      console.log(`[Parallel] Starting file ${index}: ${fileName}`);
-
-      // Update status to "copying"
-      setTransfers(prev => prev.map(t =>
-        t.id === transferId ? { ...t, status: "copying" as const, startTime: Date.now() } : t
-      ));
-
-      try {
-        await invoke("copy_audio_file_with_progress", {
-          sourcePath: sourcePath,
-          destinationDir: destinationPath,
-          transferId: transferId,
-          overwrite: forceOverwrite,
-        });
-
-        console.log(`[Parallel] Completed file ${index}: ${fileName}`);
-        setTransfers(prev => prev.map(t => {
-          if (t.id === transferId) {
-            // Don't overwrite cancelled status - user already cancelled this transfer
-            if (t.status === "cancelled") {
-              return t;
-            }
-            return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1, progress: 1.0, stage: "complete" };
-          }
-          return t;
-        }));
-        completedIndices.add(index);
-        return false; // No conflict
-      } catch (error) {
-        const errorStr = String(error);
-
-        // Handle cancellation specifically
-        if (errorStr.includes("cancelled")) {
-          console.log(`[Parallel] Transfer cancelled: ${fileName}`);
-          setTransfers(prev => prev.map(t =>
-            t.id === transferId ? { ...t, status: "cancelled" as const } : t
-          ));
-          return false; // No conflict
-        }
-
-        if (errorStr.includes('already exists') && !forceOverwrite) {
-          console.log(`[Parallel] Conflict detected for file ${index}: ${fileName}`);
-          // Mark as pending conflict - will be handled by modal
-          setTransfers(prev => prev.map(t => {
-            if (t.id === transferId) {
-              return { ...t, status: "pending" as const }; // Reset to pending for modal handling
-            }
-            return t;
-          }));
-          return true; // Conflict detected
-        } else {
-          console.error(`[Parallel] Error copying ${fileName}:`, error);
-          setTransfers(prev => prev.map(t => {
-            if (t.id === transferId) {
-              return { ...t, status: "failed" as const, error: errorStr };
-            }
-            return t;
-          }));
-          completedIndices.add(index);
-          return false; // Not a conflict, just an error
-        }
-      }
-    };
-
-    // Process files in parallel until a conflict is detected
-    while (queueIndex < sourcePaths.length && !conflictDetected) {
-      // Start new tasks to fill available slots
-      const startedThisRound: number[] = [];
-      while (queueIndex < sourcePaths.length && activePromises.size < concurrency && !conflictDetected) {
-        const currentIndex = queueIndex++;
-        const sourcePath = sourcePaths[currentIndex];
-        startedThisRound.push(currentIndex);
-
-        const promise = processFile(sourcePath, currentIndex).then((hasConflict) => {
-          activePromises.delete(currentIndex);
-          if (hasConflict && !conflictDetected) {
-            conflictDetected = true;
-            conflictIndex = currentIndex;
-          }
-        });
-        activePromises.set(currentIndex, promise);
-      }
-
-      console.log(`[Parallel] Started ${startedThisRound.length} tasks this round (indices: ${startedThisRound.join(', ')}), active: ${activePromises.size}`);
-
-      // Wait for at least one to complete
-      if (activePromises.size > 0 && !conflictDetected) {
-        console.log(`[Parallel] Waiting for one of ${activePromises.size} active tasks to complete...`);
-        await Promise.race(Array.from(activePromises.values()));
-        console.log(`[Parallel] A task completed, active now: ${activePromises.size}`);
-      }
-    }
-
-    // Wait for all active promises to complete before handling conflict
-    if (activePromises.size > 0) {
-      console.log(`[Parallel] Waiting for ${activePromises.size} remaining tasks to complete...`);
-      await Promise.all(Array.from(activePromises.values()));
-    }
-
-    console.log(`[Parallel] All tasks done. Conflict: ${conflictDetected}, conflictIndex: ${conflictIndex}`);
-
-    // If a conflict was detected, switch to sequential processing with modal
-    if (conflictDetected && conflictIndex >= 0) {
-      // Find remaining files (not completed and not the conflict)
-      const remainingPaths: string[] = [];
-      const remainingIds: string[] = [];
-
-      for (let i = conflictIndex; i < sourcePaths.length; i++) {
-        if (!completedIndices.has(i)) {
-          remainingPaths.push(sourcePaths[i]);
-          remainingIds.push(transferIds[i]);
-        }
-      }
-
-      if (remainingPaths.length > 0) {
-        console.log(`[Parallel] Switching to sequential mode for ${remainingPaths.length} remaining files`);
-        // Use processCopyQueue for sequential processing with modal support
-        await processCopyQueue(remainingPaths, 0, false, fileSizes, false, remainingIds);
-        return; // processCopyQueue will handle refreshing
-      }
-    }
-
-    // Refresh destination files after all complete
-    await loadDestinationFiles(destinationPath);
-  }
-
-  // Process copy queue with overwrite handling
-  async function processCopyQueue(sourcePaths: string[], startIndex: number, forceOverwrite: boolean = false, fileSizes?: Map<string, number>, forceSkip: boolean = false, transferIds?: string[]) {
-    for (let i = startIndex; i < sourcePaths.length; i++) {
-      const sourcePath = sourcePaths[i];
-      const fileName = sourcePath.split('/').pop() || sourcePath.split('\\').pop() || sourcePath;
-      const fileSize = fileSizes?.get(sourcePath) || 0;
-
-      // Use pre-generated transferId if available, otherwise generate new one
-      const transferId = transferIds?.[i] || `${Date.now()}-${fileName}`;
-
-      // If we have pre-generated IDs, update status to "copying"; otherwise add new transfer
-      if (transferIds?.[i]) {
-        setTransfers(prev => prev.map(t =>
-          t.id === transferId ? { ...t, status: "copying" as const, startTime: Date.now() } : t
-        ));
-      } else {
-        const newTransfer: TransferItem = {
-          id: transferId,
-          fileName: fileName,
-          fileSize: fileSize,
-          bytesTransferred: 0,
-          status: "copying" as const,
-          startTime: Date.now(),
-          sourcePath: sourcePath,
-        };
-        setTransfers(prev => [...prev, newTransfer]);
-      }
-
-      // Use force flags directly (don't rely on state which may be stale due to async updates)
-      const shouldOverwrite = forceOverwrite;
-      const shouldSkip = forceSkip;
-
-      try {
-        // Use the progress-enabled command for single file copy with conversion
-        await invoke("copy_audio_file_with_progress", {
-          sourcePath: sourcePath,
-          destinationDir: destinationPath,
-          transferId: transferId,
-          overwrite: shouldOverwrite,
-        });
-
-        setTransfers(prev => prev.map(t => {
-          if (t.id === transferId) {
-            // Don't overwrite cancelled status
-            if (t.status === "cancelled") return t;
-            return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1, progress: 1.0, stage: "complete" };
-          }
-          return t;
-        }));
-      } catch (error) {
-        const errorStr = String(error);
-        console.log('Copy error:', errorStr, 'overwriteAllMode:', overwriteAllMode);
-
-        // Handle cancellation specifically
-        if (errorStr.includes("cancelled")) {
-          console.log(`Transfer cancelled: ${fileName}`);
-          setTransfers(prev => prev.map(t =>
-            t.id === transferId ? { ...t, status: "cancelled" as const } : t
-          ));
-          return; // Stop processing
-        }
-
-        // Check if it's a "file already exists" error
-        if (errorStr.includes('already exists')) {
-          // Check overwrite mode (use computed values that include force flags)
-          if (shouldOverwrite) {
-            // Retry with overwrite
-            try {
-              await invoke("copy_audio_file_with_progress", {
-                sourcePath: sourcePath,
-                destinationDir: destinationPath,
-                transferId: transferId,
-                overwrite: true,
-              });
-              setTransfers(prev => prev.map(t => {
-                if (t.id === transferId) {
-                  // Don't overwrite cancelled status
-                  if (t.status === "cancelled") return t;
-                  return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1, progress: 1.0, stage: "complete" };
-                }
-                return t;
-              }));
-            } catch (retryError) {
-              const retryErrorStr = String(retryError);
-              if (retryErrorStr.includes("cancelled")) {
-                setTransfers(prev => prev.map(t =>
-                  t.id === transferId ? { ...t, status: "cancelled" as const } : t
-                ));
-                return;
-              }
-              setTransfers(prev => prev.map(t => {
-                if (t.id === transferId) {
-                  // Don't overwrite cancelled status
-                  if (t.status === "cancelled") return t;
-                  return { ...t, status: "failed" as const, error: String(retryError) };
-                }
-                return t;
-              }));
-            }
-          } else if (shouldSkip) {
-            // Mark as skipped
-            setTransfers(prev => prev.map(t => {
-              if (t.id === transferId) {
-                return { ...t, status: "cancelled" as const, error: 'Skipped (file exists)' };
-              }
-              return t;
-            }));
-          } else {
-            // Show modal and pause processing
-            setOverwriteModal({
-              isOpen: true,
-              fileName: fileName,
-              sourcePath: sourcePath,
-              transferId: transferId,
-              pendingFiles: sourcePaths,
-              currentIndex: i,
-              fileSizes: fileSizes,
-              transferIds: transferIds,
-            });
-            return; // Pause processing until user decides
-          }
-        } else {
-          // Other error
-          console.error(`Error copying ${fileName}:`, error);
-          setTransfers(prev => prev.map(t => {
-            if (t.id === transferId) {
-              // Don't overwrite cancelled status
-              if (t.status === "cancelled") return t;
-              return { ...t, status: "failed" as const, error: errorStr };
-            }
-            return t;
-          }));
-        }
-      }
-    }
-
-    await loadDestinationFiles(destinationPath);
-  }
-
-  // Handle overwrite modal actions
-  async function handleOverwrite() {
-    const { sourcePath, transferId, pendingFiles, currentIndex, fileSizes, transferIds } = overwriteModal;
-    setOverwriteModal(prev => ({ ...prev, isOpen: false }));
-
-    // Ensure status is "copying" so progress events are applied
-    setTransfers(prev => prev.map(t =>
-      t.id === transferId ? { ...t, status: "copying" as const, startTime: Date.now() } : t
-    ));
-
-    // Start the overwrite copy in the background (don't await)
-    // This allows the queue to continue processing while this file copies
-    const copyPromise = invoke("copy_audio_file_with_progress", {
-      sourcePath: sourcePath,
-      destinationDir: destinationPath,
-      transferId: transferId,
-      overwrite: true,
-    }).then(() => {
-      setTransfers(prev => prev.map(t => {
-        if (t.id === transferId) {
-          // Don't overwrite cancelled status
-          if (t.status === "cancelled") return t;
-          return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1, progress: 1.0, stage: "complete" };
-        }
-        return t;
-      }));
-    }).catch((error) => {
-      const errorStr = String(error);
-      if (errorStr.includes("cancelled")) {
-        setTransfers(prev => prev.map(t =>
-          t.id === transferId ? { ...t, status: "cancelled" as const } : t
-        ));
-        return;
-      }
-      setTransfers(prev => prev.map(t => {
-        if (t.id === transferId) {
-          // Don't overwrite cancelled status
-          if (t.status === "cancelled") return t;
-          return { ...t, status: "failed" as const, error: String(error) };
-        }
-        return t;
-      }));
-    });
-
-    // Continue with remaining files immediately (don't wait for current file)
-    await processCopyQueue(pendingFiles, currentIndex + 1, false, fileSizes, false, transferIds);
-
-    // Wait for the overwrite copy to finish before refreshing
-    await copyPromise;
-  }
-
-  async function handleOverwriteAll() {
-    const { pendingFiles, fileSizes, transferIds } = overwriteModal;
-    setOverwriteModal(prev => ({ ...prev, isOpen: false }));
-    setOverwriteAllMode('overwrite');
-
-    // Get concurrency for parallel processing
-    let concurrency = 2;
-    try {
-      const resources = await invoke<{ cpu_cores: number; available_memory_mb: number; recommended_concurrency: number }>("get_system_resources");
-      concurrency = resources.recommended_concurrency;
-    } catch (e) {
-      console.warn('Could not get system resources:', e);
-    }
-
-    // Process ALL files in parallel with forceOverwrite=true
-    // Since user clicked "Overwrite All", process from the beginning
-    console.log(`[Parallel] Overwrite All selected - processing ${pendingFiles.length} files in parallel with forceOverwrite=true`);
-    await processFilesInParallel(pendingFiles, transferIds!, fileSizes, concurrency, true);
-  }
-
-  function handleSkip() {
-    const { transferId, pendingFiles, currentIndex, fileSizes, transferIds } = overwriteModal;
-    setOverwriteModal(prev => ({ ...prev, isOpen: false }));
-
-    // Mark as skipped
-    setTransfers(prev => prev.map(t => {
-      if (t.id === transferId) {
-        return { ...t, status: "cancelled" as const, error: 'Skipped (file exists)' };
-      }
-      return t;
-    }));
-
-    // Continue with remaining files
-    processCopyQueue(pendingFiles, currentIndex + 1, false, fileSizes, false, transferIds);
-  }
-
-  async function handleSkipAll() {
-    const { transferId, pendingFiles, currentIndex, fileSizes, transferIds } = overwriteModal;
-    setOverwriteModal(prev => ({ ...prev, isOpen: false }));
-    setOverwriteAllMode('skip');
-
-    // Mark current as skipped
-    setTransfers(prev => prev.map(t => {
-      if (t.id === transferId) {
-        return { ...t, status: "cancelled" as const, error: 'Skipped (file exists)' };
-      }
-      return t;
-    }));
-
-    // Continue with remaining files, passing forceSkip=true
-    await processCopyQueue(pendingFiles, currentIndex + 1, false, fileSizes, true, transferIds);
-  }
-
-  function handleCancelImport() {
-    const { transferId, transferIds, currentIndex } = overwriteModal;
-    setOverwriteModal(prev => ({ ...prev, isOpen: false }));
-
-    // Mark current and all remaining pending transfers as cancelled
-    const remainingIds = transferIds ? new Set(transferIds.slice(currentIndex)) : new Set([transferId]);
-    setTransfers(prev => prev.map(t => {
-      if (remainingIds.has(t.id) && (t.status === "pending" || t.status === "copying")) {
-        return { ...t, status: "cancelled" as const, error: 'Import cancelled' };
-      }
-      return t;
-    }));
-
-    // Don't process remaining files
-    loadDestinationFiles(destinationPath);
-  }
 
   // Copy selected source files to pool
   async function copySelectedToPool(fromKeyboard: boolean = false) {
@@ -1188,7 +455,7 @@ export function AudioPoolPage() {
 
     // Use copyFilesToPool which adds all files as "pending" first, then processes
     const sourcePaths = filesToCopy.map(f => f.path);
-    await copyFilesToPool(sourcePaths, fileSizes);
+    await copyFilesToPool(sourcePaths, destinationPath, fileSizes);
   }
 
   // Copy selected dest files back to source directory
@@ -1435,41 +702,6 @@ export function AudioPoolPage() {
     }
   }
 
-  // Transfer queue management
-  function clearAllTransfers() {
-    setTransfers([]);
-  }
-
-  function clearFinishedTransfers() {
-    setTransfers(prev => prev.filter(t =>
-      t.status !== "completed" && t.status !== "failed" && t.status !== "cancelled"
-    ));
-  }
-
-  async function cancelTransfer(transferId: string) {
-    // Call Rust backend to signal cancellation
-    try {
-      await invoke("cancel_audio_transfer", { transferId });
-    } catch (e) {
-      console.error("Failed to cancel transfer:", e);
-    }
-    // Update UI immediately
-    setTransfers(prev => prev.map(t =>
-      t.id === transferId && (t.status === "copying" || t.status === "pending")
-        ? { ...t, status: "cancelled" as const }
-        : t
-    ));
-  }
-
-  function handleTransferSort(column: 'num' | 'progress' | 'file' | 'size' | 'status') {
-    if (transferSortColumn === column) {
-      setTransferSortDirection(transferSortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setTransferSortColumn(column);
-      setTransferSortDirection('asc');
-    }
-  }
-
   // Context menu handlers
   function handleContextMenu(e: React.MouseEvent, file: AudioFile | null, panel: 'source' | 'dest') {
     e.preventDefault();
@@ -1668,42 +900,6 @@ export function AudioPoolPage() {
 
     setCreateFolderModal({ isOpen: false, panel: 'dest', folderName: '' });
   }
-
-  // Sort transfers based on current sort column and direction
-  const sortedTransfers = [...transfers].map((t, idx) => ({ ...t, originalIndex: idx })).sort((a, b) => {
-    let compareA: string | number;
-    let compareB: string | number;
-
-    switch (transferSortColumn) {
-      case 'num':
-        compareA = a.originalIndex;
-        compareB = b.originalIndex;
-        break;
-      case 'progress':
-        compareA = a.status === 'completed' ? 100 : a.fileSize > 0 ? (a.bytesTransferred / a.fileSize) * 100 : 0;
-        compareB = b.status === 'completed' ? 100 : b.fileSize > 0 ? (b.bytesTransferred / b.fileSize) * 100 : 0;
-        break;
-      case 'file':
-        compareA = a.fileName.toLowerCase();
-        compareB = b.fileName.toLowerCase();
-        break;
-      case 'size':
-        compareA = a.fileSize;
-        compareB = b.fileSize;
-        break;
-      case 'status':
-        const statusOrder = { copying: 0, pending: 1, completed: 2, failed: 3, cancelled: 4 };
-        compareA = statusOrder[a.status];
-        compareB = statusOrder[b.status];
-        break;
-      default:
-        return 0;
-    }
-
-    if (compareA < compareB) return transferSortDirection === 'asc' ? -1 : 1;
-    if (compareA > compareB) return transferSortDirection === 'asc' ? 1 : -1;
-    return 0;
-  });
 
   // Keyboard navigation
   useEffect(() => {
@@ -1936,69 +1132,20 @@ export function AudioPoolPage() {
 
     try {
       const filePathsJson = e.dataTransfer.getData("application/json");
-      if (!filePathsJson) {
-        return;
-      }
+      if (!filePathsJson) return;
 
-      const sourcePaths = JSON.parse(filePathsJson) as string[];
-      if (sourcePaths.length === 0) {
-        return;
-      }
+      const draggedPaths = JSON.parse(filePathsJson) as string[];
+      if (draggedPaths.length === 0) return;
 
-      const filesToCopy = sourceFiles.filter(f => sourcePaths.includes(f.path));
+      const filesToCopy = sourceFiles.filter(f => draggedPaths.includes(f.path));
+      if (filesToCopy.length === 0) return;
 
       setSelectedSourceFiles(new Set());
-      setIsTransferQueueOpen(true);
 
-      for (const file of filesToCopy) {
-        const transferId = `${Date.now()}-${file.name}`;
-
-        const newTransfer: TransferItem = {
-          id: transferId,
-          fileName: file.name,
-          fileSize: file.size,
-          bytesTransferred: 0,
-          status: "copying" as const,
-          startTime: Date.now(),
-          sourcePath: file.path,
-        };
-
-        setTransfers(prev => [...prev, newTransfer]);
-
-        try {
-          await invoke("copy_audio_file_with_progress", {
-            sourcePath: file.path,
-            destinationDir: destinationPath,
-            transferId: transferId
-          });
-
-          setTransfers(prev => prev.map(t => {
-            if (t.fileName === file.name && t.id === transferId) {
-              if (t.status === "cancelled") return t;
-              return { ...t, status: "completed" as const, bytesTransferred: t.fileSize, progress: 1.0, stage: "complete" };
-            }
-            return t;
-          }));
-        } catch (error) {
-          const errorStr = String(error);
-          if (errorStr.includes("cancelled")) {
-            setTransfers(prev => prev.map(t =>
-              t.id === transferId ? { ...t, status: "cancelled" as const } : t
-            ));
-            continue;
-          }
-          console.error(`Error copying file ${file.name}:`, error);
-          setTransfers(prev => prev.map(t => {
-            if (t.fileName === file.name && t.id === transferId) {
-              if (t.status === "cancelled") return t;
-              return { ...t, status: "failed" as const, error: String(error) };
-            }
-            return t;
-          }));
-        }
-      }
-
-      await loadDestinationFiles(destinationPath);
+      // Build file sizes map and use the hook's copyFilesToPool for proper transfer tracking
+      const fileSizes = new Map<string, number>();
+      filesToCopy.forEach(f => fileSizes.set(f.path, f.size));
+      await copyFilesToPool(filesToCopy.map(f => f.path), destinationPath, fileSizes);
     } catch (error) {
       console.error("Error during file operation:", error);
       alert(`Error: ${error}`);
@@ -2171,124 +1318,17 @@ export function AudioPoolPage() {
         </div>
       </div>
 
-      {/* Transfer Queue - Only visible when toggled or has transfers */}
-      {isTransferQueueOpen && (
-        <div className="transfer-queue" style={{ height: `${transferPaneHeight}px` }}>
-          <div
-            className="transfer-resize-handle"
-            onMouseDown={handleTransferResizeStart}
-          />
-          <div className="transfer-header">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <h3>Transfers</h3>
-              {activeTransfersCount > 0 && (
-                <span className="transfer-count-badge">{activeTransfersCount} active</span>
-              )}
-            </div>
-            <div className="transfer-controls">
-              <button
-                className="transfer-button"
-                onClick={clearFinishedTransfers}
-                disabled={transfers.filter(t => t.status === "completed" || t.status === "failed" || t.status === "cancelled").length === 0}
-              >
-                Clear finished
-              </button>
-              <button
-                className="transfer-button"
-                onClick={clearAllTransfers}
-                disabled={transfers.length === 0}
-              >
-                Clear all
-              </button>
-              <button
-                className="icon-button"
-                onClick={() => setIsTransferQueueOpen(false)}
-                title="Close"
-              >
-                <i className="fas fa-times"></i>
-              </button>
-            </div>
-          </div>
-          <div className="transfer-list-container" ref={transferListRef}>
-            <table className="transfer-list">
-              <thead>
-                <tr>
-                  <th className="transfer-col-num sortable" onClick={() => handleTransferSort('num')}>
-                    # {transferSortColumn === 'num' && <span className="sort-arrow">{transferSortDirection === 'asc' ? '▲' : '▼'}</span>}
-                  </th>
-                  <th className="transfer-col-progress sortable" onClick={() => handleTransferSort('progress')}>
-                    Progress {transferSortColumn === 'progress' && <span className="sort-arrow">{transferSortDirection === 'asc' ? '▲' : '▼'}</span>}
-                  </th>
-                  <th className="transfer-col-file sortable" onClick={() => handleTransferSort('file')}>
-                    File {transferSortColumn === 'file' && <span className="sort-arrow">{transferSortDirection === 'asc' ? '▲' : '▼'}</span>}
-                  </th>
-                  <th className="transfer-col-size sortable" onClick={() => handleTransferSort('size')}>
-                    Size {transferSortColumn === 'size' && <span className="sort-arrow">{transferSortDirection === 'asc' ? '▲' : '▼'}</span>}
-                  </th>
-                  <th className="transfer-col-status sortable" onClick={() => handleTransferSort('status')}>
-                    Status {transferSortColumn === 'status' && <span className="sort-arrow">{transferSortDirection === 'asc' ? '▲' : '▼'}</span>}
-                  </th>
-                  <th className="transfer-col-actions">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedTransfers.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} style={{ textAlign: 'center', opacity: 0.5, padding: '2rem' }}>
-                      No transfers
-                    </td>
-                  </tr>
-                ) : (
-                  sortedTransfers.map((transfer) => {
-                    // Compute progress percentage once to ensure bar and text are synchronized
-                    const progressPercent = transfer.status === 'completed' ? 100 :
-                                           transfer.status === 'failed' || transfer.status === 'cancelled' ? 0 :
-                                           transfer.progress !== undefined ? Math.min(transfer.progress * 100, 100) :
-                                           0;
-                    return (
-                    <tr key={transfer.id} className={`transfer-row transfer-${transfer.status}`}>
-                      <td>{transfer.originalIndex + 1}</td>
-                      <td>
-                        <div className="progress-container">
-                          <div
-                            className={`progress-bar ${transfer.status === 'completed' ? 'completed' : ''}`}
-                            style={{ width: `${progressPercent}%` }}
-                          />
-                          <span className="progress-text">
-                            {transfer.status === 'failed' || transfer.status === 'cancelled' ? '-' : `${Math.round(progressPercent)}%`}
-                          </span>
-                        </div>
-                      </td>
-                      <td title={transfer.fileName}>{transfer.fileName}</td>
-                      <td>{formatFileSize(transfer.fileSize)}</td>
-                      <td>
-                        <span
-                          className={`status-badge status-${transfer.status}`}
-                          title={transfer.error ? (transfer.error.includes('already exists') ? 'File already exists' : transfer.error) : (transfer.stage || '')}
-                        >
-                          {transfer.status === 'copying' && transfer.stage ? transfer.stage : transfer.status}
-                        </span>
-                      </td>
-                      <td>
-                        {(transfer.status === "copying" || transfer.status === "pending") && (
-                          <button
-                            className="icon-button small"
-                            onClick={() => cancelTransfer(transfer.id)}
-                            title="Cancel transfer"
-                          >
-                            <i className="fas fa-times"></i>
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+      {/* Transfer Queue Panel */}
+      <TransferProgressPanel
+        transfers={transfers}
+        isOpen={isTransferQueueOpen}
+        onClose={() => setIsTransferQueueOpen(false)}
+        onCancelTransfer={cancelTransfer}
+        onClearFinished={clearFinishedTransfers}
+        onClearAll={clearAllTransfers}
+        height={transferPaneHeight}
+        onResizeStart={handleTransferResizeStart}
+      />
 
       {/* Status bar */}
       <div className="audio-pool-status">
