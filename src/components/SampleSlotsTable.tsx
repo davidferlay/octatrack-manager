@@ -17,17 +17,20 @@ import { AudioPoolSidebar } from "./AudioPoolSidebar";
 function DroppableSlotRow({
   slotId,
   className,
+  disabled,
   children,
   ...rest
 }: {
   slotId: number;
   className?: string;
+  disabled?: boolean;
   children: React.ReactNode;
   [key: string]: unknown;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `slot:${slotId}`,
     data: { type: 'slot', slotId },
+    disabled,
   });
   return (
     <tr
@@ -1137,7 +1140,8 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
               <button
                 className={`audio-pool-toggle-btn ${showAudioPool ? 'active' : ''}`}
                 onClick={() => setShowAudioPool(!showAudioPool)}
-                title="Hide Audio Pool"
+                disabled={!isEditMode}
+                title={isEditMode ? "Hide Audio Pool" : "Audio Pool is only available in edit mode"}
               >
                 <i className="fas fa-columns"></i>
               </button>
@@ -1152,7 +1156,8 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
               <button
                 className="audio-pool-toggle-btn"
                 onClick={() => setShowAudioPool(true)}
-                title="Show Audio Pool"
+                disabled={!isEditMode}
+                title={isEditMode ? "Show Audio Pool" : "Audio Pool is only available in edit mode"}
               >
                 <i className="fas fa-columns"></i>
               </button>
@@ -1346,7 +1351,8 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
               <DroppableSlotRow
                 key={slot.slot_id}
                 slotId={slot.slot_id}
-                className={dragOverSlotId === slot.slot_id || osDragOverSlotId === slot.slot_id ? 'drop-target-highlight' : ''}
+                disabled={!isEditMode}
+                className={isEditMode && (dragOverSlotId === slot.slot_id || osDragOverSlotId === slot.slot_id) ? 'drop-target-highlight' : ''}
                 onDragEnter={handleSlotDragEnter}
                 onDragOver={(e: React.DragEvent) => handleSlotDragOver(e, slot.slot_id)}
                 onDragLeave={handleSlotDragLeave}

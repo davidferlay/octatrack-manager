@@ -2363,6 +2363,17 @@ h1 {
   color: #f59e0b;
 }
 
+.audio-pool-toggle-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.audio-pool-toggle-btn:disabled:hover {
+  background: none;
+  border-color: var(--elektron-border-gray);
+  color: var(--elektron-muted-text);
+}
+
 /* Drop target highlight on slot rows */
 .samples-table tbody tr.drop-target-highlight {
   outline: 2px dashed #f59e0b;
