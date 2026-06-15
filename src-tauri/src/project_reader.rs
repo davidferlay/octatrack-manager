@@ -3998,6 +3998,8 @@ pub struct SlotAssignment {
 pub struct AssignSamplesResult {
     pub assigned_count: usize,
     pub updated_slots: Vec<SampleSlot>,
+    /// Updated flex RAM free (MB) after assignment — only set for FLEX slot type
+    pub flex_ram_free_mb: Option<f64>,
 }
 
 /// Assign audio files to sample slots in a project.
@@ -4036,6 +4038,7 @@ pub fn assign_samples_to_slots(
         return Ok(AssignSamplesResult {
             assigned_count: 0,
             updated_slots: Vec::new(),
+            flex_ram_free_mb: None,
         });
     }
 
@@ -4086,9 +4089,16 @@ pub fn assign_samples_to_slots(
         .filter(|s| assigned_indices.contains(&(s.slot_id as u16)))
         .collect();
 
+    let flex_ram_free_mb = if slot_type_upper == "FLEX" {
+        Some(metadata.memory_settings.flex_ram_free_mb)
+    } else {
+        None
+    };
+
     Ok(AssignSamplesResult {
         assigned_count: assignments.len(),
         updated_slots,
+        flex_ram_free_mb,
     })
 }
 

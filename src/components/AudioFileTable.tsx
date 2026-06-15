@@ -1,5 +1,50 @@
 import { useState, useEffect, useRef, useLayoutEffect, useTransition, type ReactNode } from "react";
+import { useDraggable } from "@dnd-kit/core";
 import type { AudioFile } from "../types/audioFile";
+
+// Inner component used when dndMode is enabled — pointer-based drag, cross-platform (fixes macOS WebKit)
+function DraggableFileRow({
+  file,
+  originalIndex,
+  selectedFiles,
+  isCursor,
+  onFileClick,
+  onContextMenu,
+  rowRefs,
+  children,
+}: {
+  file: AudioFile;
+  originalIndex: number;
+  selectedFiles: Set<string>;
+  isCursor: boolean;
+  onFileClick: (file: AudioFile, index: number, e: React.MouseEvent) => void;
+  onContextMenu?: (e: React.MouseEvent, file: AudioFile | null) => void;
+  rowRefs?: React.MutableRefObject<Map<number, HTMLTableRowElement>>;
+  children: React.ReactNode;
+}) {
+  const dragFiles = selectedFiles.has(file.path) ? Array.from(selectedFiles) : [file.path];
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `audio-file:${file.path}`,
+    data: { source: 'audio-pool-sidebar', files: dragFiles },
+    disabled: file.is_directory,
+  });
+
+  return (
+    <tr
+      ref={(el) => {
+        setNodeRef(el);
+        if (rowRefs && el) rowRefs.current.set(originalIndex, el);
+      }}
+      className={`${selectedFiles.has(file.path) ? 'selected' : ''} ${isCursor ? 'cursor' : ''}`}
+      style={{ opacity: isDragging ? 0.4 : 1, cursor: file.is_directory ? 'pointer' : 'grab' }}
+      onClick={(e) => onFileClick(file, originalIndex, e)}
+      onContextMenu={(e) => onContextMenu?.(e, file)}
+      {...(file.is_directory ? {} : { ...attributes, ...listeners })}
+    >
+      {children}
+    </tr>
+  );
+}
 
 export type SortColumn = 'name' | 'size' | 'format' | 'bitrate' | 'samplerate';
 export type SortDirection = 'asc' | 'desc';
@@ -45,6 +90,8 @@ export interface AudioFileTableProps {
   onContextMenu?: (e: React.MouseEvent, file: AudioFile | null) => void;
   rowRefs?: React.MutableRefObject<Map<number, HTMLTableRowElement>>;
   headerPrefix?: ReactNode;
+  /** When true, rows use @dnd-kit pointer-based drag instead of HTML5 drag (fixes macOS WebKit) */
+  dndMode?: boolean;
 }
 
 export function AudioFileTable({
@@ -64,6 +111,7 @@ export function AudioFileTable({
   onContextMenu,
   rowRefs,
   headerPrefix,
+  dndMode = false,
 }: AudioFileTableProps) {
   const [sortColumn, setSortColumn] = useState<SortColumn>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -444,32 +492,53 @@ export function AudioFileTable({
             {!isLoading && sortedFiles.map((file) => {
               const isCursor = isActive && cursorFile?.path === file.path;
               const originalIndex = files.findIndex(f => f.path === file.path);
+              const cells = (
+                <>
+                  <td className="col-name" title={file.name}>
+                    {file.is_directory ? <i className="fas fa-folder folder-icon"></i> : ''}
+                    <span className="file-name-text">{file.name}</span>
+                  </td>
+                  <td className="col-format">{file.is_directory ? '' : getFileFormat(file.name)}</td>
+                  <td className="col-bitrate">{file.bit_rate || ''}</td>
+                  <td className="col-samplerate">{file.sample_rate ? `${(file.sample_rate / 1000).toFixed(1)}` : ''}</td>
+                  <td className="col-size">{file.size ? formatFileSize(file.size) : ''}</td>
+                </>
+              );
+              if (dndMode && draggable) {
+                return (
+                  <DraggableFileRow
+                    key={file.path}
+                    file={file}
+                    originalIndex={originalIndex}
+                    selectedFiles={selectedFiles}
+                    isCursor={isCursor}
+                    onFileClick={onFileClick}
+                    onContextMenu={onContextMenu}
+                    rowRefs={rowRefs}
+                  >
+                    {cells}
+                  </DraggableFileRow>
+                );
+              }
               return (
-              <tr
-                key={file.path}
-                ref={(el) => {
-                  if (rowRefs && el) {
-                    rowRefs.current.set(originalIndex, el);
-                  }
-                }}
-                className={`${selectedFiles.has(file.path) ? 'selected' : ''} ${isCursor ? 'cursor' : ''}`}
-                onClick={(e) => onFileClick(file, originalIndex, e)}
-                onContextMenu={(e) => onContextMenu?.(e, file)}
-                draggable={draggable && !file.is_directory && selectedFiles.has(file.path)}
-                onDragStart={onDragStart}
-                onDragEnd={onDragEnd}
-                style={{ cursor: file.is_directory ? 'pointer' : (draggable && selectedFiles.has(file.path) ? 'grab' : 'pointer') }}
-              >
-                <td className="col-name" title={file.name}>
-                  {file.is_directory ? <i className="fas fa-folder folder-icon"></i> : ''}
-                  <span className="file-name-text">{file.name}</span>
-                </td>
-                <td className="col-format">{file.is_directory ? '' : getFileFormat(file.name)}</td>
-                <td className="col-bitrate">{file.bit_rate || ''}</td>
-                <td className="col-samplerate">{file.sample_rate ? `${(file.sample_rate / 1000).toFixed(1)}` : ''}</td>
-                <td className="col-size">{file.size ? formatFileSize(file.size) : ''}</td>
-              </tr>
-            );
+                <tr
+                  key={file.path}
+                  ref={(el) => {
+                    if (rowRefs && el) {
+                      rowRefs.current.set(originalIndex, el);
+                    }
+                  }}
+                  className={`${selectedFiles.has(file.path) ? 'selected' : ''} ${isCursor ? 'cursor' : ''}`}
+                  onClick={(e) => onFileClick(file, originalIndex, e)}
+                  onContextMenu={(e) => onContextMenu?.(e, file)}
+                  draggable={draggable && !file.is_directory && selectedFiles.has(file.path)}
+                  onDragStart={onDragStart}
+                  onDragEnd={onDragEnd}
+                  style={{ cursor: file.is_directory ? 'pointer' : (draggable && selectedFiles.has(file.path) ? 'grab' : 'pointer') }}
+                >
+                  {cells}
+                </tr>
+              );
             })}
           </tbody>
         </table>

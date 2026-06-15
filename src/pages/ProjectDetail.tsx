@@ -1698,6 +1698,12 @@ export function ProjectDetail() {
                     };
                   });
                 }}
+                onFlexRamUpdated={(freeMb) => {
+                  setMetadata(prev => {
+                    if (!prev) return prev;
+                    return { ...prev, memory_settings: { ...prev.memory_settings, flex_ram_free_mb: freeMb } };
+                  });
+                }}
               />
             )}
 

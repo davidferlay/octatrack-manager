@@ -39,13 +39,15 @@
 }
 
 .sidebar-path {
-  font-size: 1rem;
+  font-size: 0.85rem;
   color: var(--elektron-text-secondary, #999);
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: 'Courier New', monospace;
+  min-width: 0;
+  flex: 1;
 }
 
 /* Override AudioFileTable styles within sidebar context to match samples-table */
@@ -58,8 +60,7 @@
 
 .audio-pool-sidebar .filter-results-info {
   padding: 0.5rem 0.75rem;
-  font-size: 1rem;
-  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
   min-height: 40px;
   box-sizing: border-box;
   border-bottom: 1px solid #333;
@@ -91,7 +92,7 @@
 
 .audio-pool-sidebar .audio-files-table th {
   padding: 0;
-  color: var(--elektron-orange);
+  color: var(--elektron-text-primary);
   height: 32px;
   line-height: 32px;
   border-bottom: none;
@@ -102,6 +103,16 @@
   border-bottom: none;
   height: 32px;
   line-height: 32px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 0;
+}
+
+.audio-pool-sidebar .audio-files-table td.col-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .audio-pool-sidebar .audio-files-table tbody tr {
@@ -120,20 +131,20 @@
   width: 65px;
 }
 
-/* Resize handle on the right edge */
+/* Resize handle — matches AudioPool page panel-divider style */
 .sidebar-resize-handle {
   position: absolute;
   top: 0;
   right: 0;
-  width: 5px;
+  width: 4px;
   height: 100%;
   cursor: col-resize;
-  background: #444;
-  transition: background 0.15s ease;
+  background: rgba(255, 255, 255, 0.08);
+  transition: background 0.2s ease;
   z-index: 20;
 }
 
 .sidebar-resize-handle:hover,
 .sidebar-resize-handle:active {
-  background: var(--elektron-orange);
+  background: rgba(255, 255, 255, 0.35);
 }

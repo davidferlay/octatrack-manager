@@ -8,9 +8,10 @@ interface AudioPoolSidebarProps {
   audioPoolPath: string;
   isEditMode: boolean;
   toggleButton?: ReactNode;
+  dndMode?: boolean;
 }
 
-export function AudioPoolSidebar({ audioPoolPath, toggleButton }: AudioPoolSidebarProps) {
+export function AudioPoolSidebar({ audioPoolPath, toggleButton, dndMode = false }: AudioPoolSidebarProps) {
   const [currentPath, setCurrentPath] = useState(audioPoolPath);
   const [files, setFiles] = useState<AudioFile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -173,6 +174,7 @@ export function AudioPoolSidebar({ audioPoolPath, toggleButton }: AudioPoolSideb
         cursorIndex={cursorIndex}
         isActive={true}
         rowRefs={rowRefs}
+        dndMode={dndMode}
         headerPrefix={
           <>
             {toggleButton}

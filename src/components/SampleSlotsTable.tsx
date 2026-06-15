@@ -1,8 +1,44 @@
 import { useState, useRef, useEffect, useTransition, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+  type DragEndEvent,
+} from "@dnd-kit/core";
 import { useTablePreferences } from "../context/TablePreferencesContext";
 import { AudioPoolSidebar } from "./AudioPoolSidebar";
+
+// Droppable slot row for dnd-kit (pointer-based, cross-platform)
+function DroppableSlotRow({
+  slotId,
+  className,
+  children,
+  ...rest
+}: {
+  slotId: number;
+  className?: string;
+  children: React.ReactNode;
+  [key: string]: unknown;
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `slot:${slotId}`,
+    data: { type: 'slot', slotId },
+  });
+  return (
+    <tr
+      ref={setNodeRef}
+      className={`${className || ''} ${isOver ? 'drop-target-highlight' : ''}`.trim()}
+      {...rest}
+    >
+      {children}
+    </tr>
+  );
+}
 
 interface SampleSlot {
   slot_id: number;
@@ -35,6 +71,7 @@ interface SlotAssignment {
 interface AssignSamplesResult {
   assigned_count: number;
   updated_slots: SampleSlot[];
+  flex_ram_free_mb: number | null;
 }
 
 interface SampleSlotsTableProps {
@@ -46,6 +83,7 @@ interface SampleSlotsTableProps {
   isEditMode?: boolean; // Whether edit mode is active
   audioPoolPath?: string | null; // Path to AUDIO/ directory (null if not in a Set)
   onSlotsUpdated?: (updatedSlots: SampleSlot[]) => void; // Callback when slots are assigned
+  onFlexRamUpdated?: (freeMb: number) => void; // Callback when flex RAM changes after assignment
 }
 
 type SortColumn = 'slot' | 'sample' | 'status' | 'source' | 'gain' | 'timestretch' | 'loop' | 'compatibility' | 'format' | 'bitdepth' | 'samplerate';
@@ -79,7 +117,10 @@ function getSetRelativePath(projectPath: string | null): string {
   return projectPath;
 }
 
-export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated }: SampleSlotsTableProps) {
+export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated, onFlexRamUpdated }: SampleSlotsTableProps) {
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const [dndDragFiles, setDndDragFiles] = useState<string[]>([]);
+
   const { flexPreferences, staticPreferences, setFlexPreferences, setStaticPreferences } = useTablePreferences();
 
   // Get the preferences for this table type
@@ -131,59 +172,36 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
     return parts[parts.length - 1] || audioFilePath;
   }, [audioPoolPath]);
 
-  // Handle drop on a slot row
-  const handleSlotDrop = useCallback(async (e: React.DragEvent, targetSlot: SampleSlot) => {
-    e.preventDefault();
-    setDragOverSlotId(null);
+  // Core assignment logic — shared between HTML5 drop and dnd-kit drag end
+  const doAssignFiles = useCallback(async (filePaths: string[], targetSlot: SampleSlot) => {
+    if (!projectPath || filePaths.length === 0) return;
 
-    if (!projectPath) return;
+    setIsAssigning(true);
+    const slotType = tableType === 'flex' ? 'FLEX' : 'STATIC';
 
     try {
-      const jsonData = e.dataTransfer.getData("application/json");
-      if (!jsonData) return;
-
-      const dragData = JSON.parse(jsonData);
-      if (dragData.source !== "audio-pool-sidebar") return;
-
-      const filePaths: string[] = dragData.files;
-      if (!filePaths || filePaths.length === 0) return;
-
-      setIsAssigning(true);
-
-      const slotType = tableType === 'flex' ? 'FLEX' : 'STATIC';
-
       if (filePaths.length === 1) {
-        // Single file: assign to exact target slot
         const isEmptySlot = !targetSlot.path;
         const assignments: SlotAssignment[] = [{
           slot_index: targetSlot.slot_id,
           audio_path: buildRelativePath(filePaths[0]),
           set_defaults: isEmptySlot,
         }];
-
         const result = await invoke<AssignSamplesResult>("assign_samples_to_slots", {
-          path: projectPath,
-          slotType,
-          assignments,
+          path: projectPath, slotType, assignments,
         });
-
-        if (onSlotsUpdated && result.updated_slots.length > 0) {
-          onSlotsUpdated(result.updated_slots);
-        }
+        if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
+        if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb);
       } else {
-        // Multiple files: fill consecutive empty slots starting from target
         const assignments: SlotAssignment[] = [];
         let currentSlotId = targetSlot.slot_id;
-
         for (const filePath of filePaths) {
-          // Find next empty slot from currentSlotId
           while (currentSlotId <= 128) {
             const slot = slots.find(s => s.slot_id === currentSlotId);
-            if (!slot || !slot.path) break; // Empty slot found
+            if (!slot || !slot.path) break;
             currentSlotId++;
           }
-          if (currentSlotId > 128) break; // No more slots
-
+          if (currentSlotId > 128) break;
           assignments.push({
             slot_index: currentSlotId,
             audio_path: buildRelativePath(filePath),
@@ -191,17 +209,12 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
           });
           currentSlotId++;
         }
-
         if (assignments.length > 0) {
           const result = await invoke<AssignSamplesResult>("assign_samples_to_slots", {
-            path: projectPath,
-            slotType,
-            assignments,
+            path: projectPath, slotType, assignments,
           });
-
-          if (onSlotsUpdated && result.updated_slots.length > 0) {
-            onSlotsUpdated(result.updated_slots);
-          }
+          if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
+          if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb);
         }
       }
     } catch (error) {
@@ -209,7 +222,40 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
     } finally {
       setIsAssigning(false);
     }
-  }, [isEditMode, projectPath, tableType, slots, buildRelativePath, onSlotsUpdated]);
+  }, [projectPath, tableType, slots, buildRelativePath, onSlotsUpdated, onFlexRamUpdated]);
+
+  // Handle drop on a slot row (HTML5 drag — works on Linux; macOS uses dnd-kit via handleDndDragEnd)
+  const handleSlotDrop = useCallback(async (e: React.DragEvent, targetSlot: SampleSlot) => {
+    e.preventDefault();
+    setDragOverSlotId(null);
+    if (!projectPath) return;
+    try {
+      const jsonData = e.dataTransfer.getData("application/json");
+      if (!jsonData) return;
+      const dragData = JSON.parse(jsonData);
+      if (dragData.source !== "audio-pool-sidebar") return;
+      const filePaths: string[] = dragData.files;
+      if (!filePaths || filePaths.length === 0) return;
+      await doAssignFiles(filePaths, targetSlot);
+    } catch (error) {
+      console.error("Error parsing drag data:", error);
+    }
+  }, [projectPath, doAssignFiles]);
+
+  // dnd-kit drag end — used on macOS where HTML5 drag events don't work in WKWebView
+  const handleDndDragEnd = useCallback(async (event: DragEndEvent) => {
+    setDndDragFiles([]);
+    const { active, over } = event;
+    if (!over) return;
+    const sourceData = active.data.current as { source?: string; files?: string[] } | undefined;
+    const targetData = over.data.current as { type?: string; slotId?: number } | undefined;
+    if (sourceData?.source !== 'audio-pool-sidebar' || targetData?.type !== 'slot') return;
+    const filePaths = sourceData.files ?? [];
+    const targetSlotId = targetData.slotId!;
+    const targetSlot = slots.find(s => s.slot_id === targetSlotId);
+    if (!targetSlot) return;
+    await doAssignFiles(filePaths, targetSlot);
+  }, [slots, doAssignFiles]);
 
   const handleSlotDragOver = useCallback((e: React.DragEvent, slotId: number) => {
     // Always prevent default to avoid text selection during drag
@@ -636,11 +682,20 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
   };
 
   return (
+    <DndContext
+      sensors={dndSensors}
+      onDragStart={(event) => {
+        const data = event.active.data.current as { files?: string[] } | undefined;
+        setDndDragFiles(data?.files ?? []);
+      }}
+      onDragEnd={handleDndDragEnd}
+    >
     <div className={`samples-tab ${showAudioPool ? 'with-sidebar' : ''}`}>
       {showAudioPool && audioPoolPath && (
         <AudioPoolSidebar
           audioPoolPath={audioPoolPath}
           isEditMode={isEditMode ?? false}
+          dndMode={true}
           toggleButton={
             <button
               className={`audio-pool-toggle-btn ${showAudioPool ? 'active' : ''}`}
@@ -668,7 +723,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
             {isAssigning && <span className="filter-badge" style={{ background: 'rgba(245, 158, 11, 0.3)' }}>Assigning...</span>}
             {memorySettings && (
               <span className="ram-info" title="Flex RAM available for sample loading">
-                FREE MEM: {memorySettings.flex_ram_free_mb >= 10
+                {showAudioPool ? 'FREE:' : 'FREE MEM:'} {memorySettings.flex_ram_free_mb >= 10
                   ? memorySettings.flex_ram_free_mb.toFixed(1)
                   : memorySettings.flex_ram_free_mb.toFixed(2)} MB
               </span>
@@ -1296,13 +1351,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
             </thead>
           <tbody>
             {sortedSlots.map((slot) => (
-              <tr
+              <DroppableSlotRow
                 key={slot.slot_id}
+                slotId={slot.slot_id}
                 className={dragOverSlotId === slot.slot_id ? 'drop-target-highlight' : ''}
                 onDragEnter={handleSlotDragEnter}
-                onDragOver={(e) => handleSlotDragOver(e, slot.slot_id)}
+                onDragOver={(e: React.DragEvent) => handleSlotDragOver(e, slot.slot_id)}
                 onDragLeave={handleSlotDragLeave}
-                onDrop={(e) => handleSlotDrop(e, slot)}
+                onDrop={(e: React.DragEvent) => handleSlotDrop(e, slot)}
               >
                 {visibleColumns.slot && <td className="col-slot">{slotPrefix}{slot.slot_id}</td>}
                 {visibleColumns.sample && (
@@ -1337,12 +1393,31 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
                 {visibleColumns.format && <td className="col-format">{slot.file_format || '-'}</td>}
                 {visibleColumns.bitdepth && <td className="col-bitdepth">{slot.bit_depth !== null && slot.bit_depth !== undefined ? slot.bit_depth : '-'}</td>}
                 {visibleColumns.samplerate && <td className="col-samplerate">{slot.sample_rate !== null && slot.sample_rate !== undefined ? (slot.sample_rate / 1000).toFixed(1) : '-'}</td>}
-              </tr>
+              </DroppableSlotRow>
             ))}
           </tbody>
         </table>
         </div>
       </section>
     </div>
+      <DragOverlay dropAnimation={null}>
+        {dndDragFiles.length > 0 ? (
+          <div style={{
+            background: 'rgba(255, 102, 0, 0.9)',
+            color: '#fff',
+            padding: '4px 10px',
+            borderRadius: '4px',
+            fontSize: '0.8rem',
+            fontFamily: "'Courier New', monospace",
+            pointerEvents: 'none',
+            whiteSpace: 'nowrap',
+          }}>
+            {dndDragFiles.length === 1
+              ? dndDragFiles[0].split(/[\\/]/).pop()
+              : `${dndDragFiles.length} files`}
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
   );
 }
