@@ -1905,7 +1905,6 @@ h1 {
 .header-search-input:focus {
   outline: none;
   border-color: var(--elektron-orange);
-  width: 200px;
 }
 
 .header-search-input::placeholder {

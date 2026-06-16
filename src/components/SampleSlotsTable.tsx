@@ -223,7 +223,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
 
   // Core assignment logic — shared between HTML5 drop and dnd-kit drag end
   const doAssignFiles = useCallback(async (filePaths: string[], targetSlot: SampleSlot) => {
-    if (!projectPath || filePaths.length === 0) return;
+    if (!isEditMode || !projectPath || filePaths.length === 0) return;
 
     setIsAssigning(true);
     const slotType = tableType === 'flex' ? 'FLEX' : 'STATIC';
@@ -271,7 +271,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
     } finally {
       setIsAssigning(false);
     }
-  }, [projectPath, tableType, slots, buildRelativePath, onSlotsUpdated, onFlexRamUpdated]);
+  }, [isEditMode, projectPath, tableType, slots, buildRelativePath, onSlotsUpdated, onFlexRamUpdated]);
 
   // Handle drop on a slot row (HTML5 drag — works on Linux; macOS uses dnd-kit via handleDndDragEnd)
   const handleSlotDrop = useCallback(async (e: React.DragEvent, targetSlot: SampleSlot) => {
@@ -1149,8 +1149,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
               <button
                 className={`audio-pool-toggle-btn ${showAudioPool ? 'active' : ''}`}
                 onClick={() => setShowAudioPool(!showAudioPool)}
-                disabled={!isEditMode}
-                title={isEditMode ? "Hide Audio Pool" : "Toggle on Edit mode to display the Audio Pool and drag & drop samples onto slots"}
+                title="Hide Audio Pool"
               >
                 <i className="fas fa-columns"></i>
               </button>
@@ -1165,8 +1164,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
               <button
                 className="audio-pool-toggle-btn"
                 onClick={() => setShowAudioPool(true)}
-                disabled={!isEditMode}
-                title={isEditMode ? "Show Audio Pool" : "Toggle on Edit mode to display the Audio Pool and drag & drop samples onto slots"}
+                title={isEditMode ? "Show Audio Pool" : "Show Audio Pool (read-only — toggle Edit mode to assign samples)"}
               >
                 <i className="fas fa-columns"></i>
               </button>

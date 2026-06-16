@@ -38,16 +38,24 @@
   cursor: default;
 }
 
+/* Compact breadcrumb row shown when navigated below AUDIO/ root */
+.sidebar-path-row {
+  padding: 2px 0.75rem;
+  background: #222;
+  border-bottom: 1px solid #333;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
 .sidebar-path {
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   color: var(--elektron-text-secondary, #999);
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: 'Courier New', monospace;
-  min-width: 0;
-  flex: 1;
+  display: block;
 }
 
 /* Override AudioFileTable styles within sidebar context to match samples-table */

@@ -169,6 +169,11 @@ export function AudioPoolSidebar({ audioPoolPath, toggleButton, dndMode = false,
       ref={sidebarRef}
       style={sidebarWidth ? { width: `${sidebarWidth}px` } : undefined}
     >
+      {!isAtRoot && (
+        <div className="sidebar-path-row" title={getRelativePath()}>
+          <span className="sidebar-path">{getRelativePath()}</span>
+        </div>
+      )}
       <AudioFileTable
         files={files}
         selectedFiles={selectedFiles}
@@ -194,9 +199,6 @@ export function AudioPoolSidebar({ audioPoolPath, toggleButton, dndMode = false,
             >
               <i className="fas fa-arrow-left"></i>
             </button>
-            <span className="sidebar-path" title={getRelativePath()}>
-              {getRelativePath()}
-            </span>
           </>
         }
       />
