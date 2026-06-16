@@ -38,8 +38,8 @@ body {
   margin: 0;
   padding: 0;
   background-color: var(--elektron-black);
-  overflow-y: scroll;
-  scrollbar-gutter: stable;
+  /* Scrollbar only when needed; no reserved black gutter strip on the right edge */
+  overflow-y: auto;
 }
 
 .container {
@@ -815,12 +815,15 @@ h1 {
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--elektron-black);
+  /* Transparent so the scrollbar overlays whatever is behind it, no black strip */
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
   background: var(--elektron-medium-gray);
-  border: 2px solid var(--elektron-black);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 6px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
