@@ -9,7 +9,6 @@ import { OverwriteModal } from "../components/OverwriteModal";
 import { TransferProgressPanel } from "../components/TransferProgressPanel";
 import { useAudioPoolTransfer } from "../hooks/useAudioPoolTransfer";
 import type { AudioFile } from "../types/audioFile";
-import type { TransferItem } from "../types/transfer";
 import "./AudioPoolPage.css";
 
 
@@ -193,7 +192,6 @@ export function AudioPoolPage() {
   // Audio transfer hook (copy to audio pool with progress, overwrite modal, etc.)
   const {
     transfers,
-    setTransfers,
     isTransferQueueOpen,
     setIsTransferQueueOpen,
     overwriteModal,
@@ -206,7 +204,9 @@ export function AudioPoolPage() {
     handleSkip,
     handleSkipAll,
     handleCancelImport,
-  } = useAudioPoolTransfer({ onComplete: (destPath) => loadDestinationFiles(destPath) });
+  } = useAudioPoolTransfer({
+    onComplete: (path) => (path === sourcePath ? loadSourceFiles(path) : loadDestinationFiles(path)),
+  });
 
   // Handle panel divider resize
   useEffect(() => {
@@ -479,121 +479,14 @@ export function AudioPoolPage() {
     if (filesToCopy.length === 0) return;
 
     setSelectedDestFiles(new Set());
-    setIsTransferQueueOpen(true);
 
-    // First, add all files to the transfer queue with "pending" status
-    const baseTimestamp = Date.now();
-    const transferIds: string[] = [];
-    const newTransfers: TransferItem[] = filesToCopy.map((file, index) => {
-      const transferId = `${baseTimestamp}-${index}-${file.name}`;
-      transferIds.push(transferId);
-      return {
-        id: transferId,
-        fileName: file.name,
-        fileSize: file.size,
-        bytesTransferred: 0,
-        status: "pending" as const,
-        startTime: baseTimestamp,
-        sourcePath: file.path,
-      };
-    });
+    // Reuse the shared transfer pipeline (progress, conflict modal, concurrency).
+    // onComplete reloads the source pane because the destination is sourcePath.
+    const fileSizes = new Map<string, number>();
+    filesToCopy.forEach(f => fileSizes.set(f.path, f.size));
 
-    setTransfers(prev => [...prev, ...newTransfers]);
-
-    // Get system resources for dynamic concurrency
-    let concurrency = 2;
-    try {
-      const resources = await invoke<{ cpu_cores: number; available_memory_mb: number; recommended_concurrency: number }>("get_system_resources");
-      concurrency = resources.recommended_concurrency;
-    } catch (e) {
-      console.warn('Could not get system resources, using default concurrency:', e);
-    }
-
-    // Process files in parallel
     const sourcePaths = filesToCopy.map(f => f.path);
-    await processFilesInParallelToSource(sourcePaths, transferIds, sourcePath, concurrency);
-
-    // Refresh source files
-    await loadSourceFiles(sourcePath);
-  }
-
-  // Process files in parallel to source directory
-  async function processFilesInParallelToSource(
-    sourcePaths: string[],
-    transferIds: string[],
-    targetDir: string,
-    concurrency: number = 2
-  ) {
-    const queue = sourcePaths.map((path, index) => ({ path, index }));
-    const activePromises: Promise<void>[] = [];
-    let queueIndex = 0;
-
-    const processFile = async (filePath: string, index: number): Promise<void> => {
-      const transferId = transferIds[index];
-      const fileName = filePath.split('/').pop() || filePath.split('\\').pop() || filePath;
-
-      setTransfers(prev => prev.map(t =>
-        t.id === transferId ? { ...t, status: "copying" as const, startTime: Date.now() } : t
-      ));
-
-      try {
-        await invoke("copy_audio_file_with_progress", {
-          sourcePath: filePath,
-          destinationDir: targetDir,
-          transferId: transferId,
-          overwrite: false,
-        });
-
-        setTransfers(prev => prev.map(t => {
-          if (t.id === transferId) {
-            if (t.status === "cancelled") return t;
-            return { ...t, status: "completed" as const, bytesTransferred: t.fileSize || 1, progress: 1.0, stage: "complete" };
-          }
-          return t;
-        }));
-      } catch (error) {
-        const errorStr = String(error);
-        if (errorStr.includes("cancelled")) {
-          setTransfers(prev => prev.map(t =>
-            t.id === transferId ? { ...t, status: "cancelled" as const } : t
-          ));
-          return;
-        }
-        console.error(`Error copying ${fileName}:`, error);
-        setTransfers(prev => prev.map(t => {
-          if (t.id === transferId) {
-            if (t.status === "cancelled") return t;
-            return { ...t, status: "failed" as const, error: String(error) };
-          }
-          return t;
-        }));
-      }
-    };
-
-    // Start initial batch
-    while (queueIndex < queue.length && activePromises.length < concurrency) {
-      const item = queue[queueIndex++];
-      const promise = processFile(item.path, item.index).then(() => {
-        const promiseIndex = activePromises.indexOf(promise);
-        if (promiseIndex > -1) activePromises.splice(promiseIndex, 1);
-      });
-      activePromises.push(promise);
-    }
-
-    // Continue processing
-    while (queueIndex < queue.length || activePromises.length > 0) {
-      if (activePromises.length > 0) {
-        await Promise.race(activePromises);
-      }
-      while (queueIndex < queue.length && activePromises.length < concurrency) {
-        const item = queue[queueIndex++];
-        const promise = processFile(item.path, item.index).then(() => {
-          const promiseIndex = activePromises.indexOf(promise);
-          if (promiseIndex > -1) activePromises.splice(promiseIndex, 1);
-        });
-        activePromises.push(promise);
-      }
-    }
+    await copyFilesToPool(sourcePaths, sourcePath, fileSizes);
   }
 
   async function navigateToParentSource() {

@@ -2561,4 +2561,69 @@ mod tests {
         assert!(is_audio_file("song.WaV"), "Mixed case should be audio");
         assert!(is_audio_file("song.Mp3"), "Mixed case should be audio");
     }
+
+    // ==================== dest_filename_for / copy_audio_files_or_use_existing ====================
+
+    #[test]
+    fn test_dest_filename_for_non_audio_keeps_name() {
+        assert_eq!(dest_filename_for(Path::new("/x/notes.txt")), "notes.txt");
+    }
+
+    #[test]
+    fn test_copy_audio_files_or_use_existing_copies_new_file() {
+        let src_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+        let src = src_dir.path().join("notes.txt");
+        fs::write(&src, b"hello").unwrap();
+
+        let result = copy_audio_files_or_use_existing(
+            vec![src.to_string_lossy().to_string()],
+            &dest_dir.path().to_string_lossy(),
+        )
+        .unwrap();
+
+        assert_eq!(result.len(), 1);
+        let copied = dest_dir.path().join("notes.txt");
+        assert!(copied.exists(), "file should have been copied");
+        assert_eq!(result[0], copied.to_string_lossy());
+    }
+
+    #[test]
+    fn test_copy_audio_files_or_use_existing_reuses_existing() {
+        let src_dir = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+        let src = src_dir.path().join("notes.txt");
+        fs::write(&src, b"source-content").unwrap();
+        // Pre-existing destination file with DIFFERENT content
+        let existing = dest_dir.path().join("notes.txt");
+        fs::write(&existing, b"original-content").unwrap();
+
+        let result = copy_audio_files_or_use_existing(
+            vec![src.to_string_lossy().to_string()],
+            &dest_dir.path().to_string_lossy(),
+        )
+        .unwrap();
+
+        assert_eq!(result[0], existing.to_string_lossy());
+        // Existing file must NOT be overwritten
+        assert_eq!(fs::read(&existing).unwrap(), b"original-content");
+    }
+
+    #[test]
+    fn test_copy_audio_files_or_use_existing_missing_source_errors() {
+        let dest_dir = TempDir::new().unwrap();
+        let result = copy_audio_files_or_use_existing(
+            vec!["/no/such/file.wav".to_string()],
+            &dest_dir.path().to_string_lossy(),
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("does not exist"));
+    }
+
+    #[test]
+    fn test_copy_audio_files_or_use_existing_missing_dest_errors() {
+        let result = copy_audio_files_or_use_existing(vec![], "/no/such/dir");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("does not exist"));
+    }
 }
