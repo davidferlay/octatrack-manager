@@ -38,11 +38,11 @@
   cursor: default;
 }
 
-/* Status bar pinned at the bottom of the sidebar (à la Finder / Nautilus) */
+/* Status bar pinned at the bottom of the sidebar */
 .sidebar-path-row {
-  padding: 0.35rem 0.75rem;
-  background: linear-gradient(to bottom, #252525, #1e1e1e);
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0.35rem 0.6rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-top: 1px solid #333;
   flex-shrink: 0;
   overflow: hidden;
   display: flex;
@@ -50,13 +50,19 @@
 }
 
 .sidebar-path {
-  font-size: 0.78rem;
-  color: var(--elektron-muted-text, #888);
+  font-size: 0.9rem;
+  color: #aaa;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-family: 'Courier New', monospace;
-  letter-spacing: 0.3px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  width: 100%;
+}
+}
 }
 
 /* Override AudioFileTable styles within sidebar context to match samples-table */
