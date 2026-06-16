@@ -811,7 +811,7 @@ h1 {
 
 /* Scrollbar Styling */
 ::-webkit-scrollbar {
-  width: 12px;
+  width: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -2330,18 +2330,6 @@ h1 {
   position: sticky;
   top: 0;
   z-index: 10;
-}
-
-.samples-tab.with-sidebar .samples-table th {
-  padding: 0 10px;
-  height: 32px;
-  line-height: 32px;
-}
-
-.samples-tab.with-sidebar .samples-table td {
-  padding: 0 10px;
-  height: 32px;
-  line-height: 32px;
 }
 
 /* Audio Pool toggle button */

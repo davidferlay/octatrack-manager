@@ -126,6 +126,7 @@ function getSetRelativePath(projectPath: string | null): string {
 export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated, onFlexRamUpdated, onImportToAudioPool, sidebarRefreshTrigger }: SampleSlotsTableProps) {
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const [dndDragFiles, setDndDragFiles] = useState<string[]>([]);
+  const [viewModeToast, setViewModeToast] = useState(false);
 
   const { flexPreferences, staticPreferences, setFlexPreferences, setStaticPreferences } = useTablePreferences();
 
@@ -223,7 +224,12 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
 
   // Core assignment logic — shared between HTML5 drop and dnd-kit drag end
   const doAssignFiles = useCallback(async (filePaths: string[], targetSlot: SampleSlot) => {
-    if (!isEditMode || !projectPath || filePaths.length === 0) return;
+    if (!isEditMode) {
+      setViewModeToast(true);
+      setTimeout(() => setViewModeToast(false), 2500);
+      return;
+    }
+    if (!projectPath || filePaths.length === 0) return;
 
     setIsAssigning(true);
     const slotType = tableType === 'flex' ? 'FLEX' : 'STATIC';
@@ -1128,6 +1134,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
   }
 
   return (
+    <>
     <DndContext
       sensors={dndSensors}
       onDragStart={(event) => {
@@ -1392,5 +1399,11 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
         ) : null}
       </DragOverlay>
     </DndContext>
+    {viewModeToast && (
+      <div className="toast-notification warning">
+        <i className="fas fa-exclamation-triangle"></i> Toggle Edit mode to assign samples to slots
+      </div>
+    )}
+    </>
   );
 }

@@ -38,19 +38,19 @@
   cursor: default;
 }
 
-/* Compact breadcrumb row shown when navigated below AUDIO/ root */
+/* Path breadcrumb pinned at the bottom of the sidebar, like OS file explorers */
 .sidebar-path-row {
-  padding: 2px 0.75rem;
+  padding: 3px 0.75rem;
   background: #222;
-  border-bottom: 1px solid #333;
+  border-top: 1px solid #333;
   flex-shrink: 0;
   overflow: hidden;
 }
 
 .sidebar-path {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: var(--elektron-text-secondary, #999);
-  font-weight: 500;
+  font-weight: 400;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -68,13 +68,14 @@
 
 .audio-pool-sidebar .filter-results-info {
   padding: 0.5rem 0.75rem;
-  font-size: 0.85rem;
+  font-size: 1rem;
   min-height: 40px;
   box-sizing: border-box;
   border-bottom: 1px solid #333;
   background: #222;
   flex-wrap: nowrap;
   align-items: center;
+  color: var(--elektron-text-secondary);
 }
 
 .audio-pool-sidebar .table-wrapper {
@@ -100,10 +101,8 @@
 }
 
 .audio-pool-sidebar .audio-files-table th {
-  padding: 0;
+  padding: 0.75rem 10px;
   color: var(--elektron-text-primary);
-  height: 32px;
-  line-height: 32px;
   border-bottom: none;
 }
 
