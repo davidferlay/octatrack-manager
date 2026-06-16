@@ -106,10 +106,10 @@ export interface AudioFileTableProps {
 }
 
 const DEFAULT_COLUMN_SIZES: Record<string, number> = {
-  name: 200, format: 60, bitrate: 50, samplerate: 60, size: 80,
+  name: 200, format: 90, bitrate: 70, samplerate: 75, size: 80,
 };
 const MIN_COLUMN_SIZES: Record<string, number> = {
-  name: 80, format: 40, bitrate: 35, samplerate: 40, size: 50,
+  name: 80, format: 60, bitrate: 50, samplerate: 55, size: 55,
 };
 const COLUMN_LABELS: Record<string, string> = {
   name: 'Name', format: 'Format', bitrate: 'Bit', samplerate: 'kHz', size: 'Size',

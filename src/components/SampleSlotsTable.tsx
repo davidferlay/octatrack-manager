@@ -156,11 +156,11 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
   const [visibleColumns, setVisibleColumns] = useState(prefs.visibleColumns);
   const [showColumnMenu, setShowColumnMenu] = useState(false);
 
-  // Column sizing state (initialized from CSS values; inline style overrides CSS class widths)
+  // Column sizing state (initialized to fit header labels + sort indicator + filter icon)
   const [columnSizing, setColumnSizing] = useState<Record<string, number>>({
-    slot: 80, sample: 200, compatibility: 100, status: 90,
-    source: 100, gain: 80, timestretch: 140, loop: 120,
-    format: 80, bitdepth: 60, samplerate: 70,
+    slot: 80, sample: 200, compatibility: 120, status: 100,
+    source: 110, gain: 85, timestretch: 140, loop: 100,
+    format: 100, bitdepth: 80, samplerate: 80,
   });
   const resizingColRef = useRef<string | null>(null);
   const resizeStartXRef = useRef<number>(0);
@@ -1041,7 +1041,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
       <th
         key={colId}
         className={`filterable-header col-${colId}${dragOverColId === colId ? ' col-drag-over' : ''}`}
-        style={{ position: 'relative', width: columnSizing[colId] ?? 80 }}
+        style={{ position: 'relative', width: columnSizing[colId] ?? 80, minWidth: 50 }}
         onDragOver={(e) => handleColDragOver(e, colId)}
         onDrop={(e) => handleColDrop(e, colId)}
         onDragLeave={handleColDragLeave}

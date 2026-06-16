@@ -133,11 +133,11 @@
 .audio-pool-sidebar .col-format,
 .audio-pool-sidebar .col-bitrate,
 .audio-pool-sidebar .col-samplerate {
-  width: 50px;
+  min-width: 55px;
 }
 
 .audio-pool-sidebar .col-size {
-  width: 65px;
+  min-width: 60px;
 }
 
 /* Resize handle — matches AudioPool page panel-divider style */
