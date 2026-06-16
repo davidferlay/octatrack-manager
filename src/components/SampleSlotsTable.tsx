@@ -1046,12 +1046,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
           onDragStart={(e) => handleColDragStart(e, colId)}
           style={{ cursor: 'grab' }}
         >
-          <span className="sort-indicator" onClick={() => handleSort(colId as SortColumn)}>
-            {sortColumn === colId && (sortDirection === 'asc' ? '▲' : '▼')}
-          </span>
           <span onClick={() => handleSort(colId as SortColumn)} className="sortable-label">
             {COL_LABELS[colId] ?? colId}
           </span>
+          {sortColumn === colId && (
+            <span className="sort-indicator" onClick={() => handleSort(colId as SortColumn)}>
+              {sortDirection === 'asc' ? '▲' : '▼'}
+            </span>
+          )}
           {hasFilter && (
             <button
               className={`filter-icon ${openDropdown === colId || isFilterActive ? 'active' : ''}`}

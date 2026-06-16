@@ -2604,14 +2604,9 @@ h1 {
 }
 
 .sort-indicator {
-  position: absolute;
-  left: -14px;
-  top: 4px;
-  bottom: 0;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 12px;
   font-size: 0.7rem;
   cursor: pointer;
 }
@@ -2619,7 +2614,7 @@ h1 {
 .sortable-label {
   cursor: pointer;
   user-select: none;
-  flex: 1 1 auto;
+  flex: 0 1 auto; /* don't grow, so the sort arrow stays adjacent to the label text */
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

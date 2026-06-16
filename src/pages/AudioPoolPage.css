@@ -526,30 +526,25 @@ td.col-size {
 }
 
 .filterable-header .sort-indicator {
-  position: absolute;
-  left: -14px;
-  top: 50%;
-  transform: translateY(-65%);
-  width: 12px;
-  text-align: center;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 0.7rem;
   cursor: pointer;
-}
-
-.filterable-header .sort-indicator.sort-indicator-right {
-  left: auto;
-  right: auto;
-  position: relative;
-  top: 0;
-  transform: translateY(-15%);
   margin-left: 2px;
 }
 
 .filterable-header .sortable-label {
   cursor: pointer;
   user-select: none;
-  flex: 1 1 auto;
+  flex: 0 1 auto; /* don't grow, so the sort arrow stays adjacent to the label text */
   min-width: 0;
+}
+
+/* Keep the column filter (⋮) button pinned to the right of the header */
+.filterable-header .header-content .filter-icon {
+  margin-left: auto;
 }
 
 .filterable-header .sortable-label:hover {

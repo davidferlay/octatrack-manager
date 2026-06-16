@@ -474,10 +474,10 @@ export function AudioFileTable({
                         onDragStart={(e) => handleColDragStart(e, colId)}
                         style={{ cursor: 'grab' }}
                       >
-                        {sortState && <span className="sort-indicator">{sortState === 'asc' ? '▲' : '▼'}</span>}
                         <span className="sortable-label">
                           {typeof header.column.columnDef.header === 'string' ? header.column.columnDef.header : colId}
                         </span>
+                        {sortState && <span className="sort-indicator">{sortState === 'asc' ? '▲' : '▼'}</span>}
                         {isFilterable && (
                           <button
                             className={`filter-icon ${openDropdown === dropdownKey || hasActiveFilter ? 'active' : ''}`}
