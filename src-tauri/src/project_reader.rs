@@ -17872,6 +17872,44 @@ mod tests {
         }
 
         #[test]
+        fn test_assign_flex_returns_ram_free_static_returns_none() {
+            let dir = setup_project_for_assign(&[]);
+            let project_path = dir.path().to_str().unwrap();
+
+            // FLEX assignment reports the recomputed Flex RAM free (Some)
+            let flex = assign_samples_to_slots(
+                project_path,
+                "FLEX",
+                vec![SlotAssignment {
+                    slot_index: 1,
+                    audio_path: "../AUDIO/kick.wav".to_string(),
+                    set_defaults: true,
+                }],
+            )
+            .unwrap();
+            assert!(
+                flex.flex_ram_free_mb.is_some(),
+                "FLEX assignment should report flex_ram_free_mb"
+            );
+
+            // STATIC assignment does not touch Flex RAM (None)
+            let stat = assign_samples_to_slots(
+                project_path,
+                "STATIC",
+                vec![SlotAssignment {
+                    slot_index: 1,
+                    audio_path: "../AUDIO/kick.wav".to_string(),
+                    set_defaults: true,
+                }],
+            )
+            .unwrap();
+            assert!(
+                stat.flex_ram_free_mb.is_none(),
+                "STATIC assignment should not report flex_ram_free_mb"
+            );
+        }
+
+        #[test]
         fn test_assign_single_slot_path_only() {
             // Pre-existing slot with custom attributes
             let dir = setup_project_for_assign(&[("FLEX", 1, "old_sample.wav")]);

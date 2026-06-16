@@ -589,7 +589,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
           unlisten = fn;
         }
       });
-    });
+    }).catch(() => { /* Tauri runtime unavailable — OS drag-drop disabled */ });
 
     return () => {
       cancelled = true;

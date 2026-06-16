@@ -1,7 +1,11 @@
-import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { invoke } from '@tauri-apps/api/core'
 import { SampleSlotsTable } from './SampleSlotsTable'
 import { TablePreferencesProvider } from '../context/TablePreferencesContext'
+
+const mockInvoke = vi.mocked(invoke)
 
 const mockSlots = [
   {
@@ -117,5 +121,101 @@ describe('SampleSlotsTable', () => {
       <SampleSlotsTable slots={mockSlots} slotPrefix="S" tableType="static" />
     )
     expect(screen.queryByTitle(/Flex RAM available/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('SampleSlotsTable — Audio Pool integration', () => {
+  beforeEach(() => {
+    mockInvoke.mockReset()
+    mockInvoke.mockResolvedValue([])
+  })
+
+  it('shows the Audio Pool toggle when audioPoolPath is provided', () => {
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" audioPoolPath="/set/AUDIO" />
+    )
+    expect(screen.getByTitle(/Show Audio Pool/i)).toBeInTheDocument()
+  })
+
+  it('hides the Audio Pool toggle when no audioPoolPath is provided', () => {
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" />
+    )
+    expect(screen.queryByTitle(/Show Audio Pool/i)).not.toBeInTheDocument()
+  })
+
+  it('keeps the Audio Pool toggle enabled in view mode (browsing allowed without edit mode)', () => {
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode={false} audioPoolPath="/set/AUDIO" />
+    )
+    expect(screen.getByTitle(/Show Audio Pool/i)).toBeEnabled()
+  })
+
+  it('reduces the slots table to essential columns when the Audio Pool pane opens, and restores on close', async () => {
+    const user = userEvent.setup()
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode audioPoolPath="/set/AUDIO" />
+    )
+    // Non-essential columns are visible by default
+    expect(screen.getByText('Source')).toBeInTheDocument()
+    expect(screen.getByText('Gain')).toBeInTheDocument()
+
+    await user.click(screen.getByTitle(/Show Audio Pool/i))
+
+    // After opening: only Slot/Sample/Compat/Status remain
+    await waitFor(() => expect(screen.queryByText('Source')).not.toBeInTheDocument())
+    expect(screen.queryByText('Gain')).not.toBeInTheDocument()
+    expect(screen.getByText('Sample')).toBeInTheDocument()
+    expect(screen.getByText('Compat')).toBeInTheDocument()
+
+    // Closing restores the previous column set
+    await user.click(screen.getByTitle(/Hide Audio Pool/i))
+    await waitFor(() => expect(screen.getByText('Source')).toBeInTheDocument())
+    expect(screen.getByText('Gain')).toBeInTheDocument()
+  })
+
+  it('does not assign a dropped sample and warns when not in edit mode', async () => {
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode={false} projectPath="/proj" audioPoolPath="/set/AUDIO" />
+    )
+    const row = screen.getByText('F1').closest('tr')!
+    const dataTransfer = {
+      getData: (key: string) =>
+        key === 'application/json'
+          ? JSON.stringify({ source: 'audio-pool-sidebar', files: ['/set/AUDIO/kick.wav'] })
+          : '',
+    }
+    fireEvent.drop(row, { dataTransfer })
+
+    await waitFor(() => expect(screen.getByText(/Toggle Edit mode to assign samples/i)).toBeInTheDocument())
+    expect(mockInvoke).not.toHaveBeenCalledWith('assign_samples_to_slots', expect.anything())
+  })
+
+  it('assigns a dropped sample when in edit mode', async () => {
+    mockInvoke.mockResolvedValue({ assigned_count: 1, updated_slots: [], flex_ram_free_mb: 80 })
+    const onSlotsUpdated = vi.fn()
+    renderWithProvider(
+      <SampleSlotsTable
+        slots={mockSlots}
+        slotPrefix="F"
+        tableType="flex"
+        isEditMode
+        projectPath="/proj"
+        audioPoolPath="/set/AUDIO"
+        onSlotsUpdated={onSlotsUpdated}
+      />
+    )
+    const row = screen.getByText('F2').closest('tr')! // empty slot
+    const dataTransfer = {
+      getData: (key: string) =>
+        key === 'application/json'
+          ? JSON.stringify({ source: 'audio-pool-sidebar', files: ['/set/AUDIO/kick.wav'] })
+          : '',
+    }
+    fireEvent.drop(row, { dataTransfer })
+
+    await waitFor(() =>
+      expect(mockInvoke).toHaveBeenCalledWith('assign_samples_to_slots', expect.objectContaining({ path: '/proj' }))
+    )
   })
 })

@@ -11,6 +11,12 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(),
 }))
 
+vi.mock('@tauri-apps/api/window', () => ({
+  getCurrentWindow: () => ({
+    onDragDropEvent: vi.fn(() => Promise.resolve(() => {})),
+  }),
+}))
+
 vi.mock('@tauri-apps/plugin-dialog', () => ({
   open: vi.fn(),
   save: vi.fn(),

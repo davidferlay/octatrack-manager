@@ -275,25 +275,31 @@ export function AudioPoolPage() {
     let unlisten: (() => void) | undefined;
     let cancelled = false;
 
-    getCurrentWindow().onDragDropEvent(async (event) => {
-      if (event.payload.type === 'over') {
-        setIsOverDropZone(true);
-      } else if (event.payload.type === 'leave') {
-        setIsOverDropZone(false);
-      } else if (event.payload.type === 'drop') {
-        setIsOverDropZone(false);
-        const paths = event.payload.paths;
-        if (paths && paths.length > 0 && destinationPathRef.current) {
-          await copyFilesToPool(paths, destinationPathRef.current);
+    // getCurrentWindow() throws if the Tauri runtime isn't present (e.g. plain
+    // browser / e2e smoke without mocks) — guard so it never blanks the page.
+    try {
+      getCurrentWindow().onDragDropEvent(async (event) => {
+        if (event.payload.type === 'over') {
+          setIsOverDropZone(true);
+        } else if (event.payload.type === 'leave') {
+          setIsOverDropZone(false);
+        } else if (event.payload.type === 'drop') {
+          setIsOverDropZone(false);
+          const paths = event.payload.paths;
+          if (paths && paths.length > 0 && destinationPathRef.current) {
+            await copyFilesToPool(paths, destinationPathRef.current);
+          }
         }
-      }
-    }).then(fn => {
-      if (cancelled) {
-        fn();
-      } else {
-        unlisten = fn;
-      }
-    });
+      }).then(fn => {
+        if (cancelled) {
+          fn();
+        } else {
+          unlisten = fn;
+        }
+      }).catch(() => { /* drag-drop unavailable */ });
+    } catch {
+      /* Tauri runtime unavailable — drag-drop import disabled */
+    }
 
     return () => {
       cancelled = true;
