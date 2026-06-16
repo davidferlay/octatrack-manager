@@ -401,28 +401,6 @@ export function AudioFileTable({
               <button className="header-search-clear" onClick={() => setSearchText('')} title="Clear search">×</button>
             )}
           </div>
-          {/* Column visibility toggle */}
-          <div className="column-menu-wrapper" ref={columnMenuRef}>
-            <button
-              className={`filter-icon column-menu-btn ${showColumnMenu ? 'active' : ''}`}
-              onClick={(e) => { e.stopPropagation(); setShowColumnMenu(v => !v); }}
-              title="Show/Hide Columns"
-            >
-              <i className="fas fa-columns"></i>
-            </button>
-            {showColumnMenu && (
-              <div className="column-visibility-dropdown">
-                <div className="dropdown-options">
-                  {table.getAllLeafColumns().map(col => (
-                    <label key={col.id} className="dropdown-option">
-                      <input type="checkbox" checked={col.getIsVisible()} onChange={col.getToggleVisibilityHandler()} />
-                      <span>{COLUMN_LABELS[col.id] ?? col.id}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
           <label className={`toggle-switch ${isPending ? 'pending' : ''}`} title="Hide folders from the file list">
             <span className="toggle-label">Hide folders</span>
             <div className="toggle-slider-container">
@@ -438,6 +416,29 @@ export function AudioFileTable({
               <span className="toggle-slider"></span>
             </div>
           </label>
+          {/* Column visibility toggle — positioned to the right of the Hide folders field */}
+          <div className="column-menu-wrapper" ref={columnMenuRef}>
+            <button
+              className={`column-visibility-btn ${showColumnMenu ? 'active' : ''}`}
+              onClick={(e) => { e.stopPropagation(); setShowColumnMenu(v => !v); }}
+              title="Show/Hide Columns"
+            >
+              ☰
+            </button>
+            {showColumnMenu && (
+              <div className="column-visibility-dropdown">
+                <div className="column-visibility-header">Show/Hide Columns</div>
+                <div className="dropdown-options">
+                  {table.getAllLeafColumns().map(col => (
+                    <label key={col.id} className="dropdown-option">
+                      <input type="checkbox" checked={col.getIsVisible()} onChange={col.getToggleVisibilityHandler()} />
+                      <span>{COLUMN_LABELS[col.id] ?? col.id}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

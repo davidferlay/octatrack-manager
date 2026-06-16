@@ -1148,7 +1148,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
                 className={`audio-pool-toggle-btn ${showAudioPool ? 'active' : ''}`}
                 onClick={() => setShowAudioPool(!showAudioPool)}
                 disabled={!isEditMode}
-                title={isEditMode ? "Hide Audio Pool" : "Audio Pool is only available in edit mode"}
+                title={isEditMode ? "Hide Audio Pool" : "Toggle on Edit mode to display the Audio Pool and drag & drop samples onto slots"}
               >
                 <i className="fas fa-columns"></i>
               </button>
@@ -1164,7 +1164,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
                 className="audio-pool-toggle-btn"
                 onClick={() => setShowAudioPool(true)}
                 disabled={!isEditMode}
-                title={isEditMode ? "Show Audio Pool" : "Audio Pool is only available in edit mode"}
+                title={isEditMode ? "Show Audio Pool" : "Toggle on Edit mode to display the Audio Pool and drag & drop samples onto slots"}
               >
                 <i className="fas fa-columns"></i>
               </button>
@@ -1347,7 +1347,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
           </div>
         </div>
         <div className="table-wrapper" ref={dropdownRef} style={{ overflowX: 'auto' }}>
-          <table className="samples-table" style={{ width: totalTableWidth, minWidth: '100%' }}>
+          <table className="samples-table slots-table" style={{ width: totalTableWidth, minWidth: '100%' }}>
             <thead>
               <tr>
                 {visibleColIds.map(colId => renderColHeader(colId))}

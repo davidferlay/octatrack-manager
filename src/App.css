@@ -1784,6 +1784,7 @@ h1 {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   transition: color 0.2s ease;
+  white-space: nowrap;
 }
 
 .toggle-switch:hover .toggle-label {
@@ -2286,8 +2287,13 @@ h1 {
   display: flex;
   padding: 0;
   gap: 0;
-  flex: 1;
+  /* Definite height (viewport minus the 52px project header) so each pane
+     gets a bounded box and scrolls independently instead of the page.
+     flex:none (not flex:1) so this height is honored rather than overridden
+     by flex-grow against the indefinite-height tab-content. */
+  flex: none;
   min-height: 0;
+  height: calc(100vh - 52px);
   overflow: hidden;
 }
 
@@ -2298,6 +2304,8 @@ h1 {
   min-width: 0; /* Allow flex shrink */
   display: flex;
   flex-direction: column;
+  /* Slightly lifted from pure black, but still darker than the audio pool pane (#1A1A1A) */
+  background: #121212;
 }
 
 .samples-tab.with-sidebar .samples-section > .filter-results-info {
@@ -2308,6 +2316,7 @@ h1 {
 .samples-tab.with-sidebar .samples-section > .table-wrapper {
   flex: 1;
   overflow: auto;
+  min-height: 0; /* allow the flex child to shrink so it scrolls independently */
 }
 
 .samples-tab.with-sidebar .samples-table {
@@ -2365,7 +2374,7 @@ h1 {
 
 .audio-pool-toggle-btn:disabled {
   opacity: 0.35;
-  cursor: not-allowed;
+  cursor: default;
 }
 
 .audio-pool-toggle-btn:disabled:hover {
@@ -2537,6 +2546,7 @@ h1 {
   margin-bottom: 0.75rem;
   padding-bottom: 0.5rem;
   border-bottom: 1px solid var(--elektron-border-gray);
+  white-space: nowrap;
 }
 
 .column-visibility-option {
@@ -2977,6 +2987,14 @@ h1 {
 .samples-table td {
   padding: 0.75rem 1rem;
   color: var(--elektron-text-primary);
+}
+
+/* Keep slot rows a constant height whether empty or filled (badges must not grow the row) */
+.slots-table td {
+  height: 44px;
+  padding-top: 0;
+  padding-bottom: 0;
+  vertical-align: middle;
 }
 
 .samples-table td:first-child {
@@ -5320,26 +5338,6 @@ th.col-drag-over {
 /* Column visibility menu */
 .column-menu-wrapper {
   position: relative;
-}
-
-.column-menu-btn {
-  background: none;
-  border: 1px solid transparent;
-  color: var(--elektron-muted-text);
-  cursor: pointer;
-  padding: 0.2rem 0.4rem;
-  border-radius: 3px;
-  font-size: 0.8rem;
-  line-height: 1;
-  transition: all 0.15s ease;
-  flex-shrink: 0;
-}
-
-.column-menu-btn:hover,
-.column-menu-btn.active {
-  background-color: var(--elektron-medium-gray);
-  border-color: var(--elektron-border-gray);
-  color: var(--elektron-orange);
 }
 
 .column-visibility-dropdown {

@@ -72,6 +72,7 @@
 .audio-pool-sidebar .table-wrapper {
   flex: 1;
   overflow: auto;
+  min-height: 0; /* allow the flex child to shrink so it scrolls independently */
 }
 
 /* Match samples-table styling */
