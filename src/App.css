@@ -810,8 +810,14 @@ h1 {
 }
 
 /* Scrollbar Styling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {

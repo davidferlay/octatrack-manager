@@ -918,8 +918,8 @@ td.col-size {
 /* Scrollbar styling — thin, matches global */
 .table-wrapper::-webkit-scrollbar,
 .transfer-list-container::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 
 .table-wrapper::-webkit-scrollbar-track,
