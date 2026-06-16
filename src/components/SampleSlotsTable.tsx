@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useTransition, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import {
   DndContext,
   DragOverlay,
@@ -124,9 +126,12 @@ function getSetRelativePath(projectPath: string | null): string {
 }
 
 export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated, onFlexRamUpdated, onImportToAudioPool, sidebarRefreshTrigger }: SampleSlotsTableProps) {
+  const navigate = useNavigate();
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const [dndDragFiles, setDndDragFiles] = useState<string[]>([]);
   const [viewModeToast, setViewModeToast] = useState(false);
+  // Right-click context menu on slot rows
+  const [slotMenu, setSlotMenu] = useState<{ x: number; y: number; slot: SampleSlot } | null>(null);
 
   const { flexPreferences, staticPreferences, setFlexPreferences, setStaticPreferences } = useTablePreferences();
 
@@ -296,6 +301,106 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
       setIsAssigning(false);
     }
   }, [isEditMode, projectPath, tableType, slots, buildRelativePath, onSlotsUpdated, onFlexRamUpdated]);
+
+  // Assign files to the first empty slot (context-menu action from the Audio Pool pane).
+  const assignToFirstEmpty = useCallback((paths: string[]) => {
+    const firstEmpty = slots.find(s => !s.path);
+    if (!firstEmpty) {
+      setViewModeToast(false);
+      return;
+    }
+    doAssignFiles(paths, firstEmpty);
+  }, [slots, doAssignFiles]);
+
+  const slotType = tableType === 'flex' ? 'FLEX' : 'STATIC';
+
+  // Clear the sample assigned to a slot (slot becomes empty).
+  const clearSlotSample = useCallback(async (slot: SampleSlot) => {
+    if (!isEditMode || !projectPath) return;
+    setIsAssigning(true);
+    try {
+      const result = await invoke<AssignSamplesResult>("clear_sample_slots", {
+        path: projectPath, slotType, slotIndices: [slot.slot_id],
+      });
+      if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
+      if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb);
+    } catch (error) {
+      console.error("Error clearing sample slot:", error);
+    } finally {
+      setIsAssigning(false);
+    }
+  }, [isEditMode, projectPath, slotType, onSlotsUpdated, onFlexRamUpdated]);
+
+  // Reset a slot's audio-editor attributes to OT defaults, keeping the sample assigned.
+  const clearSlotAttributes = useCallback(async (slot: SampleSlot) => {
+    if (!isEditMode || !projectPath || !slot.path) return;
+    setIsAssigning(true);
+    try {
+      const result = await invoke<AssignSamplesResult>("assign_samples_to_slots", {
+        path: projectPath, slotType,
+        assignments: [{ slot_index: slot.slot_id, audio_path: slot.path, set_defaults: true }],
+      });
+      if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
+      if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb);
+    } catch (error) {
+      console.error("Error clearing slot attributes:", error);
+    } finally {
+      setIsAssigning(false);
+    }
+  }, [isEditMode, projectPath, slotType, onSlotsUpdated, onFlexRamUpdated]);
+
+  // Import an audio file from the system into the project and assign it to the slot.
+  const importToSlot = useCallback(async (slot: SampleSlot) => {
+    if (!isEditMode || !projectPath) return;
+    const selected = await openFileDialog({
+      multiple: false,
+      filters: [{ name: 'Audio', extensions: ['wav', 'aif', 'aiff', 'flac', 'mp3', 'ogg', 'm4a'] }],
+    });
+    if (!selected || Array.isArray(selected)) return;
+    setIsAssigning(true);
+    try {
+      const destPaths = await invoke<string[]>('copy_audio_files_to_project', {
+        sourcePaths: [selected], destinationDir: projectPath,
+      });
+      if (!destPaths || destPaths.length === 0) return;
+      const filename = destPaths[0].split(/[\\/]/).pop() ?? destPaths[0];
+      const result = await invoke<AssignSamplesResult>("assign_samples_to_slots", {
+        path: projectPath, slotType,
+        assignments: [{ slot_index: slot.slot_id, audio_path: filename, set_defaults: !slot.path }],
+      });
+      if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
+      if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb);
+    } catch (error) {
+      console.error("Error importing audio to slot:", error);
+    } finally {
+      setIsAssigning(false);
+    }
+  }, [isEditMode, projectPath, slotType, onSlotsUpdated, onFlexRamUpdated]);
+
+  // Navigate to the full Audio Pool page for this Set.
+  const openAudioPoolPage = useCallback(() => {
+    if (!audioPoolPath) return;
+    const setName = audioPoolPath.replace(/[/\\]AUDIO[/\\]?$/i, '').split(/[/\\]/).pop() || 'Audio Pool';
+    navigate(`/audio-pool?path=${encodeURIComponent(audioPoolPath)}&name=${encodeURIComponent(setName)}`);
+  }, [audioPoolPath, navigate]);
+
+  // Import audio files from the system into the Audio Pool (current sidebar dir).
+  const importToPool = useCallback((paths: string[], destDir: string) => {
+    if (onImportToAudioPool) onImportToAudioPool(paths, destDir);
+  }, [onImportToAudioPool]);
+
+  // Close the slot context menu on outside click / Escape
+  useEffect(() => {
+    if (!slotMenu) return;
+    const close = () => setSlotMenu(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSlotMenu(null); };
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', close);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [slotMenu]);
 
   // Handle drop on a slot row (HTML5 drag — works on Linux; macOS uses dnd-kit via handleDndDragEnd)
   const handleSlotDrop = useCallback(async (e: React.DragEvent, targetSlot: SampleSlot) => {
@@ -1178,6 +1283,8 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
             dndMode={true}
             refreshKey={sidebarRefreshKey}
             onCurrentPathChange={(path) => { sidebarCurrentPathRef.current = path; }}
+            onImport={importToPool}
+            onAssignToFirstEmpty={assignToFirstEmpty}
             toggleButton={
               <button
                 className={`audio-pool-toggle-btn ${showAudioPool ? 'active' : ''}`}
@@ -1200,6 +1307,15 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
                 title={isEditMode ? "Show Audio Pool" : "Show Audio Pool (read-only — toggle Edit mode to assign samples)"}
               >
                 <i className="fas fa-columns"></i>
+              </button>
+            )}
+            {audioPoolPath && (
+              <button
+                className="audio-pool-page-btn"
+                onClick={openAudioPoolPage}
+                title="Open the Audio Pool page for this Set"
+              >
+                <i className="fas fa-up-right-from-square"></i>
               </button>
             )}
             <span>{sortedSlots.length}/{slots.length} slots</span>
@@ -1396,6 +1512,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
                 onDragOver={(e: React.DragEvent) => handleSlotDragOver(e, slot.slot_id)}
                 onDragLeave={handleSlotDragLeave}
                 onDrop={(e: React.DragEvent) => handleSlotDrop(e, slot)}
+                onContextMenu={(e: React.MouseEvent) => { e.preventDefault(); setSlotMenu({ x: e.clientX, y: e.clientY, slot }); }}
               >
                 {visibleColIds.map(colId => renderColCell(colId, slot))}
               </DroppableSlotRow>
@@ -1427,6 +1544,39 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
     {viewModeToast && (
       <div className="toast-notification warning">
         <i className="fas fa-exclamation-triangle"></i> Toggle Edit mode to assign samples to slots
+      </div>
+    )}
+    {slotMenu && (
+      <div
+        className="context-menu"
+        style={{ position: 'fixed', top: slotMenu.y, left: slotMenu.x }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {!isEditMode && (
+          <div className="context-menu-hint">Toggle Edit mode to modify slots</div>
+        )}
+        <button
+          className="context-menu-item"
+          disabled={!isEditMode || !slotMenu.slot.path}
+          onClick={() => { clearSlotSample(slotMenu.slot); setSlotMenu(null); }}
+        >
+          <i className="fas fa-eraser"></i> Clear sample
+        </button>
+        <button
+          className="context-menu-item"
+          disabled={!isEditMode || !slotMenu.slot.path}
+          onClick={() => { clearSlotAttributes(slotMenu.slot); setSlotMenu(null); }}
+        >
+          <i className="fas fa-rotate-left"></i> Reset attributes to defaults
+        </button>
+        <div className="context-menu-separator"></div>
+        <button
+          className="context-menu-item"
+          disabled={!isEditMode}
+          onClick={() => { importToSlot(slotMenu.slot); setSlotMenu(null); }}
+        >
+          <i className="fas fa-file-import"></i> Import audio file from system…
+        </button>
       </div>
     )}
     </>

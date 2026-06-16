@@ -2371,6 +2371,37 @@ h1 {
   cursor: default;
 }
 
+/* Open-Audio-Pool-page button — sits next to the toggle, orange-accented like the projects list pool card */
+.audio-pool-page-btn {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  color: var(--elektron-orange);
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 0.95rem;
+  line-height: 1;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+}
+
+.audio-pool-page-btn:hover {
+  background: rgba(245, 158, 11, 0.25);
+  border-color: var(--elektron-orange);
+}
+
+/* Disabled / view-mode hint inside a context menu */
+.context-menu-hint {
+  font-size: 0.7rem;
+  color: var(--elektron-muted-text);
+  padding: 0.35rem 0.75rem;
+  border-bottom: 1px solid var(--elektron-border-gray);
+  white-space: nowrap;
+}
+
 .audio-pool-toggle-btn:disabled:hover {
   background: none;
   border-color: var(--elektron-border-gray);

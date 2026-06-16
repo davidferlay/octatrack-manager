@@ -128,4 +128,34 @@ test.describe('Audio Pool sidebar in Flex slots', () => {
     await toggle.click()
     await expect(page.locator('.audio-pool-sidebar')).toBeVisible()
   })
+
+  test('shows the open-Audio-Pool-page button when a pool exists', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    await expect(page.locator('.audio-pool-page-btn')).toBeVisible()
+  })
+
+  test('hides the open-Audio-Pool-page button without a pool', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: false })
+    await openFlexTab(page)
+    await expect(page.locator('.audio-pool-page-btn')).toHaveCount(0)
+  })
+
+  test('pane shows an Import icon button', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    await page.locator('.audio-pool-toggle-btn').first().click()
+    await expect(page.locator('.audio-pool-sidebar button[title*="Import audio files"]')).toBeVisible()
+  })
+
+  test('right-clicking a slot row opens the slot context menu', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    // First slot F1 has a sample in the mock
+    const row = page.locator('.samples-table tbody tr').first()
+    await row.click({ button: 'right' })
+    await expect(page.getByText('Clear sample')).toBeVisible()
+    await expect(page.getByText(/Reset attributes/i)).toBeVisible()
+    await expect(page.getByText(/Import audio file from system/i)).toBeVisible()
+  })
 })

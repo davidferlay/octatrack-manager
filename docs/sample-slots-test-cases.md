@@ -47,5 +47,27 @@ go to the **Flex** (or **Static**) tab.
 | AP28 | OS drop | Drop OS file on sidebar | Drag an audio file from the OS file manager onto the Audio Pool pane | File is imported (copied/converted) into the currently browsed AUDIO/ directory |
 | AP29 | OS drop | Sidebar refresh after import | After AP28 completes | The new file appears in the sidebar listing |
 | AP30 | OS drop | Blocked on slot in View mode | In View mode, drop an OS file on a slot row | No assignment occurs (slot assignment requires Edit mode) |
+| **Import into the pool from the pane** | | | | |
+| AP32 | Import | Import icon present | Open the Audio Pool pane | A small Import (file-import) icon button is shown in the pane toolbar |
+| AP33 | Import | Import opens dialog | Click the pane Import icon | System file picker opens (audio filters); chosen files import into the currently browsed AUDIO/ directory |
+| AP34 | Import | Available in View mode | In View mode, use the pane Import icon | Import works (pool import does not modify the project) |
+| AP35 | Import | Refresh after import | Complete an import | The imported file appears in the pane listing |
+| **Audio Pool pane item context menu** | | | | |
+| AP36 | Pane menu | Right-click a pool file | Right-click a file in the Audio Pool pane | Context menu appears with "Assign to first empty slot" |
+| AP37 | Pane menu | Assign to first empty (Edit) | In Edit mode, choose "Assign to first empty slot" | File is assigned to the first empty slot (OT defaults applied) |
+| AP38 | Pane menu | Multi-select assign | Select several pool files, right-click → assign to first empty | Files fill consecutive empty slots from the first empty one |
+| AP39 | Pane menu | Disabled in View mode | In View mode, right-click a pool file | "Assign to first empty slot" is disabled with a "Toggle Edit mode" hint |
+| AP40 | Pane menu | No menu on folders | Right-click a folder in the pane | No assign context menu appears (folders are for navigation) |
+| **Sample slot item context menu** | | | | |
+| AP41 | Slot menu | Right-click a slot | Right-click any slot row | Context menu: Clear sample, Reset attributes to defaults, Import audio file from system |
+| AP42 | Slot menu | Clear sample (Edit) | In Edit mode, right-click a filled slot → Clear sample | Slot becomes empty; Flex RAM (Flex tab) updates |
+| AP43 | Slot menu | Disabled on empty slot | Right-click an empty slot | "Clear sample" and "Reset attributes" are disabled (nothing to clear) |
+| AP44 | Slot menu | Reset attributes (Edit) | In Edit mode, right-click a filled slot → Reset attributes | Attributes reset to OT defaults (GAIN 72, TSMODE 2, LOOPMODE 0, TRIGQUANTIZATION -1); path unchanged |
+| AP45 | Slot menu | Import to slot (Edit) | In Edit mode, right-click a slot → Import audio file from system | File picker opens; chosen file is copied into the project and assigned to that slot |
+| AP46 | Slot menu | Disabled in View mode | In View mode, right-click a slot | All mutating items are disabled with a "Toggle Edit mode" hint |
+| **Open Audio Pool page** | | | | |
+| AP47 | Open page | Button present with pool | Open Flex tab for a project in a Set with a pool | An open-Audio-Pool-page button (external-link icon) shows next to the show/hide toggle |
+| AP48 | Open page | Hidden without pool | Open Flex tab for a project not in a Set | The open-Audio-Pool-page button is not shown |
+| AP49 | Open page | Navigates to pool page | Click the open-Audio-Pool-page button | App navigates to the full Audio Pool page for this Set |
 | **Copy back to source (Audio Pool page)** | | | | |
 | AP31 | Copy back | Pool → source uses shared pipeline | On the Audio Pool page, copy a destination file back to the source directory | Transfer shows in the progress pane; overwrite modal appears if a same-named file already exists |

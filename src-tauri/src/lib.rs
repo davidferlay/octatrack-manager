@@ -155,6 +155,19 @@ async fn assign_samples_to_slots(
 }
 
 #[tauri::command]
+async fn clear_sample_slots(
+    path: String,
+    slot_type: String,
+    slot_indices: Vec<u16>,
+) -> Result<AssignSamplesResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        project_reader::clear_sample_slots(&path, &slot_type, slot_indices)
+    })
+    .await
+    .unwrap()
+}
+
+#[tauri::command]
 async fn commit_part(path: String, bank_id: String, part_id: u8) -> Result<(), String> {
     // Commit a part: copy parts.unsaved to parts.saved (like Octatrack's "SAVE" command)
     tauri::async_runtime::spawn_blocking(move || commit_part_data(&path, &bank_id, part_id))
@@ -847,6 +860,7 @@ pub fn run() {
             fix_missing_samples,
             // Sample slot assignment
             assign_samples_to_slots,
+            clear_sample_slots,
             // Project Management
             project_manager::create_project,
             project_manager::copy_project,

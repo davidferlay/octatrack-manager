@@ -4102,6 +4102,132 @@ pub fn assign_samples_to_slots(
     })
 }
 
+/// Remove the `[SAMPLE]` blocks for the given slot indices, emptying those slots.
+/// Returns the updated slots (now empty) plus recomputed Flex RAM free for FLEX.
+pub fn clear_sample_slots(
+    project_path: &str,
+    slot_type: &str,
+    slot_indices: Vec<u16>,
+) -> Result<AssignSamplesResult, String> {
+    let slot_type_upper = slot_type.to_uppercase();
+    if !["FLEX", "STATIC"].contains(&slot_type_upper.as_str()) {
+        return Err(format!(
+            "Invalid slot_type: {}. Must be 'FLEX' or 'STATIC'",
+            slot_type
+        ));
+    }
+    for idx in &slot_indices {
+        if !(1..=128).contains(idx) {
+            return Err(format!("Slot index {} out of range. Must be 1-128", idx));
+        }
+    }
+    if slot_indices.is_empty() {
+        return Ok(AssignSamplesResult {
+            assigned_count: 0,
+            updated_slots: Vec::new(),
+            flex_ram_free_mb: None,
+        });
+    }
+
+    let path = Path::new(project_path);
+    let project_file_path = if path.join("project.work").exists() {
+        path.join("project.work")
+    } else if path.join("project.strd").exists() {
+        path.join("project.strd")
+    } else {
+        return Err("No project file found".to_string());
+    };
+
+    let to_clear: std::collections::HashSet<(String, u16)> = slot_indices
+        .iter()
+        .map(|i| (slot_type_upper.clone(), *i))
+        .collect();
+
+    // Read + decode
+    let raw_bytes = std::fs::read(&project_file_path)
+        .map_err(|e| format!("Failed to read project file: {}", e))?;
+    let (decoded, _, _) = encoding_rs::WINDOWS_1258.decode(&raw_bytes);
+    let content = decoded.into_owned();
+
+    // Walk [SAMPLE] blocks, dropping the ones whose (TYPE, SLOT) is in to_clear.
+    let mut kept_blocks: Vec<String> = Vec::new();
+    let mut first_block_start: Option<usize> = None;
+    let mut last_block_end: usize = 0;
+    let mut pos = 0;
+    while let Some(off) = content[pos..].find("[SAMPLE]") {
+        let block_start = pos + off;
+        if first_block_start.is_none() {
+            first_block_start = Some(block_start);
+        }
+        let end_tag = "[/SAMPLE]";
+        let block_end = content[block_start..]
+            .find(end_tag)
+            .map(|i| block_start + i + end_tag.len())
+            .ok_or_else(|| "Malformed project file: unclosed [SAMPLE] block".to_string())?;
+        let block = &content[block_start..block_end];
+
+        let stype = block
+            .lines()
+            .find(|l| l.starts_with("TYPE="))
+            .map(|l| l.trim_end_matches('\r')[5..].to_string())
+            .unwrap_or_default();
+        let sid = block
+            .lines()
+            .find(|l| l.starts_with("SLOT="))
+            .and_then(|l| l.trim_end_matches('\r')[5..].parse::<u16>().ok())
+            .unwrap_or(0);
+
+        if !to_clear.contains(&(stype.to_uppercase(), sid)) {
+            kept_blocks.push(block.to_string());
+        }
+        last_block_end = block_end;
+        pos = block_end;
+    }
+
+    // Nothing to do if there were no blocks
+    if let Some(fbs) = first_block_start {
+        let pre = content[..fbs].to_string();
+        let post = content[last_block_end..].to_string();
+        let mut result = String::with_capacity(content.len());
+        result.push_str(&pre);
+        for (i, block) in kept_blocks.iter().enumerate() {
+            if i > 0 {
+                result.push_str("\r\n\r\n");
+            }
+            result.push_str(block);
+        }
+        result.push_str(&post);
+        let (encoded, _, _) = encoding_rs::WINDOWS_1258.encode(&result);
+        std::fs::write(&project_file_path, &*encoded)
+            .map_err(|e| format!("Failed to write project file: {}", e))?;
+    }
+
+    // Re-read affected slots
+    let metadata = read_project_metadata(project_path)?;
+    let all_slots = match slot_type_upper.as_str() {
+        "FLEX" => metadata.sample_slots.flex_slots,
+        "STATIC" => metadata.sample_slots.static_slots,
+        _ => unreachable!(),
+    };
+    let cleared_indices: std::collections::HashSet<u16> = slot_indices.iter().copied().collect();
+    let updated_slots: Vec<SampleSlot> = all_slots
+        .into_iter()
+        .filter(|s| cleared_indices.contains(&(s.slot_id as u16)))
+        .collect();
+
+    let flex_ram_free_mb = if slot_type_upper == "FLEX" {
+        Some(metadata.memory_settings.flex_ram_free_mb)
+    } else {
+        None
+    };
+
+    Ok(AssignSamplesResult {
+        assigned_count: slot_indices.len(),
+        updated_slots,
+        flex_ram_free_mb,
+    })
+}
+
 /// Patch individual field lines within a `[SAMPLE]...[/SAMPLE]` block.
 /// Only lines whose field name (before `=`) matches an entry in `updates` are replaced.
 /// If a field in `updates` doesn't exist in the block, it is inserted before `[/SAMPLE]`.
@@ -17869,6 +17995,51 @@ mod tests {
             assert!(raw.contains("TSMODE=2"));
             assert!(raw.contains("LOOPMODE=0"));
             assert!(raw.contains("TRIGQUANTIZATION=-1"));
+        }
+
+        #[test]
+        fn test_clear_sample_slot_empties_it() {
+            // Slot 1 has a sample; clearing it should empty the slot.
+            let dir = setup_project_for_assign(&[("FLEX", 1, "kick.wav")]);
+            let project_path = dir.path().to_str().unwrap();
+
+            let before = surgical_write_tests::read_raw_project_work(dir.path());
+            assert!(before.contains("PATH=kick.wav"));
+
+            let result = clear_sample_slots(project_path, "FLEX", vec![1]).unwrap();
+            assert_eq!(result.assigned_count, 1);
+            assert_eq!(result.updated_slots.len(), 1);
+            assert_eq!(result.updated_slots[0].path, None);
+            assert!(result.flex_ram_free_mb.is_some());
+
+            // The [SAMPLE] block for the cleared slot is gone
+            let after = surgical_write_tests::read_raw_project_work(dir.path());
+            assert!(!after.contains("PATH=kick.wav"));
+        }
+
+        #[test]
+        fn test_clear_sample_slots_invalid_index() {
+            let dir = setup_project_for_assign(&[]);
+            let project_path = dir.path().to_str().unwrap();
+            assert!(clear_sample_slots(project_path, "FLEX", vec![0]).is_err());
+            assert!(clear_sample_slots(project_path, "FLEX", vec![129]).is_err());
+        }
+
+        #[test]
+        fn test_clear_sample_slots_only_targets_requested() {
+            // Two slots assigned; clearing slot 1 must leave slot 3 intact.
+            let dir =
+                setup_project_for_assign(&[("FLEX", 1, "kick.wav"), ("FLEX", 3, "snare.wav")]);
+            let project_path = dir.path().to_str().unwrap();
+
+            clear_sample_slots(project_path, "FLEX", vec![1]).unwrap();
+
+            let after = surgical_write_tests::read_raw_project_work(dir.path());
+            assert!(!after.contains("PATH=kick.wav"), "slot 1 should be cleared");
+            assert!(
+                after.contains("PATH=snare.wav"),
+                "slot 3 should be preserved"
+            );
         }
 
         #[test]
