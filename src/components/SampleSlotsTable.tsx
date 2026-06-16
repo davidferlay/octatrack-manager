@@ -175,6 +175,24 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
 
   // Audio Pool sidebar state
   const [showAudioPool, setShowAudioPool] = useState(false);
+  const savedColumnsRef = useRef<typeof visibleColumns | null>(null);
+
+  // When the sidebar opens, stash current columns and show only essentials;
+  // when it closes, restore the stashed set.
+  const toggleAudioPool = (open: boolean) => {
+    if (open && !showAudioPool) {
+      savedColumnsRef.current = { ...visibleColumns };
+      setVisibleColumns({
+        slot: true, sample: true, compatibility: true, status: true,
+        source: false, gain: false, timestretch: false, loop: false,
+        format: false, bitdepth: false, samplerate: false,
+      });
+    } else if (!open && showAudioPool && savedColumnsRef.current) {
+      setVisibleColumns(savedColumnsRef.current);
+      savedColumnsRef.current = null;
+    }
+    setShowAudioPool(open);
+  };
   const [dragOverSlotId, setDragOverSlotId] = useState<number | null>(null);
   const [isAssigning, setIsAssigning] = useState(false);
 
@@ -1155,7 +1173,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
             toggleButton={
               <button
                 className={`audio-pool-toggle-btn ${showAudioPool ? 'active' : ''}`}
-                onClick={() => setShowAudioPool(!showAudioPool)}
+                onClick={() => toggleAudioPool(!showAudioPool)}
                 title="Hide Audio Pool"
               >
                 <i className="fas fa-columns"></i>
@@ -1170,7 +1188,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
             {!showAudioPool && audioPoolPath && (
               <button
                 className="audio-pool-toggle-btn"
-                onClick={() => setShowAudioPool(true)}
+                onClick={() => toggleAudioPool(true)}
                 title={isEditMode ? "Show Audio Pool" : "Show Audio Pool (read-only — toggle Edit mode to assign samples)"}
               >
                 <i className="fas fa-columns"></i>
