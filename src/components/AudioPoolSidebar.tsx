@@ -183,6 +183,7 @@ export function AudioPoolSidebar({ audioPoolPath, toggleButton, dndMode = false,
         isActive={true}
         rowRefs={rowRefs}
         dndMode={dndMode}
+        initialColumnVisibility={{ format: false, bitrate: false, samplerate: false }}
         headerPrefix={
           <>
             {toggleButton}

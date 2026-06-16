@@ -103,6 +103,8 @@ export interface AudioFileTableProps {
   headerPrefix?: ReactNode;
   /** When true, rows use @dnd-kit pointer-based drag instead of HTML5 drag (fixes macOS WebKit) */
   dndMode?: boolean;
+  /** Initial column visibility — columns not listed default to visible */
+  initialColumnVisibility?: Record<string, boolean>;
 }
 
 const DEFAULT_COLUMN_SIZES: Record<string, number> = {
@@ -147,6 +149,7 @@ export function AudioFileTable({
   rowRefs,
   headerPrefix,
   dndMode = false,
+  initialColumnVisibility,
 }: AudioFileTableProps) {
   // Pre-filter state (applied before TanStack)
   const [searchText, setSearchText] = useState('');
@@ -163,7 +166,7 @@ export function AudioFileTable({
 
   // TanStack column state
   const [sorting, setSorting] = useState<SortingState>([{ id: 'name', desc: false }]);
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility ?? {});
   const [columnOrder, setColumnOrder] = useState<ColumnOrderState>(['name', 'format', 'bitrate', 'samplerate', 'size']);
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   const [showColumnMenu, setShowColumnMenu] = useState(false);
