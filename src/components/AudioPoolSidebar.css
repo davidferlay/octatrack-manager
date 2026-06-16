@@ -110,7 +110,7 @@
 .audio-pool-sidebar .audio-files-table td {
   padding: 0 10px;
   border-bottom: none;
-  height: 44px;
+  height: 40px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
