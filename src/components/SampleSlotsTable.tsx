@@ -1365,7 +1365,6 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
               <DroppableSlotRow
                 key={slot.slot_id}
                 slotId={slot.slot_id}
-                disabled={!isEditMode}
                 className={isEditMode && (dragOverSlotId === slot.slot_id || osDragOverSlotId === slot.slot_id) ? 'drop-target-highlight' : ''}
                 onDragEnter={handleSlotDragEnter}
                 onDragOver={(e: React.DragEvent) => handleSlotDragOver(e, slot.slot_id)}

@@ -221,12 +221,6 @@
 }
 
 /* Ensure table headers align */
-.source-panel .audio-files-table th,
-.dest-panel .audio-files-table th {
-  height: 32px;
-  box-sizing: border-box;
-}
-
 .audio-panel.dest-panel {
   flex: 1;
   min-width: 0;
@@ -360,7 +354,7 @@
   padding: 0.5rem 1rem;
   background-color: rgba(255, 255, 255, 0.02);
   border-bottom: 1px solid var(--elektron-border-gray);
-  font-size: 0.8rem;
+  font-size: 1rem;
   color: var(--elektron-text-secondary);
   flex-shrink: 0;
 }
@@ -437,9 +431,10 @@
 }
 
 .audio-files-table td {
-  padding: 0.5rem 0.75rem;
+  padding: 0.4rem 0.75rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   color: var(--elektron-text-primary);
+  font-size: 0.85rem;
 }
 
 .audio-files-table tbody tr {
@@ -920,27 +915,27 @@ td.col-size {
   flex-shrink: 0;
 }
 
-/* Scrollbar styling */
+/* Scrollbar styling — thin, matches global */
 .table-wrapper::-webkit-scrollbar,
 .transfer-list-container::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 .table-wrapper::-webkit-scrollbar-track,
 .transfer-list-container::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.02);
+  background: transparent;
 }
 
 .table-wrapper::-webkit-scrollbar-thumb,
 .transfer-list-container::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
 }
 
 .table-wrapper::-webkit-scrollbar-thumb:hover,
 .transfer-list-container::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.35);
 }
 
 /* Modal overlay and content */
