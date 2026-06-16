@@ -102,20 +102,20 @@
 }
 
 .audio-pool-sidebar .audio-files-table th {
-  padding: 0.75rem 10px;
-  color: var(--elektron-text-primary);
+  padding: 0.75rem 1rem;
+  color: #bbb;
   border-bottom: none;
 }
 
 .audio-pool-sidebar .audio-files-table td {
   padding: 0 10px;
   border-bottom: none;
-  height: 32px;
-  line-height: 32px;
+  height: 44px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   max-width: 0;
+  vertical-align: middle;
 }
 
 .audio-pool-sidebar .audio-files-table td.col-name {
@@ -125,7 +125,6 @@
 }
 
 .audio-pool-sidebar .audio-files-table tbody tr {
-  height: 32px;
   border-bottom: 1px solid var(--elektron-border-gray, #333);
 }
 

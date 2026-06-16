@@ -449,7 +449,7 @@ export function AudioFileTable({
       <div className="table-wrapper" ref={tableWrapperRef}>
         <table
           className="audio-files-table"
-          style={{ tableLayout: 'fixed', width: '100%', minWidth: table.getTotalSize() }}
+          style={{ width: '100%' }}
         >
           <thead>
             {table.getHeaderGroups().map(hg => (

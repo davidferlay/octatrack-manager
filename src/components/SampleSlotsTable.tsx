@@ -936,7 +936,6 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
 
   // Compute visible column IDs respecting current column order
   const visibleColIds = columnOrder.filter(id => visibleColumns[id as keyof typeof visibleColumns]);
-  const totalTableWidth = visibleColIds.reduce((sum, id) => sum + (columnSizing[id] ?? 80), 0);
 
   // Check if any filter is active
   const hasActiveFilters = compatibilityFilter !== 'all' || statusFilter !== 'all' ||
@@ -1059,7 +1058,16 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
       <th
         key={colId}
         className={`filterable-header col-${colId}${dragOverColId === colId ? ' col-drag-over' : ''}`}
-        style={{ position: 'relative', width: columnSizing[colId] ?? 80, minWidth: 50 }}
+        style={{
+          position: 'relative',
+          minWidth: 50,
+          // "sample" column has no explicit width — it auto-fills remaining space
+          // in the fixed-layout table. All other columns use their sizing value.
+          ...(colId !== 'sample' ? { width: showAudioPool
+            ? ({ slot: 65, compatibility: 95, status: 85 }[colId] ?? 80)
+            : (columnSizing[colId] ?? 80)
+          } : {}),
+        }}
         onDragOver={(e) => handleColDragOver(e, colId)}
         onDrop={(e) => handleColDrop(e, colId)}
         onDragLeave={handleColDragLeave}
@@ -1372,7 +1380,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
           </div>
         </div>
         <div className="table-wrapper" ref={dropdownRef} style={{ overflowX: 'auto' }}>
-          <table className="samples-table slots-table" style={{ width: totalTableWidth, minWidth: '100%' }}>
+          <table className="samples-table slots-table" style={{ width: '100%' }}>
             <thead>
               <tr>
                 {visibleColIds.map(colId => renderColHeader(colId))}

@@ -2835,7 +2835,6 @@ h1 {
   border-collapse: collapse;
   font-family: 'Courier New', monospace;
   font-size: 0.875rem;
-  table-layout: fixed;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -2850,10 +2849,13 @@ h1 {
   text-align: left;
   padding: 0.75rem 1rem;
   font-weight: 600;
-  color: var(--elektron-text-primary);
+  color: #bbb;
   text-transform: uppercase;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--elektron-border-gray);
+  white-space: nowrap;
+  position: relative;
 }
 
 /* Column widths - using classes instead of nth-child for dynamic column visibility */
