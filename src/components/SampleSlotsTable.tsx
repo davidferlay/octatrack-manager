@@ -1405,6 +1405,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
             onCurrentPathChange={(path) => { sidebarCurrentPathRef.current = path; }}
             onImport={importToPool}
             onAssignToFirstEmpty={assignToFirstEmpty}
+            hasEmptySlot={slots.some(s => !s.path)}
             onAssignToSelected={assignToSelected}
             hasSelectedSlot={selectedSlots.size > 0}
             onOpenAudioPoolPage={openAudioPoolPage}

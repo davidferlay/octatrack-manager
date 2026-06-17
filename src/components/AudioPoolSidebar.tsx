@@ -16,6 +16,8 @@ interface AudioPoolSidebarProps {
   onImport?: (paths: string[], destDir: string) => void;
   /** Assign the given files to the first empty sample slot (Edit mode only). */
   onAssignToFirstEmpty?: (paths: string[]) => void;
+  /** Whether at least one empty sample slot exists (enables "Assign to first empty slot"). */
+  hasEmptySlot?: boolean;
   /** Assign the given files starting at the currently-selected slot (Edit mode only). */
   onAssignToSelected?: (paths: string[]) => void;
   /** Whether at least one sample slot is currently selected (enables "Assign to selected slot"). */
@@ -26,7 +28,7 @@ interface AudioPoolSidebarProps {
   persistKey?: string;
 }
 
-export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndMode = false, refreshKey, onCurrentPathChange, onImport, onAssignToFirstEmpty, onAssignToSelected, hasSelectedSlot, onOpenAudioPoolPage, persistKey }: AudioPoolSidebarProps) {
+export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndMode = false, refreshKey, onCurrentPathChange, onImport, onAssignToFirstEmpty, hasEmptySlot = true, onAssignToSelected, hasSelectedSlot, onOpenAudioPoolPage, persistKey }: AudioPoolSidebarProps) {
   // Restore the last-browsed directory (only if it still sits under this pool root).
   const [currentPath, setCurrentPath] = useState(() => {
     if (persistKey) {
@@ -323,8 +325,8 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
         >
           <button
             className="context-menu-item"
-            disabled={!isEditMode}
-            title={!isEditMode ? 'Toggle Edit mode to assign to slots' : undefined}
+            disabled={!isEditMode || !hasEmptySlot}
+            title={!isEditMode ? 'Toggle Edit mode to assign to slots' : (!hasEmptySlot ? 'No empty slot available' : undefined)}
             onClick={() => { onAssignToFirstEmpty?.(menuTargets(itemMenu.file)); setItemMenu(null); }}
           >
             <i className="fas fa-arrow-right"></i> Assign to first empty slot
