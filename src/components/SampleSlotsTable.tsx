@@ -328,6 +328,15 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     doAssignFiles(paths, firstEmpty);
   }, [slots, doAssignFiles]);
 
+  // Assign files starting at the currently-selected slot (cursor, else lowest selected id).
+  const assignToSelected = useCallback((paths: string[]) => {
+    const targetId = lastClickedSlotId != null && selectedSlots.has(lastClickedSlotId)
+      ? lastClickedSlotId
+      : Math.min(...Array.from(selectedSlots));
+    const target = slots.find(s => s.slot_id === targetId);
+    if (target) doAssignFiles(paths, target);
+  }, [slots, selectedSlots, lastClickedSlotId, doAssignFiles]);
+
   const slotType = tableType === 'flex' ? 'FLEX' : 'STATIC';
 
   // Clear the sample assigned to a slot (slot becomes empty).
@@ -1396,6 +1405,8 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
             onCurrentPathChange={(path) => { sidebarCurrentPathRef.current = path; }}
             onImport={importToPool}
             onAssignToFirstEmpty={assignToFirstEmpty}
+            onAssignToSelected={assignToSelected}
+            hasSelectedSlot={selectedSlots.size > 0}
             onOpenAudioPoolPage={openAudioPoolPage}
             persistKey={projectPath ? `sidebar:${projectPath}:${tableType}` : undefined}
             toggleButton={

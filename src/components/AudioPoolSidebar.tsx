@@ -16,13 +16,17 @@ interface AudioPoolSidebarProps {
   onImport?: (paths: string[], destDir: string) => void;
   /** Assign the given files to the first empty sample slot (Edit mode only). */
   onAssignToFirstEmpty?: (paths: string[]) => void;
+  /** Assign the given files starting at the currently-selected slot (Edit mode only). */
+  onAssignToSelected?: (paths: string[]) => void;
+  /** Whether at least one sample slot is currently selected (enables "Assign to selected slot"). */
+  hasSelectedSlot?: boolean;
   /** Open the full Audio Pool page for this Set. */
   onOpenAudioPoolPage?: () => void;
   /** Session-storage key prefix for remembering browsed dir + scroll across navigation. */
   persistKey?: string;
 }
 
-export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndMode = false, refreshKey, onCurrentPathChange, onImport, onAssignToFirstEmpty, onOpenAudioPoolPage, persistKey }: AudioPoolSidebarProps) {
+export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndMode = false, refreshKey, onCurrentPathChange, onImport, onAssignToFirstEmpty, onAssignToSelected, hasSelectedSlot, onOpenAudioPoolPage, persistKey }: AudioPoolSidebarProps) {
   // Restore the last-browsed directory (only if it still sits under this pool root).
   const [currentPath, setCurrentPath] = useState(() => {
     if (persistKey) {
@@ -264,6 +268,15 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
         headerPrefix={
           <>
             {toggleButton}
+            {onOpenAudioPoolPage && (
+              <button
+                className="audio-pool-page-btn"
+                onClick={onOpenAudioPoolPage}
+                title="Open the Audio Pool page for this Set"
+              >
+                <i className="fas fa-up-right-from-square"></i>
+              </button>
+            )}
             <div className="sidebar-import-dropdown" onClick={(e) => e.stopPropagation()}>
               <button
                 className={`sidebar-back-btn ${importMenuOpen ? 'active' : ''}`}
@@ -285,17 +298,6 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
               )}
             </div>
           </>
-        }
-        headerActions={
-          onOpenAudioPoolPage ? (
-            <button
-              className="audio-pool-page-btn"
-              onClick={onOpenAudioPoolPage}
-              title="Open the Audio Pool page for this Set"
-            >
-              <i className="fas fa-up-right-from-square"></i>
-            </button>
-          ) : undefined
         }
       />
       <div className="sidebar-path-row" title={getRelativePath()}>
@@ -327,6 +329,16 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
           >
             <i className="fas fa-arrow-right"></i> Assign to first empty slot
           </button>
+          {hasSelectedSlot && (
+            <button
+              className="context-menu-item"
+              disabled={!isEditMode}
+              title={!isEditMode ? 'Toggle Edit mode to assign to slots' : undefined}
+              onClick={() => { onAssignToSelected?.(menuTargets(itemMenu.file)); setItemMenu(null); }}
+            >
+              <i className="fas fa-crosshairs"></i> Assign to selected slot
+            </button>
+          )}
         </div>
       )}
     </div>

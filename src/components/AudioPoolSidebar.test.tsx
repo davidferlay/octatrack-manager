@@ -59,4 +59,20 @@ describe('AudioPoolSidebar', () => {
     expect(assign).toBeDisabled()
     expect(assign.getAttribute('title')).toMatch(/Toggle Edit mode/i)
   })
+
+  it('shows "Assign to selected slot" only when a slot is selected', async () => {
+    const onAssignToSelected = vi.fn()
+    const { rerender } = render(
+      <AudioPoolSidebar audioPoolPath="/set/AUDIO" isEditMode hasSelectedSlot={false} onAssignToSelected={onAssignToSelected} />
+    )
+    await waitFor(() => expect(screen.getByText('kick.wav')).toBeInTheDocument())
+    fireEvent.contextMenu(screen.getByText('kick.wav').closest('tr')!)
+    expect(screen.queryByText(/Assign to selected slot/i)).not.toBeInTheDocument()
+
+    // With a slot selected, the item appears and calls back
+    rerender(<AudioPoolSidebar audioPoolPath="/set/AUDIO" isEditMode hasSelectedSlot onAssignToSelected={onAssignToSelected} />)
+    fireEvent.contextMenu(screen.getByText('kick.wav').closest('tr')!)
+    await userEvent.click(screen.getByText(/Assign to selected slot/i))
+    expect(onAssignToSelected).toHaveBeenCalledWith(['/set/AUDIO/kick.wav'])
+  })
 })

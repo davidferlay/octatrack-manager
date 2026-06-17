@@ -2361,9 +2361,9 @@ h1 {
 }
 
 .audio-pool-toggle-btn.active {
-  background: rgba(245, 158, 11, 0.15);
-  border-color: #f59e0b;
-  color: #f59e0b;
+  background: rgba(56, 139, 253, 0.15);
+  border-color: #388bfd;
+  color: #58a6ff;
 }
 
 .audio-pool-toggle-btn:disabled {
@@ -2371,11 +2371,11 @@ h1 {
   cursor: default;
 }
 
-/* Open-Audio-Pool-page button — sits next to the toggle, orange-accented like the projects list pool card */
+/* Open-Audio-Pool-page button — neutral like the other sidebar icons, orange on hover */
 .audio-pool-page-btn {
-  background: rgba(245, 158, 11, 0.12);
-  border: 1px solid rgba(245, 158, 11, 0.5);
-  color: var(--elektron-orange);
+  background: none;
+  border: 1px solid var(--elektron-border-gray);
+  color: var(--elektron-muted-text);
   cursor: pointer;
   border-radius: 3px;
   font-size: 0.95rem;
@@ -2389,8 +2389,9 @@ h1 {
 }
 
 .audio-pool-page-btn:hover {
-  background: rgba(245, 158, 11, 0.25);
+  background-color: var(--elektron-medium-gray);
   border-color: var(--elektron-orange);
+  color: var(--elektron-orange);
 }
 
 /* Disabled / view-mode hint inside a context menu */
