@@ -16,9 +16,11 @@ interface AudioPoolSidebarProps {
   onImport?: (paths: string[], destDir: string) => void;
   /** Assign the given files to the first empty sample slot (Edit mode only). */
   onAssignToFirstEmpty?: (paths: string[]) => void;
+  /** Open the full Audio Pool page for this Set. */
+  onOpenAudioPoolPage?: () => void;
 }
 
-export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndMode = false, refreshKey, onCurrentPathChange, onImport, onAssignToFirstEmpty }: AudioPoolSidebarProps) {
+export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndMode = false, refreshKey, onCurrentPathChange, onImport, onAssignToFirstEmpty, onOpenAudioPoolPage }: AudioPoolSidebarProps) {
   const [currentPath, setCurrentPath] = useState(audioPoolPath);
   const [files, setFiles] = useState<AudioFile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -192,8 +194,16 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
     return selectedFiles.has(file.path) ? Array.from(selectedFiles) : [file.path];
   }
 
-  // Open the system file dialog and import into the current pool directory.
-  async function handleImportClick() {
+  // Import dropdown (Files… / Folder…) — mirrors the Audio Pool page.
+  const [importMenuOpen, setImportMenuOpen] = useState(false);
+  useEffect(() => {
+    if (!importMenuOpen) return;
+    const close = () => setImportMenuOpen(false);
+    document.addEventListener('click', close);
+    return () => document.removeEventListener('click', close);
+  }, [importMenuOpen]);
+
+  async function handleImportFiles() {
     const selected = await openFileDialog({
       multiple: true,
       filters: [{ name: 'Audio', extensions: ['wav', 'aif', 'aiff', 'flac', 'mp3', 'ogg', 'm4a'] }],
@@ -201,6 +211,12 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
     if (!selected) return;
     const paths = Array.isArray(selected) ? selected : [selected];
     if (paths.length > 0) onImport?.(paths, currentPath);
+  }
+
+  async function handleImportFolder() {
+    const selected = await openFileDialog({ directory: true, multiple: false });
+    if (!selected || Array.isArray(selected)) return;
+    onImport?.([selected], currentPath);
   }
 
   const isAtRoot = currentPath === audioPoolPath;
@@ -230,25 +246,49 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
         headerPrefix={
           <>
             {toggleButton}
-            <button
-              className="sidebar-back-btn"
-              onClick={navigateUp}
-              disabled={isAtRoot}
-              title="Go up one directory"
-            >
-              <i className="fas fa-arrow-left"></i>
-            </button>
-            <button
-              className="sidebar-back-btn"
-              onClick={handleImportClick}
-              title="Import audio files into this Audio Pool directory"
-            >
-              <i className="fas fa-file-import"></i>
-            </button>
+            <div className="sidebar-import-dropdown" onClick={(e) => e.stopPropagation()}>
+              <button
+                className={`sidebar-back-btn ${importMenuOpen ? 'active' : ''}`}
+                onClick={() => setImportMenuOpen(o => !o)}
+                title="Import audio into this Audio Pool directory"
+              >
+                <i className="fas fa-file-import"></i>
+                <i className="fas fa-caret-down" style={{ marginLeft: '0.2rem', fontSize: '0.6rem' }}></i>
+              </button>
+              {importMenuOpen && (
+                <div className="import-dropdown-menu">
+                  <button className="import-dropdown-item" onClick={() => { setImportMenuOpen(false); handleImportFiles(); }}>
+                    <i className="fas fa-file-audio"></i> Files…
+                  </button>
+                  <button className="import-dropdown-item" onClick={() => { setImportMenuOpen(false); handleImportFolder(); }}>
+                    <i className="fas fa-folder"></i> Folder…
+                  </button>
+                </div>
+              )}
+            </div>
           </>
+        }
+        headerActions={
+          onOpenAudioPoolPage ? (
+            <button
+              className="audio-pool-page-btn"
+              onClick={onOpenAudioPoolPage}
+              title="Open the Audio Pool page for this Set"
+            >
+              <i className="fas fa-up-right-from-square"></i>
+            </button>
+          ) : undefined
         }
       />
       <div className="sidebar-path-row" title={getRelativePath()}>
+        <button
+          className="sidebar-back-btn"
+          onClick={navigateUp}
+          disabled={isAtRoot}
+          title="Go up one directory"
+        >
+          <i className="fas fa-arrow-left"></i>
+        </button>
         <span className="sidebar-path">{getRelativePath()}</span>
       </div>
       <div
@@ -261,12 +301,10 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
           style={{ position: 'fixed', top: itemMenu.y, left: itemMenu.x }}
           onClick={(e) => e.stopPropagation()}
         >
-          {!isEditMode && (
-            <div className="context-menu-hint">Toggle Edit mode to assign to slots</div>
-          )}
           <button
             className="context-menu-item"
             disabled={!isEditMode}
+            title={!isEditMode ? 'Toggle Edit mode to assign to slots' : undefined}
             onClick={() => { onAssignToFirstEmpty?.(menuTargets(itemMenu.file)); setItemMenu(null); }}
           >
             <i className="fas fa-arrow-right"></i> Assign to first empty slot

@@ -27,13 +27,14 @@ describe('AudioPoolSidebar', () => {
     await waitFor(() => expect(screen.getByText('kick.wav')).toBeInTheDocument())
   })
 
-  it('shows an Import button that opens the file dialog and reports the chosen files', async () => {
+  it('shows an Import dropdown that opens the file dialog and reports the chosen files', async () => {
     mockOpen.mockResolvedValue(['/ext/clap.wav'])
     const onImport = vi.fn()
     render(<AudioPoolSidebar audioPoolPath="/set/AUDIO" isEditMode={false} onImport={onImport} />)
     await waitFor(() => expect(screen.getByText('kick.wav')).toBeInTheDocument())
 
-    await userEvent.click(screen.getByTitle(/Import audio files/i))
+    await userEvent.click(screen.getByTitle(/Import audio/i))
+    await userEvent.click(screen.getByText(/Files…/i))
     await waitFor(() => expect(onImport).toHaveBeenCalledWith(['/ext/clap.wav'], '/set/AUDIO'))
   })
 
@@ -54,7 +55,8 @@ describe('AudioPoolSidebar', () => {
     await waitFor(() => expect(screen.getByText('kick.wav')).toBeInTheDocument())
 
     fireEvent.contextMenu(screen.getByText('kick.wav').closest('tr')!)
-    expect(screen.getByText(/Assign to first empty slot/i)).toBeDisabled()
-    expect(screen.getByText(/Toggle Edit mode/i)).toBeInTheDocument()
+    const assign = screen.getByText(/Assign to first empty slot/i)
+    expect(assign).toBeDisabled()
+    expect(assign.getAttribute('title')).toMatch(/Toggle Edit mode/i)
   })
 })

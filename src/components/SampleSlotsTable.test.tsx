@@ -229,19 +229,24 @@ describe('SampleSlotsTable — slot context menu & Audio Pool page button', () =
     mockInvoke.mockResolvedValue({ assigned_count: 1, updated_slots: [], flex_ram_free_mb: 80 })
   })
 
-  it('shows the Open-Audio-Pool-page button only when audioPoolPath is set', () => {
-    const { rerender } = render(
-      <MemoryRouter><TablePreferencesProvider>
-        <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" audioPoolPath="/set/AUDIO" />
-      </TablePreferencesProvider></MemoryRouter>
+  it('shows the Open-Audio-Pool-page button inside the pane only when audioPoolPath is set', async () => {
+    mockInvoke.mockImplementation(async (cmd: string) =>
+      cmd === 'list_audio_directory' ? [] : { assigned_count: 1, updated_slots: [], flex_ram_free_mb: 80 }
     )
-    expect(screen.getByTitle(/Open the Audio Pool page/i)).toBeInTheDocument()
+    const user = userEvent.setup()
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" audioPoolPath="/set/AUDIO" />
+    )
+    // Button lives inside the Audio Pool pane — open it first
+    await user.click(screen.getByTitle(/Show Audio Pool/i))
+    await waitFor(() => expect(screen.getByTitle(/Open the Audio Pool page/i)).toBeInTheDocument())
+  })
 
-    rerender(
-      <MemoryRouter><TablePreferencesProvider>
-        <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" />
-      </TablePreferencesProvider></MemoryRouter>
+  it('does not show the Audio Pool pane (nor its page button) without audioPoolPath', () => {
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" />
     )
+    expect(screen.queryByTitle(/Show Audio Pool/i)).not.toBeInTheDocument()
     expect(screen.queryByTitle(/Open the Audio Pool page/i)).not.toBeInTheDocument()
   })
 
@@ -251,9 +256,10 @@ describe('SampleSlotsTable — slot context menu & Audio Pool page button', () =
     )
     const row = screen.getByText('kick.wav').closest('tr')!
     fireEvent.contextMenu(row)
-    expect(screen.getByText('Clear sample')).toBeDisabled()
+    const clear = screen.getByText('Clear sample')
+    expect(clear).toBeDisabled()
     expect(screen.getByText(/Reset attributes/i)).toBeDisabled()
-    expect(screen.getByText(/Toggle Edit mode/i)).toBeInTheDocument()
+    expect(clear.getAttribute('title')).toMatch(/Toggle Edit mode/i)
   })
 
   it('clears a slot sample via the context menu in edit mode', async () => {

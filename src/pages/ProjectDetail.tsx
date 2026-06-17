@@ -115,7 +115,12 @@ export function ProjectDetail() {
   const [loadingStatus, setLoadingStatus] = useState<string>("Initializing...");
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabType>("overview");
+  const [activeTab, setActiveTab] = useState<TabType>(() => {
+    // Honor a ?tab= param so the Audio Pool page can return to the originating tab.
+    const t = searchParams.get("tab");
+    const valid: TabType[] = ["overview", "parts", "patterns", "tracks", "static-slots", "flex-slots", "tools"];
+    return (valid as string[]).includes(t ?? "") ? (t as TabType) : "overview";
+  });
   const [selectedBankIndex, setSelectedBankIndex] = useState<number>(0);
   const [selectedTrackIndex, setSelectedTrackIndex] = useState<number>(0); // Default to track 0, will be set to active track
   const [selectedPatternIndex, setSelectedPatternIndex] = useState<number>(0); // Default to pattern 0, will be set to active pattern
@@ -1752,6 +1757,7 @@ export function ProjectDetail() {
                 slotPrefix="F"
                 tableType="flex"
                 projectPath={projectPath}
+                projectName={projectName}
                 memorySettings={metadata.memory_settings}
                 isEditMode={isEditMode}
                 audioPoolPath={audioPoolPath}
@@ -1795,6 +1801,7 @@ export function ProjectDetail() {
                 slotPrefix="S"
                 tableType="static"
                 projectPath={projectPath}
+                projectName={projectName}
                 isEditMode={isEditMode}
                 audioPoolPath={audioPoolPath}
                 onSlotsUpdated={(updatedSlots) => {

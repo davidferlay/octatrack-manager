@@ -101,6 +101,8 @@ export interface AudioFileTableProps {
   onContextMenu?: (e: React.MouseEvent, file: AudioFile | null) => void;
   rowRefs?: React.MutableRefObject<Map<number, HTMLTableRowElement>>;
   headerPrefix?: ReactNode;
+  /** Extra controls rendered in the toolbar, just left of the Show/Hide Columns button */
+  headerActions?: ReactNode;
   /** When true, rows use @dnd-kit pointer-based drag instead of HTML5 drag (fixes macOS WebKit) */
   dndMode?: boolean;
   /** Initial column visibility — columns not listed default to visible */
@@ -148,6 +150,7 @@ export function AudioFileTable({
   onContextMenu,
   rowRefs,
   headerPrefix,
+  headerActions,
   dndMode = false,
   initialColumnVisibility,
 }: AudioFileTableProps) {
@@ -419,6 +422,7 @@ export function AudioFileTable({
               <span className="toggle-slider"></span>
             </div>
           </label>
+          {headerActions}
           {/* Column visibility toggle — positioned to the right of the Hide folders field */}
           <div className="column-menu-wrapper" ref={columnMenuRef}>
             <button

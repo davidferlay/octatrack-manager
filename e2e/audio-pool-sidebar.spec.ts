@@ -129,9 +129,11 @@ test.describe('Audio Pool sidebar in Flex slots', () => {
     await expect(page.locator('.audio-pool-sidebar')).toBeVisible()
   })
 
-  test('shows the open-Audio-Pool-page button when a pool exists', async ({ page }) => {
+  test('shows the open-Audio-Pool-page button inside the pane when a pool exists', async ({ page }) => {
     await setupMocks(page, { withAudioPool: true })
     await openFlexTab(page)
+    // The button now lives inside the Audio Pool pane — open it first
+    await page.locator('.audio-pool-toggle-btn').first().click()
     await expect(page.locator('.audio-pool-page-btn')).toBeVisible()
   })
 
@@ -145,7 +147,7 @@ test.describe('Audio Pool sidebar in Flex slots', () => {
     await setupMocks(page, { withAudioPool: true })
     await openFlexTab(page)
     await page.locator('.audio-pool-toggle-btn').first().click()
-    await expect(page.locator('.audio-pool-sidebar button[title*="Import audio files"]')).toBeVisible()
+    await expect(page.locator('.audio-pool-sidebar button[title*="Import audio"]')).toBeVisible()
   })
 
   test('right-clicking a slot row opens the slot context menu', async ({ page }) => {
@@ -156,6 +158,7 @@ test.describe('Audio Pool sidebar in Flex slots', () => {
     await row.click({ button: 'right' })
     await expect(page.getByText('Clear sample')).toBeVisible()
     await expect(page.getByText(/Reset attributes/i)).toBeVisible()
-    await expect(page.getByText(/Import audio file from system/i)).toBeVisible()
+    await expect(page.getByText(/Import audio file\(s\) from system/i)).toBeVisible()
+    await expect(page.getByText(/Import audio directory from system/i)).toBeVisible()
   })
 })

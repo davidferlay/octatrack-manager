@@ -75,6 +75,10 @@ export function AudioPoolPage() {
   const [searchParams] = useSearchParams();
   const audioPoolPath = searchParams.get("path") || "";
   const setName = searchParams.get("name") || "Audio Pool";
+  // When opened from a project's slot tab, remember how to navigate back to it.
+  const fromPath = searchParams.get("fromPath");
+  const fromName = searchParams.get("fromName") || "";
+  const fromTab = searchParams.get("fromTab") || "flex-slots";
 
   const [sourcePath, setSourcePath] = useState("");
   const [destinationPath, setDestinationPath] = useState(audioPoolPath);
@@ -1058,6 +1062,15 @@ export function AudioPoolPage() {
           <button onClick={() => navigate("/")} className="back-button">
             ← Back
           </button>
+          {fromPath && (
+            <button
+              onClick={() => navigate(`/project?path=${encodeURIComponent(fromPath)}&name=${encodeURIComponent(fromName)}&tab=${encodeURIComponent(fromTab)}`)}
+              className="back-button"
+              title="Back to the project's sample slots"
+            >
+              ← Back to project
+            </button>
+          )}
           <h1 title={destinationPath}>{setName}</h1>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

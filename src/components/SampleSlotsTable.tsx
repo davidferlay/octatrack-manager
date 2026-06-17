@@ -85,6 +85,7 @@ interface SampleSlotsTableProps {
   slotPrefix: string; // "F" for Flex, "S" for Static
   tableType: 'flex' | 'static'; // Identify which table this is
   projectPath?: string | null; // Project path for tooltip display
+  projectName?: string | null; // Project name (for navigating back from the Audio Pool page)
   memorySettings?: MemorySettings; // Memory settings for Flex RAM capacity display
   isEditMode?: boolean; // Whether edit mode is active
   audioPoolPath?: string | null; // Path to AUDIO/ directory (null if not in a Set)
@@ -125,13 +126,16 @@ function getSetRelativePath(projectPath: string | null): string {
   return projectPath;
 }
 
-export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated, onFlexRamUpdated, onImportToAudioPool, sidebarRefreshTrigger }: SampleSlotsTableProps) {
+export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, projectName, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated, onFlexRamUpdated, onImportToAudioPool, sidebarRefreshTrigger }: SampleSlotsTableProps) {
   const navigate = useNavigate();
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const [dndDragFiles, setDndDragFiles] = useState<string[]>([]);
   const [viewModeToast, setViewModeToast] = useState(false);
   // Right-click context menu on slot rows
   const [slotMenu, setSlotMenu] = useState<{ x: number; y: number; slot: SampleSlot } | null>(null);
+  // Row selection (same interaction model as the Audio Pool tables)
+  const [selectedSlots, setSelectedSlots] = useState<Set<number>>(new Set());
+  const [lastClickedSlotId, setLastClickedSlotId] = useState<number | null>(null);
 
   const { flexPreferences, staticPreferences, setFlexPreferences, setStaticPreferences } = useTablePreferences();
 
@@ -349,40 +353,83 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
     }
   }, [isEditMode, projectPath, slotType, onSlotsUpdated, onFlexRamUpdated]);
 
-  // Import an audio file from the system into the project and assign it to the slot.
-  const importToSlot = useCallback(async (slot: SampleSlot) => {
-    if (!isEditMode || !projectPath) return;
-    const selected = await openFileDialog({
-      multiple: false,
-      filters: [{ name: 'Audio', extensions: ['wav', 'aif', 'aiff', 'flac', 'mp3', 'ogg', 'm4a'] }],
-    });
-    if (!selected || Array.isArray(selected)) return;
+  // Copy source files into the project dir and assign them to consecutive empty slots from `targetSlot`.
+  const importPathsToSlot = useCallback(async (sourcePaths: string[], targetSlot: SampleSlot) => {
+    if (!isEditMode || !projectPath || sourcePaths.length === 0) return;
     setIsAssigning(true);
     try {
       const destPaths = await invoke<string[]>('copy_audio_files_to_project', {
-        sourcePaths: [selected], destinationDir: projectPath,
+        sourcePaths, destinationDir: projectPath,
       });
       if (!destPaths || destPaths.length === 0) return;
-      const filename = destPaths[0].split(/[\\/]/).pop() ?? destPaths[0];
-      const result = await invoke<AssignSamplesResult>("assign_samples_to_slots", {
-        path: projectPath, slotType,
-        assignments: [{ slot_index: slot.slot_id, audio_path: filename, set_defaults: !slot.path }],
-      });
-      if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
-      if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb);
+      const assignments: SlotAssignment[] = [];
+      if (destPaths.length === 1) {
+        const filename = destPaths[0].split(/[\\/]/).pop() ?? destPaths[0];
+        assignments.push({ slot_index: targetSlot.slot_id, audio_path: filename, set_defaults: !targetSlot.path });
+      } else {
+        let currentSlotId = targetSlot.slot_id;
+        for (const destPath of destPaths) {
+          while (currentSlotId <= 128) {
+            const slot = slots.find(s => s.slot_id === currentSlotId);
+            if (!slot || !slot.path) break;
+            currentSlotId++;
+          }
+          if (currentSlotId > 128) break;
+          const filename = destPath.split(/[\\/]/).pop() ?? destPath;
+          assignments.push({ slot_index: currentSlotId, audio_path: filename, set_defaults: true });
+          currentSlotId++;
+        }
+      }
+      if (assignments.length > 0) {
+        const result = await invoke<AssignSamplesResult>("assign_samples_to_slots", {
+          path: projectPath, slotType, assignments,
+        });
+        if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
+        if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb);
+      }
     } catch (error) {
       console.error("Error importing audio to slot:", error);
     } finally {
       setIsAssigning(false);
     }
-  }, [isEditMode, projectPath, slotType, onSlotsUpdated, onFlexRamUpdated]);
+  }, [isEditMode, projectPath, slotType, slots, onSlotsUpdated, onFlexRamUpdated]);
 
-  // Navigate to the full Audio Pool page for this Set.
+  // Import one or more audio files from the system and assign them starting at the slot.
+  const importFilesToSlot = useCallback(async (slot: SampleSlot) => {
+    if (!isEditMode) return;
+    const selected = await openFileDialog({
+      multiple: true,
+      filters: [{ name: 'Audio', extensions: ['wav', 'aif', 'aiff', 'flac', 'mp3', 'ogg', 'm4a'] }],
+    });
+    if (!selected) return;
+    const paths = Array.isArray(selected) ? selected : [selected];
+    await importPathsToSlot(paths, slot);
+  }, [isEditMode, importPathsToSlot]);
+
+  // Import a directory of audio files; each file fills a consecutive empty slot from the target.
+  const importDirectoryToSlot = useCallback(async (slot: SampleSlot) => {
+    if (!isEditMode) return;
+    const selected = await openFileDialog({ directory: true, multiple: false });
+    if (!selected || Array.isArray(selected)) return;
+    const entries = await invoke<{ path: string; is_directory: boolean }[]>('list_audio_directory', { path: selected });
+    const files = entries.filter(e => !e.is_directory).map(e => e.path);
+    if (files.length === 0) return;
+    await importPathsToSlot(files, slot);
+  }, [isEditMode, importPathsToSlot]);
+
+  // Navigate to the full Audio Pool page for this Set, remembering where we came from.
   const openAudioPoolPage = useCallback(() => {
     if (!audioPoolPath) return;
     const setName = audioPoolPath.replace(/[/\\]AUDIO[/\\]?$/i, '').split(/[/\\]/).pop() || 'Audio Pool';
-    navigate(`/audio-pool?path=${encodeURIComponent(audioPoolPath)}&name=${encodeURIComponent(setName)}`);
-  }, [audioPoolPath, navigate]);
+    const params = new URLSearchParams({
+      path: audioPoolPath,
+      name: setName,
+      fromTab: tableType === 'flex' ? 'flex-slots' : 'static-slots',
+    });
+    if (projectPath) params.set('fromPath', projectPath);
+    if (projectName) params.set('fromName', projectName);
+    navigate(`/audio-pool?${params.toString()}`);
+  }, [audioPoolPath, navigate, tableType, projectPath, projectName]);
 
   // Import audio files from the system into the Audio Pool (current sidebar dir).
   const importToPool = useCallback((paths: string[], destDir: string) => {
@@ -552,10 +599,9 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
     return () => document.removeEventListener('mousedown', handleColumnMenuClickOutside);
   }, []);
 
-  // OS drag & drop from system file manager (Phase 5: slot rows, Phase 6: sidebar)
+  // OS drag & drop from system file manager (Phase 5: slot rows, Phase 6: sidebar).
+  // Active in both modes: pool imports work read-only, slot drops warn unless in Edit mode.
   useEffect(() => {
-    if (!isEditMode) return;
-
     let unlisten: (() => void) | undefined;
     let cancelled = false;
 
@@ -624,6 +670,12 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
               }
             }
           } else if (targetSlotId != null) {
+            // Slot assignment requires Edit mode — warn and bail otherwise.
+            if (!isEditMode) {
+              setViewModeToast(true);
+              setTimeout(() => setViewModeToast(false), 2500);
+              return;
+            }
             // Phase 5: drop on a slot row — copy to project dir then assign
             if (curProjectPath) {
               const slotId = targetSlotId;
@@ -1039,6 +1091,28 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
   const filteredSlots = filterSlots(slots);
   const sortedSlots = sortSlots(filteredSlots);
 
+  // Row selection: single click selects, Ctrl/Cmd toggles, Shift extends a range (visible order).
+  function handleSlotClick(e: React.MouseEvent, slotId: number) {
+    const index = sortedSlots.findIndex(s => s.slot_id === slotId);
+    if (e.shiftKey && lastClickedSlotId != null) {
+      const lastIndex = sortedSlots.findIndex(s => s.slot_id === lastClickedSlotId);
+      if (lastIndex !== -1 && index !== -1) {
+        const next = new Set(selectedSlots);
+        const [a, b] = [Math.min(lastIndex, index), Math.max(lastIndex, index)];
+        for (let i = a; i <= b; i++) next.add(sortedSlots[i].slot_id);
+        setSelectedSlots(next);
+      }
+    } else if (e.ctrlKey || e.metaKey) {
+      const next = new Set(selectedSlots);
+      if (next.has(slotId)) next.delete(slotId); else next.add(slotId);
+      setSelectedSlots(next);
+      setLastClickedSlotId(slotId);
+    } else {
+      setSelectedSlots(new Set([slotId]));
+      setLastClickedSlotId(slotId);
+    }
+  }
+
   // Compute visible column IDs respecting current column order
   const visibleColIds = columnOrder.filter(id => visibleColumns[id as keyof typeof visibleColumns]);
 
@@ -1285,6 +1359,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
             onCurrentPathChange={(path) => { sidebarCurrentPathRef.current = path; }}
             onImport={importToPool}
             onAssignToFirstEmpty={assignToFirstEmpty}
+            onOpenAudioPoolPage={openAudioPoolPage}
             toggleButton={
               <button
                 className={`audio-pool-toggle-btn ${showAudioPool ? 'active' : ''}`}
@@ -1309,16 +1384,8 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
                 <i className="fas fa-columns"></i>
               </button>
             )}
-            {audioPoolPath && (
-              <button
-                className="audio-pool-page-btn"
-                onClick={openAudioPoolPage}
-                title="Open the Audio Pool page for this Set"
-              >
-                <i className="fas fa-up-right-from-square"></i>
-              </button>
-            )}
             <span>{sortedSlots.length}/{slots.length} slots</span>
+            {selectedSlots.size > 0 && <span className="filter-badge">{selectedSlots.size} selected</span>}
             {isAssigning && <span className="filter-badge" style={{ background: 'rgba(245, 158, 11, 0.3)' }}>Assigning...</span>}
             {memorySettings && (
               <span className="ram-info" title="Flex RAM available for sample loading">
@@ -1507,7 +1574,8 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
               <DroppableSlotRow
                 key={slot.slot_id}
                 slotId={slot.slot_id}
-                className={isEditMode && (dragOverSlotId === slot.slot_id || osDragOverSlotId === slot.slot_id) ? 'drop-target-highlight' : ''}
+                className={`${selectedSlots.has(slot.slot_id) ? 'selected' : ''} ${isEditMode && (dragOverSlotId === slot.slot_id || osDragOverSlotId === slot.slot_id) ? 'drop-target-highlight' : ''}`.trim()}
+                onClick={(e: React.MouseEvent) => handleSlotClick(e, slot.slot_id)}
                 onDragEnter={handleSlotDragEnter}
                 onDragOver={(e: React.DragEvent) => handleSlotDragOver(e, slot.slot_id)}
                 onDragLeave={handleSlotDragLeave}
@@ -1552,12 +1620,10 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
         style={{ position: 'fixed', top: slotMenu.y, left: slotMenu.x }}
         onClick={(e) => e.stopPropagation()}
       >
-        {!isEditMode && (
-          <div className="context-menu-hint">Toggle Edit mode to modify slots</div>
-        )}
         <button
           className="context-menu-item"
           disabled={!isEditMode || !slotMenu.slot.path}
+          title={!isEditMode ? 'Toggle Edit mode to modify slots' : undefined}
           onClick={() => { clearSlotSample(slotMenu.slot); setSlotMenu(null); }}
         >
           <i className="fas fa-eraser"></i> Clear sample
@@ -1565,6 +1631,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
         <button
           className="context-menu-item"
           disabled={!isEditMode || !slotMenu.slot.path}
+          title={!isEditMode ? 'Toggle Edit mode to modify slots' : undefined}
           onClick={() => { clearSlotAttributes(slotMenu.slot); setSlotMenu(null); }}
         >
           <i className="fas fa-rotate-left"></i> Reset attributes to defaults
@@ -1573,9 +1640,18 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, me
         <button
           className="context-menu-item"
           disabled={!isEditMode}
-          onClick={() => { importToSlot(slotMenu.slot); setSlotMenu(null); }}
+          title={!isEditMode ? 'Toggle Edit mode to modify slots' : undefined}
+          onClick={() => { importFilesToSlot(slotMenu.slot); setSlotMenu(null); }}
         >
-          <i className="fas fa-file-import"></i> Import audio file from system…
+          <i className="fas fa-file-audio"></i> Import audio file(s) from system…
+        </button>
+        <button
+          className="context-menu-item"
+          disabled={!isEditMode}
+          title={!isEditMode ? 'Toggle Edit mode to modify slots' : undefined}
+          onClick={() => { importDirectoryToSlot(slotMenu.slot); setSlotMenu(null); }}
+        >
+          <i className="fas fa-folder"></i> Import audio directory from system…
         </button>
       </div>
     )}

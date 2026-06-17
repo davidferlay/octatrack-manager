@@ -703,7 +703,7 @@ h1 {
 .context-menu-item.disabled,
 .context-menu-item:disabled {
   opacity: 0.4;
-  cursor: not-allowed;
+  cursor: default;
 }
 
 .context-menu-item.disabled:hover,
@@ -2406,6 +2406,54 @@ h1 {
   background: none;
   border-color: var(--elektron-border-gray);
   color: var(--elektron-muted-text);
+}
+
+/* Selectable sample-slot rows — mirrors the Audio Pool table selection */
+.slots-table tbody tr.selected td {
+  background-color: rgba(255, 102, 0, 0.15);
+}
+.slots-table tbody tr.selected:hover td {
+  background-color: rgba(255, 102, 0, 0.2);
+}
+
+/* Import dropdown inside the Audio Pool sidebar (shares the page's menu look) */
+.sidebar-import-dropdown {
+  position: relative;
+  display: inline-flex;
+}
+.sidebar-import-dropdown .import-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  min-width: 120px;
+  background-color: var(--elektron-dark-gray);
+  border: 1px solid var(--elektron-border-gray);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  z-index: 1000;
+  overflow: hidden;
+}
+.sidebar-import-dropdown .import-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: none;
+  border: none;
+  color: var(--elektron-text-primary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-align: left;
+}
+.sidebar-import-dropdown .import-dropdown-item:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+.sidebar-import-dropdown .import-dropdown-item i {
+  width: 1rem;
+  text-align: center;
+  color: var(--elektron-text-secondary);
 }
 
 /* Drop target highlight on slot rows */
