@@ -161,4 +161,38 @@ test.describe('Audio Pool sidebar in Flex slots', () => {
     await expect(page.getByText(/Import audio file\(s\) from system/i)).toBeVisible()
     await expect(page.getByText(/Import audio directory from system/i)).toBeVisible()
   })
+
+  test('right-clicking a pool file shows "Assign to first empty slot"', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    await page.locator('.audio-pool-toggle-btn').first().click()
+    const file = page.locator('.audio-pool-sidebar tbody tr', { hasText: 'kick.wav' })
+    await file.click({ button: 'right' })
+    await expect(page.getByText(/Assign to first empty slot/i)).toBeVisible()
+    // No slot selected yet → "Assign to selected slot" is absent
+    await expect(page.getByText(/Assign to selected slot/i)).toHaveCount(0)
+  })
+
+  test('"Assign to selected slot" appears once a slot is selected', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    await page.locator('.audio-pool-toggle-btn').first().click()
+    // Select a slot row, then right-click a pool file
+    await page.locator('.samples-table tbody tr').first().click()
+    const file = page.locator('.audio-pool-sidebar tbody tr', { hasText: 'kick.wav' })
+    await file.click({ button: 'right' })
+    await expect(page.getByText(/Assign to selected slot/i)).toBeVisible()
+  })
+
+  test('the up button and pool-page button live in the pane header/path row', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    await page.locator('.audio-pool-toggle-btn').first().click()
+    // "Go up" button sits in the bottom path row, disabled at the AUDIO root
+    const up = page.locator('.sidebar-path-row button[title="Go up"]')
+    await expect(up).toBeVisible()
+    await expect(up).toBeDisabled()
+    // Open-page button sits in the pane toolbar
+    await expect(page.locator('.audio-pool-page-btn')).toBeVisible()
+  })
 })

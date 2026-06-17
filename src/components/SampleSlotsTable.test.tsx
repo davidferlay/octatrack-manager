@@ -294,3 +294,75 @@ describe('SampleSlotsTable — slot context menu & Audio Pool page button', () =
     )
   })
 })
+
+describe('SampleSlotsTable — selection & transfers toggle', () => {
+  beforeEach(() => {
+    mockInvoke.mockReset()
+    mockInvoke.mockResolvedValue({ assigned_count: 1, updated_slots: [], flex_ram_free_mb: 80 })
+  })
+
+  it('selects a slot row on click (no count badge shown)', async () => {
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" projectPath="/proj" />
+    )
+    const row = screen.getByText('kick.wav').closest('tr')!
+    expect(row.className).not.toMatch(/selected/)
+    await userEvent.click(row)
+    expect(row.className).toMatch(/selected/)
+    // No "N selected" count badge in the toolbar
+    expect(screen.queryByText(/\d+ selected/i)).not.toBeInTheDocument()
+  })
+
+  it('renders the transfers toggle with a count and fires the callback', async () => {
+    const onToggleTransfers = vi.fn()
+    renderWithProvider(
+      <SampleSlotsTable
+        slots={mockSlots}
+        slotPrefix="F"
+        tableType="flex"
+        projectPath="/proj"
+        transferCount={3}
+        onToggleTransfers={onToggleTransfers}
+      />
+    )
+    const btn = screen.getByTitle(/transfers/i)
+    expect(btn).toHaveTextContent('3')
+    await userEvent.click(btn)
+    expect(onToggleTransfers).toHaveBeenCalled()
+  })
+
+  it('does not render the transfers toggle without an onToggleTransfers handler', () => {
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" projectPath="/proj" />
+    )
+    expect(screen.queryByTitle(/transfers/i)).not.toBeInTheDocument()
+  })
+
+  it('imports a directory to a slot through the transfer pipeline (onImportToProject)', async () => {
+    const openModule = await import('@tauri-apps/plugin-dialog')
+    vi.mocked(openModule.open).mockResolvedValue('/ext/drums')
+    // list_audio_files_recursive returns the folder's audio files
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'list_audio_files_recursive') return ['/ext/drums/a.wav', '/ext/drums/b.wav']
+      return { assigned_count: 2, updated_slots: [], flex_ram_free_mb: 70 }
+    })
+    const onImportToProject = vi.fn(async () => ['/proj/a.wav', '/proj/b.wav'])
+    renderWithProvider(
+      <SampleSlotsTable
+        slots={mockSlots}
+        slotPrefix="F"
+        tableType="flex"
+        isEditMode
+        projectPath="/proj"
+        onImportToProject={onImportToProject}
+      />
+    )
+    const row = screen.getByText('kick.wav').closest('tr')!
+    fireEvent.contextMenu(row)
+    await userEvent.click(screen.getByText(/Import audio directory from system/i))
+
+    // Files are copied via the transfer pipeline, then assigned
+    await waitFor(() => expect(onImportToProject).toHaveBeenCalledWith(['/ext/drums/a.wav', '/ext/drums/b.wav']))
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('assign_samples_to_slots', expect.anything()))
+  })
+})

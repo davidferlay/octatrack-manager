@@ -47,6 +47,31 @@ describe('useAudioPoolTransfer', () => {
     expect(onComplete).toHaveBeenCalledWith('/dest');
   });
 
+  it('reports copied destination paths to the per-batch onCopied callback', async () => {
+    // The backend returns the actual destination path (which may differ after conversion).
+    mockInvoke.mockImplementation(async (cmd, args) => {
+      const a = (args ?? {}) as Record<string, unknown>;
+      if (cmd === 'get_system_resources') return { recommended_concurrency: 1 };
+      if (cmd === 'copy_audio_file_with_progress') {
+        const src = a.sourcePath as string;
+        return `/dest/${src.split('/').pop()}`;
+      }
+      return undefined;
+    });
+    const { result } = renderHook(() => useAudioPoolTransfer());
+
+    const copied: string[][] = [];
+    await act(async () => {
+      await result.current.copyFilesToPool(
+        ['/a/kick.wav', '/a/snare.wav'], '/dest', undefined,
+        (paths) => copied.push(paths)
+      );
+    });
+
+    expect(copied).toHaveLength(1);
+    expect(copied[0].sort()).toEqual(['/dest/kick.wav', '/dest/snare.wav']);
+  });
+
   it('opens the overwrite modal only when the backend reports the file exists', async () => {
     mockCopy((src, overwrite) =>
       src.includes('kick') && !overwrite

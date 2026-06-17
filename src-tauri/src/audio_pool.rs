@@ -1235,6 +1235,25 @@ mod tests {
     }
 
     #[test]
+    fn test_collect_audio_files_recursive_skips_hidden_and_errors_on_non_dir() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::write(root.join("keep.wav"), b"x").unwrap();
+        std::fs::write(root.join(".hidden.wav"), b"x").unwrap(); // hidden file skipped
+        let hidden_dir = root.join(".cache");
+        std::fs::create_dir(&hidden_dir).unwrap();
+        std::fs::write(hidden_dir.join("inside.wav"), b"x").unwrap(); // hidden dir skipped
+
+        let found = collect_audio_files_recursive(root.to_str().unwrap()).unwrap();
+        assert_eq!(found.len(), 1, "only the non-hidden audio file is returned");
+        assert!(found[0].ends_with("keep.wav"));
+
+        // A path that is a file (not a directory) is an error.
+        let file = root.join("keep.wav");
+        assert!(collect_audio_files_recursive(file.to_str().unwrap()).is_err());
+    }
+
+    #[test]
     fn test_is_audio_file() {
         assert!(is_audio_file("test.wav"));
         assert!(is_audio_file("test.WAV"));
