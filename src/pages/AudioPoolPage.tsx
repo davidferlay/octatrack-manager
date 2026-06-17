@@ -1093,7 +1093,7 @@ export function AudioPoolPage() {
           <div className="toolbar-separator"></div>
           <button
             onClick={() => setIsTransferQueueOpen(!isTransferQueueOpen)}
-            className={`toolbar-button ${isTransferQueueOpen ? 'active' : ''} ${activeTransfersCount > 0 ? 'has-activity' : ''}`}
+            className={`copy-table-btn ${isTransferQueueOpen ? 'active' : ''} ${activeTransfersCount > 0 ? 'has-activity' : ''}`}
             title={isTransferQueueOpen ? 'Hide transfers' : 'Show transfers'}
           >
             <i className="fas fa-exchange-alt"></i>
