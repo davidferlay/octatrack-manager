@@ -93,6 +93,13 @@ interface SampleSlotsTableProps {
   onFlexRamUpdated?: (freeMb: number) => void; // Callback when flex RAM changes after assignment
   onImportToAudioPool?: (paths: string[], destPath: string) => void; // Callback to import files to audio pool (uses parent's transfer hook)
   sidebarRefreshTrigger?: number; // Increment to trigger sidebar refresh from parent
+  // Transfers panel toggle (rendered in the toolbar so it stays visible on slot tabs)
+  transfersOpen?: boolean;
+  transferCount?: number;
+  transfersActive?: boolean;
+  transfersSucceeded?: boolean;
+  transfersFailed?: boolean;
+  onToggleTransfers?: () => void;
 }
 
 type SortColumn = 'slot' | 'sample' | 'status' | 'source' | 'gain' | 'timestretch' | 'loop' | 'compatibility' | 'format' | 'bitdepth' | 'samplerate';
@@ -126,7 +133,7 @@ function getSetRelativePath(projectPath: string | null): string {
   return projectPath;
 }
 
-export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, projectName, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated, onFlexRamUpdated, onImportToAudioPool, sidebarRefreshTrigger }: SampleSlotsTableProps) {
+export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, projectName, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated, onFlexRamUpdated, onImportToAudioPool, sidebarRefreshTrigger, transfersOpen, transferCount, transfersActive, transfersSucceeded, transfersFailed, onToggleTransfers }: SampleSlotsTableProps) {
   const navigate = useNavigate();
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const [dndDragFiles, setDndDragFiles] = useState<string[]>([]);
@@ -411,8 +418,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     if (!isEditMode) return;
     const selected = await openFileDialog({ directory: true, multiple: false });
     if (!selected || Array.isArray(selected)) return;
-    const entries = await invoke<{ path: string; is_directory: boolean }[]>('list_audio_directory', { path: selected });
-    const files = entries.filter(e => !e.is_directory).map(e => e.path);
+    const files = await invoke<string[]>('list_audio_files_recursive', { path: selected });
     if (files.length === 0) return;
     await importPathsToSlot(files, slot);
   }, [isEditMode, importPathsToSlot]);
@@ -538,6 +544,28 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const columnMenuRef = useRef<HTMLDivElement>(null);
+
+  // Persist/restore the pane state + scroll position so a round-trip to the Audio Pool
+  // page returns the user exactly where they were (session-scoped, per project + tab).
+  const restoredViewRef = useRef(false);
+  useEffect(() => {
+    if (restoredViewRef.current || !projectPath) return;
+    const wantPane = sessionStorage.getItem(`slotsPane:${projectPath}:${tableType}`) === '1';
+    if (wantPane && !audioPoolPath) return; // wait until the pool path is known
+    restoredViewRef.current = true;
+    if (wantPane && audioPoolPath) toggleAudioPool(true);
+    const sc = sessionStorage.getItem(`slotsScroll:${projectPath}:${tableType}`);
+    if (sc != null) {
+      const top = Number(sc);
+      requestAnimationFrame(() => { if (dropdownRef.current) dropdownRef.current.scrollTop = top; });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioPoolPath, projectPath, tableType]);
+  useEffect(() => {
+    if (projectPath && restoredViewRef.current) {
+      sessionStorage.setItem(`slotsPane:${projectPath}:${tableType}`, showAudioPool ? '1' : '0');
+    }
+  }, [showAudioPool, projectPath, tableType]);
 
   // Handle dropdown toggle with position calculation
   const handleDropdownToggle = (dropdownName: string, event: React.MouseEvent) => {
@@ -1360,6 +1388,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
             onImport={importToPool}
             onAssignToFirstEmpty={assignToFirstEmpty}
             onOpenAudioPoolPage={openAudioPoolPage}
+            persistKey={projectPath ? `sidebar:${projectPath}:${tableType}` : undefined}
             toggleButton={
               <button
                 className={`audio-pool-toggle-btn ${showAudioPool ? 'active' : ''}`}
@@ -1385,7 +1414,6 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
               </button>
             )}
             <span>{sortedSlots.length}/{slots.length} slots</span>
-            {selectedSlots.size > 0 && <span className="filter-badge">{selectedSlots.size} selected</span>}
             {isAssigning && <span className="filter-badge" style={{ background: 'rgba(245, 158, 11, 0.3)' }}>Assigning...</span>}
             {memorySettings && (
               <span className="ram-info" title="Flex RAM available for sample loading">
@@ -1451,6 +1479,18 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
                 <span className="toggle-slider"></span>
               </div>
             </label>
+            {onToggleTransfers && (
+              <button
+                className={`copy-table-btn ${transfersOpen ? 'active' : ''} ${transfersActive ? 'has-activity' : ''}`}
+                onClick={onToggleTransfers}
+                title={transfersOpen ? 'Hide transfers' : 'Show transfers'}
+              >
+                <i className="fas fa-exchange-alt"></i>
+                {transferCount ? (
+                  <span className={`badge ${transfersSucceeded ? 'badge-success' : ''} ${transfersFailed ? 'badge-error' : ''}`}>{transferCount}</span>
+                ) : null}
+              </button>
+            )}
             <button
               className={`copy-table-btn ${copyFeedback === 'copied' ? 'copied' : ''}`}
               onClick={() => copyTableToClipboard(sortedSlots)}
@@ -1562,7 +1602,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
             </div>
           </div>
         </div>
-        <div className="table-wrapper" ref={dropdownRef} style={{ overflowX: 'auto' }}>
+        <div
+          className="table-wrapper"
+          ref={dropdownRef}
+          style={{ overflowX: 'auto' }}
+          onScroll={(e) => {
+            if (projectPath) sessionStorage.setItem(`slotsScroll:${projectPath}:${tableType}`, String((e.currentTarget as HTMLElement).scrollTop));
+          }}
+        >
           <table className="samples-table slots-table" style={{ width: '100%' }}>
             <thead>
               <tr>
@@ -1574,7 +1621,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
               <DroppableSlotRow
                 key={slot.slot_id}
                 slotId={slot.slot_id}
-                className={`${selectedSlots.has(slot.slot_id) ? 'selected' : ''} ${isEditMode && (dragOverSlotId === slot.slot_id || osDragOverSlotId === slot.slot_id) ? 'drop-target-highlight' : ''}`.trim()}
+                className={`${selectedSlots.has(slot.slot_id) ? 'selected' : ''} ${lastClickedSlotId === slot.slot_id ? 'cursor' : ''} ${isEditMode && (dragOverSlotId === slot.slot_id || osDragOverSlotId === slot.slot_id) ? 'drop-target-highlight' : ''}`.trim()}
                 onClick={(e: React.MouseEvent) => handleSlotClick(e, slot.slot_id)}
                 onDragEnter={handleSlotDragEnter}
                 onDragOver={(e: React.DragEvent) => handleSlotDragOver(e, slot.slot_id)}

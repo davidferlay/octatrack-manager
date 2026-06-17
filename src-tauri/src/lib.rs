@@ -7,10 +7,10 @@ pub mod project_manager;
 mod project_reader;
 
 use audio_pool::{
-    cancel_transfer, copy_audio_files_or_use_existing, copy_files_with_overwrite,
-    copy_single_file_with_progress, create_directory, delete_files, get_parent_directory,
-    list_directory, move_files, register_cancellation_token, remove_cancellation_token,
-    rename_file as rename_file_impl, AudioFileInfo,
+    cancel_transfer, collect_audio_files_recursive, copy_audio_files_or_use_existing,
+    copy_files_with_overwrite, copy_single_file_with_progress, create_directory, delete_files,
+    get_parent_directory, list_directory, move_files, register_cancellation_token,
+    remove_cancellation_token, rename_file as rename_file_impl, AudioFileInfo,
 };
 use device_detection::{discover_devices, scan_directory, ScanResult};
 use project_reader::{
@@ -195,6 +195,13 @@ async fn reload_part(path: String, bank_id: String, part_id: u8) -> Result<PartD
 async fn list_audio_directory(path: String) -> Result<Vec<AudioFileInfo>, String> {
     // Run on a blocking thread pool to avoid blocking the main event loop
     tauri::async_runtime::spawn_blocking(move || list_directory(&path))
+        .await
+        .unwrap()
+}
+
+#[tauri::command]
+async fn list_audio_files_recursive(path: String) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || collect_audio_files_recursive(&path))
         .await
         .unwrap()
 }
@@ -822,6 +829,7 @@ pub fn run() {
             commit_all_parts,
             reload_part,
             list_audio_directory,
+            list_audio_files_recursive,
             navigate_to_parent,
             create_new_directory,
             copy_audio_files,

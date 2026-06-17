@@ -18,10 +18,19 @@ interface AudioPoolSidebarProps {
   onAssignToFirstEmpty?: (paths: string[]) => void;
   /** Open the full Audio Pool page for this Set. */
   onOpenAudioPoolPage?: () => void;
+  /** Session-storage key prefix for remembering browsed dir + scroll across navigation. */
+  persistKey?: string;
 }
 
-export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndMode = false, refreshKey, onCurrentPathChange, onImport, onAssignToFirstEmpty, onOpenAudioPoolPage }: AudioPoolSidebarProps) {
-  const [currentPath, setCurrentPath] = useState(audioPoolPath);
+export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndMode = false, refreshKey, onCurrentPathChange, onImport, onAssignToFirstEmpty, onOpenAudioPoolPage, persistKey }: AudioPoolSidebarProps) {
+  // Restore the last-browsed directory (only if it still sits under this pool root).
+  const [currentPath, setCurrentPath] = useState(() => {
+    if (persistKey) {
+      const saved = sessionStorage.getItem(`${persistKey}:dir`);
+      if (saved && saved.startsWith(audioPoolPath)) return saved;
+    }
+    return audioPoolPath;
+  });
   const [files, setFiles] = useState<AudioFile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
@@ -60,15 +69,21 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
     document.addEventListener('mouseup', handleMouseUp);
   }, []);
 
-  // Reset path when audioPoolPath changes
+  // Reset path only when the pool root actually changes (not on mount — that would
+  // clobber a restored directory).
+  const prevPoolRef = useRef(audioPoolPath);
   useEffect(() => {
-    setCurrentPath(audioPoolPath);
+    if (prevPoolRef.current !== audioPoolPath) {
+      prevPoolRef.current = audioPoolPath;
+      setCurrentPath(audioPoolPath);
+    }
   }, [audioPoolPath]);
 
-  // Report path changes to parent
+  // Report path changes to parent + remember for next visit
   useEffect(() => {
     onCurrentPathChange?.(currentPath);
-  }, [currentPath, onCurrentPathChange]);
+    if (persistKey) sessionStorage.setItem(`${persistKey}:dir`, currentPath);
+  }, [currentPath, onCurrentPathChange, persistKey]);
 
   // Load files when path changes or refresh is requested
   useEffect(() => {
@@ -216,7 +231,9 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
   async function handleImportFolder() {
     const selected = await openFileDialog({ directory: true, multiple: false });
     if (!selected || Array.isArray(selected)) return;
-    onImport?.([selected], currentPath);
+    // The transfer pipeline copies file-by-file, so expand the folder into its audio files (recursively).
+    const files = await invoke<string[]>("list_audio_files_recursive", { path: selected });
+    if (files.length > 0) onImport?.(files, currentPath);
   }
 
   const isAtRoot = currentPath === audioPoolPath;
@@ -242,6 +259,7 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
         rowRefs={rowRefs}
         dndMode={dndMode}
         initialColumnVisibility={{ format: false, bitrate: false, samplerate: false }}
+        scrollStorageKey={persistKey ? `${persistKey}:scroll` : undefined}
         onContextMenu={handleItemContextMenu}
         headerPrefix={
           <>
@@ -282,12 +300,12 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
       />
       <div className="sidebar-path-row" title={getRelativePath()}>
         <button
-          className="sidebar-back-btn"
+          className="icon-button"
           onClick={navigateUp}
           disabled={isAtRoot}
-          title="Go up one directory"
+          title="Go up"
         >
-          <i className="fas fa-arrow-left"></i>
+          <i className="fas fa-arrow-up"></i>
         </button>
         <span className="sidebar-path">{getRelativePath()}</span>
       </div>

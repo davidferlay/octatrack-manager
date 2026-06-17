@@ -427,8 +427,12 @@ export function AudioPoolPage() {
         title: "Select Folder to Import",
       });
 
-      if (selected) {
-        await copyFilesToPool([selected], destinationPath);
+      if (selected && !Array.isArray(selected)) {
+        // The per-file transfer pipeline can't copy a directory directly —
+        // expand it into its audio files (recursively) first.
+        const files = await invoke<string[]>("list_audio_files_recursive", { path: selected });
+        if (files.length === 0) return;
+        await copyFilesToPool(files, destinationPath);
       }
     } catch (error) {
       console.error("Error importing folder:", error);
@@ -1059,16 +1063,17 @@ export function AudioPoolPage() {
     <main className="container audio-pool-page">
       <div className="project-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: '1' }}>
-          <button onClick={() => navigate("/")} className="back-button">
-            ← Back
-          </button>
-          {fromPath && (
+          {fromPath ? (
             <button
               onClick={() => navigate(`/project?path=${encodeURIComponent(fromPath)}&name=${encodeURIComponent(fromName)}&tab=${encodeURIComponent(fromTab)}`)}
               className="back-button"
               title="Back to the project's sample slots"
             >
               ← Back to project
+            </button>
+          ) : (
+            <button onClick={() => navigate("/")} className="back-button">
+              ← Back
             </button>
           )}
           <h1 title={destinationPath}>{setName}</h1>

@@ -107,6 +107,8 @@ export interface AudioFileTableProps {
   dndMode?: boolean;
   /** Initial column visibility — columns not listed default to visible */
   initialColumnVisibility?: Record<string, boolean>;
+  /** When set, the vertical scroll position is remembered in sessionStorage under this key */
+  scrollStorageKey?: string;
 }
 
 const DEFAULT_COLUMN_SIZES: Record<string, number> = {
@@ -153,6 +155,7 @@ export function AudioFileTable({
   headerActions,
   dndMode = false,
   initialColumnVisibility,
+  scrollStorageKey,
 }: AudioFileTableProps) {
   // Pre-filter state (applied before TanStack)
   const [searchText, setSearchText] = useState('');
@@ -177,17 +180,22 @@ export function AudioFileTable({
 
   const columnMenuRef = useRef<HTMLDivElement>(null);
   const tableWrapperRef = useRef<HTMLDivElement>(null);
-  const scrollPositionRef = useRef<number>(0);
+  const scrollPositionRef = useRef<number>(
+    scrollStorageKey ? Number(sessionStorage.getItem(scrollStorageKey)) || 0 : 0
+  );
   const prevFilesRef = useRef<AudioFile[]>(files);
 
-  // Save/restore scroll position across file list updates
+  // Save/restore scroll position across file list updates (and across navigation when keyed)
   useEffect(() => {
     const wrapper = tableWrapperRef.current;
     if (!wrapper) return;
-    const handleScroll = () => { scrollPositionRef.current = wrapper.scrollTop; };
+    const handleScroll = () => {
+      scrollPositionRef.current = wrapper.scrollTop;
+      if (scrollStorageKey) sessionStorage.setItem(scrollStorageKey, String(wrapper.scrollTop));
+    };
     wrapper.addEventListener('scroll', handleScroll);
     return () => wrapper.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [scrollStorageKey]);
   useLayoutEffect(() => {
     if (prevFilesRef.current !== files && tableWrapperRef.current && scrollPositionRef.current > 0) {
       tableWrapperRef.current.scrollTop = scrollPositionRef.current;

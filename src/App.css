@@ -2408,13 +2408,30 @@ h1 {
   color: var(--elektron-muted-text);
 }
 
-/* Selectable sample-slot rows — mirrors the Audio Pool table selection */
-.slots-table tbody tr.selected td {
+/* Selectable sample-slot rows — identical to the Audio Pool table selection */
+.slots-table tbody tr.selected {
   background-color: rgba(255, 102, 0, 0.15);
 }
-.slots-table tbody tr.selected:hover td {
+.slots-table tbody tr.selected:hover {
   background-color: rgba(255, 102, 0, 0.2);
 }
+.slots-table tbody tr.cursor {
+  outline: 2px solid var(--elektron-orange);
+  outline-offset: -2px;
+}
+
+/* Transfers panel as a bottom overlay on the project page (outside the panes' scroll
+   containers, so resizing it grows upward over the content instead of into a scrollbar). */
+.transfer-queue.transfer-queue-overlay {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 500;
+  max-height: 85vh;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45);
+}
+
 
 /* Import dropdown inside the Audio Pool sidebar (shares the page's menu look) */
 .sidebar-import-dropdown {

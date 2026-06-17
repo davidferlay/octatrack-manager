@@ -127,6 +127,36 @@ pub fn list_directory(path: &str) -> Result<Vec<AudioFileInfo>, String> {
     Ok(files)
 }
 
+/// Recursively collect audio file paths under a directory (no metadata extraction — fast).
+pub fn collect_audio_files_recursive(path: &str) -> Result<Vec<String>, String> {
+    let dir = Path::new(path);
+    if !dir.is_dir() {
+        return Err(format!("Path is not a directory: {}", path));
+    }
+    let mut out = Vec::new();
+    collect_audio_files_inner(dir, &mut out)?;
+    out.sort();
+    Ok(out)
+}
+
+fn collect_audio_files_inner(dir: &Path, out: &mut Vec<String>) -> Result<(), String> {
+    let entries = fs::read_dir(dir).map_err(|e| format!("Failed to read directory: {}", e))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+        let p = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') {
+            continue;
+        }
+        if p.is_dir() {
+            collect_audio_files_inner(&p, out)?;
+        } else if is_audio_file(&name) {
+            out.push(p.to_string_lossy().to_string());
+        }
+    }
+    Ok(())
+}
+
 /// Check if a file is an audio file based on extension
 fn is_audio_file(filename: &str) -> bool {
     let lower = filename.to_lowercase();
@@ -1182,6 +1212,27 @@ pub fn rename_file(old_path: &str, new_name: &str) -> Result<String, String> {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    #[test]
+    fn test_collect_audio_files_recursive_walks_subdirs_and_skips_non_audio() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::write(root.join("a.wav"), b"x").unwrap();
+        std::fs::write(root.join("notes.txt"), b"x").unwrap(); // skipped (not audio)
+        let sub = root.join("sub");
+        std::fs::create_dir(&sub).unwrap();
+        std::fs::write(sub.join("b.aiff"), b"x").unwrap();
+        let deep = sub.join("deep");
+        std::fs::create_dir(&deep).unwrap();
+        std::fs::write(deep.join("c.flac"), b"x").unwrap();
+
+        let found = collect_audio_files_recursive(root.to_str().unwrap()).unwrap();
+        assert_eq!(found.len(), 3, "should find audio files at every depth");
+        assert!(found.iter().any(|p| p.ends_with("a.wav")));
+        assert!(found.iter().any(|p| p.ends_with("b.aiff")));
+        assert!(found.iter().any(|p| p.ends_with("c.flac")));
+        assert!(!found.iter().any(|p| p.ends_with("notes.txt")));
+    }
 
     #[test]
     fn test_is_audio_file() {

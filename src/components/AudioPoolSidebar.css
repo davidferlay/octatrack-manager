@@ -47,11 +47,16 @@
   overflow: hidden;
   display: flex;
   align-items: center;
+  gap: 0.4rem;
+}
+
+.sidebar-path-row .icon-button {
+  flex-shrink: 0;
 }
 
 .sidebar-path {
   font-size: 0.9rem;
-  color: #aaa;
+  color: #ddd;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -60,7 +65,8 @@
   padding: 0.15rem 0.5rem;
   border-radius: 3px;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  width: 100%;
+  flex: 1;
+  min-width: 0;
 }
 }
 }

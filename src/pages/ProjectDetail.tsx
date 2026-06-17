@@ -149,6 +149,14 @@ export function ProjectDetail() {
   const [audioPoolPath, setAudioPoolPath] = useState<string | null>(null); // Path to AUDIO/ directory (for sidebar)
   const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0); // Incremented to trigger sidebar refresh after import
 
+  // Remember edit mode per project across navigation (e.g. round-trip to the Audio Pool page)
+  useEffect(() => {
+    if (projectPath && sessionStorage.getItem(`projEdit:${projectPath}`) === '1') setIsEditMode(true);
+  }, [projectPath]);
+  useEffect(() => {
+    if (projectPath) sessionStorage.setItem(`projEdit:${projectPath}`, isEditMode ? '1' : '0');
+  }, [isEditMode, projectPath]);
+
   // Transfer resize state
   const [transferPaneHeight, setTransferPaneHeight] = useState(200);
   const [isResizingTransfer, setIsResizingTransfer] = useState(false);
@@ -697,18 +705,6 @@ export function ProjectDetail() {
                 Tools
               </button>
             </div>
-          )}
-          {hasTransfers && (
-            <button
-              onClick={() => setIsTransferQueueOpen(!isTransferQueueOpen)}
-              className={`toolbar-button ${isTransferQueueOpen ? 'active' : ''} ${activeTransfersCount > 0 ? 'has-activity' : ''}`}
-              title={isTransferQueueOpen ? 'Hide transfers' : 'Show transfers'}
-            >
-              <i className="fas fa-exchange-alt"></i>
-              <span className={`badge ${allTransfersSucceeded ? 'badge-success' : ''} ${hasFailedTransfers ? 'badge-error' : ''}`}>
-                {transfers.length}
-              </span>
-            </button>
           )}
           <button
             onClick={handleRefresh}
@@ -1792,6 +1788,12 @@ export function ProjectDetail() {
                   copyFilesToPool(paths, destPath);
                 }}
                 sidebarRefreshTrigger={sidebarRefreshTrigger}
+                transfersOpen={isTransferQueueOpen}
+                transferCount={transfers.length}
+                transfersActive={activeTransfersCount > 0}
+                transfersSucceeded={allTransfersSucceeded}
+                transfersFailed={hasFailedTransfers}
+                onToggleTransfers={() => setIsTransferQueueOpen(!isTransferQueueOpen)}
               />
             )}
 
@@ -1829,6 +1831,12 @@ export function ProjectDetail() {
                   copyFilesToPool(paths, destPath);
                 }}
                 sidebarRefreshTrigger={sidebarRefreshTrigger}
+                transfersOpen={isTransferQueueOpen}
+                transferCount={transfers.length}
+                transfersActive={activeTransfersCount > 0}
+                transfersSucceeded={allTransfersSucceeded}
+                transfersFailed={hasFailedTransfers}
+                onToggleTransfers={() => setIsTransferQueueOpen(!isTransferQueueOpen)}
               />
             )}
 
@@ -1853,7 +1861,7 @@ export function ProjectDetail() {
         </div>
       )}
 
-      {/* Transfer progress panel for audio pool imports from sidebar */}
+      {/* Transfer progress panel for audio pool imports (bottom overlay) */}
       <TransferProgressPanel
         transfers={transfers}
         isOpen={isTransferQueueOpen}
@@ -1863,6 +1871,7 @@ export function ProjectDetail() {
         onClearAll={clearAllTransfers}
         height={transferPaneHeight}
         onResizeStart={handleTransferResizeStart}
+        className="transfer-queue-overlay"
       />
 
       {/* Overwrite confirmation modal for audio pool imports */}
