@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import type { CopyProgressEvent, TransferItem } from "../types/transfer";
@@ -47,6 +47,18 @@ export function useAudioPoolTransfer(options?: { onComplete?: (destinationPath: 
   const [isTransferQueueOpen, setIsTransferQueueOpen] = useState(false);
   const [overwriteModal, setOverwriteModal] = useState<OverwriteModalState>(INITIAL_OVERWRITE_MODAL);
 
+  // Per-batch collection of successfully-copied destination paths, plus an optional
+  // callback fired when the batch settles (used by slot imports to assign afterwards).
+  const copiedDestPathsRef = useRef<string[]>([]);
+  const onCopiedRef = useRef<((destPaths: string[]) => void) | undefined>(undefined);
+
+  // Fire the hook-level refresh + the per-batch onCopied callback once a batch finishes.
+  async function finishBatch(destinationPath: string) {
+    await onComplete?.(destinationPath);
+    const cb = onCopiedRef.current;
+    if (cb) cb([...copiedDestPathsRef.current]);
+  }
+
   // Patch a transfer, but never resurrect one the user already cancelled.
   const updateTransfer = (id: string, patch: Partial<TransferItem>) =>
     setTransfers(prev => prev.map(t =>
@@ -73,13 +85,14 @@ export function useAudioPoolTransfer(options?: { onComplete?: (destinationPath: 
     overwrite: boolean
   ): Promise<CopyOutcome> {
     try {
-      await invoke("copy_audio_file_with_progress", {
+      const destPath = await invoke<string>("copy_audio_file_with_progress", {
         sourcePath,
         destinationDir: destinationPath,
         transferId,
         overwrite,
       });
       markCompleted(transferId);
+      if (destPath) copiedDestPathsRef.current.push(destPath);
       return "ok";
     } catch (error) {
       const errorStr = String(error);
@@ -215,7 +228,7 @@ export function useAudioPoolTransfer(options?: { onComplete?: (destinationPath: 
       }
     }
 
-    await onComplete?.(destinationPath);
+    await finishBatch(destinationPath);
   }
 
   // Sequential copy queue with overwrite-modal handling.
@@ -275,12 +288,20 @@ export function useAudioPoolTransfer(options?: { onComplete?: (destinationPath: 
       // ok / failed: keep going
     }
 
-    await onComplete?.(destinationPath);
+    await finishBatch(destinationPath);
   }
 
   // Entry point: copy files to the pool, asking about conflicts only when the backend reports them.
-  async function copyFilesToPool(sourcePaths: string[], destinationPath: string, fileSizes?: Map<string, number>) {
+  async function copyFilesToPool(
+    sourcePaths: string[],
+    destinationPath: string,
+    fileSizes?: Map<string, number>,
+    onCopied?: (destPaths: string[]) => void
+  ) {
     setIsTransferQueueOpen(true);
+    // Start a fresh batch: reset collected dest paths and the per-batch callback.
+    copiedDestPathsRef.current = [];
+    onCopiedRef.current = onCopied;
 
     const baseTimestamp = Date.now();
     const transferIds: string[] = [];
@@ -354,7 +375,7 @@ export function useAudioPoolTransfer(options?: { onComplete?: (destinationPath: 
         ? { ...t, status: "cancelled", error: 'Import cancelled' }
         : t));
 
-    onComplete?.(destinationPath);
+    finishBatch(destinationPath);
   }
 
   async function cancelTransfer(transferId: string) {

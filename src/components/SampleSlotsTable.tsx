@@ -92,6 +92,7 @@ interface SampleSlotsTableProps {
   onSlotsUpdated?: (updatedSlots: SampleSlot[]) => void; // Callback when slots are assigned
   onFlexRamUpdated?: (freeMb: number) => void; // Callback when flex RAM changes after assignment
   onImportToAudioPool?: (paths: string[], destPath: string) => void; // Callback to import files to audio pool (uses parent's transfer hook)
+  onImportToProject?: (sourcePaths: string[]) => Promise<string[]>; // Copy files into the project dir via the transfer pane; resolves with dest paths
   sidebarRefreshTrigger?: number; // Increment to trigger sidebar refresh from parent
   // Transfers panel toggle (rendered in the toolbar so it stays visible on slot tabs)
   transfersOpen?: boolean;
@@ -133,7 +134,7 @@ function getSetRelativePath(projectPath: string | null): string {
   return projectPath;
 }
 
-export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, projectName, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated, onFlexRamUpdated, onImportToAudioPool, sidebarRefreshTrigger, transfersOpen, transferCount, transfersActive, transfersSucceeded, transfersFailed, onToggleTransfers }: SampleSlotsTableProps) {
+export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, projectName, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated, onFlexRamUpdated, onImportToAudioPool, onImportToProject, sidebarRefreshTrigger, transfersOpen, transferCount, transfersActive, transfersSucceeded, transfersFailed, onToggleTransfers }: SampleSlotsTableProps) {
   const navigate = useNavigate();
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const [dndDragFiles, setDndDragFiles] = useState<string[]>([]);
@@ -210,7 +211,9 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     setShowAudioPool(open);
   };
   const [dragOverSlotId, setDragOverSlotId] = useState<number | null>(null);
-  const [isAssigning, setIsAssigning] = useState(false);
+  // Internal busy flag (kept for guarding async ops; no longer surfaced as a badge —
+  // the transfers progress pane provides feedback instead).
+  const [, setIsAssigning] = useState(false);
 
   // OS drag & drop state (from system file manager)
   const [osDragOverSlotId, setOsDragOverSlotId] = useState<number | null>(null);
@@ -224,6 +227,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   const onSlotsUpdatedRef = useRef(onSlotsUpdated);
   const onFlexRamUpdatedRef = useRef(onFlexRamUpdated);
   const onImportToAudioPoolRef = useRef(onImportToAudioPool);
+  const onImportToProjectRef = useRef(onImportToProject);
   const sidebarCurrentPathRef = useRef<string | null>(null);
   // Tracks the current OS drag target so the 'drop' handler doesn't need elementFromPoint
   const osDragTargetRef = useRef<{ slotId: number | null; sidebar: boolean }>({ slotId: null, sidebar: false });
@@ -233,6 +237,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   useEffect(() => { onSlotsUpdatedRef.current = onSlotsUpdated; }, [onSlotsUpdated]);
   useEffect(() => { onFlexRamUpdatedRef.current = onFlexRamUpdated; }, [onFlexRamUpdated]);
   useEffect(() => { onImportToAudioPoolRef.current = onImportToAudioPool; }, [onImportToAudioPool]);
+  useEffect(() => { onImportToProjectRef.current = onImportToProject; }, [onImportToProject]);
 
   // When parent increments sidebarRefreshTrigger, refresh the sidebar file list
   useEffect(() => {
@@ -365,9 +370,10 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     if (!isEditMode || !projectPath || sourcePaths.length === 0) return;
     setIsAssigning(true);
     try {
-      const destPaths = await invoke<string[]>('copy_audio_files_to_project', {
-        sourcePaths, destinationDir: projectPath,
-      });
+      // Prefer the transfer pipeline (opens the progress pane); fall back to a direct copy.
+      const destPaths = onImportToProject
+        ? await onImportToProject(sourcePaths)
+        : await invoke<string[]>('copy_audio_files_to_project', { sourcePaths, destinationDir: projectPath });
       if (!destPaths || destPaths.length === 0) return;
       const assignments: SlotAssignment[] = [];
       if (destPaths.length === 1) {
@@ -399,7 +405,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     } finally {
       setIsAssigning(false);
     }
-  }, [isEditMode, projectPath, slotType, slots, onSlotsUpdated, onFlexRamUpdated]);
+  }, [isEditMode, projectPath, slotType, slots, onSlotsUpdated, onFlexRamUpdated, onImportToProject]);
 
   // Import one or more audio files from the system and assign them starting at the slot.
   const importFilesToSlot = useCallback(async (slot: SampleSlot) => {
@@ -713,10 +719,13 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
 
               setIsAssigning(true);
               try {
-                const destPaths = await invoke<string[]>('copy_audio_files_to_project', {
-                  sourcePaths: droppedPaths,
-                  destinationDir: curProjectPath,
-                });
+                // Route through the transfer pane when available so progress is visible.
+                const destPaths = onImportToProjectRef.current
+                  ? await onImportToProjectRef.current(droppedPaths)
+                  : await invoke<string[]>('copy_audio_files_to_project', {
+                      sourcePaths: droppedPaths,
+                      destinationDir: curProjectPath,
+                    });
                 if (!destPaths || destPaths.length === 0) return;
 
                 const slotType = tableType === 'flex' ? 'FLEX' : 'STATIC';
@@ -1414,7 +1423,6 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
               </button>
             )}
             <span>{sortedSlots.length}/{slots.length} slots</span>
-            {isAssigning && <span className="filter-badge" style={{ background: 'rgba(245, 158, 11, 0.3)' }}>Assigning...</span>}
             {memorySettings && (
               <span className="ram-info" title="Flex RAM available for sample loading">
                 {showAudioPool ? 'FREE:' : 'FREE MEM:'} {memorySettings.flex_ram_free_mb >= 10

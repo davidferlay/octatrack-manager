@@ -182,6 +182,16 @@ export function ProjectDetail() {
     onComplete: () => setSidebarRefreshTrigger(t => t + 1),
   });
 
+  // Copy files into the project directory through the transfer pipeline (so the progress
+  // pane opens automatically), resolving with the resulting destination paths for slot assignment.
+  const importToProjectWithProgress = useCallback((sourcePaths: string[]) => {
+    return new Promise<string[]>((resolve) => {
+      if (!projectPath) { resolve([]); return; }
+      copyFilesToPool(sourcePaths, projectPath, undefined, (destPaths) => resolve(destPaths));
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectPath]);
+
   // Handle transfer pane resize
   useEffect(() => {
     if (!isResizingTransfer) return;
@@ -1787,6 +1797,7 @@ export function ProjectDetail() {
                   setIsTransferQueueOpen(true);
                   copyFilesToPool(paths, destPath);
                 }}
+                onImportToProject={importToProjectWithProgress}
                 sidebarRefreshTrigger={sidebarRefreshTrigger}
                 transfersOpen={isTransferQueueOpen}
                 transferCount={transfers.length}
@@ -1830,6 +1841,7 @@ export function ProjectDetail() {
                   setIsTransferQueueOpen(true);
                   copyFilesToPool(paths, destPath);
                 }}
+                onImportToProject={importToProjectWithProgress}
                 sidebarRefreshTrigger={sidebarRefreshTrigger}
                 transfersOpen={isTransferQueueOpen}
                 transferCount={transfers.length}
