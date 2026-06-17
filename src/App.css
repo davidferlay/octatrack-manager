@@ -2584,6 +2584,13 @@ h1 {
   color: var(--elektron-orange);
 }
 
+/* Active toggle (e.g. transfers pane open) — same orange accent as hover */
+.copy-table-btn.active {
+  background-color: rgba(255, 102, 0, 0.15);
+  border-color: var(--elektron-orange);
+  color: var(--elektron-orange);
+}
+
 .copy-table-btn.copied {
   background-color: rgba(76, 175, 80, 0.2);
   border-color: #4caf50;
