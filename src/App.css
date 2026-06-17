@@ -2355,9 +2355,9 @@ h1 {
 }
 
 .audio-pool-toggle-btn:hover {
-  background-color: var(--elektron-medium-gray);
-  border-color: var(--elektron-orange);
-  color: var(--elektron-orange);
+  background-color: rgba(56, 139, 253, 0.15);
+  border-color: #388bfd;
+  color: #58a6ff;
 }
 
 .audio-pool-toggle-btn.active {
@@ -2388,10 +2388,14 @@ h1 {
   height: 28px;
 }
 
+.audio-pool-page-btn i {
+  transform: scaleX(-1); /* flip the arrow to point toward the top-left */
+}
+
 .audio-pool-page-btn:hover {
-  background-color: var(--elektron-medium-gray);
-  border-color: var(--elektron-orange);
-  color: var(--elektron-orange);
+  background-color: rgba(56, 139, 253, 0.15);
+  border-color: #388bfd;
+  color: #58a6ff;
 }
 
 /* Disabled / view-mode hint inside a context menu */
