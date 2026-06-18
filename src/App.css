@@ -810,19 +810,22 @@ h1 {
 }
 
 /* Scrollbar Styling */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
-}
-
+/* Only the custom WebKit scrollbar is defined (Tauri is WebKit-only). The standard
+   scrollbar-width/scrollbar-color props are intentionally omitted: on macOS WebKit they
+   trigger the native overlay scrollbar, which draws a bordered track gutter on hover.
+   The explicit ::-webkit-scrollbar width forces an always-on custom scrollbar that shows
+   only the thumb — no track shape. */
 ::-webkit-scrollbar {
   width: 4px;
   height: 4px;
 }
 
-::-webkit-scrollbar-track {
-  /* Transparent so the scrollbar overlays whatever is behind it, no black strip */
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-track-piece,
+::-webkit-scrollbar-corner {
   background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 ::-webkit-scrollbar-thumb {
