@@ -156,6 +156,8 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   // Row selection (same interaction model as the Audio Pool tables)
   const [selectedSlots, setSelectedSlots] = useState<Set<number>>(new Set());
   const [lastClickedSlotId, setLastClickedSlotId] = useState<number | null>(null);
+  // Bumped to clear the Audio Pool pane's selection (slot and pane selections are exclusive).
+  const [clearSidebarToken, setClearSidebarToken] = useState(0);
 
   const { flexPreferences, staticPreferences, setFlexPreferences, setStaticPreferences } = useTablePreferences();
 
@@ -1182,6 +1184,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
 
   // Row selection: single click selects, Ctrl/Cmd toggles, Shift extends a range (visible order).
   function handleSlotClick(e: React.MouseEvent, slotId: number) {
+    setClearSidebarToken(t => t + 1); // selecting a slot clears the Audio Pool pane selection
     const index = sortedSlots.findIndex(s => s.slot_id === slotId);
     if (e.shiftKey && lastClickedSlotId != null) {
       const lastIndex = sortedSlots.findIndex(s => s.slot_id === lastClickedSlotId);
@@ -1448,6 +1451,8 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
             isEditMode={isEditMode ?? false}
             dndMode={true}
             refreshKey={sidebarRefreshKey}
+            clearSelectionToken={clearSidebarToken}
+            onSelect={() => { setSelectedSlots(new Set()); setLastClickedSlotId(null); }}
             onCurrentPathChange={(path) => { sidebarCurrentPathRef.current = path; }}
             onImport={importToPool}
             onAssignToFirstEmpty={assignToFirstEmpty}

@@ -26,9 +26,13 @@ interface AudioPoolSidebarProps {
   onOpenAudioPoolPage?: () => void;
   /** Session-storage key prefix for remembering browsed dir + scroll across navigation. */
   persistKey?: string;
+  /** Fired when the user selects file(s) in the pane (lets the parent clear slot selection). */
+  onSelect?: () => void;
+  /** Bump to clear this pane's selection (pane and slot selections are mutually exclusive). */
+  clearSelectionToken?: number;
 }
 
-export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndMode = false, refreshKey, onCurrentPathChange, onImport, onAssignToFirstEmpty, hasEmptySlot = true, onAssignToSelected, hasSelectedSlot, onOpenAudioPoolPage, persistKey }: AudioPoolSidebarProps) {
+export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndMode = false, refreshKey, onCurrentPathChange, onImport, onAssignToFirstEmpty, hasEmptySlot = true, onAssignToSelected, hasSelectedSlot, onOpenAudioPoolPage, persistKey, onSelect, clearSelectionToken }: AudioPoolSidebarProps) {
   // Restore the last-browsed directory (only if it still sits under this pool root).
   const [currentPath, setCurrentPath] = useState(() => {
     if (persistKey) {
@@ -42,6 +46,11 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [cursorIndex, setCursorIndex] = useState(-1);
   const [lastClickedIndex, setLastClickedIndex] = useState(-1);
+  // Clear the pane selection when the parent signals a slot selection (exclusive selection).
+  useEffect(() => {
+    setSelectedFiles(new Set());
+    setLastClickedIndex(-1);
+  }, [clearSelectionToken]);
   const rowRefs = useRef<Map<number, HTMLTableRowElement>>(new Map());
   const [sidebarWidth, setSidebarWidth] = useState<number | null>(null);
   const isResizing = useRef(false);
@@ -144,6 +153,7 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
     // Don't select directories
     if (file.is_directory) return;
 
+    onSelect?.(); // selecting in the pane clears the slot-table selection (exclusive)
     const newSelected = new Set(selectedFiles);
 
     if (event.shiftKey && lastClickedIndex !== -1) {

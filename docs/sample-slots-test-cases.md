@@ -53,6 +53,7 @@ go to the **Flex** (or **Static**) tab.
 | AP52 | Select | Ctrl/Cmd-click toggles | Ctrl/Cmd-click several slot rows | Each toggles in/out of the selection independently |
 | AP53 | Select | Shift-click extends a range | Click one slot, Shift-click another | All rows between the two (in display order) become selected |
 | AP54 | Select | No count badge | Select one or more slots | No "N selected" badge is shown in the toolbar |
+| AP91 | Select | Exclusive with the pane | With the Audio Pool pane open, select item(s) in the pane, then select a slot (and vice versa) | Selecting in one side clears the other — slot and pane selections are never both active at once |
 | **Import into the pool from the pane** | | | | |
 | AP32 | Import | Import dropdown present | Open the Audio Pool pane | A small Import (file-import) dropdown button is shown in the pane toolbar |
 | AP33 | Import | Import Files… | Click Import → Files… | System file picker opens (audio filters); chosen files import into the currently browsed AUDIO/ directory |

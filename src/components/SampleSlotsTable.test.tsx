@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { invoke } from '@tauri-apps/api/core'
@@ -539,5 +539,43 @@ describe('SampleSlotsTable — slot drop validation', () => {
     dropFilesOn('F100', ['/p/a.wav'])
     await waitFor(() => expect(assignCall()).toBeTruthy())
     expect(await screen.findByText(/not OT-compatible/i)).toBeInTheDocument()
+  })
+})
+
+describe('SampleSlotsTable — selection is exclusive with the Audio Pool pane', () => {
+  beforeEach(() => {
+    mockInvoke.mockReset()
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'list_audio_directory') {
+        return [{ name: 'poolsample.wav', size: 1024, channels: 2, bit_rate: 16, sample_rate: 44100, is_directory: false, path: '/set/AUDIO/poolsample.wav' }]
+      }
+      return []
+    })
+  })
+
+  it('selecting a slot clears the pane selection and vice versa', async () => {
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode audioPoolPath="/set/AUDIO" projectPath="/proj" />
+    )
+    await userEvent.click(screen.getByTitle(/Show Audio Pool/i)) // open the pane
+
+    const sidebar = document.querySelector('.audio-pool-sidebar') as HTMLElement
+    const slotsTable = document.querySelector('.samples-table') as HTMLElement
+
+    // Select a pool file
+    const poolRow = (await within(sidebar).findByText('poolsample.wav')).closest('tr')!
+    await userEvent.click(poolRow)
+    expect(poolRow).toHaveClass('selected')
+
+    // Selecting a slot clears the pane selection
+    const slotRow = within(slotsTable).getByText('F2').closest('tr')!
+    await userEvent.click(slotRow)
+    expect(slotRow).toHaveClass('selected')
+    expect(poolRow).not.toHaveClass('selected')
+
+    // Selecting a pool file again clears the slot selection
+    await userEvent.click(poolRow)
+    expect(poolRow).toHaveClass('selected')
+    expect(slotRow).not.toHaveClass('selected')
   })
 })
