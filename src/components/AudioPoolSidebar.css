@@ -95,6 +95,7 @@
   flex: 1;
   overflow: auto;
   min-height: 0; /* allow the flex child to shrink so it scrolls independently */
+  padding-right: 6px; /* clear the 4px resize handle + a small gap so row outlines don't touch it */
 }
 
 /* Match samples-table styling */
