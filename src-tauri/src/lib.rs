@@ -337,6 +337,24 @@ fn open_in_file_manager(path: String) -> Result<(), String> {
     open::that(&path).map_err(|e| format!("Failed to open file manager: {}", e))
 }
 
+/// Reveal a path in the OS file explorer. Resolves `..` (sample paths are stored relative
+/// to the project dir), then opens a directory's contents or highlights a file in its folder.
+#[tauri::command]
+fn reveal_in_file_manager(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let p = std::path::Path::new(&path);
+    let canonical = std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    if canonical.is_dir() {
+        app.opener()
+            .open_path(canonical.to_string_lossy().to_string(), None::<&str>)
+            .map_err(|e| format!("Failed to open in file manager: {}", e))
+    } else {
+        app.opener()
+            .reveal_item_in_dir(&canonical)
+            .map_err(|e| format!("Failed to reveal in file manager: {}", e))
+    }
+}
+
 /// Calculate recommended concurrency based on CPU cores and available memory.
 /// This is extracted as a separate function for testability.
 fn calculate_recommended_concurrency(cpu_cores: usize, available_memory_mb: u64) -> usize {
@@ -842,6 +860,7 @@ pub fn run() {
             rename_file,
             delete_file,
             open_in_file_manager,
+            reveal_in_file_manager,
             get_system_resources,
             // Tools Tab - Set and Audio Pool
             check_project_in_set,

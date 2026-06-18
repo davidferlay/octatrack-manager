@@ -205,7 +205,7 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
   }, [itemMenu]);
 
   function handleItemContextMenu(e: React.MouseEvent, file: AudioFile | null) {
-    if (!file || file.is_directory) return;
+    if (!file) return;
     e.preventDefault();
     setItemMenu({ x: e.clientX, y: e.clientY, file });
   }
@@ -323,24 +323,35 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
           style={{ position: 'fixed', top: itemMenu.y, left: itemMenu.x }}
           onClick={(e) => e.stopPropagation()}
         >
+          {!itemMenu.file.is_directory && (
+            <>
+              <button
+                className="context-menu-item"
+                disabled={!isEditMode || !hasEmptySlot}
+                title={!isEditMode ? 'Toggle Edit mode to assign to slots' : (!hasEmptySlot ? 'No empty slot available' : undefined)}
+                onClick={() => { onAssignToFirstEmpty?.(menuTargets(itemMenu.file)); setItemMenu(null); }}
+              >
+                <i className="fas fa-arrow-right"></i> Assign to first empty slot
+              </button>
+              {hasSelectedSlot && (
+                <button
+                  className="context-menu-item"
+                  disabled={!isEditMode}
+                  title={!isEditMode ? 'Toggle Edit mode to assign to slots' : undefined}
+                  onClick={() => { onAssignToSelected?.(menuTargets(itemMenu.file)); setItemMenu(null); }}
+                >
+                  <i className="fas fa-crosshairs"></i> Assign to selected slot
+                </button>
+              )}
+              <div className="context-menu-separator"></div>
+            </>
+          )}
           <button
             className="context-menu-item"
-            disabled={!isEditMode || !hasEmptySlot}
-            title={!isEditMode ? 'Toggle Edit mode to assign to slots' : (!hasEmptySlot ? 'No empty slot available' : undefined)}
-            onClick={() => { onAssignToFirstEmpty?.(menuTargets(itemMenu.file)); setItemMenu(null); }}
+            onClick={() => { invoke('reveal_in_file_manager', { path: itemMenu.file.path }); setItemMenu(null); }}
           >
-            <i className="fas fa-arrow-right"></i> Assign to first empty slot
+            <i className="fas fa-folder-open"></i> Open in file explorer
           </button>
-          {hasSelectedSlot && (
-            <button
-              className="context-menu-item"
-              disabled={!isEditMode}
-              title={!isEditMode ? 'Toggle Edit mode to assign to slots' : undefined}
-              onClick={() => { onAssignToSelected?.(menuTargets(itemMenu.file)); setItemMenu(null); }}
-            >
-              <i className="fas fa-crosshairs"></i> Assign to selected slot
-            </button>
-          )}
         </div>
       )}
     </div>

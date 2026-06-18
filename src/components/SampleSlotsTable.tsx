@@ -356,6 +356,25 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     }
   }, [isEditMode, projectPath, slotType, onSlotsUpdated, onFlexRamUpdated]);
 
+  // Clear every selected slot that has a sample (used by the Delete keyboard shortcut).
+  const clearSelectedSlots = useCallback(async () => {
+    if (!isEditMode || !projectPath) return;
+    const ids = Array.from(selectedSlots).filter(id => slots.find(s => s.slot_id === id)?.path);
+    if (ids.length === 0) return;
+    setIsAssigning(true);
+    try {
+      const result = await invoke<AssignSamplesResult>("clear_sample_slots", {
+        path: projectPath, slotType, slotIndices: ids,
+      });
+      if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
+      if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb);
+    } catch (error) {
+      console.error("Error clearing selected slots:", error);
+    } finally {
+      setIsAssigning(false);
+    }
+  }, [isEditMode, projectPath, slotType, selectedSlots, slots, onSlotsUpdated, onFlexRamUpdated]);
+
   // Reset a slot's audio-editor attributes to OT defaults, keeping the sample assigned.
   const clearSlotAttributes = useCallback(async (slot: SampleSlot) => {
     if (!isEditMode || !projectPath || !slot.path) return;
@@ -469,6 +488,25 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
       document.removeEventListener('keydown', onKey);
     };
   }, [slotMenu]);
+
+  // Keyboard shortcuts: 'a' toggles the Audio Pool pane; Delete clears the selected slot(s)
+  // in Edit mode. Ignored while typing in a field or with a context menu open.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (slotMenu || e.ctrlKey || e.metaKey || e.altKey) return;
+      if ((e.key === 'a' || e.key === 'A') && audioPoolPath) {
+        e.preventDefault();
+        toggleAudioPool(!showAudioPool);
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && isEditMode && selectedSlots.size > 0) {
+        e.preventDefault();
+        clearSelectedSlots();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [audioPoolPath, showAudioPool, isEditMode, selectedSlots, slotMenu, clearSelectedSlots]);
 
   // Handle drop on a slot row (HTML5 drag — works on Linux; macOS uses dnd-kit via handleDndDragEnd)
   const handleSlotDrop = useCallback(async (e: React.DragEvent, targetSlot: SampleSlot) => {
@@ -1397,6 +1435,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         setDndDragFiles(data?.files ?? []);
       }}
       onDragEnd={handleDndDragEnd}
+      onDragCancel={() => { setDndDragFiles([]); setDragOverSlotId(null); }}
     >
     <div className={`samples-tab ${showAudioPool ? 'with-sidebar' : ''}`}>
       {showAudioPool && audioPoolPath && (
@@ -1723,6 +1762,20 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
           onClick={() => { importDirectoryToSlot(slotMenu.slot); setSlotMenu(null); }}
         >
           <i className="fas fa-folder"></i> Import audio directory from system…
+        </button>
+        <div className="context-menu-separator"></div>
+        <button
+          className="context-menu-item"
+          disabled={!slotMenu.slot.path || !slotMenu.slot.file_exists}
+          title={slotMenu.slot.path && !slotMenu.slot.file_exists ? 'File not found' : undefined}
+          onClick={() => {
+            if (projectPath && slotMenu.slot.path) {
+              invoke('reveal_in_file_manager', { path: `${projectPath}/${slotMenu.slot.path}` });
+            }
+            setSlotMenu(null);
+          }}
+        >
+          <i className="fas fa-folder-open"></i> Open in file explorer
         </button>
       </div>
     )}

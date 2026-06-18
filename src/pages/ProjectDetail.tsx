@@ -115,6 +115,18 @@ export function ProjectDetail() {
   const [loadingStatus, setLoadingStatus] = useState<string>("Initializing...");
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [titleMenu, setTitleMenu] = useState<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (!titleMenu) return;
+    const close = () => setTitleMenu(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setTitleMenu(null); };
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', close);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [titleMenu]);
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     // Honor a ?tab= param so the Audio Pool page can return to the originating tab.
     const t = searchParams.get("tab");
@@ -637,13 +649,37 @@ export function ProjectDetail() {
           <button onClick={() => navigate("/")} className="back-button">
             ← Back
           </button>
-          <h1 ref={titleRef} className={isTitleTruncated ? 'truncated' : ''} title={projectPath || ''} style={{ cursor: 'pointer' }} onClick={() => {
-            if (projectPath) {
-              navigator.clipboard.writeText(projectPath);
-              setToast("Path copied!");
-              setTimeout(() => setToast(null), 1500);
-            }
-          }}>{projectName}</h1>
+          <h1 ref={titleRef} className={isTitleTruncated ? 'truncated' : ''} title={projectPath || ''} style={{ cursor: 'pointer' }}
+            onClick={() => {
+              if (projectPath) {
+                navigator.clipboard.writeText(projectPath);
+                setToast("Path copied!");
+                setTimeout(() => setToast(null), 1500);
+              }
+            }}
+            onContextMenu={(e) => { e.preventDefault(); setTitleMenu({ x: e.clientX, y: e.clientY }); }}
+          >{projectName}</h1>
+          {titleMenu && (
+            <div className="context-menu" style={{ position: 'fixed', top: titleMenu.y, left: titleMenu.x }} onClick={(e) => e.stopPropagation()}>
+              <button className="context-menu-item" disabled={!projectPath}
+                onClick={() => { if (projectPath) invoke('reveal_in_file_manager', { path: projectPath }); setTitleMenu(null); }}
+              >
+                <i className="fas fa-folder-open"></i> Open in file explorer
+              </button>
+              <button className="context-menu-item" disabled={!projectPath}
+                onClick={() => {
+                  if (projectPath) {
+                    navigator.clipboard.writeText(projectPath);
+                    setToast("Path copied!");
+                    setTimeout(() => setToast(null), 1500);
+                  }
+                  setTitleMenu(null);
+                }}
+              >
+                <i className="fas fa-copy"></i> Copy path to clipboard
+              </button>
+            </div>
+          )}
           {/* View/Edit mode toggle - hidden during loading */}
           {!isLoading && (
             <div className="mode-toggle" onClick={toggleEditMode}>
