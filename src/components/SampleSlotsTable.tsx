@@ -340,26 +340,19 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   const slotType = tableType === 'flex' ? 'FLEX' : 'STATIC';
 
   // Clear the sample assigned to a slot (slot becomes empty).
-  const clearSlotSample = useCallback(async (slot: SampleSlot) => {
-    if (!isEditMode || !projectPath) return;
-    setIsAssigning(true);
-    try {
-      const result = await invoke<AssignSamplesResult>("clear_sample_slots", {
-        path: projectPath, slotType, slotIndices: [slot.slot_id],
-      });
-      if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
-      if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb);
-    } catch (error) {
-      console.error("Error clearing sample slot:", error);
-    } finally {
-      setIsAssigning(false);
+  // The slots a context-menu action targets: the whole selection when the right-clicked
+  // slot is part of a multi-selection, otherwise just that slot.
+  const menuTargetSlots = useCallback((slot: SampleSlot): SampleSlot[] => {
+    if (selectedSlots.size > 1 && selectedSlots.has(slot.slot_id)) {
+      return slots.filter(s => selectedSlots.has(s.slot_id));
     }
-  }, [isEditMode, projectPath, slotType, onSlotsUpdated, onFlexRamUpdated]);
+    return [slot];
+  }, [selectedSlots, slots]);
 
-  // Clear every selected slot that has a sample (used by the Delete keyboard shortcut).
-  const clearSelectedSlots = useCallback(async () => {
+  // Clear the sample from every given slot that has one (one batched write).
+  const clearSlots = useCallback(async (targets: SampleSlot[]) => {
     if (!isEditMode || !projectPath) return;
-    const ids = Array.from(selectedSlots).filter(id => slots.find(s => s.slot_id === id)?.path);
+    const ids = targets.filter(s => s.path).map(s => s.slot_id);
     if (ids.length === 0) return;
     setIsAssigning(true);
     try {
@@ -369,25 +362,33 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
       if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
       if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb);
     } catch (error) {
-      console.error("Error clearing selected slots:", error);
+      console.error("Error clearing sample slot(s):", error);
     } finally {
       setIsAssigning(false);
     }
-  }, [isEditMode, projectPath, slotType, selectedSlots, slots, onSlotsUpdated, onFlexRamUpdated]);
+  }, [isEditMode, projectPath, slotType, onSlotsUpdated, onFlexRamUpdated]);
 
-  // Reset a slot's audio-editor attributes to OT defaults, keeping the sample assigned.
-  const clearSlotAttributes = useCallback(async (slot: SampleSlot) => {
-    if (!isEditMode || !projectPath || !slot.path) return;
+  // Clear every selected slot that has a sample (used by the Delete keyboard shortcut).
+  const clearSelectedSlots = useCallback(() => {
+    return clearSlots(slots.filter(s => selectedSlots.has(s.slot_id)));
+  }, [clearSlots, slots, selectedSlots]);
+
+  // Reset the given slots' audio-editor attributes to OT defaults, keeping each sample assigned.
+  const resetSlotsAttributes = useCallback(async (targets: SampleSlot[]) => {
+    if (!isEditMode || !projectPath) return;
+    const assignments: SlotAssignment[] = targets
+      .filter(s => s.path)
+      .map(s => ({ slot_index: s.slot_id, audio_path: s.path!, set_defaults: true }));
+    if (assignments.length === 0) return;
     setIsAssigning(true);
     try {
       const result = await invoke<AssignSamplesResult>("assign_samples_to_slots", {
-        path: projectPath, slotType,
-        assignments: [{ slot_index: slot.slot_id, audio_path: slot.path, set_defaults: true }],
+        path: projectPath, slotType, assignments,
       });
       if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
       if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb);
     } catch (error) {
-      console.error("Error clearing slot attributes:", error);
+      console.error("Error resetting slot attribute(s):", error);
     } finally {
       setIsAssigning(false);
     }
@@ -1757,15 +1758,15 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
           className="context-menu-item"
           disabled={!isEditMode || !slotMenu.slot.path}
           title={!isEditMode ? 'Toggle Edit mode to modify slots' : undefined}
-          onClick={() => { clearSlotSample(slotMenu.slot); setSlotMenu(null); }}
+          onClick={() => { clearSlots(menuTargetSlots(slotMenu.slot)); setSlotMenu(null); }}
         >
-          <i className="fas fa-eraser"></i> Clear sample
+          <i className="fas fa-eraser"></i> {selectedSlots.size > 1 && selectedSlots.has(slotMenu.slot.slot_id) ? 'Clear samples' : 'Clear sample'}
         </button>
         <button
           className="context-menu-item"
           disabled={!isEditMode || !slotMenu.slot.path}
           title={!isEditMode ? 'Toggle Edit mode to modify slots' : undefined}
-          onClick={() => { clearSlotAttributes(slotMenu.slot); setSlotMenu(null); }}
+          onClick={() => { resetSlotsAttributes(menuTargetSlots(slotMenu.slot)); setSlotMenu(null); }}
         >
           <i className="fas fa-rotate-left"></i> Reset attributes to defaults
         </button>

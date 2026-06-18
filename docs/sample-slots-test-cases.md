@@ -77,6 +77,9 @@ go to the **Flex** (or **Static**) tab.
 | AP45 | Slot menu | Import file(s) to slot (Edit) | In Edit mode, right-click a slot → Import audio file(s) from system | File picker (multi-select) opens; chosen files are copied into the project (progress pane opens) and fill consecutive slots from that one |
 | AP60 | Slot menu | Import directory to slot (Edit) | In Edit mode, right-click a slot → Import audio directory from system | Folder picker opens; audio files (recursive) are copied into the project and fill consecutive empty slots from that one |
 | AP46 | Slot menu | Disabled in View mode | In View mode, right-click a slot | All mutating items are disabled; each shows a "Toggle Edit mode to modify slots" tooltip |
+| AP79 | Slot menu | Clear applies to all selected | In Edit mode, select several filled slots, right-click one of them → Clear samples | Every selected slot is cleared (label reads "Clear samples"); Flex RAM updates |
+| AP80 | Slot menu | Reset applies to all selected | In Edit mode, select several filled slots, right-click one → Reset attributes to defaults | Every selected slot's attributes reset to OT defaults; each sample path is kept |
+| AP81 | Slot menu | Right-click outside selection | With some slots selected, right-click a different (unselected) slot → Clear sample | Only the right-clicked slot is affected (action targets the selection only when the right-clicked slot is part of it) |
 | **Open Audio Pool page (button lives in the pane)** | | | | |
 | AP47 | Open page | Button present with pool | Open the Audio Pool pane in a Set with a pool | An open-Audio-Pool-page button (external-link icon) shows in the pane toolbar, between the pane toggle and the Import dropdown |
 | AP48 | Open page | Hidden without pool | Open Flex tab for a project not in a Set | Neither the pane toggle nor the open-page button is shown |

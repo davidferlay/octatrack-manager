@@ -338,6 +338,39 @@ describe('SampleSlotsTable — slot context menu & Audio Pool page button', () =
       }))
     )
   })
+
+  it('clears all selected slots from the context menu when multiple are selected', async () => {
+    mockInvoke.mockResolvedValue({ assigned_count: 2, updated_slots: [], flex_ram_free_mb: 90 })
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    fireEvent.click(screen.getByText('kick.wav').closest('tr')!) // select F1
+    fireEvent.click(screen.getByText('snare.wav').closest('tr')!, { ctrlKey: true }) // add F3
+    fireEvent.contextMenu(screen.getByText('kick.wav').closest('tr')!)
+    await userEvent.click(screen.getByText('Clear samples')) // plural label when multi-selected
+    await waitFor(() =>
+      expect(mockInvoke).toHaveBeenCalledWith('clear_sample_slots', expect.objectContaining({ slotIndices: [1, 3] }))
+    )
+  })
+
+  it('resets attributes for all selected slots from the context menu', async () => {
+    mockInvoke.mockResolvedValue({ assigned_count: 2, updated_slots: [], flex_ram_free_mb: 90 })
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    fireEvent.click(screen.getByText('kick.wav').closest('tr')!)
+    fireEvent.click(screen.getByText('snare.wav').closest('tr')!, { ctrlKey: true })
+    fireEvent.contextMenu(screen.getByText('kick.wav').closest('tr')!)
+    await userEvent.click(screen.getByText(/Reset attributes/i))
+    await waitFor(() =>
+      expect(mockInvoke).toHaveBeenCalledWith('assign_samples_to_slots', expect.objectContaining({
+        assignments: [
+          { slot_index: 1, audio_path: 'samples/kick.wav', set_defaults: true },
+          { slot_index: 3, audio_path: 'samples/snare.wav', set_defaults: true },
+        ],
+      }))
+    )
+  })
 })
 
 describe('SampleSlotsTable — selection & transfers toggle', () => {
