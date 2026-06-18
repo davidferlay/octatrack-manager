@@ -130,7 +130,11 @@ describe('SampleSlotsTable', () => {
 describe('SampleSlotsTable — Audio Pool integration', () => {
   beforeEach(() => {
     mockInvoke.mockReset()
-    mockInvoke.mockResolvedValue([])
+    // expand_audio_paths echoes its input (a dropped audio file expands to itself); other commands return [].
+    mockInvoke.mockImplementation(async (cmd, args) => {
+      const a = (args ?? {}) as Record<string, unknown>
+      return cmd === 'expand_audio_paths' ? (a.paths ?? []) : []
+    })
   })
 
   it('shows the Audio Pool toggle when audioPoolPath is provided', () => {
@@ -175,6 +179,27 @@ describe('SampleSlotsTable — Audio Pool integration', () => {
     await user.click(screen.getByTitle(/Hide Audio Pool/i))
     await waitFor(() => expect(screen.getByText('Source')).toBeInTheDocument())
     expect(screen.getByText('Gain')).toBeInTheDocument()
+  })
+
+  it("keyboard 'a' toggles the Audio Pool pane", async () => {
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" audioPoolPath="/set/AUDIO" />
+    )
+    expect(screen.queryByTitle(/Hide Audio Pool/i)).not.toBeInTheDocument()
+    fireEvent.keyDown(document, { key: 'a' })
+    await waitFor(() => expect(screen.getByTitle(/Hide Audio Pool/i)).toBeInTheDocument())
+  })
+
+  it('Delete clears the selected slot(s) in edit mode', async () => {
+    mockInvoke.mockResolvedValue({ assigned_count: 1, updated_slots: [], flex_ram_free_mb: 80 })
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    await userEvent.click(screen.getByText('kick.wav').closest('tr')!) // select F1
+    fireEvent.keyDown(document, { key: 'Delete' })
+    await waitFor(() =>
+      expect(mockInvoke).toHaveBeenCalledWith('clear_sample_slots', expect.objectContaining({ slotIndices: [1] }))
+    )
   })
 
   it('does not assign a dropped sample and warns when not in edit mode', async () => {
@@ -260,6 +285,26 @@ describe('SampleSlotsTable — slot context menu & Audio Pool page button', () =
     expect(clear).toBeDisabled()
     expect(screen.getByText(/Reset attributes/i)).toBeDisabled()
     expect(clear.getAttribute('title')).toMatch(/Toggle Edit mode/i)
+  })
+
+  it('reveals a slot sample in the file explorer via the context menu (allowed in view mode)', async () => {
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode={false} projectPath="/proj" />
+    )
+    fireEvent.contextMenu(screen.getByText('kick.wav').closest('tr')!)
+    await userEvent.click(screen.getByText(/Open in file explorer/i))
+    await waitFor(() =>
+      expect(mockInvoke).toHaveBeenCalledWith('reveal_in_file_manager', { path: '/proj/samples/kick.wav' })
+    )
+  })
+
+  it('disables "Open in file explorer" for an empty slot', async () => {
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    // mockSlots[1] (F2) is empty
+    fireEvent.contextMenu(screen.getByText('F2').closest('tr')!)
+    expect(screen.getByText(/Open in file explorer/i)).toBeDisabled()
   })
 
   it('clears a slot sample via the context menu in edit mode', async () => {

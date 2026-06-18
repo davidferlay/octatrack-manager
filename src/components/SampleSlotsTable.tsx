@@ -508,6 +508,17 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     return () => document.removeEventListener('keydown', onKey);
   }, [audioPoolPath, showAudioPool, isEditMode, selectedSlots, slotMenu, clearSelectedSlots]);
 
+  // Expand any dragged/dropped directories into their (recursive) audio files so the
+  // copy/assign flows never choke on a folder. Plain audio files pass through unchanged.
+  const expandPaths = useCallback(async (paths: string[]): Promise<string[]> => {
+    try {
+      const out = await invoke<string[]>('expand_audio_paths', { paths });
+      return Array.isArray(out) ? out : paths;
+    } catch {
+      return paths;
+    }
+  }, []);
+
   // Handle drop on a slot row (HTML5 drag — works on Linux; macOS uses dnd-kit via handleDndDragEnd)
   const handleSlotDrop = useCallback(async (e: React.DragEvent, targetSlot: SampleSlot) => {
     e.preventDefault();
@@ -518,13 +529,15 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
       if (!jsonData) return;
       const dragData = JSON.parse(jsonData);
       if (dragData.source !== "audio-pool-sidebar") return;
-      const filePaths: string[] = dragData.files;
-      if (!filePaths || filePaths.length === 0) return;
+      const rawPaths: string[] = dragData.files;
+      if (!rawPaths || rawPaths.length === 0) return;
+      const filePaths = await expandPaths(rawPaths);
+      if (filePaths.length === 0) return;
       await doAssignFiles(filePaths, targetSlot);
     } catch (error) {
       console.error("Error parsing drag data:", error);
     }
-  }, [projectPath, doAssignFiles]);
+  }, [projectPath, doAssignFiles, expandPaths]);
 
   // dnd-kit drag end — used on macOS where HTML5 drag events don't work in WKWebView
   const handleDndDragEnd = useCallback(async (event: DragEndEvent) => {
@@ -534,12 +547,13 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     const sourceData = active.data.current as { source?: string; files?: string[] } | undefined;
     const targetData = over.data.current as { type?: string; slotId?: number } | undefined;
     if (sourceData?.source !== 'audio-pool-sidebar' || targetData?.type !== 'slot') return;
-    const filePaths = sourceData.files ?? [];
     const targetSlotId = targetData.slotId!;
     const targetSlot = slots.find(s => s.slot_id === targetSlotId);
     if (!targetSlot) return;
+    const filePaths = await expandPaths(sourceData.files ?? []);
+    if (filePaths.length === 0) return;
     await doAssignFiles(filePaths, targetSlot);
-  }, [slots, doAssignFiles]);
+  }, [slots, doAssignFiles, expandPaths]);
 
   const handleSlotDragOver = useCallback((e: React.DragEvent, slotId: number) => {
     // Always prevent default to avoid text selection during drag
@@ -731,6 +745,15 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
 
           if (!droppedPaths || droppedPaths.length === 0) return;
 
+          // Expand dropped folders into their (recursive) audio files — copy/assign can't
+          // handle directories ("Use copy_files_with_overwrite for directories").
+          let paths = droppedPaths;
+          try {
+            const out = await invoke<string[]>('expand_audio_paths', { paths: droppedPaths });
+            if (Array.isArray(out)) paths = out;
+          } catch { /* fall back to the raw paths */ }
+          if (paths.length === 0) return;
+
           const curProjectPath = projectPathRef.current;
           const curAudioPoolPath = audioPoolPathRef.current;
 
@@ -739,13 +762,13 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
             const destDir = sidebarCurrentPathRef.current ?? curAudioPoolPath;
             if (onImportToAudioPoolRef.current) {
               // Use parent's transfer hook for progress tracking and overwrite handling
-              onImportToAudioPoolRef.current(droppedPaths, destDir);
+              onImportToAudioPoolRef.current(paths, destDir);
               // sidebarRefreshKey will be incremented via sidebarRefreshTrigger from parent's onComplete
             } else {
               // Fallback: simple copy + local refresh
               try {
                 await invoke('copy_audio_files', {
-                  sourcePaths: droppedPaths,
+                  sourcePaths: paths,
                   destinationDir: destDir,
                   overwrite: false,
                 });
@@ -772,9 +795,9 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
               try {
                 // Route through the transfer pane when available so progress is visible.
                 const destPaths = onImportToProjectRef.current
-                  ? await onImportToProjectRef.current(droppedPaths)
+                  ? await onImportToProjectRef.current(paths)
                   : await invoke<string[]>('copy_audio_files_to_project', {
-                      sourcePaths: droppedPaths,
+                      sourcePaths: paths,
                       destinationDir: curProjectPath,
                     });
                 if (!destPaths || destPaths.length === 0) return;

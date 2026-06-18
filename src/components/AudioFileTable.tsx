@@ -60,11 +60,12 @@ function DraggableFileRow({
   rowRefs?: React.MutableRefObject<Map<number, HTMLTableRowElement>>;
   children: React.ReactNode;
 }) {
+  // Directories are draggable too (dropping one onto a slot assigns its audio files,
+  // expanded recursively). Click still navigates — dnd-kit only starts a drag past 5px.
   const dragFiles = selectedFiles.has(file.path) ? Array.from(selectedFiles) : [file.path];
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `audio-file:${file.path}`,
     data: { source: 'audio-pool-sidebar', files: dragFiles },
-    disabled: file.is_directory,
   });
 
   return (
@@ -77,7 +78,8 @@ function DraggableFileRow({
       style={{ opacity: isDragging ? 0.4 : 1, cursor: file.is_directory ? 'pointer' : 'grab' }}
       onClick={(e) => onFileClick(file, originalIndex, e)}
       onContextMenu={(e) => onContextMenu?.(e, file)}
-      {...(file.is_directory ? {} : { ...attributes, ...listeners })}
+      {...attributes}
+      {...listeners}
     >
       {children}
     </tr>

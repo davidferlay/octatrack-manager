@@ -60,6 +60,28 @@ describe('AudioPoolSidebar', () => {
     expect(assign.getAttribute('title')).toMatch(/Toggle Edit mode/i)
   })
 
+  it('right-click on a file → "Open in file explorer" reveals it (works in view mode)', async () => {
+    render(<AudioPoolSidebar audioPoolPath="/set/AUDIO" isEditMode={false} />)
+    await waitFor(() => expect(screen.getByText('kick.wav')).toBeInTheDocument())
+    fireEvent.contextMenu(screen.getByText('kick.wav').closest('tr')!)
+    await userEvent.click(screen.getByText(/Open in file explorer/i))
+    expect(mockInvoke).toHaveBeenCalledWith('reveal_in_file_manager', { path: '/set/AUDIO/kick.wav' })
+  })
+
+  it('right-click on a directory shows only "Open in file explorer" (no assign items)', async () => {
+    mockInvoke.mockImplementation(async (cmd: string) =>
+      cmd === 'list_audio_directory'
+        ? [{ name: 'drums', size: 0, channels: null, bit_rate: null, sample_rate: null, is_directory: true, path: '/set/AUDIO/drums' }]
+        : undefined
+    )
+    render(<AudioPoolSidebar audioPoolPath="/set/AUDIO" isEditMode hasSelectedSlot onAssignToFirstEmpty={vi.fn()} onAssignToSelected={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('drums')).toBeInTheDocument())
+    fireEvent.contextMenu(screen.getByText('drums').closest('tr')!)
+    expect(screen.getByText(/Open in file explorer/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Assign to first empty slot/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Assign to selected slot/i)).not.toBeInTheDocument()
+  })
+
   it('shows "Assign to selected slot" only when a slot is selected', async () => {
     const onAssignToSelected = vi.fn()
     const { rerender } = render(

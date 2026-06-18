@@ -70,7 +70,7 @@ go to the **Flex** (or **Static**) tab.
 | AP58 | Pane menu | Assign to selected slot shown only when a slot is selected | Select a slot, then right-click a pool file | "Assign to selected slot" appears below "Assign to first empty slot"; it is absent when no slot is selected |
 | AP59 | Pane menu | Assign to selected (Edit) | With a slot selected, choose "Assign to selected slot" | File is assigned starting at the selected (cursor) slot; multi-file fills consecutive empty slots from there |
 | **Sample slot item context menu** | | | | |
-| AP41 | Slot menu | Right-click a slot | Right-click any slot row | Context menu: Clear sample, Reset attributes to defaults, Import audio file(s) from system, Import audio directory from system |
+| AP41 | Slot menu | Right-click a slot | Right-click any slot row | Context menu: Clear sample, Reset attributes to defaults, Import audio file(s) from system, Import audio directory from system, Open in file explorer |
 | AP42 | Slot menu | Clear sample (Edit) | In Edit mode, right-click a filled slot → Clear sample | Slot becomes empty; Flex RAM (Flex tab) updates |
 | AP43 | Slot menu | Disabled on empty slot | Right-click an empty slot | "Clear sample" and "Reset attributes" are disabled (nothing to clear) |
 | AP44 | Slot menu | Reset attributes (Edit) | In Edit mode, right-click a filled slot → Reset attributes | Attributes reset to OT defaults (GAIN 72, TSMODE 2, LOOPMODE 0, TRIGQUANTIZATION -1); path unchanged |
@@ -87,3 +87,22 @@ go to the **Flex** (or **Static**) tab.
 | AP63 | Transfers | Active styling | While the progress pane is open | The transfers toggle uses the orange active style; clicking it hides/shows the pane |
 | **Copy back to source (Audio Pool page)** | | | | |
 | AP31 | Copy back | Pool → source uses shared pipeline | On the Audio Pool page, copy a destination file back to the source directory | Transfer shows in the progress pane; overwrite modal appears if a same-named file already exists |
+| **Open in file explorer** | | | | |
+| AP64 | Reveal | Slot → file explorer | Right-click a filled slot → Open in file explorer | The OS file explorer opens with the sample's file revealed/selected (works in View and Edit mode) |
+| AP65 | Reveal | Disabled for empty/missing | Right-click an empty slot (or one whose file is missing) → observe Open in file explorer | The item is disabled (missing files show a "File not found" tooltip) |
+| AP66 | Reveal | Pool file → file explorer | In the Audio Pool pane, right-click a file → Open in file explorer | The OS file explorer opens with that pool file revealed |
+| AP67 | Reveal | Pool directory → file explorer | In the Audio Pool pane, right-click a folder → Open in file explorer | The OS file explorer opens that folder; the context menu shows only this item (no assign options for folders) |
+| AP68 | Reveal | Project title menu | On the Project Detail page, right-click the project title | Context menu with "Open in file explorer" (opens the project folder) and "Copy path to clipboard" |
+| AP69 | Reveal | Project title copy path | In the title menu, choose Copy path to clipboard | The project path is copied; a "Path copied!" toast appears (left-clicking the title still copies too) |
+| **Keyboard shortcuts** | | | | |
+| AP70 | Shortcut | 'a' toggles the pane | On a Flex/Static tab in a Set with a pool, press `a` (not while typing in a field) | The Audio Pool pane toggles open/closed |
+| AP71 | Shortcut | Delete clears selected slots | In Edit mode, select one or more filled slots, press Delete (or Backspace) | The selected slots are cleared; Flex RAM (Flex tab) updates |
+| AP72 | Shortcut | Delete ignored in View mode | In View mode, select a slot, press Delete | Nothing is cleared (slot mutation requires Edit mode) |
+| AP73 | Shortcut | Ignored while typing | Focus the search box and press `a` / Delete | The keystroke edits the search text; no pane toggle / clear happens |
+| **Drag a directory to slots** | | | | |
+| AP74 | Dir drag | Drag pool folder to a slot (Edit) | In Edit mode, drag a folder from the Audio Pool pane onto a slot | The folder's audio files (found recursively) fill consecutive empty slots starting at the drop target |
+| AP75 | Dir drag | Single click still navigates | Single-click a folder in the pane | The pane navigates into the folder (a click without dragging does not start a drag) |
+| AP76 | Dir drop | Drop OS folder on a slot (Edit) | In Edit mode, drag a folder from the OS file manager onto a slot | The folder's audio files (recursive) are copied into the project and fill consecutive empty slots — no "directory" error |
+| AP77 | Dir drop | Drop OS folder on the pane | Drag a folder from the OS file manager onto the Audio Pool pane | The folder's audio files (recursive) are imported into the current AUDIO/ directory |
+| **Cancel an in-app drag** | | | | |
+| AP78 | Cancel | Escape cancels drag | Start dragging a pool file/folder over a slot, then press Escape before releasing | The drag is cancelled with no assignment; the drag preview disappears and no slot changes |

@@ -139,6 +139,30 @@ pub fn collect_audio_files_recursive(path: &str) -> Result<Vec<String>, String> 
     Ok(out)
 }
 
+/// Expand a mixed list of file/directory paths into a flat list of audio files.
+/// Directories are walked recursively; plain files are kept only if they are audio files.
+/// Used when files/folders are dropped from the OS or dragged from the Audio Pool pane.
+pub fn expand_audio_paths(paths: &[String]) -> Result<Vec<String>, String> {
+    let mut out = Vec::new();
+    for p in paths {
+        let path = Path::new(p);
+        if path.is_dir() {
+            collect_audio_files_inner(path, &mut out)?;
+        } else if path.is_file() {
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            if is_audio_file(&name) {
+                out.push(p.clone());
+            }
+        }
+    }
+    out.sort();
+    out.dedup();
+    Ok(out)
+}
+
 fn collect_audio_files_inner(dir: &Path, out: &mut Vec<String>) -> Result<(), String> {
     let entries = fs::read_dir(dir).map_err(|e| format!("Failed to read directory: {}", e))?;
     for entry in entries {
@@ -1251,6 +1275,34 @@ mod tests {
         // A path that is a file (not a directory) is an error.
         let file = root.join("keep.wav");
         assert!(collect_audio_files_recursive(file.to_str().unwrap()).is_err());
+    }
+
+    #[test]
+    fn test_expand_audio_paths_mixes_files_and_dirs() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::write(root.join("top.wav"), b"x").unwrap();
+        std::fs::write(root.join("ignore.txt"), b"x").unwrap(); // non-audio file dropped → skipped
+        let dir = root.join("kit");
+        std::fs::create_dir(&dir).unwrap();
+        std::fs::write(dir.join("kick.wav"), b"x").unwrap();
+        std::fs::write(dir.join("snare.aiff"), b"x").unwrap();
+
+        let inputs = vec![
+            root.join("top.wav").to_string_lossy().to_string(),
+            root.join("ignore.txt").to_string_lossy().to_string(),
+            dir.to_string_lossy().to_string(), // a directory → expanded recursively
+        ];
+        let out = expand_audio_paths(&inputs).unwrap();
+        assert_eq!(
+            out.len(),
+            3,
+            "dir expands to its audio files; non-audio file skipped"
+        );
+        assert!(out.iter().any(|p| p.ends_with("top.wav")));
+        assert!(out.iter().any(|p| p.ends_with("kick.wav")));
+        assert!(out.iter().any(|p| p.ends_with("snare.aiff")));
+        assert!(!out.iter().any(|p| p.ends_with("ignore.txt")));
     }
 
     #[test]

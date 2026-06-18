@@ -21,9 +21,14 @@ async function setupMocks(page: Page, opts?: { withAudioPool?: boolean }) {
             return { cpu_cores: 4, available_memory_mb: 8000, recommended_concurrency: 4 }
           case 'list_audio_directory':
             return [
+              { name: 'Drums', size: 0, channels: 0, bit_rate: 0, sample_rate: 0, is_directory: true, path: '/test/set/AUDIO/Drums' },
               { name: 'kick.wav', size: 1024, channels: 2, bit_rate: 16, sample_rate: 44100, is_directory: false, path: '/test/set/AUDIO/kick.wav' },
               { name: 'snare.wav', size: 2048, channels: 1, bit_rate: 24, sample_rate: 48000, is_directory: false, path: '/test/set/AUDIO/snare.wav' },
             ]
+          case 'expand_audio_paths':
+            return [] // dropped/dragged folders expand to their files; not exercised here
+          case 'reveal_in_file_manager':
+            return null
           case 'get_existing_banks':
             return [] // no banks to load — keeps the loader fast and lets tabs render
           case 'load_single_bank':
@@ -194,5 +199,45 @@ test.describe('Audio Pool sidebar in Flex slots', () => {
     await expect(up).toBeDisabled()
     // Open-page button sits in the pane toolbar
     await expect(page.locator('.audio-pool-page-btn')).toBeVisible()
+  })
+
+  test('slot context menu offers "Open in file explorer"', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    await page.locator('.samples-table tbody tr').first().click({ button: 'right' })
+    await expect(page.getByText(/Open in file explorer/i)).toBeVisible()
+  })
+
+  test('pool file context menu offers "Open in file explorer"', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    await page.locator('.audio-pool-toggle-btn').first().click()
+    await page.locator('.audio-pool-sidebar tbody tr', { hasText: 'kick.wav' }).click({ button: 'right' })
+    await expect(page.getByText(/Open in file explorer/i)).toBeVisible()
+  })
+
+  test('pool directory context menu shows only "Open in file explorer" (no assign items)', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    await page.locator('.audio-pool-toggle-btn').first().click()
+    await page.locator('.audio-pool-sidebar tbody tr', { hasText: 'Drums' }).click({ button: 'right' })
+    await expect(page.getByText(/Open in file explorer/i)).toBeVisible()
+    await expect(page.getByText(/Assign to first empty slot/i)).toHaveCount(0)
+  })
+
+  test("pressing 'a' opens the Audio Pool pane", async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    await expect(page.locator('.audio-pool-sidebar')).toHaveCount(0)
+    await page.keyboard.press('a')
+    await expect(page.locator('.audio-pool-sidebar')).toBeVisible()
+  })
+
+  test('project title right-click menu has open-in-explorer and copy-path', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    await page.locator('.project-header h1').click({ button: 'right' })
+    await expect(page.getByText(/Open in file explorer/i)).toBeVisible()
+    await expect(page.getByText(/Copy path to clipboard/i)).toBeVisible()
   })
 })
