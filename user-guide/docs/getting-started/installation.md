@@ -59,12 +59,12 @@ We provide three package formats for Linux users:
 
 - **Debian / Ubuntu:** <DownloadLink asset="linux-deb">Download .deb</DownloadLink> and install it:
   ```bash
-  sudo dpkg -i octatrack-manager_*.deb
+  sudo apt install octatrack-manager_*.deb
   ```
 
 - **Fedora / RHEL:** <DownloadLink asset="linux-rpm">Download .rpm</DownloadLink> and install it:
   ```bash
-  sudo rpm -i octatrack-manager-*.rpm
+  sudo dnf install octatrack-manager-*.rpm
   ```
 
 - **AppImage (Universal):** <DownloadLink asset="linux-appimage">Download .AppImage</DownloadLink>, make it executable, and run it:
