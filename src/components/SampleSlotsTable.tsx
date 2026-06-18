@@ -1736,8 +1736,8 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
       </DragOverlay>
     </DndContext>
     {viewModeToast && (
-      <div className="toast-notification warning">
-        <i className="fas fa-exclamation-triangle"></i> Toggle Edit mode to assign samples to slots
+      <div className="toast-notification tip">
+        <i className="fas fa-lightbulb"></i> Toggle Edit mode to assign samples to slots
       </div>
     )}
     {notice && (

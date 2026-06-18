@@ -639,6 +639,16 @@ h1 {
   animation: toastIn 0.2s ease, toastOut 0.3s ease 2.5s forwards;
 }
 
+/* Friendly hint (not an error) — blue border + lightbulb */
+.toast-notification.tip {
+  border-color: #388bfd;
+  animation: toastIn 0.2s ease, toastOut 0.3s ease 2.5s forwards;
+}
+
+.toast-notification.tip i {
+  color: #58a6ff;
+}
+
 @keyframes toastIn {
   from { opacity: 0; transform: translateX(-50%) translateY(10px); }
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
