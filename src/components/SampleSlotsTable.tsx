@@ -650,7 +650,11 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
 
     import('@tauri-apps/api/window').then(({ getCurrentWindow }) => {
       getCurrentWindow().onDragDropEvent(async (event) => {
-        const scale = window.devicePixelRatio || 1;
+        // Tauri v2 reports DragDrop `position` in physical px on Windows/Linux but in
+        // logical (CSS) px on macOS. elementFromPoint wants CSS px, so only divide by
+        // the device scale off-macOS. ponytail: pinned to Tauri 2.x macOS behavior.
+        const isMac = navigator.userAgent.includes('Macintosh');
+        const scale = isMac ? 1 : (window.devicePixelRatio || 1);
 
         if (event.payload.type === 'over') {
           const x = event.payload.position.x / scale;
