@@ -125,6 +125,18 @@ describe('SampleSlotsTable', () => {
     )
     expect(screen.queryByTitle(/Flex RAM available/i)).not.toBeInTheDocument()
   })
+
+  it('shows the OT-calculated Size column only after enabling it in the column menu', async () => {
+    const slotsWithSize = [{ ...mockSlots[0], ot_size_bytes: 400 }]
+    renderWithProvider(
+      <SampleSlotsTable slots={slotsWithSize} slotPrefix="F" tableType="flex" />
+    )
+    // Hidden by default
+    expect(screen.queryByText('400 B')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByTitle('Show/Hide Columns'))
+    await userEvent.click(screen.getByText('Size'))
+    expect(screen.getByText('400 B')).toBeInTheDocument()
+  })
 })
 
 describe('SampleSlotsTable — Audio Pool integration', () => {

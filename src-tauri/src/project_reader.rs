@@ -112,6 +112,7 @@ pub struct SampleSlot {
     pub file_format: Option<String>,   // "WAV", "AIFF", etc.
     pub bit_depth: Option<u32>,        // 16, 24, etc.
     pub sample_rate: Option<u32>,      // 44100, 48000, etc.
+    pub ot_size_bytes: Option<u64>, // PCM data size as the OT measures it (None if empty/unparsable)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -747,6 +748,11 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             file_format: audio_info.file_format,
                             bit_depth: audio_info.bit_depth,
                             sample_rate: audio_info.sample_rate,
+                            ot_size_bytes: if file_exists {
+                                ot_pcm_data_size(&full_path)
+                            } else {
+                                None
+                            },
                         });
                     } else {
                         // Slot exists but has no sample - still show attributes
@@ -763,6 +769,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             file_format: None,
                             bit_depth: None,
                             sample_rate: None,
+                            ot_size_bytes: None,
                         });
                     }
                 } else {
@@ -780,6 +787,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                         file_format: None,
                         bit_depth: None,
                         sample_rate: None,
+                        ot_size_bytes: None,
                     });
                 }
             }
@@ -828,6 +836,11 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             file_format: audio_info.file_format,
                             bit_depth: audio_info.bit_depth,
                             sample_rate: audio_info.sample_rate,
+                            ot_size_bytes: if file_exists {
+                                ot_pcm_data_size(&full_path)
+                            } else {
+                                None
+                            },
                         });
                     } else {
                         // Slot exists but has no sample - still show attributes
@@ -844,6 +857,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             file_format: None,
                             bit_depth: None,
                             sample_rate: None,
+                            ot_size_bytes: None,
                         });
                     }
                 } else {
@@ -861,6 +875,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                         file_format: None,
                         bit_depth: None,
                         sample_rate: None,
+                        ot_size_bytes: None,
                     });
                 }
             }
@@ -5184,6 +5199,16 @@ fn get_flex_ram_usage(path: &Path, load_24bit_flex: bool) -> u64 {
         // Fallback: use file size (overestimates due to headers)
         std::fs::metadata(path).map(|m| m.len()).unwrap_or(0)
     }
+}
+
+/// The Octatrack-style size of an audio file: the raw PCM sample-data byte count
+/// (`frames × channels × bytes_per_sample`, 3 bytes for 24-bit, 2 for 16-bit), not the
+/// on-disk file size. This mirrors how flex RAM usage is measured. Returns None when the
+/// audio header can't be parsed (caller decides the fallback).
+pub fn ot_pcm_data_size(path: &Path) -> Option<u64> {
+    let info = read_wav_pcm_info(path).or_else(|| read_aiff_pcm_info(path))?;
+    let bytes_per_sample: u64 = if info.bits_per_sample > 16 { 3 } else { 2 };
+    Some(info.num_sample_frames * info.num_channels as u64 * bytes_per_sample)
 }
 
 /// Calculate available Flex RAM in bytes for a project based on its memory settings.
@@ -17267,6 +17292,25 @@ mod tests {
         assert_eq!(info.num_channels, 1);
         assert_eq!(info.bits_per_sample, 24);
         assert_eq!(info.num_sample_frames, 50);
+    }
+
+    #[test]
+    fn test_ot_pcm_data_size_uses_pcm_bytes_not_file_size() {
+        let dir = TempDir::new().unwrap();
+        // 16-bit stereo, 100 frames → 100 × 2 × 2 = 400 bytes of PCM data.
+        let p16 = write_minimal_wav(dir.path(), "s16.wav", 2, 44100, 16, 100);
+        assert_eq!(ot_pcm_data_size(&p16), Some(400));
+        // 24-bit mono, 50 frames → 50 × 1 × 3 = 150 bytes (24-bit kept as 3 bytes).
+        let p24 = write_minimal_wav(dir.path(), "s24.wav", 1, 44100, 24, 50);
+        assert_eq!(ot_pcm_data_size(&p24), Some(150));
+    }
+
+    #[test]
+    fn test_ot_pcm_data_size_none_when_unparsable() {
+        let dir = TempDir::new().unwrap();
+        let p = dir.path().join("notaudio.txt");
+        fs::write(&p, b"hello").unwrap();
+        assert_eq!(ot_pcm_data_size(&p), None);
     }
 
     #[test]

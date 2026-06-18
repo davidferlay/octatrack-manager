@@ -80,6 +80,11 @@ go to the **Flex** (or **Static**) tab.
 | AP79 | Slot menu | Clear applies to all selected | In Edit mode, select several filled slots, right-click one of them → Clear samples | Every selected slot is cleared (label reads "Clear samples"); Flex RAM updates |
 | AP80 | Slot menu | Reset applies to all selected | In Edit mode, select several filled slots, right-click one → Reset attributes to defaults | Every selected slot's attributes reset to OT defaults; each sample path is kept |
 | AP81 | Slot menu | Right-click outside selection | With some slots selected, right-click a different (unselected) slot → Clear sample | Only the right-clicked slot is affected (action targets the selection only when the right-clicked slot is part of it) |
+| **OT-style file size** | | | | |
+| AP82 | Size column | Toggle the slot Size column | In the slot table ☰ Show/Hide Columns menu, enable "Size" | A Size column appears showing each filled slot's size; empty slots show "-" |
+| AP83 | Size column | OT calculation (not on-disk) | Compare a slot's Size with the file's size on disk | The value is the PCM sample-data size (frames × channels × bytes; 24-bit = 3 bytes, 16-bit = 2), not the larger on-disk size (which includes headers) |
+| AP84 | Size column | Sortable | Enable Size, click the Size header | Rows sort by size (empty slots sort as smallest) |
+| AP85 | Pool size | Pane/page sizes use OT calc | Open the Audio Pool pane or page and read a file's Size | The size matches the OT PCM-data calculation (same logic as flex samples), not the raw on-disk file size |
 | **Open Audio Pool page (button lives in the pane)** | | | | |
 | AP47 | Open page | Button present with pool | Open the Audio Pool pane in a Set with a pool | An open-Audio-Pool-page button (external-link icon) shows in the pane toolbar, between the pane toggle and the Import dropdown |
 | AP48 | Open page | Hidden without pool | Open Flex tab for a project not in a Set | Neither the pane toggle nor the open-page button is shown |

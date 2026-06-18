@@ -97,7 +97,15 @@ pub fn list_directory(path: &str) -> Result<Vec<AudioFileInfo>, String> {
         }
 
         let is_directory = metadata.is_dir();
-        let size = if is_directory { 0 } else { metadata.len() };
+        // Audio files report their Octatrack PCM data size (like flex RAM), not the on-disk
+        // size; non-audio files and unparsable headers fall back to the filesystem size.
+        let size = if is_directory {
+            0
+        } else if is_audio_file(&file_name) {
+            crate::project_reader::ot_pcm_data_size(&file_path).unwrap_or_else(|| metadata.len())
+        } else {
+            metadata.len()
+        };
 
         // Extract audio metadata if it's an audio file
         let (channels, bit_rate, sample_rate) = if !is_directory && is_audio_file(&file_name) {

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, ReactNode } from 'react';
 
-type SortColumn = 'slot' | 'sample' | 'status' | 'source' | 'gain' | 'timestretch' | 'loop' | 'compatibility' | 'format' | 'bitdepth' | 'samplerate';
+type SortColumn = 'slot' | 'sample' | 'status' | 'source' | 'gain' | 'timestretch' | 'loop' | 'compatibility' | 'format' | 'bitdepth' | 'samplerate' | 'size';
 type SortDirection = 'asc' | 'desc';
 
 interface ColumnVisibility {
@@ -15,6 +15,7 @@ interface ColumnVisibility {
   format: boolean;
   bitdepth: boolean;
   samplerate: boolean;
+  size: boolean;
 }
 
 export interface TablePreferences {
@@ -60,6 +61,7 @@ const defaultPreferences: TablePreferences = {
     format: false,
     bitdepth: false,
     samplerate: false,
+    size: false,
   },
 };
 

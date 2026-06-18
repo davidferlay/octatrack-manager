@@ -14,6 +14,7 @@ import {
 } from "@dnd-kit/core";
 import { useTablePreferences } from "../context/TablePreferencesContext";
 import { AudioPoolSidebar } from "./AudioPoolSidebar";
+import { formatFileSize } from "./AudioFileTable";
 
 // Droppable slot row for dnd-kit (pointer-based, cross-platform)
 function DroppableSlotRow({
@@ -59,6 +60,7 @@ interface SampleSlot {
   file_format: string | null; // "WAV", "AIFF", etc.
   bit_depth: number | null; // 16, 24, etc.
   sample_rate: number | null; // 44100, 48000, etc.
+  ot_size_bytes?: number | null; // PCM data size as the OT measures it
 }
 
 interface MemorySettings {
@@ -103,7 +105,7 @@ interface SampleSlotsTableProps {
   onToggleTransfers?: () => void;
 }
 
-type SortColumn = 'slot' | 'sample' | 'status' | 'source' | 'gain' | 'timestretch' | 'loop' | 'compatibility' | 'format' | 'bitdepth' | 'samplerate';
+type SortColumn = 'slot' | 'sample' | 'status' | 'source' | 'gain' | 'timestretch' | 'loop' | 'compatibility' | 'format' | 'bitdepth' | 'samplerate' | 'size';
 type SortDirection = 'asc' | 'desc';
 
 // Helper function to extract filename from path
@@ -177,14 +179,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   const [columnSizing, setColumnSizing] = useState<Record<string, number>>({
     slot: 80, sample: 200, compatibility: 120, status: 100,
     source: 110, gain: 85, timestretch: 140, loop: 100,
-    format: 100, bitdepth: 80, samplerate: 80,
+    format: 100, bitdepth: 80, samplerate: 80, size: 95,
   });
   const resizingColRef = useRef<string | null>(null);
   const resizeStartXRef = useRef<number>(0);
   const resizeStartSizeRef = useRef<number>(0);
 
   // Column order and drag-over state for column reorder
-  const [columnOrder, setColumnOrder] = useState<string[]>(['slot', 'sample', 'compatibility', 'status', 'source', 'gain', 'timestretch', 'loop', 'format', 'bitdepth', 'samplerate']);
+  const [columnOrder, setColumnOrder] = useState<string[]>(['slot', 'sample', 'compatibility', 'status', 'source', 'gain', 'timestretch', 'loop', 'format', 'bitdepth', 'samplerate', 'size']);
   const [dragOverColId, setDragOverColId] = useState<string | null>(null);
 
   // Copy to clipboard state
@@ -202,7 +204,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
       setVisibleColumns({
         slot: true, sample: true, compatibility: true, status: true,
         source: false, gain: false, timestretch: false, loop: false,
-        format: false, bitdepth: false, samplerate: false,
+        format: false, bitdepth: false, samplerate: false, size: false,
       });
     } else if (!open && showAudioPool && savedColumnsRef.current) {
       setVisibleColumns(savedColumnsRef.current);
@@ -937,6 +939,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     if (visibleColumns.format) headers.push('Format');
     if (visibleColumns.bitdepth) headers.push('Bit Depth');
     if (visibleColumns.samplerate) headers.push('Sample Rate');
+    if (visibleColumns.size) headers.push('Size');
 
     const rows = slotsData.map(slot => {
       const row: string[] = [];
@@ -951,6 +954,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
       if (visibleColumns.format) row.push(slot.file_format || '');
       if (visibleColumns.bitdepth) row.push(slot.bit_depth !== null && slot.bit_depth !== undefined ? String(slot.bit_depth) : '');
       if (visibleColumns.samplerate) row.push(slot.sample_rate !== null && slot.sample_rate !== undefined ? String(slot.sample_rate / 1000) : '');
+      if (visibleColumns.size) row.push(slot.ot_size_bytes ? formatFileSize(slot.ot_size_bytes) : '');
       return row.join('\t');
     });
 
@@ -1190,6 +1194,10 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
           compareA = a.sample_rate ?? -1;
           compareB = b.sample_rate ?? -1;
           break;
+        case 'size':
+          compareA = a.ot_size_bytes ?? -1;
+          compareB = b.ot_size_bytes ?? -1;
+          break;
         default:
           return 0;
       }
@@ -1251,7 +1259,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     const COL_LABELS: Record<string, string> = {
       slot: 'Slot', sample: 'Sample', compatibility: 'Compat', status: 'Status',
       source: 'Source', gain: 'Gain', timestretch: 'Timestretch', loop: 'Loop',
-      format: 'Format', bitdepth: 'Bit', samplerate: 'kHz',
+      format: 'Format', bitdepth: 'Bit', samplerate: 'kHz', size: 'Size',
     };
     const FILTERABLE = ['compatibility', 'status', 'source', 'gain', 'timestretch', 'loop', 'format', 'bitdepth', 'samplerate'];
     const hasFilter = FILTERABLE.includes(colId);
@@ -1445,6 +1453,8 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         return <td key={colId} className="col-bitdepth">{slot.bit_depth !== null && slot.bit_depth !== undefined ? slot.bit_depth : '-'}</td>;
       case 'samplerate':
         return <td key={colId} className="col-samplerate">{slot.sample_rate !== null && slot.sample_rate !== undefined ? (slot.sample_rate / 1000).toFixed(1) : '-'}</td>;
+      case 'size':
+        return <td key={colId} className="col-size">{slot.ot_size_bytes ? formatFileSize(slot.ot_size_bytes) : '-'}</td>;
       default:
         return null;
     }
@@ -1683,6 +1693,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
                     onChange={() => toggleColumn('samplerate')}
                   />
                   <span>Sample Rate</span>
+                </label>
+                <label className="column-visibility-option">
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.size}
+                    onChange={() => toggleColumn('size')}
+                  />
+                  <span>Size</span>
                 </label>
               </div>
             )}
