@@ -67,7 +67,8 @@ interface MemorySettings {
   record_24bit: boolean;
   reserved_recorder_count: number;
   reserved_recorder_length: number;
-  flex_ram_free_mb: number;
+  flex_ram_free_mb: number;       // truncated MiB (for display)
+  flex_ram_free_bytes?: number;   // exact free bytes (for drop validation)
 }
 
 interface SlotAssignment {
@@ -80,6 +81,7 @@ interface AssignSamplesResult {
   assigned_count: number;
   updated_slots: SampleSlot[];
   flex_ram_free_mb: number | null;
+  flex_ram_free_bytes?: number | null;
 }
 
 interface SampleSlotsTableProps {
@@ -92,7 +94,7 @@ interface SampleSlotsTableProps {
   isEditMode?: boolean; // Whether edit mode is active
   audioPoolPath?: string | null; // Path to AUDIO/ directory (null if not in a Set)
   onSlotsUpdated?: (updatedSlots: SampleSlot[]) => void; // Callback when slots are assigned
-  onFlexRamUpdated?: (freeMb: number) => void; // Callback when flex RAM changes after assignment
+  onFlexRamUpdated?: (freeMb: number, freeBytes?: number | null) => void; // Callback when flex RAM changes after assignment
   onImportToAudioPool?: (paths: string[], destPath: string) => void; // Callback to import files to audio pool (uses parent's transfer hook)
   onImportToProject?: (sourcePaths: string[]) => Promise<string[]>; // Copy files into the project dir via the transfer pane; resolves with dest paths
   sidebarRefreshTrigger?: number; // Increment to trigger sidebar refresh from parent
@@ -141,6 +143,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const [dndDragFiles, setDndDragFiles] = useState<string[]>([]);
   const [viewModeToast, setViewModeToast] = useState(false);
+  // Transient notice for drop validation feedback (skipped files, RAM limits, etc.)
+  const [notice, setNotice] = useState<{ message: string; kind: 'warning' | 'info' } | null>(null);
+  const noticeTimerRef = useRef<number | null>(null);
+  const showNotice = useCallback((message: string, kind: 'warning' | 'info' = 'warning') => {
+    setNotice({ message, kind });
+    if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = window.setTimeout(() => setNotice(null), 4000);
+  }, []);
   // Right-click context menu on slot rows
   const [slotMenu, setSlotMenu] = useState<{ x: number; y: number; slot: SampleSlot } | null>(null);
   // Row selection (same interaction model as the Audio Pool tables)
@@ -226,8 +236,6 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   const slotsRef = useRef(slots);
   const projectPathRef = useRef(projectPath);
   const audioPoolPathRef = useRef(audioPoolPath);
-  const onSlotsUpdatedRef = useRef(onSlotsUpdated);
-  const onFlexRamUpdatedRef = useRef(onFlexRamUpdated);
   const onImportToAudioPoolRef = useRef(onImportToAudioPool);
   const onImportToProjectRef = useRef(onImportToProject);
   const sidebarCurrentPathRef = useRef<string | null>(null);
@@ -236,8 +244,6 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   useEffect(() => { slotsRef.current = slots; }, [slots]);
   useEffect(() => { projectPathRef.current = projectPath; }, [projectPath]);
   useEffect(() => { audioPoolPathRef.current = audioPoolPath; }, [audioPoolPath]);
-  useEffect(() => { onSlotsUpdatedRef.current = onSlotsUpdated; }, [onSlotsUpdated]);
-  useEffect(() => { onFlexRamUpdatedRef.current = onFlexRamUpdated; }, [onFlexRamUpdated]);
   useEffect(() => { onImportToAudioPoolRef.current = onImportToAudioPool; }, [onImportToAudioPool]);
   useEffect(() => { onImportToProjectRef.current = onImportToProject; }, [onImportToProject]);
 
@@ -263,7 +269,9 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     return parts[parts.length - 1] || audioFilePath;
   }, [audioPoolPath]);
 
-  // Core assignment logic — shared between HTML5 drop and dnd-kit drag end
+  // Core assignment logic — shared by all slot-drop/assign entry points. Validates the drop:
+  // assigns what fits (single → exact target, multiple → consecutive empty slots), blocks
+  // files that would exceed Flex RAM, and warns about skipped/incompatible files.
   const doAssignFiles = useCallback(async (filePaths: string[], targetSlot: SampleSlot) => {
     if (!isEditMode) {
       setViewModeToast(true);
@@ -273,52 +281,87 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     if (!projectPath || filePaths.length === 0) return;
 
     setIsAssigning(true);
-    const slotType = tableType === 'flex' ? 'FLEX' : 'STATIC';
+    const slotTypeU = tableType === 'flex' ? 'FLEX' : 'STATIC';
 
     try {
+      // Inspect dropped files for OT size + compatibility (best-effort validation inputs).
+      const checks: Record<string, { ot_size_bytes: number; compatibility: string }> = {};
+      try {
+        const results = await invoke<{ path: string; ot_size_bytes: number; compatibility: string }[]>(
+          'inspect_audio_files', { paths: filePaths });
+        if (Array.isArray(results)) for (const r of results) checks[r.path] = r;
+      } catch { /* proceed without size/compat info */ }
+
+      // Flex RAM budget in bytes (Static slots stream from card → no RAM limit). Uses the
+      // exact free bytes (not the truncated MiB display value) so a sample that just fits isn't
+      // falsely blocked; falls back to the MiB value if the exact figure is unavailable.
+      const freeBytes = tableType === 'flex' && memorySettings
+        ? (memorySettings.flex_ram_free_bytes ?? Math.floor(memorySettings.flex_ram_free_mb * 1024 * 1024))
+        : Infinity;
+
+      const assignments: SlotAssignment[] = [];
+      let netBytes = 0;
+      let incompatCount = 0;
+      let skippedNoSlot = 0;
+      let blockedRam = 0;
+
       if (filePaths.length === 1) {
-        const isEmptySlot = !targetSlot.path;
-        const assignments: SlotAssignment[] = [{
-          slot_index: targetSlot.slot_id,
-          audio_path: buildRelativePath(filePaths[0]),
-          set_defaults: isEmptySlot,
-        }];
-        const result = await invoke<AssignSamplesResult>("assign_samples_to_slots", {
-          path: projectPath, slotType, assignments,
-        });
-        if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
-        if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb);
+        const f = filePaths[0];
+        const size = checks[f]?.ot_size_bytes ?? 0;
+        // Replacing a filled slot frees its current sample, so use the net delta.
+        const delta = size - (targetSlot.ot_size_bytes ?? 0);
+        if (delta > freeBytes) {
+          blockedRam = 1;
+        } else {
+          assignments.push({ slot_index: targetSlot.slot_id, audio_path: buildRelativePath(f), set_defaults: !targetSlot.path });
+          if (checks[f] && checks[f].compatibility !== 'compatible') incompatCount++;
+        }
       } else {
-        const assignments: SlotAssignment[] = [];
         let currentSlotId = targetSlot.slot_id;
-        for (const filePath of filePaths) {
+        for (let i = 0; i < filePaths.length; i++) {
+          const f = filePaths[i];
           while (currentSlotId <= 128) {
             const slot = slots.find(s => s.slot_id === currentSlotId);
             if (!slot || !slot.path) break;
             currentSlotId++;
           }
-          if (currentSlotId > 128) break;
-          assignments.push({
-            slot_index: currentSlotId,
-            audio_path: buildRelativePath(filePath),
-            set_defaults: true,
-          });
+          if (currentSlotId > 128) { skippedNoSlot = filePaths.length - i; break; }
+          const size = checks[f]?.ot_size_bytes ?? 0;
+          if (netBytes + size > freeBytes) { blockedRam = filePaths.length - i; break; }
+          assignments.push({ slot_index: currentSlotId, audio_path: buildRelativePath(f), set_defaults: true });
+          netBytes += size;
+          if (checks[f] && checks[f].compatibility !== 'compatible') incompatCount++;
           currentSlotId++;
         }
-        if (assignments.length > 0) {
-          const result = await invoke<AssignSamplesResult>("assign_samples_to_slots", {
-            path: projectPath, slotType, assignments,
-          });
-          if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
-          if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb);
-        }
+      }
+
+      if (assignments.length > 0) {
+        const result = await invoke<AssignSamplesResult>("assign_samples_to_slots", {
+          path: projectPath, slotType: slotTypeU, assignments,
+        });
+        if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
+        if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb, result.flex_ram_free_bytes);
+      }
+
+      // Surface validation feedback.
+      const warns: string[] = [];
+      if (skippedNoSlot > 0) warns.push(`${skippedNoSlot} skipped (not enough empty slots)`);
+      if (blockedRam > 0) warns.push(`${blockedRam} skipped (not enough Flex RAM)`);
+      if (incompatCount > 0) warns.push(`${incompatCount} not OT-compatible (may play incorrectly)`);
+      if (warns.length > 0) {
+        const prefix = assignments.length > 0 ? `Assigned ${assignments.length}. ` : 'Nothing assigned. ';
+        showNotice(prefix + warns.join('; '));
       }
     } catch (error) {
       console.error("Error assigning samples to slots:", error);
     } finally {
       setIsAssigning(false);
     }
-  }, [isEditMode, projectPath, tableType, slots, buildRelativePath, onSlotsUpdated, onFlexRamUpdated]);
+  }, [isEditMode, projectPath, tableType, slots, memorySettings, buildRelativePath, onSlotsUpdated, onFlexRamUpdated, showNotice]);
+
+  // Live ref so the mount-time OS drag-drop listener can call the latest doAssignFiles.
+  const doAssignFilesRef = useRef(doAssignFiles);
+  useEffect(() => { doAssignFilesRef.current = doAssignFiles; });
 
   // Assign files to the first empty slot (context-menu action from the Audio Pool pane).
   const assignToFirstEmpty = useCallback((paths: string[]) => {
@@ -362,7 +405,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         path: projectPath, slotType, slotIndices: ids,
       });
       if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
-      if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb);
+      if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb, result.flex_ram_free_bytes);
     } catch (error) {
       console.error("Error clearing sample slot(s):", error);
     } finally {
@@ -388,7 +431,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         path: projectPath, slotType, assignments,
       });
       if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
-      if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb);
+      if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb, result.flex_ram_free_bytes);
     } catch (error) {
       console.error("Error resetting slot attribute(s):", error);
     } finally {
@@ -396,47 +439,16 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     }
   }, [isEditMode, projectPath, slotType, onSlotsUpdated, onFlexRamUpdated]);
 
-  // Copy source files into the project dir and assign them to consecutive empty slots from `targetSlot`.
+  // Copy source files into the project dir, then assign (with validation) from `targetSlot`.
   const importPathsToSlot = useCallback(async (sourcePaths: string[], targetSlot: SampleSlot) => {
     if (!isEditMode || !projectPath || sourcePaths.length === 0) return;
-    setIsAssigning(true);
-    try {
-      // Prefer the transfer pipeline (opens the progress pane); fall back to a direct copy.
-      const destPaths = onImportToProject
-        ? await onImportToProject(sourcePaths)
-        : await invoke<string[]>('copy_audio_files_to_project', { sourcePaths, destinationDir: projectPath });
-      if (!destPaths || destPaths.length === 0) return;
-      const assignments: SlotAssignment[] = [];
-      if (destPaths.length === 1) {
-        const filename = destPaths[0].split(/[\\/]/).pop() ?? destPaths[0];
-        assignments.push({ slot_index: targetSlot.slot_id, audio_path: filename, set_defaults: !targetSlot.path });
-      } else {
-        let currentSlotId = targetSlot.slot_id;
-        for (const destPath of destPaths) {
-          while (currentSlotId <= 128) {
-            const slot = slots.find(s => s.slot_id === currentSlotId);
-            if (!slot || !slot.path) break;
-            currentSlotId++;
-          }
-          if (currentSlotId > 128) break;
-          const filename = destPath.split(/[\\/]/).pop() ?? destPath;
-          assignments.push({ slot_index: currentSlotId, audio_path: filename, set_defaults: true });
-          currentSlotId++;
-        }
-      }
-      if (assignments.length > 0) {
-        const result = await invoke<AssignSamplesResult>("assign_samples_to_slots", {
-          path: projectPath, slotType, assignments,
-        });
-        if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
-        if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb);
-      }
-    } catch (error) {
-      console.error("Error importing audio to slot:", error);
-    } finally {
-      setIsAssigning(false);
-    }
-  }, [isEditMode, projectPath, slotType, slots, onSlotsUpdated, onFlexRamUpdated, onImportToProject]);
+    // Prefer the transfer pipeline (opens the progress pane); fall back to a direct copy.
+    const destPaths = onImportToProject
+      ? await onImportToProject(sourcePaths)
+      : await invoke<string[]>('copy_audio_files_to_project', { sourcePaths, destinationDir: projectPath });
+    if (!destPaths || destPaths.length === 0) return;
+    await doAssignFiles(destPaths, targetSlot);
+  }, [isEditMode, projectPath, onImportToProject, doAssignFiles]);
 
   // Import one or more audio files from the system and assign them starting at the slot.
   const importFilesToSlot = useCallback(async (slot: SampleSlot) => {
@@ -755,7 +767,10 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
             const out = await invoke<string[]>('expand_audio_paths', { paths: droppedPaths });
             if (Array.isArray(out)) paths = out;
           } catch { /* fall back to the raw paths */ }
-          if (paths.length === 0) return;
+          if (paths.length === 0) {
+            showNotice('No supported audio files in the dropped items.');
+            return;
+          }
 
           const curProjectPath = projectPathRef.current;
           const curAudioPoolPath = audioPoolPathRef.current;
@@ -787,14 +802,10 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
               setTimeout(() => setViewModeToast(false), 2500);
               return;
             }
-            // Phase 5: drop on a slot row — copy to project dir then assign
+            // Phase 5: drop on a slot row — copy to project dir, then assign (validated).
             if (curProjectPath) {
-              const slotId = targetSlotId;
-              const currentSlots = slotsRef.current;
-              const targetSlot = currentSlots.find(s => s.slot_id === slotId);
+              const targetSlot = slotsRef.current.find(s => s.slot_id === targetSlotId);
               if (!targetSlot) return;
-
-              setIsAssigning(true);
               try {
                 // Route through the transfer pane when available so progress is visible.
                 const destPaths = onImportToProjectRef.current
@@ -804,51 +815,9 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
                       destinationDir: curProjectPath,
                     });
                 if (!destPaths || destPaths.length === 0) return;
-
-                const slotType = tableType === 'flex' ? 'FLEX' : 'STATIC';
-                const assignments: SlotAssignment[] = [];
-
-                if (destPaths.length === 1) {
-                  const filename = destPaths[0].split(/[\\/]/).pop() ?? destPaths[0];
-                  assignments.push({
-                    slot_index: targetSlot.slot_id,
-                    audio_path: filename,
-                    set_defaults: !targetSlot.path,
-                  });
-                } else {
-                  let currentSlotId = targetSlot.slot_id;
-                  for (const destPath of destPaths) {
-                    while (currentSlotId <= 128) {
-                      const slot = currentSlots.find(s => s.slot_id === currentSlotId);
-                      if (!slot || !slot.path) break;
-                      currentSlotId++;
-                    }
-                    if (currentSlotId > 128) break;
-                    const filename = destPath.split(/[\\/]/).pop() ?? destPath;
-                    assignments.push({
-                      slot_index: currentSlotId,
-                      audio_path: filename,
-                      set_defaults: true,
-                    });
-                    currentSlotId++;
-                  }
-                }
-
-                if (assignments.length > 0) {
-                  const result = await invoke<AssignSamplesResult>('assign_samples_to_slots', {
-                    path: curProjectPath,
-                    slotType,
-                    assignments,
-                  });
-                  onSlotsUpdatedRef.current?.(result.updated_slots);
-                  if (onFlexRamUpdatedRef.current && result.flex_ram_free_mb != null) {
-                    onFlexRamUpdatedRef.current(result.flex_ram_free_mb);
-                  }
-                }
+                await doAssignFilesRef.current(destPaths, targetSlot);
               } catch (err) {
                 console.error('OS slot drop failed:', err);
-              } finally {
-                setIsAssigning(false);
               }
             }
           }
@@ -1764,6 +1733,11 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     {viewModeToast && (
       <div className="toast-notification warning">
         <i className="fas fa-exclamation-triangle"></i> Toggle Edit mode to assign samples to slots
+      </div>
+    )}
+    {notice && (
+      <div className={`toast-notification ${notice.kind}`}>
+        <i className={`fas ${notice.kind === 'warning' ? 'fa-exclamation-triangle' : 'fa-circle-info'}`}></i> {notice.message}
       </div>
     )}
     {slotMenu && (

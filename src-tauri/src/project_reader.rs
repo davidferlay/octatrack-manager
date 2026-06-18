@@ -60,7 +60,8 @@ pub struct MemorySettings {
     pub record_24bit: bool,
     pub reserved_recorder_count: u8,
     pub reserved_recorder_length: u32,
-    pub flex_ram_free_mb: f64,
+    pub flex_ram_free_mb: f64, // truncated to MiB for display (matches the OT screen)
+    pub flex_ram_free_bytes: u64, // exact free bytes — used for drop validation, not display
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -651,6 +652,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                 reserved_recorder_count: project.settings.control.memory.reserved_recorder_count,
                 reserved_recorder_length: project.settings.control.memory.reserved_recorder_length,
                 flex_ram_free_mb: 0.0, // will be computed below
+                flex_ram_free_bytes: 0,
             };
 
             // Compute flex RAM free: capacity minus loaded sample sizes
@@ -661,6 +663,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
             let flex_ram_free_mb = truncate_bytes_to_mib(flex_ram_free);
             let memory_settings = MemorySettings {
                 flex_ram_free_mb,
+                flex_ram_free_bytes: flex_ram_free,
                 ..memory_settings
             };
 
@@ -4015,6 +4018,8 @@ pub struct AssignSamplesResult {
     pub updated_slots: Vec<SampleSlot>,
     /// Updated flex RAM free (MB) after assignment — only set for FLEX slot type
     pub flex_ram_free_mb: Option<f64>,
+    /// Updated exact flex RAM free (bytes) after assignment — only set for FLEX slot type
+    pub flex_ram_free_bytes: Option<u64>,
 }
 
 /// Assign audio files to sample slots in a project.
@@ -4054,6 +4059,7 @@ pub fn assign_samples_to_slots(
             assigned_count: 0,
             updated_slots: Vec::new(),
             flex_ram_free_mb: None,
+            flex_ram_free_bytes: None,
         });
     }
 
@@ -4109,11 +4115,17 @@ pub fn assign_samples_to_slots(
     } else {
         None
     };
+    let flex_ram_free_bytes = if slot_type_upper == "FLEX" {
+        Some(metadata.memory_settings.flex_ram_free_bytes)
+    } else {
+        None
+    };
 
     Ok(AssignSamplesResult {
         assigned_count: assignments.len(),
         updated_slots,
         flex_ram_free_mb,
+        flex_ram_free_bytes,
     })
 }
 
@@ -4141,6 +4153,7 @@ pub fn clear_sample_slots(
             assigned_count: 0,
             updated_slots: Vec::new(),
             flex_ram_free_mb: None,
+            flex_ram_free_bytes: None,
         });
     }
 
@@ -4235,11 +4248,17 @@ pub fn clear_sample_slots(
     } else {
         None
     };
+    let flex_ram_free_bytes = if slot_type_upper == "FLEX" {
+        Some(metadata.memory_settings.flex_ram_free_bytes)
+    } else {
+        None
+    };
 
     Ok(AssignSamplesResult {
         assigned_count: slot_indices.len(),
         updated_slots,
         flex_ram_free_mb,
+        flex_ram_free_bytes,
     })
 }
 
@@ -5211,6 +5230,24 @@ pub fn ot_pcm_data_size(path: &Path) -> Option<u64> {
     Some(info.num_sample_frames * info.num_channels as u64 * bytes_per_sample)
 }
 
+/// Per-file info used to validate dropping audio onto sample slots.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AudioFileCheck {
+    pub path: String,
+    pub ot_size_bytes: u64, // PCM data size as the OT measures it (0 if unparsable)
+    pub compatibility: String, // "compatible" | "wrong_rate" | "incompatible" | "unknown"
+}
+
+/// Inspect an audio file for slot-drop validation: its OT PCM size and OT compatibility.
+pub fn inspect_audio_file(path: &Path) -> AudioFileCheck {
+    let info = check_audio_compatibility(path);
+    AudioFileCheck {
+        path: path.to_string_lossy().to_string(),
+        ot_size_bytes: ot_pcm_data_size(path).unwrap_or(0),
+        compatibility: info.compatibility,
+    }
+}
+
 /// Calculate available Flex RAM in bytes for a project based on its memory settings.
 ///
 /// Formula: Total RAM - recorder buffer allocation
@@ -5344,6 +5381,7 @@ fn read_project_memory_settings(project_path: &Path) -> Result<MemorySettings, S
             .memory
             .reserved_recorder_length,
         flex_ram_free_mb: 0.0, // not needed for validation, computed separately
+        flex_ram_free_bytes: 0,
     })
 }
 
@@ -13634,6 +13672,22 @@ mod tests {
                 "Time signature should be in X/Y format"
             );
         }
+
+        #[test]
+        fn test_metadata_exposes_exact_flex_ram_free_bytes() {
+            let project = TestProject::new();
+            let ms = read_project_metadata(&project.path)
+                .unwrap()
+                .memory_settings;
+            // The exact byte figure must truncate to the displayed MiB value (display stays
+            // OT-faithful; validation uses the un-truncated bytes).
+            assert_eq!(
+                truncate_bytes_to_mib(ms.flex_ram_free_bytes),
+                ms.flex_ram_free_mb
+            );
+            // And it should be at least the truncated value's worth of bytes (never lose space).
+            assert!(ms.flex_ram_free_bytes as f64 / (1024.0 * 1024.0) >= ms.flex_ram_free_mb);
+        }
     }
 
     // ==================== BANK READING TESTS ====================
@@ -16875,6 +16929,7 @@ mod tests {
             reserved_recorder_count: 0,
             reserved_recorder_length: 0,
             flex_ram_free_mb: 0.0,
+            flex_ram_free_bytes: 0,
         };
         assert_eq!(calculate_flex_ram_bytes(&settings), OT_TOTAL_RAM_BYTES);
     }
@@ -16888,6 +16943,7 @@ mod tests {
             reserved_recorder_count: 1,
             reserved_recorder_length: 1,
             flex_ram_free_mb: 0.0,
+            flex_ram_free_bytes: 0,
         };
         // 1 × 1s × 44100 × 2ch × 2 bytes = 176,400
         assert_eq!(
@@ -16905,6 +16961,7 @@ mod tests {
             reserved_recorder_count: 1,
             reserved_recorder_length: 1,
             flex_ram_free_mb: 0.0,
+            flex_ram_free_bytes: 0,
         };
         // 1 × 1s × 44100 × 2ch × 3 bytes = 264,600
         assert_eq!(
@@ -16922,6 +16979,7 @@ mod tests {
             reserved_recorder_count: 255,
             reserved_recorder_length: u32::MAX,
             flex_ram_free_mb: 0.0,
+            flex_ram_free_bytes: 0,
         };
         assert_eq!(calculate_flex_ram_bytes(&settings), 0);
     }
@@ -16964,6 +17022,7 @@ mod tests {
             reserved_recorder_count: 8,
             reserved_recorder_length: 10,
             flex_ram_free_mb: 0.0,
+            flex_ram_free_bytes: 0,
         };
         let capacity = calculate_flex_ram_bytes(&settings);
         assert_eq!(truncate_bytes_to_mib(capacity), 72.0);
@@ -16979,6 +17038,7 @@ mod tests {
             reserved_recorder_count: 8,
             reserved_recorder_length: 30,
             flex_ram_free_mb: 0.0,
+            flex_ram_free_bytes: 0,
         };
         let capacity = calculate_flex_ram_bytes(&settings);
         assert_eq!(truncate_bytes_to_mib(capacity), 45.1);
@@ -16994,6 +17054,7 @@ mod tests {
             reserved_recorder_count: 8,
             reserved_recorder_length: 50,
             flex_ram_free_mb: 0.0,
+            flex_ram_free_bytes: 0,
         };
         let capacity = calculate_flex_ram_bytes(&settings);
         assert_eq!(truncate_bytes_to_mib(capacity), 18.2);
@@ -17009,6 +17070,7 @@ mod tests {
             reserved_recorder_count: 2,
             reserved_recorder_length: 200,
             flex_ram_free_mb: 0.0,
+            flex_ram_free_bytes: 0,
         };
         let capacity = calculate_flex_ram_bytes(&settings);
         assert_eq!(truncate_bytes_to_mib(capacity), 18.2);
@@ -17024,6 +17086,7 @@ mod tests {
             reserved_recorder_count: 8,
             reserved_recorder_length: 10,
             flex_ram_free_mb: 0.0,
+            flex_ram_free_bytes: 0,
         };
         let capacity = calculate_flex_ram_bytes(&settings);
         assert_eq!(truncate_bytes_to_mib(capacity), 65.3);
@@ -17039,6 +17102,7 @@ mod tests {
             reserved_recorder_count: 8,
             reserved_recorder_length: 20,
             flex_ram_free_mb: 0.0,
+            flex_ram_free_bytes: 0,
         };
         let capacity = calculate_flex_ram_bytes(&settings);
         assert_eq!(truncate_bytes_to_mib(capacity), 45.1);
@@ -17054,6 +17118,7 @@ mod tests {
             reserved_recorder_count: 8,
             reserved_recorder_length: 30,
             flex_ram_free_mb: 0.0,
+            flex_ram_free_bytes: 0,
         };
         let capacity = calculate_flex_ram_bytes(&settings);
         assert_eq!(truncate_bytes_to_mib(capacity), 24.9);
@@ -17069,6 +17134,7 @@ mod tests {
             reserved_recorder_count: 5,
             reserved_recorder_length: 50,
             flex_ram_free_mb: 0.0,
+            flex_ram_free_bytes: 0,
         };
         let capacity = calculate_flex_ram_bytes(&settings);
         assert_eq!(truncate_bytes_to_mib(capacity), 22.4);
@@ -17306,6 +17372,27 @@ mod tests {
     }
 
     #[test]
+    fn test_inspect_audio_file_reports_size_and_compatibility() {
+        let dir = TempDir::new().unwrap();
+        // 16-bit / 44.1kHz stereo, 100 frames → compatible, 400 bytes.
+        let ok = write_minimal_wav(dir.path(), "ok.wav", 2, 44100, 16, 100);
+        let c = inspect_audio_file(&ok);
+        assert_eq!(c.compatibility, "compatible");
+        assert_eq!(c.ot_size_bytes, 400);
+
+        // Wrong sample rate → still audio, but flagged for conversion.
+        let wr = write_minimal_wav(dir.path(), "wr.wav", 1, 48000, 16, 100);
+        assert_eq!(inspect_audio_file(&wr).compatibility, "wrong_rate");
+
+        // Non-audio → unknown, size 0.
+        let txt = dir.path().join("note.txt");
+        fs::write(&txt, b"x").unwrap();
+        let n = inspect_audio_file(&txt);
+        assert_eq!(n.compatibility, "unknown");
+        assert_eq!(n.ot_size_bytes, 0);
+    }
+
+    #[test]
     fn test_ot_pcm_data_size_none_when_unparsable() {
         let dir = TempDir::new().unwrap();
         let p = dir.path().join("notaudio.txt");
@@ -17448,6 +17535,7 @@ mod tests {
             reserved_recorder_count: 4,
             reserved_recorder_length: 100,
             flex_ram_free_mb: 0.0, // Will be recomputed
+            flex_ram_free_bytes: 0,
         };
 
         let _returned_mb =
@@ -17480,6 +17568,7 @@ mod tests {
             reserved_recorder_count: 0,
             reserved_recorder_length: 0,
             flex_ram_free_mb: 0.0,
+            flex_ram_free_bytes: 0,
         };
 
         let free_mb =
@@ -17498,6 +17587,7 @@ mod tests {
             reserved_recorder_count: 0,
             reserved_recorder_length: 0,
             flex_ram_free_mb: 0.0,
+            flex_ram_free_bytes: 0,
         };
         let err = save_memory_settings_data(&dir.path().to_string_lossy(), settings).unwrap_err();
         assert!(err.contains("not found"), "got: {}", err);
@@ -17521,6 +17611,7 @@ mod tests {
             reserved_recorder_count: 2,
             reserved_recorder_length: 50,
             flex_ram_free_mb: 0.0,
+            flex_ram_free_bytes: 0,
         };
 
         let _free_mb = save_memory_settings_data(&project.path, settings.clone())
@@ -17714,6 +17805,7 @@ mod tests {
                 reserved_recorder_count: 0,
                 reserved_recorder_length: 0,
                 flex_ram_free_mb: 0.0,
+                flex_ram_free_bytes: 0,
             };
             let capacity = calculate_flex_ram_bytes(&ms);
             let used = sum_flex_sample_sizes(&project_path, false).unwrap_or(0);

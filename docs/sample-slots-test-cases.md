@@ -85,6 +85,12 @@ go to the **Flex** (or **Static**) tab.
 | AP83 | Size column | OT calculation (not on-disk) | Compare a slot's Size with the file's size on disk | The value is the PCM sample-data size (frames × channels × bytes; 24-bit = 3 bytes, 16-bit = 2), not the larger on-disk size (which includes headers) |
 | AP84 | Size column | Sortable | Enable Size, click the Size header | Rows sort by size (empty slots sort as smallest) |
 | AP85 | Pool size | Pane/page sizes use OT calc | Open the Audio Pool pane or page and read a file's Size | The size matches the OT PCM-data calculation (same logic as flex samples), not the raw on-disk file size |
+| **Slot drop validation** | | | | |
+| AP86 | Drop guard | Non-audio dropped on slot | In Edit mode, drag a non-audio file (e.g. .txt) from the OS onto a slot | Nothing is assigned; a notice reads "No supported audio files in the dropped items" |
+| AP87 | Drop guard | More files than empty slots | Drop N files where fewer than N empty slots follow the target | The files that fit are assigned to consecutive empty slots; a notice reports how many were skipped (not enough empty slots) |
+| AP88 | Drop guard | Exceeds Flex RAM (Flex tab) | On the Flex tab, drop samples whose total OT size exceeds available Flex RAM | Files are assigned until the budget is reached; the rest are blocked with a notice "N skipped (not enough Flex RAM)". The check uses the exact free bytes (not the truncated MB shown on screen), so a sample that just fits is not falsely blocked |
+| AP89 | Drop guard | No RAM limit on Static | Repeat AP88 on the Static tab | No Flex-RAM blocking occurs (static samples stream from the card) |
+| AP90 | Drop guard | Incompatible audio (pool drag) | Drag a non-OT-compatible pool file (e.g. wrong sample rate) onto a slot | It is assigned but a notice warns it is not OT-compatible (may play incorrectly); dropping the same file from the OS instead auto-converts it on import |
 | **Open Audio Pool page (button lives in the pane)** | | | | |
 | AP47 | Open page | Button present with pool | Open the Audio Pool pane in a Set with a pool | An open-Audio-Pool-page button (external-link icon) shows in the pane toolbar, between the pane toggle and the Import dropdown |
 | AP48 | Open page | Hidden without pool | Open Flex tab for a project not in a Set | Neither the pane toggle nor the open-page button is shown |

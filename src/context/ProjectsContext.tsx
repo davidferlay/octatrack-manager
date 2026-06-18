@@ -54,6 +54,7 @@ interface MemorySettings {
   reserved_recorder_count: number;
   reserved_recorder_length: number;
   flex_ram_free_mb: number;
+  flex_ram_free_bytes?: number;
 }
 
 interface MidiSettings {

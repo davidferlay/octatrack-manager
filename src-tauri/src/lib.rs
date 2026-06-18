@@ -215,6 +215,21 @@ async fn expand_audio_paths(paths: Vec<String>) -> Result<Vec<String>, String> {
         .unwrap()
 }
 
+/// Inspect audio files (OT PCM size + compatibility) so the UI can validate slot drops.
+#[tauri::command]
+async fn inspect_audio_files(
+    paths: Vec<String>,
+) -> Result<Vec<project_reader::AudioFileCheck>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        paths
+            .iter()
+            .map(|p| project_reader::inspect_audio_file(std::path::Path::new(p)))
+            .collect()
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn navigate_to_parent(path: String) -> Result<String, String> {
     get_parent_directory(&path)
@@ -871,6 +886,7 @@ pub fn run() {
             open_in_file_manager,
             reveal_in_file_manager,
             expand_audio_paths,
+            inspect_audio_files,
             get_system_resources,
             // Tools Tab - Set and Audio Pool
             check_project_in_set,

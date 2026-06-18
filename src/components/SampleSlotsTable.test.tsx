@@ -456,3 +456,88 @@ describe('SampleSlotsTable — selection & transfers toggle', () => {
     await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('assign_samples_to_slots', expect.anything()))
   })
 })
+
+describe('SampleSlotsTable — slot drop validation', () => {
+  // Build a 128-slot flex array; only `emptyIds` are empty, every other slot is filled.
+  function makeSlots(emptyIds: number[], sizeEach = 1000) {
+    return Array.from({ length: 128 }, (_, i) => {
+      const id = i + 1
+      const empty = emptyIds.includes(id)
+      return {
+        slot_id: id, slot_type: 'flex', path: empty ? null : `s${id}.wav`,
+        gain: empty ? null : 72, loop_mode: null, timestretch_mode: null,
+        source_location: empty ? null : 'Project', file_exists: !empty,
+        compatibility: empty ? null : 'compatible', file_format: empty ? null : 'WAV',
+        bit_depth: empty ? null : 16, sample_rate: empty ? null : 44100,
+        ot_size_bytes: empty ? null : sizeEach,
+      }
+    })
+  }
+
+  function dropFilesOn(rowLabel: string, files: string[]) {
+    const row = screen.getByText(rowLabel).closest('tr')!
+    const dataTransfer = {
+      getData: (key: string) =>
+        key === 'application/json' ? JSON.stringify({ source: 'audio-pool-sidebar', files }) : '',
+    }
+    fireEvent.drop(row, { dataTransfer })
+  }
+
+  function assignCall() {
+    return mockInvoke.mock.calls.find(c => c[0] === 'assign_samples_to_slots')
+  }
+
+  beforeEach(() => {
+    mockInvoke.mockReset()
+    mockInvoke.mockImplementation(async (cmd, args) => {
+      const a = (args ?? {}) as Record<string, unknown>
+      if (cmd === 'expand_audio_paths') return a.paths ?? []
+      if (cmd === 'inspect_audio_files') {
+        return ((a.paths as string[]) ?? []).map(p => ({ path: p, ot_size_bytes: 1000, compatibility: 'compatible' }))
+      }
+      if (cmd === 'assign_samples_to_slots') return { assigned_count: 1, updated_slots: [], flex_ram_free_mb: 80 }
+      return []
+    })
+  })
+
+  it('assigns what fits and warns when there are fewer empty slots than files', async () => {
+    // Only slot 100 is empty; dropping 2 files there → 1 assigned, 1 skipped.
+    renderWithProvider(
+      <SampleSlotsTable slots={makeSlots([100])} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    dropFilesOn('F100', ['/p/a.wav', '/p/b.wav'])
+    await waitFor(() => expect(assignCall()).toBeTruthy())
+    expect((assignCall()![1] as { assignments: unknown[] }).assignments).toHaveLength(1)
+    expect(await screen.findByText(/not enough empty slots/i)).toBeInTheDocument()
+  })
+
+  it('blocks files that would exceed Flex RAM and warns', async () => {
+    // Two empty slots, but only ~1 KB of Flex RAM free; each file is 1000 bytes.
+    const memorySettings = { record_24bit: false, reserved_recorder_count: 8, reserved_recorder_length: 16, flex_ram_free_mb: 0.001 }
+    renderWithProvider(
+      <SampleSlotsTable slots={makeSlots([100, 101])} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" memorySettings={memorySettings} />
+    )
+    dropFilesOn('F100', ['/p/a.wav', '/p/b.wav'])
+    await waitFor(() => expect(assignCall()).toBeTruthy())
+    expect((assignCall()![1] as { assignments: unknown[] }).assignments).toHaveLength(1)
+    expect(await screen.findByText(/not enough Flex RAM/i)).toBeInTheDocument()
+  })
+
+  it('warns when an assigned sample is not OT-compatible', async () => {
+    mockInvoke.mockImplementation(async (cmd, args) => {
+      const a = (args ?? {}) as Record<string, unknown>
+      if (cmd === 'expand_audio_paths') return a.paths ?? []
+      if (cmd === 'inspect_audio_files') {
+        return ((a.paths as string[]) ?? []).map(p => ({ path: p, ot_size_bytes: 1000, compatibility: 'wrong_rate' }))
+      }
+      if (cmd === 'assign_samples_to_slots') return { assigned_count: 1, updated_slots: [], flex_ram_free_mb: 80 }
+      return []
+    })
+    renderWithProvider(
+      <SampleSlotsTable slots={makeSlots([100])} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    dropFilesOn('F100', ['/p/a.wav'])
+    await waitFor(() => expect(assignCall()).toBeTruthy())
+    expect(await screen.findByText(/not OT-compatible/i)).toBeInTheDocument()
+  })
+})

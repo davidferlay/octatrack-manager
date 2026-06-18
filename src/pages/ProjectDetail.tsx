@@ -318,10 +318,12 @@ export function ProjectDetail() {
           path: projectPath,
           settings: settingsToSave,
         }).then((flexRamFreeMb) => {
-          // Update flex_ram_free_mb with the recomputed value from backend
+          // Update flex_ram_free_mb with the recomputed value from backend. The exact byte
+          // figure isn't returned here, so clear it — the drop budget falls back to the fresh
+          // (conservative) MiB value until the next full project reload.
           setMetadata(m => {
             if (!m) return m;
-            return { ...m, memory_settings: { ...m.memory_settings, flex_ram_free_mb: flexRamFreeMb } };
+            return { ...m, memory_settings: { ...m.memory_settings, flex_ram_free_mb: flexRamFreeMb, flex_ram_free_bytes: undefined } };
           });
           handleWriteStatusChange({ state: 'success', message: 'Memory settings saved' });
           setTimeout(() => handleWriteStatusChange({ state: 'idle' }), 2000);
@@ -1823,10 +1825,10 @@ export function ProjectDetail() {
                     };
                   });
                 }}
-                onFlexRamUpdated={(freeMb) => {
+                onFlexRamUpdated={(freeMb, freeBytes) => {
                   setMetadata(prev => {
                     if (!prev) return prev;
-                    return { ...prev, memory_settings: { ...prev.memory_settings, flex_ram_free_mb: freeMb } };
+                    return { ...prev, memory_settings: { ...prev.memory_settings, flex_ram_free_mb: freeMb, flex_ram_free_bytes: freeBytes ?? undefined } };
                   });
                 }}
                 onImportToAudioPool={(paths, destPath) => {
