@@ -121,3 +121,10 @@ go to the **Flex** (or **Static**) tab.
 | AP77 | Dir drop | Drop OS folder on the pane | Drag a folder from the OS file manager onto the Audio Pool pane | The folder's audio files (recursive) are imported into the current AUDIO/ directory |
 | **Cancel an in-app drag** | | | | |
 | AP78 | Cancel | Escape cancels drag | Start dragging a pool file/folder over a slot, then press Escape before releasing | The drag is cancelled with no assignment; the drag preview disappears and no slot changes |
+| **Copy path to clipboard** | | | | |
+| AP92 | Clipboard | Slot → copy path | Right-click a filled slot → Copy path to clipboard | The sample's absolute path (project folder + slot path) is placed on the clipboard; disabled for empty slots |
+| AP93 | Clipboard | Pool pane file/dir → copy path | In the Audio Pool pane, right-click a file or folder → Copy path to clipboard | That item's absolute path is placed on the clipboard |
+| AP94 | Clipboard | Pool page file/dir → copy path | On the Audio Pool page, right-click a file or folder → Copy path to clipboard | That item's absolute path is placed on the clipboard; disabled when multiple items are selected |
+| **Edit mode persistence** | | | | |
+| AP95 | Edit mode | Kept across pool round-trip | Enable Edit mode, open the Audio Pool page, click "Back to project" | The project reopens still in Edit mode |
+| AP96 | Edit mode | Reset on Back to list | Enable Edit mode, click "Back" (or press Escape) to the projects list, reopen the same project | The project opens in View mode (Edit mode is not restored) |

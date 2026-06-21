@@ -39,7 +39,7 @@ describe('ProjectContextMenu', () => {
         {...handlers}
       />
     )
-    expect(screen.getByText(/copy/i)).toBeInTheDocument()
+    expect(screen.getByText('Copy')).toBeInTheDocument()
     expect(screen.getByText(/rename/i)).toBeInTheDocument()
     expect(screen.getByText(/delete/i)).toBeInTheDocument()
     expect(screen.getByText(/open in file manager/i)).toBeInTheDocument()
@@ -137,7 +137,7 @@ describe('ProjectContextMenu', () => {
         onClose={onClose}
       />
     )
-    await u.click(screen.getByText(/copy/i))
+    await u.click(screen.getByText('Copy'))
     expect(onCopy).toHaveBeenCalled()
     expect(onClose).toHaveBeenCalled()
   })

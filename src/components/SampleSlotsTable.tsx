@@ -1798,6 +1798,18 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         >
           <i className="fas fa-folder-open"></i> Open in file explorer
         </button>
+        <button
+          className="context-menu-item"
+          disabled={!slotMenu.slot.path}
+          onClick={() => {
+            if (projectPath && slotMenu.slot.path) {
+              navigator.clipboard.writeText(`${projectPath}/${slotMenu.slot.path}`);
+            }
+            setSlotMenu(null);
+          }}
+        >
+          <i className="fas fa-copy"></i> Copy path to clipboard
+        </button>
       </div>
     )}
     </>

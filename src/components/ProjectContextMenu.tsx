@@ -70,6 +70,9 @@ export function ProjectContextMenu(props: ProjectContextMenuProps) {
           <button className="context-menu-item" onClick={fire(props.onOpenInFileManager)}>
             <i className="fas fa-folder-open"></i> Open in File Manager
           </button>
+          <button className="context-menu-item" onClick={fire(() => navigator.clipboard.writeText(target.project.path))}>
+            <i className="fas fa-copy"></i> Copy path to clipboard
+          </button>
           <div className="context-menu-separator"></div>
           <button className="context-menu-item danger" onClick={fire(props.onDelete)}>
             <i className="fas fa-trash"></i> Delete
@@ -99,6 +102,9 @@ export function ProjectContextMenu(props: ProjectContextMenuProps) {
           <div className="context-menu-separator"></div>
           <button className="context-menu-item" onClick={fire(props.onOpenInFileManager)}>
             <i className="fas fa-folder-open"></i> Open in File Manager
+          </button>
+          <button className="context-menu-item" onClick={fire(() => navigator.clipboard.writeText(target.setPath))}>
+            <i className="fas fa-copy"></i> Copy path to clipboard
           </button>
           <div className="context-menu-separator"></div>
           <button className="context-menu-item danger" onClick={fire(props.onDeleteSet)}>

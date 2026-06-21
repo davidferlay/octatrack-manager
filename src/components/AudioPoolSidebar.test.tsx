@@ -68,6 +68,16 @@ describe('AudioPoolSidebar', () => {
     expect(mockInvoke).toHaveBeenCalledWith('reveal_in_file_manager', { path: '/set/AUDIO/kick.wav' })
   })
 
+  it('right-click on a file → "Copy path to clipboard" writes the path', async () => {
+    const writeText = vi.fn()
+    Object.assign(navigator, { clipboard: { writeText } })
+    render(<AudioPoolSidebar audioPoolPath="/set/AUDIO" isEditMode={false} />)
+    await waitFor(() => expect(screen.getByText('kick.wav')).toBeInTheDocument())
+    fireEvent.contextMenu(screen.getByText('kick.wav').closest('tr')!)
+    await userEvent.click(screen.getByText(/Copy path to clipboard/i))
+    expect(writeText).toHaveBeenCalledWith('/set/AUDIO/kick.wav')
+  })
+
   it('right-click on a directory shows only "Open in file explorer" (no assign items)', async () => {
     mockInvoke.mockImplementation(async (cmd: string) =>
       cmd === 'list_audio_directory'

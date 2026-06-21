@@ -362,6 +362,12 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
           >
             <i className="fas fa-folder-open"></i> Open in file explorer
           </button>
+          <button
+            className="context-menu-item"
+            onClick={() => { navigator.clipboard.writeText(itemMenu.file.path); setItemMenu(null); }}
+          >
+            <i className="fas fa-copy"></i> Copy path to clipboard
+          </button>
         </div>
       )}
     </div>

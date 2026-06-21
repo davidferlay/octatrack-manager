@@ -1296,6 +1296,13 @@ export function AudioPoolPage() {
                 >
                   <i className="fas fa-folder-open"></i> Reveal in Explorer
                 </button>
+                <button
+                  className={`context-menu-item ${isMultipleSelected ? 'disabled' : ''}`}
+                  onClick={isMultipleSelected ? undefined : () => { if (contextMenu.file) navigator.clipboard.writeText(contextMenu.file.path); closeContextMenu(); }}
+                  disabled={isMultipleSelected}
+                >
+                  <i className="fas fa-copy"></i> Copy path to clipboard
+                </button>
                 {contextMenu.panel === 'dest' && sourcePath && (
                   <button
                     className="context-menu-item"

@@ -5,10 +5,10 @@
 | # | Operation | Test | Steps | Pass Criteria |
 |---|-----------|------|-------|---------------|
 | **Context Menu** | | | | |
-| PM1 | Context Menu | Right-click project card | Right-click on any project card | Context menu appears with: Copy, Rename, Open in File Manager, Delete |
-| PM2 | Context Menu | Right-click set header | Right-click on a Set header area | Context menu appears with: Copy Set, Rename Set, New Project, Open in File Manager, Delete Set |
-| PM3 | Context Menu | Right-click set area | Right-click on the Set card background (not on a project card) | Context menu appears with: Copy Set, Rename Set, New Project, Open in File Manager, Delete Set |
-| PM4 | Context Menu | Right-click grid background | Right-click on the projects-grid background (between cards) | Context menu appears with: Copy Set, Rename Set, New Project, Open in File Manager, Delete Set |
+| PM1 | Context Menu | Right-click project card | Right-click on any project card | Context menu appears with: Copy, Rename, Open in File Manager, Copy path to clipboard, Delete |
+| PM2 | Context Menu | Right-click set header | Right-click on a Set header area | Context menu appears with: Copy Set, Rename Set, New Project, Open in File Manager, Copy path to clipboard, Delete Set |
+| PM3 | Context Menu | Right-click set area | Right-click on the Set card background (not on a project card) | Context menu appears with: Copy Set, Rename Set, New Project, Open in File Manager, Copy path to clipboard, Delete Set |
+| PM4 | Context Menu | Right-click grid background | Right-click on the projects-grid background (between cards) | Context menu appears with: Copy Set, Rename Set, New Project, Open in File Manager, Copy path to clipboard, Delete Set |
 | PM5 | Context Menu | Paste project appears after copy | Copy a project, then right-click set header | "Paste Project" option appears alongside other Set actions |
 | PM6 | Context Menu | No paste on project card | Copy a project, then right-click another project card | No "Paste Project" option in the menu |
 | PM7 | Context Menu | Right-click location header | Right-click on a location header | Context menu appears with: New Set, Open in File Manager |
@@ -133,3 +133,6 @@
 | PM104 | Memory Edit | "e" toggles edit mode from selects | Focus any Memory dropdown (Flex Format, Reserve Recordings, etc.), press "e" | Edit mode toggles off — "e" is not consumed by the select |
 | PM105 | Memory Edit | Reserve Length "s" suffix in edit mode | Enter Edit mode, set Reserve Length to any value (e.g. 16) | "s" unit label displayed inside the field next to digits, at same position as in view mode |
 | PM106 | Memory Edit | No vertical layout shift on toggle | Toggle Edit mode on and off on Overview tab | Reserve Length field does not shift vertically between edit and view modes |
+| **Copy path to clipboard** | | | | |
+| PM107 | Clipboard | Copy project path | Right-click a project → Copy path to clipboard | The project's absolute folder path is placed on the system clipboard |
+| PM108 | Clipboard | Copy set path | Right-click a Set header → Copy path to clipboard | The Set's absolute folder path is placed on the system clipboard |

@@ -270,6 +270,12 @@ export function ProjectDetail() {
     setIsEditMode(prev => !prev);
   }, [isEditMode, projectPath, selectedBankIndex]);
 
+  // Leaving to the projects list resets edit mode (unlike the Audio Pool round-trip, which keeps it).
+  const leaveToProjectList = useCallback(() => {
+    if (projectPath) sessionStorage.removeItem(`projEdit:${projectPath}`);
+    navigate('/');
+  }, [navigate, projectPath]);
+
   // Compute max reserve length in seconds for the given recorder count and format
   const getMaxReserveLength = useCallback((count: number, record24bit: boolean): number => {
     if (count === 0) return 0;
@@ -438,12 +444,12 @@ export function ProjectDetail() {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
       if (e.key === 'Escape') {
-        navigate('/');
+        leaveToProjectList();
       }
     }
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [navigate, isLoading, toggleEditMode]);
+  }, [leaveToProjectList, isLoading, toggleEditMode]);
 
   useEffect(() => {
     if (!projectPath || selectedBankIndex < 0 || selectedBankIndex >= 16) {
@@ -648,7 +654,7 @@ export function ProjectDetail() {
     <main className="container">
       <div className="project-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: '1' }}>
-          <button onClick={() => navigate("/")} className="back-button">
+          <button onClick={leaveToProjectList} className="back-button">
             ← Back
           </button>
           <h1 ref={titleRef} className={isTitleTruncated ? 'truncated' : ''} title={projectPath || ''} style={{ cursor: 'pointer' }}
