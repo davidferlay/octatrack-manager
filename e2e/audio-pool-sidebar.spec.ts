@@ -77,6 +77,10 @@ async function setupMocks(page: Page, opts?: { withAudioPool?: boolean }) {
                 })),
               },
             }
+          case 'reset_slot_attributes':
+          case 'clear_sample_slots':
+          case 'assign_samples_to_slots':
+            return { assigned_count: 1, updated_slots: [], flex_ram_free_mb: 85.5, flex_ram_free_bytes: null }
           default:
             return null
         }
@@ -165,6 +169,17 @@ test.describe('Audio Pool sidebar in Flex slots', () => {
     await expect(page.getByText(/Reset attributes/i)).toBeVisible()
     await expect(page.getByText(/Import audio file\(s\) from system/i)).toBeVisible()
     await expect(page.getByText(/Import audio directory from system/i)).toBeVisible()
+  })
+
+  test('the slot context menu offers "Reset attributes" on an empty slot too', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    // Slots beyond the first three are empty in the mock; F4 is row index 3.
+    const emptyRow = page.locator('.samples-table tbody tr').nth(3)
+    await emptyRow.click({ button: 'right' })
+    // Attributes are tied to the slot, so reset is available even with no sample assigned.
+    await expect(page.getByText(/Reset attributes to defaults/i)).toBeVisible()
+    await expect(page.getByText('Clear sample')).toBeVisible()
   })
 
   test('right-clicking a pool file shows "Assign to first empty slot"', async ({ page }) => {

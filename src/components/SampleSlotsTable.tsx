@@ -420,17 +420,17 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     return clearSlots(slots.filter(s => selectedSlots.has(s.slot_id)));
   }, [clearSlots, slots, selectedSlots]);
 
-  // Reset the given slots' audio-editor attributes to OT defaults, keeping each sample assigned.
+  // Reset the given slots' audio-editor attributes to OT defaults. Attributes are tied to the
+  // slot (not the audio file), so this also applies to empty slots; the backend additionally
+  // deletes any sibling .ot file (after backing it up). Keeps each sample assigned.
   const resetSlotsAttributes = useCallback(async (targets: SampleSlot[]) => {
     if (!isEditMode || !projectPath) return;
-    const assignments: SlotAssignment[] = targets
-      .filter(s => s.path)
-      .map(s => ({ slot_index: s.slot_id, audio_path: s.path!, set_defaults: true }));
-    if (assignments.length === 0) return;
+    const slotIndices = targets.map(s => s.slot_id);
+    if (slotIndices.length === 0) return;
     setIsAssigning(true);
     try {
-      const result = await invoke<AssignSamplesResult>("assign_samples_to_slots", {
-        path: projectPath, slotType, assignments,
+      const result = await invoke<AssignSamplesResult>("reset_slot_attributes", {
+        path: projectPath, slotType, slotIndices,
       });
       if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
       if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb, result.flex_ram_free_bytes);
@@ -1761,7 +1761,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         </button>
         <button
           className="context-menu-item"
-          disabled={!isEditMode || !slotMenu.slot.path}
+          disabled={!isEditMode}
           title={!isEditMode ? 'Toggle Edit mode to modify slots' : undefined}
           onClick={() => { resetSlotsAttributes(menuTargetSlots(slotMenu.slot)); setSlotMenu(null); }}
         >

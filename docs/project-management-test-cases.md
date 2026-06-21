@@ -29,6 +29,7 @@
 | PM21 | Create | Escape cancels | Open modal, press Escape | Modal closes, no project created |
 | PM22 | Create | Charset info icon | Hover the ⓘ icon inside the name field | Tooltip displays full list of allowed characters |
 | PM23 | Create | Files created on disk | Create project, then open in file manager | Folder contains project.work, bank01.work through bank16.work, arr01.work through arr08.work, and markers.work |
+| PM23b | Create | Signed TRIGQUANTIZATION | Create a project, open its project.work | Every TRIGQUANTIZATION value is `-1` (the signed DIRECT form the hardware writes), never `255` |
 | **Copy Project** | | | | |
 | PM24 | Copy | Via context menu | Right-click project → Copy | Green-bordered toast appears briefly: "Copied 'PROJECT_NAME'" |
 | PM25 | Copy | Via Ctrl+C | Focus a project card, press Ctrl+C | Same green toast confirmation appears |

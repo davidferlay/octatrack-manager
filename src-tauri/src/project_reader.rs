@@ -3999,6 +3999,25 @@ fn replace_sample_fields_surgical(
     Ok(())
 }
 
+/// OT default audio-editor attributes for a freshly-assigned (or reset) sample, keyed by
+/// uppercased field name. Matches what the hardware writes on assign:
+/// GAIN=48, TSMODE=2, TRIGQUANTIZATION=-1, and LOOPMODE=1 for FLEX / 0 for STATIC.
+/// Stale timing fields (BPMx24, TRIM_BARSx100) are marked for deletion — the OT recomputes
+/// TRIM_BARSx100 on load, and an assigned sample never carries BPMx24.
+fn default_attr_fields(slot_type_upper: &str) -> std::collections::HashMap<String, String> {
+    let mut f = std::collections::HashMap::new();
+    f.insert("GAIN".to_string(), "48".to_string());
+    f.insert("TSMODE".to_string(), "2".to_string());
+    f.insert(
+        "LOOPMODE".to_string(),
+        if slot_type_upper == "FLEX" { "1" } else { "0" }.to_string(),
+    );
+    f.insert("TRIGQUANTIZATION".to_string(), "-1".to_string());
+    f.insert("BPMX24".to_string(), FIELD_DELETE.to_string());
+    f.insert("TRIM_BARSX100".to_string(), FIELD_DELETE.to_string());
+    f
+}
+
 /// Input for assigning audio files to sample slots.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SlotAssignment {
@@ -4006,7 +4025,8 @@ pub struct SlotAssignment {
     pub slot_index: u16,
     /// Relative path to the audio file (e.g. "../AUDIO/kick.wav" or "kick.wav")
     pub audio_path: String,
-    /// If true, sets OT defaults (GAIN=72, TSMODE=2, LOOPMODE=0, TRIGQUANTIZATION=-1).
+    /// If true, sets OT defaults (see `default_attr_fields`: GAIN=48, TSMODE=2,
+    /// LOOPMODE=1 for FLEX / 0 for STATIC, TRIGQUANTIZATION=-1).
     /// If false, only updates PATH.
     pub set_defaults: bool,
 }
@@ -4026,7 +4046,7 @@ pub struct AssignSamplesResult {
 ///
 /// For each assignment:
 /// - If `set_defaults` is true (typically for empty slots): sets PATH + OT defaults
-///   (GAIN=72, TSMODE=2, LOOPMODE=0, TRIGQUANTIZATION=-1)
+///   (GAIN=48, TSMODE=2, LOOPMODE=1 for FLEX / 0 for STATIC, TRIGQUANTIZATION=-1)
 /// - If `set_defaults` is false (non-empty slot re-assignment): only updates PATH
 ///
 /// Uses `replace_sample_fields_surgical` internally for batch write.
@@ -4083,10 +4103,7 @@ pub fn assign_samples_to_slots(
         fields.insert("PATH".to_string(), a.audio_path.clone());
 
         if a.set_defaults {
-            fields.insert("GAIN".to_string(), "72".to_string());
-            fields.insert("TSMODE".to_string(), "2".to_string());
-            fields.insert("LOOPMODE".to_string(), "0".to_string());
-            fields.insert("TRIGQUANTIZATION".to_string(), "-1".to_string());
+            fields.extend(default_attr_fields(&slot_type_upper));
         }
 
         field_updates.insert((slot_type_upper.clone(), a.slot_index), fields);
@@ -4123,6 +4140,150 @@ pub fn assign_samples_to_slots(
 
     Ok(AssignSamplesResult {
         assigned_count: assignments.len(),
+        updated_slots,
+        flex_ram_free_mb,
+        flex_ram_free_bytes,
+    })
+}
+
+/// Back up (into the project's `backups/` dir) then delete the sibling `.ot` attributes
+/// file for an audio sample, if one exists. `rel_audio_path` is the slot's PATH value
+/// (relative to the project dir, e.g. `../AUDIO/foo.wav`). No-op if there's no `.ot`.
+fn backup_and_delete_ot_sibling(
+    project_dir: &Path,
+    rel_audio_path: &str,
+    backup_label: &str,
+) -> Result<(), String> {
+    let ot_path = project_dir.join(rel_audio_path).with_extension("ot");
+    if !ot_path.is_file() {
+        return Ok(());
+    }
+    let now = chrono::Local::now();
+    let backup_dir = project_dir.join("backups").join(format!(
+        "{}_{}",
+        now.format("%Y-%m-%d_%H-%M-%S"),
+        backup_label
+    ));
+    std::fs::create_dir_all(&backup_dir)
+        .map_err(|e| format!("Failed to create backup directory: {}", e))?;
+    let file_name = ot_path
+        .file_name()
+        .map(|n| n.to_owned())
+        .unwrap_or_default();
+    std::fs::copy(&ot_path, backup_dir.join(&file_name))
+        .map_err(|e| format!("Failed to back up .ot file: {}", e))?;
+    std::fs::remove_file(&ot_path).map_err(|e| format!("Failed to delete .ot file: {}", e))?;
+    Ok(())
+}
+
+/// Reset the audio-editor attributes of the given slots to OT defaults.
+///
+/// Attributes are tied to the slot, not the audio file, so this works on empty slots too:
+/// - Slots with a sample: rewrite GAIN/TSMODE/LOOPMODE/TRIGQUANTIZATION to defaults (keeping
+///   PATH) and strip stale BPMx24/TRIM_BARSx100. Any sibling `.ot` is backed up then deleted
+///   so it can't re-impose custom attributes.
+/// - Empty slots: drop any stray `[SAMPLE]` block so the slot matches hardware (no block).
+pub fn reset_slot_attributes(
+    project_path: &str,
+    slot_type: &str,
+    slot_indices: Vec<u16>,
+) -> Result<AssignSamplesResult, String> {
+    let slot_type_upper = slot_type.to_uppercase();
+    if !["FLEX", "STATIC"].contains(&slot_type_upper.as_str()) {
+        return Err(format!(
+            "Invalid slot_type: {}. Must be 'FLEX' or 'STATIC'",
+            slot_type
+        ));
+    }
+    for idx in &slot_indices {
+        if !(1..=128).contains(idx) {
+            return Err(format!("Slot index {} out of range. Must be 1-128", idx));
+        }
+    }
+    if slot_indices.is_empty() {
+        return Ok(AssignSamplesResult {
+            assigned_count: 0,
+            updated_slots: Vec::new(),
+            flex_ram_free_mb: None,
+            flex_ram_free_bytes: None,
+        });
+    }
+
+    let project_dir = Path::new(project_path);
+    let project_file_path = if project_dir.join("project.work").exists() {
+        project_dir.join("project.work")
+    } else if project_dir.join("project.strd").exists() {
+        project_dir.join("project.strd")
+    } else {
+        return Err("No project file found".to_string());
+    };
+
+    // Look up each target slot's current PATH to split filled vs empty and locate .ot siblings.
+    let metadata = read_project_metadata(project_path)?;
+    let all_slots = match slot_type_upper.as_str() {
+        "FLEX" => &metadata.sample_slots.flex_slots,
+        "STATIC" => &metadata.sample_slots.static_slots,
+        _ => unreachable!(),
+    };
+    let targets: std::collections::HashSet<u16> = slot_indices.iter().copied().collect();
+    let mut filled: Vec<u16> = Vec::new();
+    let mut empty: Vec<u16> = Vec::new();
+    for slot in all_slots {
+        let sid = slot.slot_id as u16;
+        if !targets.contains(&sid) {
+            continue;
+        }
+        match slot.path.as_deref() {
+            Some(p) if !p.is_empty() => {
+                // Back up + delete the sibling .ot so it can't re-impose attributes.
+                backup_and_delete_ot_sibling(project_dir, p, "reset_attributes")?;
+                filled.push(sid);
+            }
+            _ => empty.push(sid),
+        }
+    }
+
+    // Empty slots: drop any stray [SAMPLE] block (no-op when none exists).
+    if !empty.is_empty() {
+        clear_sample_slots(project_path, &slot_type_upper, empty)?;
+    }
+
+    // Filled slots: normalize attributes to defaults in one batched write.
+    if !filled.is_empty() {
+        let defaults = default_attr_fields(&slot_type_upper);
+        let mut field_updates: std::collections::HashMap<
+            (String, u16),
+            std::collections::HashMap<String, String>,
+        > = std::collections::HashMap::new();
+        for sid in &filled {
+            field_updates.insert((slot_type_upper.clone(), *sid), defaults.clone());
+        }
+        replace_sample_fields_surgical(&project_file_path, &field_updates)?;
+    }
+
+    // Re-read affected slots for the response.
+    let metadata = read_project_metadata(project_path)?;
+    let all_slots = match slot_type_upper.as_str() {
+        "FLEX" => metadata.sample_slots.flex_slots,
+        "STATIC" => metadata.sample_slots.static_slots,
+        _ => unreachable!(),
+    };
+    let updated_slots: Vec<SampleSlot> = all_slots
+        .into_iter()
+        .filter(|s| targets.contains(&(s.slot_id as u16)))
+        .collect();
+
+    let (flex_ram_free_mb, flex_ram_free_bytes) = if slot_type_upper == "FLEX" {
+        (
+            Some(metadata.memory_settings.flex_ram_free_mb),
+            Some(metadata.memory_settings.flex_ram_free_bytes),
+        )
+    } else {
+        (None, None)
+    };
+
+    Ok(AssignSamplesResult {
+        assigned_count: slot_indices.len(),
         updated_slots,
         flex_ram_free_mb,
         flex_ram_free_bytes,
@@ -4262,8 +4423,13 @@ pub fn clear_sample_slots(
     })
 }
 
+/// Sentinel update value meaning "delete this field line if present" (and don't insert it).
+/// Used to strip stale timing fields (e.g. BPMx24) when normalizing a slot's attributes.
+const FIELD_DELETE: &str = "\u{0}__DELETE__";
+
 /// Patch individual field lines within a `[SAMPLE]...[/SAMPLE]` block.
 /// Only lines whose field name (before `=`) matches an entry in `updates` are replaced.
+/// If a field's value is `FIELD_DELETE`, the matching line is removed (and not re-inserted).
 /// If a field in `updates` doesn't exist in the block, it is inserted before `[/SAMPLE]`.
 /// All other lines are preserved verbatim (including unknown fields like TRIM_BARSx100).
 fn patch_sample_block_fields(
@@ -4281,10 +4447,14 @@ fn patch_sample_block_fields(
             let field_name = &trimmed[..eq_pos];
             let field_upper = field_name.to_uppercase();
             if let Some(new_value) = updates.get(&field_upper) {
+                applied_fields.insert(field_upper);
+                if new_value == FIELD_DELETE {
+                    // Drop the line entirely.
+                    continue;
+                }
                 // Preserve original line ending style
                 let cr = if line.ends_with('\r') { "\r" } else { "" };
                 result_lines.push(format!("{}={}{}", field_name, new_value, cr));
-                applied_fields.insert(field_upper);
                 continue;
             }
         }
@@ -4292,10 +4462,11 @@ fn patch_sample_block_fields(
         result_lines.push(line.to_string());
     }
 
-    // Insert any fields that weren't found in the existing block (before [/SAMPLE])
+    // Insert any fields that weren't found in the existing block (before [/SAMPLE]),
+    // skipping deletion markers (nothing to delete if the field was absent).
     let missing: Vec<(&String, &String)> = updates
         .iter()
-        .filter(|(k, _)| !applied_fields.contains(k.as_str()))
+        .filter(|(k, v)| !applied_fields.contains(k.as_str()) && v.as_str() != FIELD_DELETE)
         .collect();
     if !missing.is_empty() {
         // Find the [/SAMPLE] line and insert before it
@@ -4330,12 +4501,16 @@ fn build_new_sample_block(
 
     // Only write BPMx24 if explicitly present in fields (avoid writing defaults)
     if let Some(bpm) = fields.get("BPMX24") {
-        s.push_str(&format!("BPMx24={}\r\n", bpm));
+        if bpm != FIELD_DELETE {
+            s.push_str(&format!("BPMx24={}\r\n", bpm));
+        }
     }
 
     // Write TRIM_BARSx100 if present (not modeled by ot-tools-io)
     if let Some(trim_bars) = fields.get("TRIM_BARSX100") {
-        s.push_str(&format!("TRIM_BARSx100={}\r\n", trim_bars));
+        if trim_bars != FIELD_DELETE {
+            s.push_str(&format!("TRIM_BARSx100={}\r\n", trim_bars));
+        }
     }
 
     s.push_str(&format!(
@@ -18123,13 +18298,13 @@ mod tests {
             let slot = &result.updated_slots[0];
             assert_eq!(slot.slot_id, 1);
             assert_eq!(slot.path.as_deref(), Some("../AUDIO/kick.wav"));
-            assert_eq!(slot.gain, Some(72));
+            assert_eq!(slot.gain, Some(48));
 
-            // Verify raw file has OT defaults
+            // Verify raw file has OT defaults (FLEX: GAIN=48, LOOPMODE=1, matching hardware)
             let raw = surgical_write_tests::read_raw_project_work(dir.path());
-            assert!(raw.contains("GAIN=72"));
+            assert!(raw.contains("GAIN=48"));
             assert!(raw.contains("TSMODE=2"));
-            assert!(raw.contains("LOOPMODE=0"));
+            assert!(raw.contains("LOOPMODE=1"));
             assert!(raw.contains("TRIGQUANTIZATION=-1"));
         }
 
@@ -18224,8 +18399,8 @@ mod tests {
 
             // Verify existing attributes before assignment
             let raw_before = surgical_write_tests::read_raw_project_work(dir.path());
-            assert!(raw_before.contains("GAIN=48")); // Non-default gain from setup
-            assert!(raw_before.contains("LOOPMODE=1")); // Non-default loop from setup
+            assert!(raw_before.contains("GAIN=48")); // existing gain from setup
+            assert!(raw_before.contains("LOOPMODE=1")); // existing loop from setup
 
             let result = assign_samples_to_slots(
                 project_path,
@@ -18428,6 +18603,101 @@ mod tests {
             .unwrap();
 
             assert_eq!(result.assigned_count, 1);
+        }
+
+        #[test]
+        fn test_assign_static_slot_uses_loopmode_zero() {
+            // STATIC assigns keep LOOPMODE=0 (only FLEX defaults to 1), GAIN=48 like hardware.
+            let dir = setup_project_for_assign(&[]);
+            let project_path = dir.path().to_str().unwrap();
+
+            assign_samples_to_slots(
+                project_path,
+                "STATIC",
+                vec![SlotAssignment {
+                    slot_index: 3,
+                    audio_path: "../AUDIO/pad.wav".to_string(),
+                    set_defaults: true,
+                }],
+            )
+            .unwrap();
+
+            let raw = surgical_write_tests::read_raw_project_work(dir.path());
+            let block = raw
+                .split("[SAMPLE]")
+                .find(|b| b.contains("TYPE=STATIC") && b.contains("SLOT=003"))
+                .expect("static slot 3 block");
+            assert!(block.contains("GAIN=48"));
+            assert!(block.contains("LOOPMODE=0"));
+            assert!(block.contains("TRIGQUANTIZATION=-1"));
+        }
+
+        #[test]
+        fn test_reset_normalizes_attributes_and_strips_bpm() {
+            // A FLEX slot with non-default GAIN and a stale BPMx24 line.
+            let dir = setup_project_for_assign(&[]);
+            let project_dir = dir.path();
+            let project_path = project_dir.to_str().unwrap();
+            // Hand-write a slot-1 block with a stale BPMx24 and non-default GAIN/LOOPMODE,
+            // inserted just before the recorder-buffer slots (129+).
+            let mut content = surgical_write_tests::read_raw_project_work(project_dir);
+            let block = "[SAMPLE]\r\nTYPE=FLEX\r\nSLOT=001\r\nPATH=../AUDIO/loop.wav\r\nBPMx24=1848\r\nTSMODE=2\r\nLOOPMODE=0\r\nGAIN=99\r\nTRIGQUANTIZATION=-1\r\n[/SAMPLE]\r\n\r\n";
+            let anchor = "[SAMPLE]\r\nTYPE=FLEX\r\nSLOT=129";
+            content = content.replace(anchor, &format!("{}{}", block, anchor));
+            surgical_write_tests::write_raw_project_work(project_dir, &content);
+
+            let result = reset_slot_attributes(project_path, "FLEX", vec![1]).unwrap();
+            assert_eq!(result.assigned_count, 1);
+
+            let raw = surgical_write_tests::read_raw_project_work(project_dir);
+            let after = raw
+                .split("[SAMPLE]")
+                .find(|b| b.contains("SLOT=001"))
+                .expect("slot 1 block");
+            assert!(after.contains("PATH=../AUDIO/loop.wav")); // sample kept
+            assert!(after.contains("GAIN=48")); // normalized
+            assert!(after.contains("LOOPMODE=1")); // FLEX default
+            assert!(after.contains("TRIGQUANTIZATION=-1"));
+            assert!(!after.contains("BPMx24")); // stale timing field stripped
+        }
+
+        #[test]
+        fn test_reset_deletes_and_backs_up_ot_sibling() {
+            let dir = setup_project_for_assign(&[("FLEX", 1, "samp.wav")]);
+            let project_dir = dir.path();
+            let project_path = project_dir.to_str().unwrap();
+            // Sample + its .ot companion live next to the project (PATH is relative to project dir).
+            fs::write(project_dir.join("samp.wav"), b"RIFFxxxxWAVE").unwrap();
+            fs::write(project_dir.join("samp.ot"), b"ot-attrs").unwrap();
+
+            reset_slot_attributes(project_path, "FLEX", vec![1]).unwrap();
+
+            assert!(
+                !project_dir.join("samp.ot").exists(),
+                ".ot sibling should be deleted"
+            );
+            // A backup copy of the .ot must exist somewhere under backups/.
+            let backed_up = WalkDir::new(project_dir.join("backups"))
+                .into_iter()
+                .filter_map(|e| e.ok())
+                .any(|e| e.file_name() == "samp.ot");
+            assert!(backed_up, ".ot sibling should be backed up before deletion");
+        }
+
+        #[test]
+        fn test_reset_empty_slot_removes_stray_block() {
+            // An empty slot may carry a stray block; reset drops it (matches hardware: no block).
+            let dir = setup_project_for_assign(&[("FLEX", 7, "")]);
+            let project_dir = dir.path();
+            let project_path = project_dir.to_str().unwrap();
+            assert!(surgical_write_tests::read_raw_project_work(project_dir).contains("SLOT=007"));
+
+            reset_slot_attributes(project_path, "FLEX", vec![7]).unwrap();
+
+            assert!(
+                !surgical_write_tests::read_raw_project_work(project_dir).contains("SLOT=007"),
+                "stray block for empty slot should be removed"
+            );
         }
     }
 }

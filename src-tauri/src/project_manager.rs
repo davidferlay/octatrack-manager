@@ -141,6 +141,32 @@ const DEFAULT_PROJECT_SIZE_BYTES: u64 = 12 * 1024 * 1024;
 /// Synchronous core of [`create_project`]. Tests call this directly so they
 /// can assert behaviour without an async runtime; the public [`create_project`]
 /// command is a thin wrapper that runs this on the blocking thread pool.
+/// Rewrite every `TRIGQUANTIZATION=255` to `TRIGQUANTIZATION=-1` in a project file.
+/// The token is pure ASCII, so the replacement is safe to do at the byte level without
+/// decoding the Windows-1258 payload. Returns the number of replacements made.
+fn normalize_trig_quantization(project_work_path: &Path) -> std::io::Result<usize> {
+    let from: &[u8] = b"TRIGQUANTIZATION=255";
+    let to: &[u8] = b"TRIGQUANTIZATION=-1";
+    let data = fs::read(project_work_path)?;
+    let mut out = Vec::with_capacity(data.len());
+    let mut i = 0;
+    let mut count = 0;
+    while i < data.len() {
+        if data[i..].starts_with(from) {
+            out.extend_from_slice(to);
+            i += from.len();
+            count += 1;
+        } else {
+            out.push(data[i]);
+            i += 1;
+        }
+    }
+    if count > 0 {
+        fs::write(project_work_path, &out)?;
+    }
+    Ok(count)
+}
+
 pub(crate) fn create_project_sync(set: &Path, name: &str) -> Result<String, String> {
     if !set.is_dir() {
         return Err(format!("Set path does not exist: {}", set.display()));
@@ -169,13 +195,19 @@ pub(crate) fn create_project_sync(set: &Path, name: &str) -> Result<String, Stri
     })?;
 
     let project_file = ProjectFile::default();
-    project_file
-        .to_data_file(&project_path.join("project.work"))
-        .map_err(|e| {
-            // Best-effort cleanup on partial failure.
-            let _ = fs::remove_dir_all(&project_path);
-            format!("Failed to write project.work: {}", e)
-        })?;
+    let project_work_path = project_path.join("project.work");
+    project_file.to_data_file(&project_work_path).map_err(|e| {
+        // Best-effort cleanup on partial failure.
+        let _ = fs::remove_dir_all(&project_path);
+        format!("Failed to write project.work: {}", e)
+    })?;
+
+    // ot-tools-io serializes the default TRIGQUANTIZATION (DIRECT) as the unsigned byte 255,
+    // but the hardware writes the signed form -1. Rewrite so fresh projects byte-match the OT.
+    normalize_trig_quantization(&project_work_path).map_err(|e| {
+        let _ = fs::remove_dir_all(&project_path);
+        format!("Failed to normalize project.work: {}", e)
+    })?;
 
     for i in 1u8..=16 {
         let bank = BankFile::default();
@@ -1646,6 +1678,24 @@ mod tests {
         ProjectFile::from_data_file(&p.join("project.work")).unwrap();
         BankFile::from_data_file(&p.join("bank01.work")).unwrap();
         MarkersFile::from_data_file(&p.join("markers.work")).unwrap();
+    }
+
+    #[test]
+    fn create_project_writes_signed_trigquantization() {
+        // Hardware writes TRIGQUANTIZATION=-1 for a fresh project; ot-tools-io emits the
+        // unsigned 255, which we normalize. The fresh project must contain neither =255.
+        let set = tmp_dir();
+        let path = create_project_sync(set.path(), "TQ").unwrap();
+        let bytes = fs::read(Path::new(&path).join("project.work")).unwrap();
+        let (text, _, _) = encoding_rs::WINDOWS_1258.decode(&bytes);
+        assert!(
+            text.contains("TRIGQUANTIZATION=-1"),
+            "expected signed -1 trig quantization"
+        );
+        assert!(
+            !text.contains("TRIGQUANTIZATION=255"),
+            "no slot should keep the unsigned 255 form"
+        );
     }
 
     #[test]

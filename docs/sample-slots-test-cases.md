@@ -34,7 +34,7 @@ go to the **Flex** (or **Static**) tab.
 | AP18 | Browse | Sort by column | Click a sidebar column header | Files sort by that column; folders stay grouped first |
 | AP50 | Browse | Remember pane state across navigation | Open the pane, enter a subdirectory, scroll, then open the Audio Pool page and return via "Back to project" | Pane reopens at the same subdirectory and scroll position; Edit mode is preserved |
 | **Assign via in-app drag (Edit mode)** | | | | |
-| AP19 | Assign | Drag file to empty slot | In Edit mode, drag a sidebar file onto an empty slot row | Slot receives the file; PATH set and OT defaults applied (GAIN 72, etc.) |
+| AP19 | Assign | Drag file to empty slot | In Edit mode, drag a sidebar file onto an empty slot row | Slot receives the file; PATH set and OT defaults applied (GAIN 48, TSMODE 2, TRIGQUANTIZATION -1, LOOPMODE 1 for Flex / 0 for Static) — matching the hardware |
 | AP20 | Assign | Drag file to filled slot | Drag a sidebar file onto a non-empty slot | Only the slot PATH changes; existing attributes (gain, loop, etc.) are preserved |
 | AP21 | Assign | Multi-file fills consecutive empties | Select several sidebar files, drag onto a slot | Files fill consecutive empty slots starting at the drop target |
 | AP22 | Assign | Flex RAM updates | Assign a file in the Flex tab | The FREE MEM / FREE value updates to reflect the new assignment |
@@ -73,8 +73,8 @@ go to the **Flex** (or **Static**) tab.
 | **Sample slot item context menu** | | | | |
 | AP41 | Slot menu | Right-click a slot | Right-click any slot row | Context menu: Clear sample, Reset attributes to defaults, Import audio file(s) from system, Import audio directory from system, Open in file explorer |
 | AP42 | Slot menu | Clear sample (Edit) | In Edit mode, right-click a filled slot → Clear sample | Slot becomes empty; Flex RAM (Flex tab) updates |
-| AP43 | Slot menu | Disabled on empty slot | Right-click an empty slot | "Clear sample" and "Reset attributes" are disabled (nothing to clear) |
-| AP44 | Slot menu | Reset attributes (Edit) | In Edit mode, right-click a filled slot → Reset attributes | Attributes reset to OT defaults (GAIN 72, TSMODE 2, LOOPMODE 0, TRIGQUANTIZATION -1); path unchanged |
+| AP43 | Slot menu | Disabled on empty slot | Right-click an empty slot | "Clear sample" is disabled (nothing to clear); "Reset attributes to defaults" is ENABLED (attributes are tied to the slot, not the audio file) |
+| AP44 | Slot menu | Reset attributes (Edit) | In Edit mode, right-click a filled slot → Reset attributes | Attributes reset to OT defaults (GAIN 48, TSMODE 2, TRIGQUANTIZATION -1, LOOPMODE 1 for Flex / 0 for Static); any stale BPMx24 line removed; path unchanged |
 | AP45 | Slot menu | Import file(s) to slot (Edit) | In Edit mode, right-click a slot → Import audio file(s) from system | File picker (multi-select) opens; chosen files are copied into the project (progress pane opens) and fill consecutive slots from that one |
 | AP60 | Slot menu | Import directory to slot (Edit) | In Edit mode, right-click a slot → Import audio directory from system | Folder picker opens; audio files (recursive) are copied into the project and fill consecutive empty slots from that one |
 | AP46 | Slot menu | Disabled in View mode | In View mode, right-click a slot | All mutating items are disabled; each shows a "Toggle Edit mode to modify slots" tooltip |
@@ -128,3 +128,9 @@ go to the **Flex** (or **Static**) tab.
 | **Edit mode persistence** | | | | |
 | AP95 | Edit mode | Kept across pool round-trip | Enable Edit mode, open the Audio Pool page, click "Back to project" | The project reopens still in Edit mode |
 | AP96 | Edit mode | Reset on Back to list | Enable Edit mode, click "Back" (or press Escape) to the projects list, reopen the same project | The project opens in View mode (Edit mode is not restored) |
+| **Attribute defaults & reset (hardware parity)** | | | | |
+| AP97 | Reset | Empty slot reset | In Edit mode, right-click an empty slot → Reset attributes to defaults | No error; the slot stays empty (any stray attribute block is removed so it matches the hardware's "no block" state) |
+| AP98 | Reset | Deletes sibling .ot | Assign a sample whose audio file has a sibling `.ot` (e.g. `kick.wav` + `kick.ot`), then Reset attributes on that slot | The `.ot` file is backed up under the project's `backups/` folder, then deleted, so it can no longer re-impose custom attributes |
+| AP99 | Reset | Multi-slot incl. empty | Select a mix of filled and empty slots, right-click → Reset attributes to defaults | Filled slots are normalized to defaults (path kept); empty slots are left with no block; sibling `.ot` files of filled slots are backed up + deleted |
+| AP100 | Assign | Flex LOOPMODE default | In Edit mode, assign a sample to an empty Flex slot | The written block has LOOPMODE=1 and GAIN=48 (matches the hardware) |
+| AP101 | Assign | Static LOOPMODE default | In Edit mode, assign a sample to an empty Static slot | The written block has LOOPMODE=0 and GAIN=48 (Flex-only difference) |

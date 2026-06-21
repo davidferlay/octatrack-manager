@@ -319,6 +319,14 @@ describe('SampleSlotsTable — slot context menu & Audio Pool page button', () =
     expect(screen.getByText(/Open in file explorer/i)).toBeDisabled()
   })
 
+  it('enables "Reset attributes" for an empty slot in edit mode (attributes are slot-tied)', async () => {
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    fireEvent.contextMenu(screen.getByText('F2').closest('tr')!) // empty slot
+    expect(screen.getByText(/Reset attributes/i)).not.toBeDisabled()
+  })
+
   it('clears a slot sample via the context menu in edit mode', async () => {
     const onSlotsUpdated = vi.fn()
     mockInvoke.mockResolvedValue({ assigned_count: 1, updated_slots: [{ ...mockSlots[1] }], flex_ram_free_mb: 90 })
@@ -334,7 +342,7 @@ describe('SampleSlotsTable — slot context menu & Audio Pool page button', () =
     )
   })
 
-  it('resets slot attributes via the context menu (assign with set_defaults, keeps path)', async () => {
+  it('resets slot attributes via the context menu (reset_slot_attributes by slot index)', async () => {
     renderWithProvider(
       <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
     )
@@ -343,10 +351,10 @@ describe('SampleSlotsTable — slot context menu & Audio Pool page button', () =
     await userEvent.click(screen.getByText(/Reset attributes/i))
 
     await waitFor(() =>
-      expect(mockInvoke).toHaveBeenCalledWith('assign_samples_to_slots', expect.objectContaining({
+      expect(mockInvoke).toHaveBeenCalledWith('reset_slot_attributes', expect.objectContaining({
         path: '/proj',
         slotType: 'FLEX',
-        assignments: [expect.objectContaining({ slot_index: 1, audio_path: 'samples/kick.wav', set_defaults: true })],
+        slotIndices: [1],
       }))
     )
   })
@@ -375,11 +383,8 @@ describe('SampleSlotsTable — slot context menu & Audio Pool page button', () =
     fireEvent.contextMenu(screen.getByText('kick.wav').closest('tr')!)
     await userEvent.click(screen.getByText(/Reset attributes/i))
     await waitFor(() =>
-      expect(mockInvoke).toHaveBeenCalledWith('assign_samples_to_slots', expect.objectContaining({
-        assignments: [
-          { slot_index: 1, audio_path: 'samples/kick.wav', set_defaults: true },
-          { slot_index: 3, audio_path: 'samples/snare.wav', set_defaults: true },
-        ],
+      expect(mockInvoke).toHaveBeenCalledWith('reset_slot_attributes', expect.objectContaining({
+        slotIndices: [1, 3],
       }))
     )
   })
