@@ -168,6 +168,19 @@ async fn clear_sample_slots(
 }
 
 #[tauri::command]
+async fn clear_sample_keep_attributes(
+    path: String,
+    slot_type: String,
+    slot_indices: Vec<u16>,
+) -> Result<AssignSamplesResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        project_reader::clear_sample_keep_attributes(&path, &slot_type, slot_indices)
+    })
+    .await
+    .unwrap()
+}
+
+#[tauri::command]
 async fn reset_slot_attributes(
     path: String,
     slot_type: String,
@@ -927,6 +940,7 @@ pub fn run() {
             // Sample slot assignment
             assign_samples_to_slots,
             clear_sample_slots,
+            clear_sample_keep_attributes,
             reset_slot_attributes,
             // Project Management
             project_manager::create_project,

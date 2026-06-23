@@ -79,6 +79,7 @@ async function setupMocks(page: Page, opts?: { withAudioPool?: boolean }) {
             }
           case 'reset_slot_attributes':
           case 'clear_sample_slots':
+          case 'clear_sample_keep_attributes':
           case 'assign_samples_to_slots':
             return { assigned_count: 1, updated_slots: [], flex_ram_free_mb: 85.5, flex_ram_free_bytes: null }
           default:
@@ -165,8 +166,10 @@ test.describe('Audio Pool sidebar in Flex slots', () => {
     // First slot F1 has a sample in the mock
     const row = page.locator('.samples-table tbody tr').first()
     await row.click({ button: 'right' })
-    await expect(page.getByText('Clear sample')).toBeVisible()
-    await expect(page.getByText(/Reset attributes/i)).toBeVisible()
+    await expect(page.getByText('Clear sample', { exact: true })).toBeVisible()
+    await expect(page.getByText('Reset attributes to defaults', { exact: true })).toBeVisible()
+    // Combined action is offered for a slot that has a sample.
+    await expect(page.getByText('Clear sample & reset attributes', { exact: true })).toBeVisible()
     await expect(page.getByText(/Import audio file\(s\) from system/i)).toBeVisible()
     await expect(page.getByText(/Import audio directory from system/i)).toBeVisible()
   })
@@ -178,8 +181,8 @@ test.describe('Audio Pool sidebar in Flex slots', () => {
     const emptyRow = page.locator('.samples-table tbody tr').nth(3)
     await emptyRow.click({ button: 'right' })
     // Attributes are tied to the slot, so reset is available even with no sample assigned.
-    await expect(page.getByText(/Reset attributes to defaults/i)).toBeVisible()
-    await expect(page.getByText('Clear sample')).toBeVisible()
+    await expect(page.getByText('Reset attributes to defaults', { exact: true })).toBeVisible()
+    await expect(page.getByText('Clear sample', { exact: true })).toBeVisible()
   })
 
   test('right-clicking a pool file shows "Assign to first empty slot"', async ({ page }) => {

@@ -71,14 +71,15 @@ go to the **Flex** (or **Static**) tab.
 | AP58 | Pane menu | Assign to selected slot shown only when a slot is selected | Select a slot, then right-click a pool file | "Assign to selected slot" appears below "Assign to first empty slot"; it is absent when no slot is selected |
 | AP59 | Pane menu | Assign to selected (Edit) | With a slot selected, choose "Assign to selected slot" | File is assigned starting at the selected (cursor) slot; multi-file fills consecutive empty slots from there |
 | **Sample slot item context menu** | | | | |
-| AP41 | Slot menu | Right-click a slot | Right-click any slot row | Context menu: Clear sample, Reset attributes to defaults, Import audio file(s) from system, Import audio directory from system, Open in file explorer |
-| AP42 | Slot menu | Clear sample (Edit) | In Edit mode, right-click a filled slot → Clear sample | Slot becomes empty; Flex RAM (Flex tab) updates |
-| AP43 | Slot menu | Disabled on empty slot | Right-click an empty slot | "Clear sample" is disabled (nothing to clear); "Reset attributes to defaults" is ENABLED (attributes are tied to the slot, not the audio file) |
+| AP41 | Slot menu | Right-click a slot | Right-click any slot row | Context menu: Clear sample, Reset attributes to defaults, Clear sample & reset attributes, Import audio file(s) from system, Import audio directory from system, Open in file explorer |
+| AP42 | Slot menu | Clear sample keeps attributes (Edit) | In Edit mode, right-click a filled slot → Clear sample | The sample reference is removed (slot shows no sample, Flex RAM updates) but the slot's attributes (GAIN, TSMODE, LOOPMODE, TRIGQUANTIZATION, TRIM_BARSx100) are kept; the sibling .ot (if any) is left in place |
+| AP105 | Slot menu | Clear sample & reset attributes (Edit) | In Edit mode, right-click a filled slot → Clear sample & reset attributes | The sample is removed AND attributes reset: the slot returns to the fully-empty hardware state (block removed) and any sibling .ot is backed up + deleted. Only available for a slot that has a sample, and only in Edit mode |
+| AP43 | Slot menu | Disabled on empty slot | Right-click an empty slot | "Clear sample" and "Clear sample & reset attributes" are disabled (no sample); "Reset attributes to defaults" is ENABLED (attributes are tied to the slot, not the audio file) |
 | AP44 | Slot menu | Reset attributes (Edit) | In Edit mode, right-click a filled slot → Reset attributes | Attributes reset to OT defaults (GAIN 48, TSMODE 2, TRIGQUANTIZATION -1, LOOPMODE 1 for Flex / 0 for Static); any stale BPMx24 / TRIM_BARSx100 line removed (the OT recomputes on load); path unchanged |
 | AP45 | Slot menu | Import file(s) to slot (Edit) | In Edit mode, right-click a slot → Import audio file(s) from system | File picker (multi-select) opens; chosen files are copied into the project (progress pane opens) and fill consecutive slots from that one |
 | AP60 | Slot menu | Import directory to slot (Edit) | In Edit mode, right-click a slot → Import audio directory from system | Folder picker opens; audio files (recursive) are copied into the project and fill consecutive empty slots from that one |
 | AP46 | Slot menu | Disabled in View mode | In View mode, right-click a slot | All mutating items are disabled; each shows a "Toggle Edit mode to modify slots" tooltip |
-| AP79 | Slot menu | Clear applies to all selected | In Edit mode, select several filled slots, right-click one of them → Clear samples | Every selected slot is cleared (label reads "Clear samples"); Flex RAM updates |
+| AP79 | Slot menu | Clear applies to all selected | In Edit mode, select several filled slots, right-click one of them → Clear samples | Every selected slot's sample is removed (attributes kept; label reads "Clear samples"); Flex RAM updates. "Clear samples & reset attributes" applies to all selected too |
 | AP80 | Slot menu | Reset applies to all selected | In Edit mode, select several filled slots, right-click one → Reset attributes to defaults | Every selected slot's attributes reset to OT defaults; each sample path is kept |
 | AP81 | Slot menu | Right-click outside selection | With some slots selected, right-click a different (unselected) slot → Clear sample | Only the right-clicked slot is affected (action targets the selection only when the right-clicked slot is part of it) |
 | **OT-style file size** | | | | |
@@ -111,7 +112,7 @@ go to the **Flex** (or **Static**) tab.
 | AP69 | Reveal | Project title copy path | In the title menu, choose Copy path to clipboard | The project path is copied; a "Path copied!" toast appears (left-clicking the title still copies too) |
 | **Keyboard shortcuts** | | | | |
 | AP70 | Shortcut | 'a' toggles the pane | On a Flex/Static tab in a Set with a pool, press `a` (not while typing in a field) | The Audio Pool pane toggles open/closed |
-| AP71 | Shortcut | Delete clears selected slots | In Edit mode, select one or more filled slots, press Delete (or Backspace) | The selected slots are cleared; Flex RAM (Flex tab) updates |
+| AP71 | Shortcut | Delete clears samples / resets attributes | In Edit mode, select slots, press Delete (or Backspace) | Per slot: a slot with a sample has its sample cleared (attributes kept); a slot with no sample has its attributes reset. So pressing Delete twice on the same slot first removes the sample, then clears its attributes. Mixed selections do both at once |
 | AP72 | Shortcut | Delete ignored in View mode | In View mode, select a slot, press Delete | Nothing is cleared (slot mutation requires Edit mode) |
 | AP73 | Shortcut | Ignored while typing | Focus the search box and press `a` / Delete | The keystroke edits the search text; no pane toggle / clear happens |
 | **Drag a directory to slots** | | | | |

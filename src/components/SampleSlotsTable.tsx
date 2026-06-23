@@ -396,14 +396,15 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     return [slot];
   }, [selectedSlots, slots]);
 
-  // Clear the sample from every given slot that has one (one batched write).
+  // Clear the sample from every given slot that has one, keeping the slot's attributes
+  // (only the PATH is blanked). One batched write.
   const clearSlots = useCallback(async (targets: SampleSlot[]) => {
     if (!isEditMode || !projectPath) return;
     const ids = targets.filter(s => s.path).map(s => s.slot_id);
     if (ids.length === 0) return;
     setIsAssigning(true);
     try {
-      const result = await invoke<AssignSamplesResult>("clear_sample_slots", {
+      const result = await invoke<AssignSamplesResult>("clear_sample_keep_attributes", {
         path: projectPath, slotType, slotIndices: ids,
       });
       if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
@@ -415,10 +416,27 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     }
   }, [isEditMode, projectPath, slotType, onSlotsUpdated, onFlexRamUpdated]);
 
-  // Clear every selected slot that has a sample (used by the Delete keyboard shortcut).
-  const clearSelectedSlots = useCallback(() => {
-    return clearSlots(slots.filter(s => selectedSlots.has(s.slot_id)));
-  }, [clearSlots, slots, selectedSlots]);
+  // Clear the sample AND reset attributes to defaults for every given slot that has a sample:
+  // resets attributes (also backs up + deletes any sibling .ot), then removes the slot block
+  // entirely so the slot returns to the hardware's fully-empty state.
+  const clearAndResetSlots = useCallback(async (targets: SampleSlot[]) => {
+    if (!isEditMode || !projectPath) return;
+    const ids = targets.filter(s => s.path).map(s => s.slot_id);
+    if (ids.length === 0) return;
+    setIsAssigning(true);
+    try {
+      await invoke("reset_slot_attributes", { path: projectPath, slotType, slotIndices: ids });
+      const result = await invoke<AssignSamplesResult>("clear_sample_slots", {
+        path: projectPath, slotType, slotIndices: ids,
+      });
+      if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
+      if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb, result.flex_ram_free_bytes);
+    } catch (error) {
+      console.error("Error clearing + resetting sample slot(s):", error);
+    } finally {
+      setIsAssigning(false);
+    }
+  }, [isEditMode, projectPath, slotType, onSlotsUpdated, onFlexRamUpdated]);
 
   // Reset the given slots' audio-editor attributes to OT defaults. Attributes are tied to the
   // slot (not the audio file), so this also applies to empty slots; the backend additionally
@@ -440,6 +458,17 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
       setIsAssigning(false);
     }
   }, [isEditMode, projectPath, slotType, onSlotsUpdated, onFlexRamUpdated]);
+
+  // Delete-key behavior, per selected slot: a slot with a sample is cleared (keeping its
+  // attributes); a slot without a sample has its attributes reset. So pressing Delete twice
+  // first removes the sample, then clears the attributes.
+  const handleDeleteKey = useCallback(async () => {
+    const sel = slots.filter(s => selectedSlots.has(s.slot_id));
+    const filled = sel.filter(s => s.path);
+    const empty = sel.filter(s => !s.path);
+    if (filled.length > 0) await clearSlots(filled);
+    if (empty.length > 0) await resetSlotsAttributes(empty);
+  }, [slots, selectedSlots, clearSlots, resetSlotsAttributes]);
 
   // Copy source files into the project dir, then assign (with validation) from `targetSlot`.
   const importPathsToSlot = useCallback(async (sourcePaths: string[], targetSlot: SampleSlot) => {
@@ -518,12 +547,12 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         toggleAudioPool(!showAudioPool);
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && isEditMode && selectedSlots.size > 0) {
         e.preventDefault();
-        clearSelectedSlots();
+        handleDeleteKey();
       }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [audioPoolPath, showAudioPool, isEditMode, selectedSlots, slotMenu, clearSelectedSlots]);
+  }, [audioPoolPath, showAudioPool, isEditMode, selectedSlots, slotMenu, handleDeleteKey]);
 
   // Expand any dragged/dropped directories into their (recursive) audio files so the
   // copy/assign flows never choke on a folder. Plain audio files pass through unchanged.
@@ -1766,6 +1795,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
           onClick={() => { resetSlotsAttributes(menuTargetSlots(slotMenu.slot)); setSlotMenu(null); }}
         >
           <i className="fas fa-rotate-left"></i> Reset attributes to defaults
+        </button>
+        <button
+          className="context-menu-item"
+          disabled={!isEditMode || !slotMenu.slot.path}
+          title={!isEditMode ? 'Toggle Edit mode to modify slots' : undefined}
+          onClick={() => { clearAndResetSlots(menuTargetSlots(slotMenu.slot)); setSlotMenu(null); }}
+        >
+          <i className="fas fa-trash"></i> {selectedSlots.size > 1 && selectedSlots.has(slotMenu.slot.slot_id) ? 'Clear samples & reset attributes' : 'Clear sample & reset attributes'}
         </button>
         <div className="context-menu-separator"></div>
         <button

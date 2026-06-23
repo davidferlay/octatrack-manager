@@ -4342,6 +4342,103 @@ pub fn reset_slot_attributes(
     })
 }
 
+/// Clear the assigned sample from the given slots **without** touching their attributes:
+/// the slot's `PATH` is blanked but its `[SAMPLE]` block (GAIN, TSMODE, LOOPMODE,
+/// TRIGQUANTIZATION, TRIM_BARSx100, …) is kept — the same shape the OT uses for its empty
+/// recorder-buffer slots. Only slots that currently hold a sample are touched; empty slots and
+/// any sibling `.ot` files are left alone. Returns the updated slots + recomputed Flex RAM.
+pub fn clear_sample_keep_attributes(
+    project_path: &str,
+    slot_type: &str,
+    slot_indices: Vec<u16>,
+) -> Result<AssignSamplesResult, String> {
+    let slot_type_upper = slot_type.to_uppercase();
+    if !["FLEX", "STATIC"].contains(&slot_type_upper.as_str()) {
+        return Err(format!(
+            "Invalid slot_type: {}. Must be 'FLEX' or 'STATIC'",
+            slot_type
+        ));
+    }
+    for idx in &slot_indices {
+        if !(1..=128).contains(idx) {
+            return Err(format!("Slot index {} out of range. Must be 1-128", idx));
+        }
+    }
+    if slot_indices.is_empty() {
+        return Ok(AssignSamplesResult {
+            assigned_count: 0,
+            updated_slots: Vec::new(),
+            flex_ram_free_mb: None,
+            flex_ram_free_bytes: None,
+        });
+    }
+
+    let project_dir = Path::new(project_path);
+    let project_file_path = if project_dir.join("project.work").exists() {
+        project_dir.join("project.work")
+    } else if project_dir.join("project.strd").exists() {
+        project_dir.join("project.strd")
+    } else {
+        return Err("No project file found".to_string());
+    };
+
+    // Only blank the PATH of slots that actually hold a sample (leave empty slots untouched).
+    let metadata = read_project_metadata(project_path)?;
+    let all_slots = match slot_type_upper.as_str() {
+        "FLEX" => &metadata.sample_slots.flex_slots,
+        "STATIC" => &metadata.sample_slots.static_slots,
+        _ => unreachable!(),
+    };
+    let targets: std::collections::HashSet<u16> = slot_indices.iter().copied().collect();
+    let mut field_updates: std::collections::HashMap<
+        (String, u16),
+        std::collections::HashMap<String, String>,
+    > = std::collections::HashMap::new();
+    for slot in all_slots {
+        let sid = slot.slot_id as u16;
+        if !targets.contains(&sid) {
+            continue;
+        }
+        if slot.path.as_deref().is_some_and(|p| !p.is_empty()) {
+            let mut fields = std::collections::HashMap::new();
+            fields.insert("PATH".to_string(), String::new());
+            field_updates.insert((slot_type_upper.clone(), sid), fields);
+        }
+    }
+
+    if !field_updates.is_empty() {
+        replace_sample_fields_surgical(&project_file_path, &field_updates)?;
+    }
+
+    // Re-read affected slots for the response.
+    let metadata = read_project_metadata(project_path)?;
+    let all_slots = match slot_type_upper.as_str() {
+        "FLEX" => metadata.sample_slots.flex_slots,
+        "STATIC" => metadata.sample_slots.static_slots,
+        _ => unreachable!(),
+    };
+    let updated_slots: Vec<SampleSlot> = all_slots
+        .into_iter()
+        .filter(|s| targets.contains(&(s.slot_id as u16)))
+        .collect();
+
+    let (flex_ram_free_mb, flex_ram_free_bytes) = if slot_type_upper == "FLEX" {
+        (
+            Some(metadata.memory_settings.flex_ram_free_mb),
+            Some(metadata.memory_settings.flex_ram_free_bytes),
+        )
+    } else {
+        (None, None)
+    };
+
+    Ok(AssignSamplesResult {
+        assigned_count: slot_indices.len(),
+        updated_slots,
+        flex_ram_free_mb,
+        flex_ram_free_bytes,
+    })
+}
+
 /// Remove the `[SAMPLE]` blocks for the given slot indices, emptying those slots.
 /// Returns the updated slots (now empty) plus recomputed Flex RAM free for FLEX.
 pub fn clear_sample_slots(
@@ -18464,6 +18561,72 @@ mod tests {
             // The [SAMPLE] block for the cleared slot is gone
             let after = surgical_write_tests::read_raw_project_work(dir.path());
             assert!(!after.contains("PATH=kick.wav"));
+        }
+
+        #[test]
+        fn test_clear_sample_keep_attributes_blanks_path_keeps_attrs() {
+            // Assign to get a full default block (GAIN=48 etc.), then clear keeping attributes.
+            let dir = setup_project_for_assign(&[]);
+            let project_path = dir.path().to_str().unwrap();
+            assign_samples_to_slots(
+                project_path,
+                "FLEX",
+                vec![SlotAssignment {
+                    slot_index: 1,
+                    audio_path: "../AUDIO/kick.wav".to_string(),
+                    set_defaults: true,
+                }],
+            )
+            .unwrap();
+
+            let result = clear_sample_keep_attributes(project_path, "FLEX", vec![1]).unwrap();
+            assert_eq!(result.updated_slots.len(), 1);
+            // Sample reference gone, but the slot's attributes remain.
+            assert!(result.updated_slots[0]
+                .path
+                .as_deref()
+                .unwrap_or("")
+                .is_empty());
+
+            let raw = surgical_write_tests::read_raw_project_work(dir.path());
+            assert!(
+                !raw.contains("PATH=../AUDIO/kick.wav"),
+                "sample path should be cleared"
+            );
+            // GAIN=48 is unique to our assigned slot (recorder buffers use GAIN=72), proving the
+            // attribute block was kept.
+            assert!(raw.contains("GAIN=48"), "attributes should be preserved");
+        }
+
+        #[test]
+        fn test_clear_keep_then_reset_removes_block() {
+            // Models pressing Delete twice: first clears the sample (keeping attributes),
+            // then resets the now-sample-less slot, which removes its block entirely.
+            let dir = setup_project_for_assign(&[]);
+            let project_path = dir.path().to_str().unwrap();
+            assign_samples_to_slots(
+                project_path,
+                "FLEX",
+                vec![SlotAssignment {
+                    slot_index: 1,
+                    audio_path: "../AUDIO/kick.wav".to_string(),
+                    set_defaults: true,
+                }],
+            )
+            .unwrap();
+
+            clear_sample_keep_attributes(project_path, "FLEX", vec![1]).unwrap();
+            assert!(
+                surgical_write_tests::read_raw_project_work(dir.path()).contains("GAIN=48"),
+                "after clear, attributes should still be present"
+            );
+
+            reset_slot_attributes(project_path, "FLEX", vec![1]).unwrap();
+            let raw = surgical_write_tests::read_raw_project_work(dir.path());
+            assert!(
+                !raw.contains("GAIN=48"),
+                "reset on the now-empty slot should remove its block"
+            );
         }
 
         #[test]

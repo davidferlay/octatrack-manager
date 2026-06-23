@@ -210,7 +210,7 @@ describe('SampleSlotsTable — Audio Pool integration', () => {
     await userEvent.click(screen.getByText('kick.wav').closest('tr')!) // select F1
     fireEvent.keyDown(document, { key: 'Delete' })
     await waitFor(() =>
-      expect(mockInvoke).toHaveBeenCalledWith('clear_sample_slots', expect.objectContaining({ slotIndices: [1] }))
+      expect(mockInvoke).toHaveBeenCalledWith('clear_sample_keep_attributes', expect.objectContaining({ slotIndices: [1] }))
     )
   })
 
@@ -295,7 +295,7 @@ describe('SampleSlotsTable — slot context menu & Audio Pool page button', () =
     fireEvent.contextMenu(row)
     const clear = screen.getByText('Clear sample')
     expect(clear).toBeDisabled()
-    expect(screen.getByText(/Reset attributes/i)).toBeDisabled()
+    expect(screen.getByText('Reset attributes to defaults')).toBeDisabled()
     expect(clear.getAttribute('title')).toMatch(/Toggle Edit mode/i)
   })
 
@@ -324,7 +324,7 @@ describe('SampleSlotsTable — slot context menu & Audio Pool page button', () =
       <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
     )
     fireEvent.contextMenu(screen.getByText('F2').closest('tr')!) // empty slot
-    expect(screen.getByText(/Reset attributes/i)).not.toBeDisabled()
+    expect(screen.getByText('Reset attributes to defaults')).not.toBeDisabled()
   })
 
   it('clears a slot sample via the context menu in edit mode', async () => {
@@ -338,7 +338,7 @@ describe('SampleSlotsTable — slot context menu & Audio Pool page button', () =
     await userEvent.click(screen.getByText('Clear sample'))
 
     await waitFor(() =>
-      expect(mockInvoke).toHaveBeenCalledWith('clear_sample_slots', expect.objectContaining({ path: '/proj', slotType: 'FLEX', slotIndices: [1] }))
+      expect(mockInvoke).toHaveBeenCalledWith('clear_sample_keep_attributes', expect.objectContaining({ path: '/proj', slotType: 'FLEX', slotIndices: [1] }))
     )
   })
 
@@ -348,7 +348,7 @@ describe('SampleSlotsTable — slot context menu & Audio Pool page button', () =
     )
     const row = screen.getByText('kick.wav').closest('tr')!
     fireEvent.contextMenu(row)
-    await userEvent.click(screen.getByText(/Reset attributes/i))
+    await userEvent.click(screen.getByText('Reset attributes to defaults'))
 
     await waitFor(() =>
       expect(mockInvoke).toHaveBeenCalledWith('reset_slot_attributes', expect.objectContaining({
@@ -369,7 +369,7 @@ describe('SampleSlotsTable — slot context menu & Audio Pool page button', () =
     fireEvent.contextMenu(screen.getByText('kick.wav').closest('tr')!)
     await userEvent.click(screen.getByText('Clear samples')) // plural label when multi-selected
     await waitFor(() =>
-      expect(mockInvoke).toHaveBeenCalledWith('clear_sample_slots', expect.objectContaining({ slotIndices: [1, 3] }))
+      expect(mockInvoke).toHaveBeenCalledWith('clear_sample_keep_attributes', expect.objectContaining({ slotIndices: [1, 3] }))
     )
   })
 
@@ -381,11 +381,46 @@ describe('SampleSlotsTable — slot context menu & Audio Pool page button', () =
     fireEvent.click(screen.getByText('kick.wav').closest('tr')!)
     fireEvent.click(screen.getByText('snare.wav').closest('tr')!, { ctrlKey: true })
     fireEvent.contextMenu(screen.getByText('kick.wav').closest('tr')!)
-    await userEvent.click(screen.getByText(/Reset attributes/i))
+    await userEvent.click(screen.getByText('Reset attributes to defaults'))
     await waitFor(() =>
       expect(mockInvoke).toHaveBeenCalledWith('reset_slot_attributes', expect.objectContaining({
         slotIndices: [1, 3],
       }))
+    )
+  })
+
+  it('offers "Clear sample & reset attributes" only for a slot with a sample (edit mode)', async () => {
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    fireEvent.contextMenu(screen.getByText('kick.wav').closest('tr')!) // filled slot
+    expect(screen.getByText('Clear sample & reset attributes')).not.toBeDisabled()
+    fireEvent.contextMenu(screen.getByText('F2').closest('tr')!) // empty slot
+    expect(screen.getByText('Clear sample & reset attributes')).toBeDisabled()
+  })
+
+  it('"Clear sample & reset attributes" resets attributes then removes the slot block', async () => {
+    mockInvoke.mockResolvedValue({ assigned_count: 1, updated_slots: [], flex_ram_free_mb: 90 })
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    fireEvent.contextMenu(screen.getByText('kick.wav').closest('tr')!)
+    await userEvent.click(screen.getByText('Clear sample & reset attributes'))
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith('reset_slot_attributes', expect.objectContaining({ slotIndices: [1] }))
+      expect(mockInvoke).toHaveBeenCalledWith('clear_sample_slots', expect.objectContaining({ slotIndices: [1] }))
+    })
+  })
+
+  it('Delete on a slot without a sample resets its attributes (instead of clearing)', async () => {
+    mockInvoke.mockResolvedValue({ assigned_count: 1, updated_slots: [], flex_ram_free_mb: 80 })
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    await userEvent.click(screen.getByText('F2').closest('tr')!) // select empty F2
+    fireEvent.keyDown(document, { key: 'Delete' })
+    await waitFor(() =>
+      expect(mockInvoke).toHaveBeenCalledWith('reset_slot_attributes', expect.objectContaining({ slotIndices: [2] }))
     )
   })
 })
