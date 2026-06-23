@@ -4002,8 +4002,11 @@ fn replace_sample_fields_surgical(
 /// OT default audio-editor attributes for a freshly-assigned (or reset) sample, keyed by
 /// uppercased field name. Matches what the hardware writes on assign:
 /// GAIN=48, TSMODE=2, TRIGQUANTIZATION=-1, and LOOPMODE=1 for FLEX / 0 for STATIC.
-/// Stale timing fields (BPMx24, TRIM_BARSx100) are marked for deletion — the OT recomputes
-/// TRIM_BARSx100 on load, and an assigned sample never carries BPMx24.
+/// Timing fields (BPMx24, TRIM_BARSx100) are marked for deletion here; `assign_samples_to_slots`
+/// then sets TRIM_BARSx100 from the audio file (see `compute_assign_timing`),
+/// while `reset_slot_attributes` leaves them deleted so the OT recomputes on load.
+/// OT does not write a per-slot BPMx24 on assign (it appears only when a slot is
+/// switched to Tempo calculation mode), so it stays deleted in both cases.
 fn default_attr_fields(slot_type_upper: &str) -> std::collections::HashMap<String, String> {
     let mut f = std::collections::HashMap::new();
     f.insert("GAIN".to_string(), "48".to_string());
@@ -4016,6 +4019,50 @@ fn default_attr_fields(slot_type_upper: &str) -> std::collections::HashMap<Strin
     f.insert("BPMX24".to_string(), FIELD_DELETE.to_string());
     f.insert("TRIM_BARSX100".to_string(), FIELD_DELETE.to_string());
     f
+}
+
+/// Read (frame count, sample rate) from a WAV or AIFF file. Returns None if unreadable.
+fn audio_frames_and_rate(path: &Path) -> Option<(u64, u32)> {
+    if let Ok(reader) = hound::WavReader::open(path) {
+        let spec = reader.spec();
+        let channels = (spec.channels as u64).max(1);
+        return Some((reader.len() as u64 / channels, spec.sample_rate));
+    }
+    if let Ok(file) = std::fs::File::open(path) {
+        let mut stream = std::io::BufReader::new(file);
+        if let Ok(reader) = aifc::AifcReader::new(&mut stream) {
+            let info = reader.info();
+            return Some((info.comm_num_sample_frames as u64, info.sample_rate as u32));
+        }
+    }
+    None
+}
+
+/// Computes `TRIM_BARSx100` attribute for a freshly-assigned sample to reproduce
+/// OT on-assign behavior: assume the whole sample is one 4/4 bar, then fold that tempo into one octave
+/// `[85, 170)` BPM by doubling/halving; bars = `duration * BPM / 240`. Samples shorter than one
+/// second use the 120 BPM default with no folding. OT does not write BPM per slot on
+/// assign, so only the trim length is returned. Returns None when frames/rate are unavailable.
+/// (validated against OT assigned samples and projects)
+fn compute_assign_timing(audio_file_path: &Path) -> Option<i64> {
+    let (frames, sample_rate) = audio_frames_and_rate(audio_file_path)?;
+    if frames == 0 || sample_rate == 0 {
+        return None;
+    }
+    let dur = frames as f64 / sample_rate as f64;
+    let bpm = if dur >= 1.0 {
+        let mut b = 240.0 / dur;
+        while b < 85.0 {
+            b *= 2.0;
+        }
+        while b >= 170.0 {
+            b /= 2.0;
+        }
+        b
+    } else {
+        120.0
+    };
+    Some((dur * bpm / 240.0 * 100.0).round() as i64)
 }
 
 /// Input for assigning audio files to sample slots.
@@ -4104,6 +4151,11 @@ pub fn assign_samples_to_slots(
 
         if a.set_defaults {
             fields.extend(default_attr_fields(&slot_type_upper));
+            // Compute the OT auto-detected TRIM_BARSx100 from the audio file so the slot matches
+            // the hardware on load. (The hardware writes no per-slot BPMx24 on assign.)
+            if let Some(trim_barsx100) = compute_assign_timing(&path.join(&a.audio_path)) {
+                fields.insert("TRIM_BARSX100".to_string(), trim_barsx100.to_string());
+            }
         }
 
         field_updates.insert((slot_type_upper.clone(), a.slot_index), fields);
@@ -18306,6 +18358,92 @@ mod tests {
             assert!(raw.contains("TSMODE=2"));
             assert!(raw.contains("LOOPMODE=1"));
             assert!(raw.contains("TRIGQUANTIZATION=-1"));
+        }
+
+        /// Write a silent mono 16-bit 44.1 kHz WAV with `frames` sample frames.
+        fn write_silent_wav(path: &Path, frames: u64) {
+            let spec = hound::WavSpec {
+                channels: 1,
+                sample_rate: 44100,
+                bits_per_sample: 16,
+                sample_format: hound::SampleFormat::Int,
+            };
+            let mut w = hound::WavWriter::create(path, spec).unwrap();
+            for _ in 0..frames {
+                w.write_sample(0i16).unwrap();
+            }
+            w.finalize().unwrap();
+        }
+
+        #[test]
+        fn test_compute_assign_timing_matches_hardware() {
+            // Reference cases verified against real Octatrack .ot files.
+            let dir = TempDir::new().unwrap();
+            let cases = [
+                // (frames, expected TRIM_BARSx100)
+                (247868u64, 200i64), // 240/dur folds 42.70 -> 85.40 BPM, 2 bars
+                (88200, 100),        // exactly 2.0s -> 120 BPM, 1 bar
+                (44100, 50),         // exactly 1.0s -> 240 folds to 120 BPM, 0.5 bar
+                (22050, 25),         // 0.5s (<1s) -> 120 BPM default, 0.25 bar
+            ];
+            for (i, (frames, exp_trim)) in cases.iter().enumerate() {
+                let wav = dir.path().join(format!("s{}.wav", i));
+                write_silent_wav(&wav, *frames);
+                let trim = compute_assign_timing(&wav).unwrap();
+                assert_eq!(trim, *exp_trim, "TRIM_BARSx100 for {} frames", frames);
+            }
+        }
+
+        #[test]
+        fn test_assign_writes_computed_timing() {
+            let dir = setup_project_for_assign(&[]);
+            let project_path = dir.path().to_str().unwrap();
+            // Place a real WAV inside the project dir so compute_assign_timing can read it.
+            write_silent_wav(&dir.path().join("kick.wav"), 247868);
+
+            assign_samples_to_slots(
+                project_path,
+                "FLEX",
+                vec![SlotAssignment {
+                    slot_index: 1,
+                    audio_path: "kick.wav".to_string(),
+                    set_defaults: true,
+                }],
+            )
+            .unwrap();
+
+            let raw = surgical_write_tests::read_raw_project_work(dir.path());
+            assert!(raw.contains("TRIM_BARSx100=200"), "raw was: {}", raw);
+            // The hardware writes no per-slot BPMx24 on assign; neither should we.
+            let start = raw.find("PATH=kick.wav").unwrap();
+            let block_end = raw[start..].find("[/SAMPLE]").unwrap();
+            assert!(!raw[start..start + block_end].contains("BPMx24="));
+        }
+
+        #[test]
+        fn test_assign_missing_audio_omits_timing() {
+            // When the audio file can't be read, timing fields are omitted (safe fallback).
+            let dir = setup_project_for_assign(&[]);
+            let project_path = dir.path().to_str().unwrap();
+
+            assign_samples_to_slots(
+                project_path,
+                "FLEX",
+                vec![SlotAssignment {
+                    slot_index: 1,
+                    audio_path: "../AUDIO/nonexistent.wav".to_string(),
+                    set_defaults: true,
+                }],
+            )
+            .unwrap();
+
+            // Inspect only the newly-created block for our slot.
+            let raw = surgical_write_tests::read_raw_project_work(dir.path());
+            let start = raw.find("PATH=../AUDIO/nonexistent.wav").unwrap();
+            let block_end = raw[start..].find("[/SAMPLE]").unwrap();
+            let block = &raw[start..start + block_end];
+            assert!(!block.contains("BPMx24="), "block was: {}", block);
+            assert!(!block.contains("TRIM_BARSx100="), "block was: {}", block);
         }
 
         #[test]

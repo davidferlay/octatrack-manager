@@ -102,7 +102,7 @@ pub fn list_directory(path: &str) -> Result<Vec<AudioFileInfo>, String> {
         let size = if is_directory {
             0
         } else if is_audio_file(&file_name) {
-            crate::project_reader::ot_pcm_data_size(&file_path).unwrap_or_else(|| metadata.len())
+            crate::project_reader::ot_pcm_data_size(&file_path).unwrap_or(metadata.len())
         } else {
             metadata.len()
         };
