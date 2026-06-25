@@ -4164,6 +4164,11 @@ pub fn assign_samples_to_slots(
     // Write all assignments in one batch
     replace_sample_fields_surgical(&project_file_path, &field_updates)?;
 
+    // Mirror the hardware: write each assigned slot's trim window (trim_end = sample frame
+    // count) into markers.work. The OT does NOT recompute trim_end on load, so without this the
+    // playback window is empty and the slot is silent even though it shows as assigned.
+    update_markers_trim_end(path, &slot_type_upper, &assignments)?;
+
     // Re-read the affected slots to return updated state
     let metadata = read_project_metadata(project_path)?;
     let all_slots = match slot_type_upper.as_str() {
@@ -4196,6 +4201,57 @@ pub fn assign_samples_to_slots(
         flex_ram_free_mb,
         flex_ram_free_bytes,
     })
+}
+
+/// Set each assigned slot's trim window in `markers.work` to match the audio, mirroring what the
+/// Octatrack writes on assign: `trim_offset = 0`, `trim_end = sample frame count`. The hardware
+/// computes this only at assign time and never recomputes it on load, so a slot left at the
+/// default `trim_end` (≈0) plays a near-empty window — i.e. silence. Slots whose audio can't be
+/// read are left untouched; a missing markers file is a no-op (malformed project). Slot indices
+/// are assumed pre-validated to 1..=128 by the caller.
+fn update_markers_trim_end(
+    project_dir: &Path,
+    slot_type_upper: &str,
+    assignments: &[SlotAssignment],
+) -> Result<(), String> {
+    let markers_path = if project_dir.join("markers.work").exists() {
+        project_dir.join("markers.work")
+    } else if project_dir.join("markers.strd").exists() {
+        project_dir.join("markers.strd")
+    } else {
+        return Ok(());
+    };
+
+    let mut markers = MarkersFile::from_data_file(&markers_path)
+        .map_err(|e| format!("Failed to read markers file: {:?}", e))?;
+
+    let mut modified = false;
+    for a in assignments {
+        let frames = match audio_frames_and_rate(&project_dir.join(&a.audio_path)) {
+            Some((f, _)) if f > 0 => f as u32,
+            _ => continue,
+        };
+        let idx = (a.slot_index - 1) as usize;
+        match slot_type_upper {
+            "FLEX" => {
+                markers.flex_slots[idx].trim_offset = 0;
+                markers.flex_slots[idx].trim_end = frames;
+            }
+            "STATIC" => {
+                markers.static_slots[idx].trim_offset = 0;
+                markers.static_slots[idx].trim_end = frames;
+            }
+            _ => continue,
+        }
+        modified = true;
+    }
+
+    if modified {
+        markers
+            .to_data_file(&markers_path)
+            .map_err(|e| format!("Failed to write markers file: {:?}", e))?;
+    }
+    Ok(())
 }
 
 /// Back up (into the project's `backups/` dir) then delete the sibling `.ot` attributes
@@ -18515,6 +18571,68 @@ mod tests {
             let start = raw.find("PATH=kick.wav").unwrap();
             let block_end = raw[start..].find("[/SAMPLE]").unwrap();
             assert!(!raw[start..start + block_end].contains("BPMx24="));
+        }
+
+        #[test]
+        fn test_assign_sets_markers_trim_end_to_frame_count() {
+            // Regression: app-assigned slots were silent on hardware because markers.work
+            // trim_end was left at its default instead of the sample's length. The OT does not
+            // recompute trim_end on load, so it must be written at assign time. Verified against
+            // a real hardware project: stored trim_end == the WAV's exact frame count.
+            let dir = setup_project_for_assign(&[]);
+            let project_path = dir.path().to_str().unwrap();
+            // Every real OT project has a markers.work; create a default one.
+            MarkersFile::default()
+                .to_data_file(&dir.path().join("markers.work"))
+                .unwrap();
+            let frames = 53059u64;
+            write_silent_wav(&dir.path().join("kick.wav"), frames);
+
+            assign_samples_to_slots(
+                project_path,
+                "FLEX",
+                vec![SlotAssignment {
+                    slot_index: 1,
+                    audio_path: "kick.wav".to_string(),
+                    set_defaults: true,
+                }],
+            )
+            .unwrap();
+
+            let markers = MarkersFile::from_data_file(&dir.path().join("markers.work")).unwrap();
+            assert_eq!(markers.flex_slots[0].trim_end, frames as u32);
+            assert_eq!(markers.flex_slots[0].trim_offset, 0);
+        }
+
+        #[test]
+        fn test_assign_replace_updates_static_markers_trim_end() {
+            // Replacing a sample (set_defaults=false keeps attributes) must still reset the trim
+            // window to the NEW sample's length, like the hardware — otherwise the slot keeps the
+            // previous sample's trim_end and plays the wrong length (or silence).
+            let dir = setup_project_for_assign(&[("STATIC", 4, "../AUDIO/old.wav")]);
+            let project_path = dir.path().to_str().unwrap();
+            // Pre-existing markers with a stale trim_end for STATIC slot 4 (0-based index 3).
+            let mut markers = MarkersFile::default();
+            markers.static_slots[3].trim_end = 999999;
+            markers
+                .to_data_file(&dir.path().join("markers.work"))
+                .unwrap();
+            let frames = 73024u64;
+            write_silent_wav(&dir.path().join("bass.wav"), frames);
+
+            assign_samples_to_slots(
+                project_path,
+                "STATIC",
+                vec![SlotAssignment {
+                    slot_index: 4,
+                    audio_path: "bass.wav".to_string(),
+                    set_defaults: false,
+                }],
+            )
+            .unwrap();
+
+            let markers = MarkersFile::from_data_file(&dir.path().join("markers.work")).unwrap();
+            assert_eq!(markers.static_slots[3].trim_end, frames as u32);
         }
 
         #[test]
