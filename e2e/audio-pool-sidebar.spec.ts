@@ -166,7 +166,7 @@ test.describe('Audio Pool sidebar in Flex slots', () => {
     // First slot F1 has a sample in the mock
     const row = page.locator('.samples-table tbody tr').first()
     await row.click({ button: 'right' })
-    await expect(page.getByText('Clear sample', { exact: true })).toBeVisible()
+    await expect(page.getByText('Clear sample assignment', { exact: true })).toBeVisible()
     await expect(page.getByText('Reset attributes to defaults', { exact: true })).toBeVisible()
     // Combined action is offered for a slot that has a sample.
     await expect(page.getByText('Clear sample & reset attributes', { exact: true })).toBeVisible()
@@ -182,7 +182,7 @@ test.describe('Audio Pool sidebar in Flex slots', () => {
     await emptyRow.click({ button: 'right' })
     // Attributes are tied to the slot, so reset is available even with no sample assigned.
     await expect(page.getByText('Reset attributes to defaults', { exact: true })).toBeVisible()
-    await expect(page.getByText('Clear sample', { exact: true })).toBeVisible()
+    await expect(page.getByText('Clear sample assignment', { exact: true })).toBeVisible()
   })
 
   test('right-clicking a pool file shows "Assign to first empty slot"', async ({ page }) => {

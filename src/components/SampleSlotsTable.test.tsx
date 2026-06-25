@@ -293,7 +293,7 @@ describe('SampleSlotsTable — slot context menu & Audio Pool page button', () =
     )
     const row = screen.getByText('kick.wav').closest('tr')!
     fireEvent.contextMenu(row)
-    const clear = screen.getByText('Clear sample')
+    const clear = screen.getByText('Clear sample assignment')
     expect(clear).toBeDisabled()
     expect(screen.getByText('Reset attributes to defaults')).toBeDisabled()
     expect(clear.getAttribute('title')).toMatch(/Toggle Edit mode/i)
@@ -335,7 +335,7 @@ describe('SampleSlotsTable — slot context menu & Audio Pool page button', () =
     )
     const row = screen.getByText('kick.wav').closest('tr')!
     fireEvent.contextMenu(row)
-    await userEvent.click(screen.getByText('Clear sample'))
+    await userEvent.click(screen.getByText('Clear sample assignment'))
 
     await waitFor(() =>
       expect(mockInvoke).toHaveBeenCalledWith('clear_sample_keep_attributes', expect.objectContaining({ path: '/proj', slotType: 'FLEX', slotIndices: [1] }))
@@ -367,7 +367,7 @@ describe('SampleSlotsTable — slot context menu & Audio Pool page button', () =
     fireEvent.click(screen.getByText('kick.wav').closest('tr')!) // select F1
     fireEvent.click(screen.getByText('snare.wav').closest('tr')!, { ctrlKey: true }) // add F3
     fireEvent.contextMenu(screen.getByText('kick.wav').closest('tr')!)
-    await userEvent.click(screen.getByText('Clear samples')) // plural label when multi-selected
+    await userEvent.click(screen.getByText('Clear sample assignments')) // plural label when multi-selected
     await waitFor(() =>
       expect(mockInvoke).toHaveBeenCalledWith('clear_sample_keep_attributes', expect.objectContaining({ slotIndices: [1, 3] }))
     )
@@ -410,6 +410,24 @@ describe('SampleSlotsTable — slot context menu & Audio Pool page button', () =
       expect(mockInvoke).toHaveBeenCalledWith('reset_slot_attributes', expect.objectContaining({ slotIndices: [1] }))
       expect(mockInvoke).toHaveBeenCalledWith('clear_sample_slots', expect.objectContaining({ slotIndices: [1] }))
     })
+  })
+
+  it('"Clear sample & reset attributes" deletes the lingering block of an already-cleared slot (no path)', async () => {
+    // PATH blanked but attributes still present → a [SAMPLE] block lingers and should be deletable.
+    const cleared = [{ ...mockSlots[0], path: null }]
+    mockInvoke.mockResolvedValue({ assigned_count: 1, updated_slots: [], flex_ram_free_mb: 90 })
+    renderWithProvider(
+      <SampleSlotsTable slots={cleared} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    fireEvent.contextMenu(screen.getByText('F1').closest('tr')!)
+    const item = screen.getByText('Clear sample & reset attributes')
+    expect(item).not.toBeDisabled()
+    await userEvent.click(item)
+    await waitFor(() =>
+      expect(mockInvoke).toHaveBeenCalledWith('clear_sample_slots', expect.objectContaining({ slotIndices: [1] }))
+    )
+    // No sample assigned, so there is no sibling .ot to delete.
+    expect(mockInvoke).not.toHaveBeenCalledWith('reset_slot_attributes', expect.anything())
   })
 
   it('Delete on a slot without a sample resets its attributes (instead of clearing)', async () => {

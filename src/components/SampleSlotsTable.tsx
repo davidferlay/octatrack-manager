@@ -110,6 +110,12 @@ interface SampleSlotsTableProps {
 type SortColumn = 'slot' | 'sample' | 'status' | 'source' | 'gain' | 'timestretch' | 'loop' | 'compatibility' | 'format' | 'bitdepth' | 'samplerate' | 'size';
 type SortDirection = 'asc' | 'desc';
 
+// A slot "has a [SAMPLE] block" in the project file when it references a sample or carries any
+// slot-tied attribute. Truly-empty slots (never assigned, no stored attributes) have all null.
+function slotHasBlock(s: SampleSlot): boolean {
+  return !!s.path || s.gain != null || s.loop_mode != null || s.timestretch_mode != null;
+}
+
 // Helper function to extract filename from path
 function getFilename(path: string | null): string {
   if (!path) return '';
@@ -416,23 +422,29 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     }
   }, [isEditMode, projectPath, slotType, onSlotsUpdated, onFlexRamUpdated]);
 
-  // Clear the sample AND reset attributes to defaults for every given slot that has a sample:
-  // resets attributes (also backs up + deletes any sibling .ot), then removes the slot block
-  // entirely so the slot returns to the hardware's fully-empty state.
+  // Delete the entire [SAMPLE] block for every target slot that has one, returning it to the
+  // hardware's fully-empty state (no sample, attributes back to OT defaults). For slots still
+  // referencing a sample, first back up + delete the sibling .ot so it can't re-impose attributes
+  // if that audio is assigned again later. Works even on already-cleared slots (blank PATH but a
+  // lingering block) — the block is dropped regardless.
   const clearAndResetSlots = useCallback(async (targets: SampleSlot[]) => {
     if (!isEditMode || !projectPath) return;
-    const ids = targets.filter(s => s.path).map(s => s.slot_id);
+    const blocks = targets.filter(slotHasBlock);
+    const ids = blocks.map(s => s.slot_id);
     if (ids.length === 0) return;
+    const filledIds = blocks.filter(s => s.path).map(s => s.slot_id);
     setIsAssigning(true);
     try {
-      await invoke("reset_slot_attributes", { path: projectPath, slotType, slotIndices: ids });
+      if (filledIds.length > 0) {
+        await invoke("reset_slot_attributes", { path: projectPath, slotType, slotIndices: filledIds });
+      }
       const result = await invoke<AssignSamplesResult>("clear_sample_slots", {
         path: projectPath, slotType, slotIndices: ids,
       });
       if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
       if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb, result.flex_ram_free_bytes);
     } catch (error) {
-      console.error("Error clearing + resetting sample slot(s):", error);
+      console.error("Error deleting sample slot block(s):", error);
     } finally {
       setIsAssigning(false);
     }
@@ -1786,7 +1798,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
           title={!isEditMode ? 'Toggle Edit mode to modify slots' : undefined}
           onClick={() => { clearSlots(menuTargetSlots(slotMenu.slot)); setSlotMenu(null); }}
         >
-          <i className="fas fa-eraser"></i> {selectedSlots.size > 1 && selectedSlots.has(slotMenu.slot.slot_id) ? 'Clear samples' : 'Clear sample'}
+          <i className="fas fa-eraser"></i> {selectedSlots.size > 1 && selectedSlots.has(slotMenu.slot.slot_id) ? 'Clear sample assignments' : 'Clear sample assignment'}
         </button>
         <button
           className="context-menu-item"
@@ -1798,7 +1810,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         </button>
         <button
           className="context-menu-item"
-          disabled={!isEditMode || !slotMenu.slot.path}
+          disabled={!isEditMode || !slotHasBlock(slotMenu.slot)}
           title={!isEditMode ? 'Toggle Edit mode to modify slots' : undefined}
           onClick={() => { clearAndResetSlots(menuTargetSlots(slotMenu.slot)); setSlotMenu(null); }}
         >
