@@ -22,6 +22,7 @@ const mockSlots = [
     file_format: 'WAV',
     bit_depth: 16,
     sample_rate: 44100,
+    attributes_at_default: false,
   },
   {
     slot_id: 2,
@@ -36,6 +37,7 @@ const mockSlots = [
     file_format: null,
     bit_depth: null,
     sample_rate: null,
+    attributes_at_default: true,
   },
   {
     slot_id: 3,
@@ -50,6 +52,7 @@ const mockSlots = [
     file_format: 'AIFF',
     bit_depth: 24,
     sample_rate: 44100,
+    attributes_at_default: false,
   },
 ]
 
@@ -319,11 +322,19 @@ describe('SampleSlotsTable — slot context menu & Audio Pool page button', () =
     expect(screen.getByText(/Open in file explorer/i)).toBeDisabled()
   })
 
-  it('enables "Reset attributes" for an empty slot in edit mode (attributes are slot-tied)', async () => {
+  it('disables "Reset attributes" when the slot attributes already equal defaults', async () => {
     renderWithProvider(
       <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
     )
-    fireEvent.contextMenu(screen.getByText('F2').closest('tr')!) // empty slot
+    fireEvent.contextMenu(screen.getByText('F2').closest('tr')!) // empty slot, attributes_at_default
+    expect(screen.getByText('Reset attributes to defaults')).toBeDisabled()
+  })
+
+  it('enables "Reset attributes" only when attributes differ from defaults', async () => {
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    fireEvent.contextMenu(screen.getByText('kick.wav').closest('tr')!) // F1: attributes_at_default false
     expect(screen.getByText('Reset attributes to defaults')).not.toBeDisabled()
   })
 

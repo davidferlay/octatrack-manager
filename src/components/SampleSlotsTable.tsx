@@ -61,6 +61,7 @@ interface SampleSlot {
   bit_depth: number | null; // 16, 24, etc.
   sample_rate: number | null; // 44100, 48000, etc.
   ot_size_bytes?: number | null; // PCM data size as the OT measures it
+  attributes_at_default?: boolean; // audio-editor attributes equal OT defaults (reset is a no-op)
 }
 
 interface MemorySettings {
@@ -1794,6 +1795,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
       >
         <button
           className="context-menu-item"
+          disabled={!isEditMode || !slotHasBlock(slotMenu.slot)}
+          title={!isEditMode ? 'Toggle Edit mode to modify slots' : undefined}
+          onClick={() => { clearAndResetSlots(menuTargetSlots(slotMenu.slot)); setSlotMenu(null); }}
+        >
+          <i className="fas fa-trash"></i> {selectedSlots.size > 1 && selectedSlots.has(slotMenu.slot.slot_id) ? 'Clear samples & reset attributes' : 'Clear sample & reset attributes'}
+        </button>
+        <button
+          className="context-menu-item"
           disabled={!isEditMode || !slotMenu.slot.path}
           title={!isEditMode ? 'Toggle Edit mode to modify slots' : undefined}
           onClick={() => { clearSlots(menuTargetSlots(slotMenu.slot)); setSlotMenu(null); }}
@@ -1802,19 +1811,11 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         </button>
         <button
           className="context-menu-item"
-          disabled={!isEditMode}
-          title={!isEditMode ? 'Toggle Edit mode to modify slots' : undefined}
+          disabled={!isEditMode || slotMenu.slot.attributes_at_default}
+          title={!isEditMode ? 'Toggle Edit mode to modify slots' : (slotMenu.slot.attributes_at_default ? 'Attributes already at defaults' : undefined)}
           onClick={() => { resetSlotsAttributes(menuTargetSlots(slotMenu.slot)); setSlotMenu(null); }}
         >
           <i className="fas fa-rotate-left"></i> Reset attributes to defaults
-        </button>
-        <button
-          className="context-menu-item"
-          disabled={!isEditMode || !slotHasBlock(slotMenu.slot)}
-          title={!isEditMode ? 'Toggle Edit mode to modify slots' : undefined}
-          onClick={() => { clearAndResetSlots(menuTargetSlots(slotMenu.slot)); setSlotMenu(null); }}
-        >
-          <i className="fas fa-trash"></i> {selectedSlots.size > 1 && selectedSlots.has(slotMenu.slot.slot_id) ? 'Clear samples & reset attributes' : 'Clear sample & reset attributes'}
         </button>
         <div className="context-menu-separator"></div>
         <button

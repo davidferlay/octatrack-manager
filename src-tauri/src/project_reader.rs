@@ -114,6 +114,7 @@ pub struct SampleSlot {
     pub bit_depth: Option<u32>,        // 16, 24, etc.
     pub sample_rate: Option<u32>,      // 44100, 48000, etc.
     pub ot_size_bytes: Option<u64>, // PCM data size as the OT measures it (None if empty/unparsable)
+    pub attributes_at_default: bool, // true => audio-editor attributes equal OT defaults (reset is a no-op)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -741,6 +742,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                         static_slots.push(SampleSlot {
                             slot_id,
                             slot_type: "Static".to_string(),
+                            attributes_at_default: slot_attributes_at_default(slot),
                             path: Some(path_str),
                             gain: Some(slot.gain),
                             loop_mode: Some(format!("{:?}", slot.loop_mode)),
@@ -762,6 +764,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                         static_slots.push(SampleSlot {
                             slot_id,
                             slot_type: "Static".to_string(),
+                            attributes_at_default: slot_attributes_at_default(slot),
                             path: None,
                             gain: Some(slot.gain),
                             loop_mode: Some(format!("{:?}", slot.loop_mode)),
@@ -780,6 +783,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                     static_slots.push(SampleSlot {
                         slot_id,
                         slot_type: "Static".to_string(),
+                        attributes_at_default: true,
                         path: None,
                         gain: None,
                         loop_mode: None,
@@ -829,6 +833,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                         flex_slots.push(SampleSlot {
                             slot_id,
                             slot_type: "Flex".to_string(),
+                            attributes_at_default: slot_attributes_at_default(slot),
                             path: Some(path_str),
                             gain: Some(slot.gain),
                             loop_mode: Some(format!("{:?}", slot.loop_mode)),
@@ -850,6 +855,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                         flex_slots.push(SampleSlot {
                             slot_id,
                             slot_type: "Flex".to_string(),
+                            attributes_at_default: slot_attributes_at_default(slot),
                             path: None,
                             gain: Some(slot.gain),
                             loop_mode: Some(format!("{:?}", slot.loop_mode)),
@@ -868,6 +874,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                     flex_slots.push(SampleSlot {
                         slot_id,
                         slot_type: "Flex".to_string(),
+                        attributes_at_default: true,
                         path: None,
                         gain: None,
                         loop_mode: None,
@@ -4019,6 +4026,21 @@ fn default_attr_fields(slot_type_upper: &str) -> std::collections::HashMap<Strin
     f.insert("BPMX24".to_string(), FIELD_DELETE.to_string());
     f.insert("TRIM_BARSX100".to_string(), FIELD_DELETE.to_string());
     f
+}
+
+/// True when a slot's audio-editor attributes (gain, timestretch, loop, trig quantization) all
+/// equal the OT assign-time defaults — i.e. "Reset attributes to defaults" would be a no-op.
+/// Defaults: GAIN=48, TSMODE=2 (Normal), TRIGQUANTIZATION=-1 (Direct=255), and LOOPMODE 1 (Normal)
+/// for Flex / 0 (Off) for Static. Trim/BPM timing is not treated as an attribute here.
+fn slot_attributes_at_default(slot: &SlotAttributes) -> bool {
+    let default_loop = match slot.slot_type {
+        SlotType::Flex => 1u8,
+        SlotType::Static => 0u8,
+    };
+    slot.gain == 48
+        && slot.timestrech_mode as u8 == 2
+        && slot.loop_mode as u8 == default_loop
+        && slot.trig_quantization_mode as u8 == 255
 }
 
 /// Read (frame count, sample rate) from a WAV or AIFF file. Returns None if unreadable.
@@ -18513,6 +18535,77 @@ mod tests {
             assert!(raw.contains("TRIGQUANTIZATION=-1"));
         }
 
+        #[test]
+        fn test_slot_attributes_at_default() {
+            // Flex defaults: gain 48, TS Normal(2), Loop Normal(1), TrigQuant Direct(-1).
+            let flex_def = SlotAttributes::new(
+                SlotType::Flex,
+                1,
+                None,
+                None,
+                Some(LoopMode::Normal),
+                None,
+                Some(48),
+                None,
+            )
+            .unwrap();
+            assert!(slot_attributes_at_default(&flex_def));
+
+            // Static defaults differ only in loop mode: Off(0).
+            let static_def = SlotAttributes::new(
+                SlotType::Static,
+                1,
+                None,
+                None,
+                Some(LoopMode::Off),
+                None,
+                Some(48),
+                None,
+            )
+            .unwrap();
+            assert!(slot_attributes_at_default(&static_def));
+
+            // Any deviation from default => not at default.
+            let gain_changed = SlotAttributes::new(
+                SlotType::Flex,
+                1,
+                None,
+                None,
+                Some(LoopMode::Normal),
+                None,
+                Some(50),
+                None,
+            )
+            .unwrap();
+            assert!(!slot_attributes_at_default(&gain_changed));
+
+            let loop_changed = SlotAttributes::new(
+                SlotType::Flex,
+                1,
+                None,
+                None,
+                Some(LoopMode::Off),
+                None,
+                Some(48),
+                None,
+            )
+            .unwrap();
+            assert!(!slot_attributes_at_default(&loop_changed));
+
+            let tq_changed = SlotAttributes::new(
+                SlotType::Flex,
+                1,
+                None,
+                None,
+                Some(LoopMode::Normal),
+                Some(TrigQuantizationMode::PatternLength),
+                Some(48),
+                None,
+            )
+            .unwrap();
+            assert!(!slot_attributes_at_default(&tq_changed));
+        }
+
         /// Write a silent mono 16-bit 44.1 kHz WAV with `frames` sample frames.
         fn write_silent_wav(path: &Path, frames: u64) {
             let spec = hound::WavSpec {
@@ -18633,6 +18726,53 @@ mod tests {
 
             let markers = MarkersFile::from_data_file(&dir.path().join("markers.work")).unwrap();
             assert_eq!(markers.static_slots[3].trim_end, frames as u32);
+        }
+
+        #[test]
+        fn test_attributes_at_default_flows_through_metadata() {
+            let dir = setup_project_for_assign(&[]);
+            let project_path = dir.path().to_str().unwrap();
+
+            // Freshly assigned with defaults => slot reports attributes at default.
+            let res = assign_samples_to_slots(
+                project_path,
+                "FLEX",
+                vec![SlotAssignment {
+                    slot_index: 1,
+                    audio_path: "../AUDIO/kick.wav".to_string(),
+                    set_defaults: true,
+                }],
+            )
+            .unwrap();
+            assert!(res.updated_slots[0].attributes_at_default);
+
+            // Change one attribute (gain) => no longer at default.
+            let mut fields = std::collections::HashMap::new();
+            fields.insert("GAIN".to_string(), "60".to_string());
+            let mut updates = std::collections::HashMap::new();
+            updates.insert(("FLEX".to_string(), 1u16), fields);
+            replace_sample_fields_surgical(&dir.path().join("project.work"), &updates).unwrap();
+
+            let meta = read_project_metadata(project_path).unwrap();
+            let slot1 = meta
+                .sample_slots
+                .flex_slots
+                .iter()
+                .find(|s| s.slot_id == 1)
+                .unwrap();
+            assert!(
+                !slot1.attributes_at_default,
+                "changed gain should not be at default"
+            );
+
+            // A never-assigned (truly empty) slot is treated as at default (reset is a no-op).
+            let empty = meta
+                .sample_slots
+                .flex_slots
+                .iter()
+                .find(|s| s.slot_id == 2)
+                .unwrap();
+            assert!(empty.attributes_at_default);
         }
 
         #[test]
