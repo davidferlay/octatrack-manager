@@ -227,9 +227,9 @@ pub struct TrackInfo {
     pub per_track_len: Option<u8>,       // Track length in per-track mode
     pub per_track_scale: Option<String>, // Track scale in per-track mode
     pub pattern_settings: TrackSettings,
-    pub trig_counts: TrigCounts,  // Per-track trig statistics
-    pub steps: Vec<TrigStep>,     // Per-step trig information (64 steps)
-    pub default_note: Option<u8>, // Default note for MIDI tracks (0-127)
+    pub trig_counts: TrigCounts,          // Per-track trig statistics
+    pub steps: Vec<TrigStep>,             // Per-step trig information (64 steps)
+    pub default_note: Option<u8>,         // Default note for MIDI tracks (0-127)
     pub assigned_sample_slot: Option<u8>, // Part-assigned sample slot for this track (1-based); None for MIDI / non-sample machines
 }
 

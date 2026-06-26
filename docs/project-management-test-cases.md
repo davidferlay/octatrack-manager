@@ -9,6 +9,7 @@
 | PM2 | Context Menu | Right-click set header | Right-click on a Set header area | Context menu appears with: Copy Set, Rename Set, New Project, Open in File Manager, Copy path to clipboard, Delete Set |
 | PM3 | Context Menu | Right-click set area | Right-click on the Set card background (not on a project card) | Context menu appears with: Copy Set, Rename Set, New Project, Open in File Manager, Copy path to clipboard, Delete Set |
 | PM4 | Context Menu | Right-click grid background | Right-click on the projects-grid background (between cards) | Context menu appears with: Copy Set, Rename Set, New Project, Open in File Manager, Copy path to clipboard, Delete Set |
+| PM100 | Context Menu | Right-click "New project" card | Right-click on the "New Project" card inside a set | Set context menu appears (Copy Set, Rename Set, New Project, ...), same as right-clicking the set background |
 | PM5 | Context Menu | Paste project appears after copy | Copy a project, then right-click set header | "Paste Project" option appears alongside other Set actions |
 | PM6 | Context Menu | No paste on project card | Copy a project, then right-click another project card | No "Paste Project" option in the menu |
 | PM7 | Context Menu | Right-click location header | Right-click on a location header | Context menu appears with: New Set, Open in File Manager |
@@ -137,3 +138,7 @@
 | **Copy path to clipboard** | | | | |
 | PM107 | Clipboard | Copy project path | Right-click a project → Copy path to clipboard | The project's absolute folder path is placed on the system clipboard |
 | PM108 | Clipboard | Copy set path | Right-click a Set header → Copy path to clipboard | The Set's absolute folder path is placed on the system clipboard |
+| **Pattern Detail / Overview** | | | | |
+| PM109 | Pattern Detail | Sample Slot shown for normal trigs | Open a pattern, select a step that has a normal sample trig (Trigger) on an audio track | Step details show "Sample Slot: N" = the track's part-assigned slot (1-based), same as for p-locked steps |
+| PM110 | Pattern Detail | Sample p-lock overrides shown slot | Select a step with a sample-lock p-lock | "Sample Slot:" shows the p-locked slot number, not the part-assigned one |
+| PM111 | Overview | Tempo shows one decimal | Open the Overview tab | Tempo displays with one decimal place (e.g. "120.0 BPM", "143.5 BPM") |
