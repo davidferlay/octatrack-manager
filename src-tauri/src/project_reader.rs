@@ -214,7 +214,7 @@ pub struct TrigStep {
     pub notes: Vec<u8>, // MIDI note values (up to 4 notes for chords on MIDI tracks)
     pub velocity: Option<u8>, // Velocity/level value (0-127)
     pub plock_count: u8, // Number of parameter locks on this step
-    pub sample_slot: Option<u8>, // Sample slot ID if locked (audio tracks)
+    pub sample_slot: Option<u8>, // Sample slot ID if locked (audio tracks), 1-based for display
     pub audio_plocks: Option<AudioParameterLocks>, // Audio parameter locks (audio tracks only)
     pub midi_plocks: Option<MidiParameterLocks>, // MIDI parameter locks (MIDI tracks only)
 }
@@ -1557,11 +1557,13 @@ fn read_project_banks_internal(
                                 let plock = &audio_track.plocks.0[step];
                                 let plock_count = count_audio_plocks(plock);
 
-                                // Get sample slot if locked
-                                let sample_slot = if plock.static_slot_id != 255 {
-                                    Some(plock.static_slot_id)
-                                } else if plock.flex_slot_id != 255 {
-                                    Some(plock.flex_slot_id)
+                                // Get sample slot if locked. The per-trig sample
+                                // lock is stored in `flex_slot_id` (0-based) for
+                                // both static and flex machines; the pool follows
+                                // the track's machine type. Expose it 1-based to
+                                // match the slot numbering shown everywhere else.
+                                let sample_slot = if plock.flex_slot_id != 255 {
+                                    Some(plock.flex_slot_id + 1)
                                 } else {
                                     None
                                 };
@@ -14215,6 +14217,33 @@ mod tests {
             let bank = read_single_bank(&project.path, 0).unwrap().unwrap();
 
             assert_eq!(bank.parts.len(), 4, "Bank should have 4 parts");
+        }
+
+        #[test]
+        fn test_sample_lock_slot_displayed_one_based() {
+            // A sample lock stored as flex_slot_id = 4 (0-based) is UI slot #5.
+            let project = TestProject::with_modified_bank(0, |bank| {
+                bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[4].flex_slot_id = 4;
+            });
+            let bank = read_single_bank(&project.path, 0).unwrap().unwrap();
+
+            let mut found = None;
+            for part in &bank.parts {
+                for pattern in &part.patterns {
+                    for track in &pattern.tracks {
+                        for step in &track.steps {
+                            if step.sample_slot.is_some() {
+                                found = step.sample_slot;
+                            }
+                        }
+                    }
+                }
+            }
+            assert_eq!(
+                found,
+                Some(5),
+                "Sample-lock slot must be displayed 1-based (stored 4 -> shown 5)"
+            );
         }
 
         #[test]
