@@ -5143,8 +5143,10 @@ fn collect_referenced_slots(
             let machine_type = bank.parts.unsaved.0[part_idx].audio_track_machine_types[track_idx];
             let track_trigs = &pattern.audio_track_trigs.0[track_idx];
             for step_idx in 0..64 {
+                // 255 = no lock. 0 is a real lock to slot #1 (values are
+                // 0-based), so only 255 is excluded.
                 let lock = track_trigs.plocks.0[step_idx].flex_slot_id;
-                if lock != 255 && lock != 0 {
+                if lock != 255 {
                     match machine_type {
                         0 => {
                             static_slots.insert(lock);
@@ -5444,8 +5446,9 @@ fn remap_bank_slot_references(
                 .plocks
                 .0;
             for step_idx in 0..64 {
+                // 255 = no lock; 0 is a real lock to slot #1 (0-based values).
                 let plock = &mut plocks[step_idx];
-                if plock.flex_slot_id != 255 && plock.flex_slot_id != 0 {
+                if plock.flex_slot_id != 255 {
                     if let Some(&new_id) = remap.get(&plock.flex_slot_id) {
                         plock.flex_slot_id = new_id;
                     }
@@ -8586,6 +8589,49 @@ mod tests {
             assert_eq!(
                 bank.patterns.0[0].audio_track_trigs.0[5].plocks.0[20].flex_slot_id, 255,
                 "No-lock sentinel should NOT be remapped"
+            );
+        }
+
+        #[test]
+        fn test_collect_referenced_slots_plock_to_slot_one() {
+            // A lock to slot #1 is stored as flex_slot_id = 0 (only 255 means
+            // "no lock"), so it must be collected, not skipped.
+            let project = TestProject::with_modified_bank(0, |bank| {
+                bank.patterns.0[0].part_assignment = 0;
+                bank.parts.unsaved.0[0].audio_track_machine_types[1] = 1; // Flex
+                bank.patterns.0[0].audio_track_trigs.0[1].plocks.0[3].flex_slot_id = 0;
+            });
+
+            let bank = BankFile::from_data_file(
+                &std::path::PathBuf::from(&project.path).join("bank01.work"),
+            )
+            .unwrap();
+            let (_static_slots, flex_slots) = collect_referenced_slots(&bank);
+
+            assert!(
+                flex_slots.contains(&0),
+                "Lock to slot #1 (stored 0) must be collected as a flex reference"
+            );
+        }
+
+        #[test]
+        fn test_remap_bank_slot_references_plock_to_slot_one() {
+            // A lock to slot #1 (stored 0) must follow the remap, not be skipped.
+            let project = TestProject::with_modified_bank(0, |bank| {
+                bank.patterns.0[0].part_assignment = 0;
+                bank.parts.unsaved.0[0].audio_track_machine_types[1] = 1; // Flex
+                bank.patterns.0[0].audio_track_trigs.0[1].plocks.0[3].flex_slot_id = 0;
+            });
+
+            let bank_path = std::path::PathBuf::from(&project.path).join("bank01.work");
+            let mut bank = BankFile::from_data_file(&bank_path).unwrap();
+
+            let flex_remap: HashMap<u8, u8> = [(0, 7)].into_iter().collect();
+            remap_bank_slot_references(&mut bank, &HashMap::new(), &flex_remap);
+
+            assert_eq!(
+                bank.patterns.0[0].audio_track_trigs.0[1].plocks.0[3].flex_slot_id, 7,
+                "Lock to slot #1 (stored 0) must be remapped 0 -> 7"
             );
         }
     }
