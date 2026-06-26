@@ -5128,18 +5128,30 @@ fn collect_referenced_slots(
         }
     }
 
-    // Scan Pattern p-locks (sample locks per trig)
+    // Scan Pattern p-locks (sample locks per trig).
+    //
+    // The per-trig sample lock is stored in `flex_slot_id` regardless of the
+    // track's machine type; the slot POOL (static vs flex) is determined by the
+    // machine type of the part the pattern uses. So route the locked slot to the
+    // correct pool by looking up that machine type.
     for pattern_idx in 0..16 {
         let pattern = &bank.patterns.0[pattern_idx];
+        let part_idx = (pattern.part_assignment as usize).min(3);
         for track_idx in 0..8 {
+            let machine_type = bank.parts.unsaved.0[part_idx].audio_track_machine_types[track_idx];
             let track_trigs = &pattern.audio_track_trigs.0[track_idx];
             for step_idx in 0..64 {
-                let plock = &track_trigs.plocks.0[step_idx];
-                if plock.static_slot_id != 255 && plock.static_slot_id != 0 {
-                    static_slots.insert(plock.static_slot_id);
-                }
-                if plock.flex_slot_id != 255 && plock.flex_slot_id != 0 {
-                    flex_slots.insert(plock.flex_slot_id);
+                let lock = track_trigs.plocks.0[step_idx].flex_slot_id;
+                if lock != 255 && lock != 0 {
+                    match machine_type {
+                        0 => {
+                            static_slots.insert(lock);
+                        }
+                        1 => {
+                            flex_slots.insert(lock);
+                        }
+                        _ => {} // Thru, Neighbor, Pickup — no sample slot
+                    }
                 }
             }
         }
@@ -5380,7 +5392,8 @@ fn build_remap_table(
 ///
 /// Updates:
 /// - Parts: audio_track_machine_slots[track].static_slot_id / flex_slot_id
-/// - Patterns: AudioTrackParameterLocks.static_slot_id / flex_slot_id (p-locks)
+/// - Patterns: per-trig sample locks (stored in `flex_slot_id`), routed to the
+///   static or flex remap by the machine type of the part the pattern uses.
 ///
 /// Does NOT touch recorder_slot_id.
 /// Skips 0 (unassigned) for Parts and 255 (no lock) for p-locks.
@@ -5410,20 +5423,28 @@ fn remap_bank_slot_references(
         }
     }
 
-    // Remap Pattern p-locks
+    // Remap Pattern p-locks (sample locks).
+    //
+    // The per-trig sample lock is stored in `flex_slot_id`; the slot POOL is
+    // chosen by the machine type of the part the pattern uses. Remap through the
+    // matching table so a STATIC-machine track follows the static remap and a
+    // FLEX-machine track follows the flex remap.
     for pattern_idx in 0..16 {
-        let pattern = &mut bank.patterns.0[pattern_idx];
+        let part_idx = (bank.patterns.0[pattern_idx].part_assignment as usize).min(3);
         for track_idx in 0..8 {
-            let track_trigs = &mut pattern.audio_track_trigs.0[track_idx];
+            let machine_type = bank.parts.unsaved.0[part_idx].audio_track_machine_types[track_idx];
+            let remap = match machine_type {
+                0 => static_remap,
+                1 => flex_remap,
+                _ => continue, // Thru, Neighbor, Pickup — no sample slot
+            };
+            let plocks = &mut bank.patterns.0[pattern_idx].audio_track_trigs.0[track_idx]
+                .plocks
+                .0;
             for step_idx in 0..64 {
-                let plock = &mut track_trigs.plocks.0[step_idx];
-                if plock.static_slot_id != 255 && plock.static_slot_id != 0 {
-                    if let Some(&new_id) = static_remap.get(&plock.static_slot_id) {
-                        plock.static_slot_id = new_id;
-                    }
-                }
+                let plock = &mut plocks[step_idx];
                 if plock.flex_slot_id != 255 && plock.flex_slot_id != 0 {
-                    if let Some(&new_id) = flex_remap.get(&plock.flex_slot_id) {
+                    if let Some(&new_id) = remap.get(&plock.flex_slot_id) {
                         plock.flex_slot_id = new_id;
                     }
                 }
@@ -8342,10 +8363,16 @@ mod tests {
 
         #[test]
         fn test_collect_referenced_slots_from_plocks() {
+            // Sample locks are stored in `flex_slot_id`; the pool is decided by
+            // the track's machine type in the part the pattern uses.
             let project = TestProject::with_modified_bank(0, |bank| {
-                // Add a p-lock on pattern 0, track 0, step 5
-                bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[5].static_slot_id = 42;
-                bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[10].flex_slot_id = 77;
+                bank.patterns.0[0].part_assignment = 0;
+                // Track 0 = STATIC machine -> lock counts as a static reference
+                bank.parts.unsaved.0[0].audio_track_machine_types[0] = 0;
+                bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[5].flex_slot_id = 42;
+                // Track 1 = FLEX machine -> lock counts as a flex reference
+                bank.parts.unsaved.0[0].audio_track_machine_types[1] = 1;
+                bank.patterns.0[0].audio_track_trigs.0[1].plocks.0[10].flex_slot_id = 77;
             });
 
             let bank = BankFile::from_data_file(
@@ -8521,31 +8548,41 @@ mod tests {
 
         #[test]
         fn test_remap_bank_slot_references_plocks() {
+            // The per-trig sample lock is always stored in `flex_slot_id`; the
+            // slot POOL (static vs flex) is chosen by the machine type of the
+            // part the pattern uses — not by which field holds the value.
             let project = TestProject::with_modified_bank(0, |bank| {
-                bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[5].static_slot_id = 42;
-                bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[10].flex_slot_id = 77;
+                bank.patterns.0[0].part_assignment = 0;
+                // Track 3 = STATIC machine -> lock indexes the static pool
+                bank.parts.unsaved.0[0].audio_track_machine_types[3] = 0;
+                bank.patterns.0[0].audio_track_trigs.0[3].plocks.0[5].flex_slot_id = 42;
+                // Track 4 = FLEX machine -> lock indexes the flex pool
+                bank.parts.unsaved.0[0].audio_track_machine_types[4] = 1;
+                bank.patterns.0[0].audio_track_trigs.0[4].plocks.0[10].flex_slot_id = 77;
                 // 255 = no lock — should NOT be remapped
-                bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[20].static_slot_id = 255;
+                bank.patterns.0[0].audio_track_trigs.0[5].plocks.0[20].flex_slot_id = 255;
             });
 
             let bank_path = std::path::PathBuf::from(&project.path).join("bank01.work");
             let mut bank = BankFile::from_data_file(&bank_path).unwrap();
 
+            // Same key (42 / 77) resolves differently per table, proving the
+            // correct table is selected by machine type.
             let static_remap: HashMap<u8, u8> = [(42, 50)].into_iter().collect();
             let flex_remap: HashMap<u8, u8> = [(77, 80)].into_iter().collect();
 
             remap_bank_slot_references(&mut bank, &static_remap, &flex_remap);
 
             assert_eq!(
-                bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[5].static_slot_id, 50,
-                "P-lock static slot should be remapped from 42 to 50"
+                bank.patterns.0[0].audio_track_trigs.0[3].plocks.0[5].flex_slot_id, 50,
+                "STATIC-machine track sample-lock must remap via the static table"
             );
             assert_eq!(
-                bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[10].flex_slot_id, 80,
-                "P-lock flex slot should be remapped from 77 to 80"
+                bank.patterns.0[0].audio_track_trigs.0[4].plocks.0[10].flex_slot_id, 80,
+                "FLEX-machine track sample-lock must remap via the flex table"
             );
             assert_eq!(
-                bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[20].static_slot_id, 255,
+                bank.patterns.0[0].audio_track_trigs.0[5].plocks.0[20].flex_slot_id, 255,
                 "No-lock sentinel should NOT be remapped"
             );
         }
