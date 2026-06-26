@@ -48,14 +48,14 @@ test.describe('HomePage', () => {
 test.describe('Navigation', () => {
   test('project route exists', async ({ page }) => {
     await page.goto('/#/project?path=test&name=test')
-    // Page should load without crashing
-    await expect(page.locator('body')).toBeVisible()
+    // Page should render its main content without crashing
+    await expect(page.locator('main.container')).toBeVisible()
   })
 
   test('audio pool route exists', async ({ page }) => {
     await page.goto('/#/audio-pool?path=test&name=test')
-    // Page should load without crashing
-    await expect(page.locator('body')).toBeVisible()
+    // Page should render its main content without crashing
+    await expect(page.locator('main.audio-pool-page')).toBeVisible()
   })
 
   test('can navigate back to home', async ({ page }) => {
