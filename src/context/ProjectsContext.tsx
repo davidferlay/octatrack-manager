@@ -217,6 +217,7 @@ interface TrackInfo {
   trig_counts: TrigCounts;
   steps: TrigStep[];
   default_note: number | null;
+  assigned_sample_slot: number | null;
 }
 
 interface Pattern {

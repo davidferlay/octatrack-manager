@@ -777,7 +777,9 @@ export function HomePage() {
                                           className="projects-grid"
                                           onContextMenu={(e) => {
                                             e.preventDefault();
-                                            if ((e.target as HTMLElement).closest('.project-card')) return;
+                                            // Only real project cards have their own menu; the
+                                            // "New project" card falls through to the set menu.
+                                            if ((e.target as HTMLElement).closest('.project-card.clickable-project')) return;
                                             setContextMenu({
                                               x: e.clientX,
                                               y: e.clientY,

@@ -2300,6 +2300,8 @@ h1 {
 .samples-tab {
   padding: 0;
   overflow: visible;
+  /* Lifted from pure black, but still darker than the audio pool pane (#1A1A1A) */
+  background: #121212;
 }
 
 .samples-tab.with-sidebar {
@@ -3491,7 +3493,7 @@ h1 {
 .parameter-panel-header h4 {
   margin: 0;
   font-size: 1rem;
-  color: var(--elektron-orange);
+  color: var(--elektron-text-primary);
 }
 
 .parameter-note {

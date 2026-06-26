@@ -230,6 +230,7 @@ pub struct TrackInfo {
     pub trig_counts: TrigCounts,  // Per-track trig statistics
     pub steps: Vec<TrigStep>,     // Per-step trig information (64 steps)
     pub default_note: Option<u8>, // Default note for MIDI tracks (0-127)
+    pub assigned_sample_slot: Option<u8>, // Part-assigned sample slot for this track (1-based); None for MIDI / non-sample machines
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1710,6 +1711,21 @@ fn read_project_banks_internal(
                                 });
                             }
 
+                            // Sample slot this track's machine plays by default
+                            // (part-assigned). The part slot is 0-based; expose
+                            // it 1-based for display. None for non-sample
+                            // machines (Thru/Neighbor/Pickup).
+                            let assigned_sample_slot = {
+                                let part =
+                                    &bank_data.parts.unsaved.0[(part_assignment as usize).min(3)];
+                                let slot = &part.audio_track_machine_slots[idx];
+                                match part.audio_track_machine_types[idx] {
+                                    0 => Some(slot.static_slot_id.saturating_add(1)),
+                                    1 => Some(slot.flex_slot_id.saturating_add(1)),
+                                    _ => None,
+                                }
+                            };
+
                             tracks.push(TrackInfo {
                                 track_id: idx as u8,
                                 track_type: "Audio".to_string(),
@@ -1739,6 +1755,7 @@ fn read_project_banks_internal(
                                 },
                                 steps,
                                 default_note: None, // Audio tracks don't have default notes
+                                assigned_sample_slot,
                             });
                         }
 
@@ -2021,6 +2038,7 @@ fn read_project_banks_internal(
                                 },
                                 steps,
                                 default_note, // Default NOTE value from Part file
+                                assigned_sample_slot: None, // MIDI tracks have no sample slot
                             });
                         }
 
@@ -14290,6 +14308,43 @@ mod tests {
                 Some(5),
                 "Sample-lock slot must be displayed 1-based (stored 4 -> shown 5)"
             );
+        }
+
+        #[test]
+        fn test_track_assigned_sample_slot() {
+            // Part-assigned machine slot is exposed per track, 1-based, routed by
+            // machine type; non-sample machines report None.
+            let project = TestProject::with_modified_bank(0, |bank| {
+                bank.patterns.0[0].part_assignment = 0;
+                // Track 3: Static machine, static slot 4 (0-based) -> UI slot 5
+                bank.parts.unsaved.0[0].audio_track_machine_types[3] = 0;
+                bank.parts.unsaved.0[0].audio_track_machine_slots[3].static_slot_id = 4;
+                // Track 4: Flex machine, flex slot 9 (0-based) -> UI slot 10
+                bank.parts.unsaved.0[0].audio_track_machine_types[4] = 1;
+                bank.parts.unsaved.0[0].audio_track_machine_slots[4].flex_slot_id = 9;
+                // Track 5: Thru machine -> no sample slot
+                bank.parts.unsaved.0[0].audio_track_machine_types[5] = 2;
+            });
+            let bank = read_single_bank(&project.path, 0).unwrap().unwrap();
+
+            // Inspect a pattern assigned to part 0 (pattern 0, default assignment)
+            let pattern = bank
+                .parts
+                .iter()
+                .flat_map(|p| &p.patterns)
+                .find(|p| p.id == 0)
+                .expect("pattern 0");
+            let slot_of = |tid: u8| {
+                pattern
+                    .tracks
+                    .iter()
+                    .find(|t| t.track_id == tid && t.track_type == "Audio")
+                    .unwrap()
+                    .assigned_sample_slot
+            };
+            assert_eq!(slot_of(3), Some(5), "Static track: slot 4 -> shown 5");
+            assert_eq!(slot_of(4), Some(10), "Flex track: slot 9 -> shown 10");
+            assert_eq!(slot_of(5), None, "Thru machine has no sample slot");
         }
 
         #[test]

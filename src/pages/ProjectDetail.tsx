@@ -825,7 +825,7 @@ export function ProjectDetail() {
                     <div className="compact-grid">
                       <div className="compact-item">
                         <span className="compact-label">Tempo</span>
-                        <span className="compact-value">{metadata.tempo} BPM</span>
+                        <span className="compact-value">{metadata.tempo.toFixed(1)} BPM</span>
                       </div>
                       <div className="compact-item">
                         <span className="compact-label">Time Sig</span>
@@ -1721,7 +1721,14 @@ export function ProjectDetail() {
                                         {selectedStep.trig_repeats > 0 && <div className="param-item"><span>Repeats:</span> {selectedStep.trig_repeats + 1}x</div>}
                                         {selectedStep.micro_timing && <div className="param-item"><span>Micro-timing:</span> {selectedStep.micro_timing}</div>}
                                         {selectedStep.velocity !== null && <div className="param-item"><span>{trackData.track_type === "MIDI" ? "VEL (Velocity)" : "VOL (Volume)"}:</span> {selectedStep.velocity}</div>}
-                                        {selectedStep.sample_slot !== null && <div className="param-item"><span>Sample Slot:</span> {selectedStep.sample_slot}</div>}
+                                        {(() => {
+                                          // A sample p-lock overrides the slot for this step; otherwise a
+                                          // normal trig plays the track's part-assigned sample slot.
+                                          const slot = selectedStep.sample_slot ?? (selectedStep.trigger ? trackData.assigned_sample_slot : null);
+                                          return trackData.track_type !== "MIDI" && slot !== null
+                                            ? <div className="param-item"><span>Sample Slot:</span> {slot}</div>
+                                            : null;
+                                        })()}
 
                                         {/* Audio P-Locks: Machine Parameters */}
                                         {selectedStep.audio_plocks?.machine?.param1 != null && <div className="param-item"><span>PTCH (Pitch):</span> {selectedStep.audio_plocks?.machine?.param1}</div>}
