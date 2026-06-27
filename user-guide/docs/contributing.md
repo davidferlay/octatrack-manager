@@ -6,7 +6,7 @@ sidebar_position: 99
 
 ## For testing
 
-All current features should be consided experimental - isn't that exciting?
+All current features should be considered experimental - isn't that exciting?
 
 Right now, the focus is on building features and push things as far as possible: View and edit every aspect of projects, ease project management as well as sample magement, provide bulk actions, etc.
 
