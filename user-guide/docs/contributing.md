@@ -6,11 +6,11 @@ sidebar_position: 99
 
 ## For testing
 
-All current features are **experimental** - isn't that exciting?
+All current features should be consided experimental - isn't that exciting?
 
 Right now, the focus is on building features and push things as far as possible: View and edit every aspect of projects, ease project management as well as sample magement, provide bulk actions, etc.
 
-End game is to get everything that's possible on the Ocratrack - and then more.
+End game is to get everything that's possible on the Ocratrack - **and then more**.
 
 **To make all that possible, features have to be tested through and through by as much users as possible.** They say no plan survives first contact with implementation; well I'd add: no implementation survives first contact with real-world usage.
 
