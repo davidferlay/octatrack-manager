@@ -98,6 +98,6 @@ In case selected destination slot does not leave enough room for all selected so
 
 - **Automatic Backup:** Before executing, the app automatically backs up `project.work`, `markers.work`, and any destination audio files (`.wav`) that would be overwritten.
     - When using **Move all to Pool**, the source project's `project.work` and audio files are also backed up since both are modified.
-    - See [Quick Start](../getting-started/quick-start.md#8-automatic-backups) for details.
+    - See [Quick Start](../getting-started/quick-start.md#9-automatic-backups) for details.
 - **Same Set required for Mirror and Move all to Pool:** Both "Mirror locations" and "Move all to Pool" are only available when source and destination projects are in the same Set. If you select a destination project in a different Set, the audio mode auto-switches to "Copy all to project" — the only option that guarantees all files are self-contained in the destination.
 - **Shared files on Move all to Pool:** If the same audio file is referenced by both a Static slot and a Flex slot, and you copy only one slot type (e.g., Static only), the original file is kept in the source project directory after the move — deleting it would break the Flex slot that still references it. The success message reports how many files were preserved for this reason.

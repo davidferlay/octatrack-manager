@@ -56,4 +56,4 @@ Visible when **All Tracks** is selected. Controls which track types are copied:
 - **All Tracks Affected:** Pattern data includes **of all Audio and MIDI tracks** of current bank - it's not tied to individual tracks.
 - **Multi-bank Destination:** You can select multiple destination banks to copy patterns to several banks at once.
 - **Destructive Operation:** Copying a pattern replaces existing sequences at the destination.
-- **Automatic Backup:** The app automatically backs up the destination bank file(s) before executing. See [Quick Start](../getting-started/quick-start.md#8-automatic-backups) for details.
+- **Automatic Backup:** The app automatically backs up the destination bank file(s) before executing. See [Quick Start](../getting-started/quick-start.md#9-automatic-backups) for details.

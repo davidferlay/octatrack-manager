@@ -128,5 +128,5 @@ When copying samples, the app automatically remaps all slot references in the co
 ## Important Notes
 
 - **Destructive Operation:** Copying a bank replaces all existing data at the destination.
-- **Automatic Backup:** The app automatically backs up destination bank files before executing. See [Quick Start](../getting-started/quick-start.md#8-automatic-backups) for details.
+- **Automatic Backup:** The app automatically backs up destination bank files before executing. See [Quick Start](../getting-started/quick-start.md#9-automatic-backups) for details.
 - **Multi-bank Destination:** You can select multiple destination banks to copy the same source bank to several targets at once.

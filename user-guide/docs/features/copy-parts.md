@@ -41,5 +41,5 @@ All sound design data for both audio and MIDI tracks:
 
 - **All Tracks Affected:** Part data includes parameters **of all Audio and MIDI tracks** of current bank - it's not tied to individual tracks.
 - **Patterns Not Affected:** This operation only copies sound design settings (the Part), not sequences or triggers.
-- **Automatic Backup:** The app automatically backs up destination bank files before executing. See [Quick Start](../getting-started/quick-start.md#8-automatic-backups) for details.
+- **Automatic Backup:** The app automatically backs up destination bank files before executing. See [Quick Start](../getting-started/quick-start.md#9-automatic-backups) for details.
 - **Sample Slot References:** This tool only copies the **reference to a sample slot id** (which Slot is assigned to track), not the Sample Slot metadata, nor audio file itself. Use [Copy Sample Slots](./copy-sample-slots.md) to transfer audio files.
