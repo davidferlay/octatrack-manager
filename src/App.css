@@ -38,7 +38,6 @@ body {
   margin: 0;
   padding: 0;
   background-color: var(--elektron-black);
-  /* Scrollbar only when needed; no reserved black gutter strip on the right edge */
   overflow-y: auto;
 }
 
@@ -3861,7 +3860,6 @@ h1 {
   border: 1px solid var(--elektron-medium-gray);
   border-radius: 4px;
   color: var(--elektron-text-primary);
-  color-scheme: dark;
   transition: all 0.2s;
   appearance: none;
   -webkit-appearance: none;
