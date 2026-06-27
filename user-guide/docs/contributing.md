@@ -6,15 +6,15 @@ sidebar_position: 99
 
 ## For testing
 
-All current features are **experimental** — isn't that exciting?
+All current features are **experimental** - isn't that exciting?
 
-Right now, the focus is on building features and push things as far as possible: View and edit every aspect of projects, ease project management as well as sample magement, provide bulk actions, and more.
+Right now, the focus is on building features and push things as far as possible: View and edit every aspect of projects, ease project management as well as sample magement, provide bulk actions, etc.
 
 End game is to get everything that's possible on the Ocratrack - and then more.
 
-To make all that possible, features have to be tested through and through by as much users as possible. They say no plan survives first contact with implementation; well I'd even add: no implementation survives first contact with real-world usage.
+**To make all that possible, features have to be tested through and through by as much users as possible.** They say no plan survives first contact with implementation; well I'd add: no implementation survives first contact with real-world usage.
 
-If you’re using the app, your experience matters a lot: Whether everything works perfectly, something behaves unexpectedly, or you notice a bug or edge case — every piece of feedback helps move the project forward. Even a simple “worked fine for me” is useful. The goal is to validate each feature across a diverse group of real users. This will tremendously help in creating a useful and stable app.
+If you’re using the app, your experience matters a lot: Whether everything works perfectly or not, every piece of feedback helps move the project forward. Even a simple “worked fine for me” is useful. The goal is to validate each feature across a diverse group of real users. This will tremendously help in creating a useful and stable app.
 
 At this stage, **functional feedback is what matters the most** — correctness, reliability, data integrity, edge cases, and real-world behavior. UI/UX and visual design will be refined later; the current priority is building a solid, reliable foundation of functionalities.
 
