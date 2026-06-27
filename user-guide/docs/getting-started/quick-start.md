@@ -42,7 +42,7 @@ At the top of the project view, you can switch between several specialized views
 
 - **Parts:** Manage the 4 sound snapshots (kits) for each bank.
 - **Patterns:** Visualize your sequences and triggers in detail.
-- **Flex / Static:** Browse and filter the 256 sample slots.
+- **Flex / Static:** Browse, search, filter sample slots and [assign samples](../features/sample-slots.md#assigning--managing-samples) to them from the Audio Pool or your computer.
 - **Tools:** Access bulk copy operations between projects.
 
 ## 4. Edit a Part
@@ -68,7 +68,19 @@ In the **Audio Pool** view, you can move samples from your computer into your Se
 
 ![Audio Pool conversion](/img/screenshots/audio-pool-conversion.png)
 
-## 6. Copy Content Within and Between Projects
+## 6. Manage Sample Slots
+
+On the **Flex** and **Static** tabs you can assign samples to your project's 256 slots - no hardware needed. Slot editing requires **Edit mode** (toggle in the header, or press <kbd>E</kbd>).
+
+1. Open the project's **Flex** or **Static** tab and switch to **Edit mode**.
+2. Open the **Audio Pool pane** (toggle in the toolbar, or press <kbd>A</kbd>) to browse the Set's samples right beside the slots.
+3. **Drag** one or more samples - from the pane or directly from your computer - onto a slot row. Multiple files (or a whole folder) fill consecutive empty slots. Files dragged from your computer are imported and converted automatically.
+4. Alternatively, right-click a pool sample to **Assign to first empty slot** / **Assign to selected slot**, or right-click a slot to **import** files from disk.
+5. Right-click any slot to **clear** its sample or **reset** its attributes; selecting multiple slots applies the action to all of them.
+
+See [Assigning & Managing Samples](../features/sample-slots.md#assigning--managing-samples) for the full details.
+
+## 7. Copy Content Within and Between Projects
 
 The **Tools** tab lets you copy content between banks and projects without touching the hardware. Select an operation from the dropdown, configure source, options, and destination, then execute.
 
@@ -95,11 +107,11 @@ The destination project can be selected from your scanned locations or browsed m
 Your copy settings (selected operation, destination project, slot ranges, etc.) are remembered for each project during your session — you can switch tabs and come back without losing selected values.
 :::
 
-## 7. Fix Missing Samples
+## 8. Fix Missing Samples
 
 The **Tools** tab also includes a **[Fix Missing Samples](../features/fix-missing-samples.md)** operation that scans your project for broken sample slot references and automatically locates and reconnects missing audio files. It searches the project directory, Audio Pool, and sibling projects, with the option to browse additional directories manually.
 
-## 8. Automatic Backups
+## 9. Automatic Backups
 
 Octatrack Manager automatically backs up your project files before any write operation — whether you are enabling Edit mode, saving a Part, or executing a copy operation via Tools.
 

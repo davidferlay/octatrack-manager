@@ -6,15 +6,19 @@ sidebar_position: 99
 
 ## For testing
 
-All current features are **experimental** — and that’s part of the excitement.
+All current features are **experimental** — isn't that exciting?
 
-Right now, the focus is on exploring what’s possible: building powerful tools to edit every aspect of an Octatrack project, enabling bulk actions, and demonstrating the full potential of the platform. Hardening and stabilizing features comes next, and that’s where real-world usage becomes invaluable.
+Right now, the focus is on building features and push things as far as possible: View and edit every aspect of projects, ease project management as well as sample magement, provide bulk actions, and more.
 
-If you’re using the app, your experience truly matters. Whether everything works perfectly, something behaves unexpectedly, or you notice a bug or edge case — every piece of feedback helps move the project forward. Even a simple “worked fine for me” is useful. The goal is to validate each feature across a diverse group of real users, building confidence, stability, and a solid feedback loop for continuous improvement.
+End game is to get everything that's possible on the Ocratrack - and then more.
 
-At this stage, **functional feedback is what matters the most** — correctness, reliability, data safety, edge cases, and real-world behavior. UI/UX and visual design will be refined later; the current priority is building a solid, reliable foundation.
+To make all that possible, features have to be tested through and through by as much users as possible. They say no plan survives first contact with implementation; well I'd even add: no implementation survives first contact with real-world usage.
 
-Please report issues on the [GitHub Issues page](https://github.com/davidferlay/octatrack-manager/issues) or join the discussion on the [Elektronauts thread](https://www.elektronauts.com/t/project-manager-for-octatrack/).
+If you’re using the app, your experience matters a lot: Whether everything works perfectly, something behaves unexpectedly, or you notice a bug or edge case — every piece of feedback helps move the project forward. Even a simple “worked fine for me” is useful. The goal is to validate each feature across a diverse group of real users. This will tremendously help in creating a useful and stable app.
+
+At this stage, **functional feedback is what matters the most** — correctness, reliability, data integrity, edge cases, and real-world behavior. UI/UX and visual design will be refined later; the current priority is building a solid, reliable foundation of functionalities.
+
+You can report issues, feedbacks and ideas directly on the [Elektronauts thread](https://www.elektronauts.com/t/project-manager-for-octatrack/).
 
 
 ## For macOS Code Signing

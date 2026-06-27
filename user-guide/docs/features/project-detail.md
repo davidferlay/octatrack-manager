@@ -9,7 +9,7 @@ The Project Detail page provides a comprehensive, high-level view of an Octatrac
 
 ## Overview Tab
 
-The **Overview** tab displays the global settings that define how your project behaves on the Octatrack. 
+The **Overview** tab displays the global settings that define how your project behaves on the Octatrack.
 
 It's a view that captures the exact state of the project when it was last saved on the hardware.
 
@@ -55,13 +55,13 @@ At the top of the project header, you can switch between several specialized vie
 The **Parts** tab takes you to the [Parts Editor](./parts-editor.md), where you can view and modify the sound design parameters of each bank. This is where you can edit Source, Amp, effects, and LFOs perameters for each track - according to machine type.
 
 ### Patterns
-The **Patterns** tab provides a visual representation of your sequencer data. You can inspect every trigger, parameter lock, and trig condition in your project. See [Patterns](./patterns.md) for details.
+The **Patterns** tab provides a visual representation of your sequencer data. Steps can be [inspected](./patterns.md) and display their trigger, parameter lock, and trig condition.
 
 ### Flex & Static Slots
-The **Flex** and **Static** tabs list all 256 sample slots in your project. You can filter slots (by name - or any other column), check which slots are empty, and see the exact file path for every sample as well as their state. See [Sample Slots](./sample-slots.md) for details.
+The **Flex** and **Static** tabs list all 256 sample slots in project. You can search and filter slots, check their attributes and [assign samples to slots](./sample-slots.md) using drag & drop from the Audio Pool or from OS File Explorer.
 
 ### Tools
-The **Tools** tab provides bulk operations for copying content between projects — banks, parts, patterns, tracks, and sample slots.
+The **Tools** tab provides bulk operations for copying content between projects ([banks](./copy-bank.md), [parts](./copy-parts.md), [patterns](./copy-patterns.md), [tracks](./copy-tracks.md) or [sample slots](./copy-sample-slots.md)) as well as additional unique features (like [fixing missing samples](./fix-missing-samples.md)).
 
 ---
 
@@ -83,7 +83,7 @@ In addition of the menu, the header of the Project Detail page also contains sev
 
 ## Multi-Bank View
 
-- In the **Parts** and **Patterns** tabs, you can use the **Bank Selector** to focus on a single bank (A–P) or select **All Banks** to see an overview of your entire project simultaneously. 
+- In the **Parts** and **Patterns** tabs, you can use the **Bank Selector** to focus on a single bank (A–P) or select **All Banks** to see an overview of your entire project simultaneously.
 
 - By viewing "All Banks", you can scroll through all 16 banks on a single page, making it much easier to organize complex projects.
 

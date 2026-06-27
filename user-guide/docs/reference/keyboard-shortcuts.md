@@ -54,6 +54,8 @@ These shortcuts work across the entire application:
 | <kbd>Ctrl</kbd> + <kbd>A</kbd> | Select all files in the current folder. |
 | <kbd>Shift</kbd> + <kbd>Click</kbd> | Select a range of files or slots. |
 | <kbd>Ctrl</kbd> + <kbd>Click</kbd> | Add or remove individual files from the selection. |
+| <kbd>A</kbd> | Toggle the Audio Pool pane on a Flex/Static tab (when the Set has a pool). |
+| <kbd>Delete</kbd> / <kbd>Backspace</kbd> | In Edit mode: clear the selected slots' samples, or reset attributes on slots that are already empty. |
 
 ---
 

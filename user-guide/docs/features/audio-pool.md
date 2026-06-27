@@ -22,8 +22,9 @@ Access the Audio Pool of a Set from the **Home Page** by clicking the **Audio Po
 This shows the contents of your `AUDIO/` directory. You can:
 - **Navigate:** Double-click a folder to enter it. Click the breadcrumb to go back up.
 - **Create Folders:** Click **+ New Folder** to organize your library.
-- **Inspect Metadata:** Every audio file shows its sample rate, bit depth, and number of channels.
+- **Inspect Metadata:** Every audio file shows its sample rate, bit depth, and number of channels and size.
 - **Filter and Sort:** Use the toolbar to filter by name, bit depth, sample rate, or audio format.
+- **Search recursively:** Typing in the search box matches files and folders in the current directory and all of its subfolders (a spinner shows while deep folders are scanned).
 
 ### Left Panel: Your Computer
 - This is a standard file browser that lets you explore your local hard drives to find samples you want to add to your Set.
@@ -83,6 +84,14 @@ To remove unwanted samples from your library:
 1. Select one or more files in the right panel (Audio Pool).
 2. Click **Delete**.
 3. A confirmation dialog will appear to prevent accidental loss of data.
+
+---
+
+## Assigning Pool Samples to Slots
+
+Audio Pool pane can be opened from a project's **Flex** or **Static** tab - where you can drag samples straight onto sample slots while in Edit mode.
+
+See [Assigning & Managing Samples](sample-slots.md#assigning--managing-samples).
 
 ---
 
