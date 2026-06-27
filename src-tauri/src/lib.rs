@@ -232,6 +232,13 @@ async fn list_audio_files_recursive(path: String) -> Result<Vec<String>, String>
         .unwrap()
 }
 
+#[tauri::command]
+async fn list_audio_directory_recursive(path: String) -> Result<Vec<AudioFileInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || audio_pool::list_directory_recursive(&path))
+        .await
+        .unwrap()
+}
+
 /// Expand a mixed list of dropped/dragged paths (files + directories) into a flat list of
 /// audio files, recursing into directories. Keeps copy/assign flows from choking on folders.
 #[tauri::command]
@@ -898,6 +905,7 @@ pub fn run() {
             reload_part,
             list_audio_directory,
             list_audio_files_recursive,
+            list_audio_directory_recursive,
             navigate_to_parent,
             create_new_directory,
             copy_audio_files,

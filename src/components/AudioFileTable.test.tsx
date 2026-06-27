@@ -1,7 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { AudioFileTable } from './AudioFileTable'
 import type { AudioFile } from '../types/audioFile'
+
+const invokeMock = vi.fn()
+vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invokeMock(...args) }))
 
 const files: AudioFile[] = [
   { name: 'kick.wav', size: 1024, channels: 2, bit_rate: 16, sample_rate: 44100, is_directory: false, path: '/AUDIO/kick.wav' },
@@ -50,5 +54,30 @@ describe('AudioFileTable', () => {
   it('shows the Show/Hide Columns control', () => {
     renderTable()
     expect(screen.getByTitle(/Show\/Hide Columns/i)).toBeInTheDocument()
+  })
+
+  it('shows the pool-relative path on hover when poolRoot is set', () => {
+    renderTable({ poolRoot: '/AUDIO' })
+    expect(screen.getByText('kick.wav').closest('td')?.getAttribute('title')).toBe('AUDIO/kick.wav')
+  })
+
+  it('falls back to the plain name as hover title when poolRoot is absent', () => {
+    renderTable()
+    expect(screen.getByText('kick.wav').closest('td')?.getAttribute('title')).toBe('kick.wav')
+  })
+
+  it('searches recursively from the current directory when searchRoot is set', async () => {
+    // A match that lives in a subfolder — not in the current-directory `files`.
+    invokeMock.mockResolvedValue([
+      { name: 'deep-hat.wav', size: 10, channels: 2, bit_rate: 16, sample_rate: 44100, is_directory: false, path: '/AUDIO/Drums/hats/deep-hat.wav' },
+    ] satisfies AudioFile[])
+    renderTable({ poolRoot: '/AUDIO', searchRoot: '/AUDIO/Drums' })
+
+    await userEvent.type(screen.getByPlaceholderText('Search...'), 'deep')
+
+    // Recursion roots at the current directory, not the pool root.
+    expect(invokeMock).toHaveBeenCalledWith('list_audio_directory_recursive', { path: '/AUDIO/Drums' })
+    expect(await screen.findByText('deep-hat.wav')).toBeInTheDocument()
+    expect(screen.queryByText('kick.wav')).not.toBeInTheDocument()
   })
 })

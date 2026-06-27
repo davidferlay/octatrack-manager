@@ -1231,6 +1231,8 @@ export function AudioPoolPage() {
             onPanelClick={() => setActivePanel('dest')}
             onContextMenu={(e, file) => handleContextMenu(e, file, 'dest')}
             rowRefs={destRowRefs}
+            poolRoot={audioPoolPath}
+            searchRoot={destinationPath}
           />
         </div>
       </div>

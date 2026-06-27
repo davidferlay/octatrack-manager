@@ -30,7 +30,10 @@ go to the **Flex** (or **Static**) tab.
 | AP14 | Browse | Up navigation | Inside a subdirectory, click the up (↑) button in the bottom path row | Listing returns to the parent directory |
 | AP15 | Browse | Cannot go above AUDIO/ | At the AUDIO/ root, observe the up (↑) button | Up button is disabled (cannot navigate above the pool root) |
 | AP16 | Browse | Path indicator | Navigate into a subdirectory | Bottom path row shows the current path relative to AUDIO/ |
-| AP17 | Browse | Search filter | Type text in the sidebar search box | Listing filters to matching file names |
+| AP17 | Browse | Search filter (recursive) | From any directory, type text in the sidebar search box | Listing shows matching files/folders from the current directory and all its subfolders (not just the current level; not above it) |
+| AP96 | Browse | Search clears back to current dir | After AP17, clear the search box | Listing returns to the plain current-directory contents |
+| AP97 | Browse | Hover shows pool-relative path | Hover over any file or folder in the pane | Tooltip shows the path relative to the pool root, e.g. `AUDIO/Drums/kick.wav` |
+| AP101 | Browse | Search progress throbber | Type in the search box over a directory with many/deep subfolders | A small spinner shows in the search box while subfolders are scanned, replaced by the clear (×) button once results are listed |
 | AP18 | Browse | Sort by column | Click a sidebar column header | Files sort by that column; folders stay grouped first |
 | AP50 | Browse | Remember pane state across navigation | Open the pane, enter a subdirectory, scroll, then open the Audio Pool page and return via "Back to project" | Pane reopens at the same subdirectory and scroll position; Edit mode is preserved |
 | **Assign via in-app drag (Edit mode)** | | | | |
@@ -101,6 +104,10 @@ go to the **Flex** (or **Static**) tab.
 | **Transfers toggle** | | | | |
 | AP62 | Transfers | Toggle in slot toolbar | Trigger a pool/slot import so transfers exist | A transfers toggle (exchange icon + count badge) is shown in the slot table toolbar |
 | AP63 | Transfers | Active styling | While the progress pane is open | The transfers toggle uses the orange active style; clicking it hides/shows the pane |
+| **Audio Pool page — right (Audio Pool) pane** | | | | |
+| AP98 | Page search | Recursive search | On the Audio Pool page, type in the right (Audio Pool) pane's search box | Matching files/folders from the current directory and all its subfolders are listed, not just the current level |
+| AP99 | Page search | Hover shows pool-relative path | Hover over a file/folder in the right (Audio Pool) pane | Tooltip shows the path relative to the pool root, e.g. `AUDIO/Drums/kick.wav` |
+| AP100 | Page search | Source pane unaffected | Type in the left (Source) pane's search box | Source pane filters only its current directory by name (no recursive search; tooltip shows the plain file name) |
 | **Copy back to source (Audio Pool page)** | | | | |
 | AP31 | Copy back | Pool → source uses shared pipeline | On the Audio Pool page, copy a destination file back to the source directory | Transfer shows in the progress pane; overwrite modal appears if a same-named file already exists |
 | **Open in file explorer** | | | | |

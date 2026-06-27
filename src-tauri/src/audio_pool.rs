@@ -135,6 +135,28 @@ pub fn list_directory(path: &str) -> Result<Vec<AudioFileInfo>, String> {
     Ok(files)
 }
 
+/// List every file/directory under `path` (recursively) with audio metadata, flattened.
+/// Used by the Audio Pool panes so the search bar can match across subfolders.
+/// ponytail: extracts metadata for every audio file in the subtree — fine for typical
+/// pools (only runs while a search is active); switch to a lazy/streamed walk if it lags.
+pub fn list_directory_recursive(path: &str) -> Result<Vec<AudioFileInfo>, String> {
+    let mut out = Vec::new();
+    list_directory_recursive_inner(path, &mut out)?;
+    Ok(out)
+}
+
+fn list_directory_recursive_inner(path: &str, out: &mut Vec<AudioFileInfo>) -> Result<(), String> {
+    for entry in list_directory(path)? {
+        let is_dir = entry.is_directory;
+        let child = entry.path.clone();
+        out.push(entry);
+        if is_dir {
+            list_directory_recursive_inner(&child, out)?;
+        }
+    }
+    Ok(())
+}
+
 /// Recursively collect audio file paths under a directory (no metadata extraction — fast).
 pub fn collect_audio_files_recursive(path: &str) -> Result<Vec<String>, String> {
     let dir = Path::new(path);
@@ -1264,6 +1286,25 @@ mod tests {
         assert!(found.iter().any(|p| p.ends_with("b.aiff")));
         assert!(found.iter().any(|p| p.ends_with("c.flac")));
         assert!(!found.iter().any(|p| p.ends_with("notes.txt")));
+    }
+
+    #[test]
+    fn test_list_directory_recursive_flattens_subdirs_with_entries() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::write(root.join("top.wav"), b"x").unwrap();
+        let sub = root.join("kit");
+        std::fs::create_dir(&sub).unwrap();
+        std::fs::write(sub.join("kick.wav"), b"x").unwrap();
+
+        let found = list_directory_recursive(root.to_str().unwrap()).unwrap();
+        // top.wav + kit (dir) + kick.wav
+        assert_eq!(found.len(), 3);
+        assert!(found.iter().any(|f| f.name == "top.wav" && !f.is_directory));
+        assert!(found.iter().any(|f| f.name == "kit" && f.is_directory));
+        assert!(found
+            .iter()
+            .any(|f| f.name == "kick.wav" && f.path.ends_with("kit/kick.wav")));
     }
 
     #[test]

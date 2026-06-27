@@ -276,6 +276,8 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
         dndMode={dndMode}
         initialColumnVisibility={{ format: false, bitrate: false, samplerate: false }}
         scrollStorageKey={persistKey ? `${persistKey}:scroll` : undefined}
+        poolRoot={audioPoolPath}
+        searchRoot={currentPath}
         onContextMenu={handleItemContextMenu}
         headerPrefix={
           <>

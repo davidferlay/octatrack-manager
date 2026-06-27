@@ -1945,6 +1945,17 @@ h1 {
   color: var(--elektron-orange);
 }
 
+.header-search-spinner {
+  position: absolute;
+  right: 0.4rem;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--elektron-border-gray);
+  border-top-color: var(--elektron-orange);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
 .toggle-switch.pending .toggle-slider {
   animation: pulse 0.6s ease-in-out infinite;
 }

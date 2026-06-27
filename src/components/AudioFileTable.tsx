@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useLayoutEffect, useTransition, useMemo, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { invoke } from "@tauri-apps/api/core";
 import {
   useReactTable,
   getCoreRowModel,
@@ -111,6 +112,23 @@ export interface AudioFileTableProps {
   initialColumnVisibility?: Record<string, boolean>;
   /** When set, the vertical scroll position is remembered in sessionStorage under this key */
   scrollStorageKey?: string;
+  /**
+   * Audio Pool root. When set, name cells show the path relative to this root on hover.
+   * Omit for plain name-only hover titles (e.g. the Source pane).
+   */
+  poolRoot?: string;
+  /**
+   * Directory to search under. When set, the search box matches recursively across this
+   * directory and all its subfolders. Omit for plain single-directory, name-only filtering.
+   */
+  searchRoot?: string;
+}
+
+/** Path relative to the Audio Pool root, prefixed "AUDIO/" — used for hover titles. */
+function relativeToPool(filePath: string, poolRoot: string): string {
+  if (!filePath.startsWith(poolRoot)) return filePath;
+  const rel = filePath.slice(poolRoot.length).replace(/^[/\\]/, '').replace(/\\/g, '/');
+  return rel ? `AUDIO/${rel}` : 'AUDIO/';
 }
 
 const DEFAULT_COLUMN_SIZES: Record<string, number> = {
@@ -158,6 +176,8 @@ export function AudioFileTable({
   dndMode = false,
   initialColumnVisibility,
   scrollStorageKey,
+  poolRoot,
+  searchRoot,
 }: AudioFileTableProps) {
   // Pre-filter state (applied before TanStack)
   const [searchText, setSearchText] = useState('');
@@ -167,6 +187,30 @@ export function AudioFileTable({
   const [formatFilter, setFormatFilter] = useState<string>('all');
   const [bitDepthFilter, setBitDepthFilter] = useState<string>('all');
   const [sampleRateFilter, setSampleRateFilter] = useState<string>('all');
+
+  // Recursive search: when a searchRoot is set and the user is searching, match across that
+  // directory and all its subfolders instead of just the current level. Fetched once when
+  // search turns on (and when the directory changes), then filtered client-side as you type.
+  const searchActive = searchText.trim().length > 0;
+  const [recursiveFiles, setRecursiveFiles] = useState<AudioFile[] | null>(null);
+  const [recursiveLoading, setRecursiveLoading] = useState(false);
+  useEffect(() => {
+    if (!searchRoot || !searchActive) {
+      setRecursiveFiles(null);
+      setRecursiveLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setRecursiveLoading(true);
+    invoke<AudioFile[]>("list_audio_directory_recursive", { path: searchRoot })
+      .then(r => { if (!cancelled) setRecursiveFiles(r); })
+      .catch(() => { if (!cancelled) setRecursiveFiles(null); }) // no Tauri (e2e) → plain search
+      .finally(() => { if (!cancelled) setRecursiveLoading(false); });
+    return () => { cancelled = true; };
+  }, [searchRoot, searchActive]);
+
+  // While a recursive search is resolved, browse that flattened list; otherwise the current dir.
+  const baseFiles = searchRoot && searchActive && recursiveFiles ? recursiveFiles : files;
 
   // Dropdown state — use portal + position to avoid clipping issues
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
@@ -265,14 +309,14 @@ export function AudioFileTable({
   }, [files]);
 
   // Pre-filter before passing to TanStack
-  const filteredData = useMemo(() => files.filter(file => {
+  const filteredData = useMemo(() => baseFiles.filter(file => {
     if (hideDirectories && file.is_directory) return false;
     if (searchText && !file.name.toLowerCase().includes(searchText.toLowerCase())) return false;
     if (formatFilter !== 'all' && getFileFormat(file.name) !== formatFilter) return false;
     if (bitDepthFilter !== 'all' && file.bit_rate?.toString() !== bitDepthFilter) return false;
     if (sampleRateFilter !== 'all' && file.sample_rate?.toString() !== sampleRateFilter) return false;
     return true;
-  }), [files, hideDirectories, searchText, formatFilter, bitDepthFilter, sampleRateFilter]);
+  }), [baseFiles, hideDirectories, searchText, formatFilter, bitDepthFilter, sampleRateFilter]);
 
   const columns = useMemo<ColumnDef<AudioFile>[]>(() => [
     { id: 'name', accessorKey: 'name', header: 'Name', size: DEFAULT_COLUMN_SIZES.name, minSize: MIN_COLUMN_SIZES.name, sortingFn: dirFirstSort },
@@ -305,7 +349,7 @@ export function AudioFileTable({
     switch (colId) {
       case 'name':
         return (
-          <td key={colId} className="col-name" title={file.name}
+          <td key={colId} className="col-name" title={poolRoot ? relativeToPool(file.path, poolRoot) : file.name}
             style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
             {file.is_directory ? <i className="fas fa-folder folder-icon"></i> : ''}
             <span className="file-name-text">{file.name}</span>
@@ -399,7 +443,7 @@ export function AudioFileTable({
       <div className="filter-results-info">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           {headerPrefix}
-          <span>{table.getRowModel().rows.length}/{files.length} files</span>
+          <span>{table.getRowModel().rows.length}/{baseFiles.length} files</span>
           {formatFilter !== 'all' && <span className="filter-badge">Format: {formatFilter}</span>}
           {bitDepthFilter !== 'all' && <span className="filter-badge">Bit: {bitDepthFilter}</span>}
           {sampleRateFilter !== 'all' && <span className="filter-badge">Rate: {(parseInt(sampleRateFilter) / 1000).toFixed(1)}kHz</span>}
@@ -413,9 +457,11 @@ export function AudioFileTable({
               onChange={(e) => setSearchText(e.target.value)}
               className="header-search-input"
             />
-            {searchText && (
-              <button className="header-search-clear" onClick={() => setSearchText('')} title="Clear search">×</button>
-            )}
+            {recursiveLoading
+              ? <span className="header-search-spinner" title="Searching subfolders…" />
+              : searchText && (
+                  <button className="header-search-clear" onClick={() => setSearchText('')} title="Clear search">×</button>
+                )}
           </div>
           <label className={`toggle-switch ${isPending ? 'pending' : ''}`} title="Hide folders from the file list">
             <span className="toggle-label">Hide folders</span>
@@ -534,6 +580,9 @@ export function AudioFileTable({
             {!isLoading && table.getRowModel().rows.map((row) => {
               const file = row.original;
               const isCursor = isActive && cursorFile?.path === file.path;
+              // ponytail: index into the parent's current-dir list; -1 for subfolder hits shown
+              // during a recursive search (plain click still selects by path; shift-range and
+              // arrow-key nav stay scoped to the current directory until you navigate into it).
               const originalIndex = files.findIndex(f => f.path === file.path);
               const cells = <>{visibleColumns.map(col => renderCell(col.id, file))}</>;
 
