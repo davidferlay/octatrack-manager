@@ -3890,8 +3890,8 @@ h1 {
 .tools-select option {
   /* --elektron-darker-gray is undefined; an invalid value reverts to the
      initial bg, which paints white in the native <select> popup on Windows
-     (white-on-white text). Use a defined dark color. */
-  background-color: var(--elektron-dark-gray);
+     (white-on-white text). Use black to match the closed control's shade. */
+  background-color: var(--elektron-black);
   color: var(--elektron-text-primary);
   padding: 0.5rem;
 }
