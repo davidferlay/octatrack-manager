@@ -3640,8 +3640,11 @@ h1 {
 
 .tools-panel {
   padding: 1.5rem;
+  width: 100%;
   max-width: 1400px;
   margin: 0 auto;
+  background: #121212;
+  flex: 1;
 }
 
 .tools-header {
@@ -3734,7 +3737,7 @@ h1 {
 .tools-options-panel,
 .tools-dest-panel {
   background-color: var(--elektron-darker-gray);
-  border: 2px solid var(--elektron-dark-gray);
+  border: 2px solid var(--elektron-border-gray);
   border-radius: 8px;
   padding: 1.25rem;
 }
@@ -3845,7 +3848,7 @@ h1 {
   display: block;
   margin-bottom: 0.5rem;
   font-weight: 500;
-  color: var(--elektron-text-secondary);
+  color: var(--elektron-text-primary);
   font-size: 0.85rem;
 }
 
@@ -3888,9 +3891,6 @@ h1 {
 
 .tools-field select option,
 .tools-select option {
-  /* --elektron-darker-gray is undefined; an invalid value reverts to the
-     initial bg, which paints white in the native <select> popup on Windows
-     (white-on-white text). Use black to match the closed control's shade. */
   background-color: var(--elektron-black);
   color: var(--elektron-text-primary);
   padding: 0.5rem;
@@ -4145,10 +4145,10 @@ h1 {
   padding: 0.4rem 0.6rem;
   font-size: 0.85rem;
   font-weight: 500;
-  background-color: var(--elektron-dark-gray);
+  background-color: #222222;
   border: 1px solid var(--elektron-medium-gray);
   border-radius: 4px;
-  color: #cccccc;
+  color: var(--elektron-text-primary);
   cursor: pointer;
   transition: all 0.15s;
   min-width: 32px;
@@ -4169,6 +4169,7 @@ h1 {
 .tools-multi-btn.tools-select-all {
   background-color: transparent;
   border-style: dashed;
+  border-color: var(--elektron-border-gray);
   font-size: 0.75rem;
 }
 
@@ -4215,7 +4216,7 @@ h1 {
 
 .tools-description-pane {
   background-color: var(--elektron-darker-gray);
-  border: 2px solid var(--elektron-dark-gray);
+  border: 2px solid var(--elektron-border-gray);
   border-radius: 8px;
   padding: 1rem 1.25rem;
 }
@@ -4223,7 +4224,7 @@ h1 {
 .tools-description-pane p {
   margin: 0;
   font-size: 1rem;
-  color: #cccccc;
+  color: var(--elektron-text-primary);
   line-height: 1.5;
 }
 
@@ -4313,10 +4314,10 @@ h1 {
   padding: 0.5rem 0.75rem;
   font-size: 0.85rem;
   font-weight: 500;
-  background-color: var(--elektron-dark-gray);
+  background-color: #222222;
   border: 1px solid var(--elektron-medium-gray);
   border-radius: 4px;
-  color: #cccccc;
+  color: var(--elektron-text-primary);
   cursor: pointer;
   transition: all 0.15s;
   text-align: center;
@@ -4795,9 +4796,9 @@ h1 {
   font-size: 0.8rem;
   font-weight: 500;
   background-color: transparent;
-  border: 1px dashed var(--elektron-medium-gray);
+  border: 1px dashed var(--elektron-border-gray);
   border-radius: 4px;
-  color: #cccccc;
+  color: var(--elektron-text-primary);
   cursor: pointer;
   transition: all 0.15s;
 }
@@ -5055,12 +5056,12 @@ h1 {
 
 .tools-fix-status-detail {
   font-size: 0.85rem;
-  color: var(--elektron-text-secondary);
+  color: var(--elektron-text-primary);
 }
 
 /* Scoped toggle group for fix-missing (pill-style for 2-option toggles) */
 .tools-fix-missing-layout .tools-field label {
-  color: #bbbbbb;
+  color: var(--elektron-text-primary);
 }
 
 .tools-fix-missing-layout .tools-toggle-group {
