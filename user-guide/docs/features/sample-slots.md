@@ -27,9 +27,9 @@ The total Octatrack RAM is 85.5 MB. The available capacity for Flex samples depe
 - **Reserved Recorder Buffers:** Each recorder reserves `length × 44100 × 2 channels × bytes_per_sample` bytes. The byte depth is 2 for 16-bit recording or 3 for 24-bit recording.
 - **Loaded Flex samples:** The PCM data size of every sample currently assigned to a Flex slot is subtracted from available RAM.
 
-The value is displayed with 1 decimal place (for values ≥ 10 MB) or 2 decimal places (for values < 10 MB), using floor truncation — matching the Octatrack's own display precision.
+The value is displayed with 1 decimal place (for values ≥ 10 MB) or 2 decimal places (for values < 10 MB), using floor truncation (same as Octatrack).
 
-![Sample Slots - Static Table](/img/screenshots/sample-slots-static.png)
+<img src={require('@site/static/img/screenshots/sample-slots-static.png').default} alt="Sample Slots - Static Table" style={{width: '60%', display: 'block', margin: '0 auto'}} />
 
 ---
 
