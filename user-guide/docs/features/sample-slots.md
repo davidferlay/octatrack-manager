@@ -101,7 +101,7 @@ When a project belongs to a Set that has an `AUDIO/` pool, an **Audio Pool toggl
 
 <div style={{display: 'flex', gap: '0.75rem', alignItems: 'flex-start', justifyContent: 'center'}}>
   <img src={require('@site/static/img/screenshots/sample-slots-open-pool-page.png').default} alt="Open the Audio Pool page for this Set" style={{width: '36%'}} />
-  <img src={require('@site/static/img/screenshots/sample-slots-back-to-project.png').default} alt="Back to project button" style={{width: '47%'}} />
+  <img src={require('@site/static/img/screenshots/sample-slots-back-to-project.png').default} alt="Back to project button" style={{width: '45%'}} />
 </div>
 
 ### Assigning samples to slots
