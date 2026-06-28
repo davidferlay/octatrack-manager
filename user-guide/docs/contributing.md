@@ -8,7 +8,7 @@ sidebar_position: 99
 
 All current features should be considered experimental - isn't that exciting?
 
-Right now, the focus is on building features and push things as far as possible: View and edit every aspect of projects, ease project management as well as sample magement, provide bulk actions, etc.
+Right now, the **focus is on building features and push things as far as possible**: View and edit every aspect of projects, ease project management as well as sample magement, provide bulk actions, etc.
 
 End game is to get everything that's possible on the Ocratrack - **and then more**.
 
@@ -16,7 +16,7 @@ End game is to get everything that's possible on the Ocratrack - **and then more
 
 If you’re using the app, your experience matters a lot: Whether everything works perfectly or not, every piece of feedback helps move the project forward. Even a simple “worked fine for me” is useful. The goal is to validate each feature across a diverse group of real users. This will tremendously help in creating a useful and stable app.
 
-At this stage, **functional feedback is what matters the most** — correctness, reliability, data integrity, edge cases, and real-world behavior. UI/UX and visual design will be refined later; the current priority is building a solid, reliable foundation of functionalities.
+At this stage, **functional feedback is what matters the most**: correctness, reliability, data integrity, edge cases, and real-world behavior. UI/UX and visual design will be refined later; the current priority is building a solid, reliable foundation of functionalities.
 
 You can report issues, feedbacks and ideas directly on the [Elektronauts thread](https://www.elektronauts.com/t/project-manager-for-octatrack/).
 
