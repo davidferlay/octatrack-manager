@@ -85,15 +85,24 @@ All slot-editing actions require **Edit mode** (toggle in the project header, or
 
 Whenever you enter Edit mode, Octatrack Manager first backs up the project files it is about to modify.
 
+<img src={require('@site/static/img/screenshots/sample-slots-edit-mode-toggle.png').default} alt="View / Edit mode toggle" style={{width: '50%', display: 'block', margin: '0 auto'}} />
+
 ### The Audio Pool pane
 
 When a project belongs to a Set that has an `AUDIO/` pool, an **Audio Pool toggle** icon appears in the slot table toolbar (top left corner). Click it - or press <kbd>A</kbd> - to open the Audio Pool pane. From there you can drag samples straight from your pool onto slots without leaving the project.
+
+![Audio Pool pane open next to the slot table](/img/screenshots/sample-slots-audio-pool-pane.png)
 
 - **Browse:** Double-click a folder to enter it; use the up (↑) button in the bottom path row to go back until you reach `AUDIO/` root.
 - **Search recursively:** Type in the search box to match files and folders in the current directory and all of its subfolders. A small spinner shows up while search is in progress. Clear the box to return to the plain directory listing.
 - **Full path on hover:** Hover any item to see its path relative to the pool root (e.g. `AUDIO/Drums/kick.wav`).
 - **Import into the pool:** Click the **Import** dropdown button to import and convert files or directories to Audio Pool on the fly Files… or a whole Folder… (recursive) into the directory you are browsing.
 - **Open the full page:** Click the second top left icon to nevigate to the complete [Audio Pool](audio-pool.md) page of current Set. Once there, click the **Back to project** button (top left corner) to go back to the project you came from.
+
+<div style={{display: 'flex', gap: '0.75rem', alignItems: 'flex-start', justifyContent: 'center'}}>
+  <img src={require('@site/static/img/screenshots/sample-slots-open-pool-page.png').default} alt="Open the Audio Pool page for this Set" style={{width: '36%'}} />
+  <img src={require('@site/static/img/screenshots/sample-slots-back-to-project.png').default} alt="Back to project button" style={{width: '47%'}} />
+</div>
 
 ### Assigning samples to slots
 
@@ -104,11 +113,25 @@ Samples can be assigned to slots in several ways while in Edit mode:
 - **Pool item right-click:** Right-click a file in the pane for **Assign to first empty slot**, or - when a slot is selected - **Assign to selected slot**.
 - **Slot right-click:** Right-click a slot for **Import audio file(s) from system** or **Import audio directory from system** to bring files in from disk and assign them starting at selected slot.
 
+![Dragging a sample from the Audio Pool pane onto a slot](/img/screenshots/sample-slots-drag-from-pool.png)
+
+![Dragging an audio file from the OS file manager onto a slot](/img/screenshots/sample-slots-drag-from-computer.png)
+
+A Transfers panel tracks the progress of these copies and conversions, similar to the [Progress Tracking](audio-pool.md#progress-tracking) pane on the Audio Pool page.
+
+![Transfers panel showing copy progress](/img/screenshots/sample-slots-transfers.png)
+
+![Audio Pool item right-click menu](/img/screenshots/sample-slots-pool-menu.png)
+
+<img src={require('@site/static/img/screenshots/sample-slots-slot-menu-empty.png').default} alt="Right-click menu on an empty slot" style={{width: '70%', display: 'block', margin: '0 auto'}} />
+
 A sample assigned to an **empty** slot will take on default attribute values (gain, timestretch, trig quantization, loop mode and trim length). However, assigning a sample onto a **filled** slot only swaps the sample path and keep any existing attributes.
 
 ### Managing existing assignments
 
 Right-click to any slot (in Edit mode) for operations:
+
+![Right-click menu on a filled slot](/img/screenshots/sample-slots-slot-menu.png)
 
 - **Clear sample & reset attributes** - same result as "Clear" operation on the Octatrack.
 - **Clear sample assignment** - removes the sample but keeps slot's attributes.
