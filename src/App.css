@@ -3888,7 +3888,10 @@ h1 {
 
 .tools-field select option,
 .tools-select option {
-  background-color: var(--elektron-darker-gray);
+  /* --elektron-darker-gray is undefined; an invalid value reverts to the
+     initial bg, which paints white in the native <select> popup on Windows
+     (white-on-white text). Use a defined dark color. */
+  background-color: var(--elektron-dark-gray);
   color: var(--elektron-text-primary);
   padding: 0.5rem;
 }
