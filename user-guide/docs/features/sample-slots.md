@@ -48,11 +48,11 @@ Every row in the table represents a slot (S1–S128 or F1–F128). The table pro
 | **Timestretch** | Shows the timestretch mode (Off, Normal, Beat). |
 | **Loop** | Shows whether the sample is set to loop (Off, Normal). |
 
-<img src={require('@site/static/img/screenshots/sample-slots-hover-compat.png').default} alt="Sample Slots - Hover compat" style={{width: '58%', display: 'block', margin: '0 auto'}} />
-
-<img src={require('@site/static/img/screenshots/sample-slots-hover-status.png').default} alt="Sample Slots - Hover status" style={{width: '52%', display: 'block', margin: '0 auto'}} />
-
-<img src={require('@site/static/img/screenshots/sample-slots-hover-source.png').default} alt="Sample Slots - Hover source" style={{width: '37%', display: 'block', margin: '0 auto'}} />
+<div style={{display: 'flex', gap: '0.75rem', alignItems: 'flex-start', justifyContent: 'center'}}>
+  <img src={require('@site/static/img/screenshots/sample-slots-hover-compat.png').default} alt="Sample Slots - Hover compat" style={{width: '32%'}} />
+  <img src={require('@site/static/img/screenshots/sample-slots-hover-status.png').default} alt="Sample Slots - Hover status" style={{width: '30%'}} />
+  <img src={require('@site/static/img/screenshots/sample-slots-hover-source.png').default} alt="Sample Slots - Hover source" style={{width: '25%'}} />
+</div>
 
 ### Filtering and Sorting
 
@@ -65,19 +65,17 @@ Each column cna be sorted or filtered:
 Additionally, you can also use these advanced features:
 - **Hide Empty:** Toggle the switch to focus only on slots that have a sample assigned.
 - **Search:** Type a name to filter the list instantly.
+<div style={{display: 'flex', gap: '0.75rem', alignItems: 'flex-start', justifyContent: 'center'}}>
+  <img src={require('@site/static/img/screenshots/sample-slots-hide-empty.png').default} alt="Sample Slots - Hide Empty" style={{width: '42%'}} />
+  <img src={require('@site/static/img/screenshots/sample-slots-search-bar.png').default} alt="Sample Slots - Search bar" style={{width: '47%'}} />
+</div>
 
-<img src={require('@site/static/img/screenshots/sample-slots-hide-empty.png').default} alt="Sample Slots - Hide Empty" style={{width: '54%', display: 'block', margin: '0 auto'}} />
-
-<img src={require('@site/static/img/screenshots/sample-slots-search-bar.png').default} alt="Sample Slots - Search bar" style={{width: '60%', display: 'block', margin: '0 auto'}} />
-
-![Sample Slots - Search results](/img/screenshots/sample-slots-search-results.png)
 
 ### Column Preferences
 You can customize which columns are visible. Click the column menu icon in the toolbar to toggle column visibility. These preferences are remembered across sessions.
 
 <img src={require('@site/static/img/screenshots/sample-slots-flex-filters-bis-col-selec.png').default} alt="Sample Slots - Column selector" style={{width: '50%', display: 'block', margin: '0 auto'}} />
 
-![Sample Slots - Column visibility menu](/img/screenshots/sample-slots-flex-filters-bis.png)
 
 ---
 
