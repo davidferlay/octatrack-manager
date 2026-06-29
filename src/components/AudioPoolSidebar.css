@@ -40,7 +40,10 @@
 
 /* Status bar pinned at the bottom of the sidebar */
 .sidebar-path-row {
-  padding: 0.35rem 0.6rem;
+  /* Keep in sync with .sample-player-bar so the two bottom bars align perfectly. */
+  box-sizing: border-box;
+  height: 2.25rem;
+  padding: 0 0.6rem;
   background: rgba(255, 255, 255, 0.02);
   border-top: 1px solid #333;
   flex-shrink: 0;

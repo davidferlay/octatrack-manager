@@ -1,9 +1,12 @@
 /* Greyish status-bar styling matching .sidebar-path-row / .audio-pool-status. */
 .sample-player-bar {
+  /* Keep height in sync with .sidebar-path-row so the two bottom bars align perfectly. */
+  box-sizing: border-box;
+  height: 2.25rem;
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.4rem 0.75rem;
+  padding: 0 0.75rem;
   background: var(--elektron-dark-gray);
   border-top: 1px solid var(--elektron-border-gray);
   font-size: 0.78rem;
@@ -42,7 +45,7 @@
   position: relative;
   flex: 1 1 auto;
   min-width: 4rem;
-  height: 1.5rem;
+  height: 1.2rem;
   display: flex;
   align-items: center;
 }
@@ -66,7 +69,7 @@
 .player-seek-head {
   position: absolute;
   width: 2px;
-  height: 1rem;
+  height: 0.85rem;
   background: var(--elektron-orange);
   transform: translateX(-1px);
   pointer-events: none;
