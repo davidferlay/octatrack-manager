@@ -7,7 +7,7 @@ function makePlayer(overrides: Partial<AudioPreview> = {}): AudioPreview {
   return {
     isPlaying: false, currentTime: 0, duration: 4, activeName: 'kick.wav', error: false,
     volume: 0.8, autoPreview: false,
-    play: vi.fn(), load: vi.fn(), pause: vi.fn(), togglePlay: vi.fn(), seek: vi.fn(),
+    play: vi.fn(), load: vi.fn(), reset: vi.fn(), pause: vi.fn(), togglePlay: vi.fn(), seek: vi.fn(),
     setVolume: vi.fn(), setAutoPreview: vi.fn(), ...overrides,
   }
 }
@@ -48,7 +48,25 @@ describe('SamplePlayerBar', () => {
 
   it('shows volume as a percentage', () => {
     render(<SamplePlayerBar player={makePlayer({ volume: 0.8 })} playable={true} />)
-    expect(screen.getByText('80%')).toBeInTheDocument()
+    expect(screen.getByText(/80%/)).toBeInTheDocument()
+  })
+
+  it('raises volume on drag up', () => {
+    const player = makePlayer({ volume: 0.5 })
+    render(<SamplePlayerBar player={player} playable={true} />)
+    fireEvent.pointerDown(screen.getByLabelText(/volume/i), { clientY: 200 })
+    fireEvent.pointerMove(window, { clientY: 125 }) // up 75px => +0.5
+    expect(player.setVolume).toHaveBeenCalledWith(1)
+  })
+
+  it('hides the name and timeline when no sample is selected', () => {
+    render(<SamplePlayerBar player={makePlayer({ activeName: '' })} playable={false} />)
+    expect(screen.queryByText(/no sample selected/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/seek/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/play|pause/i)).not.toBeInTheDocument()
+    // Volume and Auto remain available
+    expect(screen.getByLabelText(/volume/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/auto-preview/i)).toBeInTheDocument()
   })
 
   it('toggles auto-preview', () => {

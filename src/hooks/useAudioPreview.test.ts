@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { invoke } from '@tauri-apps/api/core'
-import { useAudioPreview, shouldAutoPreview, formatTime, scrubTarget, volumeStep } from './useAudioPreview'
+import { useAudioPreview, shouldAutoPreview, formatTime, scrubTarget, volumeStep, isAudioFile } from './useAudioPreview'
 
 beforeEach(() => {
   localStorage.clear()
@@ -15,6 +15,17 @@ describe('shouldAutoPreview', () => {
     expect(shouldAutoPreview(false, 1, true)).toBe(false)
     expect(shouldAutoPreview(true, 2, true)).toBe(false)
     expect(shouldAutoPreview(true, 1, false)).toBe(false)
+  })
+})
+
+describe('isAudioFile', () => {
+  it('accepts common audio extensions, rejects everything else', () => {
+    expect(isAudioFile('/x/Atmosphere  5 - A.wav')).toBe(true)
+    expect(isAudioFile('/x/loop.AIFF')).toBe(true)
+    expect(isAudioFile('/x/take.flac')).toBe(true)
+    expect(isAudioFile('/x/huge.tar.gz')).toBe(false)
+    expect(isAudioFile('/x/archive.zip')).toBe(false)
+    expect(isAudioFile('/x/noext')).toBe(false)
   })
 })
 

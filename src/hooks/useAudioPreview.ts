@@ -8,6 +8,17 @@ export function shouldAutoPreview(autoPreview: boolean, selectionSize: number, p
   return autoPreview && selectionSize === 1 && playable
 }
 
+// Extensions we attempt to preview. Anything else is never read/decoded, so selecting
+// a huge non-audio file (e.g. a 400 MB tar.gz) can't freeze the UI on a pointless read.
+const AUDIO_EXTENSIONS = new Set([
+  'wav', 'wave', 'aif', 'aiff', 'aifc', 'flac', 'mp3', 'ogg', 'oga', 'opus', 'm4a', 'aac',
+])
+export function isAudioFile(path: string): boolean {
+  const dot = path.lastIndexOf('.')
+  if (dot < 0) return false
+  return AUDIO_EXTENSIONS.has(path.slice(dot + 1).toLowerCase())
+}
+
 // Keyboard scrub: move the playhead by 5% of total duration, clamped to the clip.
 export function scrubTarget(currentTime: number, duration: number, dir: 1 | -1): number {
   if (!Number.isFinite(duration) || duration <= 0) return Math.max(0, currentTime)
@@ -47,6 +58,7 @@ export interface AudioPreview {
   autoPreview: boolean
   play: (path: string, name: string) => void
   load: (path: string, name: string) => void
+  reset: () => void
   pause: () => void
   togglePlay: () => void
   seek: (seconds: number) => void
@@ -184,6 +196,18 @@ export function useAudioPreview(): AudioPreview {
     decode(path, name)
   }, [decode, stopPlayback])
 
+  // Return to the idle state (no sample): used when the selection isn't a previewable file.
+  const reset = useCallback(() => {
+    stopPlayback(false)
+    bufferRef.current = null
+    offsetRef.current = 0
+    setIsPlaying(false)
+    setActiveName('')
+    setDuration(0)
+    setCurrentTime(0)
+    setError(false)
+  }, [stopPlayback])
+
   const pause = useCallback(() => { stopPlayback(true); setIsPlaying(false) }, [stopPlayback])
 
   const togglePlay = useCallback(() => {
@@ -214,5 +238,5 @@ export function useAudioPreview(): AudioPreview {
   }, [stopPlayback, stopRaf])
 
   return { isPlaying, currentTime, duration, activeName, error, volume, autoPreview,
-    play, load, pause, togglePlay, seek, setVolume, setAutoPreview }
+    play, load, reset, pause, togglePlay, seek, setVolume, setAutoPreview }
 }

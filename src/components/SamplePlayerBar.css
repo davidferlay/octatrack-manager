@@ -1,25 +1,31 @@
+/* Greyish status-bar styling matching .sidebar-path-row / .audio-pool-status. */
 .sample-player-bar {
   display: flex;
   align-items: center;
   gap: 0.6rem;
   padding: 0.4rem 0.75rem;
-  background: #121212;
+  background: var(--elektron-dark-gray);
   border-top: 1px solid var(--elektron-border-gray);
-  font-size: 0.85rem;
-  color: var(--elektron-text-primary);
+  font-size: 0.78rem;
+  color: var(--elektron-text-secondary);
 }
 
+.sample-player-bar.idle {
+  justify-content: flex-end;
+}
+
+/* Play/pause: bare icon, no button chrome. */
 .player-play-btn {
   flex: 0 0 auto;
-  width: 2rem;
-  height: 2rem;
-  border: 1px solid var(--elektron-medium-gray);
-  border-radius: 4px;
-  background: #222222;
+  background: none;
+  border: none;
+  padding: 0;
   color: var(--elektron-text-primary);
+  font-size: 0.95rem;
+  line-height: 1;
   cursor: pointer;
 }
-
+.player-play-btn:hover:not(:disabled) { color: var(--elektron-orange); }
 .player-play-btn:disabled { opacity: 0.4; cursor: default; }
 
 .player-name {
@@ -27,6 +33,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--elektron-text-primary);
 }
 
 /* Seek: a horizontal line with a vertical playhead browsing across it.
@@ -73,7 +80,6 @@
   opacity: 0;
   cursor: pointer;
 }
-
 .player-seek-input:disabled { cursor: default; }
 
 .player-time {
@@ -82,44 +88,46 @@
   color: var(--elektron-text-secondary);
 }
 
-.player-volume {
+/* VOL: a small LCD-style readout; drag up/down (or scroll) to change. */
+.player-vol-readout {
+  flex: 0 0 auto;
+  font-family: 'Courier New', monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  color: var(--elektron-orange);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--elektron-border-gray);
+  border-radius: 2px;
+  padding: 0.1rem 0.4rem;
+  min-width: 4.4rem;
+  text-align: center;
+  cursor: ns-resize;
+  user-select: none;
+}
+
+/* AUTO: a labelled LED that glows when on (no button chrome). */
+.player-auto {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  cursor: ns-resize;
-  user-select: none;
-  color: var(--elektron-text-secondary);
-}
-
-.player-vol-label {
+  background: none;
+  border: none;
+  padding: 0;
   font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  color: var(--elektron-orange);
-}
-
-.player-vol-value {
-  font-variant-numeric: tabular-nums;
-  min-width: 2.6rem;
-  text-align: right;
-}
-
-.player-auto {
-  flex: 0 0 auto;
-  padding: 0.2rem 0.6rem;
-  border: 1px solid var(--elektron-medium-gray);
-  border-radius: 999px;
-  background: transparent;
+  letter-spacing: 0.08em;
   color: var(--elektron-text-secondary);
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   cursor: pointer;
 }
+.player-auto.on { color: var(--elektron-text-primary); }
 
-.player-auto.active {
+.player-auto-led {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--elektron-border-gray);
+}
+.player-auto.on .player-auto-led {
   background: var(--elektron-orange);
-  border-color: var(--elektron-orange);
-  color: #121212;
+  box-shadow: 0 0 5px var(--elektron-orange);
 }

@@ -2314,6 +2314,29 @@ h1 {
   background: #121212;
 }
 
+/* Without the sidebar, bound the tab like the with-sidebar case so the table scrolls
+   independently and the player bar stays pinned, full-width, at the bottom. */
+.samples-tab:not(.with-sidebar) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: calc(100vh - 52px);
+  overflow: hidden;
+}
+.samples-tab:not(.with-sidebar) .samples-section {
+  flex: 1;
+  min-height: 0;
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.samples-tab:not(.with-sidebar) .samples-section > .table-wrapper {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
 .samples-tab.with-sidebar {
   display: flex;
   padding: 0;
@@ -2519,13 +2542,6 @@ h1 {
   outline: 2px dashed #f59e0b;
   outline-offset: -2px;
   background: rgba(245, 158, 11, 0.05);
-}
-
-/* Subtle highlight on the pane that has keyboard focus (arrow navigation). */
-.sidebar-os-drop-zone.pane-active .audio-pool-sidebar,
-.samples-tab.with-sidebar .samples-section.pane-active {
-  outline: 1px solid var(--elektron-orange);
-  outline-offset: -1px;
 }
 
 .banks-tab,

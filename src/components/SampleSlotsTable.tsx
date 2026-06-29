@@ -15,7 +15,7 @@ import {
 import { useTablePreferences } from "../context/TablePreferencesContext";
 import { AudioPoolSidebar } from "./AudioPoolSidebar";
 import { formatFileSize } from "./AudioFileTable";
-import { useAudioPreview, shouldAutoPreview, scrubTarget, volumeStep } from '../hooks/useAudioPreview';
+import { useAudioPreview, shouldAutoPreview, scrubTarget, volumeStep, isAudioFile } from '../hooks/useAudioPreview';
 import { SamplePlayerBar } from './SamplePlayerBar';
 
 // Droppable slot row for dnd-kit (pointer-based, cross-platform)
@@ -195,9 +195,11 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     const isAbsolute = !!path && (path.startsWith('/') || /^[A-Za-z]:/.test(path));
     const joined = !path ? null : isAbsolute ? path : (projectPath ? `${projectPath}/${path}` : null);
     const resolved = joined ? normalizePath(joined) : null;
-    const playable = !!resolved;
+    // Only preview real audio files; non-audio (or empty) selections reset the bar to idle
+    // and are never read/decoded, so a huge non-audio file can't freeze the UI.
+    const playable = !!resolved && isAudioFile(resolved);
     setActivePlayable(playable);
-    if (!resolved) return;
+    if (!playable) { player.reset(); return; }
     if (shouldAutoPreview(player.autoPreview, selectionSize, playable)) {
       player.play(resolved, name);
     } else {
@@ -1586,7 +1588,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     >
     <div className={`samples-tab ${showAudioPool ? 'with-sidebar' : ''}`}>
       {showAudioPool && audioPoolPath && (
-        <div className={`sidebar-os-drop-zone${osDragOverSidebar ? ' os-drag-over' : ''}${activePane === 'pool' ? ' pane-active' : ''}`}>
+        <div className={`sidebar-os-drop-zone${osDragOverSidebar ? ' os-drag-over' : ''}`}>
           <AudioPoolSidebar
             audioPoolPath={audioPoolPath}
             isEditMode={isEditMode ?? false}
@@ -1616,7 +1618,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
           />
         </div>
       )}
-      <section className={`samples-section${showAudioPool && activePane === 'slots' ? ' pane-active' : ''}`}>
+      <section className="samples-section">
         <div className="filter-results-info">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
             {!showAudioPool && audioPoolPath && (

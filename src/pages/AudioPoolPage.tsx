@@ -8,7 +8,7 @@ import { AudioFileTable } from "../components/AudioFileTable";
 import { OverwriteModal } from "../components/OverwriteModal";
 import { TransferProgressPanel } from "../components/TransferProgressPanel";
 import { useAudioPoolTransfer } from "../hooks/useAudioPoolTransfer";
-import { useAudioPreview, shouldAutoPreview, scrubTarget, volumeStep } from "../hooks/useAudioPreview";
+import { useAudioPreview, shouldAutoPreview, scrubTarget, volumeStep, isAudioFile } from "../hooks/useAudioPreview";
 import { SamplePlayerBar } from "../components/SamplePlayerBar";
 import type { AudioFile } from "../types/audioFile";
 import "./AudioPoolPage.css";
@@ -96,9 +96,11 @@ export function AudioPoolPage() {
   const [activePlayable, setActivePlayable] = useState(false);
 
   const previewCandidate = useCallback((path: string | null, name: string, selectionSize: number) => {
-    const playable = !!path;
+    // Only preview real audio files; non-audio selections reset the bar and are never
+    // read/decoded, so a huge non-audio file can't freeze the UI.
+    const playable = !!path && isAudioFile(path);
     setActivePlayable(playable);
-    if (!path) return;
+    if (!playable) { player.reset(); return; }
     if (shouldAutoPreview(player.autoPreview, selectionSize, playable)) {
       player.play(path, name);
     } else {
@@ -1287,15 +1289,18 @@ export function AudioPoolPage() {
         onResizeStart={handleTransferResizeStart}
       />
 
-      {/* Status bar */}
+      {/* Status bar (left) + sample player (right) share one row */}
       <div className="audio-pool-status">
-        {selectedSourceFiles.size > 0 && (
-          <span>{selectedSourceFiles.size} file(s) selected - Drag to audio pool to copy</span>
-        )}
-        {selectedDestFiles.size > 0 && <span>{selectedDestFiles.size} file(s) selected in audio pool</span>}
-        {selectedSourceFiles.size === 0 && selectedDestFiles.size === 0 && (
-          <span>{isSourcePanelOpen ? 'Select files to copy' : 'Click "Import" to add files to audio pool'}</span>
-        )}
+        <div className="audio-pool-status-msg">
+          {selectedSourceFiles.size > 0 && (
+            <span>{selectedSourceFiles.size} file(s) selected - Drag to audio pool to copy</span>
+          )}
+          {selectedDestFiles.size > 0 && <span>{selectedDestFiles.size} file(s) selected in audio pool</span>}
+          {selectedSourceFiles.size === 0 && selectedDestFiles.size === 0 && (
+            <span>{isSourcePanelOpen ? 'Select files to copy' : 'Click "Import" to add files to audio pool'}</span>
+          )}
+        </div>
+        <SamplePlayerBar player={player} playable={activePlayable} />
       </div>
 
       {/* Overwrite confirmation modal */}
@@ -1500,8 +1505,6 @@ export function AudioPoolPage() {
           </div>
         </div>
       )}
-
-      <SamplePlayerBar player={player} playable={activePlayable} />
     </main>
   );
 }

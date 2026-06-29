@@ -906,13 +906,31 @@ td.col-size {
 /* Status bar */
 .audio-pool-status {
   display: flex;
-  align-items: center;
-  padding: 0.5rem 1rem;
+  align-items: stretch;
+  padding: 0;
   background-color: var(--elektron-dark-gray);
   border-top: 1px solid var(--elektron-border-gray);
   font-size: 0.8rem;
   color: var(--elektron-text-secondary);
   flex-shrink: 0;
+}
+
+/* Status message and sample player each take half the row, kept visually separate. */
+.audio-pool-status-msg {
+  flex: 1 1 50%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+}
+
+.audio-pool-status .sample-player-bar {
+  flex: 1 1 50%;
+  min-width: 0;
+  background: none;
+  border-top: none;
+  border-left: 1px solid var(--elektron-border-gray);
+  padding: 0.3rem 1rem;
 }
 
 /* Scrollbar styling — thin, matches global */
