@@ -3,10 +3,21 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { invoke } from '@tauri-apps/api/core'
-import { SampleSlotsTable } from './SampleSlotsTable'
+import { SampleSlotsTable, normalizePath } from './SampleSlotsTable'
 import { TablePreferencesProvider } from '../context/TablePreferencesContext'
 
 const mockInvoke = vi.mocked(invoke)
+
+describe('normalizePath', () => {
+  it('collapses ".." so the asset protocol never sees a traversal path', () => {
+    // Slot paths are ../AUDIO/... relative to the project dir; the join + normalize
+    // must yield a clean absolute path (the asset protocol returns 403 on "..").
+    expect(normalizePath('/home/u/SET/PROJ/../AUDIO/kick.wav')).toBe('/home/u/SET/AUDIO/kick.wav')
+    expect(normalizePath('/home/u/SET/PROJ/./AUDIO/kick.wav')).toBe('/home/u/SET/PROJ/AUDIO/kick.wav')
+    expect(normalizePath('/already/clean/file.wav')).toBe('/already/clean/file.wav')
+    expect(normalizePath('/a/b/c/../../d.wav')).toBe('/a/d.wav')
+  })
+})
 
 const mockSlots = [
   {

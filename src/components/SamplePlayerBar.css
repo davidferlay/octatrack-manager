@@ -1,0 +1,125 @@
+.sample-player-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.75rem;
+  background: #121212;
+  border-top: 1px solid var(--elektron-border-gray);
+  font-size: 0.85rem;
+  color: var(--elektron-text-primary);
+}
+
+.player-play-btn {
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--elektron-medium-gray);
+  border-radius: 4px;
+  background: #222222;
+  color: var(--elektron-text-primary);
+  cursor: pointer;
+}
+
+.player-play-btn:disabled { opacity: 0.4; cursor: default; }
+
+.player-name {
+  flex: 0 1 12rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Seek: a horizontal line with a vertical playhead browsing across it.
+   A transparent range input sits on top for click/drag/keyboard seeking. */
+.player-seek-track {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 4rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+}
+
+.player-seek-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--elektron-border-gray);
+}
+
+.player-seek-fill {
+  position: absolute;
+  left: 0;
+  height: 2px;
+  background: var(--elektron-orange);
+  opacity: 0.5;
+}
+
+.player-seek-head {
+  position: absolute;
+  width: 2px;
+  height: 1rem;
+  background: var(--elektron-orange);
+  transform: translateX(-1px);
+  pointer-events: none;
+}
+
+.player-seek-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.player-seek-input:disabled { cursor: default; }
+
+.player-time {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--elektron-text-secondary);
+}
+
+.player-volume {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: ns-resize;
+  user-select: none;
+  color: var(--elektron-text-secondary);
+}
+
+.player-vol-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--elektron-orange);
+}
+
+.player-vol-value {
+  font-variant-numeric: tabular-nums;
+  min-width: 2.6rem;
+  text-align: right;
+}
+
+.player-auto {
+  flex: 0 0 auto;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--elektron-medium-gray);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--elektron-text-secondary);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.player-auto.active {
+  background: var(--elektron-orange);
+  border-color: var(--elektron-orange);
+  color: #121212;
+}

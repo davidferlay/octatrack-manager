@@ -3,7 +3,16 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { invoke } from '@tauri-apps/api/core'
 import { open as openFileDialog } from '@tauri-apps/plugin-dialog'
-import { AudioPoolSidebar } from './AudioPoolSidebar'
+import { AudioPoolSidebar, parentDir } from './AudioPoolSidebar'
+
+describe('parentDir', () => {
+  it('climbs one level but never above the pool root', () => {
+    expect(parentDir('/set/AUDIO/drums', '/set/AUDIO')).toBe('/set/AUDIO')
+    expect(parentDir('/set/AUDIO/drums/909', '/set/AUDIO')).toBe('/set/AUDIO/drums')
+    expect(parentDir('/set/AUDIO', '/set/AUDIO')).toBe('/set/AUDIO') // already at root: no move
+    expect(parentDir('/set/AUDIO/drums/', '/set/AUDIO')).toBe('/set/AUDIO') // trailing slash
+  })
+})
 
 const mockInvoke = vi.mocked(invoke)
 const mockOpen = vi.mocked(openFileDialog)

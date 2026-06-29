@@ -15,6 +15,8 @@ import {
 import { useTablePreferences } from "../context/TablePreferencesContext";
 import { AudioPoolSidebar } from "./AudioPoolSidebar";
 import { formatFileSize } from "./AudioFileTable";
+import { useAudioPreview, shouldAutoPreview, scrubTarget, volumeStep } from '../hooks/useAudioPreview';
+import { SamplePlayerBar } from './SamplePlayerBar';
 
 // Droppable slot row for dnd-kit (pointer-based, cross-platform)
 function DroppableSlotRow({
@@ -132,6 +134,21 @@ function getDirectoryPath(path: string | null): string {
   return parts.join('/') + '/';
 }
 
+// Collapse '.' and '..' segments into a clean absolute path. The asset protocol
+// returns 403 for any path containing '..' (traversal protection) and does not
+// resolve it like the OS does, so sample paths (stored as ../AUDIO/...) must be
+// normalized before convertFileSrc.
+export function normalizePath(p: string): string {
+  const isAbs = p.startsWith('/');
+  const out: string[] = [];
+  for (const seg of p.split('/')) {
+    if (seg === '' || seg === '.') continue;
+    if (seg === '..') { out.pop(); continue; }
+    out.push(seg);
+  }
+  return (isAbs ? '/' : '') + out.join('/');
+}
+
 // Helper function to extract Set-relative path (SetName/ProjectName/)
 function getSetRelativePath(projectPath: string | null): string {
   if (!projectPath) return '';
@@ -165,6 +182,52 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   const [lastClickedSlotId, setLastClickedSlotId] = useState<number | null>(null);
   // Bumped to clear the Audio Pool pane's selection (slot and pane selections are exclusive).
   const [clearSidebarToken, setClearSidebarToken] = useState(0);
+  // Which pane keyboard arrows act on. Forced to 'slots' whenever the sidebar is hidden.
+  const [activePane, setActivePane] = useState<'slots' | 'pool'>('slots');
+
+  const player = useAudioPreview();
+  const [activePlayable, setActivePlayable] = useState(false);
+
+  // Drive preview from a clicked slot row or a pool file. Slot paths are stored
+  // relative to the project dir (e.g. ../AUDIO/x.wav); pool paths are already
+  // absolute. convertFileSrc needs an absolute path, so resolve relative ones.
+  const previewCandidate = useCallback((path: string | null, name: string, selectionSize: number) => {
+    const isAbsolute = !!path && (path.startsWith('/') || /^[A-Za-z]:/.test(path));
+    const joined = !path ? null : isAbsolute ? path : (projectPath ? `${projectPath}/${path}` : null);
+    const resolved = joined ? normalizePath(joined) : null;
+    const playable = !!resolved;
+    setActivePlayable(playable);
+    if (!resolved) return;
+    if (shouldAutoPreview(player.autoPreview, selectionSize, playable)) {
+      player.play(resolved, name);
+    } else {
+      player.load(resolved, name);
+    }
+  }, [player, projectPath]);
+
+  // Keyboard up/down over the slot list: move the cursor, single-select, preview.
+  // Depends on sortedSlots, defined further down, so read it lazily via a ref.
+  const sortedSlotsRef = useRef<SampleSlot[]>([]);
+  const moveSlotSelection = useCallback((delta: number) => {
+    const list = sortedSlotsRef.current;
+    if (list.length === 0) return;
+    const curIdx = lastClickedSlotId != null ? list.findIndex(s => s.slot_id === lastClickedSlotId) : -1;
+    const base = curIdx < 0 ? (delta > 0 ? -1 : 0) : curIdx;
+    const next = Math.min(list.length - 1, Math.max(0, base + delta));
+    const slot = list[next];
+    if (!slot) return;
+    setClearSidebarToken(t => t + 1);
+    setSelectedSlots(new Set([slot.slot_id]));
+    setLastClickedSlotId(slot.slot_id);
+    previewCandidate(slot.path ?? null, getFilename(slot.path ?? null), 1);
+  }, [lastClickedSlotId, previewCandidate]);
+
+  // Keep the cursor row visible after keyboard navigation. block:'nearest' is a no-op
+  // when the row is already on screen, so mouse clicks do not cause jarring scrolls.
+  useEffect(() => {
+    if (lastClickedSlotId == null) return;
+    document.querySelector('.slots-table tr.cursor')?.scrollIntoView({ block: 'nearest' });
+  }, [lastClickedSlotId]);
 
   const { flexPreferences, staticPreferences, setFlexPreferences, setStaticPreferences } = useTablePreferences();
 
@@ -548,24 +611,54 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     };
   }, [slotMenu]);
 
-  // Keyboard shortcuts: 'a' toggles the Audio Pool pane; Delete clears the selected slot(s)
-  // in Edit mode. Ignored while typing in a field or with a context menu open.
+  // Focus stays on the slots when there is no Audio Pool pane to move to.
+  useEffect(() => { if (!showAudioPool) setActivePane('slots'); }, [showAudioPool]);
+
+  // Keyboard shortcuts. Player controls (Space, Ctrl+arrows) work regardless of pane;
+  // 'a' toggles the pane; Delete clears slots; Left/Right switch panes; Up/Down move
+  // the slot cursor when the slots pane is active (the sidebar handles its own up/down).
+  // Ignored while typing in a field or with a context menu open.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (slotMenu) return;
       const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-      if (slotMenu || e.ctrlKey || e.metaKey || e.altKey) return;
-      if ((e.key === 'a' || e.key === 'A') && audioPoolPath) {
-        e.preventDefault();
-        toggleAudioPool(!showAudioPool);
-      } else if ((e.key === 'Delete' || e.key === 'Backspace') && isEditMode && selectedSlots.size > 0) {
-        e.preventDefault();
-        handleDeleteKey();
+      const tag = t?.tagName;
+      const typing = !!t && (tag === 'INPUT' || tag === 'TEXTAREA' || t.isContentEditable);
+
+      // Space: play/pause. Skip when a button/select/link/field is focused so it does not double-fire.
+      if (e.key === ' ' && !typing) {
+        if (tag !== 'BUTTON' && tag !== 'SELECT' && tag !== 'A') { e.preventDefault(); player.togglePlay(); }
+        return;
+      }
+      // Shift+Enter: toggle Auto-preview.
+      if (e.key === 'Enter' && e.shiftKey && !typing) { e.preventDefault(); player.setAutoPreview(!player.autoPreview); return; }
+      // Ctrl/Cmd + arrows: scrub the playhead / adjust volume.
+      if ((e.ctrlKey || e.metaKey) && !typing) {
+        if (e.key === 'ArrowLeft') { e.preventDefault(); player.seek(scrubTarget(player.currentTime, player.duration, -1)); return; }
+        if (e.key === 'ArrowRight') { e.preventDefault(); player.seek(scrubTarget(player.currentTime, player.duration, 1)); return; }
+        if (e.key === 'ArrowUp') { e.preventDefault(); player.setVolume(volumeStep(player.volume, 1)); return; }
+        if (e.key === 'ArrowDown') { e.preventDefault(); player.setVolume(volumeStep(player.volume, -1)); return; }
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return; // any other modifier combo is not ours
+      if (typing) return;
+
+      if ((e.key === 'a' || e.key === 'A') && audioPoolPath) { e.preventDefault(); toggleAudioPool(!showAudioPool); return; }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && isEditMode && selectedSlots.size > 0) { e.preventDefault(); handleDeleteKey(); return; }
+
+      // Left/Right switch the focused pane (pool sits on the left, slots on the right).
+      if (e.key === 'ArrowLeft') { if (showAudioPool) { e.preventDefault(); setActivePane('pool'); } return; }
+      if (e.key === 'ArrowRight') { if (showAudioPool) { e.preventDefault(); setActivePane('slots'); } return; }
+
+      // Up/Down move the slot cursor only when the slots pane is active.
+      const poolActive = showAudioPool && activePane === 'pool';
+      if (!poolActive) {
+        if (e.key === 'ArrowDown') { e.preventDefault(); moveSlotSelection(1); return; }
+        if (e.key === 'ArrowUp') { e.preventDefault(); moveSlotSelection(-1); return; }
       }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [audioPoolPath, showAudioPool, isEditMode, selectedSlots, slotMenu, handleDeleteKey]);
+  }, [audioPoolPath, showAudioPool, isEditMode, selectedSlots, slotMenu, handleDeleteKey, player, activePane, moveSlotSelection]);
 
   // Expand any dragged/dropped directories into their (recursive) audio files so the
   // copy/assign flows never choke on a folder. Plain audio files pass through unchanged.
@@ -1223,9 +1316,11 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
 
   const filteredSlots = filterSlots(slots);
   const sortedSlots = sortSlots(filteredSlots);
+  sortedSlotsRef.current = sortedSlots; // keep the keyboard-nav ref in sync with the visible order
 
   // Row selection: single click selects, Ctrl/Cmd toggles, Shift extends a range (visible order).
   function handleSlotClick(e: React.MouseEvent, slotId: number) {
+    setActivePane('slots'); // clicking a slot moves keyboard focus to the slots pane
     setClearSidebarToken(t => t + 1); // selecting a slot clears the Audio Pool pane selection
     const index = sortedSlots.findIndex(s => s.slot_id === slotId);
     if (e.shiftKey && lastClickedSlotId != null) {
@@ -1245,6 +1340,10 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
       setSelectedSlots(new Set([slotId]));
       setLastClickedSlotId(slotId);
     }
+
+    const clicked = sortedSlots.find(s => s.slot_id === slotId);
+    const hasModifier = e.shiftKey || e.ctrlKey || e.metaKey;
+    previewCandidate(clicked?.path ?? null, getFilename(clicked?.path ?? null), hasModifier ? 2 : 1);
   }
 
   // Compute visible column IDs respecting current column order
@@ -1487,14 +1586,15 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     >
     <div className={`samples-tab ${showAudioPool ? 'with-sidebar' : ''}`}>
       {showAudioPool && audioPoolPath && (
-        <div className={`sidebar-os-drop-zone${osDragOverSidebar ? ' os-drag-over' : ''}`}>
+        <div className={`sidebar-os-drop-zone${osDragOverSidebar ? ' os-drag-over' : ''}${activePane === 'pool' ? ' pane-active' : ''}`}>
           <AudioPoolSidebar
             audioPoolPath={audioPoolPath}
             isEditMode={isEditMode ?? false}
             dndMode={true}
             refreshKey={sidebarRefreshKey}
             clearSelectionToken={clearSidebarToken}
-            onSelect={() => { setSelectedSlots(new Set()); setLastClickedSlotId(null); }}
+            active={activePane === 'pool'}
+            onSelect={() => { setActivePane('pool'); setSelectedSlots(new Set()); setLastClickedSlotId(null); }}
             onCurrentPathChange={(path) => { sidebarCurrentPathRef.current = path; }}
             onImport={importToPool}
             onAssignToFirstEmpty={assignToFirstEmpty}
@@ -1503,6 +1603,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
             hasSelectedSlot={selectedSlots.size > 0}
             onOpenAudioPoolPage={openAudioPoolPage}
             persistKey={projectPath ? `sidebar:${projectPath}:${tableType}` : undefined}
+            onActiveFile={(path, name, size) => previewCandidate(path, name, size)}
             toggleButton={
               <button
                 className={`audio-pool-toggle-btn ${showAudioPool ? 'active' : ''}`}
@@ -1515,7 +1616,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
           />
         </div>
       )}
-      <section className="samples-section">
+      <section className={`samples-section${showAudioPool && activePane === 'slots' ? ' pane-active' : ''}`}>
         <div className="filter-results-info">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
             {!showAudioPool && audioPoolPath && (
@@ -1756,6 +1857,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
           </tbody>
         </table>
         </div>
+        <SamplePlayerBar player={player} playable={activePlayable} />
       </section>
     </div>
       <DragOverlay dropAnimation={null}>

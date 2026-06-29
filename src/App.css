@@ -2521,6 +2521,13 @@ h1 {
   background: rgba(245, 158, 11, 0.05);
 }
 
+/* Subtle highlight on the pane that has keyboard focus (arrow navigation). */
+.sidebar-os-drop-zone.pane-active .audio-pool-sidebar,
+.samples-tab.with-sidebar .samples-section.pane-active {
+  outline: 1px solid var(--elektron-orange);
+  outline-offset: -1px;
+}
+
 .banks-tab,
 .tracks-tab {
   padding: 0;

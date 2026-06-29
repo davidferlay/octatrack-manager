@@ -4,6 +4,7 @@ import { vi } from 'vitest'
 // Mock Tauri APIs
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
+  convertFileSrc: vi.fn((p: string) => `asset://localhost/${encodeURIComponent(p)}`),
 }))
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -43,3 +44,44 @@ Object.defineProperty(window, 'matchMedia', {
     dispatchEvent: vi.fn(),
   })),
 })
+
+// jsdom does not implement media playback
+window.HTMLMediaElement.prototype.play = vi.fn(() => Promise.resolve())
+window.HTMLMediaElement.prototype.pause = vi.fn()
+window.HTMLMediaElement.prototype.load = vi.fn()
+
+// jsdom does not implement Blob object URLs
+URL.createObjectURL = vi.fn(() => 'blob:mock')
+URL.revokeObjectURL = vi.fn()
+
+// jsdom does not implement scrollIntoView
+Element.prototype.scrollIntoView = vi.fn()
+
+// jsdom does not implement the Web Audio API (used by useAudioPreview)
+class FakeGainNode {
+  gain = { value: 1 }
+  connect() {}
+  disconnect() {}
+}
+class FakeBufferSource {
+  buffer: unknown = null
+  onended: (() => void) | null = null
+  connect() {}
+  disconnect() {}
+  start() {}
+  stop() {}
+}
+class FakeAudioContext {
+  currentTime = 0
+  destination = {}
+  createGain() { return new FakeGainNode() }
+  createBufferSource() { return new FakeBufferSource() }
+  decodeAudioData() { return Promise.resolve({ duration: 4, numberOfChannels: 2, sampleRate: 44100, length: 176400 }) }
+  resume() { return Promise.resolve() }
+  close() { return Promise.resolve() }
+}
+;(globalThis as unknown as { AudioContext: unknown }).AudioContext = FakeAudioContext
+
+// Keep the rAF position loop from running in tests (avoids open handles / act noise)
+globalThis.requestAnimationFrame = vi.fn(() => 0)
+globalThis.cancelAnimationFrame = vi.fn()

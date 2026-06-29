@@ -412,6 +412,17 @@ fn reveal_in_file_manager(app: tauri::AppHandle, path: String) -> Result<(), Str
     }
 }
 
+/// Read an audio file's raw bytes so the frontend can play it via a Blob URL.
+/// On Linux webkit2gtk the `<audio>` element loads through GStreamer, which bypasses
+/// the asset:// custom-scheme handler, so we hand the bytes to the webview directly.
+/// Canonicalize to resolve `..` (slot paths are stored relative to the project dir).
+#[tauri::command]
+fn read_audio_file(path: String) -> Result<tauri::ipc::Response, String> {
+    let canonical = std::fs::canonicalize(&path).map_err(|e| e.to_string())?;
+    let bytes = std::fs::read(&canonical).map_err(|e| e.to_string())?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
 /// Calculate recommended concurrency based on CPU cores and available memory.
 /// This is extracted as a separate function for testability.
 fn calculate_recommended_concurrency(cpu_cores: usize, available_memory_mb: u64) -> usize {
@@ -919,6 +930,7 @@ pub fn run() {
             delete_file,
             open_in_file_manager,
             reveal_in_file_manager,
+            read_audio_file,
             expand_audio_paths,
             inspect_audio_files,
             get_system_resources,

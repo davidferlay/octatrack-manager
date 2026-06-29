@@ -30,9 +30,24 @@ interface AudioPoolSidebarProps {
   onSelect?: () => void;
   /** Bump to clear this pane's selection (pane and slot selections are mutually exclusive). */
   clearSelectionToken?: number;
+  /** Report the last-clicked file so the page can drive auto-preview. */
+  onActiveFile?: (path: string, name: string, selectionSize: number) => void;
+  /** True when this pane has keyboard focus (drives up/down navigation). */
+  active?: boolean;
 }
 
-export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndMode = false, refreshKey, onCurrentPathChange, onImport, onAssignToFirstEmpty, hasEmptySlot = true, onAssignToSelected, hasSelectedSlot, onOpenAudioPoolPage, persistKey, onSelect, clearSelectionToken }: AudioPoolSidebarProps) {
+// Parent directory of `path`, never climbing above `root`. Returns `path` unchanged
+// when already at the root (signals "no move").
+export function parentDir(path: string, root: string): string {
+  if (path === root) return path;
+  const trimmed = path.replace(/[\\/]+$/, '');
+  const idx = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'));
+  if (idx < 0) return path;
+  const parent = trimmed.slice(0, idx);
+  return parent.startsWith(root) && parent.length >= root.length ? parent : root;
+}
+
+export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndMode = false, refreshKey, onCurrentPathChange, onImport, onAssignToFirstEmpty, hasEmptySlot = true, onAssignToSelected, hasSelectedSlot, onOpenAudioPoolPage, persistKey, onSelect, clearSelectionToken, onActiveFile, active = false }: AudioPoolSidebarProps) {
   // Restore the last-browsed directory (only if it still sits under this pool root).
   const [currentPath, setCurrentPath] = useState(() => {
     if (persistKey) {
@@ -182,7 +197,61 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
       setLastClickedIndex(index);
       setCursorIndex(index);
     }
+
+    // Report for auto-preview. Single (unmodified) click => size 1.
+    if (!file.is_directory) {
+      const size = (event.shiftKey || event.ctrlKey || event.metaKey)
+        ? newSelected.size
+        : 1;
+      onActiveFile?.(file.path, file.name, size);
+    }
   }
+
+  // Keyboard up/down navigation when this pane is focused. Mirrors a single click:
+  // moves the cursor, single-selects a file, and reports it for preview. Directories
+  // just move the cursor (no selection / preview).
+  const moveSelection = useCallback((delta: number) => {
+    if (files.length === 0) return;
+    const base = cursorIndex < 0 ? (delta > 0 ? -1 : 0) : cursorIndex;
+    const next = Math.min(files.length - 1, Math.max(0, base + delta));
+    setCursorIndex(next);
+    rowRefs.current.get(next)?.scrollIntoView({ block: 'nearest' });
+    const f = files[next];
+    if (f && !f.is_directory) {
+      onSelect?.();
+      setSelectedFiles(new Set([f.path]));
+      setLastClickedIndex(next);
+      onActiveFile?.(f.path, f.name, 1);
+    }
+  }, [files, cursorIndex, onSelect, onActiveFile]);
+
+  // Enter the cursor's directory; Backspace goes up one level (never above the pool root).
+  const enterDir = useCallback(() => {
+    const f = files[cursorIndex];
+    if (f?.is_directory) { setCurrentPath(f.path); setCursorIndex(0); }
+  }, [files, cursorIndex]);
+
+  const navigateParent = useCallback(() => {
+    const parent = parentDir(currentPath, audioPoolPath);
+    if (parent === currentPath) return;
+    setCurrentPath(parent);
+    setCursorIndex(0);
+  }, [currentPath, audioPoolPath]);
+
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return; // parent owns ctrl-combos
+      if (e.key === 'ArrowDown') { e.preventDefault(); moveSelection(1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); moveSelection(-1); }
+      else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enterDir(); } // Shift+Enter is the parent's Auto toggle
+      else if (e.key === 'Backspace') { e.preventDefault(); navigateParent(); }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [active, moveSelection, enterDir, navigateParent]);
 
   function handleDragStart(e: React.DragEvent) {
     // Build drag data with selected file paths

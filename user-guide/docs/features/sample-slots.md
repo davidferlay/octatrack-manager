@@ -76,6 +76,14 @@ You can customize which columns are visible. Click the column menu icon in the t
 
 <img src={require('@site/static/img/screenshots/sample-slots-flex-filters-bis-col-selec.png').default} alt="Sample Slots - Column selector" style={{width: '50%', display: 'block', margin: '0 auto'}} />
 
+### Playback
+
+A player bar sits at the bottom of the page. Select a slot to load its sample, then use the play button to listen. Drag the seek bar to scrub, and use the volume slider to set the level.
+
+- Auto-preview: enable the Auto toggle to play a sample automatically when you select a single slot. Selecting several slots at once does not auto-play.
+- Empty slots cannot be played; the play button stays disabled.
+
+When the Audio Pool pane is open, the player bar spans the slots side of the page.
 
 ---
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useLayoutEffect } from "react";
+import { useState, useEffect, useRef, useLayoutEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -8,6 +8,8 @@ import { AudioFileTable } from "../components/AudioFileTable";
 import { OverwriteModal } from "../components/OverwriteModal";
 import { TransferProgressPanel } from "../components/TransferProgressPanel";
 import { useAudioPoolTransfer } from "../hooks/useAudioPoolTransfer";
+import { useAudioPreview, shouldAutoPreview, scrubTarget, volumeStep } from "../hooks/useAudioPreview";
+import { SamplePlayerBar } from "../components/SamplePlayerBar";
 import type { AudioFile } from "../types/audioFile";
 import "./AudioPoolPage.css";
 
@@ -89,6 +91,21 @@ export function AudioPoolPage() {
   const [lastClickedSourceIndex, setLastClickedSourceIndex] = useState<number>(-1);
   const [lastClickedDestIndex, setLastClickedDestIndex] = useState<number>(-1);
   const [activePanel, setActivePanel] = useState<'source' | 'dest'>('dest');
+
+  const player = useAudioPreview();
+  const [activePlayable, setActivePlayable] = useState(false);
+
+  const previewCandidate = useCallback((path: string | null, name: string, selectionSize: number) => {
+    const playable = !!path;
+    setActivePlayable(playable);
+    if (!path) return;
+    if (shouldAutoPreview(player.autoPreview, selectionSize, playable)) {
+      player.play(path, name);
+    } else {
+      player.load(path, name);
+    }
+  }, [player]);
+
   const [cursorIndexSource, setCursorIndexSource] = useState<number>(0);
   const [cursorIndexDest, setCursorIndexDest] = useState<number>(0);
   const sourceRowRefs = useRef<Map<number, HTMLTableRowElement>>(new Map());
@@ -571,6 +588,9 @@ export function AudioPoolPage() {
       setLastClickedSourceIndex(index);
       setCursorIndexSource(index);
     }
+
+    const hasModifier = event.shiftKey || event.ctrlKey || event.metaKey;
+    if (!file.is_directory) previewCandidate(file.path, file.name, hasModifier ? 2 : 1);
   }
 
   function handleDestFileClick(file: AudioFile, index: number, event: React.MouseEvent) {
@@ -607,6 +627,9 @@ export function AudioPoolPage() {
       setLastClickedDestIndex(index);
       setCursorIndexDest(index);
     }
+
+    const hasModifier = event.shiftKey || event.ctrlKey || event.metaKey;
+    previewCandidate(file.path, file.name, hasModifier ? 2 : 1);
   }
 
   // Context menu handlers
@@ -815,6 +838,21 @@ export function AudioPoolPage() {
       if (overwriteModal.isOpen) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
+      // Player controls take precedence over row/panel navigation.
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (e.key === ' ') {
+        if (tag !== 'BUTTON' && tag !== 'SELECT' && tag !== 'A') { e.preventDefault(); player.togglePlay(); }
+        return;
+      }
+      // Shift+Enter: toggle Auto-preview (Ctrl+Enter stays the copy shortcut here).
+      if (e.shiftKey && e.key === 'Enter') { e.preventDefault(); player.setAutoPreview(!player.autoPreview); return; }
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'ArrowLeft') { e.preventDefault(); player.seek(scrubTarget(player.currentTime, player.duration, -1)); return; }
+        if (e.key === 'ArrowRight') { e.preventDefault(); player.seek(scrubTarget(player.currentTime, player.duration, 1)); return; }
+        if (e.key === 'ArrowUp') { e.preventDefault(); player.setVolume(volumeStep(player.volume, 1)); return; }
+        if (e.key === 'ArrowDown') { e.preventDefault(); player.setVolume(volumeStep(player.volume, -1)); return; }
+      }
+
       const files = activePanel === 'source' ? sourceFiles : destinationFiles;
       const cursorIndex = activePanel === 'source' ? cursorIndexSource : cursorIndexDest;
       const setCursorIndex = activePanel === 'source' ? setCursorIndexSource : setCursorIndexDest;
@@ -1003,7 +1041,7 @@ export function AudioPoolPage() {
     activePanel, sourceFiles, destinationFiles,
     cursorIndexSource, cursorIndexDest,
     selectedSourceFiles, selectedDestFiles,
-    isSourcePanelOpen, overwriteModal.isOpen
+    isSourcePanelOpen, overwriteModal.isOpen, player
   ]);
 
   // Drag and drop handlers
@@ -1462,6 +1500,8 @@ export function AudioPoolPage() {
           </div>
         </div>
       )}
+
+      <SamplePlayerBar player={player} playable={activePlayable} />
     </main>
   );
 }

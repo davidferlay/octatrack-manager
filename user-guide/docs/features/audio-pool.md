@@ -95,6 +95,14 @@ See [Assigning & Managing Samples](sample-slots.md#assigning--managing-samples).
 
 ---
 
+## Playback
+
+Select a pool file to load it into the player bar at the bottom of the page. Use the play button to listen, drag the seek bar to scrub, and adjust the volume slider to set the level.
+
+- Auto-preview: enable the Auto toggle to play a file automatically when you select a single file. Selecting multiple files does not auto-play.
+
+---
+
 ## Tips
 
 - **Batch Processing:** You can select and transfer dozens of folders at once. Octatrack Manager will handle the recursive conversion of every audio file within them.
