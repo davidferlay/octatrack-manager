@@ -49,13 +49,31 @@ These shortcuts work across the entire application:
 
 | Shortcut | Action |
 |----------|---------|
-| <kbd>↑</kbd> / <kbd>↓</kbd> | Move through the list of files or sample slots. |
+| <kbd>↑</kbd> / <kbd>↓</kbd> | Move through the list of files or sample slots (also previews the selection). |
+| <kbd>←</kbd> / <kbd>→</kbd> | Switch focus between the Audio Pool pane and the sample slots table (when the pane is open). |
 | <kbd>Enter</kbd> | Open a folder (in Audio Pool) or copy a filename (in Sample Slots). |
+| <kbd>Backspace</kbd> | Go up to the parent directory (in the Audio Pool pane or page). |
+| <kbd>B</kbd> | Toggle the Browse (source) pane on the Audio Pool page. |
 | <kbd>Ctrl</kbd> + <kbd>A</kbd> | Select all files in the current folder. |
 | <kbd>Shift</kbd> + <kbd>Click</kbd> | Select a range of files or slots. |
 | <kbd>Ctrl</kbd> + <kbd>Click</kbd> | Add or remove individual files from the selection. |
 | <kbd>A</kbd> | Toggle the Audio Pool pane on a Flex/Static tab (when the Set has a pool). |
 | <kbd>Delete</kbd> / <kbd>Backspace</kbd> | In Edit mode: clear the selected slots' samples, or reset attributes on slots that are already empty. |
+
+---
+
+## Sample Preview & Playback
+
+These control the playback bar at the bottom of the Sample Slots and Audio Pool views. Selecting a slot or file that exists on disk loads it into the bar.
+
+| Shortcut | Action |
+|----------|---------|
+| <kbd>Space</kbd> | Play / pause the loaded sample. |
+| <kbd>↑</kbd> / <kbd>↓</kbd> | Select the previous / next slot or file and preview it (auto-plays when AUTO is on). |
+| <kbd>Ctrl</kbd> + <kbd>←</kbd> / <kbd>→</kbd> | Scrub the playhead backward / forward. |
+| <kbd>Ctrl</kbd> + <kbd>↑</kbd> / <kbd>↓</kbd> | Increase / decrease the preview volume. |
+| <kbd>Shift</kbd> + <kbd>Enter</kbd> | Toggle AUTO (auto-play a sample as soon as it is selected). |
+| <kbd>Shift</kbd> + <kbd>L</kbd> | Toggle LOOP (repeat the sample when it reaches the end). |
 
 ---
 
