@@ -907,8 +907,10 @@ td.col-size {
 /* Status bar */
 .audio-pool-status {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   padding: 0;
+  height: 2.25rem;
+  box-sizing: border-box;
   background-color: rgba(255, 255, 255, 0.08);
   border-top: 1px solid var(--elektron-border-gray);
   font-size: 0.8rem;
@@ -922,16 +924,20 @@ td.col-size {
   min-width: 0;
   display: flex;
   align-items: center;
-  padding: 0.5rem 1rem;
+  padding: 0 1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .audio-pool-status .sample-player-bar {
   flex: 1 1 50%;
   min-width: 0;
+  height: 100%;
   background: none;
   border-top: none;
   border-left: 1px solid var(--elektron-border-gray);
-  padding: 0.3rem 1rem;
+  padding: 0 0.75rem;
 }
 
 /* Scrollbar styling — thin, matches global */
