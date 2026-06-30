@@ -191,13 +191,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   // Drive preview from a clicked slot row or a pool file. Slot paths are stored
   // relative to the project dir (e.g. ../AUDIO/x.wav); pool paths are already
   // absolute. convertFileSrc needs an absolute path, so resolve relative ones.
-  const previewCandidate = useCallback((path: string | null, name: string, selectionSize: number) => {
+  const previewCandidate = useCallback((path: string | null, name: string, selectionSize: number, fileExists: boolean = true) => {
     const isAbsolute = !!path && (path.startsWith('/') || /^[A-Za-z]:/.test(path));
     const joined = !path ? null : isAbsolute ? path : (projectPath ? `${projectPath}/${path}` : null);
     const resolved = joined ? normalizePath(joined) : null;
-    // Only preview real audio files; non-audio (or empty) selections reset the bar to idle
-    // and are never read/decoded, so a huge non-audio file can't freeze the UI.
-    const playable = !!resolved && isAudioFile(resolved);
+    // Only preview real audio files that exist on disk; non-audio, empty, or missing-file
+    // selections reset the bar to idle and are never read/decoded (a huge non-audio file
+    // can't freeze the UI, and a missing file can't error mid-read).
+    const playable = !!resolved && isAudioFile(resolved) && fileExists;
     setActivePlayable(playable);
     if (!playable) { player.reset(); return; }
     if (shouldAutoPreview(player.autoPreview, selectionSize, playable)) {
@@ -221,7 +222,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     setClearSidebarToken(t => t + 1);
     setSelectedSlots(new Set([slot.slot_id]));
     setLastClickedSlotId(slot.slot_id);
-    previewCandidate(slot.path ?? null, getFilename(slot.path ?? null), 1);
+    previewCandidate(slot.path ?? null, getFilename(slot.path ?? null), 1, slot.file_exists);
   }, [lastClickedSlotId, previewCandidate]);
 
   // Keep the cursor row visible after keyboard navigation. block:'nearest' is a no-op
@@ -1347,7 +1348,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
 
     const clicked = sortedSlots.find(s => s.slot_id === slotId);
     const hasModifier = e.shiftKey || e.ctrlKey || e.metaKey;
-    previewCandidate(clicked?.path ?? null, getFilename(clicked?.path ?? null), hasModifier ? 2 : 1);
+    previewCandidate(clicked?.path ?? null, getFilename(clicked?.path ?? null), hasModifier ? 2 : 1, clicked?.file_exists ?? true);
   }
 
   // Compute visible column IDs respecting current column order
