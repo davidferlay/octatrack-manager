@@ -34,7 +34,7 @@
   line-height: 1;
   cursor: pointer;
 }
-.player-play-btn:hover:not(:disabled) { color: var(--elektron-orange); }
+.player-play-btn:hover:not(:disabled) { color: #4a9eff; }
 .player-play-btn:disabled { opacity: 0.4; cursor: default; }
 /* Pause drawn as two thin bars so the gap between them is tunable (retro/minimal). */
 .player-pause-icon { display: inline-flex; align-items: center; gap: 3px; }
@@ -73,7 +73,7 @@
   position: absolute;
   left: 0;
   height: 2px;
-  background: var(--elektron-orange);
+  background: #4a9eff;
   opacity: 0.5;
 }
 
@@ -81,7 +81,7 @@
   position: absolute;
   width: 2px;
   height: 0.85rem;
-  background: var(--elektron-orange);
+  background: #4a9eff;
   transform: translateX(-1px);
   pointer-events: none;
 }
@@ -148,6 +148,6 @@
   background: var(--elektron-border-gray);
 }
 .player-auto.on .player-auto-led {
-  background: var(--elektron-orange);
-  box-shadow: 0 0 5px var(--elektron-orange);
+  background: #4a9eff;
+  box-shadow: 0 0 5px #4a9eff;
 }
