@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 
 const VOL_KEY = 'otm.preview.volume'
 const AUTO_KEY = 'otm.preview.autoPreview'
+const LOOP_KEY = 'otm.preview.loop'
 
 export function shouldAutoPreview(autoPreview: boolean, selectionSize: number, playable: boolean): boolean {
   return autoPreview && selectionSize === 1 && playable
@@ -48,6 +49,10 @@ function loadAutoPreview(): boolean {
   return localStorage.getItem(AUTO_KEY) === 'true'
 }
 
+function loadLoop(): boolean {
+  return localStorage.getItem(LOOP_KEY) === 'true'
+}
+
 export interface AudioPreview {
   isPlaying: boolean
   currentTime: number
@@ -56,6 +61,7 @@ export interface AudioPreview {
   error: boolean
   volume: number
   autoPreview: boolean
+  loop: boolean
   play: (path: string, name: string) => void
   load: (path: string, name: string) => void
   reset: () => void
@@ -64,6 +70,7 @@ export interface AudioPreview {
   seek: (seconds: number) => void
   setVolume: (v: number) => void
   setAutoPreview: (b: boolean) => void
+  setLoop: (b: boolean) => void
 }
 
 // Sample preview via the Web Audio API. We decode the file bytes once into a PCM
@@ -88,7 +95,9 @@ export function useAudioPreview(): AudioPreview {
   const [error, setError] = useState(false)
   const [volume, setVolumeState] = useState(loadVolume)
   const [autoPreview, setAutoPreviewState] = useState(loadAutoPreview)
+  const [loop, setLoopState] = useState(loadLoop)
   const volumeRef = useRef(volume)
+  const loopRef = useRef(loop)
 
   const getCtx = useCallback(() => {
     if (!ctxRef.current) {
@@ -149,6 +158,7 @@ export function useAudioPreview(): AudioPreview {
     src.onended = () => {
       if (stoppingRef.current) return // our own stop(), not a natural end
       sourceRef.current = null
+      if (loopRef.current && bufferRef.current) { startPlayback(0); return }
       offsetRef.current = 0
       setIsPlaying(false)
       setCurrentTime(0)
@@ -232,11 +242,12 @@ export function useAudioPreview(): AudioPreview {
     localStorage.setItem(VOL_KEY, String(v))
   }, [])
   const setAutoPreview = useCallback((b: boolean) => { setAutoPreviewState(b); localStorage.setItem(AUTO_KEY, String(b)) }, [])
+  const setLoop = useCallback((b: boolean) => { setLoopState(b); loopRef.current = b; localStorage.setItem(LOOP_KEY, String(b)) }, [])
 
   useEffect(() => {
     return () => { stopPlayback(false); stopRaf(); ctxRef.current?.close() }
   }, [stopPlayback, stopRaf])
 
-  return { isPlaying, currentTime, duration, activeName, error, volume, autoPreview,
-    play, load, reset, pause, togglePlay, seek, setVolume, setAutoPreview }
+  return { isPlaying, currentTime, duration, activeName, error, volume, autoPreview, loop,
+    play, load, reset, pause, togglePlay, seek, setVolume, setAutoPreview, setLoop }
 }

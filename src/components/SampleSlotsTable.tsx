@@ -634,6 +634,8 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
       }
       // Shift+Enter: toggle Auto-preview.
       if (e.key === 'Enter' && e.shiftKey && !typing) { e.preventDefault(); player.setAutoPreview(!player.autoPreview); return; }
+      // Shift+L: toggle Loop.
+      if ((e.key === 'L' || e.key === 'l') && e.shiftKey && !typing) { e.preventDefault(); player.setLoop(!player.loop); return; }
       // Ctrl/Cmd + arrows: scrub the playhead / adjust volume.
       if ((e.ctrlKey || e.metaKey) && !typing) {
         if (e.key === 'ArrowLeft') { e.preventDefault(); player.seek(scrubTarget(player.currentTime, player.duration, -1)); return; }
@@ -1859,7 +1861,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
           </tbody>
         </table>
         </div>
-        <SamplePlayerBar player={player} playable={activePlayable} />
+        <SamplePlayerBar player={player} playable={activePlayable} compact={showAudioPool} />
       </section>
     </div>
       <DragOverlay dropAnimation={null}>

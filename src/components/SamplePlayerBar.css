@@ -7,7 +7,7 @@
   align-items: center;
   gap: 0.6rem;
   padding: 0 0.75rem;
-  background: var(--elektron-dark-gray);
+  background: rgba(255, 255, 255, 0.04);
   border-top: 1px solid var(--elektron-border-gray);
   font-size: 0.78rem;
   color: var(--elektron-text-secondary);
@@ -20,6 +20,12 @@
 /* Play/pause: bare icon, no button chrome. */
 .player-play-btn {
   flex: 0 0 auto;
+  /* Fixed, centered box so the triangle and the two-bar pause occupy the same spot (no jump on toggle). */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1em;
+  height: 1.1em;
   background: none;
   border: none;
   padding: 0;
@@ -30,12 +36,17 @@
 }
 .player-play-btn:hover:not(:disabled) { color: var(--elektron-orange); }
 .player-play-btn:disabled { opacity: 0.4; cursor: default; }
+/* Pause drawn as two thin bars so the gap between them is tunable (retro/minimal). */
+.player-pause-icon { display: inline-flex; align-items: center; gap: 3px; }
+.player-pause-icon span { width: 2px; height: 0.85em; background: currentColor; }
 
 .player-name {
   flex: 0 1 12rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  position: relative;
+  top: -1px;
   color: var(--elektron-text-primary);
 }
 
@@ -87,25 +98,30 @@
 
 .player-time {
   flex: 0 0 auto;
+  font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
-  color: var(--elektron-text-secondary);
+  position: relative;
+  top: -1px;
+  color: #b8b8b8;
 }
 
-/* VOL: a small LCD-style readout; drag up/down (or scroll) to change. */
-.player-vol-readout {
+/* VOL: matches the LOOP/AUTO text style. Drag/scroll to change. */
+.player-vol {
   flex: 0 0 auto;
-  font-family: 'Courier New', monospace;
-  font-size: 0.72rem;
-  letter-spacing: 0.03em;
-  color: var(--elektron-orange);
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid var(--elektron-border-gray);
-  border-radius: 2px;
-  padding: 0.1rem 0.4rem;
-  min-width: 4.4rem;
-  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  color: var(--elektron-text-primary);
   cursor: ns-resize;
   user-select: none;
+}
+.player-vol-val {
+  /* Fixed width + tabular figures: the readout never reflows as the value changes (5% vs 100%). */
+  width: 2.1rem;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
 }
 
 /* AUTO: a labelled LED that glows when on (no button chrome). */
@@ -117,7 +133,8 @@
   background: none;
   border: none;
   padding: 0;
-  font-size: 0.72rem;
+  font-family: inherit; /* buttons don't inherit the page font by default — match the VOL span */
+  font-size: 0.75rem;
   letter-spacing: 0.08em;
   color: var(--elektron-text-secondary);
   cursor: pointer;

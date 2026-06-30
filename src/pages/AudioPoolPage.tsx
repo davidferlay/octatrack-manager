@@ -848,6 +848,8 @@ export function AudioPoolPage() {
       }
       // Shift+Enter: toggle Auto-preview (Ctrl+Enter stays the copy shortcut here).
       if (e.shiftKey && e.key === 'Enter') { e.preventDefault(); player.setAutoPreview(!player.autoPreview); return; }
+      // Shift+L: toggle Loop.
+      if (e.shiftKey && (e.key === 'L' || e.key === 'l')) { e.preventDefault(); player.setLoop(!player.loop); return; }
       if (e.ctrlKey || e.metaKey) {
         if (e.key === 'ArrowLeft') { e.preventDefault(); player.seek(scrubTarget(player.currentTime, player.duration, -1)); return; }
         if (e.key === 'ArrowRight') { e.preventDefault(); player.seek(scrubTarget(player.currentTime, player.duration, 1)); return; }
@@ -902,6 +904,8 @@ export function AudioPoolPage() {
               const newSelected = new Set<string>();
               newSelected.add(files[newIndex].path);
               setSelectedFiles(newSelected);
+              // Preview the focused file (directories reset the bar).
+              previewCandidate(files[newIndex].is_directory ? null : files[newIndex].path, files[newIndex].name, 1);
             }
           }
           break;
@@ -922,6 +926,8 @@ export function AudioPoolPage() {
               const newSelected = new Set<string>();
               newSelected.add(files[newIndex].path);
               setSelectedFiles(newSelected);
+              // Preview the focused file (directories reset the bar).
+              previewCandidate(files[newIndex].is_directory ? null : files[newIndex].path, files[newIndex].name, 1);
             }
           }
           break;
@@ -1003,6 +1009,14 @@ export function AudioPoolPage() {
           }
           break;
         }
+        case 'b':
+        case 'B': {
+          if (e.ctrlKey || e.metaKey) break;
+          e.preventDefault();
+          // Toggle the source (Browse) panel
+          setIsSourcePanelOpen(prev => !prev);
+          break;
+        }
         case 'Escape': {
           e.preventDefault();
           // Clear selection
@@ -1043,7 +1057,7 @@ export function AudioPoolPage() {
     activePanel, sourceFiles, destinationFiles,
     cursorIndexSource, cursorIndexDest,
     selectedSourceFiles, selectedDestFiles,
-    isSourcePanelOpen, overwriteModal.isOpen, player
+    isSourcePanelOpen, overwriteModal.isOpen, player, previewCandidate
   ]);
 
   // Drag and drop handlers
@@ -1300,7 +1314,7 @@ export function AudioPoolPage() {
             <span>{isSourcePanelOpen ? 'Select files to copy' : 'Click "Import" to add files to audio pool'}</span>
           )}
         </div>
-        <SamplePlayerBar player={player} playable={activePlayable} />
+        <SamplePlayerBar player={player} playable={activePlayable} compact={isSourcePanelOpen} />
       </div>
 
       {/* Overwrite confirmation modal */}

@@ -908,7 +908,7 @@ td.col-size {
   display: flex;
   align-items: stretch;
   padding: 0;
-  background-color: var(--elektron-dark-gray);
+  background-color: rgba(255, 255, 255, 0.04);
   border-top: 1px solid var(--elektron-border-gray);
   font-size: 0.8rem;
   color: var(--elektron-text-secondary);

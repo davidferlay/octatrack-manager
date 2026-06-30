@@ -4,11 +4,13 @@ import './SamplePlayerBar.css'
 interface Props {
   player: AudioPreview
   playable: boolean
+  // When a side pane is shown, horizontal room is tight — shorten LOOP/AUTO to L/A.
+  compact?: boolean
 }
 
-export function SamplePlayerBar({ player, playable }: Props) {
-  const { isPlaying, currentTime, duration, activeName, error, volume, autoPreview,
-    togglePlay, seek, setVolume, setAutoPreview } = player
+export function SamplePlayerBar({ player, playable, compact = false }: Props) {
+  const { isPlaying, currentTime, duration, activeName, error, volume, autoPreview, loop,
+    togglePlay, seek, setVolume, setAutoPreview, setLoop } = player
   const hasSample = !!activeName
   const canPlay = playable && !error
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0
@@ -39,7 +41,9 @@ export function SamplePlayerBar({ player, playable }: Props) {
         <>
           <button className="player-play-btn" aria-label={isPlaying ? 'Pause' : 'Play'}
             title={isPlaying ? 'Pause' : 'Play'} disabled={!canPlay} onClick={togglePlay}>
-            <i className={isPlaying ? 'fas fa-pause' : 'fas fa-play'} />
+            {isPlaying
+              ? <span className="player-pause-icon" aria-hidden="true"><span /><span /></span>
+              : <i className="fas fa-play" />}
           </button>
 
           <span className="player-name" title={error ? "Can't play this file" : activeName}>
@@ -58,23 +62,31 @@ export function SamplePlayerBar({ player, playable }: Props) {
           <span className="player-time" title="Elapsed / total duration">
             {formatTime(currentTime)} / {formatTime(duration)}
           </span>
+
+          <span className="player-vol" aria-label="Volume" role="slider"
+            aria-valuenow={volumePct} aria-valuemin={0} aria-valuemax={100}
+            title="Volume (drag up/down or scroll)"
+            onPointerDown={onVolumePointerDown}
+            onWheel={(e) => nudgeVolume(e.deltaY < 0 ? 0.05 : -0.05)}>
+            {!compact && <span className="player-vol-label">VOL</span>}
+            <span className="player-vol-val">{volumePct}%</span>
+          </span>
+
+          <button className={`player-auto${loop ? ' on' : ''}`} aria-label="Loop"
+            aria-pressed={loop} title="Loop the sample"
+            onClick={() => setLoop(!loop)}>
+            <span className="player-auto-led" />
+            {compact ? 'L' : 'LOOP'}
+          </button>
+
+          <button className={`player-auto${autoPreview ? ' on' : ''}`} aria-label="Auto-preview"
+            aria-pressed={autoPreview} title="Auto-play a sample when you select it"
+            onClick={() => setAutoPreview(!autoPreview)}>
+            <span className="player-auto-led" />
+            {compact ? 'A' : 'AUTO'}
+          </button>
         </>
       )}
-
-      <span className="player-vol-readout" aria-label="Volume" role="slider"
-        aria-valuenow={volumePct} aria-valuemin={0} aria-valuemax={100}
-        title="Volume (drag up/down or scroll)"
-        onPointerDown={onVolumePointerDown}
-        onWheel={(e) => nudgeVolume(e.deltaY < 0 ? 0.05 : -0.05)}>
-        VOL {volumePct}%
-      </span>
-
-      <button className={`player-auto${autoPreview ? ' on' : ''}`} aria-label="Auto-preview"
-        aria-pressed={autoPreview} title="Auto-play a sample when you select it"
-        onClick={() => setAutoPreview(!autoPreview)}>
-        <span className="player-auto-led" />
-        AUTO
-      </button>
     </div>
   )
 }

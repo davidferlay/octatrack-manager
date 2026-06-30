@@ -6,9 +6,9 @@ import type { AudioPreview } from '../hooks/useAudioPreview'
 function makePlayer(overrides: Partial<AudioPreview> = {}): AudioPreview {
   return {
     isPlaying: false, currentTime: 0, duration: 4, activeName: 'kick.wav', error: false,
-    volume: 0.8, autoPreview: false,
+    volume: 0.8, autoPreview: false, loop: false,
     play: vi.fn(), load: vi.fn(), reset: vi.fn(), pause: vi.fn(), togglePlay: vi.fn(), seek: vi.fn(),
-    setVolume: vi.fn(), setAutoPreview: vi.fn(), ...overrides,
+    setVolume: vi.fn(), setAutoPreview: vi.fn(), setLoop: vi.fn(), ...overrides,
   }
 }
 
@@ -59,14 +59,14 @@ describe('SamplePlayerBar', () => {
     expect(player.setVolume).toHaveBeenCalledWith(1)
   })
 
-  it('hides the name and timeline when no sample is selected', () => {
+  it('hides every control when no sample is selected', () => {
     render(<SamplePlayerBar player={makePlayer({ activeName: '' })} playable={false} />)
     expect(screen.queryByText(/no sample selected/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/seek/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/play|pause/i)).not.toBeInTheDocument()
-    // Volume and Auto remain available
-    expect(screen.getByLabelText(/volume/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/auto-preview/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/volume/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/auto-preview/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^loop$/i)).not.toBeInTheDocument()
   })
 
   it('toggles auto-preview', () => {
@@ -74,5 +74,12 @@ describe('SamplePlayerBar', () => {
     render(<SamplePlayerBar player={player} playable={true} />)
     fireEvent.click(screen.getByLabelText(/auto-preview/i))
     expect(player.setAutoPreview).toHaveBeenCalledWith(true)
+  })
+
+  it('toggles loop', () => {
+    const player = makePlayer()
+    render(<SamplePlayerBar player={player} playable={true} />)
+    fireEvent.click(screen.getByLabelText(/^loop$/i))
+    expect(player.setLoop).toHaveBeenCalledWith(true)
   })
 })

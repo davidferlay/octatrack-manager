@@ -82,6 +82,13 @@ describe('useAudioPreview', () => {
     expect(localStorage.getItem('otm.preview.autoPreview')).toBe('true')
   })
 
+  it('setLoop persists to localStorage', () => {
+    const { result } = renderHook(() => useAudioPreview())
+    act(() => result.current.setLoop(true))
+    expect(result.current.loop).toBe(true)
+    expect(localStorage.getItem('otm.preview.loop')).toBe('true')
+  })
+
   it('reads persisted volume on init', () => {
     localStorage.setItem('otm.preview.volume', '0.5')
     const { result } = renderHook(() => useAudioPreview())
