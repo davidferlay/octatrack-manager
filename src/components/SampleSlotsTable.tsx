@@ -1613,7 +1613,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
               <button
                 className={`audio-pool-toggle-btn ${showAudioPool ? 'active' : ''}`}
                 onClick={() => toggleAudioPool(!showAudioPool)}
-                title="Hide Audio Pool"
+                title="Hide Audio Pool (A)"
               >
                 <i className="fas fa-columns"></i>
               </button>
@@ -1628,7 +1628,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
               <button
                 className="audio-pool-toggle-btn"
                 onClick={() => toggleAudioPool(true)}
-                title={isEditMode ? "Show Audio Pool" : "Show Audio Pool (read-only — toggle Edit mode to assign samples)"}
+                title={isEditMode ? "Show Audio Pool (A)" : "Show Audio Pool (read-only — toggle Edit mode to assign samples) (A)"}
               >
                 <i className="fas fa-columns"></i>
               </button>

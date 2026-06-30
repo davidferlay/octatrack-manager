@@ -216,7 +216,7 @@ test.describe('Audio Pool sidebar in Flex slots', () => {
     await openFlexTab(page)
     await page.locator('.audio-pool-toggle-btn').first().click()
     // "Go up" button sits in the bottom path row, disabled at the AUDIO root
-    const up = page.locator('.sidebar-path-row button[title="Go up"]')
+    const up = page.locator('.sidebar-path-row button[title^="Go up"]')
     await expect(up).toBeVisible()
     await expect(up).toBeDisabled()
     // Open-page button sits in the pane toolbar

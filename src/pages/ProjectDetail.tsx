@@ -654,7 +654,7 @@ export function ProjectDetail() {
     <main className="container">
       <div className="project-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: '1' }}>
-          <button onClick={leaveToProjectList} className="back-button">
+          <button onClick={leaveToProjectList} className="back-button" title="Back to projects (Esc)">
             ← Back
           </button>
           <h1 ref={titleRef} className={isTitleTruncated ? 'truncated' : ''} title={projectPath || ''} style={{ cursor: 'pointer' }}
@@ -690,7 +690,7 @@ export function ProjectDetail() {
           )}
           {/* View/Edit mode toggle - hidden during loading */}
           {!isLoading && (
-            <div className="mode-toggle" onClick={toggleEditMode}>
+            <div className="mode-toggle" onClick={toggleEditMode} title="Toggle View/Edit mode (E)">
               <span className={`mode-toggle-btn ${!isEditMode ? 'active' : ''}`}>
                 View
               </span>

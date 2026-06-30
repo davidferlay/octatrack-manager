@@ -40,7 +40,7 @@ export function SamplePlayerBar({ player, playable, compact = false }: Props) {
       {hasSample && (
         <>
           <button className="player-play-btn" aria-label={isPlaying ? 'Pause' : 'Play'}
-            title={isPlaying ? 'Pause' : 'Play'} disabled={!canPlay} onClick={togglePlay}>
+            title={isPlaying ? 'Pause (Space)' : 'Play (Space)'} disabled={!canPlay} onClick={togglePlay}>
             {isPlaying
               ? <span className="player-pause-icon" aria-hidden="true"><span /><span /></span>
               : <i className="fas fa-play" />}
@@ -50,7 +50,7 @@ export function SamplePlayerBar({ player, playable, compact = false }: Props) {
             {error ? "Can't play" : activeName}
           </span>
 
-          <div className="player-seek-track" title="Seek through the sample">
+          <div className="player-seek-track" title="Seek through the sample (Ctrl+Left/Right to scrub)">
             <div className="player-seek-line" />
             <div className="player-seek-fill" style={{ width: `${progress}%` }} />
             <div className="player-seek-head" style={{ left: `${progress}%` }} />
@@ -65,7 +65,7 @@ export function SamplePlayerBar({ player, playable, compact = false }: Props) {
 
           <span className="player-vol" aria-label="Volume" role="slider"
             aria-valuenow={volumePct} aria-valuemin={0} aria-valuemax={100}
-            title="Volume (drag up/down or scroll)"
+            title="Volume (drag up/down, scroll, or Ctrl+Up/Down)"
             onPointerDown={onVolumePointerDown}
             onWheel={(e) => nudgeVolume(e.deltaY < 0 ? 0.05 : -0.05)}>
             {!compact && <span className="player-vol-label">VOL</span>}
@@ -73,14 +73,14 @@ export function SamplePlayerBar({ player, playable, compact = false }: Props) {
           </span>
 
           <button className={`player-auto${loop ? ' on' : ''}`} aria-label="Loop"
-            aria-pressed={loop} title="Loop the sample"
+            aria-pressed={loop} title="Loop the sample (Shift+L)"
             onClick={() => setLoop(!loop)}>
             <span className="player-auto-led" />
             {compact ? 'L' : 'LOOP'}
           </button>
 
           <button className={`player-auto${autoPreview ? ' on' : ''}`} aria-label="Auto-preview"
-            aria-pressed={autoPreview} title="Auto-play a sample when you select it"
+            aria-pressed={autoPreview} title="Auto-play a sample when you select it (Shift+Enter)"
             onClick={() => setAutoPreview(!autoPreview)}>
             <span className="player-auto-led" />
             {compact ? 'A' : 'AUTO'}

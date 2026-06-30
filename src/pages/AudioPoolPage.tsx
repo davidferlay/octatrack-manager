@@ -1136,7 +1136,7 @@ export function AudioPoolPage() {
           <button
             onClick={() => setIsSourcePanelOpen(!isSourcePanelOpen)}
             className={`toolbar-button ${isSourcePanelOpen ? 'active' : ''}`}
-            title={isSourcePanelOpen ? 'Hide source browser' : 'Show source browser'}
+            title={isSourcePanelOpen ? 'Hide source browser (B)' : 'Show source browser (B)'}
           >
             <i className="fas fa-columns"></i> Browse
           </button>
@@ -1194,7 +1194,7 @@ export function AudioPoolPage() {
                 <button className="icon-button" title="Browse..." onClick={browseSourceDirectory}>
                   <i className="fas fa-folder-open"></i>
                 </button>
-                <button className="icon-button" title="Go up" onClick={navigateToParentSource}>
+                <button className="icon-button" title="Go up (Backspace)" onClick={navigateToParentSource}>
                   <i className="fas fa-arrow-up"></i>
                 </button>
                 <div className="toolbar-separator"></div>
@@ -1264,7 +1264,7 @@ export function AudioPoolPage() {
               </button>
               <button
                 className="icon-button"
-                title="Go up"
+                title="Go up (Backspace)"
                 onClick={navigateToParentDest}
                 disabled={destinationPath === audioPoolPath}
               >

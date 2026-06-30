@@ -388,7 +388,7 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
           className="icon-button"
           onClick={navigateUp}
           disabled={isAtRoot}
-          title="Go up"
+          title="Go up (Backspace)"
         >
           <i className="fas fa-arrow-up"></i>
         </button>
