@@ -192,7 +192,8 @@
 .audio-panel {
   display: flex;
   flex-direction: column;
-  background-color: var(--elektron-black);
+  /* Match the Sample Slots pane background (#121212) rather than pure black. */
+  background-color: #121212;
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -431,7 +432,7 @@
 }
 
 .audio-files-table td {
-  padding: 0.35rem 0.75rem;
+  padding: 0.55rem 0.75rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   color: var(--elektron-text-primary);
   font-size: 0.85rem;
@@ -442,7 +443,7 @@
 }
 
 .audio-files-table tbody tr:hover {
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--elektron-medium-gray);
 }
 
 .audio-files-table tbody tr.selected {
