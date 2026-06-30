@@ -145,3 +145,31 @@ go to the **Flex** (or **Static**) tab.
 | AP102 | Assign | TRIM_BARSx100 computed | In Edit mode, assign a sample, then load the project on the Octatrack (or inspect project.work) | The slot's block has a TRIM_BARSx100 equal to the sample's musical length in bars × 100 (e.g. a 2-bar loop → 200, a half-bar one-shot → 50), matching what the OT writes when assigning the same file on hardware. The length uses the file's declared sample rate — confirmed on hardware with a 48 kHz file (1032000 frames ÷ 48000 = 21.5 s → 8 bars → 800), where the OT also wrote 800 (it uses the header rate, not the 44.1 kHz playback rate) |
 | AP103 | Assign | No BPMx24 on assign | In Edit mode, assign a sample and inspect the slot's project.work block | The block contains TRIM_BARSx100 but no BPMx24 line (the hardware writes a per-slot tempo only when a slot is switched to Tempo mode, which is not part of assignment) |
 | AP104 | Assign | Unreadable audio omits TRIM | In Edit mode, assign a slot to a path whose audio can't be read (missing/corrupt) | The assignment still succeeds with PATH + defaults, but no TRIM_BARSx100 is written (safe fallback; the OT will recompute on load) |
+| **Sample preview & playback (player bar)** | | | | |
+| PB1 | Player | Idle when nothing selected | Open a Flex/Static tab and select no slot | The playback bar shows no file name, no play control, and no timeline (idle) |
+| PB2 | Player | Selecting an existing audio slot loads it | Click a slot whose file exists on disk | The bar shows the file name, a play control, a seek line, and the time as `0:00 / <duration>` |
+| PB3 | Player | Play / pause | With a file loaded, click the play control | Playback starts, the control switches to pause, and the playhead advances; clicking again pauses |
+| PB4 | Player | Seek | Drag or click along the seek line | The playhead jumps to that position; if playing, audio continues from the new position |
+| PB5 | Player | Volume (drag / scroll) | Drag the VOL readout up/down, or scroll over it | The percentage changes between 0% and 100% and the loudness follows; the value persists across selections and app restarts |
+| PB6 | Player | Auto-preview toggle | Click AUTO | AUTO turns on; selecting a single audio file now auto-plays it immediately. Toggling off returns to load-without-play. The setting persists |
+| PB7 | Player | Loop toggle | Click LOOP, then play a sample to its end | LOOP turns on; the sample restarts from the beginning at the end (repeats). Toggling off plays once. The setting persists |
+| PB8 | Player | Missing file is not played | Select a slot whose Status is "File missing from disk" | The bar stays idle (no name/play/timeline) and no file read is attempted |
+| PB9 | Player | Non-audio path not processed | Select a slot or pool item whose extension is not a supported audio type (e.g. `.tar.gz`) | The bar stays idle; the file is never read or decoded (no UI freeze on large files) |
+| PB10 | Player | Unreadable audio | Select an audio file that fails to decode | The bar shows the name with a "Can't play" note and the play control disabled |
+| PB11 | Player | Supported formats | Select files of common audio types (wav, aiff, flac, mp3, ogg/opus, m4a/aac) | Each loads into the bar and plays |
+| **Playback keyboard shortcuts (slots tab)** | | | | |
+| PB12 | Shortcut | Space play/pause | With a file loaded, press Space (not while typing or while a button is focused) | Toggles play/pause |
+| PB13 | Shortcut | Up/Down select + preview | Press Up/Down over the slots | The slot cursor moves to the previous/next slot, selects it, and previews it (auto-plays when AUTO is on, otherwise just loads) |
+| PB14 | Shortcut | Ctrl+Left/Right scrub | Hold Ctrl and press Left/Right | The playhead scrubs backward/forward by a small fraction of the total duration |
+| PB15 | Shortcut | Ctrl+Up/Down volume | Hold Ctrl and press Up/Down | Volume steps up/down by 5% |
+| PB16 | Shortcut | Shift+Enter toggles AUTO | Press Shift+Enter | Auto-preview toggles (same as the AUTO control) |
+| PB17 | Shortcut | Shift+L toggles LOOP | Press Shift+L | Loop toggles (same as the LOOP control) |
+| PB18 | Shortcut | Left/Right switch panes | With the Audio Pool pane open, press Left/Right | Focus moves between the Audio Pool pane and the slots table; Up/Down then navigates within the focused side |
+| PB19 | Shortcut | Ignored while typing | Focus the search box and press Space / Shift+L | The keystroke edits the text; no playback action occurs |
+| **Audio Pool page - playback & navigation** | | | | |
+| PB20 | Page | Arrow selection previews | On the Audio Pool page, use Up/Down in either pane to select an audio file | The selected file loads into the playback bar (auto-plays when AUTO is on) |
+| PB21 | Page | 'b' toggles the Browse pane | Press `b` (not while typing) | The source (Browse) pane shows/hides |
+| PB22 | Page | Enter enters a directory | With a folder at the cursor, press Enter | Navigation enters that directory |
+| PB23 | Page | Backspace goes to parent | Press Backspace | Navigation goes up one directory (never above the pool/source root) |
+| PB24 | Page | Space / Shift+Enter / Shift+L | Use these keys on the page | Space toggles play/pause; Shift+Enter toggles AUTO; Shift+L toggles LOOP (same as the slots tab) |
+| PB25 | Page | Ctrl+arrows scrub / volume | Hold Ctrl with the arrows | Left/Right scrub the playhead; Up/Down adjust the volume |

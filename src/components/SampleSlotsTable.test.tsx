@@ -659,3 +659,47 @@ describe('SampleSlotsTable — selection is exclusive with the Audio Pool pane',
     expect(slotRow).not.toHaveClass('selected')
   })
 })
+
+describe('SampleSlotsTable — sample preview gating & loop shortcut', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    mockInvoke.mockReset()
+    mockInvoke.mockResolvedValue(new ArrayBuffer(8))
+  })
+
+  const presentSlot = {
+    slot_id: 1, slot_type: 'flex', path: 'samples/kick.wav', gain: 72, loop_mode: 'Off',
+    timestretch_mode: 'Off', source_location: 'Project', file_exists: true,
+    compatibility: 'compatible', file_format: 'WAV', bit_depth: 16, sample_rate: 44100,
+    attributes_at_default: false,
+  }
+  const missingSlot = { ...presentSlot, slot_id: 2, path: 'samples/gone.wav', file_exists: false }
+
+  it('loads the player when an existing audio slot is selected', async () => {
+    renderWithProvider(
+      <SampleSlotsTable slots={[presentSlot]} slotPrefix="F" tableType="flex" projectPath="/proj" />
+    )
+    await userEvent.click(screen.getByText('kick.wav').closest('tr')!)
+    // The player bar reveals its Play control once a previewable file is loaded.
+    expect(await screen.findByLabelText('Play')).toBeInTheDocument()
+  })
+
+  it('does NOT load the player for a slot whose file is missing from disk', async () => {
+    renderWithProvider(
+      <SampleSlotsTable slots={[missingSlot]} slotPrefix="F" tableType="flex" projectPath="/proj" />
+    )
+    await userEvent.click(screen.getByText('gone.wav').closest('tr')!)
+    // No read attempted and the player stays idle (no Play control).
+    expect(screen.queryByLabelText('Play')).not.toBeInTheDocument()
+    expect(mockInvoke).not.toHaveBeenCalledWith('read_audio_file', expect.anything())
+  })
+
+  it('Shift+L toggles loop mode (persisted)', () => {
+    renderWithProvider(
+      <SampleSlotsTable slots={[presentSlot]} slotPrefix="F" tableType="flex" projectPath="/proj" />
+    )
+    expect(localStorage.getItem('otm.preview.loop')).toBeNull()
+    fireEvent.keyDown(document, { key: 'L', shiftKey: true })
+    expect(localStorage.getItem('otm.preview.loop')).toBe('true')
+  })
+})

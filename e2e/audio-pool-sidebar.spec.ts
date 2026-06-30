@@ -82,6 +82,10 @@ async function setupMocks(page: Page, opts?: { withAudioPool?: boolean }) {
           case 'clear_sample_keep_attributes':
           case 'assign_samples_to_slots':
             return { assigned_count: 1, updated_slots: [], flex_ram_free_mb: 85.5, flex_ram_free_bytes: null }
+          case 'read_audio_file':
+            // Bytes for the Web Audio preview. A tiny invalid buffer is enough for the
+            // UI assertions (the bar populates from the file name before decoding).
+            return new ArrayBuffer(8)
           default:
             return null
         }
@@ -257,5 +261,37 @@ test.describe('Audio Pool sidebar in Flex slots', () => {
     await page.locator('.project-header h1').click({ button: 'right' })
     await expect(page.getByText(/Open in file explorer/i)).toBeVisible()
     await expect(page.getByText(/Copy path to clipboard/i)).toBeVisible()
+  })
+
+  test('selecting a filled slot loads the playback bar with VOL/LOOP/AUTO controls', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    // First three flex slots are filled in the mock (flex_0/1/2.wav).
+    await page.getByText('flex_0.wav').first().click()
+    const bar = page.locator('.sample-player-bar')
+    await expect(bar.getByText('VOL')).toBeVisible()
+    await expect(bar.getByText('LOOP')).toBeVisible()
+    await expect(bar.getByText('AUTO')).toBeVisible()
+    await expect(bar.getByLabel('Play')).toBeVisible()
+  })
+
+  test('an empty slot leaves the playback bar idle (no controls)', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    // F5 is an empty slot (only F1-F3 are filled).
+    await page.getByText('F5', { exact: true }).click()
+    const bar = page.locator('.sample-player-bar')
+    await expect(bar.getByText('LOOP')).toHaveCount(0)
+    await expect(bar.getByLabel('Play')).toHaveCount(0)
+  })
+
+  test('Shift+L toggles the LOOP indicator on the playback bar', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    await page.getByText('flex_0.wav').first().click()
+    const loop = page.locator('.sample-player-bar .player-auto', { hasText: 'LOOP' })
+    await expect(loop).not.toHaveClass(/\bon\b/)
+    await page.keyboard.press('Shift+L')
+    await expect(loop).toHaveClass(/\bon\b/)
   })
 })

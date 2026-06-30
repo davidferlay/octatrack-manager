@@ -418,9 +418,14 @@ fn reveal_in_file_manager(app: tauri::AppHandle, path: String) -> Result<(), Str
 /// Canonicalize to resolve `..` (slot paths are stored relative to the project dir).
 #[tauri::command]
 fn read_audio_file(path: String) -> Result<tauri::ipc::Response, String> {
-    let canonical = std::fs::canonicalize(&path).map_err(|e| e.to_string())?;
-    let bytes = std::fs::read(&canonical).map_err(|e| e.to_string())?;
-    Ok(tauri::ipc::Response::new(bytes))
+    Ok(tauri::ipc::Response::new(read_audio_bytes(&path)?))
+}
+
+/// Read + canonicalize an audio file's bytes. Extracted from the command so it is
+/// testable without constructing a `tauri::ipc::Response`.
+fn read_audio_bytes(path: &str) -> Result<Vec<u8>, String> {
+    let canonical = std::fs::canonicalize(path).map_err(|e| e.to_string())?;
+    std::fs::read(&canonical).map_err(|e| e.to_string())
 }
 
 /// Calculate recommended concurrency based on CPU cores and available memory.
@@ -1242,5 +1247,42 @@ mod tests {
             "Backup dir name '{}' should end with '_edit_mode'",
             dir_name_str
         );
+    }
+
+    // =========================================================================
+    // read_audio_bytes tests
+    // =========================================================================
+
+    #[test]
+    fn test_read_audio_bytes_returns_file_contents() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("kick.wav");
+        std::fs::write(&file, b"RIFFsomePCMbytes").unwrap();
+
+        let bytes = read_audio_bytes(file.to_str().unwrap()).unwrap();
+        assert_eq!(bytes, b"RIFFsomePCMbytes");
+    }
+
+    #[test]
+    fn test_read_audio_bytes_resolves_relative_traversal() {
+        // Slot paths are stored relative to the project dir (e.g. ../AUDIO/x.wav);
+        // canonicalize must resolve the ".." before reading.
+        let dir = tempfile::tempdir().unwrap();
+        let audio = dir.path().join("AUDIO");
+        let proj = dir.path().join("PROJ");
+        std::fs::create_dir_all(&audio).unwrap();
+        std::fs::create_dir_all(&proj).unwrap();
+        std::fs::write(audio.join("snare.wav"), b"snaredata").unwrap();
+
+        let traversal = proj.join("../AUDIO/snare.wav");
+        let bytes = read_audio_bytes(traversal.to_str().unwrap()).unwrap();
+        assert_eq!(bytes, b"snaredata");
+    }
+
+    #[test]
+    fn test_read_audio_bytes_errors_when_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("does-not-exist.wav");
+        assert!(read_audio_bytes(missing.to_str().unwrap()).is_err());
     }
 }

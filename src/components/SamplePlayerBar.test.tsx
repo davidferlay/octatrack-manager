@@ -82,4 +82,22 @@ describe('SamplePlayerBar', () => {
     fireEvent.click(screen.getByLabelText(/^loop$/i))
     expect(player.setLoop).toHaveBeenCalledWith(true)
   })
+
+  it('shows full LOOP/AUTO labels and a VOL label by default', () => {
+    render(<SamplePlayerBar player={makePlayer()} playable={true} />)
+    expect(screen.getByText('LOOP')).toBeInTheDocument()
+    expect(screen.getByText('AUTO')).toBeInTheDocument()
+    expect(screen.getByText('VOL')).toBeInTheDocument()
+  })
+
+  it('shortens LOOP/AUTO to L/A and drops the VOL label in compact mode', () => {
+    render(<SamplePlayerBar player={makePlayer()} playable={true} compact={true} />)
+    expect(screen.getByText('L')).toBeInTheDocument()
+    expect(screen.getByText('A')).toBeInTheDocument()
+    expect(screen.queryByText('LOOP')).not.toBeInTheDocument()
+    expect(screen.queryByText('AUTO')).not.toBeInTheDocument()
+    expect(screen.queryByText('VOL')).not.toBeInTheDocument()
+    // The percentage value still renders even without the VOL label.
+    expect(screen.getByText(/80%/)).toBeInTheDocument()
+  })
 })
