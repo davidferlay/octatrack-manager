@@ -33,11 +33,12 @@ This shows the contents of your `AUDIO/` directory. You can:
 
 ## Adding Samples (Copy / Move)
 
-Octatrack Manager simplifies the process of getting new sounds into your Octatrack.
+Samples can be imported to Audio Pool in several ways:
 
-1. **Select Source:** Browse to your samples in the left panel.
-2. **Select Destination:** Navigate to the folder where you want them in the right panel.
-3. **Execute:** Click **Copy** button or **Copy to Pool** in right-click contextual menu.
+- **Drag & drop from the Browser pane:** Drag one or more files into the Audio Pool. The drop target highlights while you hover. Several files can be added at once, as well as dragging a whole folder.
+- **Drag from your computer:** Drag audio files or folders directly from OS file manager into Audio Pool pane.
+- **Browser item right-click:** Right-click a file and select **Copy to Pool**.
+- Select an audio file from Browser pane and click the **Copy button**
 
 <img src={require('@site/static/img/screenshots/audio-pool-copy-button.png').default} alt="Copy selected Audio files from button" style={{width: '64%', display: 'block', margin: '0 auto'}} />
 
@@ -97,9 +98,18 @@ See [Assigning & Managing Samples](sample-slots.md#assigning--managing-samples).
 
 ## Playback
 
-Select a pool file to load it into the player bar at the bottom of the page. Use the play button to listen, drag the seek bar to scrub, and adjust the volume slider to set the level.
+An audio player is available the bottom of the page. Select an item from either the Browser or the Audio Pool pane to play it:
+- Use <kbd>↑</kbd> / <kbd>↓</kbd> to move to the previous / next slot and play it as you go.
+- Press <kbd>Space</kbd> to **play / pause** the loaded sample.
+- Hold <kbd>Ctrl</kbd> and press <kbd>←</kbd> / <kbd>→</kbd> to scrub backward / forward the timeline; or drag the play head to any position.
+- Drag **VOL** up/down to change volume. You can also scroll over it, or hold <kbd>Ctrl</kbd> and press <kbd>↑</kbd> / <kbd>↓</kbd>.
+- Click **LOOP** or use <kbd>Shift</kbd> + <kbd>L</kbd> to toggle sample repeat.
+- Click **AUTO** or use <kbd>Shift</kbd> + <kbd>Enter</kbd>) to toggle auto playback when selecting a file.
+- Press <kbd>B</kbd> to show or hide the left (Browse) panel.
 
-- Auto-preview: enable the Auto toggle to play a file automatically when you select a single file. Selecting multiple files does not auto-play.
+Common audio formats are supported: WAV, AIFF, FLAC, MP3, OGG/Opus, and M4A/AAC.
+
+The player is also available from [Sample Slots](sample-slots.md#playback) within projects.
 
 ---
 

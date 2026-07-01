@@ -78,12 +78,17 @@ You can customize which columns are visible. Click the column menu icon in the t
 
 ### Playback
 
-A player bar sits at the bottom of the page. Select a slot to load its sample, then use the play button to listen. Drag the seek bar to scrub, and use the volume slider to set the level.
+An audio player is available the bottom of the page. Select an item from either the sample slots or the Audio Pool pane to play it:
+- Use <kbd>↑</kbd> / <kbd>↓</kbd> to move to the previous / next slot and play it as you go.
+- Press <kbd>Space</kbd> to **play / pause** the loaded sample.
+- Hold <kbd>Ctrl</kbd> and press <kbd>←</kbd> / <kbd>→</kbd> to scrub backward / forward the timeline; or drag the play head to any position.
+- Drag **VOL** up/down to change volume. You can also scroll over it, or hold <kbd>Ctrl</kbd> and press <kbd>↑</kbd> / <kbd>↓</kbd>.
+- Click **LOOP** or use <kbd>Shift</kbd> + <kbd>L</kbd> to toggle sample repeat.
+- Click **AUTO** or use <kbd>Shift</kbd> + <kbd>Enter</kbd>) to toggle auto playback when selecting a slot or file.
 
-- Auto-preview: enable the Auto toggle to play a sample automatically when you select a single slot. Selecting several slots at once does not auto-play.
-- Empty slots cannot be played; the play button stays disabled.
+Common audio formats are supported: WAV, AIFF, FLAC, MP3, OGG/Opus, and M4A/AAC.
 
-When the Audio Pool pane is open, the player bar spans the slots side of the page.
+The player is also available from [Audio Pool](audio-pool.md#playback).
 
 ---
 
