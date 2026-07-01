@@ -91,6 +91,8 @@ export interface AudioFileTableProps {
   files: AudioFile[];
   selectedFiles: Set<string>;
   onFileClick: (file: AudioFile, index: number, event: React.MouseEvent) => void;
+  /** Double-click a row (e.g. to enter a directory when single-click only selects). */
+  onFileDoubleClick?: (file: AudioFile, index: number, event: React.MouseEvent) => void;
   isLoading: boolean;
   emptyMessage: string;
   onEmptyClick?: () => void;
@@ -159,6 +161,7 @@ export function AudioFileTable({
   files,
   selectedFiles,
   onFileClick,
+  onFileDoubleClick,
   isLoading,
   emptyMessage,
   onEmptyClick,
@@ -608,11 +611,12 @@ export function AudioFileTable({
                   ref={(el) => { if (rowRefs && el) rowRefs.current.set(originalIndex, el); }}
                   className={`${selectedFiles.has(file.path) ? 'selected' : ''} ${isCursor ? 'cursor' : ''}`}
                   onClick={(e) => onFileClick(file, originalIndex, e)}
+                  onDoubleClick={(e) => onFileDoubleClick?.(file, originalIndex, e)}
                   onContextMenu={(e) => onContextMenu?.(e, file)}
-                  draggable={draggable && !file.is_directory && selectedFiles.has(file.path)}
+                  draggable={draggable && selectedFiles.has(file.path)}
                   onDragStart={onDragStart}
                   onDragEnd={onDragEnd}
-                  style={{ cursor: file.is_directory ? 'pointer' : (draggable && selectedFiles.has(file.path) ? 'grab' : 'pointer') }}
+                  style={{ cursor: draggable && selectedFiles.has(file.path) ? 'grab' : 'pointer' }}
                 >
                   {cells}
                 </tr>

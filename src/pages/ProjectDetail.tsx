@@ -1874,6 +1874,7 @@ export function ProjectDetail() {
                 transfersSucceeded={allTransfersSucceeded}
                 transfersFailed={hasFailedTransfers}
                 onToggleTransfers={() => setIsTransferQueueOpen(!isTransferQueueOpen)}
+                onDragStateChange={(active) => { isDraggingRef.current = active; }}
               />
             )}
 
@@ -1918,6 +1919,7 @@ export function ProjectDetail() {
                 transfersSucceeded={allTransfersSucceeded}
                 transfersFailed={hasFailedTransfers}
                 onToggleTransfers={() => setIsTransferQueueOpen(!isTransferQueueOpen)}
+                onDragStateChange={(active) => { isDraggingRef.current = active; }}
               />
             )}
 

@@ -557,13 +557,12 @@ export function AudioPoolPage() {
     setDestinationPath(audioPoolPath);
   }
 
-  function handleSourceFileClick(file: AudioFile, index: number, event: React.MouseEvent) {
-    // Double-click or single click without modifier on directory navigates into it
-    if (file.is_directory && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
-      setSourcePath(file.path);
-      return;
-    }
+  // Single click selects a directory (so it can be dragged to the pool); double-click enters it.
+  function handleSourceFileDoubleClick(file: AudioFile) {
+    if (file.is_directory) setSourcePath(file.path);
+  }
 
+  function handleSourceFileClick(file: AudioFile, index: number, event: React.MouseEvent) {
     const newSelected = new Set(selectedSourceFiles);
 
     if (event.shiftKey && lastClickedSourceIndex !== -1) {
@@ -1213,6 +1212,7 @@ export function AudioPoolPage() {
               files={sourceFiles}
               selectedFiles={selectedSourceFiles}
               onFileClick={handleSourceFileClick}
+              onFileDoubleClick={handleSourceFileDoubleClick}
               isLoading={isLoadingSource}
               emptyMessage={sourcePath ? 'No audio files found' : 'Select a folder to browse'}
               onEmptyClick={() => !sourcePath && browseSourceDirectory()}

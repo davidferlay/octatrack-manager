@@ -80,4 +80,32 @@ describe('AudioFileTable', () => {
     expect(await screen.findByText('deep-hat.wav')).toBeInTheDocument()
     expect(screen.queryByText('kick.wav')).not.toBeInTheDocument()
   })
+
+  it('makes a selected directory row draggable so it can be dropped on the pool', () => {
+    const dirFiles: AudioFile[] = [
+      { name: 'Drums', size: 0, channels: 0, bit_rate: null, sample_rate: null, is_directory: true, path: '/src/Drums' },
+    ]
+    renderTable({ files: dirFiles, draggable: true, selectedFiles: new Set(['/src/Drums']) })
+    const row = screen.getByText('Drums').closest('tr')!
+    expect(row.getAttribute('draggable')).toBe('true')
+  })
+
+  it('does not make an unselected directory row draggable', () => {
+    const dirFiles: AudioFile[] = [
+      { name: 'Drums', size: 0, channels: 0, bit_rate: null, sample_rate: null, is_directory: true, path: '/src/Drums' },
+    ]
+    renderTable({ files: dirFiles, draggable: true, selectedFiles: new Set() })
+    const row = screen.getByText('Drums').closest('tr')!
+    expect(row.getAttribute('draggable')).toBe('false')
+  })
+
+  it('fires onFileDoubleClick when a row is double-clicked', async () => {
+    const onDouble = vi.fn()
+    const dirFiles: AudioFile[] = [
+      { name: 'Drums', size: 0, channels: 0, bit_rate: null, sample_rate: null, is_directory: true, path: '/src/Drums' },
+    ]
+    renderTable({ files: dirFiles, onFileDoubleClick: onDouble })
+    await userEvent.dblClick(screen.getByText('Drums'))
+    expect(onDouble).toHaveBeenCalledWith(dirFiles[0], 0, expect.anything())
+  })
 })

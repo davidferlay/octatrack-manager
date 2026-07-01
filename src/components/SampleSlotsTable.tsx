@@ -108,6 +108,8 @@ interface SampleSlotsTableProps {
   transfersSucceeded?: boolean;
   transfersFailed?: boolean;
   onToggleTransfers?: () => void;
+  // Fired when a dnd-kit drag starts/ends so the parent can suppress Escape-to-leave mid-drag.
+  onDragStateChange?: (active: boolean) => void;
 }
 
 type SortColumn = 'slot' | 'sample' | 'status' | 'source' | 'gain' | 'timestretch' | 'loop' | 'compatibility' | 'format' | 'bitdepth' | 'samplerate' | 'size';
@@ -162,7 +164,7 @@ function getSetRelativePath(projectPath: string | null): string {
   return projectPath;
 }
 
-export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, projectName, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated, onFlexRamUpdated, onImportToAudioPool, onImportToProject, sidebarRefreshTrigger, transfersOpen, transferCount, transfersActive, transfersSucceeded, transfersFailed, onToggleTransfers }: SampleSlotsTableProps) {
+export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, projectName, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated, onFlexRamUpdated, onImportToAudioPool, onImportToProject, sidebarRefreshTrigger, transfersOpen, transferCount, transfersActive, transfersSucceeded, transfersFailed, onToggleTransfers, onDragStateChange }: SampleSlotsTableProps) {
   const navigate = useNavigate();
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const [dndDragFiles, setDndDragFiles] = useState<string[]>([]);
@@ -699,6 +701,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   // dnd-kit drag end — used on macOS where HTML5 drag events don't work in WKWebView
   const handleDndDragEnd = useCallback(async (event: DragEndEvent) => {
     setDndDragFiles([]);
+    onDragStateChange?.(false);
     const { active, over } = event;
     if (!over) return;
     const sourceData = active.data.current as { source?: string; files?: string[] } | undefined;
@@ -710,7 +713,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     const filePaths = await expandPaths(sourceData.files ?? []);
     if (filePaths.length === 0) return;
     await doAssignFiles(filePaths, targetSlot);
-  }, [slots, doAssignFiles, expandPaths]);
+  }, [slots, doAssignFiles, expandPaths, onDragStateChange]);
 
   const handleSlotDragOver = useCallback((e: React.DragEvent, slotId: number) => {
     // Always prevent default to avoid text selection during drag
@@ -1585,9 +1588,10 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
       onDragStart={(event) => {
         const data = event.active.data.current as { files?: string[] } | undefined;
         setDndDragFiles(data?.files ?? []);
+        onDragStateChange?.(true);
       }}
       onDragEnd={handleDndDragEnd}
-      onDragCancel={() => { setDndDragFiles([]); setDragOverSlotId(null); }}
+      onDragCancel={() => { setDndDragFiles([]); setDragOverSlotId(null); onDragStateChange?.(false); }}
     >
     <div className={`samples-tab ${showAudioPool ? 'with-sidebar' : ''}`}>
       {showAudioPool && audioPoolPath && (

@@ -298,21 +298,24 @@ test.describe('Audio Pool sidebar in Flex slots', () => {
   test('Escape cancels an in-progress drag without leaving the project', async ({ page }) => {
     await setupMocks(page, { withAudioPool: true })
     await openFlexTab(page)
+    await page.locator('.audio-pool-toggle-btn').first().click()
+    await page.waitForTimeout(300)
 
-    // Simulate an in-progress HTML5 drag (bubbles to the document listener).
-    await page.evaluate(() => {
-      document.body.dispatchEvent(new Event('dragstart', { bubbles: true }))
-    })
+    // Start a real dnd-kit pointer drag on a pool file (past the 5px activation distance).
+    const row = page.locator('.audio-pool-sidebar tr', { hasText: 'kick.wav' }).first()
+    const box = await row.boundingBox()
+    if (!box) throw new Error('pool row not found')
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width / 2 + 40, box.y + box.height / 2 + 40, { steps: 6 })
+
+    // Escape mid-drag: cancels the drag but stays on the project (does not go to the list).
     await page.keyboard.press('Escape')
-
-    // Still on the project page: the tabs/slots remain, URL unchanged.
+    await page.mouse.up()
     await expect(page.locator('.header-tab', { hasText: 'Flex' })).toBeVisible()
     expect(page.url()).toContain('/project')
 
     // With no drag active, Escape leaves back to the project list.
-    await page.evaluate(() => {
-      document.body.dispatchEvent(new Event('dragend', { bubbles: true }))
-    })
     await page.keyboard.press('Escape')
     await expect(page.locator('.header-tab', { hasText: 'Flex' })).toHaveCount(0)
   })
