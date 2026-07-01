@@ -3,6 +3,16 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
 import { Version } from "../components/Version";
 import { AudioFileTable } from "../components/AudioFileTable";
 import { OverwriteModal } from "../components/OverwriteModal";
@@ -13,8 +23,17 @@ import { SamplePlayerBar } from "../components/SamplePlayerBar";
 import type { AudioFile } from "../types/audioFile";
 import "./AudioPoolPage.css";
 
-
-
+// Droppable wrapper for the Audio Pool (destination) pane. Uses @dnd-kit (pointer-based)
+// so in-app drag from the Source pane works on macOS WebKit, which does not fire HTML5
+// drag events - same reason the Project List page uses @dnd-kit to drop projects on sets.
+function PoolDropZone({ osOver, children }: { osOver: boolean; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id: 'audio-pool-dest', data: { type: 'pool' } });
+  return (
+    <div ref={setNodeRef} className={`audio-panel dest-panel ${osOver || isOver ? 'drop-zone-active' : ''}`}>
+      {children}
+    </div>
+  );
+}
 
 
 // Import dropdown component
@@ -117,6 +136,10 @@ export function AudioPoolPage() {
   const [isSpinning, setIsSpinning] = useState(false);
   const [isSourcePanelOpen, setIsSourcePanelOpen] = useState(true);
   const [isOverDropZone, setIsOverDropZone] = useState(false);
+  // Files currently being dragged from the Source pane (drives the drag overlay).
+  const [dndDragFiles, setDndDragFiles] = useState<string[]>([]);
+  // Pointer sensor with a small activation distance so clicks still select (drag only past 5px).
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -1059,49 +1082,28 @@ export function AudioPoolPage() {
     isSourcePanelOpen, overwriteModal.isOpen, player, previewCandidate
   ]);
 
-  // Drag and drop handlers
-  function handleDragStart(e: React.DragEvent) {
-    const filePaths = Array.from(selectedSourceFiles);
-    e.dataTransfer.setData("application/json", JSON.stringify(filePaths));
-    e.dataTransfer.effectAllowed = "copy";
+  // In-app drag from the Source pane to the Audio Pool pane uses @dnd-kit (pointer-based)
+  // so it works on macOS WebKit, which does not deliver HTML5 drag events. OS-level file
+  // drops keep coming through the Tauri onDragDropEvent listener above.
+  function handleDndDragStart(event: DragStartEvent) {
+    const data = event.active.data.current as { files?: string[] } | undefined;
+    setDndDragFiles(data?.files ?? []);
   }
 
-  function handleDragEnd() {
-    // Cleanup after drag ends
-  }
+  async function handleDndDragEnd(event: DragEndEvent) {
+    setDndDragFiles([]);
+    const { active, over } = event;
+    if (!over || (over.data.current as { type?: string } | undefined)?.type !== 'pool') return;
 
-  function handleDragOver(e: React.DragEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsOverDropZone(true);
-    e.dataTransfer.dropEffect = "copy";
-  }
+    const draggedPaths = (active.data.current as { files?: string[] } | undefined)?.files ?? [];
+    if (draggedPaths.length === 0) return;
 
-  function handleDragLeave(e: React.DragEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.currentTarget === e.target) {
-      setIsOverDropZone(false);
-    }
-  }
+    const filesToCopy = sourceFiles.filter(f => draggedPaths.includes(f.path));
+    if (filesToCopy.length === 0) return;
 
-  async function handleDrop(e: React.DragEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsOverDropZone(false);
+    setSelectedSourceFiles(new Set());
 
     try {
-      const filePathsJson = e.dataTransfer.getData("application/json");
-      if (!filePathsJson) return;
-
-      const draggedPaths = JSON.parse(filePathsJson) as string[];
-      if (draggedPaths.length === 0) return;
-
-      const filesToCopy = sourceFiles.filter(f => draggedPaths.includes(f.path));
-      if (filesToCopy.length === 0) return;
-
-      setSelectedSourceFiles(new Set());
-
       // Build file sizes map and use the hook's copyFilesToPool for proper transfer tracking
       const fileSizes = new Map<string, number>();
       filesToCopy.forEach(f => fileSizes.set(f.path, f.size));
@@ -1177,6 +1179,12 @@ export function AudioPoolPage() {
         ref={panelContainerRef}
         className="audio-pool-container"
       >
+        <DndContext
+          sensors={dndSensors}
+          onDragStart={handleDndDragStart}
+          onDragEnd={handleDndDragEnd}
+          onDragCancel={() => setDndDragFiles([])}
+        >
         {/* Left Panel - Source (My Computer) */}
         {isSourcePanelOpen && (
           <div className="audio-panel source-panel" style={{ width: `${sourcePanelWidth}%` }}>
@@ -1217,8 +1225,7 @@ export function AudioPoolPage() {
               emptyMessage={sourcePath ? 'No audio files found' : 'Select a folder to browse'}
               onEmptyClick={() => !sourcePath && browseSourceDirectory()}
               draggable={true}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
+              dndMode={true}
               tableId="source"
               cursorIndex={cursorIndexSource}
               isActive={activePanel === 'source'}
@@ -1238,12 +1245,7 @@ export function AudioPoolPage() {
         )}
 
         {/* Right Panel - Destination (Audio Pool) */}
-        <div
-          className={`audio-panel dest-panel ${isOverDropZone ? 'drop-zone-active' : ''}`}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        >
+        <PoolDropZone osOver={isOverDropZone}>
           <div className="panel-header-bar">
             <span className="panel-title">Audio Pool</span>
             <div className="panel-path-controls">
@@ -1288,7 +1290,27 @@ export function AudioPoolPage() {
             poolRoot={audioPoolPath}
             searchRoot={destinationPath}
           />
-        </div>
+        </PoolDropZone>
+
+        <DragOverlay dropAnimation={null}>
+          {dndDragFiles.length > 0 ? (
+            <div style={{
+              background: 'rgba(255, 102, 0, 0.9)',
+              color: '#fff',
+              padding: '4px 10px',
+              borderRadius: '4px',
+              fontSize: '0.8rem',
+              fontFamily: "'Courier New', monospace",
+              pointerEvents: 'none',
+              whiteSpace: 'nowrap',
+            }}>
+              {dndDragFiles.length === 1
+                ? dndDragFiles[0].split(/[\\/]/).pop()
+                : `${dndDragFiles.length} items`}
+            </div>
+          ) : null}
+        </DragOverlay>
+        </DndContext>
       </div>
 
       {/* Transfer Queue Panel */}

@@ -48,6 +48,7 @@ function DraggableFileRow({
   selectedFiles,
   isCursor,
   onFileClick,
+  onFileDoubleClick,
   onContextMenu,
   rowRefs,
   children,
@@ -57,6 +58,7 @@ function DraggableFileRow({
   selectedFiles: Set<string>;
   isCursor: boolean;
   onFileClick: (file: AudioFile, index: number, e: React.MouseEvent) => void;
+  onFileDoubleClick?: (file: AudioFile, index: number, e: React.MouseEvent) => void;
   onContextMenu?: (e: React.MouseEvent, file: AudioFile | null) => void;
   rowRefs?: React.MutableRefObject<Map<number, HTMLTableRowElement>>;
   children: React.ReactNode;
@@ -78,6 +80,7 @@ function DraggableFileRow({
       className={`${selectedFiles.has(file.path) ? 'selected' : ''} ${isCursor ? 'cursor' : ''}`}
       style={{ opacity: isDragging ? 0.4 : 1, cursor: file.is_directory ? 'pointer' : 'grab' }}
       onClick={(e) => onFileClick(file, originalIndex, e)}
+      onDoubleClick={(e) => onFileDoubleClick?.(file, originalIndex, e)}
       onContextMenu={(e) => onContextMenu?.(e, file)}
       {...attributes}
       {...listeners}
@@ -598,6 +601,7 @@ export function AudioFileTable({
                     selectedFiles={selectedFiles}
                     isCursor={isCursor}
                     onFileClick={onFileClick}
+                    onFileDoubleClick={onFileDoubleClick}
                     onContextMenu={onContextMenu}
                     rowRefs={rowRefs}
                   >

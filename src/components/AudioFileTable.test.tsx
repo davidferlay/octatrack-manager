@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { DndContext } from '@dnd-kit/core'
 import { AudioFileTable } from './AudioFileTable'
 import type { AudioFile } from '../types/audioFile'
 
@@ -105,6 +106,31 @@ describe('AudioFileTable', () => {
       { name: 'Drums', size: 0, channels: 0, bit_rate: null, sample_rate: null, is_directory: true, path: '/src/Drums' },
     ]
     renderTable({ files: dirFiles, onFileDoubleClick: onDouble })
+    await userEvent.dblClick(screen.getByText('Drums'))
+    expect(onDouble).toHaveBeenCalledWith(dirFiles[0], 0, expect.anything())
+  })
+
+  it('fires onFileDoubleClick from a dnd-kit (pointer-drag) row too', async () => {
+    const onDouble = vi.fn()
+    const dirFiles: AudioFile[] = [
+      { name: 'Drums', size: 0, channels: 0, bit_rate: null, sample_rate: null, is_directory: true, path: '/src/Drums' },
+    ]
+    // dndMode rows (used by the Source pane so macOS drag works) live inside a DndContext.
+    render(
+      <DndContext>
+        <AudioFileTable
+          files={dirFiles}
+          selectedFiles={new Set()}
+          onFileClick={vi.fn()}
+          onFileDoubleClick={onDouble}
+          isLoading={false}
+          emptyMessage="No audio files"
+          tableId="dnd-table"
+          draggable
+          dndMode
+        />
+      </DndContext>
+    )
     await userEvent.dblClick(screen.getByText('Drums'))
     expect(onDouble).toHaveBeenCalledWith(dirFiles[0], 0, expect.anything())
   })
