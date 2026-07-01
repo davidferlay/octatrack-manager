@@ -108,6 +108,11 @@ go to the **Flex** (or **Static**) tab.
 | AP98 | Page search | Recursive search | On the Audio Pool page, type in the right (Audio Pool) pane's search box | Matching files/folders from the current directory and all its subfolders are listed, not just the current level |
 | AP99 | Page search | Hover shows pool-relative path | Hover over a file/folder in the right (Audio Pool) pane | Tooltip shows the path relative to the pool root, e.g. `AUDIO/Drums/kick.wav` |
 | AP100 | Page search | Source pane unaffected | Type in the left (Source) pane's search box | Source pane filters only its current directory by name (no recursive search; tooltip shows the plain file name) |
+| **Audio Pool page — OS drag & drop** | | | | |
+| AP102 | OS drop | Drop OS files on the page | Drag one or more audio files from the OS file manager onto the Audio Pool page | Each file is imported (converted when needed) into the currently browsed AUDIO/ directory; a transfer appears per file |
+| AP103 | OS drop | Drop an OS folder on the page | Drag a folder from the OS file manager onto the Audio Pool page | The folder is copied recursively into the current AUDIO/ directory under a same-named subfolder: audio files are converted to OT format, non-audio files are copied as-is, and the subfolder structure is preserved — no "directory" error |
+| AP104 | OS drop | Drop multiple OS folders/mixed | Drag several folders (or a mix of files and folders) onto the page at once | Every dropped item is imported: files converted/copied, folders recursed; a transfer entry appears per top-level item |
+| AP105 | OS drop | Folder merge overwrites | Drop an OS folder whose name already exists in the current directory | Contents are merged into the existing folder; colliding files are overwritten (no per-file conflict prompt for folder drops) |
 | **Copy back to source (Audio Pool page)** | | | | |
 | AP31 | Copy back | Pool → source uses shared pipeline | On the Audio Pool page, copy a destination file back to the source directory | Transfer shows in the progress pane; overwrite modal appears if a same-named file already exists |
 | **Open in file explorer** | | | | |
@@ -129,6 +134,7 @@ go to the **Flex** (or **Static**) tab.
 | AP77 | Dir drop | Drop OS folder on the pane | Drag a folder from the OS file manager onto the Audio Pool pane | The folder's audio files (recursive) are imported into the current AUDIO/ directory |
 | **Cancel an in-app drag** | | | | |
 | AP78 | Cancel | Escape cancels drag | Start dragging a pool file/folder over a slot, then press Escape before releasing | The drag is cancelled with no assignment; the drag preview disappears and no slot changes |
+| AP79 | Cancel | Escape mid-drag stays on the project | While a drag is in progress on a Flex/Static tab, press Escape | The drag is cancelled but the app stays on the project (it does not navigate back to the projects list, unlike a plain Escape with no drag) |
 | **Copy path to clipboard** | | | | |
 | AP92 | Clipboard | Slot → copy path | Right-click a filled slot → Copy path to clipboard | The sample's absolute path (project folder + slot path) is placed on the clipboard; disabled for empty slots |
 | AP93 | Clipboard | Pool pane file/dir → copy path | In the Audio Pool pane, right-click a file or folder → Copy path to clipboard | That item's absolute path is placed on the clipboard |

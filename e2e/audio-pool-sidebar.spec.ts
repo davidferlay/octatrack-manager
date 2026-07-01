@@ -294,4 +294,26 @@ test.describe('Audio Pool sidebar in Flex slots', () => {
     await page.keyboard.press('Shift+L')
     await expect(loop).toHaveClass(/\bon\b/)
   })
+
+  test('Escape cancels an in-progress drag without leaving the project', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+
+    // Simulate an in-progress HTML5 drag (bubbles to the document listener).
+    await page.evaluate(() => {
+      document.body.dispatchEvent(new Event('dragstart', { bubbles: true }))
+    })
+    await page.keyboard.press('Escape')
+
+    // Still on the project page: the tabs/slots remain, URL unchanged.
+    await expect(page.locator('.header-tab', { hasText: 'Flex' })).toBeVisible()
+    expect(page.url()).toContain('/project')
+
+    // With no drag active, Escape leaves back to the project list.
+    await page.evaluate(() => {
+      document.body.dispatchEvent(new Event('dragend', { bubbles: true }))
+    })
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.header-tab', { hasText: 'Flex' })).toHaveCount(0)
+  })
 })
