@@ -19426,4 +19426,83 @@ mod tests {
             );
         }
     }
+
+    /// Tests against project.work as written by a real Octatrack (OS 1.40B).
+    /// The fixture contains everything ot-tools-io normalizes away on a full rewrite
+    /// (TRIGQUANTIZATION=-1, TRIM_BARSx100, fractional TEMPOx24, MIDI_CLOCK_SEND=2),
+    /// so these tests prove the surgical write path preserves device data verbatim.
+    mod real_device_fixture_tests {
+        use super::*;
+
+        fn setup_real_device_project() -> TempDir {
+            let dir = TempDir::new().unwrap();
+            let fixture_dir =
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/real_device");
+            fs::copy(
+                fixture_dir.join("project.work"),
+                dir.path().join("project.work"),
+            )
+            .unwrap();
+            fs::copy(
+                fixture_dir.join("markers.work"),
+                dir.path().join("markers.work"),
+            )
+            .unwrap();
+            dir
+        }
+
+        #[test]
+        fn test_assign_on_real_device_file_only_touches_target_path() {
+            let dir = setup_real_device_project();
+            let before = surgical_write_tests::read_raw_project_work(dir.path());
+
+            // Path-only reassignment of an existing flex slot (33) from the device file.
+            let old_path =
+                "PATH=../AUDIO/Loopmasters/Loops/Drum & Bass/Music Loops/JM_172_D_Atmos.wav";
+            assert!(before.contains(old_path), "fixture changed unexpectedly");
+
+            let result = assign_samples_to_slots(
+                dir.path().to_str().unwrap(),
+                "FLEX",
+                vec![SlotAssignment {
+                    slot_index: 33,
+                    audio_path: "../AUDIO/replacement.wav".to_string(),
+                    set_defaults: false,
+                }],
+            )
+            .unwrap();
+            assert_eq!(result.assigned_count, 1);
+
+            // Every byte outside the one PATH line must be preserved verbatim.
+            let after = surgical_write_tests::read_raw_project_work(dir.path());
+            let expected = before.replace(old_path, "PATH=../AUDIO/replacement.wav");
+            assert_eq!(
+                after, expected,
+                "surgical write must not alter any other line of a device-written project.work"
+            );
+        }
+
+        #[test]
+        fn test_real_device_file_oddities_survive_assign() {
+            // Belt-and-braces: the specific fields ot-tools-io corrupts must survive.
+            let dir = setup_real_device_project();
+            assign_samples_to_slots(
+                dir.path().to_str().unwrap(),
+                "FLEX",
+                vec![SlotAssignment {
+                    slot_index: 33,
+                    audio_path: "../AUDIO/replacement.wav".to_string(),
+                    set_defaults: false,
+                }],
+            )
+            .unwrap();
+
+            let after = surgical_write_tests::read_raw_project_work(dir.path());
+            assert_eq!(after.matches("TRIGQUANTIZATION=-1").count(), 34);
+            assert!(!after.contains("TRIGQUANTIZATION=255"));
+            assert_eq!(after.matches("TRIM_BARSx100=").count(), 15);
+            assert!(after.contains("TEMPOx24=3027")); // fractional BPM (126.125)
+            assert!(after.contains("MIDI_CLOCK_SEND=2"));
+        }
+    }
 }
