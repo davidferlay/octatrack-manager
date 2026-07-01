@@ -966,7 +966,18 @@ where
     }
 
     if source.is_dir() {
-        return Err("Use copy_files_with_overwrite for directories".to_string());
+        // ponytail: recursively import a dropped folder, converting audio and copying
+        // non-audio as-is. It merges into a same-named folder and overwrites colliding
+        // files (no per-file conflict modal for directory drops); coarse copying/complete
+        // progress only. Add per-file progress/conflicts here if users ask for it.
+        let dir_name = source
+            .file_name()
+            .ok_or_else(|| format!("Invalid directory name: {}", source_path))?;
+        let dst = dest_dir.join(dir_name);
+        progress_callback("copying", 0.0);
+        copy_dir_recursive_with_conversion(source, &dst)?;
+        progress_callback("complete", 1.0);
+        return Ok(dst.to_string_lossy().to_string());
     }
 
     let result = copy_and_convert_audio_with_progress(
@@ -1595,6 +1606,38 @@ mod tests {
 
         let copied = result.unwrap();
         assert_eq!(copied.len(), 2);
+    }
+
+    #[test]
+    fn test_copy_single_file_with_progress_imports_directory_recursively() {
+        let source_root = TempDir::new().unwrap();
+        let dest_dir = TempDir::new().unwrap();
+
+        // Source folder with a nested subfolder and a non-audio file to copy as-is.
+        let src_folder = source_root.path().join("kit");
+        fs::create_dir(&src_folder).unwrap();
+        fs::write(src_folder.join("readme.txt"), "notes").unwrap();
+        let nested = src_folder.join("subs");
+        fs::create_dir(&nested).unwrap();
+        fs::write(nested.join("note.txt"), "nested").unwrap();
+
+        let result = copy_single_file_with_progress(
+            &src_folder.to_string_lossy(),
+            &dest_dir.path().to_string_lossy(),
+            false,
+            |_, _| {},
+            None,
+        );
+        assert!(result.is_ok(), "Should import directory: {:?}", result);
+
+        // Directory tree is recreated under a same-named folder.
+        assert!(dest_dir.path().join("kit").join("readme.txt").exists());
+        assert!(dest_dir
+            .path()
+            .join("kit")
+            .join("subs")
+            .join("note.txt")
+            .exists());
     }
 
     #[test]
