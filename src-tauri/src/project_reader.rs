@@ -4026,6 +4026,65 @@ fn replace_sample_fields_surgical(
     Ok(())
 }
 
+/// Surgically replace `KEY=value` lines inside the [SETTINGS] block of a project file.
+/// Only the listed keys are touched; every other byte is preserved verbatim. This avoids
+/// the lossy ot-tools-io ProjectFile rewrite, which drops TRIM_BARSx100 lines, rewrites
+/// TRIGQUANTIZATION=-1 as 255, truncates fractional TEMPOx24 values, and normalizes
+/// out-of-range flags like MIDI_CLOCK_SEND=2 (all observed on real device files).
+/// Keys must be given in the uppercase form the device writes. A key missing from the
+/// block is appended just before [/SETTINGS].
+fn replace_settings_fields_surgical(
+    project_file_path: &Path,
+    updates: &[(&str, String)],
+) -> Result<(), String> {
+    let raw_bytes = std::fs::read(project_file_path)
+        .map_err(|e| format!("Failed to read project file: {}", e))?;
+    let (decoded, _, _) = encoding_rs::WINDOWS_1258.decode(&raw_bytes);
+    let content = decoded.into_owned();
+
+    if !content.contains("[SETTINGS]") {
+        return Err("Malformed project file: no [SETTINGS] block".to_string());
+    }
+
+    let mut pending: std::collections::HashMap<&str, &String> =
+        updates.iter().map(|(k, v)| (*k, v)).collect();
+    let mut result = String::with_capacity(content.len() + 64);
+    let mut in_settings = false;
+
+    for line in content.split_inclusive('\n') {
+        let trimmed = line.trim_end_matches(['\r', '\n']);
+        if trimmed == "[SETTINGS]" {
+            in_settings = true;
+        } else if trimmed == "[/SETTINGS]" {
+            for (key, value) in updates {
+                if pending.remove(*key).is_some() {
+                    result.push_str(key);
+                    result.push('=');
+                    result.push_str(value);
+                    result.push_str("\r\n");
+                }
+            }
+            in_settings = false;
+        } else if in_settings {
+            if let Some(eq) = trimmed.find('=') {
+                if let Some(value) = pending.remove(&trimmed[..eq]) {
+                    let terminator = &line[trimmed.len()..];
+                    result.push_str(&trimmed[..eq]);
+                    result.push('=');
+                    result.push_str(value);
+                    result.push_str(terminator);
+                    continue;
+                }
+            }
+        }
+        result.push_str(line);
+    }
+
+    let (encoded, _, _) = encoding_rs::WINDOWS_1258.encode(&result);
+    std::fs::write(project_file_path, &*encoded)
+        .map_err(|e| format!("Failed to write project file: {}", e))
+}
+
 /// OT default audio-editor attributes for a freshly-assigned (or reset) sample, keyed by
 /// uppercased field name. Matches what the hardware writes on assign:
 /// GAIN=48, TSMODE=2, TRIGQUANTIZATION=-1, and LOOPMODE=1 for FLEX / 0 for STATIC.
@@ -5847,24 +5906,28 @@ pub fn save_memory_settings_data(
         return Err("Project file not found".to_string());
     };
 
-    let mut project_data = ProjectFile::from_data_file(&project_file_path)
-        .map_err(|e| format!("Failed to read project file: {:?}", e))?;
-
-    // Update memory settings
-    project_data.settings.control.memory.load_24bit_flex = settings.load_24bit_flex;
-    project_data.settings.control.memory.dynamic_recorders = settings.dynamic_recorders;
-    project_data.settings.control.memory.record_24bit = settings.record_24bit;
-    project_data.settings.control.memory.reserved_recorder_count = settings.reserved_recorder_count;
-    project_data
-        .settings
-        .control
-        .memory
-        .reserved_recorder_length = settings.reserved_recorder_length;
-
-    // Write back to disk
-    project_data
-        .to_data_file(&project_file_path)
-        .map_err(|e| format!("Failed to write project file: {:?}", e))?;
+    // Surgically edit only the memory lines: a full ot-tools-io rewrite corrupts
+    // unrelated device data (see replace_settings_fields_surgical).
+    let updates = [
+        (
+            "LOAD_24BIT_FLEX",
+            (settings.load_24bit_flex as u8).to_string(),
+        ),
+        (
+            "DYNAMIC_RECORDERS",
+            (settings.dynamic_recorders as u8).to_string(),
+        ),
+        ("RECORD_24BIT", (settings.record_24bit as u8).to_string()),
+        (
+            "RESERVED_RECORDER_COUNT",
+            settings.reserved_recorder_count.to_string(),
+        ),
+        (
+            "RESERVED_RECORDER_LENGTH",
+            settings.reserved_recorder_length.to_string(),
+        ),
+    ];
+    replace_settings_fields_surgical(&project_file_path, &updates)?;
 
     // Recompute flex RAM free
     let flex_ram_capacity = calculate_flex_ram_bytes(&settings);
@@ -19503,6 +19566,307 @@ mod tests {
             assert_eq!(after.matches("TRIM_BARSx100=").count(), 15);
             assert!(after.contains("TEMPOx24=3027")); // fractional BPM (126.125)
             assert!(after.contains("MIDI_CLOCK_SEND=2"));
+        }
+
+        #[test]
+        fn test_save_memory_settings_only_touches_memory_lines() {
+            let dir = setup_real_device_project();
+            let before = surgical_write_tests::read_raw_project_work(dir.path());
+
+            save_memory_settings_data(
+                dir.path().to_str().unwrap(),
+                MemorySettings {
+                    load_24bit_flex: true,
+                    dynamic_recorders: true,
+                    record_24bit: true,
+                    reserved_recorder_count: 4,
+                    reserved_recorder_length: 32,
+                    flex_ram_free_mb: 0.0,
+                    flex_ram_free_bytes: 0,
+                },
+            )
+            .unwrap();
+
+            // Every byte outside the five memory lines must be preserved verbatim —
+            // this is the regression test for the ot-tools-io full-rewrite bug that
+            // corrupted TRIGQUANTIZATION=-1, TRIM_BARSx100, TEMPOx24 and MIDI_CLOCK_SEND.
+            let after = surgical_write_tests::read_raw_project_work(dir.path());
+            let expected = before
+                .replace("LOAD_24BIT_FLEX=0", "LOAD_24BIT_FLEX=1")
+                .replace("DYNAMIC_RECORDERS=0", "DYNAMIC_RECORDERS=1")
+                .replace("RECORD_24BIT=0", "RECORD_24BIT=1")
+                .replace("RESERVED_RECORDER_COUNT=8", "RESERVED_RECORDER_COUNT=4")
+                .replace("RESERVED_RECORDER_LENGTH=16", "RESERVED_RECORDER_LENGTH=32");
+            assert_ne!(before, expected, "fixture defaults changed unexpectedly");
+            assert_eq!(
+                after, expected,
+                "saving memory settings must not alter any other line of a device-written project.work"
+            );
+        }
+
+        #[test]
+        fn test_save_memory_settings_second_identical_save_is_byte_stable() {
+            let dir = setup_real_device_project();
+            let settings = MemorySettings {
+                load_24bit_flex: true,
+                dynamic_recorders: false,
+                record_24bit: true,
+                reserved_recorder_count: 2,
+                reserved_recorder_length: 8,
+                flex_ram_free_mb: 0.0,
+                flex_ram_free_bytes: 0,
+            };
+
+            save_memory_settings_data(dir.path().to_str().unwrap(), settings.clone()).unwrap();
+            let first = fs::read(dir.path().join("project.work")).unwrap();
+            save_memory_settings_data(dir.path().to_str().unwrap(), settings).unwrap();
+            let second = fs::read(dir.path().join("project.work")).unwrap();
+
+            assert_eq!(
+                first, second,
+                "re-saving identical settings must be a no-op"
+            );
+        }
+
+        #[test]
+        fn test_save_memory_settings_appends_deleted_memory_key() {
+            // A hand-edited file missing one memory line: the key is re-added, the rest preserved.
+            let dir = setup_real_device_project();
+            let before = surgical_write_tests::read_raw_project_work(dir.path());
+            let stripped = before.replace("DYNAMIC_RECORDERS=0\r\n", "");
+            assert_ne!(before, stripped, "fixture should contain the memory line");
+            surgical_write_tests::write_raw_project_work(dir.path(), &stripped);
+
+            save_memory_settings_data(
+                dir.path().to_str().unwrap(),
+                MemorySettings {
+                    load_24bit_flex: false,
+                    dynamic_recorders: true,
+                    record_24bit: false,
+                    reserved_recorder_count: 8,
+                    reserved_recorder_length: 16,
+                    flex_ram_free_mb: 0.0,
+                    flex_ram_free_bytes: 0,
+                },
+            )
+            .unwrap();
+
+            let after = surgical_write_tests::read_raw_project_work(dir.path());
+            // Re-added just before [/SETTINGS]; all other lines (incl. device oddities) intact.
+            let expected = stripped.replace("[/SETTINGS]", "DYNAMIC_RECORDERS=1\r\n[/SETTINGS]");
+            assert_eq!(after, expected);
+
+            let reread = read_project_memory_settings(dir.path()).unwrap();
+            assert!(reread.dynamic_recorders);
+        }
+
+        #[test]
+        fn test_save_memory_settings_writes_bools_as_zero_one() {
+            let dir = setup_real_device_project();
+            save_memory_settings_data(
+                dir.path().to_str().unwrap(),
+                MemorySettings {
+                    load_24bit_flex: true,
+                    dynamic_recorders: true,
+                    record_24bit: false,
+                    reserved_recorder_count: 0,
+                    reserved_recorder_length: 0,
+                    flex_ram_free_mb: 0.0,
+                    flex_ram_free_bytes: 0,
+                },
+            )
+            .unwrap();
+
+            let raw = surgical_write_tests::read_raw_project_work(dir.path());
+            assert!(raw.contains("LOAD_24BIT_FLEX=1"));
+            assert!(raw.contains("DYNAMIC_RECORDERS=1"));
+            assert!(raw.contains("RECORD_24BIT=0"));
+            assert!(raw.contains("RESERVED_RECORDER_COUNT=0"));
+            assert!(raw.contains("RESERVED_RECORDER_LENGTH=0"));
+            assert!(!raw.contains("=true") && !raw.contains("=false"));
+        }
+    }
+
+    /// Direct tests for `replace_settings_fields_surgical` on synthetic files, pinning
+    /// its exact editing semantics (scoping, terminators, encoding, fallbacks).
+    mod settings_surgical_tests {
+        use super::*;
+
+        const BASE: &str = "[META]\r\nTYPE=OCTATRACK DPS-1 PROJECT\r\nVERSION=19\r\n[/META]\r\n\r\n[SETTINGS]\r\nWRITEPROTECTED=0\r\nTEMPOx24=3027\r\nMIDI_CLOCK_SEND=2\r\nLOAD_24BIT_FLEX=0\r\nRECORD_24BIT=0\r\nRECORD_24BITX=7\r\n[/SETTINGS]\r\n\r\n[SAMPLE]\r\nTYPE=FLEX\r\nSLOT=001\r\nPATH=../AUDIO/kick.wav\r\nLOAD_24BIT_FLEX=9\r\nTRIGQUANTIZATION=-1\r\n[/SAMPLE]\r\n";
+
+        fn write_project(content: &str) -> TempDir {
+            let dir = TempDir::new().unwrap();
+            let (encoded, _, _) = encoding_rs::WINDOWS_1258.encode(content);
+            fs::write(dir.path().join("project.work"), &*encoded).unwrap();
+            dir
+        }
+
+        fn read_project(dir: &TempDir) -> String {
+            let raw = fs::read(dir.path().join("project.work")).unwrap();
+            let (decoded, _, _) = encoding_rs::WINDOWS_1258.decode(&raw);
+            decoded.into_owned()
+        }
+
+        fn apply(dir: &TempDir, updates: &[(&str, String)]) -> Result<(), String> {
+            replace_settings_fields_surgical(&dir.path().join("project.work"), updates)
+        }
+
+        #[test]
+        fn test_replaces_value_and_preserves_everything_else() {
+            let dir = write_project(BASE);
+            apply(&dir, &[("LOAD_24BIT_FLEX", "1".to_string())]).unwrap();
+            // Only the [SETTINGS] occurrence changes; the [SAMPLE] one is out of scope.
+            let expected = BASE.replacen("LOAD_24BIT_FLEX=0", "LOAD_24BIT_FLEX=1", 1);
+            assert_eq!(read_project(&dir), expected);
+        }
+
+        #[test]
+        fn test_does_not_touch_matching_keys_outside_settings_block() {
+            let dir = write_project(BASE);
+            apply(&dir, &[("LOAD_24BIT_FLEX", "1".to_string())]).unwrap();
+            let after = read_project(&dir);
+            assert!(
+                after.contains("LOAD_24BIT_FLEX=9"),
+                "the [SAMPLE] block line must stay untouched"
+            );
+        }
+
+        #[test]
+        fn test_key_match_requires_full_key() {
+            // RECORD_24BIT must not swallow RECORD_24BITX (prefix collision).
+            let dir = write_project(BASE);
+            apply(&dir, &[("RECORD_24BIT", "1".to_string())]).unwrap();
+            let after = read_project(&dir);
+            assert!(after.contains("RECORD_24BIT=1"));
+            assert!(after.contains("RECORD_24BITX=7"));
+        }
+
+        #[test]
+        fn test_replaces_multiple_keys_in_one_pass() {
+            let dir = write_project(BASE);
+            apply(
+                &dir,
+                &[
+                    ("WRITEPROTECTED", "1".to_string()),
+                    ("LOAD_24BIT_FLEX", "1".to_string()),
+                    ("RECORD_24BIT", "1".to_string()),
+                ],
+            )
+            .unwrap();
+            let after = read_project(&dir);
+            assert!(after.contains("WRITEPROTECTED=1"));
+            assert!(after.contains("LOAD_24BIT_FLEX=1"));
+            assert!(after.contains("RECORD_24BIT=1"));
+            // Untouched neighbours survive
+            assert!(after.contains("TEMPOx24=3027"));
+            assert!(after.contains("MIDI_CLOCK_SEND=2"));
+        }
+
+        #[test]
+        fn test_value_length_may_grow_or_shrink() {
+            let dir = write_project(BASE);
+            apply(&dir, &[("TEMPOx24", "720".to_string())]).unwrap();
+            assert_eq!(
+                read_project(&dir),
+                BASE.replace("TEMPOx24=3027", "TEMPOx24=720")
+            );
+            apply(&dir, &[("TEMPOx24", "72000".to_string())]).unwrap();
+            assert_eq!(
+                read_project(&dir),
+                BASE.replace("TEMPOx24=3027", "TEMPOx24=72000")
+            );
+        }
+
+        #[test]
+        fn test_missing_key_appended_before_settings_close() {
+            let dir = write_project(BASE);
+            apply(&dir, &[("RESERVED_RECORDER_COUNT", "4".to_string())]).unwrap();
+            let expected = BASE.replace("[/SETTINGS]", "RESERVED_RECORDER_COUNT=4\r\n[/SETTINGS]");
+            assert_eq!(read_project(&dir), expected);
+        }
+
+        #[test]
+        fn test_empty_updates_leave_file_byte_identical() {
+            let dir = write_project(BASE);
+            let before = fs::read(dir.path().join("project.work")).unwrap();
+            apply(&dir, &[]).unwrap();
+            let after = fs::read(dir.path().join("project.work")).unwrap();
+            assert_eq!(before, after);
+        }
+
+        #[test]
+        fn test_errors_without_settings_block() {
+            let dir = write_project("[META]\r\nTYPE=X\r\n[/META]\r\n");
+            let err = apply(&dir, &[("LOAD_24BIT_FLEX", "1".to_string())]).unwrap_err();
+            assert!(err.contains("[SETTINGS]"), "got: {}", err);
+        }
+
+        #[test]
+        fn test_errors_on_missing_file() {
+            let dir = TempDir::new().unwrap();
+            let err = replace_settings_fields_surgical(
+                &dir.path().join("project.work"),
+                &[("LOAD_24BIT_FLEX", "1".to_string())],
+            )
+            .unwrap_err();
+            assert!(err.contains("Failed to read"), "got: {}", err);
+        }
+
+        #[test]
+        fn test_only_first_occurrence_of_duplicate_key_is_replaced() {
+            // Device files repeat TRIG_MODE_MIDI 8x inside [SETTINGS]; pin the
+            // first-occurrence-only behaviour so a change to it is deliberate.
+            let content = "[SETTINGS]\r\nTRIG_MODE_MIDI=0\r\nTRIG_MODE_MIDI=0\r\nTRIG_MODE_MIDI=0\r\n[/SETTINGS]\r\n";
+            let dir = write_project(content);
+            apply(&dir, &[("TRIG_MODE_MIDI", "1".to_string())]).unwrap();
+            let after = read_project(&dir);
+            assert_eq!(after.matches("TRIG_MODE_MIDI=1").count(), 1);
+            assert_eq!(after.matches("TRIG_MODE_MIDI=0").count(), 2);
+        }
+
+        #[test]
+        fn test_preserves_lf_only_line_terminators() {
+            // Defensive: a file rewritten by some other tool with bare-LF lines keeps its style.
+            let content = "[SETTINGS]\nLOAD_24BIT_FLEX=0\nTEMPOx24=3027\n[/SETTINGS]\n";
+            let dir = write_project(content);
+            apply(&dir, &[("LOAD_24BIT_FLEX", "1".to_string())]).unwrap();
+            assert_eq!(
+                read_project(&dir),
+                "[SETTINGS]\nLOAD_24BIT_FLEX=1\nTEMPOx24=3027\n[/SETTINGS]\n"
+            );
+        }
+
+        #[test]
+        fn test_handles_missing_trailing_newline() {
+            let content = "[SETTINGS]\r\nLOAD_24BIT_FLEX=0\r\n[/SETTINGS]";
+            let dir = write_project(content);
+            apply(&dir, &[("LOAD_24BIT_FLEX", "1".to_string())]).unwrap();
+            assert_eq!(
+                read_project(&dir),
+                "[SETTINGS]\r\nLOAD_24BIT_FLEX=1\r\n[/SETTINGS]"
+            );
+        }
+
+        #[test]
+        fn test_preserves_windows_1258_bytes_outside_settings() {
+            // Sample paths may hold non-ASCII Windows-1258 characters; they must
+            // survive the decode/encode round-trip untouched.
+            let content = "[SETTINGS]\r\nLOAD_24BIT_FLEX=0\r\n[/SETTINGS]\r\n\r\n[SAMPLE]\r\nTYPE=FLEX\r\nSLOT=001\r\nPATH=../AUDIO/télé çà.wav\r\n[/SAMPLE]\r\n";
+            let dir = write_project(content);
+            let before = fs::read(dir.path().join("project.work")).unwrap();
+            apply(&dir, &[("LOAD_24BIT_FLEX", "1".to_string())]).unwrap();
+            let after = fs::read(dir.path().join("project.work")).unwrap();
+            // Byte-level: only '0' -> '1' inside the settings line changed.
+            assert_eq!(before.len(), after.len());
+            let diffs: Vec<usize> = before
+                .iter()
+                .zip(after.iter())
+                .enumerate()
+                .filter(|(_, (a, b))| a != b)
+                .map(|(i, _)| i)
+                .collect();
+            assert_eq!(diffs.len(), 1, "exactly one byte should differ");
+            assert!(read_project(&dir).contains("PATH=../AUDIO/télé çà.wav"));
         }
     }
 }
