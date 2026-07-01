@@ -112,3 +112,25 @@ jobs:
           releaseId: ${{ github.event.release.id }}
           tagName: ${{ github.ref_name }}
           args: ${{ matrix.args }}
+
+  # Uploading assets can leave the release drafted; force-publish it once every build
+  # finishes so a prod release is never left as a draft. Only runs for the release
+  # event (manual workflow_dispatch has no release payload to publish).
+  publish-release:
+    needs: build-tauri
+    if: ${{ github.event.release.id }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish release (undraft)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: context.payload.release.id,
+              draft: false,
+            });
+            core.info('Release published (draft=false)');
