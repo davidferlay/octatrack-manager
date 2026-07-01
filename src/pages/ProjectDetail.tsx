@@ -419,6 +419,22 @@ export function ProjectDetail() {
     }
   }, [partsWriteStatus.state]);
 
+  // Track whether an HTML5 drag is in progress so Escape cancels the drag
+  // (native behavior) instead of navigating back to the project list.
+  const isDraggingRef = useRef(false);
+  useEffect(() => {
+    const start = () => { isDraggingRef.current = true; };
+    const end = () => { isDraggingRef.current = false; };
+    document.addEventListener('dragstart', start);
+    document.addEventListener('dragend', end);
+    document.addEventListener('drop', end);
+    return () => {
+      document.removeEventListener('dragstart', start);
+      document.removeEventListener('dragend', end);
+      document.removeEventListener('drop', end);
+    };
+  }, []);
+
   // Load machine types for the selected bank's active part
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -444,6 +460,8 @@ export function ProjectDetail() {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
       if (e.key === 'Escape') {
+        // Mid-drag Escape cancels the drag (handled natively); don't leave the project.
+        if (isDraggingRef.current) return;
         leaveToProjectList();
       }
     }
