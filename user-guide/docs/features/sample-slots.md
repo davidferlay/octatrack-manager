@@ -86,6 +86,12 @@ An audio player is available the bottom of the page. Select an item from either 
 - Click **LOOP** or use <kbd>Shift</kbd> + <kbd>L</kbd> to toggle sample repeat.
 - Click **AUTO** or use <kbd>Shift</kbd> + <kbd>Enter</kbd>) to toggle auto playback when selecting a slot or file.
 
+![Audio player at the bottom of the sample slots page](/img/screenshots/sample-slots-playback.png)
+
+With the Audio Pool pane open:
+
+![Audio player with the Audio Pool pane open](/img/screenshots/sample-slots-playback-pane.png)
+
 Common audio formats are supported: WAV, AIFF, FLAC, MP3, OGG/Opus, and M4A/AAC.
 
 The player is also available from [Audio Pool](audio-pool.md#playback).

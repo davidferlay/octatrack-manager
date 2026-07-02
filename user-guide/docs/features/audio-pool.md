@@ -40,6 +40,8 @@ Samples can be imported to Audio Pool in several ways:
 - **Browser item right-click:** Right-click a file and select **Copy to Pool**.
 - Select an audio file from Browser pane and click the **Copy button**
 
+![Dragging a file from the Browser pane onto the Audio Pool](/img/screenshots/audio-pool-drag-drop.png)
+
 <img src={require('@site/static/img/screenshots/audio-pool-copy-button.png').default} alt="Copy selected Audio files from button" style={{width: '64%', display: 'block', margin: '0 auto'}} />
 
 <img src={require('@site/static/img/screenshots/audio-pool-copy-menu.png').default} alt="Copy selected Audio files from contextual menu" style={{width: '62%', display: 'block', margin: '0 auto'}} />
@@ -48,7 +50,7 @@ Samples can be imported to Audio Pool in several ways:
 
 ## Automatic Conversion
 
-The Octatrack hardware is very specific about the audio formats it can play. Octatrack Manager takes care of all this automatically — **you never need to manually convert files again**.
+The Octatrack hardware is very specific about the audio formats it can play. Octatrack Manager converts all files added to Audio Pool automatically.
 
 Conversion uses a **high-quality Sinc interpolation** algorithm (Blackman-Harris windowed) for the best possible audio fidelity.
 
@@ -106,6 +108,8 @@ An audio player is available the bottom of the page. Select an item from either 
 - Click **LOOP** or use <kbd>Shift</kbd> + <kbd>L</kbd> to toggle sample repeat.
 - Click **AUTO** or use <kbd>Shift</kbd> + <kbd>Enter</kbd>) to toggle auto playback when selecting a file.
 - Press <kbd>B</kbd> to show or hide the left (Browse) panel.
+
+![Audio player at the bottom of the Audio Pool page](/img/screenshots/audio-pool-playback.png)
 
 Common audio formats are supported: WAV, AIFF, FLAC, MP3, OGG/Opus, and M4A/AAC.
 
