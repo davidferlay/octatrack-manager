@@ -21,7 +21,7 @@ Choose the file that matches your operating system below.
 ## macOS
 
 :::caution Important Note for Mac Users
-Octatrack Manager is not yet "signed" with an Apple Developer certificate. This means macOS will block it by default unless you follow these specific steps.
+Octatrack Manager is not signed with an Apple Developer certificate. macOS will block the first launch, and you need to approve the app manually — a one-time step described below.
 :::
 
 1. **Download:** Get the `.dmg` file for your Mac:
@@ -30,18 +30,20 @@ Octatrack Manager is not yet "signed" with an Apple Developer certificate. This 
 
 2. **Install:** Open the `.dmg` file and drag **Octatrack Manager** into your **Applications** folder.
 
-3. **Bypass Gatekeeper:**
-   - Open your **Applications** folder in Finder.
-   - **Right-click** (or Control-click) on Octatrack Manager.
-   - Select **Open** from the menu.
-   - A dialog will appear warning you about the unidentified developer. Click **Open** again.
+3. **Approve the app (first launch only):**
+   - Open your **Applications** folder and double-click **Octatrack Manager**.
+   - macOS shows a warning that it could not verify the app. Click **Done** (not "Move to Trash").
+   - Open **System Settings** → **Privacy & Security**, scroll down to the **Security** section, and click **Open Anyway** next to the message about Octatrack Manager.
+   - Confirm **Open Anyway** in the dialog that appears. The app will open normally from now on.
+
+   On macOS 14 (Sonoma) and earlier, you can instead right-click Octatrack Manager in Applications, select **Open**, and click **Open** in the warning dialog.
 
    *If the app still refuses to open:*
    Open the **Terminal** app and paste this command, then press Enter:
    ```bash
    xattr -cr /Applications/octatrack-manager.app
    ```
-   This command removes the "quarantine" attribute that prevents the app from launching.
+   This command removes the "quarantine" attribute macOS places on downloaded files.
 
 ---
 
