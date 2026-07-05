@@ -32,6 +32,8 @@ interface AudioPoolSidebarProps {
   clearSelectionToken?: number;
   /** Report the last-clicked file so the page can drive auto-preview. */
   onActiveFile?: (path: string, name: string, selectionSize: number) => void;
+  /** Explicitly play a file (double-click or context-menu Play). */
+  onPlayFile?: (path: string, name: string) => void;
   /** True when this pane has keyboard focus (drives up/down navigation). */
   active?: boolean;
 }
@@ -47,7 +49,7 @@ export function parentDir(path: string, root: string): string {
   return parent.startsWith(root) && parent.length >= root.length ? parent : root;
 }
 
-export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndMode = false, refreshKey, onCurrentPathChange, onImport, onAssignToFirstEmpty, hasEmptySlot = true, onAssignToSelected, hasSelectedSlot, onOpenAudioPoolPage, persistKey, onSelect, clearSelectionToken, onActiveFile, active = false }: AudioPoolSidebarProps) {
+export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndMode = false, refreshKey, onCurrentPathChange, onImport, onAssignToFirstEmpty, hasEmptySlot = true, onAssignToSelected, hasSelectedSlot, onOpenAudioPoolPage, persistKey, onSelect, clearSelectionToken, onActiveFile, onPlayFile, active = false }: AudioPoolSidebarProps) {
   // Restore the last-browsed directory (only if it still sits under this pool root).
   const [currentPath, setCurrentPath] = useState(() => {
     if (persistKey) {
@@ -333,6 +335,7 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
         files={files}
         selectedFiles={selectedFiles}
         onFileClick={handleFileClick}
+        onFileDoubleClick={(file) => { if (!file.is_directory) onPlayFile?.(file.path, file.name); }}
         isLoading={isLoading}
         emptyMessage="No audio files"
         draggable={true}
@@ -406,6 +409,17 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
         >
           {!itemMenu.file.is_directory && (
             <>
+              {onPlayFile && (
+                <>
+                  <button
+                    className="context-menu-item"
+                    onClick={() => { onPlayFile(itemMenu.file.path, itemMenu.file.name); setItemMenu(null); }}
+                  >
+                    <i className="fas fa-play"></i> Play
+                  </button>
+                  <div className="context-menu-separator"></div>
+                </>
+              )}
               <button
                 className="context-menu-item"
                 disabled={!isEditMode || !hasEmptySlot}

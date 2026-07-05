@@ -5,9 +5,11 @@ async function setupMocks(page: Page, opts?: { withAudioPool?: boolean }) {
   const withAudioPool = opts?.withAudioPool ?? true
   await page.addInitScript((withAudioPool: boolean) => {
     ;(window as any).__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} }
+    ;(window as any).__invokeCalls = []
     ;(window as any).__TAURI_INTERNALS__ = {
       transformCallback: () => 0,
-      invoke: async (cmd: string) => {
+      invoke: async (cmd: string, args?: unknown) => {
+        ;(window as any).__invokeCalls.push([cmd, args])
         switch (cmd) {
           case 'plugin:event|listen':
             return 0
@@ -293,6 +295,83 @@ test.describe('Audio Pool sidebar in Flex slots', () => {
     await expect(loop).not.toHaveClass(/\bon\b/)
     await page.keyboard.press('Shift+L')
     await expect(loop).toHaveClass(/\bon\b/)
+  })
+
+  test('slot context menu shows Play as its first item, enabled on a filled slot', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    await page.locator('.samples-table tbody tr').first().click({ button: 'right' })
+    const first = page.locator('.context-menu .context-menu-item').first()
+    await expect(first).toHaveText(/Play/)
+    await expect(first).toBeEnabled()
+  })
+
+  test('slot context menu Play is disabled on an empty slot', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    await page.locator('.samples-table tbody tr').nth(3).click({ button: 'right' })
+    const first = page.locator('.context-menu .context-menu-item').first()
+    await expect(first).toHaveText(/Play/)
+    await expect(first).toBeDisabled()
+  })
+
+  test('slot context menu Play reads the sample file for playback', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    await page.locator('.samples-table tbody tr').first().click({ button: 'right' })
+    await page.locator('.context-menu .context-menu-item', { hasText: 'Play' }).click()
+    await expect
+      .poll(async () => page.evaluate(() =>
+        (window as any).__invokeCalls.filter(([c]: [string]) => c === 'read_audio_file').map(([, a]: [string, any]) => a.path)
+      ))
+      .toContain('/samples/flex_0.wav')
+  })
+
+  test('double-clicking a filled slot row plays its sample', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    await page.locator('.samples-table tbody tr').first().dblclick()
+    await expect
+      .poll(async () => page.evaluate(() =>
+        (window as any).__invokeCalls.filter(([c]: [string]) => c === 'read_audio_file').map(([, a]: [string, any]) => a.path)
+      ))
+      .toContain('/samples/flex_0.wav')
+  })
+
+  test('pool file context menu shows Play as its first item and plays the file', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    await page.locator('.audio-pool-toggle-btn').first().click()
+    await page.locator('.audio-pool-sidebar tbody tr', { hasText: 'kick.wav' }).click({ button: 'right' })
+    const first = page.locator('.context-menu .context-menu-item').first()
+    await expect(first).toHaveText(/Play/)
+    await first.click()
+    await expect
+      .poll(async () => page.evaluate(() =>
+        (window as any).__invokeCalls.filter(([c]: [string]) => c === 'read_audio_file').map(([, a]: [string, any]) => a.path)
+      ))
+      .toContain('/test/set/AUDIO/kick.wav')
+  })
+
+  test('pool directory context menu has no Play item', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    await page.locator('.audio-pool-toggle-btn').first().click()
+    await page.locator('.audio-pool-sidebar tbody tr', { hasText: 'Drums' }).click({ button: 'right' })
+    await expect(page.locator('.context-menu')).toBeVisible()
+    await expect(page.locator('.context-menu .context-menu-item', { hasText: 'Play' })).toHaveCount(0)
+  })
+
+  test('double-clicking a pool file plays it', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    await page.locator('.audio-pool-toggle-btn').first().click()
+    await page.locator('.audio-pool-sidebar tbody tr', { hasText: 'snare.wav' }).dblclick()
+    await expect
+      .poll(async () => page.evaluate(() =>
+        (window as any).__invokeCalls.filter(([c]: [string]) => c === 'read_audio_file').map(([, a]: [string, any]) => a.path)
+      ))
+      .toContain('/test/set/AUDIO/snare.wav')
   })
 
   test('Escape cancels an in-progress drag without leaving the project', async ({ page }) => {

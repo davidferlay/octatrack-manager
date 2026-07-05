@@ -127,6 +127,14 @@ export function AudioPoolPage() {
     }
   }, [player]);
 
+  // Explicit playback (double-click or context-menu Play) — plays regardless of the
+  // Auto-preview toggle.
+  const playFile = useCallback((file: AudioFile) => {
+    if (file.is_directory || !isAudioFile(file.path)) return;
+    setActivePlayable(true);
+    player.play(file.path, file.name);
+  }, [player]);
+
   const [cursorIndexSource, setCursorIndexSource] = useState<number>(0);
   const [cursorIndexDest, setCursorIndexDest] = useState<number>(0);
   const sourceRowRefs = useRef<Map<number, HTMLTableRowElement>>(new Map());
@@ -580,9 +588,11 @@ export function AudioPoolPage() {
     setDestinationPath(audioPoolPath);
   }
 
-  // Single click selects a directory (so it can be dragged to the pool); double-click enters it.
+  // Single click selects a directory (so it can be dragged to the pool); double-click
+  // enters it. Double-clicking a file plays it.
   function handleSourceFileDoubleClick(file: AudioFile) {
     if (file.is_directory) setSourcePath(file.path);
+    else playFile(file);
   }
 
   function handleSourceFileClick(file: AudioFile, index: number, event: React.MouseEvent) {
@@ -1279,6 +1289,7 @@ export function AudioPoolPage() {
             files={destinationFiles}
             selectedFiles={selectedDestFiles}
             onFileClick={handleDestFileClick}
+            onFileDoubleClick={(file) => playFile(file)}
             isLoading={isLoadingDest}
             emptyMessage="No files in audio pool"
             tableId="dest"
@@ -1370,6 +1381,14 @@ export function AudioPoolPage() {
           >
             {contextMenu.file && (
               <>
+                <button
+                  className="context-menu-item"
+                  disabled={contextMenu.file.is_directory || !isAudioFile(contextMenu.file.path)}
+                  onClick={() => { if (contextMenu.file) playFile(contextMenu.file); closeContextMenu(); }}
+                >
+                  <i className="fas fa-play"></i> Play
+                </button>
+                <div className="context-menu-separator"></div>
                 <button
                   className={`context-menu-item ${isMultipleSelected ? 'disabled' : ''}`}
                   onClick={isMultipleSelected ? undefined : handleRevealInExplorer}

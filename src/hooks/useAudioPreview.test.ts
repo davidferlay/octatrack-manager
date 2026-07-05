@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { invoke } from '@tauri-apps/api/core'
-import { useAudioPreview, shouldAutoPreview, formatTime, scrubTarget, volumeStep, isAudioFile } from './useAudioPreview'
+import { useAudioPreview, shouldAutoPreview, formatTime, scrubTarget, volumeStep, isAudioFile, getAudioContextCtor, decodeBytes } from './useAudioPreview'
 
 beforeEach(() => {
   localStorage.clear()
@@ -57,6 +57,65 @@ describe('formatTime', () => {
     expect(formatTime(5)).toBe('0:05')
     expect(formatTime(65)).toBe('1:05')
     expect(formatTime(NaN)).toBe('0:00')
+  })
+})
+
+// Old WKWebView (macOS Mojave and earlier Safari) only exposes webkitAudioContext and a
+// callback-only decodeAudioData - the compat shims must handle both shapes.
+describe('legacy WebKit compatibility', () => {
+  const g = globalThis as unknown as { AudioContext?: unknown; webkitAudioContext?: unknown }
+
+  it('getAudioContextCtor falls back to webkitAudioContext when AudioContext is missing', () => {
+    const saved = g.AudioContext
+    class Prefixed {}
+    delete g.AudioContext
+    g.webkitAudioContext = Prefixed
+    try {
+      expect(getAudioContextCtor()).toBe(Prefixed)
+    } finally {
+      g.AudioContext = saved
+      delete g.webkitAudioContext
+    }
+  })
+
+  it('getAudioContextCtor throws when no implementation exists', () => {
+    const saved = g.AudioContext
+    delete g.AudioContext
+    try {
+      expect(() => getAudioContextCtor()).toThrow('Web Audio API not available')
+    } finally {
+      g.AudioContext = saved
+    }
+  })
+
+  it('decodeBytes resolves with a callback-only decodeAudioData (old WebKit)', async () => {
+    const buffer = { duration: 2 }
+    const ctx = {
+      decodeAudioData: (_b: ArrayBuffer, ok: (b: unknown) => void) => { ok(buffer) }, // no returned promise
+    } as unknown as AudioContext
+    await expect(decodeBytes(ctx, new ArrayBuffer(4))).resolves.toBe(buffer)
+  })
+
+  it('decodeBytes rejects with a callback-only decodeAudioData on error', async () => {
+    const ctx = {
+      decodeAudioData: (_b: ArrayBuffer, _ok: unknown, err: (e: unknown) => void) => { err(new Error('bad data')) },
+    } as unknown as AudioContext
+    await expect(decodeBytes(ctx, new ArrayBuffer(4))).rejects.toThrow('bad data')
+  })
+
+  it('decodeBytes resolves with a promise-returning decodeAudioData (modern engines)', async () => {
+    const buffer = { duration: 3 }
+    const ctx = {
+      decodeAudioData: () => Promise.resolve(buffer), // ignores callbacks, like some mocks/engines
+    } as unknown as AudioContext
+    await expect(decodeBytes(ctx, new ArrayBuffer(4))).resolves.toBe(buffer)
+  })
+
+  it('decodeBytes rejects with a promise-returning decodeAudioData on error', async () => {
+    const ctx = {
+      decodeAudioData: () => Promise.reject(new Error('undecodable')),
+    } as unknown as AudioContext
+    await expect(decodeBytes(ctx, new ArrayBuffer(4))).rejects.toThrow('undecodable')
   })
 })
 

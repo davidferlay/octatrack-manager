@@ -40,6 +40,25 @@ export function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
+// Older WebKit (WKWebView up to Safari 14.0, e.g. macOS Mojave) only exposes the
+// prefixed constructor.
+export function getAudioContextCtor(): typeof AudioContext {
+  const w = window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }
+  const Ctor = w.AudioContext ?? w.webkitAudioContext
+  if (!Ctor) throw new Error('Web Audio API not available')
+  return Ctor
+}
+
+// decodeAudioData: older WebKit only implements the callback signature (no returned
+// promise); modern engines support both. Wire up both and let the Promise ignore the
+// duplicate settle.
+export function decodeBytes(ctx: AudioContext, bytes: ArrayBuffer): Promise<AudioBuffer> {
+  return new Promise((resolve, reject) => {
+    const p = ctx.decodeAudioData(bytes, resolve, reject) as Promise<AudioBuffer> | undefined
+    p?.then(resolve, reject)
+  })
+}
+
 function loadVolume(): number {
   const v = parseFloat(localStorage.getItem(VOL_KEY) ?? '')
   return Number.isFinite(v) && v >= 0 && v <= 1 ? v : 0.8
@@ -101,7 +120,8 @@ export function useAudioPreview(): AudioPreview {
 
   const getCtx = useCallback(() => {
     if (!ctxRef.current) {
-      const ctx = new AudioContext()
+      const Ctor = getAudioContextCtor()
+      const ctx = new Ctor()
       const gain = ctx.createGain()
       gain.gain.value = volumeRef.current
       gain.connect(ctx.destination)
@@ -180,7 +200,7 @@ export function useAudioPreview(): AudioPreview {
     try {
       const ctx = getCtx()
       const bytes = await invoke<ArrayBuffer>('read_audio_file', { path })
-      const buffer = await ctx.decodeAudioData(bytes)
+      const buffer = await decodeBytes(ctx, bytes)
       bufferRef.current = buffer
       offsetRef.current = 0
       setDuration(buffer.duration)
@@ -195,10 +215,14 @@ export function useAudioPreview(): AudioPreview {
   }, [getCtx])
 
   const play = useCallback(async (path: string, name: string) => {
+    // Resume while still inside the user-gesture call stack: WebView2 (Chromium autoplay
+    // policy) and WebKit can refuse a resume() issued after an await, which left the
+    // context suspended and playback silent.
+    try { getCtx().resume() } catch { /* surfaces via decode() below */ }
     stopPlayback(false)
     setIsPlaying(false)
     if (await decode(path, name)) startPlayback(0)
-  }, [decode, startPlayback, stopPlayback])
+  }, [getCtx, decode, startPlayback, stopPlayback])
 
   const load = useCallback((path: string, name: string) => {
     stopPlayback(false)

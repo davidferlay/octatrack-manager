@@ -5,10 +5,12 @@ import { test, expect, Page } from '@playwright/test'
 async function setupMocks(page: Page) {
   await page.addInitScript(() => {
     ;(window as any).__copyCalls = []
+    ;(window as any).__invokeCalls = []
     ;(window as any).__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} }
     ;(window as any).__TAURI_INTERNALS__ = {
       transformCallback: () => 0,
       invoke: async (cmd: string, args: any) => {
+        ;(window as any).__invokeCalls.push([cmd, args])
         switch (cmd) {
           case 'plugin:event|listen':
             return 0
@@ -27,6 +29,8 @@ async function setupMocks(page: Page) {
           case 'copy_audio_file_with_progress':
             ;(window as any).__copyCalls.push(args)
             return (args?.destinationDir || '') + '/kick.wav'
+          case 'read_audio_file':
+            return new ArrayBuffer(8)
           default:
             return null
         }
@@ -76,5 +80,59 @@ test.describe('Audio Pool page — Source to Pool drag', () => {
     await page.locator('.source-panel tr', { hasText: 'Loops' }).first().click()
     await expect(page.locator('.source-panel tr.selected', { hasText: 'Loops' })).toBeVisible()
     expect(await page.evaluate(() => (window as any).__copyCalls.length)).toBe(0)
+  })
+})
+
+test.describe('Audio Pool page — sample playback', () => {
+  const readAudioPaths = (page: Page) =>
+    page.evaluate(() =>
+      (window as any).__invokeCalls.filter(([c]: [string]) => c === 'read_audio_file').map(([, a]: [string, any]) => a.path)
+    )
+
+  test('file context menu shows Play as its first item and plays the file', async ({ page }) => {
+    await setupMocks(page)
+    await openPage(page)
+    await page.locator('.dest-panel tr', { hasText: 'kick.wav' }).first().click({ button: 'right' })
+    const first = page.locator('.context-menu .context-menu-item').first()
+    await expect(first).toHaveText(/Play/)
+    await expect(first).toBeEnabled()
+    await first.click()
+    await expect.poll(async () => readAudioPaths(page)).toContain('/test/set/AUDIO/kick.wav')
+  })
+
+  test('directory context menu Play item is disabled', async ({ page }) => {
+    await setupMocks(page)
+    await openPage(page)
+    await page.locator('.source-panel tr', { hasText: 'Loops' }).first().click({ button: 'right' })
+    const first = page.locator('.context-menu .context-menu-item').first()
+    await expect(first).toHaveText(/Play/)
+    await expect(first).toBeDisabled()
+  })
+
+  test('double-clicking a Source file plays it', async ({ page }) => {
+    await setupMocks(page)
+    await openPage(page)
+    await page.locator('.source-panel tr', { hasText: 'snare.wav' }).first().dblclick()
+    await expect.poll(async () => readAudioPaths(page)).toContain('/home/user/samples/snare.wav')
+  })
+
+  test('double-clicking an Audio Pool file plays it', async ({ page }) => {
+    await setupMocks(page)
+    await openPage(page)
+    await page.locator('.dest-panel tr', { hasText: 'snare.wav' }).first().dblclick()
+    await expect.poll(async () => readAudioPaths(page)).toContain('/test/set/AUDIO/snare.wav')
+  })
+
+  test('double-clicking a Source folder still navigates into it (no playback)', async ({ page }) => {
+    await setupMocks(page)
+    await openPage(page)
+    await page.locator('.source-panel tr', { hasText: 'Loops' }).first().dblclick()
+    // Navigation re-lists the entered directory
+    await expect
+      .poll(async () => page.evaluate(() =>
+        (window as any).__invokeCalls.some(([c, a]: [string, any]) => c === 'list_audio_directory' && a?.path === '/home/user/samples/Loops')
+      ))
+      .toBe(true)
+    expect(await readAudioPaths(page)).toEqual([])
   })
 })

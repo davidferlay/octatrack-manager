@@ -193,10 +193,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   // Drive preview from a clicked slot row or a pool file. Slot paths are stored
   // relative to the project dir (e.g. ../AUDIO/x.wav); pool paths are already
   // absolute. convertFileSrc needs an absolute path, so resolve relative ones.
-  const previewCandidate = useCallback((path: string | null, name: string, selectionSize: number, fileExists: boolean = true) => {
+  const resolveSlotPath = useCallback((path: string | null) => {
     const isAbsolute = !!path && (path.startsWith('/') || /^[A-Za-z]:/.test(path));
     const joined = !path ? null : isAbsolute ? path : (projectPath ? `${projectPath}/${path}` : null);
-    const resolved = joined ? normalizePath(joined) : null;
+    return joined ? normalizePath(joined) : null;
+  }, [projectPath]);
+
+  const previewCandidate = useCallback((path: string | null, name: string, selectionSize: number, fileExists: boolean = true) => {
+    const resolved = resolveSlotPath(path);
     // Only preview real audio files that exist on disk; non-audio, empty, or missing-file
     // selections reset the bar to idle and are never read/decoded (a huge non-audio file
     // can't freeze the UI, and a missing file can't error mid-read).
@@ -208,7 +212,20 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     } else {
       player.load(resolved, name);
     }
-  }, [player, projectPath]);
+  }, [player, resolveSlotPath]);
+
+  // Explicit playback (double-click or context-menu Play) — plays regardless of the
+  // Auto-preview toggle.
+  const slotIsPlayable = useCallback((slot: SampleSlot) => {
+    const resolved = resolveSlotPath(slot.path ?? null);
+    return !!resolved && isAudioFile(resolved) && slot.file_exists;
+  }, [resolveSlotPath]);
+
+  const playSlot = useCallback((slot: SampleSlot) => {
+    if (!slotIsPlayable(slot)) return;
+    setActivePlayable(true);
+    player.play(resolveSlotPath(slot.path ?? null)!, getFilename(slot.path ?? null));
+  }, [slotIsPlayable, resolveSlotPath, player]);
 
   // Keyboard up/down over the slot list: move the cursor, single-select, preview.
   // Depends on sortedSlots, defined further down, so read it lazily via a ref.
@@ -1613,6 +1630,11 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
             onOpenAudioPoolPage={openAudioPoolPage}
             persistKey={projectPath ? `sidebar:${projectPath}:${tableType}` : undefined}
             onActiveFile={(path, name, size) => previewCandidate(path, name, size)}
+            onPlayFile={(path, name) => {
+              if (!isAudioFile(path)) return;
+              setActivePlayable(true);
+              player.play(path, name);
+            }}
             toggleButton={
               <button
                 className={`audio-pool-toggle-btn ${showAudioPool ? 'active' : ''}`}
@@ -1854,6 +1876,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
                 slotId={slot.slot_id}
                 className={`${selectedSlots.has(slot.slot_id) ? 'selected' : ''} ${lastClickedSlotId === slot.slot_id ? 'cursor' : ''} ${isEditMode && (dragOverSlotId === slot.slot_id || osDragOverSlotId === slot.slot_id) ? 'drop-target-highlight' : ''}`.trim()}
                 onClick={(e: React.MouseEvent) => handleSlotClick(e, slot.slot_id)}
+                onDoubleClick={() => playSlot(slot)}
                 onDragEnter={handleSlotDragEnter}
                 onDragOver={(e: React.DragEvent) => handleSlotDragOver(e, slot.slot_id)}
                 onDragLeave={handleSlotDragLeave}
@@ -1904,6 +1927,15 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         style={{ position: 'fixed', top: slotMenu.y, left: slotMenu.x }}
         onClick={(e) => e.stopPropagation()}
       >
+        <button
+          className="context-menu-item"
+          disabled={!slotIsPlayable(slotMenu.slot)}
+          title={slotMenu.slot.path && !slotMenu.slot.file_exists ? 'File not found' : undefined}
+          onClick={() => { playSlot(slotMenu.slot); setSlotMenu(null); }}
+        >
+          <i className="fas fa-play"></i> Play
+        </button>
+        <div className="context-menu-separator"></div>
         <button
           className="context-menu-item"
           disabled={!isEditMode || !slotHasBlock(slotMenu.slot)}
