@@ -101,6 +101,7 @@ See [Assigning & Managing Samples](sample-slots.md#assigning--managing-samples).
 ## Playback
 
 An audio player is available the bottom of the page. Select an item from either the Browser or the Audio Pool pane to play it:
+- Double-click a file to play it right away. You can also right-click it and choose **Play**.
 - Use <kbd>↑</kbd> / <kbd>↓</kbd> to move to the previous / next slot and play it as you go.
 - Press <kbd>Space</kbd> to **play / pause** the loaded sample.
 - Hold <kbd>Ctrl</kbd> and press <kbd>←</kbd> / <kbd>→</kbd> to scrub backward / forward the timeline; or drag the play head to any position.

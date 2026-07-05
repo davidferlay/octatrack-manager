@@ -79,6 +79,7 @@ You can customize which columns are visible. Click the column menu icon in the t
 ### Playback
 
 An audio player is available the bottom of the page. Select an item from either the sample slots or the Audio Pool pane to play it:
+- Double-click a slot or a pool file to play it right away. You can also right-click it and choose **Play**.
 - Use <kbd>↑</kbd> / <kbd>↓</kbd> to move to the previous / next slot and play it as you go.
 - Press <kbd>Space</kbd> to **play / pause** the loaded sample.
 - Hold <kbd>Ctrl</kbd> and press <kbd>←</kbd> / <kbd>→</kbd> to scrub backward / forward the timeline; or drag the play head to any position.
@@ -164,8 +165,9 @@ If the sample's audio file has a sibling `.ot` settings file, it will be backed-
 
 Pressing keyboard <kbd>Delete</kbd> (or <kbd>Backspace</kbd>) clears the sample from any slot that has one, or resets attributes on a slot that is already empty - so pressing it twice on the same slot first clears the sample, then resets its attributes (same result as "Clear sample & reset attributes").
 
-Two more operations can be found when right-clicking on Sample Slots:
+Three more operations can be found when right-clicking on Sample Slots, available in View mode too:
 
+- **Play** - plays the slot's sample (same as double-clicking the slot).
 - **Open in file explorer** - reveals the slot's sample (or a pool item) in your OS file manager.
 - **Copy path to clipboard** - copies the absolute path of the slot's sample or a pool item.
 
