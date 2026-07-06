@@ -28,13 +28,13 @@ interface CurrentState {
   pattern: number;
   part: number;
   track: number;
-  muted_tracks: number[];
-  soloed_tracks: number[];
   midi_mode: number;
   track_othermode: number;
   audio_muted_tracks: number[];
+  audio_soloed_tracks: number[];
   audio_cued_tracks: number[];
   midi_muted_tracks: number[];
+  midi_soloed_tracks: number[];
 }
 
 interface MixerSettings {

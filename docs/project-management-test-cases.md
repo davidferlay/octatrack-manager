@@ -142,3 +142,6 @@
 | PM109 | Pattern Detail | Sample Slot shown for normal trigs | Open a pattern, select a step that has a normal sample trig (Trigger) on an audio track | Step details show "Sample Slot: N" = the track's part-assigned slot (1-based), same as for p-locked steps |
 | PM110 | Pattern Detail | Sample p-lock overrides shown slot | Select a step with a sample-lock p-lock | "Sample Slot:" shows the p-locked slot number, not the part-assigned one |
 | PM111 | Overview | Tempo shows one decimal | Open the Overview tab | Tempo displays with one decimal place (e.g. "120.0 BPM", "143.5 BPM") |
+| PM112 | Overview | Soloed audio tracks listed | On the device, solo one or more audio tracks, save project, open Overview tab | Audio Mode section shows a "Soloed" row listing the soloed tracks as badges (like Muted and Cued); "—" when none |
+| PM113 | Overview | Soloed MIDI tracks listed | Solo one or more MIDI tracks on the device, save, open Overview tab | MIDI Mode section shows a "Soloed" row with the soloed MIDI track badges; "—" when none |
+| PM114 | Overview | Mute and solo shown independently | On the device, mute a track AND solo the same track, save, open Overview tab | The track appears in both the Muted and Soloed rows (independent masks in project.work, not mutually exclusive) |

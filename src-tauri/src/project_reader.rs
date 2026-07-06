@@ -14422,6 +14422,28 @@ mod tests {
         }
 
         #[test]
+        fn test_read_project_metadata_mute_solo_cue_masks() {
+            // The [STATES] masks are independent bitmasks: a track can be muted
+            // and soloed at the same time (track 2 below), the file allows it.
+            let project = TestProject::new();
+            let project_file_path = Path::new(&project.path).join("project.work");
+            let mut project_file = ProjectFile::from_data_file(&project_file_path).unwrap();
+            project_file.states.track_mute_mask = 0b0000_0110; // audio tracks 2, 3
+            project_file.states.track_solo_mask = 0b0001_0010; // audio tracks 2, 5
+            project_file.states.track_cue_mask = 0b0000_1000; // audio track 4
+            project_file.states.midi_track_mute_mask = 0b0000_0001; // MIDI track 1
+            project_file.states.midi_track_solo_mask = 0b0100_0000; // MIDI track 7
+            project_file.to_data_file(&project_file_path).unwrap();
+
+            let state = read_project_metadata(&project.path).unwrap().current_state;
+            assert_eq!(state.audio_muted_tracks, vec![1, 2]);
+            assert_eq!(state.audio_soloed_tracks, vec![1, 4]);
+            assert_eq!(state.audio_cued_tracks, vec![3]);
+            assert_eq!(state.midi_muted_tracks, vec![0]);
+            assert_eq!(state.midi_soloed_tracks, vec![6]);
+        }
+
+        #[test]
         fn test_read_project_metadata_has_current_state() {
             let project = TestProject::new();
             let metadata = read_project_metadata(&project.path).unwrap();

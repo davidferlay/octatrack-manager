@@ -37,8 +37,10 @@ async function setupTauriMocks(page: Page, overrides?: { sameSet?: boolean; with
                 midi_mode: 0,
                 track_othermode: 0,
                 audio_muted_tracks: [],
+                audio_soloed_tracks: [],
                 audio_cued_tracks: [],
                 midi_muted_tracks: [],
+                midi_soloed_tracks: [],
               },
               mixer_settings: {
                 gain_ab: 0,

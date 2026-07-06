@@ -47,7 +47,7 @@ async function setupMocks(page: Page, opts?: { withAudioPool?: boolean }) {
               current_state: {
                 bank: 0, bank_name: 'BANK A', pattern: 0, part: 0, track: 0,
                 muted_tracks: [], soloed_tracks: [], midi_mode: 0, track_othermode: 0,
-                audio_muted_tracks: [], audio_cued_tracks: [], midi_muted_tracks: [],
+                audio_muted_tracks: [], audio_soloed_tracks: [], audio_cued_tracks: [], midi_muted_tracks: [], midi_soloed_tracks: [],
               },
               mixer_settings: { gain_ab: 0, gain_cd: 0, dir_ab: 0, dir_cd: 0, phones_mix: 0, main_level: 100, cue_level: 100 },
               memory_settings: {

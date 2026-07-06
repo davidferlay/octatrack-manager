@@ -27,8 +27,8 @@ async function setupTauriMocks(page: Page) {
               current_state: {
                 bank: 0, bank_name: 'BANK A', pattern: 3, part: 1, track: 0,
                 midi_mode: 0, track_othermode: 0,
-                audio_muted_tracks: [1, 2], audio_soloed_tracks: [], audio_cued_tracks: [],
-                midi_muted_tracks: [], midi_soloed_tracks: [],
+                audio_muted_tracks: [1, 2], audio_soloed_tracks: [4], audio_cued_tracks: [],
+                midi_muted_tracks: [], midi_soloed_tracks: [6],
               },
               mixer_settings: { gain_ab: 12, gain_cd: -6, dir_ab: 0, dir_cd: 0, phones_mix: 32, main_level: 100, cue_level: 90 },
               memory_settings: { load_24bit_flex: false, dynamic_recorders: false, record_24bit: false, reserved_recorder_count: 8, reserved_recorder_length: 16, flex_ram_free_mb: 85.5 },
@@ -114,6 +114,19 @@ test.describe('Overview - Metadata display', () => {
     await expect(compactItem(page, 'Tempo').locator('.compact-value')).toHaveText('128.5 BPM')
     await expect(compactItem(page, 'Time Sig').first().locator('.compact-value')).toHaveText('4/4')
     await expect(compactItem(page, 'OS').locator('.compact-value')).toHaveText('1.40C')
+  })
+
+  test('audio and MIDI modes list muted and soloed tracks independently', async ({ page }) => {
+    // Audio: tracks 2, 3 muted (0-based 1, 2), track 5 soloed (0-based 4)
+    const audioMuted = compactItem(page, 'Muted').first()
+    await expect(audioMuted.locator('.track-badge')).toHaveText(['T2', 'T3'])
+    const audioSoloed = compactItem(page, 'Soloed').first()
+    await expect(audioSoloed.locator('.track-badge')).toHaveText(['T5'])
+    // MIDI: nothing muted, track 7 soloed (0-based 6, shown as MIDI track)
+    const midiMuted = compactItem(page, 'Muted').nth(1)
+    await expect(midiMuted.locator('.compact-value')).toHaveText('—')
+    const midiSoloed = compactItem(page, 'Soloed').nth(1)
+    await expect(midiSoloed.locator('.track-badge')).toHaveText(['T7'])
   })
 
   test('current state shows bank, 1-based pattern and part, and mode', async ({ page }) => {

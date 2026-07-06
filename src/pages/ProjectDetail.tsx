@@ -1121,6 +1121,16 @@ export function ProjectDetail() {
                         </span>
                       </div>
                       <div className="compact-item">
+                        <span className="compact-label">Soloed</span>
+                        <span className="compact-value">
+                          {metadata.current_state.audio_soloed_tracks.length > 0
+                            ? metadata.current_state.audio_soloed_tracks.map((t: number, idx: number) => (
+                                <TrackBadge key={`audio-soloed-${idx}`} trackId={t} />
+                              ))
+                            : "—"}
+                        </span>
+                      </div>
+                      <div className="compact-item">
                         <span className="compact-label">Cued</span>
                         <span className="compact-value">
                           {metadata.current_state.audio_cued_tracks.length > 0
@@ -1149,6 +1159,16 @@ export function ProjectDetail() {
                           {metadata.current_state.midi_muted_tracks.length > 0
                             ? metadata.current_state.midi_muted_tracks.map((t: number, idx: number) => (
                                 <TrackBadge key={`midi-muted-${idx}`} trackId={t + 8} />
+                              ))
+                            : "—"}
+                        </span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Soloed</span>
+                        <span className="compact-value">
+                          {metadata.current_state.midi_soloed_tracks.length > 0
+                            ? metadata.current_state.midi_soloed_tracks.map((t: number, idx: number) => (
+                                <TrackBadge key={`midi-soloed-${idx}`} trackId={t + 8} />
                               ))
                             : "—"}
                         </span>
