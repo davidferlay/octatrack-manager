@@ -3501,6 +3501,55 @@ h1 {
   gap: 0.5rem;
   font-size: 1rem;
   color: var(--elektron-text-primary);
+  /* Legend items are buttons toggling the indicator for their pattern card */
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.legend-item.off {
+  opacity: 0.35;
+  text-decoration: line-through;
+}
+
+/* Global indicator filter chips (Patterns tab header) */
+.indicator-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.indicator-filters-label {
+  font-size: 0.9rem;
+  color: var(--elektron-text-secondary);
+  margin-right: 0.25rem;
+}
+
+.indicator-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+  color: var(--elektron-text-primary);
+  background-color: var(--elektron-dark-gray);
+  border: 1px solid var(--elektron-border-gray);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.indicator-filter-chip:hover {
+  border-color: var(--elektron-orange);
+}
+
+.indicator-filter-chip.off {
+  opacity: 0.35;
+  text-decoration: line-through;
 }
 
 .legend-item span {

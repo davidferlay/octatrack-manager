@@ -224,3 +224,115 @@ test.describe('Patterns tab - step grid indicators', () => {
     await expect(panel).toContainText('6')
   })
 })
+
+test.describe('Patterns tab - indicator filters', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    const patternsTab = page.locator('.header-tab', { hasText: 'Patterns' })
+    await expect(patternsTab).toBeVisible({ timeout: 10000 })
+    await patternsTab.click()
+    await expect(page.locator('.pattern-step').first()).toBeVisible({ timeout: 10000 })
+  })
+
+  const chip = (page: Page, label: string) =>
+    page.locator('.indicator-filter-chip', { hasText: label }).first()
+
+  test('global filter chip hides an indicator in all patterns and persists', async ({ page }) => {
+    await expect(page.locator('.indicator-recorder').first()).toBeVisible()
+
+    await chip(page, 'Recorder').click()
+    await expect(chip(page, 'Recorder')).toHaveClass(/off/)
+    await expect(page.locator('.pattern-step .indicator-recorder')).toHaveCount(0)
+    // globally hidden indicators leave the per-pattern legend too
+    await expect(page.locator('.pattern-grid-legend .legend-item', { hasText: /^\s*R\s*Recorder\s*$/ })).toHaveCount(0)
+
+    // persisted across reloads
+    await page.reload()
+    await page.locator('.header-tab', { hasText: 'Patterns' }).click()
+    await expect(page.locator('.pattern-step').first()).toBeVisible({ timeout: 10000 })
+    await expect(chip(page, 'Recorder')).toHaveClass(/off/)
+    await expect(page.locator('.pattern-step .indicator-recorder')).toHaveCount(0)
+
+    // toggle back on
+    await chip(page, 'Recorder').click()
+    await expect(page.locator('.pattern-step .indicator-recorder').first()).toBeVisible()
+  })
+
+  test('legend badge hides an indicator for its own pattern only', async ({ page }) => {
+    // show all 16 patterns so there are several cards with legends
+    await page.locator('select[id^="pattern-select"]').selectOption('-1')
+    const cards = page.locator('.pattern-card')
+    await expect(cards.nth(1)).toBeVisible()
+
+    const firstCard = cards.nth(0)
+    const secondCard = cards.nth(1)
+    await expect(firstCard.locator('.indicator-recorder').first()).toBeVisible()
+    await expect(secondCard.locator('.indicator-recorder').first()).toBeVisible()
+
+    const badge = firstCard.locator('.pattern-grid-legend .legend-item', { hasText: /^\s*R\s*Recorder\s*$/ })
+    await badge.click()
+    await expect(badge).toHaveClass(/off/)
+    await expect(firstCard.locator('.pattern-step .indicator-recorder')).toHaveCount(0)
+    // the other pattern card is unaffected
+    await expect(secondCard.locator('.pattern-step .indicator-recorder').first()).toBeVisible()
+
+    // clicking again restores it
+    await badge.click()
+    await expect(firstCard.locator('.pattern-step .indicator-recorder').first()).toBeVisible()
+  })
+})
+
+test.describe('Patterns tab - keyboard navigation', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    const patternsTab = page.locator('.header-tab', { hasText: 'Patterns' })
+    await expect(patternsTab).toBeVisible({ timeout: 10000 })
+    await patternsTab.click()
+    await expect(page.locator('.pattern-step').first()).toBeVisible({ timeout: 10000 })
+  })
+
+  const detailsHeader = (page: Page) => page.locator('.parameter-panel-header h4')
+
+  test('arrow keys and Tab move the step selection', async ({ page }) => {
+    await page.locator('.pattern-step').nth(0).click()
+    await expect(detailsHeader(page)).toHaveText('Step 1 details')
+
+    await page.keyboard.press('ArrowRight')
+    await expect(detailsHeader(page)).toHaveText('Step 2 details')
+
+    await page.keyboard.press('Tab')
+    await expect(detailsHeader(page)).toHaveText('Step 3 details')
+
+    await page.keyboard.press('Shift+Tab')
+    await expect(detailsHeader(page)).toHaveText('Step 2 details')
+
+    await page.keyboard.press('ArrowLeft')
+    await expect(detailsHeader(page)).toHaveText('Step 1 details')
+
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.parameter-details-panel')).toHaveCount(0)
+  })
+
+  test('arrows past the pattern edge switch to the neighbor pattern', async ({ page }) => {
+    // last step of Pattern 1 (length 16)
+    await page.locator('.pattern-step').nth(15).click()
+    await expect(detailsHeader(page)).toHaveText('Step 16 details')
+
+    await page.keyboard.press('ArrowRight')
+    await expect(page.locator('.pattern-name')).toHaveText('Pattern 2')
+    await expect(detailsHeader(page)).toHaveText('Step 1 details')
+
+    await page.keyboard.press('ArrowLeft')
+    await expect(page.locator('.pattern-name')).toHaveText('Pattern 1')
+    await expect(detailsHeader(page)).toHaveText('Step 16 details')
+  })
+
+  test('Up and Down move by a full page row when the pattern is long enough', async ({ page }) => {
+    // Pattern 1 is 16 steps long: Down past the end must do nothing
+    await page.locator('.pattern-step').nth(0).click()
+    await page.keyboard.press('ArrowDown')
+    await expect(detailsHeader(page)).toHaveText('Step 1 details')
+  })
+})

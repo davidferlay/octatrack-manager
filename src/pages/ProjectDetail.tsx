@@ -1,4 +1,4 @@
-import { useState, useEffect, useTransition, useCallback, useRef } from "react";
+import { useState, useEffect, useTransition, useCallback, useRef, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import type { ProjectMetadata, Bank, PartsDataResponse } from "../context/ProjectsContext";
@@ -101,6 +101,37 @@ function getLengthDenominator(length: number): number {
   return 64;
 }
 
+// Every step indicator shown in the pattern grid, in display order. Shared by the
+// global filter chips, the per-pattern legend, and the show/hide logic.
+const INDICATOR_DEFS: { key: string; label: string; glyph: ReactNode }[] = [
+  { key: 'trigger', label: 'Trigger', glyph: <span className="indicator-trigger"><i className="fas fa-circle"></i></span> },
+  { key: 'oneshot', label: 'One-Shot', glyph: <span className="indicator-oneshot"><i className="fas fa-circle"></i></span> },
+  { key: 'trigless', label: 'Trigless', glyph: <span className="indicator-trigless"><i className="fas fa-circle"></i></span> },
+  { key: 'lock', label: 'Lock', glyph: <span className="indicator-lock"><i className="far fa-circle"></i></span> },
+  { key: 'plock', label: 'P-Lock', glyph: <span className="indicator-plock">P</span> },
+  { key: 'swing', label: 'Swing', glyph: <span className="indicator-swing"><svg viewBox="0 0 20 14" width="14" height="11"><path d="M1 7 C4 1 7 1 10 7 C13 13 16 13 19 7" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round"/></svg></span> },
+  { key: 'slide', label: 'Slide', glyph: <span className="indicator-slide">~</span> },
+  { key: 'recorder', label: 'Recorder', glyph: <span className="indicator-recorder">R</span> },
+  { key: 'recorder-oneshot', label: 'One-Shot Rec', glyph: <span className="indicator-recorder-oneshot">R</span> },
+  { key: 'condition', label: 'Condition', glyph: <span className="indicator-condition">%</span> },
+  { key: 'repeats', label: 'Repeats', glyph: <span className="indicator-repeats">X</span> },
+  { key: 'timing', label: 'Micro-timing', glyph: <span className="indicator-timing">µ</span> },
+  { key: 'note', label: 'MIDI Note/Chord', glyph: <span className="indicator-note">C4</span> },
+  { key: 'velocity', label: 'Volume', glyph: <span className="indicator-velocity">V</span> },
+  { key: 'sample', label: 'Sample', glyph: <span className="indicator-sample">S</span> },
+];
+
+const HIDDEN_INDICATORS_KEY = 'otm.patterns.hiddenIndicators';
+
+function loadHiddenIndicators(): string[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(HIDDEN_INDICATORS_KEY) ?? '[]');
+    return Array.isArray(parsed) ? parsed.filter((k) => typeof k === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
 export function ProjectDetail() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -138,6 +169,72 @@ export function ProjectDetail() {
   const [selectedTrackIndex, setSelectedTrackIndex] = useState<number>(0); // Default to track 0, will be set to active track
   const [selectedPatternIndex, setSelectedPatternIndex] = useState<number>(0); // Default to pattern 0, will be set to active pattern
   const [selectedStepNumber, setSelectedStepNumber] = useState<number | null>(null); // Selected step number (synchronized across all patterns)
+  // Indicator visibility filters: global (persisted) and per pattern card (session-only,
+  // keyed "bank-pattern-track"). An indicator renders only if hidden in neither.
+  const [hiddenIndicators, setHiddenIndicators] = useState<string[]>(loadHiddenIndicators);
+  const [cardHiddenIndicators, setCardHiddenIndicators] = useState<Record<string, string[]>>({});
+  const toggleGlobalIndicator = (key: string) => {
+    setHiddenIndicators((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+      localStorage.setItem(HIDDEN_INDICATORS_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
+  const toggleCardIndicator = (cardKey: string, key: string) => {
+    setCardHiddenIndicators((prev) => {
+      const current = prev[cardKey] ?? [];
+      const next = current.includes(key) ? current.filter((k) => k !== key) : [...current, key];
+      return { ...prev, [cardKey]: next };
+    });
+  };
+
+  // Keyboard navigation through pattern steps once a step is selected:
+  // Left/Right and Tab/Shift+Tab move by one step, Up/Down by a page row (16),
+  // Escape deselects. In single-pattern view, moving horizontally past the
+  // first/last step switches to the previous/next pattern.
+  useEffect(() => {
+    if (activeTab !== 'patterns' || selectedStepNumber === null) return;
+    const patternLength = (patternIdx: number): number => {
+      const bankIdx = selectedBankIndex === ALL_BANKS
+        ? Array.from(loadedBankIndices).sort((a, b) => a - b)[0] ?? -1
+        : selectedBankIndex;
+      return banks[bankIdx]?.parts[0]?.patterns[patternIdx]?.length ?? 64;
+    };
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+      if (e.key === 'Escape') { setSelectedStepNumber(null); return; }
+      let delta: number;
+      switch (e.key) {
+        case 'ArrowRight': delta = 1; break;
+        case 'ArrowLeft': delta = -1; break;
+        case 'ArrowDown': delta = 16; break;
+        case 'ArrowUp': delta = -16; break;
+        case 'Tab': delta = e.shiftKey ? -1 : 1; break;
+        default: return;
+      }
+      e.preventDefault();
+      const singlePattern = selectedPatternIndex !== ALL_PATTERNS;
+      const length = singlePattern ? patternLength(selectedPatternIndex) : 64;
+      const next = selectedStepNumber + delta;
+      if (next >= 0 && next < length) {
+        setSelectedStepNumber(next);
+        return;
+      }
+      // Only single-step horizontal moves cross pattern boundaries.
+      if (!singlePattern || Math.abs(delta) !== 1) return;
+      if (next >= length && selectedPatternIndex < 15) {
+        setSelectedPatternIndex(selectedPatternIndex + 1);
+        setSelectedStepNumber(0);
+      } else if (next < 0 && selectedPatternIndex > 0) {
+        const prevPattern = selectedPatternIndex - 1;
+        setSelectedPatternIndex(prevPattern);
+        setSelectedStepNumber(patternLength(prevPattern) - 1);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [activeTab, selectedStepNumber, selectedPatternIndex, selectedBankIndex, banks, loadedBankIndices]);
   const [sharedPartsPageIndex, setSharedPartsPageIndex] = useState<number>(-1); // Shared page index for Parts panels (persists across bank changes), -1 = ALL
   const [sharedPartsLfoTab, setSharedPartsLfoTab] = useState<'LFO1' | 'LFO2' | 'LFO3' | 'DESIGN'>('LFO1'); // Shared LFO tab for Parts panels (persists across bank changes)
   const [sharedPartsActivePartIndex, setSharedPartsActivePartIndex] = useState<number | undefined>(undefined); // Active part index (persists across bank changes)
@@ -1336,6 +1433,23 @@ export function ProjectDetail() {
                   />
                 </div>
 
+                {/* Global indicator filter: toggles apply to every pattern. Legend
+                    badges on each pattern card refine this per pattern. */}
+                <div className="indicator-filters">
+                  <span className="indicator-filters-label">Show:</span>
+                  {INDICATOR_DEFS.map((def) => (
+                    <button
+                      key={def.key}
+                      type="button"
+                      className={`indicator-filter-chip${hiddenIndicators.includes(def.key) ? ' off' : ''}`}
+                      title={`Show or hide ${def.label} indicators in all patterns`}
+                      onClick={() => toggleGlobalIndicator(def.key)}
+                    >
+                      {def.glyph} {def.label}
+                    </button>
+                  ))}
+                </div>
+
                 {loadedBankIndices.size === 0 ? (
                   <div className="loading-section">
                     <div className="loading-spinner"></div>
@@ -1588,6 +1702,12 @@ export function ProjectDetail() {
                                   const usedIndicators = new Set<string>();
                                   const steps = trackData.steps.slice(0, pattern.length);
 
+                                  // Effective indicator visibility for this pattern card:
+                                  // hidden globally (filter chips) or via this card's legend.
+                                  const cardKey = `${bankIndex}-${patternIndex}-${trackIndex}`;
+                                  const cardHidden = cardHiddenIndicators[cardKey] ?? [];
+                                  const show = (key: string) => !hiddenIndicators.includes(key) && !cardHidden.includes(key);
+
                                   steps.forEach((step) => {
                                     // One-shot and lock (plock-mask) trigs stand on their own,
                                     // without a trigger/trigless bit.
@@ -1664,13 +1784,13 @@ export function ProjectDetail() {
                                         {hasData && (
                                           <div className="step-indicators">
                                             {/* 1. Trig indicators first */}
-                                            {step.trigger && !(trackData.track_type === "MIDI" && allNotes.length > 0) && <span className="indicator-trigger"><i className="fas fa-circle"></i></span>}
-                                            {step.oneshot && <span className="indicator-oneshot"><i className="fas fa-circle"></i></span>}
-                                            {step.trigless && <span className="indicator-trigless"><i className="fas fa-circle"></i></span>}
-                                            {step.plock && <span className="indicator-lock"><i className="far fa-circle"></i></span>}
+                                            {show('trigger') && step.trigger && !(trackData.track_type === "MIDI" && allNotes.length > 0) && <span className="indicator-trigger"><i className="fas fa-circle"></i></span>}
+                                            {show('oneshot') && step.oneshot && <span className="indicator-oneshot"><i className="fas fa-circle"></i></span>}
+                                            {show('trigless') && step.trigless && <span className="indicator-trigless"><i className="fas fa-circle"></i></span>}
+                                            {show('lock') && step.plock && <span className="indicator-lock"><i className="far fa-circle"></i></span>}
 
                                             {/* 2. MIDI Notes */}
-                                            {allNotes.length > 0 && (hasTrig || trackData.track_type !== "MIDI") && (
+                                            {show('note') && allNotes.length > 0 && (hasTrig || trackData.track_type !== "MIDI") && (
                                               <div className="note-indicator-wrapper">
                                                 {allNotes.map((note, idx) => (
                                                   <span key={idx} className={`indicator-note ${chordName ? 'indicator-chord' : ''}`}>
@@ -1681,21 +1801,21 @@ export function ProjectDetail() {
                                             )}
 
                                             {/* 3. P-lock count */}
-                                            {step.plock_count === 1 && <span className="indicator-plock">P</span>}
-                                            {step.plock_count > 1 && <span className="indicator-plock-count">{step.plock_count}P</span>}
+                                            {show('plock') && step.plock_count === 1 && <span className="indicator-plock">P</span>}
+                                            {show('plock') && step.plock_count > 1 && <span className="indicator-plock-count">{step.plock_count}P</span>}
 
                                             {/* 4. Other indicators */}
-                                            {step.slide && <span className="indicator-slide">~</span>}
-                                            {step.recorder && !step.recorder_oneshot && <span className="indicator-recorder">R</span>}
-                                            {step.recorder_oneshot && <span className="indicator-recorder-oneshot">R</span>}
-                                            {step.trig_condition && <span className="indicator-condition">%</span>}
-                                            {step.trig_repeats > 0 && <span className="indicator-repeats">X</span>}
-                                            {step.micro_timing && <span className="indicator-timing">µ</span>}
-                                            {step.velocity !== null && <span className="indicator-velocity">V</span>}
-                                            {step.sample_slot !== null && <span className="indicator-sample">S</span>}
+                                            {show('slide') && step.slide && <span className="indicator-slide">~</span>}
+                                            {show('recorder') && step.recorder && !step.recorder_oneshot && <span className="indicator-recorder">R</span>}
+                                            {show('recorder-oneshot') && step.recorder_oneshot && <span className="indicator-recorder-oneshot">R</span>}
+                                            {show('condition') && step.trig_condition && <span className="indicator-condition">%</span>}
+                                            {show('repeats') && step.trig_repeats > 0 && <span className="indicator-repeats">X</span>}
+                                            {show('timing') && step.micro_timing && <span className="indicator-timing">µ</span>}
+                                            {show('velocity') && step.velocity !== null && <span className="indicator-velocity">V</span>}
+                                            {show('sample') && step.sample_slot !== null && <span className="indicator-sample">S</span>}
 
                                             {/* 5. Swing last */}
-                                            {step.swing && <span className="indicator-swing"><svg viewBox="0 0 20 14" width="13" height="11"><path d="M1 7 C4 1 7 1 10 7 C13 13 16 13 19 7" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round"/></svg></span>}
+                                            {show('swing') && step.swing && <span className="indicator-swing"><svg viewBox="0 0 20 14" width="13" height="11"><path d="M1 7 C4 1 7 1 10 7 C13 13 16 13 19 7" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round"/></svg></span>}
                                           </div>
                                         )}
                                       </div>
@@ -1703,24 +1823,24 @@ export function ProjectDetail() {
                                   })}
                                 </div>
 
-                                {/* Legend - only show indicators that are actually used */}
+                                {/* Legend: only indicators actually used and not globally
+                                    hidden. Clicking a badge hides/shows that indicator for
+                                    this pattern card only. */}
                                 {usedIndicators.size > 0 && (
                                   <div className="pattern-grid-legend">
-                                    {usedIndicators.has('trigger') && <div className="legend-item"><span className="indicator-trigger"><i className="fas fa-circle"></i></span> Trigger</div>}
-                                    {usedIndicators.has('oneshot') && <div className="legend-item"><span className="indicator-oneshot"><i className="fas fa-circle"></i></span> One-Shot</div>}
-                                    {usedIndicators.has('trigless') && <div className="legend-item"><span className="indicator-trigless"><i className="fas fa-circle"></i></span> Trigless</div>}
-                                    {usedIndicators.has('lock') && <div className="legend-item"><span className="indicator-lock"><i className="far fa-circle"></i></span> Lock</div>}
-                                    {usedIndicators.has('plock') && <div className="legend-item"><span className="indicator-plock">P</span> P-Lock</div>}
-                                    {usedIndicators.has('swing') && <div className="legend-item"><span className="indicator-swing"><svg viewBox="0 0 20 14" width="14" height="11"><path d="M1 7 C4 1 7 1 10 7 C13 13 16 13 19 7" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round"/></svg></span> Swing</div>}
-                                    {usedIndicators.has('slide') && <div className="legend-item"><span className="indicator-slide">~</span> Slide</div>}
-                                    {usedIndicators.has('recorder') && <div className="legend-item"><span className="indicator-recorder">R</span> Recorder</div>}
-                                    {usedIndicators.has('recorder-oneshot') && <div className="legend-item"><span className="indicator-recorder-oneshot">R</span> One-Shot Rec</div>}
-                                    {usedIndicators.has('condition') && <div className="legend-item"><span className="indicator-condition">%</span> Condition</div>}
-                                    {usedIndicators.has('repeats') && <div className="legend-item"><span className="indicator-repeats">X</span> Repeats</div>}
-                                    {usedIndicators.has('timing') && <div className="legend-item"><span className="indicator-timing">µ</span> Micro-timing</div>}
-                                    {usedIndicators.has('note') && <div className="legend-item"><span className="indicator-note">C4</span> MIDI Note/Chord</div>}
-                                    {usedIndicators.has('velocity') && <div className="legend-item"><span className="indicator-velocity">V</span> {trackData.track_type === "MIDI" ? "Velocity" : "Volume"}</div>}
-                                    {usedIndicators.has('sample') && <div className="legend-item"><span className="indicator-sample">S</span> Sample</div>}
+                                    {INDICATOR_DEFS
+                                      .filter((def) => usedIndicators.has(def.key) && !hiddenIndicators.includes(def.key))
+                                      .map((def) => (
+                                        <button
+                                          key={def.key}
+                                          type="button"
+                                          className={`legend-item${cardHidden.includes(def.key) ? ' off' : ''}`}
+                                          title={`Show or hide ${def.label} indicators in this pattern`}
+                                          onClick={() => toggleCardIndicator(cardKey, def.key)}
+                                        >
+                                          {def.glyph} {def.key === 'velocity' && trackData.track_type === "MIDI" ? 'Velocity' : def.label}
+                                        </button>
+                                      ))}
                                   </div>
                                 )}
 
