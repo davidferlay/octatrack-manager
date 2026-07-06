@@ -59,6 +59,13 @@ export function decodeBytes(ctx: AudioContext, bytes: ArrayBuffer): Promise<Audi
   })
 }
 
+// Raw invoke responses arrive as ArrayBuffer over Tauri's custom-protocol IPC, but Tauri
+// silently falls back to postMessage IPC when that fetch fails (seen on older WKWebView,
+// e.g. macOS Mojave) — there a raw Vec<u8> response arrives as a plain JSON number array.
+export function toArrayBuffer(data: ArrayBuffer | number[]): ArrayBuffer {
+  return data instanceof ArrayBuffer ? data : new Uint8Array(data).buffer
+}
+
 function loadVolume(): number {
   const v = parseFloat(localStorage.getItem(VOL_KEY) ?? '')
   return Number.isFinite(v) && v >= 0 && v <= 1 ? v : 0.8
@@ -78,6 +85,7 @@ export interface AudioPreview {
   duration: number
   activeName: string
   error: boolean
+  errorDetail: string
   volume: number
   autoPreview: boolean
   loop: boolean
@@ -112,6 +120,7 @@ export function useAudioPreview(): AudioPreview {
   const [duration, setDuration] = useState(0)
   const [activeName, setActiveName] = useState('')
   const [error, setError] = useState(false)
+  const [errorDetail, setErrorDetail] = useState('')
   const [volume, setVolumeState] = useState(loadVolume)
   const [autoPreview, setAutoPreviewState] = useState(loadAutoPreview)
   const [loop, setLoopState] = useState(loadLoop)
@@ -196,19 +205,22 @@ export function useAudioPreview(): AudioPreview {
   // Fetch the file bytes via Rust and decode them into a PCM buffer.
   const decode = useCallback(async (path: string, name: string): Promise<boolean> => {
     setError(false)
+    setErrorDetail('')
     setActiveName(name)
     try {
       const ctx = getCtx()
-      const bytes = await invoke<ArrayBuffer>('read_audio_file', { path })
-      const buffer = await decodeBytes(ctx, bytes)
+      const bytes = await invoke<ArrayBuffer | number[]>('read_audio_file', { path })
+      const buffer = await decodeBytes(ctx, toArrayBuffer(bytes))
       bufferRef.current = buffer
       offsetRef.current = 0
       setDuration(buffer.duration)
       setCurrentTime(0)
       return true
-    } catch {
+    } catch (e) {
+      console.error('audio preview failed', path, e)
       bufferRef.current = null
       setError(true)
+      setErrorDetail(String(e))
       setIsPlaying(false)
       return false
     }
@@ -240,6 +252,7 @@ export function useAudioPreview(): AudioPreview {
     setDuration(0)
     setCurrentTime(0)
     setError(false)
+    setErrorDetail('')
   }, [stopPlayback])
 
   const pause = useCallback(() => { stopPlayback(true); setIsPlaying(false) }, [stopPlayback])
@@ -272,6 +285,6 @@ export function useAudioPreview(): AudioPreview {
     return () => { stopPlayback(false); stopRaf(); ctxRef.current?.close() }
   }, [stopPlayback, stopRaf])
 
-  return { isPlaying, currentTime, duration, activeName, error, volume, autoPreview, loop,
+  return { isPlaying, currentTime, duration, activeName, error, errorDetail, volume, autoPreview, loop,
     play, load, reset, pause, togglePlay, seek, setVolume, setAutoPreview, setLoop }
 }

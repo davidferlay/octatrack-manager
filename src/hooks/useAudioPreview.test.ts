@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { invoke } from '@tauri-apps/api/core'
-import { useAudioPreview, shouldAutoPreview, formatTime, scrubTarget, volumeStep, isAudioFile, getAudioContextCtor, decodeBytes } from './useAudioPreview'
+import { useAudioPreview, shouldAutoPreview, formatTime, scrubTarget, volumeStep, isAudioFile, getAudioContextCtor, decodeBytes, toArrayBuffer } from './useAudioPreview'
 
 beforeEach(() => {
   localStorage.clear()
@@ -119,7 +119,31 @@ describe('legacy WebKit compatibility', () => {
   })
 })
 
+// When Tauri's custom-protocol IPC fails (seen on older WKWebView, e.g. macOS Mojave),
+// it falls back to postMessage IPC where a raw Vec<u8> response arrives as a plain JSON
+// number array instead of an ArrayBuffer.
+describe('toArrayBuffer', () => {
+  it('passes an ArrayBuffer through untouched', () => {
+    const buf = new ArrayBuffer(4)
+    expect(toArrayBuffer(buf)).toBe(buf)
+  })
+
+  it('converts a number array (tauri postMessage IPC fallback) to an ArrayBuffer', () => {
+    const out = toArrayBuffer([82, 73, 70, 70])
+    expect(out).toBeInstanceOf(ArrayBuffer)
+    expect(Array.from(new Uint8Array(out))).toEqual([82, 73, 70, 70])
+  })
+})
+
 describe('useAudioPreview', () => {
+  it('play succeeds when invoke returns a number array (postMessage IPC fallback)', async () => {
+    vi.mocked(invoke).mockResolvedValue([82, 73, 70, 70])
+    const { result } = renderHook(() => useAudioPreview())
+    await act(async () => { await result.current.play('/set/AUDIO/kick.wav', 'kick.wav') })
+    expect(result.current.error).toBe(false)
+    expect(result.current.activeName).toBe('kick.wav')
+  })
+
   it('play reads the file bytes via read_audio_file and sets the active name', async () => {
     const { result } = renderHook(() => useAudioPreview())
     await act(async () => { await result.current.play('/set/AUDIO/kick.wav', 'kick.wav') })

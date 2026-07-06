@@ -5,7 +5,7 @@ import type { AudioPreview } from '../hooks/useAudioPreview'
 
 function makePlayer(overrides: Partial<AudioPreview> = {}): AudioPreview {
   return {
-    isPlaying: false, currentTime: 0, duration: 4, activeName: 'kick.wav', error: false,
+    isPlaying: false, currentTime: 0, duration: 4, activeName: 'kick.wav', error: false, errorDetail: '',
     volume: 0.8, autoPreview: false, loop: false,
     play: vi.fn(), load: vi.fn(), reset: vi.fn(), pause: vi.fn(), togglePlay: vi.fn(), seek: vi.fn(),
     setVolume: vi.fn(), setAutoPreview: vi.fn(), setLoop: vi.fn(), ...overrides,

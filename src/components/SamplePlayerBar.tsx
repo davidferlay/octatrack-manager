@@ -9,7 +9,7 @@ interface Props {
 }
 
 export function SamplePlayerBar({ player, playable, compact = false }: Props) {
-  const { isPlaying, currentTime, duration, activeName, error, volume, autoPreview, loop,
+  const { isPlaying, currentTime, duration, activeName, error, errorDetail, volume, autoPreview, loop,
     togglePlay, seek, setVolume, setAutoPreview, setLoop } = player
   const hasSample = !!activeName
   const canPlay = playable && !error
@@ -46,7 +46,7 @@ export function SamplePlayerBar({ player, playable, compact = false }: Props) {
               : <i className="fas fa-play" />}
           </button>
 
-          <span className="player-name" title={error ? "Can't play this file" : activeName}>
+          <span className="player-name" title={error ? errorDetail || "Can't play this file" : activeName}>
             {error ? "Can't play" : activeName}
           </span>
 
