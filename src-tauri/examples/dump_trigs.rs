@@ -28,7 +28,12 @@ fn main() {
     for (i, plocks) in track.plocks.0.iter().enumerate() {
         let mach = &plocks.machine;
         let machine_vals = [
-            mach.param1, mach.param2, mach.param3, mach.param4, mach.param5, mach.param6,
+            mach.param1,
+            mach.param2,
+            mach.param3,
+            mach.param4,
+            mach.param5,
+            mach.param6,
         ];
         let orc = track.trig_offsets_repeats_conditions[i];
         let has_plock = machine_vals.iter().any(|&v| v != 255)

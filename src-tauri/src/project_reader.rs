@@ -1761,12 +1761,18 @@ fn read_project_banks_internal(
                                         0 if setup.static_machine.slic != 0
                                             && (slot.static_slot_id as usize) < 128 =>
                                         {
-                                            Some(m.static_slots[slot.static_slot_id as usize].slice_count)
+                                            Some(
+                                                m.static_slots[slot.static_slot_id as usize]
+                                                    .slice_count,
+                                            )
                                         }
                                         1 if setup.flex_machine.slic != 0
                                             && (slot.flex_slot_id as usize) < 136 =>
                                         {
-                                            Some(m.flex_slots[slot.flex_slot_id as usize].slice_count)
+                                            Some(
+                                                m.flex_slots[slot.flex_slot_id as usize]
+                                                    .slice_count,
+                                            )
                                         }
                                         _ => None,
                                     }
@@ -2091,7 +2097,7 @@ fn read_project_banks_internal(
                                 steps,
                                 default_note, // Default NOTE value from Part file
                                 assigned_sample_slot: None, // MIDI tracks have no sample slot
-                                slice_count: None,          // MIDI tracks have no samples
+                                slice_count: None, // MIDI tracks have no samples
                             });
                         }
 
@@ -8066,6 +8072,122 @@ mod tests {
             let (rec, oneshot) = decode_recorder_masks(&masks);
             assert_eq!(set_steps(&rec), per_page(&[5, 6, 7, 8]));
             assert_eq!(set_steps(&oneshot), per_page(&[6]));
+        }
+    }
+
+    // Full read path: bank bytes -> TrigStep/TrackInfo, covering the fixes for
+    // page byte order, recorder sub-masks, swing gating, sample-lock-only steps
+    // and slice mode detection.
+    mod pattern_step_reading {
+        use super::*;
+
+        fn track_steps(project: &TestProject, track: usize) -> TrackInfo {
+            let bank = read_single_bank(&project.path, 0).unwrap().unwrap();
+            bank.parts[0].patterns[0].tracks[track].clone()
+        }
+
+        #[test]
+        fn trig_positions_and_swing_gating_through_read_path() {
+            let project = TestProject::with_modified_bank(0, |bank| {
+                let track = &mut bank.patterns.0[0].audio_track_trigs.0[0];
+                track.trig_masks.trigger = [243, 1, 243, 1, 243, 1, 243, 1];
+                track.trig_masks.oneshot = [0, 2, 0, 2, 0, 2, 0, 2];
+                track.trig_masks.trigless = [0, 4, 0, 4, 0, 4, 0, 4];
+                track.trig_masks.plock = [0, 8, 0, 8, 0, 8, 0, 8];
+                track.trig_masks.swing = [12, 0, 12, 0, 12, 0, 12, 0];
+                track.trig_masks.slide = [3, 0, 3, 0, 3, 0, 3, 0];
+                track.swing_amount = 0; // device 50: swing trigs do nothing
+                let other = &mut bank.patterns.0[0].audio_track_trigs.0[1];
+                other.trig_masks.swing = [12, 0, 12, 0, 12, 0, 12, 0];
+                other.swing_amount = 16; // device 66: swing active
+            });
+
+            let t1 = track_steps(&project, 0);
+            let s = |n: usize| &t1.steps[n - 1]; // 1-based like the device
+            for page in [0usize, 16, 32, 48] {
+                assert!(s(1 + page).trigger, "trigger on step {}", 1 + page);
+                assert!(s(2 + page).oneshot && !s(2 + page).trigger);
+                assert!(s(3 + page).trigless);
+                assert!(s(4 + page).plock && !s(4 + page).trigless);
+                assert!(s(9 + page).slide && s(10 + page).slide);
+                assert!(
+                    !s(11 + page).swing && !s(12 + page).swing,
+                    "swing amount 0 must hide swing trigs"
+                );
+            }
+
+            let t2 = track_steps(&project, 1);
+            assert!(t2.steps[10].swing && t2.steps[11].swing);
+        }
+
+        #[test]
+        fn recorder_trigs_union_sources_and_expose_oneshot() {
+            let project = TestProject::with_modified_bank(0, |bank| {
+                bank.patterns.0[0].audio_track_trigs.0[0]
+                    .trig_masks
+                    .recorder = [
+                    0, 112, 0, 112, 0, 112, 0, 112, // INAB: steps 5-7
+                    0, 112, 0, 112, 0, 112, 0, 112, // INCD: steps 5-7
+                    0, 240, 0, 240, 0, 240, 0, 240, // SRC3: steps 5-8
+                    0, 32, 0, 32, 0, 32, 0, 32, // one-shot: step 6
+                ];
+            });
+
+            let t1 = track_steps(&project, 0);
+            let s = |n: usize| &t1.steps[n - 1];
+            for n in [5, 6, 7, 8] {
+                assert!(s(n).recorder, "step {} must be a rec trig", n);
+            }
+            assert!(s(6).recorder_oneshot);
+            assert!(!s(5).recorder_oneshot && !s(8).recorder_oneshot);
+            assert!(!s(4).recorder);
+        }
+
+        #[test]
+        fn sample_lock_only_step_has_no_plock_count() {
+            let project = TestProject::with_modified_bank(0, |bank| {
+                let track = &mut bank.patterns.0[0].audio_track_trigs.0[0];
+                track.plocks.0[12].flex_slot_id = 0; // sample lock only (slot 1)
+                track.plocks.0[14].machine.param1 = 60; // a real p-lock
+            });
+
+            let t1 = track_steps(&project, 0);
+            let locked = &t1.steps[12];
+            assert_eq!(locked.sample_slot, Some(1));
+            assert_eq!(locked.plock_count, 0, "sample lock must not count as P");
+            assert!(
+                locked.audio_plocks.is_some(),
+                "slot lock still surfaces lock data"
+            );
+
+            let plocked = &t1.steps[14];
+            assert_eq!(plocked.plock_count, 1);
+            assert_eq!(plocked.sample_slot, None);
+        }
+
+        #[test]
+        fn slice_count_requires_slic_setting_and_sliced_sample() {
+            let project = TestProject::with_modified_bank(0, |bank| {
+                let part = &mut bank.parts.unsaved.0[0];
+                // track 1: flex machine on a sliced slot with SLIC on
+                part.audio_track_machine_types[0] = 1;
+                part.audio_track_machine_slots[0].flex_slot_id = 2;
+                part.audio_track_machine_setup[0].flex_machine.slic = 1;
+                // track 2: same slot but SLIC off
+                part.audio_track_machine_types[1] = 1;
+                part.audio_track_machine_slots[1].flex_slot_id = 2;
+                part.audio_track_machine_setup[1].flex_machine.slic = 0;
+            });
+
+            let mut markers = MarkersFile::default();
+            markers.flex_slots[2].slice_count = 64;
+            markers.checksum = markers.calculate_checksum().unwrap();
+            markers
+                .to_data_file(&Path::new(&project.path).join("markers.work"))
+                .unwrap();
+
+            assert_eq!(track_steps(&project, 0).slice_count, Some(64));
+            assert_eq!(track_steps(&project, 1).slice_count, None);
         }
     }
 
