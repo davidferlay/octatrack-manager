@@ -104,6 +104,24 @@ test.describe('Sample slots - Used column', () => {
     await openFlexTab(page)
   })
 
+  test('the Used header label is centered with the kebab at the right edge', async ({ page }) => {
+    const layout = await page.evaluate(() => {
+      const th = document.querySelector('th.col-used') as HTMLElement
+      const label = th.querySelector('.sortable-label') as HTMLElement
+      const kebab = th.querySelector('.filter-icon') as HTMLElement
+      const thBox = th.getBoundingClientRect()
+      const labelBox = label.getBoundingClientRect()
+      const kebabBox = kebab.getBoundingClientRect()
+      const content = th.querySelector('.header-content')!.getBoundingClientRect()
+      return {
+        labelOffCenter: Math.abs(labelBox.x + labelBox.width / 2 - (thBox.x + thBox.width / 2)),
+        kebabFromRight: content.x + content.width - (kebabBox.x + kebabBox.width),
+      }
+    })
+    expect(layout.labelOffCenter).toBeLessThan(3) // label centered in the column
+    expect(layout.kebabFromRight).toBeLessThan(3) // kebab at the right edge, like other headers
+  })
+
   test('shows count badges on used slots and a dash on unused ones', async ({ page }) => {
     await expect(page.locator('th.col-used')).toBeVisible()
     const rows = page.locator('.samples-table tbody tr')

@@ -3572,6 +3572,15 @@ th.col-used .header-content {
   justify-content: center;
 }
 
+/* Center the label alone; the kebab stays anchored at the right edge like in
+   every other column header (elsewhere done via margin-left: auto, which would
+   push the centered label off to the left here). */
+th.col-used .header-content .filter-icon {
+  position: absolute;
+  right: 0;
+  margin-left: 0;
+}
+
 .usage-badge {
   display: inline-flex;
   align-items: center;

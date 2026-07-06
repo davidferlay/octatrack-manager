@@ -43,6 +43,7 @@ Every row in the table represents a slot (S1–S128 or F1–F128). The table pro
 | **Name** | The filename of the sample. Hover on it to display the full file path - relative to project's folder. |
 | **Compatibility** | Whether or not the audio file is compatible with Octatrack's audio engine. Uses same icons as on Octatrack. |
 | **Status** | Whether or not the audio file is found at the exact location set for Sample Slot. |
+| **Used** | If and where the slot is used across the project. See [Slot Usage](#slot-usage) below. |
 | **Source** | Whether the audio file is located in Project's directory or the Set's Audio pool. |
 | **Gain** | The gain setting for that sample slot. |
 | **Timestretch** | Shows the timestretch mode (Off, Normal, Beat). |
@@ -70,6 +71,22 @@ Additionally, you can also use these advanced features:
   <img src={require('@site/static/img/screenshots/sample-slots-search-bar.png').default} alt="Sample Slots - Search bar" style={{width: '47%'}} />
 </div>
 
+
+### Slot Usage
+
+The **Used** column tells you at a glance whether a slot matters to the project, with up to two badges:
+
+- A blue **✓ N** badge counts the places where the slot audibly plays: track machines that actually have trigs, plus sample locks on pattern steps.
+- A gray **○ N** badge counts silent references - machine assignments on tracks that never trig. The Octatrack assigns a default slot to every track of every bank, so most projects show plenty of these.
+
+Click a badge to see the exact locations:
+
+- Machine assignments read **Bank A · Part 1 · T1 · Machine**.
+- Sample locks read **Bank B · Ptn 5 · T3 · Step 12 · Lock**.
+
+The column filter offers **Used (plays)**, **Referenced, never trigged** and **Unused**, so finding samples that are safe to remove is one click: an **Unused** slot is referenced nowhere at all, and a **Referenced, never trigged** one is silent everywhere. Sorting the column ranks slots by how much they play.
+
+Usage is computed when you open the tab and refreshed together with the project (refresh button).
 
 ### Column Preferences
 You can customize which columns are visible. Click the column menu icon in the toolbar to toggle column visibility. These preferences are remembered across sessions.
