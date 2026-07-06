@@ -3382,14 +3382,31 @@ h1 {
   top: -1.3px;
 }
 
+/* Trigless lock (lock trig): outlined circle, same green family as trigless */
+.indicator-lock {
+  color: #66cc66;
+}
+
+.indicator-lock i {
+  font-size: 0.65rem;
+  position: relative;
+  top: -1.3px;
+}
+
 .indicator-plock {
   color: #4a9eff;
   font-size: 0.95rem;
 }
 
+/* One-shot trig: plain yellow circle */
 .indicator-oneshot {
-  color: #ff6b9d;
-  font-size: 0.95rem;
+  color: #ffcc00;
+}
+
+.indicator-oneshot i {
+  font-size: 0.65rem;
+  position: relative;
+  top: -1.3px;
 }
 
 .indicator-swing {
@@ -3405,6 +3422,12 @@ h1 {
 
 .indicator-recorder {
   color: #ff9900;
+  font-size: 0.95rem;
+}
+
+/* One-shot recorder trig: same R glyph, one-shot yellow */
+.indicator-recorder-oneshot {
+  color: #ffcc00;
   font-size: 0.95rem;
 }
 

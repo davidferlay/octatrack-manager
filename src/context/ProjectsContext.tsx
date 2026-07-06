@@ -196,6 +196,7 @@ interface TrigStep {
   swing: boolean;
   slide: boolean;
   recorder: boolean;
+  recorder_oneshot: boolean;
   trig_condition: string | null;
   trig_repeats: number;
   micro_timing: string | null;
@@ -218,6 +219,7 @@ interface TrackInfo {
   steps: TrigStep[];
   default_note: number | null;
   assigned_sample_slot: number | null;
+  slice_count: number | null;
 }
 
 interface Pattern {

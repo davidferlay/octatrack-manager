@@ -208,6 +208,7 @@ pub struct TrigStep {
     pub swing: bool,                               // Has swing trig
     pub slide: bool,                               // Has slide trig (audio only)
     pub recorder: bool,                            // Has recorder trig (audio only)
+    pub recorder_oneshot: bool,                    // Recorder trig is one-shot (audio only)
     pub trig_condition: Option<String>, // Trig condition (Fill, NotFill, Pre, percentages, etc.)
     pub trig_repeats: u8,               // Number of trig repeats (0-7)
     pub micro_timing: Option<String>,   // Micro-timing offset (e.g., "+1/32", "-1/64")
@@ -231,6 +232,7 @@ pub struct TrackInfo {
     pub steps: Vec<TrigStep>,             // Per-step trig information (64 steps)
     pub default_note: Option<u8>,         // Default note for MIDI tracks (0-127)
     pub assigned_sample_slot: Option<u8>, // Part-assigned sample slot for this track (1-based); None for MIDI / non-sample machines
+    pub slice_count: Option<u32>, // Slice count of the part-assigned sample when the machine's SLIC setting is on; STRT p-locks then select slices (slice = value/2 + 1)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -971,6 +973,54 @@ pub fn get_existing_bank_indices(project_path: &str) -> Vec<u8> {
     existing
 }
 
+// Trig bitmasks are stored one byte per half-page (8 steps), pages in reverse
+// order and the SECOND half of each page stored first (verified against a real
+// project where all 4 pages held identical trigs; the ot-tools-io doc claiming
+// only page 1 has swapped halves is wrong):
+// byte[0]: steps 56-63 (2nd half of 4th page)
+// byte[1]: steps 48-55 (1st half of 4th page)
+// byte[2]: steps 40-47 (2nd half of 3rd page)
+// byte[3]: steps 32-39 (1st half of 3rd page)
+// byte[4]: steps 24-31 (2nd half of 2nd page)
+// byte[5]: steps 16-23 (1st half of 2nd page)
+// byte[6]: steps 8-15  (2nd half of 1st page)
+// byte[7]: steps 0-7   (1st half of 1st page)
+const BYTE_TO_STEP_OFFSET: [usize; 8] = [56, 48, 40, 32, 24, 16, 8, 0];
+
+/// Decode an 8-byte trig bitmask into a 64-element boolean array (bit N = step offset+N).
+fn decode_trig_masks(masks: &[u8]) -> [bool; 64] {
+    let mut steps = [false; 64];
+    for (byte_idx, &mask) in masks.iter().take(8).enumerate() {
+        let step_offset = BYTE_TO_STEP_OFFSET[byte_idx];
+        for bit_pos in 0..8 {
+            if mask & (1 << bit_pos) != 0 {
+                steps[step_offset + bit_pos] = true;
+            }
+        }
+    }
+    steps
+}
+
+/// Decode the 32-byte recorder trig mask array. It holds four 8-byte masks, each
+/// with the standard step encoding: one per recording source (INAB, INCD, SRC3)
+/// plus one marking which recorder trigs are one-shot. A rec trig may be armed
+/// for any subset of sources, so the returned rec trig array is the union of the
+/// three source masks; the second array flags one-shot recorder trigs.
+fn decode_recorder_masks(masks: &[u8]) -> ([bool; 64], [bool; 64]) {
+    let mut recorder = [false; 64];
+    let mut oneshot = [false; 64];
+    for (i, &mask) in masks.iter().take(32).enumerate() {
+        let step_offset = BYTE_TO_STEP_OFFSET[i % 8];
+        let target: &mut [bool; 64] = if i < 24 { &mut recorder } else { &mut oneshot };
+        for bit_pos in 0..8 {
+            if mask & (1 << bit_pos) != 0 {
+                target[step_offset + bit_pos] = true;
+            }
+        }
+    }
+    (recorder, oneshot)
+}
+
 pub fn read_single_bank(project_path: &str, bank_index: u8) -> Result<Option<Bank>, String> {
     if bank_index >= 16 {
         return Err(format!("Invalid bank index: {}. Must be 0-15.", bank_index));
@@ -1008,6 +1058,17 @@ fn read_project_banks_internal(
 ) -> Result<Vec<Bank>, String> {
     let path = Path::new(project_path);
     let mut banks = Vec::new();
+
+    // Slice counts per sample slot (for slice-mode STRT p-lock display).
+    // Missing/corrupt markers file just means no slice info.
+    let markers = {
+        let markers_path = if path.join("markers.work").exists() {
+            path.join("markers.work")
+        } else {
+            path.join("markers.strd")
+        };
+        MarkersFile::from_data_file(&markers_path).ok()
+    };
 
     // Bank files are named bank01.work, bank02.work, etc.
     // Octatrack supports up to 16 banks (A-P)
@@ -1102,54 +1163,6 @@ fn read_project_banks_internal(
                         // Helper function to count set bits in trig masks
                         fn count_trigs(masks: &[u8]) -> u16 {
                             masks.iter().map(|&mask| mask.count_ones() as u16).sum()
-                        }
-
-                        // Helper function to decode trig bitmasks into a 64-element boolean array
-                        // Trig masks are stored in a specific order across 8 bytes (see ot-tools-io docs)
-                        fn decode_trig_masks(masks: &[u8]) -> [bool; 64] {
-                            let mut steps = [false; 64];
-
-                            // The masks are stored in this order (each byte = 8 steps):
-                            // byte[0]: steps 48-55 (1st half of 4th page)
-                            // byte[1]: steps 56-63 (2nd half of 4th page)
-                            // byte[2]: steps 32-39 (1st half of 3rd page)
-                            // byte[3]: steps 40-47 (2nd half of 3rd page)
-                            // byte[4]: steps 16-23 (1st half of 2nd page)
-                            // byte[5]: steps 24-31 (2nd half of 2nd page)
-                            // byte[6]: steps 8-15  (2nd half of 1st page)
-                            // byte[7]: steps 0-7   (1st half of 1st page)
-
-                            let byte_to_step_offset = [48, 56, 32, 40, 16, 24, 8, 0];
-
-                            for (byte_idx, &mask) in masks.iter().enumerate() {
-                                let step_offset = byte_to_step_offset[byte_idx];
-                                for bit_pos in 0..8 {
-                                    if mask & (1 << bit_pos) != 0 {
-                                        steps[step_offset + bit_pos] = true;
-                                    }
-                                }
-                            }
-
-                            steps
-                        }
-
-                        // Helper function to decode recorder trig masks (32-byte array)
-                        // Only first 8 bytes are used for standard trig positions
-                        fn decode_recorder_masks(masks: &[u8]) -> [bool; 64] {
-                            let mut steps = [false; 64];
-                            // Only use first 8 bytes, same encoding as other trig masks
-                            if masks.len() >= 8 {
-                                let byte_to_step_offset = [48, 56, 32, 40, 16, 24, 8, 0];
-                                for (byte_idx, &mask) in masks[0..8].iter().enumerate() {
-                                    let step_offset = byte_to_step_offset[byte_idx];
-                                    for bit_pos in 0..8 {
-                                        if mask & (1 << bit_pos) != 0 {
-                                            steps[step_offset + bit_pos] = true;
-                                        }
-                                    }
-                                }
-                            }
-                            steps
                         }
 
                         // Helper function to decode trig condition from byte value
@@ -1317,12 +1330,9 @@ fn read_project_banks_internal(
                             if plock.amp.f != 255 {
                                 count += 1;
                             }
-                            if plock.static_slot_id != 255 {
-                                count += 1;
-                            }
-                            if plock.flex_slot_id != 255 {
-                                count += 1;
-                            }
+                            // Sample slot locks (static/flex_slot_id) are intentionally NOT
+                            // counted: they're surfaced separately as the step's sample lock,
+                            // so a sample-lock-only step shows S without a bogus P.
                             count
                         }
 
@@ -1544,8 +1554,11 @@ fn read_project_banks_internal(
                             let oneshot_steps = decode_trig_masks(&audio_track.trig_masks.oneshot);
                             let swing_steps = decode_trig_masks(&audio_track.trig_masks.swing);
                             let slide_steps = decode_trig_masks(&audio_track.trig_masks.slide);
-                            let recorder_steps =
+                            let (recorder_steps, recorder_oneshot_steps) =
                                 decode_recorder_masks(&audio_track.trig_masks.recorder);
+                            // Swing trigs with the default swing amount (50 on device,
+                            // stored as 0) don't do anything, so don't display them.
+                            let swing_active = audio_track.swing_amount > 0;
 
                             let mut steps = Vec::new();
                             for step in 0..64 {
@@ -1577,7 +1590,12 @@ fn read_project_banks_internal(
                                 };
 
                                 // Extract all audio parameter locks if this step has any
-                                let audio_plocks = if plock_count > 0 {
+                                // (sample slot locks aren't in plock_count but still count
+                                // as having lock data to show)
+                                let audio_plocks = if plock_count > 0
+                                    || plock.static_slot_id != 255
+                                    || plock.flex_slot_id != 255
+                                {
                                     Some(AudioParameterLocks {
                                         machine: MachineParams {
                                             param1: if plock.machine.param1 != 255 {
@@ -1696,9 +1714,10 @@ fn read_project_banks_internal(
                                     trigless: trigless_steps[step],
                                     plock: plock_steps[step],
                                     oneshot: oneshot_steps[step],
-                                    swing: swing_steps[step],
+                                    swing: swing_steps[step] && swing_active,
                                     slide: slide_steps[step],
                                     recorder: recorder_steps[step],
+                                    recorder_oneshot: recorder_oneshot_steps[step],
                                     trig_condition,
                                     trig_repeats,
                                     micro_timing,
@@ -1724,6 +1743,35 @@ fn read_project_banks_internal(
                                     1 => Some(slot.flex_slot_id.saturating_add(1)),
                                     _ => None,
                                 }
+                            };
+
+                            // When the machine's SLIC setting is on and the assigned
+                            // sample has slices, STRT p-locks select slices (value =
+                            // slice_index * 2, independent of the slice count).
+                            // ponytail: uses the part-assigned slot; a per-step sample
+                            // lock pointing at a differently-sliced sample falls back to
+                            // the raw STRT value in the UI.
+                            let slice_count = {
+                                let part =
+                                    &bank_data.parts.unsaved.0[(part_assignment as usize).min(3)];
+                                let setup = &part.audio_track_machine_setup[idx];
+                                let slot = &part.audio_track_machine_slots[idx];
+                                markers.as_ref().and_then(|m| {
+                                    match part.audio_track_machine_types[idx] {
+                                        0 if setup.static_machine.slic != 0
+                                            && (slot.static_slot_id as usize) < 128 =>
+                                        {
+                                            Some(m.static_slots[slot.static_slot_id as usize].slice_count)
+                                        }
+                                        1 if setup.flex_machine.slic != 0
+                                            && (slot.flex_slot_id as usize) < 136 =>
+                                        {
+                                            Some(m.flex_slots[slot.flex_slot_id as usize].slice_count)
+                                        }
+                                        _ => None,
+                                    }
+                                    .filter(|&c| c > 0)
+                                })
                             };
 
                             tracks.push(TrackInfo {
@@ -1756,6 +1804,7 @@ fn read_project_banks_internal(
                                 steps,
                                 default_note: None, // Audio tracks don't have default notes
                                 assigned_sample_slot,
+                                slice_count,
                             });
                         }
 
@@ -1830,6 +1879,8 @@ fn read_project_banks_internal(
                             let trigless_steps = decode_trig_masks(&midi_track.trig_masks.trigless);
                             let plock_steps = decode_trig_masks(&midi_track.trig_masks.plock);
                             let swing_steps = decode_trig_masks(&midi_track.trig_masks.swing);
+                            // Same as audio tracks: default swing amount does nothing.
+                            let swing_active = midi_track.swing_amount > 0;
 
                             let mut steps = Vec::new();
                             for step in 0..64 {
@@ -1985,9 +2036,10 @@ fn read_project_banks_internal(
                                     trigless: trigless_steps[step],
                                     plock: plock_steps[step],
                                     oneshot: false, // MIDI tracks don't have oneshot trigs
-                                    swing: swing_steps[step],
+                                    swing: swing_steps[step] && swing_active,
                                     slide: false, // MIDI tracks don't have slide trigs
                                     recorder: false, // MIDI tracks don't have recorder trigs
+                                    recorder_oneshot: false, // MIDI tracks don't have recorder trigs
                                     trig_condition,
                                     trig_repeats,
                                     micro_timing,
@@ -2039,6 +2091,7 @@ fn read_project_banks_internal(
                                 steps,
                                 default_note, // Default NOTE value from Part file
                                 assigned_sample_slot: None, // MIDI tracks have no sample slot
+                                slice_count: None,          // MIDI tracks have no samples
                             });
                         }
 
@@ -7948,6 +8001,73 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
     use tempfile::TempDir;
+
+    // Mask bytes below are taken from a real project (bank02.work, pattern 1,
+    // track 1) whose on-device trig layout was confirmed by its author; all
+    // four pages hold identical trigs, exposing the per-page byte order.
+    mod trig_mask_decoding {
+        use super::super::{decode_recorder_masks, decode_trig_masks};
+
+        fn set_steps(flags: &[bool; 64]) -> Vec<usize> {
+            flags
+                .iter()
+                .enumerate()
+                .filter(|(_, &b)| b)
+                .map(|(i, _)| i + 1) // 1-based like the UI
+                .collect()
+        }
+
+        fn per_page(base: &[usize]) -> Vec<usize> {
+            (0..4)
+                .flat_map(|p| base.iter().map(move |s| s + p * 16))
+                .collect()
+        }
+
+        #[test]
+        fn decode_trig_masks_maps_pages_and_half_pages() {
+            // trigger: steps 1, 9, 10, 13-16 on every page
+            assert_eq!(
+                set_steps(&decode_trig_masks(&[243, 1, 243, 1, 243, 1, 243, 1])),
+                per_page(&[1, 9, 10, 13, 14, 15, 16])
+            );
+            // trigless: step 3; plock (trigless lock): step 4; oneshot: step 2
+            assert_eq!(
+                set_steps(&decode_trig_masks(&[0, 4, 0, 4, 0, 4, 0, 4])),
+                per_page(&[3])
+            );
+            assert_eq!(
+                set_steps(&decode_trig_masks(&[0, 8, 0, 8, 0, 8, 0, 8])),
+                per_page(&[4])
+            );
+            assert_eq!(
+                set_steps(&decode_trig_masks(&[0, 2, 0, 2, 0, 2, 0, 2])),
+                per_page(&[2])
+            );
+            // swing: steps 11-12; slide: steps 9-10
+            assert_eq!(
+                set_steps(&decode_trig_masks(&[12, 0, 12, 0, 12, 0, 12, 0])),
+                per_page(&[11, 12])
+            );
+            assert_eq!(
+                set_steps(&decode_trig_masks(&[3, 0, 3, 0, 3, 0, 3, 0])),
+                per_page(&[9, 10])
+            );
+        }
+
+        #[test]
+        fn decode_recorder_masks_unions_sources_and_flags_oneshot() {
+            // INAB + INCD armed on steps 5-7, SRC3 on steps 5-8, one-shot rec on step 6
+            let masks: [u8; 32] = [
+                0, 112, 0, 112, 0, 112, 0, 112, // INAB
+                0, 112, 0, 112, 0, 112, 0, 112, // INCD
+                0, 240, 0, 240, 0, 240, 0, 240, // SRC3
+                0, 32, 0, 32, 0, 32, 0, 32, // one-shot flags
+            ];
+            let (rec, oneshot) = decode_recorder_masks(&masks);
+            assert_eq!(set_steps(&rec), per_page(&[5, 6, 7, 8]));
+            assert_eq!(set_steps(&oneshot), per_page(&[6]));
+        }
+    }
 
     /// Helper struct to manage test project fixtures
     struct TestProject {

@@ -77,6 +77,7 @@ interface TrigStep {
   swing: boolean;            // Has swing trig
   slide: boolean;            // Has slide trig (audio only)
   recorder: boolean;         // Has recorder trig (audio only)
+  recorder_oneshot: boolean; // Recorder trig is one-shot (audio only)
   trig_condition: string | null; // Trig condition (Fill, NotFill, Pre, percentages, etc.)
   trig_repeats: number;      // Number of trig repeats (0-7)
   micro_timing: string | null;  // Micro-timing offset (e.g., "+1/32", "-1/64")
@@ -1445,7 +1446,7 @@ export function ProjectDetail() {
 
                                   // Check if pattern/track has any trigs
                                   const hasAnyTrigs = trackData.steps.slice(0, pattern.length).some(
-                                    (step: TrigStep) => step.trigger || step.trigless
+                                    (step: TrigStep) => step.trigger || step.trigless || step.oneshot || step.plock || step.recorder
                                   );
 
                                   // Skip empty patterns if hideEmptyPatterns is enabled
@@ -1588,17 +1589,21 @@ export function ProjectDetail() {
                                   const steps = trackData.steps.slice(0, pattern.length);
 
                                   steps.forEach((step) => {
-                                    const hasTrig = step.trigger || step.trigless;
-                                    if (!hasTrig) return; // Only track indicators for steps with trigs
+                                    // One-shot and lock (plock-mask) trigs stand on their own,
+                                    // without a trigger/trigless bit.
+                                    const hasTrig = step.trigger || step.trigless || step.oneshot || step.plock;
+                                    if (!hasTrig && !step.recorder) return; // Only track indicators for steps with trigs
 
                                     const allNotes = getStepNotes(step, trackData);
                                     if (step.trigger && !(trackData.track_type === "MIDI" && allNotes.length > 0)) usedIndicators.add('trigger');
                                     if (step.trigless) usedIndicators.add('trigless');
-                                    if (step.plock || step.plock_count > 0) usedIndicators.add('plock');
+                                    if (step.plock) usedIndicators.add('lock');
+                                    if (step.plock_count > 0) usedIndicators.add('plock');
                                     if (step.oneshot) usedIndicators.add('oneshot');
                                     if (step.swing) usedIndicators.add('swing');
                                     if (step.slide) usedIndicators.add('slide');
-                                    if (step.recorder) usedIndicators.add('recorder');
+                                    if (step.recorder && !step.recorder_oneshot) usedIndicators.add('recorder');
+                                    if (step.recorder_oneshot) usedIndicators.add('recorder-oneshot');
                                     if (step.trig_condition) usedIndicators.add('condition');
                                     if (step.trig_repeats > 0) usedIndicators.add('repeats');
                                     if (step.micro_timing) usedIndicators.add('timing');
@@ -1612,15 +1617,16 @@ export function ProjectDetail() {
                                       {/* Grid */}
                                       <div className="pattern-grid">
                                         {steps.map((step) => {
-                                          const hasTrig = step.trigger || step.trigless;
+                                          const hasTrig = step.trigger || step.trigless || step.oneshot || step.plock;
                                           const trigTypes = [];
                                           if (step.trigger) trigTypes.push('trigger');
                                           if (step.trigless) trigTypes.push('trigless');
-                                          if (step.plock) trigTypes.push('plock');
+                                          if (step.plock) trigTypes.push('lock');
                                           if (step.oneshot) trigTypes.push('oneshot');
                                           if (step.swing) trigTypes.push('swing');
                                           if (step.slide) trigTypes.push('slide');
-                                          if (step.recorder) trigTypes.push('recorder');
+                                          if (step.recorder && !step.recorder_oneshot) trigTypes.push('recorder');
+                                          if (step.recorder_oneshot) trigTypes.push('recorder-oneshot');
 
                                     const allNotes = getStepNotes(step, trackData);
                                     const chordName = detectChord(allNotes);
@@ -1644,7 +1650,7 @@ export function ProjectDetail() {
                                     const hasData = hasTrig || step.plock_count > 0 || step.velocity !== null ||
                                                     step.sample_slot !== null || (allNotes.length > 0 && (hasTrig || trackData.track_type !== "MIDI")) ||
                                                     step.trig_condition || step.trig_repeats > 0 || step.micro_timing ||
-                                                    step.swing || step.slide || step.oneshot || step.recorder;
+                                                    step.swing || step.slide || step.oneshot || step.recorder || step.recorder_oneshot;
 
                                     return (
                                       <div
@@ -1659,7 +1665,9 @@ export function ProjectDetail() {
                                           <div className="step-indicators">
                                             {/* 1. Trig indicators first */}
                                             {step.trigger && !(trackData.track_type === "MIDI" && allNotes.length > 0) && <span className="indicator-trigger"><i className="fas fa-circle"></i></span>}
-                                            {step.trigless && <span className="indicator-trigless"><i className="far fa-circle"></i></span>}
+                                            {step.oneshot && <span className="indicator-oneshot"><i className="fas fa-circle"></i></span>}
+                                            {step.trigless && <span className="indicator-trigless"><i className="fas fa-circle"></i></span>}
+                                            {step.plock && <span className="indicator-lock"><i className="far fa-circle"></i></span>}
 
                                             {/* 2. MIDI Notes */}
                                             {allNotes.length > 0 && (hasTrig || trackData.track_type !== "MIDI") && (
@@ -1673,13 +1681,13 @@ export function ProjectDetail() {
                                             )}
 
                                             {/* 3. P-lock count */}
-                                            {(step.plock || (step.plock_count > 0 && step.plock_count <= 1)) && <span className="indicator-plock">P</span>}
+                                            {step.plock_count === 1 && <span className="indicator-plock">P</span>}
                                             {step.plock_count > 1 && <span className="indicator-plock-count">{step.plock_count}P</span>}
 
                                             {/* 4. Other indicators */}
-                                            {step.oneshot && <span className="indicator-oneshot">1</span>}
                                             {step.slide && <span className="indicator-slide">~</span>}
-                                            {step.recorder && <span className="indicator-recorder">R</span>}
+                                            {step.recorder && !step.recorder_oneshot && <span className="indicator-recorder">R</span>}
+                                            {step.recorder_oneshot && <span className="indicator-recorder-oneshot">R</span>}
                                             {step.trig_condition && <span className="indicator-condition">%</span>}
                                             {step.trig_repeats > 0 && <span className="indicator-repeats">X</span>}
                                             {step.micro_timing && <span className="indicator-timing">µ</span>}
@@ -1699,12 +1707,14 @@ export function ProjectDetail() {
                                 {usedIndicators.size > 0 && (
                                   <div className="pattern-grid-legend">
                                     {usedIndicators.has('trigger') && <div className="legend-item"><span className="indicator-trigger"><i className="fas fa-circle"></i></span> Trigger</div>}
-                                    {usedIndicators.has('trigless') && <div className="legend-item"><span className="indicator-trigless"><i className="far fa-circle"></i></span> Trigless</div>}
+                                    {usedIndicators.has('oneshot') && <div className="legend-item"><span className="indicator-oneshot"><i className="fas fa-circle"></i></span> One-Shot</div>}
+                                    {usedIndicators.has('trigless') && <div className="legend-item"><span className="indicator-trigless"><i className="fas fa-circle"></i></span> Trigless</div>}
+                                    {usedIndicators.has('lock') && <div className="legend-item"><span className="indicator-lock"><i className="far fa-circle"></i></span> Lock</div>}
                                     {usedIndicators.has('plock') && <div className="legend-item"><span className="indicator-plock">P</span> P-Lock</div>}
-                                    {usedIndicators.has('oneshot') && <div className="legend-item"><span className="indicator-oneshot">1</span> One-Shot</div>}
                                     {usedIndicators.has('swing') && <div className="legend-item"><span className="indicator-swing"><svg viewBox="0 0 20 14" width="14" height="11"><path d="M1 7 C4 1 7 1 10 7 C13 13 16 13 19 7" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round"/></svg></span> Swing</div>}
                                     {usedIndicators.has('slide') && <div className="legend-item"><span className="indicator-slide">~</span> Slide</div>}
                                     {usedIndicators.has('recorder') && <div className="legend-item"><span className="indicator-recorder">R</span> Recorder</div>}
+                                    {usedIndicators.has('recorder-oneshot') && <div className="legend-item"><span className="indicator-recorder-oneshot">R</span> One-Shot Rec</div>}
                                     {usedIndicators.has('condition') && <div className="legend-item"><span className="indicator-condition">%</span> Condition</div>}
                                     {usedIndicators.has('repeats') && <div className="legend-item"><span className="indicator-repeats">X</span> Repeats</div>}
                                     {usedIndicators.has('timing') && <div className="legend-item"><span className="indicator-timing">µ</span> Micro-timing</div>}
@@ -1731,10 +1741,11 @@ export function ProjectDetail() {
                                         {/* Trig Information - only show if there's a trig */}
                                         {selectedStep.trigger && <div className="param-item"><span>Trig Type:</span> Trigger</div>}
                                         {selectedStep.trigless && <div className="param-item"><span>Trig Type:</span> Trigless</div>}
+                                        {selectedStep.plock && <div className="param-item"><span>Trig Type:</span> Trigless Lock</div>}
                                         {selectedStep.oneshot && <div className="param-item"><span>One-Shot:</span> Yes</div>}
                                         {selectedStep.swing && <div className="param-item"><span>Swing:</span> Yes</div>}
                                         {selectedStep.slide && <div className="param-item"><span>Slide:</span> Yes</div>}
-                                        {selectedStep.recorder && <div className="param-item"><span>Recorder Trig:</span> Yes</div>}
+                                        {selectedStep.recorder && <div className="param-item"><span>Recorder Trig:</span> {selectedStep.recorder_oneshot ? 'Yes (One-Shot)' : 'Yes'}</div>}
                                         {selectedStep.trig_condition && <div className="param-item"><span>Condition:</span> {selectedStep.trig_condition}</div>}
                                         {selectedStep.trig_repeats > 0 && <div className="param-item"><span>Repeats:</span> {selectedStep.trig_repeats + 1}x</div>}
                                         {selectedStep.micro_timing && <div className="param-item"><span>Micro-timing:</span> {selectedStep.micro_timing}</div>}
@@ -1750,7 +1761,19 @@ export function ProjectDetail() {
 
                                         {/* Audio P-Locks: Machine Parameters */}
                                         {selectedStep.audio_plocks?.machine?.param1 != null && <div className="param-item"><span>PTCH (Pitch):</span> {selectedStep.audio_plocks?.machine?.param1}</div>}
-                                        {selectedStep.audio_plocks?.machine?.param2 != null && <div className="param-item"><span>STRT (Start):</span> {selectedStep.audio_plocks?.machine?.param2}</div>}
+                                        {selectedStep.audio_plocks?.machine?.param2 != null && (() => {
+                                          // In slice mode, STRT selects a slice: the 0-127 range always
+                                          // addresses the max 64 slices, 2 per slice, regardless of the
+                                          // sample's actual slice count (verified with 4/32/64-slice
+                                          // test patterns): slice = value / 2 + 1.
+                                          // ponytail: skipped when the step sample-locks another slot,
+                                          // whose slice mode we don't know here.
+                                          const strt = selectedStep.audio_plocks!.machine!.param2!;
+                                          const sliceMode = trackData.slice_count != null && selectedStep.sample_slot === null;
+                                          return sliceMode
+                                            ? <div className="param-item"><span>STRT (Slice):</span> {Math.floor(strt / 2) + 1}</div>
+                                            : <div className="param-item"><span>STRT (Start):</span> {strt}</div>;
+                                        })()}
                                         {selectedStep.audio_plocks?.machine?.param3 != null && <div className="param-item"><span>LEN (Length):</span> {selectedStep.audio_plocks?.machine?.param3}</div>}
                                         {selectedStep.audio_plocks?.machine?.param4 != null && <div className="param-item"><span>RATE (Rate):</span> {selectedStep.audio_plocks?.machine?.param4}</div>}
                                         {selectedStep.audio_plocks?.machine?.param5 != null && <div className="param-item"><span>RTRG (Retrigs):</span> {selectedStep.audio_plocks?.machine?.param5}</div>}
