@@ -14,20 +14,21 @@ The Patterns tab provides a visual representation of the sequencer data. It allo
 Each pattern is displayed as a grid of steps. It matches the global or per-track length defined in Scale Setup menu of the Octatrack.
 
 ### Trig Types
-- **Trigger:** Indicated by a solid circle. A traditional sequencer trigger.
-- **Trigless:** Indicated by an empty circle. A trigger that changes parameters but does not restart the sample envelope.
-- **P-Lock:** Indicated by the letter **P**. Shows that one or more parameter locks are present on that step.
+- **Trigger:** Solid orange circle. A traditional sequencer trigger.
+- **One-Shot:** Solid yellow circle. A trigger that plays only once, until re-armed.
+- **Trigless:** Solid green circle. A trigger that changes parameters but does not restart the sample envelope.
+- **Lock:** Outlined green circle. A trigless lock (lock trig) that holds parameter locks without triggering anything.
+- **P-Lock:** Indicated by the letter **P** (or a count like **3P**). Shows that one or more parameter locks are present on that step. A step whose only lock is a sample lock shows **S** alone, without **P**.
 
 ### Specialized Indicators
-- **1:** One-Shot trigger.
 - **~:** Slide trigger.
-- **R:** Recorder trigger.
+- **R:** Recorder trigger. Shown in yellow when the recorder trig is One-Shot.
 - **%:** Trig Condition (e.g., Fill, 50%).
 - **X:** Trig Repeats.
 - **µ:** Micro-timing offset.
 - **V:** Velocity or Volume lock.
 - **S:** Sample slot lock.
-- **Swing:** A wave icon indicates that a swing trig is active on that step.
+- **Swing:** A wave icon indicates that a swing trig is active on that step. Swing trigs are hidden when the track's swing amount is 50 (the default), since they have no effect.
 
 ---
 
@@ -37,7 +38,8 @@ Click on any step in the grid to open the **Parameter Details Panel**. This pane
 
 - **Notes & Chords:** For MIDI tracks, it shows the exact notes and even detects common chord types.
 - **P-Lock Values:** Lists every parameter lock and its exact value.
-- **Micro-timing:** Shows the precise offset (e.g., +1/32).
+- **Slices:** When the track's machine has **SLIC** enabled and its sample is sliced, a **STRT** lock selects a slice - the panel shows the slice number (**STRT (Slice)**) instead of the raw start value.
+- **Micro-timing:** Shows the precise offset (+1/32 for instance).
 
 ![Patterns - Parameter Details](/img/screenshots/patterns-details.png)
 
