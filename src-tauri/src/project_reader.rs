@@ -1021,6 +1021,134 @@ fn decode_recorder_masks(masks: &[u8]) -> ([bool; 64], [bool; 64]) {
     (recorder, oneshot)
 }
 
+/// One place a sample slot is referenced from.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SlotUsageEntry {
+    pub bank: u8,            // 0-based (0 = Bank A)
+    pub kind: String,        // "machine" (part assignment) or "lock" (sample p-lock)
+    pub track: u8,           // 0-based audio track
+    pub part: Option<u8>,    // machine usage: 0-based part
+    pub pattern: Option<u8>, // lock usage: 0-based pattern
+    pub step: Option<u8>,    // lock usage: 0-based step
+}
+
+/// Per-slot usage lists for both pools, indexed by 0-based slot id (slots 1-128).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SampleSlotUsage {
+    pub static_usage: Vec<Vec<SlotUsageEntry>>,
+    pub flex_usage: Vec<Vec<SlotUsageEntry>>,
+}
+
+/// Scan every bank of a project and report where each sample slot is audibly used.
+///
+/// "Audible" semantics: a part's machine slot assignment only counts when that
+/// track has at least one trigger or one-shot trig in some pattern assigned to
+/// that part (the OT assigns default slots to every track of every empty bank,
+/// which would otherwise flag most low slots as used). Sample locks count on
+/// their own, but only within the pattern's played length (bank files keep
+/// leftover lock bytes beyond it).
+pub fn compute_sample_usage(project_path: &str) -> Result<SampleSlotUsage, String> {
+    let path = Path::new(project_path);
+    let mut static_usage: Vec<Vec<SlotUsageEntry>> = vec![Vec::new(); 128];
+    let mut flex_usage: Vec<Vec<SlotUsageEntry>> = vec![Vec::new(); 128];
+
+    for bank_idx in 0..16u8 {
+        let bank_num = bank_idx + 1;
+        let mut bank_path = path.join(format!("bank{:02}.work", bank_num));
+        if !bank_path.exists() {
+            bank_path = path.join(format!("bank{:02}.strd", bank_num));
+            if !bank_path.exists() {
+                continue;
+            }
+        }
+        let bank = match BankFile::from_data_file(&bank_path) {
+            Ok(b) => b,
+            Err(_) => continue,
+        };
+
+        // (part, track) pairs whose machine can actually be heard: the track has
+        // a trigger or one-shot trig in at least one pattern assigned to the part.
+        let mut audible: std::collections::HashSet<(usize, usize)> =
+            std::collections::HashSet::new();
+        for pattern in bank.patterns.0.iter() {
+            let part_id = (pattern.part_assignment as usize).min(3);
+            for (t, track) in pattern.audio_track_trigs.0.iter().enumerate() {
+                let has_trig = track.trig_masks.trigger.iter().any(|&m| m != 0)
+                    || track.trig_masks.oneshot.iter().any(|&m| m != 0);
+                if has_trig {
+                    audible.insert((part_id, t));
+                }
+            }
+        }
+
+        // Machine slot assignments (one entry per bank/part/track).
+        for (part_id, part) in bank.parts.unsaved.0.iter().enumerate() {
+            for t in 0..8 {
+                if !audible.contains(&(part_id, t)) {
+                    continue;
+                }
+                let slot = &part.audio_track_machine_slots[t];
+                let (pool, slot_id) = match part.audio_track_machine_types[t] {
+                    0 => (&mut static_usage, slot.static_slot_id),
+                    1 => (&mut flex_usage, slot.flex_slot_id),
+                    _ => continue, // Thru/Neighbor/Pickup play no sample slot
+                };
+                if let Some(entries) = pool.get_mut(slot_id as usize) {
+                    entries.push(SlotUsageEntry {
+                        bank: bank_idx,
+                        kind: "machine".to_string(),
+                        track: t as u8,
+                        part: Some(part_id as u8),
+                        pattern: None,
+                        step: None,
+                    });
+                }
+            }
+        }
+
+        // Sample locks. The lock is stored in the flex_slot_id byte for both
+        // machine types; the pool is decided by the track's machine type in the
+        // pattern's assigned part.
+        for (p_idx, pattern) in bank.patterns.0.iter().enumerate() {
+            let part = &bank.parts.unsaved.0[(pattern.part_assignment as usize).min(3)];
+            for (t, track) in pattern.audio_track_trigs.0.iter().enumerate() {
+                let pool = match part.audio_track_machine_types[t] {
+                    0 => &mut static_usage,
+                    1 => &mut flex_usage,
+                    _ => continue,
+                };
+                let track_len = if pattern.scale.scale_mode == 1 {
+                    track.scale_per_track_mode.per_track_len
+                } else {
+                    pattern.scale.master_len
+                }
+                .min(64) as usize;
+                for (s, plock) in track.plocks.0.iter().enumerate().take(track_len) {
+                    let slot_id = plock.flex_slot_id;
+                    if slot_id == 255 {
+                        continue;
+                    }
+                    if let Some(entries) = pool.get_mut(slot_id as usize) {
+                        entries.push(SlotUsageEntry {
+                            bank: bank_idx,
+                            kind: "lock".to_string(),
+                            track: t as u8,
+                            part: None,
+                            pattern: Some(p_idx as u8),
+                            step: Some(s as u8),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(SampleSlotUsage {
+        static_usage,
+        flex_usage,
+    })
+}
+
 pub fn read_single_bank(project_path: &str, bank_index: u8) -> Result<Option<Bank>, String> {
     if bank_index >= 16 {
         return Err(format!("Invalid bank index: {}. Must be 0-15.", bank_index));
@@ -8188,6 +8316,82 @@ mod tests {
 
             assert_eq!(track_steps(&project, 0).slice_count, Some(64));
             assert_eq!(track_steps(&project, 1).slice_count, None);
+        }
+    }
+
+    mod sample_usage_tests {
+        use super::*;
+
+        #[test]
+        fn default_project_has_no_usage() {
+            // Default banks assign slots to every track but have no trigs, so
+            // nothing counts as used (audible semantics).
+            let project = TestProject::new();
+            let usage = compute_sample_usage(&project.path).unwrap();
+            assert!(usage.static_usage.iter().all(|e| e.is_empty()));
+            assert!(usage.flex_usage.iter().all(|e| e.is_empty()));
+        }
+
+        #[test]
+        fn machine_assignment_counts_only_with_trigs() {
+            let project = TestProject::with_modified_bank(0, |bank| {
+                let part = &mut bank.parts.unsaved.0[0];
+                // track 1: flex machine on slot 6 (0-based 5), WITH trigs
+                part.audio_track_machine_types[0] = 1;
+                part.audio_track_machine_slots[0].flex_slot_id = 5;
+                // track 2: static machine on slot 4 (0-based 3), NO trigs
+                part.audio_track_machine_types[1] = 0;
+                part.audio_track_machine_slots[1].static_slot_id = 3;
+                // pattern 1 uses part 1 by default; give track 1 a trigger trig
+                bank.patterns.0[0].audio_track_trigs.0[0].trig_masks.trigger =
+                    [0, 1, 0, 0, 0, 0, 0, 0];
+            });
+
+            let usage = compute_sample_usage(&project.path).unwrap();
+            let entries = &usage.flex_usage[5];
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].kind, "machine");
+            assert_eq!(entries[0].bank, 0);
+            assert_eq!(entries[0].part, Some(0));
+            assert_eq!(entries[0].track, 0);
+            assert!(usage.static_usage[3].is_empty(), "no trigs -> not used");
+        }
+
+        #[test]
+        fn sample_locks_count_within_pattern_length_only() {
+            let project = TestProject::with_modified_bank(0, |bank| {
+                let part = &mut bank.parts.unsaved.0[0];
+                part.audio_track_machine_types[2] = 1; // track 3: flex machine
+                let pattern = &mut bank.patterns.0[1];
+                pattern.scale.master_len = 16;
+                let track = &mut pattern.audio_track_trigs.0[2];
+                track.plocks.0[4].flex_slot_id = 9; // step 5: counted
+                track.plocks.0[20].flex_slot_id = 9; // step 21: beyond length, ignored
+            });
+
+            let usage = compute_sample_usage(&project.path).unwrap();
+            let entries = &usage.flex_usage[9];
+            assert_eq!(entries.len(), 1, "only the in-length lock counts");
+            assert_eq!(entries[0].kind, "lock");
+            assert_eq!(entries[0].pattern, Some(1));
+            assert_eq!(entries[0].track, 2);
+            assert_eq!(entries[0].step, Some(4));
+        }
+
+        #[test]
+        fn lock_pool_follows_track_machine_type() {
+            // Same lock byte, but on a static-machine track it references the
+            // static pool.
+            let project = TestProject::with_modified_bank(0, |bank| {
+                bank.parts.unsaved.0[0].audio_track_machine_types[0] = 0; // static
+                let pattern = &mut bank.patterns.0[0];
+                pattern.scale.master_len = 16;
+                pattern.audio_track_trigs.0[0].plocks.0[0].flex_slot_id = 7;
+            });
+
+            let usage = compute_sample_usage(&project.path).unwrap();
+            assert_eq!(usage.static_usage[7].len(), 1);
+            assert!(usage.flex_usage[7].is_empty());
         }
     }
 

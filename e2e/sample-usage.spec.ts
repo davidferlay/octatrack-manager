@@ -1,0 +1,139 @@
+import { test, expect, Page } from '@playwright/test'
+
+/**
+ * Sample Slots Usage Column E2E Tests
+ *
+ * Tests the "Used" column with mocked compute_sample_usage: count badge,
+ * usage details popover (machine assignments and sample locks), and the
+ * Used/Unused column filter.
+ */
+
+async function setupMocks(page: Page) {
+  await page.addInitScript(() => {
+    const emptyUsage = () => Array(128).fill(null).map(() => [])
+
+    ;(window as any).__TAURI_INTERNALS__ = {
+      invoke: async (cmd: string) => {
+        switch (cmd) {
+          case 'load_project_metadata':
+            return {
+              name: 'TestProject',
+              tempo: 120.0,
+              time_signature: '4/4',
+              pattern_length: 16,
+              os_version: '1.40F',
+              current_state: {
+                bank: 0, bank_name: 'BANK A', pattern: 0, part: 0, track: 0,
+                midi_mode: 0, track_othermode: 0,
+                audio_muted_tracks: [], audio_soloed_tracks: [], audio_cued_tracks: [],
+                midi_muted_tracks: [], midi_soloed_tracks: [],
+              },
+              mixer_settings: { gain_ab: 0, gain_cd: 0, dir_ab: 0, dir_cd: 0, phones_mix: 0, main_level: 100, cue_level: 100 },
+              memory_settings: { load_24bit_flex: false, dynamic_recorders: false, record_24bit: false, reserved_recorder_count: 8, reserved_recorder_length: 16, flex_ram_free_mb: 85.5 },
+              midi_settings: { trig_channels: [1, 2, 3, 4, 5, 6, 7, 8], auto_channel: 10, clock_send: true, clock_receive: true, transport_send: true, transport_receive: true, prog_change_send: false, prog_change_send_channel: 1, prog_change_receive: false, prog_change_receive_channel: 1 },
+              metronome_settings: { enabled: false, main_volume: 64, cue_volume: 64, pitch: 64, tonal: false, preroll: 0, time_signature_numerator: 4, time_signature_denominator: 4 },
+              sample_slots: {
+                flex_slots: Array(128).fill(null).map((_, i) => ({
+                  slot_id: i + 1, slot_type: 'Flex',
+                  path: i < 3 ? `/samples/flex_${i}.wav` : null,
+                  gain: null, loop_mode: null, timestretch_mode: null,
+                  source_location: i < 3 ? 'Project' : null, file_exists: i < 3,
+                  compatibility: i < 3 ? 'compatible' : null, file_format: null, bit_depth: null, sample_rate: null,
+                })),
+                static_slots: Array(128).fill(null).map((_, i) => ({
+                  slot_id: i + 1, slot_type: 'Static', path: null, gain: null, loop_mode: null,
+                  timestretch_mode: null, source_location: null, file_exists: false,
+                  compatibility: null, file_format: null, bit_depth: null, sample_rate: null,
+                })),
+              },
+            }
+          case 'compute_sample_usage': {
+            const flex = emptyUsage()
+            flex[0] = [
+              { bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null },
+              { bank: 1, kind: 'lock', track: 2, part: null, pattern: 4, step: 11 },
+            ]
+            return { static_usage: emptyUsage(), flex_usage: flex }
+          }
+          case 'get_existing_banks':
+            return []
+          case 'load_single_bank':
+            return null
+          case 'load_project_banks':
+            return []
+          case 'get_audio_pool_status':
+            return { exists: false, path: null, set_path: null }
+          case 'check_project_in_set':
+            return false
+          case 'get_system_resources':
+            return { cpu_cores: 4, available_memory_mb: 8000, recommended_concurrency: 4 }
+          case 'check_missing_source_files':
+            return 0
+          case 'get_slot_audio_paths':
+            return []
+          case 'plugin:app|version':
+            return '1.0.0'
+          default:
+            return null
+        }
+      },
+      transformCallback: () => {},
+    }
+    ;(window as any).__TAURI__ = {
+      invoke: (window as any).__TAURI_INTERNALS__.invoke,
+    }
+  })
+}
+
+async function openFlexTab(page: Page) {
+  await page.goto('/#/project?path=/test/TestProject&name=TestProject')
+  const flexTab = page.locator('.header-tab', { hasText: 'Flex' })
+  await expect(flexTab).toBeVisible({ timeout: 10000 })
+  await flexTab.click()
+  await expect(page.locator('.samples-table tbody tr').first()).toBeVisible({ timeout: 10000 })
+}
+
+test.describe('Sample slots - Used column', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupMocks(page)
+    await openFlexTab(page)
+  })
+
+  test('shows a count badge on used slots and a dash on unused ones', async ({ page }) => {
+    await expect(page.locator('th.col-used')).toBeVisible()
+    const rows = page.locator('.samples-table tbody tr')
+    await expect(rows.nth(0).locator('.usage-badge')).toHaveText(/2/)
+    await expect(rows.nth(1).locator('.usage-badge')).toHaveCount(0)
+    await expect(rows.nth(1).locator('.usage-none')).toHaveText('—')
+  })
+
+  test('clicking the badge opens a popover listing every usage', async ({ page }) => {
+    await page.locator('.usage-badge').first().click()
+    const popover = page.locator('.usage-popover')
+    await expect(popover).toBeVisible()
+    await expect(popover.locator('.usage-popover-header')).toContainText('F1 used in 2 places')
+    await expect(popover.locator('.usage-popover-entry').nth(0)).toHaveText('Bank A · Part 1 · T1 · Machine')
+    await expect(popover.locator('.usage-popover-entry').nth(1)).toHaveText('Bank B · Ptn 5 · T3 · Step 12 · Lock')
+
+    await page.keyboard.press('Escape')
+    await expect(popover).toHaveCount(0)
+  })
+
+  test('Used and Unused filters narrow the rows', async ({ page }) => {
+    const rows = page.locator('.samples-table tbody tr')
+    await expect(rows).toHaveCount(128)
+
+    await page.locator('th.col-used .filter-icon').click()
+    await page.locator('.filter-dropdown .dropdown-option', { hasText: 'Used' }).first().click()
+    await expect(rows).toHaveCount(1)
+    await expect(rows.first()).toContainText('F1')
+
+    await page.locator('th.col-used .filter-icon').click()
+    await page.locator('.filter-dropdown .dropdown-option', { hasText: 'Unused' }).click()
+    await expect(rows).toHaveCount(127)
+
+    await page.locator('th.col-used .filter-icon').click()
+    await page.locator('.filter-dropdown .dropdown-option', { hasText: 'All' }).click()
+    await expect(rows).toHaveCount(128)
+  })
+})

@@ -13,6 +13,7 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { useTablePreferences } from "../context/TablePreferencesContext";
+import type { SlotUsageEntry } from "../context/ProjectsContext";
 import { AudioPoolSidebar } from "./AudioPoolSidebar";
 import { formatFileSize } from "./AudioFileTable";
 import { useAudioPreview, shouldAutoPreview, scrubTarget, volumeStep, isAudioFile } from '../hooks/useAudioPreview';
@@ -110,10 +111,14 @@ interface SampleSlotsTableProps {
   onToggleTransfers?: () => void;
   // Fired when a dnd-kit drag starts/ends so the parent can suppress Escape-to-leave mid-drag.
   onDragStateChange?: (active: boolean) => void;
+  // Per-slot usage lists (indexed by 0-based slot id); undefined while still computing.
+  slotUsage?: SlotUsageEntry[][];
 }
 
-type SortColumn = 'slot' | 'sample' | 'status' | 'source' | 'gain' | 'timestretch' | 'loop' | 'compatibility' | 'format' | 'bitdepth' | 'samplerate' | 'size';
+type SortColumn = 'slot' | 'sample' | 'status' | 'used' | 'source' | 'gain' | 'timestretch' | 'loop' | 'compatibility' | 'format' | 'bitdepth' | 'samplerate' | 'size';
 type SortDirection = 'asc' | 'desc';
+
+const BANK_LETTERS = 'ABCDEFGHIJKLMNOP';
 
 // A slot "has a [SAMPLE] block" in the project file when it references a sample or carries any
 // slot-tied attribute. Truly-empty slots (never assigned, no stored attributes) have all null.
@@ -164,7 +169,7 @@ function getSetRelativePath(projectPath: string | null): string {
   return projectPath;
 }
 
-export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, projectName, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated, onFlexRamUpdated, onImportToAudioPool, onImportToProject, sidebarRefreshTrigger, transfersOpen, transferCount, transfersActive, transfersSucceeded, transfersFailed, onToggleTransfers, onDragStateChange }: SampleSlotsTableProps) {
+export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, projectName, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated, onFlexRamUpdated, onImportToAudioPool, onImportToProject, sidebarRefreshTrigger, transfersOpen, transferCount, transfersActive, transfersSucceeded, transfersFailed, onToggleTransfers, onDragStateChange, slotUsage }: SampleSlotsTableProps) {
   const navigate = useNavigate();
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const [dndDragFiles, setDndDragFiles] = useState<string[]>([]);
@@ -267,6 +272,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   const [hideEmpty, setHideEmpty] = useState(prefs.hideEmpty);
   const [hideEmptyVisual, setHideEmptyVisual] = useState(prefs.hideEmpty); // Immediate visual state for toggle
   const [isPending, startTransition] = useTransition();
+  const [usageFilter, setUsageFilter] = useState<string>(prefs.usageFilter);
   const [sourceFilter, setSourceFilter] = useState<string>(prefs.sourceFilter);
   const [gainFilter, setGainFilter] = useState<string>(prefs.gainFilter);
   const [timestretchFilter, setTimestretchFilter] = useState<string>(prefs.timestretchFilter);
@@ -290,7 +296,26 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   const resizeStartSizeRef = useRef<number>(0);
 
   // Column order and drag-over state for column reorder
-  const [columnOrder, setColumnOrder] = useState<string[]>(['slot', 'sample', 'compatibility', 'status', 'source', 'gain', 'timestretch', 'loop', 'format', 'bitdepth', 'samplerate', 'size']);
+  const [columnOrder, setColumnOrder] = useState<string[]>(['slot', 'sample', 'compatibility', 'status', 'used', 'source', 'gain', 'timestretch', 'loop', 'format', 'bitdepth', 'samplerate', 'size']);
+
+  // Where this slot is used across the project (machine assignments + sample locks)
+  const usageEntries = useCallback(
+    (slot: SampleSlot): SlotUsageEntry[] => slotUsage?.[slot.slot_id - 1] ?? [],
+    [slotUsage]
+  );
+  // Popover listing a slot's usages, anchored at the clicked badge
+  const [usagePopover, setUsagePopover] = useState<{ x: number; y: number; slot: SampleSlot } | null>(null);
+  useEffect(() => {
+    if (!usagePopover) return;
+    const close = () => setUsagePopover(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setUsagePopover(null); };
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', close);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [usagePopover]);
   const [dragOverColId, setDragOverColId] = useState<string | null>(null);
 
   // Copy to clipboard state
@@ -306,7 +331,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     if (open && !showAudioPool) {
       savedColumnsRef.current = { ...visibleColumns };
       setVisibleColumns({
-        slot: true, sample: true, compatibility: true, status: true,
+        slot: true, sample: true, compatibility: true, status: true, used: false,
         source: false, gain: false, timestretch: false, loop: false,
         format: false, bitdepth: false, samplerate: false, size: false,
       });
@@ -756,6 +781,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
       compatibilityFilter,
       statusFilter,
       hideEmpty,
+      usageFilter,
       sourceFilter,
       gainFilter,
       timestretchFilter,
@@ -772,6 +798,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     compatibilityFilter,
     statusFilter,
     hideEmpty,
+    usageFilter,
     sourceFilter,
     gainFilter,
     timestretchFilter,
@@ -1063,6 +1090,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     if (visibleColumns.sample) headers.push('Sample');
     if (visibleColumns.compatibility) headers.push('Compatibility');
     if (visibleColumns.status) headers.push('Status');
+    if (visibleColumns.used) headers.push('Used');
     if (visibleColumns.source) headers.push('Source');
     if (visibleColumns.gain) headers.push('Gain');
     if (visibleColumns.timestretch) headers.push('Timestretch');
@@ -1078,6 +1106,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
       if (visibleColumns.sample) row.push(slot.path ? getFilename(slot.path) : '');
       if (visibleColumns.compatibility) row.push(slot.file_exists ? (slot.compatibility || '') : '');
       if (visibleColumns.status) row.push(slot.path ? (slot.file_exists ? 'Exists' : 'Missing') : '');
+      if (visibleColumns.used) row.push(String(usageEntries(slot).length));
       if (visibleColumns.source) row.push(slot.source_location || '');
       if (visibleColumns.gain) row.push(slot.gain !== null && slot.gain !== undefined ? String(slot.gain) : '');
       if (visibleColumns.timestretch) row.push(slot.timestretch_mode || '');
@@ -1212,6 +1241,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         return false;
       }
 
+      // Filter by usage
+      if (usageFilter === 'used' && usageEntries(slot).length === 0) {
+        return false;
+      }
+      if (usageFilter === 'unused' && usageEntries(slot).length > 0) {
+        return false;
+      }
+
       // Filter by source
       if (sourceFilter !== 'all') {
         if (slot.source_location !== sourceFilter) {
@@ -1285,6 +1322,10 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         case 'status':
           compareA = a.file_exists ? 1 : 0;
           compareB = b.file_exists ? 1 : 0;
+          break;
+        case 'used':
+          compareA = usageEntries(a).length;
+          compareB = usageEntries(b).length;
           break;
         case 'source':
           compareA = a.source_location || '';
@@ -1376,6 +1417,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
 
   // Check if any filter is active
   const hasActiveFilters = compatibilityFilter !== 'all' || statusFilter !== 'all' ||
+    usageFilter !== 'all' ||
     sourceFilter !== 'all' || gainFilter !== 'all' || timestretchFilter !== 'all' ||
     loopFilter !== 'all' || formatFilter !== 'all' || bitDepthFilter !== 'all' ||
     sampleRateFilter !== 'all';
@@ -1384,6 +1426,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   const resetAllFilters = () => {
     setCompatibilityFilter('all');
     setStatusFilter('all');
+    setUsageFilter('all');
     setSourceFilter('all');
     setGainFilter('all');
     setTimestretchFilter('all');
@@ -1396,14 +1439,16 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   function renderColHeader(colId: string) {
     const COL_LABELS: Record<string, string> = {
       slot: 'Slot', sample: 'Sample', compatibility: 'Compat', status: 'Status',
+      used: 'Used',
       source: 'Source', gain: 'Gain', timestretch: 'Timestretch', loop: 'Loop',
       format: 'Format', bitdepth: 'Bit', samplerate: 'kHz', size: 'Size',
     };
-    const FILTERABLE = ['compatibility', 'status', 'source', 'gain', 'timestretch', 'loop', 'format', 'bitdepth', 'samplerate'];
+    const FILTERABLE = ['compatibility', 'status', 'used', 'source', 'gain', 'timestretch', 'loop', 'format', 'bitdepth', 'samplerate'];
     const hasFilter = FILTERABLE.includes(colId);
     const isFilterActive: boolean = ({
       compatibility: compatibilityFilter !== 'all',
       status: statusFilter !== 'all',
+      used: usageFilter !== 'all',
       source: sourceFilter !== 'all',
       gain: gainFilter !== 'all',
       timestretch: timestretchFilter !== 'all',
@@ -1429,6 +1474,13 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
             <label className="dropdown-option"><input type="radio" name="status" checked={statusFilter === 'all'} onChange={() => { setStatusFilter('all'); closeDropdown(); }} /><span>All</span></label>
             <label className="dropdown-option"><input type="radio" name="status" checked={statusFilter === 'exists'} onChange={() => { setStatusFilter('exists'); closeDropdown(); }} /><span>File Exists</span></label>
             <label className="dropdown-option"><input type="radio" name="status" checked={statusFilter === 'missing'} onChange={() => { setStatusFilter('missing'); closeDropdown(); }} /><span>File Missing</span></label>
+          </>
+        );
+        case 'used': return (
+          <>
+            <label className="dropdown-option"><input type="radio" name="used" checked={usageFilter === 'all'} onChange={() => { setUsageFilter('all'); closeDropdown(); }} /><span>All</span></label>
+            <label className="dropdown-option"><input type="radio" name="used" checked={usageFilter === 'used'} onChange={() => { setUsageFilter('used'); closeDropdown(); }} /><span>Used</span></label>
+            <label className="dropdown-option"><input type="radio" name="used" checked={usageFilter === 'unused'} onChange={() => { setUsageFilter('unused'); closeDropdown(); }} /><span>Unused</span></label>
           </>
         );
         case 'source': return (
@@ -1577,6 +1629,30 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
             )}
           </td>
         );
+      case 'used': {
+        const entries = usageEntries(slot);
+        return (
+          <td key={colId} className="col-used">
+            {entries.length > 0 ? (
+              <button
+                className="usage-badge"
+                title={`Used in ${entries.length} place${entries.length > 1 ? 's' : ''} — click for details`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  setUsagePopover({ x: rect.left, y: rect.bottom + 4, slot });
+                }}
+              >
+                ✓ {entries.length}
+              </button>
+            ) : slotUsage ? (
+              <span className="usage-none" title="Not used anywhere in this project">—</span>
+            ) : (
+              <span className="usage-none" title="Computing usage…">…</span>
+            )}
+          </td>
+        );
+      }
       case 'source':
         return <td key={colId} className="col-source" title={slot.source_location === 'Project' ? getSetRelativePath(projectPath ?? null) : getDirectoryPath(slot.path)}>{slot.source_location || '-'}</td>;
       case 'gain':
@@ -1789,6 +1865,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
                 <label className="column-visibility-option">
                   <input
                     type="checkbox"
+                    checked={visibleColumns.used}
+                    onChange={() => toggleColumn('used')}
+                  />
+                  <span>Used</span>
+                </label>
+                <label className="column-visibility-option">
+                  <input
+                    type="checkbox"
                     checked={visibleColumns.source}
                     onChange={() => toggleColumn('source')}
                   />
@@ -1920,6 +2004,27 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
       <div className={`toast-notification ${notice.kind}`}>
         <i className={`fas ${notice.kind === 'warning' ? 'fa-exclamation-triangle' : 'fa-circle-info'}`}></i> {notice.message}
       </div>
+    )}
+    {usagePopover && createPortal(
+      <div
+        className="usage-popover"
+        style={{ position: 'fixed', top: usagePopover.y, left: usagePopover.x }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="usage-popover-header">
+          {slotPrefix}{usagePopover.slot.slot_id} used in {usageEntries(usagePopover.slot).length} place{usageEntries(usagePopover.slot).length > 1 ? 's' : ''}
+        </div>
+        <div className="usage-popover-list">
+          {usageEntries(usagePopover.slot).map((entry, idx) => (
+            <div key={idx} className="usage-popover-entry">
+              {entry.kind === 'machine'
+                ? `Bank ${BANK_LETTERS[entry.bank] ?? '?'} · Part ${(entry.part ?? 0) + 1} · T${entry.track + 1} · Machine`
+                : `Bank ${BANK_LETTERS[entry.bank] ?? '?'} · Ptn ${(entry.pattern ?? 0) + 1} · T${entry.track + 1} · Step ${(entry.step ?? 0) + 1} · Lock`}
+            </div>
+          ))}
+        </div>
+      </div>,
+      document.body
     )}
     {slotMenu && (
       <div

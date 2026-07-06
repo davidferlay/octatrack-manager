@@ -184,3 +184,13 @@ go to the **Flex** (or **Static**) tab.
 | PB23 | Page | Backspace goes to parent | Press Backspace | Navigation goes up one directory (never above the pool/source root) |
 | PB24 | Page | Space / Shift+Enter / Shift+L | Use these keys on the page | Space toggles play/pause; Shift+Enter toggles AUTO; Shift+L toggles LOOP (same as the slots tab) |
 | PB25 | Page | Ctrl+arrows scrub / volume | Hold Ctrl with the arrows | Left/Right scrub the playhead; Up/Down adjust the volume |
+| **Usage Column** | | | | |
+| AP110 | Usage | Used column shows count badge | Open Flex or Static tab of a project where a slot is played by a track | The Used column shows a green checkmark badge with the number of places the slot is used |
+| AP111 | Usage | Unused slot shows a dash | Look at a slot no track plays and no step locks | Used column shows a dash |
+| AP112 | Usage | Popover lists machine usages | Click the badge of a slot assigned to a playing track machine | Popover lists entries like "Bank A - Part 1 - T1 - Machine"; Escape or clicking elsewhere closes it |
+| AP113 | Usage | Popover lists sample lock usages | Click the badge of a slot referenced by a sample lock | Popover lists entries like "Bank B - Ptn 5 - T3 - Step 12 - Lock" |
+| AP114 | Usage | Default assignments not counted | Open a fresh project (default slot-per-track machine assignments, no trigs) | All slots show as unused: a machine assignment only counts when its track has trigs in a pattern using that part |
+| AP115 | Usage | Leftover locks beyond length ignored | Slot referenced only by a lock on a step beyond the pattern's length | Slot shows as unused |
+| AP116 | Usage | Filter Used / Unused | Open the Used column filter and pick Used, then Unused | Table shows only used slots, then only unused slots; Reset filters returns to All |
+| AP117 | Usage | Sort by usage | Click the Used column header | Slots sort by their usage count |
+| AP118 | Usage | Usage refreshes with project | Change slot usage on the device/file, click the refresh button, reopen the tab | Counts reflect the new state |

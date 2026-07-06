@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, ReactNode } from 'react';
 
-type SortColumn = 'slot' | 'sample' | 'status' | 'source' | 'gain' | 'timestretch' | 'loop' | 'compatibility' | 'format' | 'bitdepth' | 'samplerate' | 'size';
+type SortColumn = 'slot' | 'sample' | 'status' | 'used' | 'source' | 'gain' | 'timestretch' | 'loop' | 'compatibility' | 'format' | 'bitdepth' | 'samplerate' | 'size';
 type SortDirection = 'asc' | 'desc';
 
 interface ColumnVisibility {
@@ -8,6 +8,7 @@ interface ColumnVisibility {
   sample: boolean;
   compatibility: boolean;
   status: boolean;
+  used: boolean;
   source: boolean;
   gain: boolean;
   timestretch: boolean;
@@ -25,6 +26,7 @@ export interface TablePreferences {
   compatibilityFilter: string;
   statusFilter: string;
   hideEmpty: boolean;
+  usageFilter: string;
   sourceFilter: string;
   gainFilter: string;
   timestretchFilter: string;
@@ -42,6 +44,7 @@ const defaultPreferences: TablePreferences = {
   compatibilityFilter: 'all',
   statusFilter: 'all',
   hideEmpty: false,
+  usageFilter: 'all',
   sourceFilter: 'all',
   gainFilter: 'all',
   timestretchFilter: 'all',
@@ -54,6 +57,7 @@ const defaultPreferences: TablePreferences = {
     sample: true,
     compatibility: true,
     status: true,
+    used: true,
     source: true,
     gain: true,
     timestretch: true,

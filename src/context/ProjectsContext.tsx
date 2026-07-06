@@ -208,6 +208,21 @@ interface TrigStep {
   midi_plocks: MidiParameterLocks | null;
 }
 
+// One place a sample slot is referenced from (see compute_sample_usage in Rust).
+export interface SlotUsageEntry {
+  bank: number;            // 0-based (0 = Bank A)
+  kind: 'machine' | 'lock';
+  track: number;           // 0-based audio track
+  part: number | null;     // machine usage
+  pattern: number | null;  // lock usage
+  step: number | null;     // lock usage
+}
+
+export interface SampleSlotUsage {
+  static_usage: SlotUsageEntry[][]; // indexed by 0-based slot id
+  flex_usage: SlotUsageEntry[][];
+}
+
 interface TrackInfo {
   track_id: number;
   track_type: string;

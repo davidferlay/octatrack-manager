@@ -3561,6 +3561,60 @@ h1 {
   text-decoration: line-through;
 }
 
+/* Sample slot usage badge and popover */
+.usage-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.8rem;
+  font-family: inherit;
+  color: #66cc66;
+  background-color: rgba(102, 204, 102, 0.12);
+  border: 1px solid rgba(102, 204, 102, 0.4);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.usage-badge:hover {
+  border-color: #66cc66;
+}
+
+.usage-none {
+  color: var(--elektron-text-dim);
+}
+
+.usage-popover {
+  z-index: 1000;
+  min-width: 240px;
+  max-width: 340px;
+  max-height: 300px;
+  overflow-y: auto;
+  background-color: var(--elektron-medium-gray);
+  border: 1px solid var(--elektron-border-gray);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.usage-popover-header {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--elektron-text-primary);
+  border-bottom: 1px solid var(--elektron-border-gray);
+}
+
+.usage-popover-list {
+  padding: 0.25rem 0;
+}
+
+.usage-popover-entry {
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8rem;
+  color: var(--elektron-text-secondary);
+  white-space: nowrap;
+}
+
 .legend-item span {
   font-size: 1.15rem;
   font-weight: 700;

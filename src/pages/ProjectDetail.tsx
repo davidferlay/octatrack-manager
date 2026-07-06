@@ -1,7 +1,7 @@
 import { useState, useEffect, useTransition, useCallback, useRef, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
-import type { ProjectMetadata, Bank, PartsDataResponse } from "../context/ProjectsContext";
+import type { ProjectMetadata, Bank, PartsDataResponse, SampleSlotUsage } from "../context/ProjectsContext";
 import { BankSelector, ALL_BANKS, formatBankName } from "../components/BankSelector";
 import { TrackSelector, ALL_AUDIO_TRACKS, ALL_MIDI_TRACKS } from "../components/TrackSelector";
 import { PatternSelector, ALL_PATTERNS } from "../components/PatternSelector";
@@ -192,6 +192,17 @@ export function ProjectDetail() {
       return { ...prev, [cardKey]: next };
     });
   };
+
+  // Where each sample slot is used (machine assignments + sample locks),
+  // computed by the backend when a slots tab is first opened.
+  const [slotUsage, setSlotUsage] = useState<SampleSlotUsage | null>(null);
+  useEffect(() => {
+    if (!projectPath || slotUsage) return;
+    if (activeTab !== 'flex-slots' && activeTab !== 'static-slots') return;
+    invoke<SampleSlotUsage>('compute_sample_usage', { path: projectPath })
+      .then(setSlotUsage)
+      .catch((err) => console.error('Failed to compute sample usage:', err));
+  }, [activeTab, projectPath, slotUsage]);
 
   // Keyboard navigation through pattern steps once a step is selected:
   // Left/Right and Tab/Shift+Tab move by one step, Up/Down by a page row (16),
@@ -456,6 +467,7 @@ export function ProjectDetail() {
       // Reload metadata
       const projectMetadata = await invoke<ProjectMetadata>("load_project_metadata", { path: projectPath });
       setMetadata(projectMetadata);
+      setSlotUsage(null); // recomputed on next Flex/Static tab visit
 
       // Reload all banks in-place
       const existingBankIndices = await invoke<number[]>("get_existing_banks", { path: projectPath });
@@ -2009,6 +2021,7 @@ export function ProjectDetail() {
                 slots={metadata.sample_slots.flex_slots}
                 slotPrefix="F"
                 tableType="flex"
+                slotUsage={slotUsage?.flex_usage}
                 projectPath={projectPath}
                 projectName={projectName}
                 memorySettings={metadata.memory_settings}
@@ -2061,6 +2074,7 @@ export function ProjectDetail() {
                 slots={metadata.sample_slots.static_slots}
                 slotPrefix="S"
                 tableType="static"
+                slotUsage={slotUsage?.static_usage}
                 projectPath={projectPath}
                 projectName={projectName}
                 isEditMode={isEditMode}
