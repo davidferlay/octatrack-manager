@@ -288,6 +288,8 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   // Column sizing state (initialized to fit header labels + sort indicator + filter icon)
   const [columnSizing, setColumnSizing] = useState<Record<string, number>>({
     slot: 80, sample: 200, compatibility: 120, status: 100,
+    // wide enough for both usage badges (green + gray) on one line
+    used: 130,
     source: 110, gain: 85, timestretch: 140, loop: 100,
     format: 100, bitdepth: 80, samplerate: 80, size: 95,
   });
@@ -303,8 +305,9 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     (slot: SampleSlot): SlotUsageEntry[] => slotUsage?.[slot.slot_id - 1] ?? [],
     [slotUsage]
   );
-  // Popover listing a slot's usages, anchored at the clicked badge
-  const [usagePopover, setUsagePopover] = useState<{ x: number; y: number; slot: SampleSlot } | null>(null);
+  // Popover listing a slot's usages, anchored at the clicked badge and scoped
+  // to the badge's kind (audible usages vs never-trigged references)
+  const [usagePopover, setUsagePopover] = useState<{ x: number; y: number; slot: SampleSlot; scope: 'audible' | 'referenced' } | null>(null);
   useEffect(() => {
     if (!usagePopover) return;
     const close = () => setUsagePopover(null);
@@ -1106,7 +1109,11 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
       if (visibleColumns.sample) row.push(slot.path ? getFilename(slot.path) : '');
       if (visibleColumns.compatibility) row.push(slot.file_exists ? (slot.compatibility || '') : '');
       if (visibleColumns.status) row.push(slot.path ? (slot.file_exists ? 'Exists' : 'Missing') : '');
-      if (visibleColumns.used) row.push(String(usageEntries(slot).length));
+      // "audible/total" (e.g. "2/5" = played in 2 places, 3 more never-trigged references)
+      if (visibleColumns.used) {
+        const entries = usageEntries(slot);
+        row.push(`${entries.filter(e => e.audible).length}/${entries.length}`);
+      }
       if (visibleColumns.source) row.push(slot.source_location || '');
       if (visibleColumns.gain) row.push(slot.gain !== null && slot.gain !== undefined ? String(slot.gain) : '');
       if (visibleColumns.timestretch) row.push(slot.timestretch_mode || '');
@@ -1241,12 +1248,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         return false;
       }
 
-      // Filter by usage
-      if (usageFilter === 'used' && usageEntries(slot).length === 0) {
-        return false;
-      }
-      if (usageFilter === 'unused' && usageEntries(slot).length > 0) {
-        return false;
+      // Filter by usage: used = audibly played somewhere; referenced = only
+      // non-audible references (machine assignments without trigs); unused = none.
+      if (usageFilter !== 'all') {
+        const entries = usageEntries(slot);
+        const audibleCount = entries.filter(e => e.audible).length;
+        if (usageFilter === 'used' && audibleCount === 0) return false;
+        if (usageFilter === 'referenced' && (entries.length === 0 || audibleCount > 0)) return false;
+        if (usageFilter === 'unused' && entries.length > 0) return false;
       }
 
       // Filter by source
@@ -1324,8 +1333,9 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
           compareB = b.file_exists ? 1 : 0;
           break;
         case 'used':
-          compareA = usageEntries(a).length;
-          compareB = usageEntries(b).length;
+          // Audible usages dominate, references break ties
+          compareA = usageEntries(a).filter(e => e.audible).length * 1000 + usageEntries(a).length;
+          compareB = usageEntries(b).filter(e => e.audible).length * 1000 + usageEntries(b).length;
           break;
         case 'source':
           compareA = a.source_location || '';
@@ -1479,7 +1489,8 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         case 'used': return (
           <>
             <label className="dropdown-option"><input type="radio" name="used" checked={usageFilter === 'all'} onChange={() => { setUsageFilter('all'); closeDropdown(); }} /><span>All</span></label>
-            <label className="dropdown-option"><input type="radio" name="used" checked={usageFilter === 'used'} onChange={() => { setUsageFilter('used'); closeDropdown(); }} /><span>Used</span></label>
+            <label className="dropdown-option"><input type="radio" name="used" checked={usageFilter === 'used'} onChange={() => { setUsageFilter('used'); closeDropdown(); }} /><span>Used (plays)</span></label>
+            <label className="dropdown-option"><input type="radio" name="used" checked={usageFilter === 'referenced'} onChange={() => { setUsageFilter('referenced'); closeDropdown(); }} /><span>Referenced, never trigged</span></label>
             <label className="dropdown-option"><input type="radio" name="used" checked={usageFilter === 'unused'} onChange={() => { setUsageFilter('unused'); closeDropdown(); }} /><span>Unused</span></label>
           </>
         );
@@ -1631,25 +1642,38 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         );
       case 'used': {
         const entries = usageEntries(slot);
+        const audibleCount = entries.filter(e => e.audible).length;
+        const referencedCount = entries.length - audibleCount;
+        const openPopover = (scope: 'audible' | 'referenced') => (e: React.MouseEvent) => {
+          e.stopPropagation();
+          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          setUsagePopover({ x: rect.left, y: rect.bottom + 4, slot, scope });
+        };
         return (
           <td key={colId} className="col-used">
-            {entries.length > 0 ? (
+            {audibleCount > 0 && (
               <button
                 className="usage-badge"
-                title={`Used in ${entries.length} place${entries.length > 1 ? 's' : ''} — click for details`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                  setUsagePopover({ x: rect.left, y: rect.bottom + 4, slot });
-                }}
+                title={`Played in ${audibleCount} place${audibleCount > 1 ? 's' : ''} — click for details`}
+                onClick={openPopover('audible')}
               >
-                ✓ {entries.length}
+                ✓ {audibleCount}
               </button>
-            ) : slotUsage ? (
-              <span className="usage-none" title="Not used anywhere in this project">—</span>
+            )}
+            {referencedCount > 0 && (
+              <button
+                className="usage-badge referenced"
+                title={`Referenced in ${referencedCount} place${referencedCount > 1 ? 's' : ''} but never trigged — click for details`}
+                onClick={openPopover('referenced')}
+              >
+                ○ {referencedCount}
+              </button>
+            )}
+            {entries.length === 0 && (slotUsage ? (
+              <span className="usage-none" title="Not referenced anywhere in this project">—</span>
             ) : (
               <span className="usage-none" title="Computing usage…">…</span>
-            )}
+            ))}
           </td>
         );
       }
@@ -2011,18 +2035,31 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         style={{ position: 'fixed', top: usagePopover.y, left: usagePopover.x }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="usage-popover-header">
-          {slotPrefix}{usagePopover.slot.slot_id} used in {usageEntries(usagePopover.slot).length} place{usageEntries(usagePopover.slot).length > 1 ? 's' : ''}
-        </div>
-        <div className="usage-popover-list">
-          {usageEntries(usagePopover.slot).map((entry, idx) => (
-            <div key={idx} className="usage-popover-entry">
-              {entry.kind === 'machine'
-                ? `Bank ${BANK_LETTERS[entry.bank] ?? '?'} · Part ${(entry.part ?? 0) + 1} · T${entry.track + 1} · Machine`
-                : `Bank ${BANK_LETTERS[entry.bank] ?? '?'} · Ptn ${(entry.pattern ?? 0) + 1} · T${entry.track + 1} · Step ${(entry.step ?? 0) + 1} · Lock`}
-            </div>
-          ))}
-        </div>
+        {(() => {
+          // Each badge opens its own scope: the green badge lists audible
+          // usages, the gray one lists never-trigged references.
+          const scoped = usageEntries(usagePopover.slot).filter(
+            (e) => e.audible === (usagePopover.scope === 'audible')
+          );
+          return (
+            <>
+              <div className="usage-popover-header">
+                {usagePopover.scope === 'audible'
+                  ? `${slotPrefix}${usagePopover.slot.slot_id} played in ${scoped.length} place${scoped.length > 1 ? 's' : ''}`
+                  : `${slotPrefix}${usagePopover.slot.slot_id} referenced in ${scoped.length} place${scoped.length > 1 ? 's' : ''}, never trigged`}
+              </div>
+              <div className="usage-popover-list">
+                {scoped.map((entry, idx) => (
+                  <div key={idx} className="usage-popover-entry">
+                    {entry.kind === 'machine'
+                      ? `Bank ${BANK_LETTERS[entry.bank] ?? '?'} · Part ${(entry.part ?? 0) + 1} · T${entry.track + 1} · Machine`
+                      : `Bank ${BANK_LETTERS[entry.bank] ?? '?'} · Ptn ${(entry.pattern ?? 0) + 1} · T${entry.track + 1} · Step ${(entry.step ?? 0) + 1} · Lock`}
+                  </div>
+                ))}
+              </div>
+            </>
+          );
+        })()}
       </div>,
       document.body
     )}

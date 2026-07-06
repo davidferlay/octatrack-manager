@@ -50,8 +50,13 @@ async function setupMocks(page: Page) {
           case 'compute_sample_usage': {
             const flex = emptyUsage()
             flex[0] = [
-              { bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null },
-              { bank: 1, kind: 'lock', track: 2, part: null, pattern: 4, step: 11 },
+              { bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true },
+              { bank: 1, kind: 'lock', track: 2, part: null, pattern: 4, step: 11, audible: true },
+              { bank: 3, kind: 'machine', track: 0, part: 2, pattern: null, step: null, audible: false },
+            ]
+            // slot 2: referenced by a machine assignment but never trigged
+            flex[1] = [
+              { bank: 2, kind: 'machine', track: 4, part: 1, pattern: null, step: null, audible: false },
             ]
             return { static_usage: emptyUsage(), flex_usage: flex }
           }
@@ -99,19 +104,28 @@ test.describe('Sample slots - Used column', () => {
     await openFlexTab(page)
   })
 
-  test('shows a count badge on used slots and a dash on unused ones', async ({ page }) => {
+  test('shows count badges on used slots and a dash on unused ones', async ({ page }) => {
     await expect(page.locator('th.col-used')).toBeVisible()
     const rows = page.locator('.samples-table tbody tr')
-    await expect(rows.nth(0).locator('.usage-badge')).toHaveText(/2/)
-    await expect(rows.nth(1).locator('.usage-badge')).toHaveCount(0)
-    await expect(rows.nth(1).locator('.usage-none')).toHaveText('—')
+    // slot 1: audible + never-trigged usages -> both badges, side by side
+    await expect(rows.nth(0).locator('.usage-badge:not(.referenced)')).toHaveText(/✓ 2/)
+    await expect(rows.nth(0).locator('.usage-badge.referenced')).toHaveText(/○ 1/)
+    const green = await rows.nth(0).locator('.usage-badge:not(.referenced)').boundingBox()
+    const gray = await rows.nth(0).locator('.usage-badge.referenced').boundingBox()
+    expect(Math.abs(green!.y - gray!.y)).toBeLessThan(5) // one line, not stacked like a duplicated badge
+    // slot 2: referenced but never trigged -> gray circle badge only
+    await expect(rows.nth(1).locator('.usage-badge.referenced')).toHaveText(/○ 1/)
+    await expect(rows.nth(1).locator('.usage-badge:not(.referenced)')).toHaveCount(0)
+    // slot 3: no references at all
+    await expect(rows.nth(2).locator('.usage-badge')).toHaveCount(0)
+    await expect(rows.nth(2).locator('.usage-none')).toHaveText('—')
   })
 
-  test('clicking the badge opens a popover listing every usage', async ({ page }) => {
+  test('the green badge opens a popover scoped to audible usages', async ({ page }) => {
     await page.locator('.usage-badge').first().click()
     const popover = page.locator('.usage-popover')
     await expect(popover).toBeVisible()
-    await expect(popover.locator('.usage-popover-header')).toContainText('F1 used in 2 places')
+    await expect(popover.locator('.usage-popover-header')).toContainText('F1 played in 2 places')
     await expect(popover.locator('.usage-popover-entry').nth(0)).toHaveText('Bank A · Part 1 · T1 · Machine')
     await expect(popover.locator('.usage-popover-entry').nth(1)).toHaveText('Bank B · Ptn 5 · T3 · Step 12 · Lock')
 
@@ -119,18 +133,31 @@ test.describe('Sample slots - Used column', () => {
     await expect(popover).toHaveCount(0)
   })
 
-  test('Used and Unused filters narrow the rows', async ({ page }) => {
+  test('the gray badge opens a popover scoped to never-trigged references', async ({ page }) => {
+    const rows = page.locator('.samples-table tbody tr')
+    await rows.nth(1).locator('.usage-badge.referenced').click()
+    const popover = page.locator('.usage-popover')
+    await expect(popover.locator('.usage-popover-header')).toContainText('F2 referenced in 1 place, never trigged')
+    await expect(popover.locator('.usage-popover-entry')).toHaveText('Bank C · Part 2 · T5 · Machine')
+  })
+
+  test('Used, Referenced and Unused filters narrow the rows', async ({ page }) => {
     const rows = page.locator('.samples-table tbody tr')
     await expect(rows).toHaveCount(128)
 
     await page.locator('th.col-used .filter-icon').click()
-    await page.locator('.filter-dropdown .dropdown-option', { hasText: 'Used' }).first().click()
+    await page.locator('.filter-dropdown .dropdown-option', { hasText: 'Used (plays)' }).click()
     await expect(rows).toHaveCount(1)
     await expect(rows.first()).toContainText('F1')
 
     await page.locator('th.col-used .filter-icon').click()
+    await page.locator('.filter-dropdown .dropdown-option', { hasText: 'Referenced, never trigged' }).click()
+    await expect(rows).toHaveCount(1)
+    await expect(rows.first()).toContainText('F2')
+
+    await page.locator('th.col-used .filter-icon').click()
     await page.locator('.filter-dropdown .dropdown-option', { hasText: 'Unused' }).click()
-    await expect(rows).toHaveCount(127)
+    await expect(rows).toHaveCount(126)
 
     await page.locator('th.col-used .filter-icon').click()
     await page.locator('.filter-dropdown .dropdown-option', { hasText: 'All' }).click()

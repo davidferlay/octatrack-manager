@@ -3561,23 +3561,49 @@ h1 {
   text-decoration: line-through;
 }
 
-/* Sample slot usage badge and popover */
+/* Sample slot usage badge and popover. The cell never wraps: a stacked pair of
+   badges reads as a duplicated badge instead of two distinct counts. */
+.col-used {
+  white-space: nowrap;
+  text-align: center;
+}
+
+th.col-used .header-content {
+  justify-content: center;
+}
+
 .usage-badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
-  padding: 0.1rem 0.5rem;
+  gap: 0.25rem;
+  padding: 0.1rem 0.45rem;
   font-size: 0.8rem;
   font-family: inherit;
-  color: #66cc66;
-  background-color: rgba(102, 204, 102, 0.12);
-  border: 1px solid rgba(102, 204, 102, 0.4);
+  color: #4a9eff;
+  background-color: rgba(74, 158, 255, 0.12);
+  border: 1px solid rgba(74, 158, 255, 0.4);
   border-radius: 10px;
   cursor: pointer;
 }
 
 .usage-badge:hover {
-  border-color: #66cc66;
+  border-color: #4a9eff;
+}
+
+/* Referenced but never trigged: same badge, gray */
+.usage-badge.referenced {
+  color: var(--elektron-text-secondary);
+  background-color: rgba(153, 153, 153, 0.12);
+  border-color: rgba(153, 153, 153, 0.4);
+  margin-left: 0.3rem;
+}
+
+.usage-badge.referenced:hover {
+  border-color: var(--elektron-text-secondary);
+}
+
+.usage-badge.referenced:first-child {
+  margin-left: 0;
 }
 
 .usage-none {

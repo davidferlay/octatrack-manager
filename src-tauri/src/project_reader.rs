@@ -1030,6 +1030,7 @@ pub struct SlotUsageEntry {
     pub part: Option<u8>,    // machine usage: 0-based part
     pub pattern: Option<u8>, // lock usage: 0-based pattern
     pub step: Option<u8>,    // lock usage: 0-based step
+    pub audible: bool,       // false = referenced but never trigged
 }
 
 /// Per-slot usage lists for both pools, indexed by 0-based slot id (slots 1-128).
@@ -1039,14 +1040,14 @@ pub struct SampleSlotUsage {
     pub flex_usage: Vec<Vec<SlotUsageEntry>>,
 }
 
-/// Scan every bank of a project and report where each sample slot is audibly used.
+/// Scan every bank of a project and report where each sample slot is referenced.
 ///
-/// "Audible" semantics: a part's machine slot assignment only counts when that
-/// track has at least one trigger or one-shot trig in some pattern assigned to
-/// that part (the OT assigns default slots to every track of every empty bank,
-/// which would otherwise flag most low slots as used). Sample locks count on
-/// their own, but only within the pattern's played length (bank files keep
-/// leftover lock bytes beyond it).
+/// Every machine slot assignment is reported; its `audible` flag is true only
+/// when that track has at least one trigger or one-shot trig in some pattern
+/// assigned to that part (the OT assigns default slots to every track of every
+/// empty bank, so non-audible entries are usually those defaults). Sample locks
+/// are always audible entries, but only within the pattern's played length
+/// (bank files keep leftover lock bytes beyond it).
 pub fn compute_sample_usage(project_path: &str) -> Result<SampleSlotUsage, String> {
     let path = Path::new(project_path);
     let mut static_usage: Vec<Vec<SlotUsageEntry>> = vec![Vec::new(); 128];
@@ -1084,9 +1085,6 @@ pub fn compute_sample_usage(project_path: &str) -> Result<SampleSlotUsage, Strin
         // Machine slot assignments (one entry per bank/part/track).
         for (part_id, part) in bank.parts.unsaved.0.iter().enumerate() {
             for t in 0..8 {
-                if !audible.contains(&(part_id, t)) {
-                    continue;
-                }
                 let slot = &part.audio_track_machine_slots[t];
                 let (pool, slot_id) = match part.audio_track_machine_types[t] {
                     0 => (&mut static_usage, slot.static_slot_id),
@@ -1101,6 +1099,7 @@ pub fn compute_sample_usage(project_path: &str) -> Result<SampleSlotUsage, Strin
                         part: Some(part_id as u8),
                         pattern: None,
                         step: None,
+                        audible: audible.contains(&(part_id, t)),
                     });
                 }
             }
@@ -1136,6 +1135,7 @@ pub fn compute_sample_usage(project_path: &str) -> Result<SampleSlotUsage, Strin
                             part: None,
                             pattern: Some(p_idx as u8),
                             step: Some(s as u8),
+                            audible: true,
                         });
                     }
                 }
@@ -8323,17 +8323,25 @@ mod tests {
         use super::*;
 
         #[test]
-        fn default_project_has_no_usage() {
-            // Default banks assign slots to every track but have no trigs, so
-            // nothing counts as used (audible semantics).
+        fn default_project_has_only_non_audible_references() {
+            // Default banks assign slots to every track but have no trigs:
+            // every reported entry must be a non-audible reference.
             let project = TestProject::new();
             let usage = compute_sample_usage(&project.path).unwrap();
-            assert!(usage.static_usage.iter().all(|e| e.is_empty()));
-            assert!(usage.flex_usage.iter().all(|e| e.is_empty()));
+            let all = usage.static_usage.iter().chain(usage.flex_usage.iter());
+            let mut total = 0;
+            for entries in all {
+                for entry in entries {
+                    assert!(!entry.audible, "default assignments are never audible");
+                    assert_eq!(entry.kind, "machine");
+                    total += 1;
+                }
+            }
+            assert!(total > 0, "default machine assignments are still reported");
         }
 
         #[test]
-        fn machine_assignment_counts_only_with_trigs() {
+        fn machine_assignment_audible_flag_follows_trigs() {
             let project = TestProject::with_modified_bank(0, |bank| {
                 let part = &mut bank.parts.unsaved.0[0];
                 // track 1: flex machine on slot 6 (0-based 5), WITH trigs
@@ -8348,13 +8356,21 @@ mod tests {
             });
 
             let usage = compute_sample_usage(&project.path).unwrap();
-            let entries = &usage.flex_usage[5];
-            assert_eq!(entries.len(), 1);
-            assert_eq!(entries[0].kind, "machine");
-            assert_eq!(entries[0].bank, 0);
-            assert_eq!(entries[0].part, Some(0));
-            assert_eq!(entries[0].track, 0);
-            assert!(usage.static_usage[3].is_empty(), "no trigs -> not used");
+            // Bank 1 (modified) contributes the audible entry; other banks may
+            // add non-audible defaults for the same slot.
+            let audible: Vec<_> = usage.flex_usage[5].iter().filter(|e| e.audible).collect();
+            assert_eq!(audible.len(), 1);
+            assert_eq!(audible[0].kind, "machine");
+            assert_eq!(audible[0].bank, 0);
+            assert_eq!(audible[0].part, Some(0));
+            assert_eq!(audible[0].track, 0);
+            // The trig-less track is reported, but never as audible.
+            let static_entries = &usage.static_usage[3];
+            assert!(!static_entries.is_empty(), "reference is still reported");
+            assert!(
+                static_entries.iter().all(|e| !e.audible),
+                "no trigs -> referenced but never trigged"
+            );
         }
 
         #[test]
@@ -8370,12 +8386,15 @@ mod tests {
             });
 
             let usage = compute_sample_usage(&project.path).unwrap();
-            let entries = &usage.flex_usage[9];
-            assert_eq!(entries.len(), 1, "only the in-length lock counts");
-            assert_eq!(entries[0].kind, "lock");
-            assert_eq!(entries[0].pattern, Some(1));
-            assert_eq!(entries[0].track, 2);
-            assert_eq!(entries[0].step, Some(4));
+            let locks: Vec<_> = usage.flex_usage[9]
+                .iter()
+                .filter(|e| e.kind == "lock")
+                .collect();
+            assert_eq!(locks.len(), 1, "only the in-length lock counts");
+            assert_eq!(locks[0].pattern, Some(1));
+            assert_eq!(locks[0].track, 2);
+            assert_eq!(locks[0].step, Some(4));
+            assert!(locks[0].audible);
         }
 
         #[test]
@@ -8390,8 +8409,9 @@ mod tests {
             });
 
             let usage = compute_sample_usage(&project.path).unwrap();
-            assert_eq!(usage.static_usage[7].len(), 1);
-            assert!(usage.flex_usage[7].is_empty());
+            let static_locks = usage.static_usage[7].iter().filter(|e| e.kind == "lock");
+            assert_eq!(static_locks.count(), 1);
+            assert!(usage.flex_usage[7].iter().all(|e| e.kind != "lock"));
         }
     }
 

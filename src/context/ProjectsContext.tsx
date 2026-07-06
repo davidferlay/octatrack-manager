@@ -216,6 +216,7 @@ export interface SlotUsageEntry {
   part: number | null;     // machine usage
   pattern: number | null;  // lock usage
   step: number | null;     // lock usage
+  audible: boolean;        // false = referenced but never trigged
 }
 
 export interface SampleSlotUsage {
