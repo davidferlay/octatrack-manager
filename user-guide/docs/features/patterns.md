@@ -21,14 +21,25 @@ Each pattern is displayed as a grid of steps. It matches the global or per-track
 - **P-Lock:** Indicated by the letter **P** (or a count like **3P**). Shows that one or more parameter locks are present on that step. A step whose only lock is a sample lock shows **S** alone, without **P**.
 
 ### Specialized Indicators
-- **~:** Slide trigger.
-- **R:** Recorder trigger. Shown in yellow when the recorder trig is One-Shot.
+- **/:** Slide trigger.
+- **R:** Recorder trigger, shown in red - or in yellow when the recorder trig is One-Shot.
 - **%:** Trig Condition (e.g., Fill, 50%).
 - **X:** Trig Repeats.
 - **µ:** Micro-timing offset.
 - **V:** Velocity or Volume lock.
 - **S:** Sample slot lock.
-- **Swing:** A wave icon indicates that a swing trig is active on that step. Swing trigs are hidden when the track's swing amount is 50 (the default), since they have no effect.
+- **Swing:** A green wave icon indicates that a swing trig is active on that step. Swing trigs are hidden when the track's swing amount is 50 (the default), since they have no effect.
+
+---
+
+## Filtering Indicators
+
+With every trig type, lock and modifier displayed at once, busy patterns can get dense. Things can be filtered out using two complementary filters:
+
+- **Global filter:** The **Show:** chip row at the top of the tab lists every indicator. Click a chip to hide or show that indicator in **all patterns**; use **All** / **None** to toggle everything at once. Hidden chips appear dimmed. This filter is remembered across sessions.
+- **Per-pattern filter:** The legend badges below each pattern grid are clickable too. Clicking one hides that indicator in **that pattern only** (click again to restore). These per-pattern choices last until the page is reloaded.
+
+An indicator is displayed only if it is enabled both globally and in the pattern's legend. Indicators hidden globally are removed from the legends entirely.
 
 ---
 
@@ -54,6 +65,16 @@ When viewing all patterns at once, each track's triggers are displayed across mu
 :::tip
 **Hide Empty:** Toggle the **Hide empty** switch in the header to focus only on patterns that contain triggers.
 :::
+
+### Keyboard Navigation
+
+Once a step is selected, you can move through the pattern from the keyboard:
+
+- <kbd>←</kbd> / <kbd>→</kbd> or <kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd>: previous / next step.
+- <kbd>↑</kbd> / <kbd>↓</kbd>: jump a full page row (16 steps) up or down.
+- <kbd>Esc</kbd>: close the details panel.
+
+When viewing a single pattern, moving past its last step continues into the next pattern (and moving before step 1 goes back to the previous one), so you can walk through a whole bank without touching the mouse.
 
 ---
 

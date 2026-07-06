@@ -259,6 +259,18 @@ test.describe('Patterns tab - indicator filters', () => {
     await expect(page.locator('.pattern-step .indicator-recorder').first()).toBeVisible()
   })
 
+  test('None hides every indicator and All restores them', async ({ page }) => {
+    await expect(page.locator('.pattern-step .indicator-trigger').first()).toBeVisible()
+
+    await chip(page, 'None').click()
+    await expect(page.locator('.pattern-step .step-indicators span')).toHaveCount(0)
+    await expect(chip(page, 'Trigger')).toHaveClass(/off/)
+
+    await chip(page, 'All').click()
+    await expect(page.locator('.pattern-step .indicator-trigger').first()).toBeVisible()
+    await expect(chip(page, 'Trigger')).not.toHaveClass(/off/)
+  })
+
   test('legend badge hides an indicator for its own pattern only', async ({ page }) => {
     // show all 16 patterns so there are several cards with legends
     await page.locator('select[id^="pattern-select"]').selectOption('-1')

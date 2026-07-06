@@ -110,7 +110,7 @@ const INDICATOR_DEFS: { key: string; label: string; glyph: ReactNode }[] = [
   { key: 'lock', label: 'Lock', glyph: <span className="indicator-lock"><i className="far fa-circle"></i></span> },
   { key: 'plock', label: 'P-Lock', glyph: <span className="indicator-plock">P</span> },
   { key: 'swing', label: 'Swing', glyph: <span className="indicator-swing"><svg viewBox="0 0 20 14" width="14" height="11"><path d="M1 7 C4 1 7 1 10 7 C13 13 16 13 19 7" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round"/></svg></span> },
-  { key: 'slide', label: 'Slide', glyph: <span className="indicator-slide">~</span> },
+  { key: 'slide', label: 'Slide', glyph: <span className="indicator-slide">/</span> },
   { key: 'recorder', label: 'Recorder', glyph: <span className="indicator-recorder">R</span> },
   { key: 'recorder-oneshot', label: 'One-Shot Rec', glyph: <span className="indicator-recorder-oneshot">R</span> },
   { key: 'condition', label: 'Condition', glyph: <span className="indicator-condition">%</span> },
@@ -179,6 +179,11 @@ export function ProjectDetail() {
       localStorage.setItem(HIDDEN_INDICATORS_KEY, JSON.stringify(next));
       return next;
     });
+  };
+  const setAllIndicators = (visible: boolean) => {
+    const next = visible ? [] : INDICATOR_DEFS.map((d) => d.key);
+    localStorage.setItem(HIDDEN_INDICATORS_KEY, JSON.stringify(next));
+    setHiddenIndicators(next);
   };
   const toggleCardIndicator = (cardKey: string, key: string) => {
     setCardHiddenIndicators((prev) => {
@@ -1436,17 +1441,27 @@ export function ProjectDetail() {
                 {/* Global indicator filter: toggles apply to every pattern. Legend
                     badges on each pattern card refine this per pattern. */}
                 <div className="indicator-filters">
-                  <span className="indicator-filters-label">Show:</span>
-                  {INDICATOR_DEFS.map((def) => (
-                    <button
-                      key={def.key}
-                      type="button"
-                      className={`indicator-filter-chip${hiddenIndicators.includes(def.key) ? ' off' : ''}`}
-                      title={`Show or hide ${def.label} indicators in all patterns`}
-                      onClick={() => toggleGlobalIndicator(def.key)}
-                    >
-                      {def.glyph} {def.label}
-                    </button>
+                  {[INDICATOR_DEFS.slice(0, 6), INDICATOR_DEFS.slice(6)].map((row, rowIdx) => (
+                    <div key={rowIdx} className="indicator-filters-row">
+                      {rowIdx === 0 && <span className="indicator-filters-label">Show:</span>}
+                      {rowIdx === 0 && (
+                        <>
+                          <button type="button" className="indicator-filter-chip" title="Show all indicators" onClick={() => setAllIndicators(true)}>All</button>
+                          <button type="button" className="indicator-filter-chip" title="Hide all indicators" onClick={() => setAllIndicators(false)}>None</button>
+                        </>
+                      )}
+                      {row.map((def) => (
+                        <button
+                          key={def.key}
+                          type="button"
+                          className={`indicator-filter-chip${hiddenIndicators.includes(def.key) ? ' off' : ''}`}
+                          title={`Show or hide ${def.label} indicators in all patterns`}
+                          onClick={() => toggleGlobalIndicator(def.key)}
+                        >
+                          {def.glyph} {def.label}
+                        </button>
+                      ))}
+                    </div>
                   ))}
                 </div>
 
@@ -1805,7 +1820,7 @@ export function ProjectDetail() {
                                             {show('plock') && step.plock_count > 1 && <span className="indicator-plock-count">{step.plock_count}P</span>}
 
                                             {/* 4. Other indicators */}
-                                            {show('slide') && step.slide && <span className="indicator-slide">~</span>}
+                                            {show('slide') && step.slide && <span className="indicator-slide">/</span>}
                                             {show('recorder') && step.recorder && !step.recorder_oneshot && <span className="indicator-recorder">R</span>}
                                             {show('recorder-oneshot') && step.recorder_oneshot && <span className="indicator-recorder-oneshot">R</span>}
                                             {show('condition') && step.trig_condition && <span className="indicator-condition">%</span>}
