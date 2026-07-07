@@ -158,7 +158,8 @@ test.describe('Patterns tab - step grid indicators', () => {
     await expect(page.locator('.pattern-step').first()).toBeVisible({ timeout: 10000 })
   })
 
-  const stepCell = (page: Page, step: number) => page.locator('.pattern-step').nth(step - 1)
+  const stepCell = (page: Page, step: number) => page.locator('.track-grid .pattern-step').nth(step - 1)
+  const recCell = (page: Page, step: number) => page.locator('.rec-grid .pattern-step').nth(step - 1)
 
   test('trigger, one-shot, trigless and trigless lock render as circles', async ({ page }) => {
     await expect(stepCell(page, 1).locator('.indicator-trigger i.fas.fa-circle')).toBeVisible()
@@ -176,11 +177,45 @@ test.describe('Patterns tab - step grid indicators', () => {
   })
 
   test('one-shot recorder trig is differentiated from recorder trig', async ({ page }) => {
-    await expect(stepCell(page, 5).locator('.indicator-recorder')).toHaveText('R')
-    await expect(stepCell(page, 5).locator('.indicator-recorder-oneshot')).toHaveCount(0)
+    // recorder trigs render on their own grid, like on the hardware
+    await expect(recCell(page, 5).locator('.indicator-recorder')).toHaveText('R')
+    await expect(recCell(page, 5).locator('.indicator-recorder-oneshot')).toHaveCount(0)
 
-    await expect(stepCell(page, 6).locator('.indicator-recorder-oneshot')).toHaveText('R')
-    await expect(stepCell(page, 6).locator('.indicator-recorder')).toHaveCount(0)
+    await expect(recCell(page, 6).locator('.indicator-recorder-oneshot')).toHaveText('R')
+    await expect(recCell(page, 6).locator('.indicator-recorder')).toHaveCount(0)
+
+    // the track grid never shows recorder indicators
+    await expect(page.locator('.track-grid .indicator-recorder')).toHaveCount(0)
+  })
+
+  test('trig view toggle switches between track, both and rec grids', async ({ page }) => {
+    // default "Both": track 1 has rec trigs, so both grids and captions show
+    await expect(page.locator('.track-grid')).toBeVisible()
+    await expect(page.locator('.rec-grid')).toBeVisible()
+    await expect(page.locator('.pattern-grid-caption', { hasText: 'Sample trigs' })).toBeVisible()
+    await expect(page.locator('.pattern-grid-caption', { hasText: 'Recorder trigs' })).toBeVisible()
+
+    await page.locator('.tri-toggle-option', { hasText: 'Track' }).click()
+    await expect(page.locator('.track-grid')).toBeVisible()
+    await expect(page.locator('.rec-grid')).toHaveCount(0)
+
+    await page.locator('.tri-toggle-option', { hasText: 'Rec' }).click()
+    await expect(page.locator('.track-grid')).toHaveCount(0)
+    await expect(page.locator('.rec-grid')).toBeVisible()
+
+    await page.locator('.tri-toggle-option', { hasText: 'Both' }).click()
+    await expect(page.locator('.track-grid')).toBeVisible()
+    await expect(page.locator('.rec-grid')).toBeVisible()
+  })
+
+  test('Both hides the recorder grid when the track has no rec trigs', async ({ page }) => {
+    // track 2 has no recorder trigs
+    await page.locator('#patterns-track-select').selectOption('1')
+    await expect(page.locator('.track-grid')).toBeVisible()
+    await expect(page.locator('.rec-grid')).toHaveCount(0)
+    // Rec view still shows the (empty) recorder grid explicitly
+    await page.locator('.tri-toggle-option', { hasText: 'Rec' }).click()
+    await expect(page.locator('.rec-grid')).toBeVisible()
   })
 
   test('sample-lock-only step shows S without P', async ({ page }) => {

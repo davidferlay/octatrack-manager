@@ -9,9 +9,9 @@
 | PT2 | Indicators | One-shot glyph | Place a one-shot trig (no normal trigger on the same step) | Step shows a solid yellow circle, no orange circle, no "1" text |
 | PT3 | Indicators | Trigless glyph | Place a trigless trig | Step shows a solid green circle |
 | PT4 | Indicators | Trigless lock glyph | Place a trigless lock (lock trig) | Step shows an outlined green circle (previously displayed nothing) |
-| PT5 | Indicators | Rec trig glyph and color | Place a recorder trig | Step shows a red R |
-| PT6 | Indicators | One-shot rec trig differentiated | Place a one-shot recorder trig | Step shows a yellow R (not red), legend lists "One-Shot Rec" |
-| PT7 | Indicators | SRC3-only rec trig shown | Place a rec trig armed for SRC3 only (INAB/INCD off) | Step still shows the R indicator |
+| PT5 | Indicators | Rec trig glyph and color | Place a recorder trig | Step shows a red R on the separate "Recorder trigs" grid, not on the track grid |
+| PT6 | Indicators | One-shot rec trig differentiated | Place a one-shot recorder trig | Recorder grid step shows a yellow R (not red), recorder legend lists "One-Shot Rec" |
+| PT7 | Indicators | SRC3-only rec trig shown | Place a rec trig armed for SRC3 only (INAB/INCD off) | Recorder grid step still shows the R indicator |
 | PT8 | Indicators | Slide glyph | Place a slide trig | Step shows a green rising arrow character (same green as swing; the P-lock P stays blue) |
 | PT9 | Indicators | Swing shown when amount above 50 | Set track swing amount above 50, place swing trigs | Swing steps show a green wave icon |
 | PT10 | Indicators | Swing hidden at default amount | Leave track swing amount at 50, with swing trigs placed | No swing icons are displayed (50 has no audible effect) |
@@ -33,6 +33,11 @@
 | PT24 | Filters | Globally hidden leaves legends | Hide an indicator via the global chip | It is removed from every pattern legend (no dead per-pattern toggle) |
 | PT33 | Filters | Absent indicators disabled | Display patterns that contain no trig of a given kind (e.g. no slide trigs anywhere) | That chip is grayed out and not clickable; it becomes active again when the bank/pattern/track selection includes such a trig |
 | PT34 | Filters | MIDI Note/Chord chip gated by track type | Display an audio track, then switch to a MIDI track or All MIDI Tracks | The "MIDI Note/Chord" chip is absent for audio tracks and appears for MIDI tracks |
+| **Trig View** | | | | |
+| PT35 | Trig View | Recorder grid separated | Open a pattern whose track has both sample trigs and recorder trigs | Two grids with captions: "Sample trigs" (or "Note trigs" for MIDI tracks) and "Recorder trigs"; R indicators appear only on the recorder grid |
+| PT36 | Trig View | Track view | Set the Trigs control to "Track" | Only the track grid is displayed, no recorder grid or caption |
+| PT37 | Trig View | Rec view | Set the Trigs control to "Rec" | Only the recorder grid is displayed, even when the track has no recorder trigs |
+| PT38 | Trig View | Both hides empty recorder grid | Set the Trigs control to "Both" and display a track without recorder trigs | No recorder grid is shown for that track; tracks with rec trigs still show it |
 | **Keyboard Navigation** | | | | |
 | PT25 | Keyboard | Left/Right move selection | Click a step, press Right then Left | Details panel follows: next step, then back |
 | PT26 | Keyboard | Tab / Shift+Tab move selection | With a step selected, press Tab then Shift+Tab | Same movement as Right / Left |

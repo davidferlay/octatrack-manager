@@ -20,9 +20,18 @@ Each pattern is displayed as a grid of steps. It matches the global or per-track
 - **Lock:** Outlined green circle. A trigless lock (lock trig) that holds parameter locks without triggering anything.
 - **P-Lock:** Indicated by the letter **P** (or a count like **3P**). Shows that one or more parameter locks are present on that step. A step whose only lock is a sample lock shows **S** alone, without **P**.
 
+### Recorder Trigs
+
+Just like on the Octatrack itself, recorder trigs are displayed separately from the track's sample/note trigs, on their own **Recorder trigs** grid below the main grid. A red **R** marks a recorder trig; a yellow **R** marks a One-Shot recorder trig.
+
+The **Trigs** control next to the bank selector picks which grids are displayed:
+
+- **Track:** Sample and note trigs only.
+- **Both:** Track trigs plus the recorder grid (the recorder grid only appears when the track actually has recorder trigs).
+- **Rec:** Recorder trigs only.
+
 ### Specialized Indicators
 - **↗:** Slide trigger, shown in green.
-- **R:** Recorder trigger, shown in red - or in yellow when the recorder trig is One-Shot.
 - **%:** Trig Condition (e.g., Fill, 50%).
 - **X:** Trig Repeats.
 - **µ:** Micro-timing offset.

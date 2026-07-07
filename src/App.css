@@ -1544,7 +1544,7 @@ h1 {
   background-color: var(--elektron-dark-gray);
   border: 1px solid var(--elektron-border-gray);
   border-left: 1px solid var(--elektron-orange);
-  padding: 1rem;
+  padding: 7px 5px 5px 5px;
   margin-bottom: 1rem;
 }
 
@@ -3492,6 +3492,54 @@ h1 {
   color: #ffcc66;
   font-size: 0.7rem;
   font-weight: 600;
+}
+
+/* Three-state trig view control (Track / Both / Rec), same design language
+   as the neighboring toggle switches */
+.tri-toggle {
+  display: inline-flex;
+  background: #1a1a1a;
+  border: 2px solid #333;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.tri-toggle-option {
+  padding: 3px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--elektron-text-secondary);
+  background: none;
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.tri-toggle-option + .tri-toggle-option {
+  border-left: 1px solid #333;
+}
+
+.tri-toggle-option.active {
+  background: var(--elektron-orange);
+  color: #fff;
+}
+
+/* Caption above each trig grid (sample/note trigs vs recorder trigs) */
+.pattern-grid-caption {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--elektron-text-secondary);
+  margin: 0.75rem 0 0.35rem;
+}
+
+/* Recorder trig grid: red accent matching the recorder R */
+.rec-grid .pattern-step.has-trig {
+  background-color: rgba(244, 67, 54, 0.12);
+  border-color: #f44336;
 }
 
 /* Grid legend */
