@@ -56,6 +56,8 @@ An indicator is displayed only if it is enabled both globally and in the pattern
 
 Click on any step in the grid to open the **Parameter Details Panel**. This panel shows you every single piece of data associated with that specific trigger.
 
+Each grid has its own panel below it: the track grid's panel covers the sample/note trig data, while the recorder grid's panel reports the recorder trig state of the selected step. Selecting a step highlights it on both grids.
+
 - **Notes & Chords:** For MIDI tracks, it shows the exact notes and even detects common chord types.
 - **P-Lock Values:** Lists every parameter lock and its exact value.
 - **Slices:** When the track's machine has **SLIC** enabled and its sample is sliced, a **STRT** lock selects a slice - the panel shows the slice number (**STRT (Slice)**) instead of the raw start value.

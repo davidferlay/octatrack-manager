@@ -232,18 +232,22 @@ test.describe('Patterns tab - step grid indicators', () => {
   })
 
   test('step details name the trig types', async ({ page }) => {
+    // each grid has its own details panel below it
     await stepCell(page, 4).click()
-    const panel = page.locator('.parameter-details-panel')
-    await expect(panel).toContainText('Trigless Lock')
+    const trackPanel = page.locator('.parameter-details-panel:not(.rec-details)')
+    const recPanel = page.locator('.parameter-details-panel.rec-details')
+    await expect(trackPanel).toContainText('Trigless Lock')
+    await expect(trackPanel).not.toContainText('Recorder Trig:')
+    await expect(recPanel).toContainText('Recorder Trig: No')
 
-    await stepCell(page, 6).click()
-    await expect(panel).toContainText('Recorder Trig:')
-    await expect(panel).toContainText('Yes (One-Shot)')
+    await recCell(page, 6).click()
+    await expect(recPanel).toContainText('recorder details')
+    await expect(recPanel).toContainText('Recorder Trig: Yes (One-Shot)')
   })
 
   test('STRT p-lock shows the slice number in slice mode', async ({ page }) => {
     await stepCell(page, 15).click()
-    const panel = page.locator('.parameter-details-panel')
+    const panel = page.locator('.parameter-details-panel:not(.rec-details)')
     // slice mode: stored value 6 = slice 6/2 + 1 = 4
     await expect(panel).toContainText('STRT (Slice):')
     await expect(panel).toContainText('4')
@@ -254,7 +258,7 @@ test.describe('Patterns tab - step grid indicators', () => {
     await page.locator('#patterns-track-select').selectOption('1')
     await expect(page.locator('.pattern-step').first()).toBeVisible()
     await stepCell(page, 15).click()
-    const panel = page.locator('.parameter-details-panel')
+    const panel = page.locator('.parameter-details-panel:not(.rec-details)')
     await expect(panel).toContainText('STRT (Start):')
     await expect(panel).toContainText('6')
   })
@@ -365,7 +369,7 @@ test.describe('Patterns tab - keyboard navigation', () => {
     await expect(page.locator('.pattern-step').first()).toBeVisible({ timeout: 10000 })
   })
 
-  const detailsHeader = (page: Page) => page.locator('.parameter-panel-header h4')
+  const detailsHeader = (page: Page) => page.locator('.parameter-details-panel:not(.rec-details) .parameter-panel-header h4')
 
   test('arrow keys and Tab move the step selection', async ({ page }) => {
     await page.locator('.pattern-step').nth(0).click()

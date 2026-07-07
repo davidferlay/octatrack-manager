@@ -1967,56 +1967,7 @@ export function ProjectDetail() {
                                       ))}
                                   </div>
                                 )}
-                                </>
-                                )}
-
-                                {/* Recorder trig grid: separate from the track trigs,
-                                    as on the hardware */}
-                                {showRecGrid && (
-                                  <>
-                                    <div className="pattern-grid-caption">Recorder trigs</div>
-                                    <div className="pattern-grid rec-grid">
-                                      {steps.map((step) => (
-                                        <div
-                                          key={step.step}
-                                          className={`pattern-step ${step.recorder ? 'has-trig' : ''} ${selectedStepNumber === step.step ? 'selected' : ''}`}
-                                          title={step.recorder
-                                            ? `Step ${step.step + 1}\n${step.recorder_oneshot ? 'One-shot recorder trig' : 'Recorder trig'}`
-                                            : `Step ${step.step + 1}`}
-                                          onClick={() => setSelectedStepNumber(step.step)}
-                                          style={{ cursor: 'pointer' }}
-                                        >
-                                          <div className="step-number">{step.step + 1}</div>
-                                          {step.recorder && (
-                                            <div className="step-indicators">
-                                              {show('recorder') && !step.recorder_oneshot && <span className="indicator-recorder">R</span>}
-                                              {show('recorder-oneshot') && step.recorder_oneshot && <span className="indicator-recorder-oneshot">R</span>}
-                                            </div>
-                                          )}
-                                        </div>
-                                      ))}
-                                    </div>
-                                    {INDICATOR_DEFS.some((def) => usedIndicators.has(def.key) && REC_INDICATOR_KEYS.includes(def.key)) && (
-                                      <div className="pattern-grid-legend rec-grid-legend">
-                                        {INDICATOR_DEFS
-                                          .filter((def) => usedIndicators.has(def.key) && REC_INDICATOR_KEYS.includes(def.key) && !hiddenIndicators.includes(def.key))
-                                          .map((def) => (
-                                            <button
-                                              key={def.key}
-                                              type="button"
-                                              className={`legend-item${cardHidden.includes(def.key) ? ' off' : ''}`}
-                                              title={`Show or hide ${def.label} indicators in this pattern`}
-                                              onClick={() => toggleCardIndicator(cardKey, def.key)}
-                                            >
-                                              {def.glyph} {def.label}
-                                            </button>
-                                          ))}
-                                      </div>
-                                    )}
-                                  </>
-                                )}
-
-                                {/* Parameter Details Panel */}
+                                {/* Parameter Details Panel (track trigs) */}
                                 {selectedStepNumber !== null && (() => {
                                   // Find the step data for this specific pattern/track
                                   const selectedStep = trackData.steps.find(s => s.step === selectedStepNumber);
@@ -2037,7 +1988,6 @@ export function ProjectDetail() {
                                         {selectedStep.oneshot && <div className="param-item"><span>One-Shot:</span> Yes</div>}
                                         {selectedStep.swing && <div className="param-item"><span>Swing:</span> Yes</div>}
                                         {selectedStep.slide && <div className="param-item"><span>Slide:</span> Yes</div>}
-                                        {selectedStep.recorder && <div className="param-item"><span>Recorder Trig:</span> {selectedStep.recorder_oneshot ? 'Yes (One-Shot)' : 'Yes'}</div>}
                                         {selectedStep.trig_condition && <div className="param-item"><span>Condition:</span> {selectedStep.trig_condition}</div>}
                                         {selectedStep.trig_repeats > 0 && <div className="param-item"><span>Repeats:</span> {selectedStep.trig_repeats + 1}x</div>}
                                         {selectedStep.micro_timing && <div className="param-item"><span>Micro-timing:</span> {selectedStep.micro_timing}</div>}
@@ -2121,6 +2071,75 @@ export function ProjectDetail() {
                                   </div>
                                   );
                                 })()}
+                                </>
+                                )}
+
+                                {/* Recorder trig grid: separate from the track trigs,
+                                    as on the hardware */}
+                                {showRecGrid && (
+                                  <>
+                                    <div className="pattern-grid-caption">Recorder trigs</div>
+                                    <div className="pattern-grid rec-grid">
+                                      {steps.map((step) => (
+                                        <div
+                                          key={step.step}
+                                          className={`pattern-step ${step.recorder ? 'has-trig' : ''} ${selectedStepNumber === step.step ? 'selected' : ''}`}
+                                          title={step.recorder
+                                            ? `Step ${step.step + 1}\n${step.recorder_oneshot ? 'One-shot recorder trig' : 'Recorder trig'}`
+                                            : `Step ${step.step + 1}`}
+                                          onClick={() => setSelectedStepNumber(step.step)}
+                                          style={{ cursor: 'pointer' }}
+                                        >
+                                          <div className="step-number">{step.step + 1}</div>
+                                          {step.recorder && (
+                                            <div className="step-indicators">
+                                              {show('recorder') && !step.recorder_oneshot && <span className="indicator-recorder">R</span>}
+                                              {show('recorder-oneshot') && step.recorder_oneshot && <span className="indicator-recorder-oneshot">R</span>}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                    {INDICATOR_DEFS.some((def) => usedIndicators.has(def.key) && REC_INDICATOR_KEYS.includes(def.key)) && (
+                                      <div className="pattern-grid-legend rec-grid-legend">
+                                        {INDICATOR_DEFS
+                                          .filter((def) => usedIndicators.has(def.key) && REC_INDICATOR_KEYS.includes(def.key) && !hiddenIndicators.includes(def.key))
+                                          .map((def) => (
+                                            <button
+                                              key={def.key}
+                                              type="button"
+                                              className={`legend-item${cardHidden.includes(def.key) ? ' off' : ''}`}
+                                              title={`Show or hide ${def.label} indicators in this pattern`}
+                                              onClick={() => toggleCardIndicator(cardKey, def.key)}
+                                            >
+                                              {def.glyph} {def.label}
+                                            </button>
+                                          ))}
+                                      </div>
+                                    )}
+
+                                    {/* Recorder step details */}
+                                    {selectedStepNumber !== null && (() => {
+                                      const selectedStep = trackData.steps.find(s => s.step === selectedStepNumber);
+                                      if (!selectedStep) return null;
+                                      return (
+                                        <div className="parameter-details-panel rec-details">
+                                          <div className="parameter-panel-header">
+                                            <h4>Step {selectedStep.step + 1} recorder details</h4>
+                                            <button onClick={() => setSelectedStepNumber(null)} className="close-button">×</button>
+                                          </div>
+                                          <div className="parameter-panel-content">
+                                            <div className="param-grid">
+                                              <div className="param-item">
+                                                <span>Recorder Trig:</span> {selectedStep.recorder ? (selectedStep.recorder_oneshot ? 'Yes (One-Shot)' : 'Yes') : 'No'}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      );
+                                    })()}
+                                  </>
+                                )}
                                 </>
                               );
                             })()}
