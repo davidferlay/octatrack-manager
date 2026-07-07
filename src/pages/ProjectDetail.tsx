@@ -1855,11 +1855,6 @@ export function ProjectDetail() {
 
                                   return (
                                     <>
-                                      {showTrackGrid && showRecGrid && (
-                                        <div className="pattern-grid-caption">
-                                          {trackData.track_type === 'MIDI' ? 'Note trigs' : 'Sample trigs'}
-                                        </div>
-                                      )}
                                       {showTrackGrid && (
                                       <>
                                       {/* Grid */}
@@ -2078,7 +2073,6 @@ export function ProjectDetail() {
                                     as on the hardware */}
                                 {showRecGrid && (
                                   <>
-                                    <div className="pattern-grid-caption">Recorder trigs</div>
                                     <div className="pattern-grid rec-grid">
                                       {steps.map((step) => (
                                         <div

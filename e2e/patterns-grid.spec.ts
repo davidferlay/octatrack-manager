@@ -189,11 +189,9 @@ test.describe('Patterns tab - step grid indicators', () => {
   })
 
   test('trig view toggle switches between track, both and rec grids', async ({ page }) => {
-    // default "Both": track 1 has rec trigs, so both grids and captions show
+    // default "Both": track 1 has rec trigs, so both grids show
     await expect(page.locator('.track-grid')).toBeVisible()
     await expect(page.locator('.rec-grid')).toBeVisible()
-    await expect(page.locator('.pattern-grid-caption', { hasText: 'Sample trigs' })).toBeVisible()
-    await expect(page.locator('.pattern-grid-caption', { hasText: 'Recorder trigs' })).toBeVisible()
 
     await page.locator('.tri-toggle-option', { hasText: 'Track' }).click()
     await expect(page.locator('.track-grid')).toBeVisible()

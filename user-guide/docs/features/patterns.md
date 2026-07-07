@@ -22,7 +22,7 @@ Each pattern is displayed as a grid of steps. It matches the global or per-track
 
 ### Recorder Trigs
 
-Just like on the Octatrack itself, recorder trigs are displayed separately from the track's sample/note trigs, on their own **Recorder trigs** grid below the main grid. A red **R** marks a recorder trig; a yellow **R** marks a One-Shot recorder trig.
+Just like on the Octatrack itself, recorder trigs are displayed separately from the track's sample/note trigs, on their own grid below the main grid. A red **R** marks a recorder trig; a yellow **R** marks a One-Shot recorder trig.
 
 The **Trigs** control next to the bank selector picks which grids are displayed:
 

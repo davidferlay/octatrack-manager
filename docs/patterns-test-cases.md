@@ -34,7 +34,7 @@
 | PT33 | Filters | Absent indicators disabled | Display patterns that contain no trig of a given kind (e.g. no slide trigs anywhere) | That chip is grayed out and not clickable; it becomes active again when the bank/pattern/track selection includes such a trig |
 | PT34 | Filters | MIDI Note/Chord chip gated by track type | Display an audio track, then switch to a MIDI track or All MIDI Tracks | The "MIDI Note/Chord" chip is absent for audio tracks and appears for MIDI tracks |
 | **Trig View** | | | | |
-| PT35 | Trig View | Recorder grid separated | Open a pattern whose track has both sample trigs and recorder trigs | Two grids with captions: "Sample trigs" (or "Note trigs" for MIDI tracks) and "Recorder trigs"; R indicators appear only on the recorder grid |
+| PT35 | Trig View | Recorder grid separated | Open a pattern whose track has both sample trigs and recorder trigs | Two grids without captions: the track grid, then the recorder grid below it; R indicators appear only on the recorder grid |
 | PT36 | Trig View | Track view | Set the Trigs control to "Track" | Only the track grid is displayed, no recorder grid or caption |
 | PT37 | Trig View | Rec view | Set the Trigs control to "Rec" | Only the recorder grid is displayed, even when the track has no recorder trigs |
 | PT38 | Trig View | Both hides empty recorder grid | Set the Trigs control to "Both" and display a track without recorder trigs | No recorder grid is shown for that track; tracks with rec trigs still show it |

@@ -3526,17 +3526,12 @@ h1 {
   color: #fff;
 }
 
-/* Caption above each trig grid (sample/note trigs vs recorder trigs) */
-.pattern-grid-caption {
-  font-size: 0.8rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--elektron-text-secondary);
-  margin: 0.75rem 0 0.35rem;
+/* Recorder trig grid: red accent matching the recorder R. The separating
+   margin only applies below the track grid, not in Rec-only view */
+.rec-grid:not(:first-child) {
+  margin-top: 0.5rem;
 }
 
-/* Recorder trig grid: red accent matching the recorder R */
 .rec-grid .pattern-step.has-trig {
   background-color: rgba(244, 67, 54, 0.12);
   border-color: #f44336;
