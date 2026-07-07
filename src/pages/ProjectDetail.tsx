@@ -1,4 +1,4 @@
-import { useState, useEffect, useTransition, useCallback, useRef, type ReactNode } from "react";
+import { useState, useEffect, useTransition, useCallback, useMemo, useRef, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import type { ProjectMetadata, Bank, PartsDataResponse, SampleSlotUsage } from "../context/ProjectsContext";
@@ -110,7 +110,7 @@ const INDICATOR_DEFS: { key: string; label: string; glyph: ReactNode }[] = [
   { key: 'lock', label: 'Lock', glyph: <span className="indicator-lock"><i className="far fa-circle"></i></span> },
   { key: 'plock', label: 'P-Lock', glyph: <span className="indicator-plock">P</span> },
   { key: 'swing', label: 'Swing', glyph: <span className="indicator-swing"><svg viewBox="0 0 20 14" width="14" height="11"><path d="M1 7 C4 1 7 1 10 7 C13 13 16 13 19 7" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round"/></svg></span> },
-  { key: 'slide', label: 'Slide', glyph: <span className="indicator-slide">/</span> },
+  { key: 'slide', label: 'Slide', glyph: <span className="indicator-slide">↗</span> },
   { key: 'recorder', label: 'Recorder', glyph: <span className="indicator-recorder">R</span> },
   { key: 'recorder-oneshot', label: 'One-Shot Rec', glyph: <span className="indicator-recorder-oneshot">R</span> },
   { key: 'condition', label: 'Condition', glyph: <span className="indicator-condition">%</span> },
@@ -120,6 +120,61 @@ const INDICATOR_DEFS: { key: string; label: string; glyph: ReactNode }[] = [
   { key: 'velocity', label: 'Volume', glyph: <span className="indicator-velocity">V</span> },
   { key: 'sample', label: 'Sample', glyph: <span className="indicator-sample">S</span> },
 ];
+
+// All notes for a step (including the MIDI default note when it applies).
+// step.notes already contains all notes (NOTE, NOT2, NOT3, NOT4) from the Rust parser.
+function getStepNotes(step: TrigStep, trackData: any): number[] {
+  let allNotes = [...step.notes];
+
+  // For MIDI tracks, check if we need to add the default note
+  if (trackData.track_type === "MIDI" && trackData.default_note !== null) {
+    // Check if the primary NOTE is parameter-locked
+    const noteIsLocked = step.midi_plocks?.midi?.note !== null && step.midi_plocks?.midi?.note !== undefined;
+
+    // Check if additional notes are present
+    const hasAdditionalNotes = step.midi_plocks?.midi?.not2 !== null ||
+                                step.midi_plocks?.midi?.not3 !== null ||
+                                step.midi_plocks?.midi?.not4 !== null;
+
+    // Add default note if:
+    // 1. There's a trigger but no notes at all, OR
+    // 2. There are additional notes but the primary note is not locked
+    if ((allNotes.length === 0 && step.trigger) || (hasAdditionalNotes && !noteIsLocked)) {
+      allNotes.unshift(trackData.default_note); // Add at the beginning
+    }
+  }
+
+  return allNotes;
+}
+
+// Collect the indicator keys actually present in a track's steps. Shared by the
+// per-pattern legend and the global filter chips (to disable chips for
+// indicators absent from every displayed pattern).
+function collectUsedIndicators(steps: TrigStep[], trackData: any, into: Set<string>) {
+  steps.forEach((step) => {
+    // One-shot and lock (plock-mask) trigs stand on their own,
+    // without a trigger/trigless bit.
+    const hasTrig = step.trigger || step.trigless || step.oneshot || step.plock;
+    if (!hasTrig && !step.recorder) return; // Only track indicators for steps with trigs
+
+    const allNotes = getStepNotes(step, trackData);
+    if (step.trigger && !(trackData.track_type === "MIDI" && allNotes.length > 0)) into.add('trigger');
+    if (step.trigless) into.add('trigless');
+    if (step.plock) into.add('lock');
+    if (step.plock_count > 0) into.add('plock');
+    if (step.oneshot) into.add('oneshot');
+    if (step.swing) into.add('swing');
+    if (step.slide) into.add('slide');
+    if (step.recorder && !step.recorder_oneshot) into.add('recorder');
+    if (step.recorder_oneshot) into.add('recorder-oneshot');
+    if (step.trig_condition) into.add('condition');
+    if (step.trig_repeats > 0) into.add('repeats');
+    if (step.micro_timing) into.add('timing');
+    if (allNotes.length > 0) into.add('note');
+    if (step.velocity !== null) into.add('velocity');
+    if (step.sample_slot !== null) into.add('sample');
+  });
+}
 
 const HIDDEN_INDICATORS_KEY = 'otm.patterns.hiddenIndicators';
 
@@ -192,6 +247,29 @@ export function ProjectDetail() {
       return { ...prev, [cardKey]: next };
     });
   };
+  // Indicator keys present somewhere in the currently displayed bank/pattern/track
+  // selection. Global filter chips for absent indicators are disabled.
+  const usedIndicatorKeys = useMemo(() => {
+    const used = new Set<string>();
+    const bankIdxs = selectedBankIndex === ALL_BANKS
+      ? Array.from(loadedBankIndices).sort((a, b) => a - b)
+      : loadedBankIndices.has(selectedBankIndex) ? [selectedBankIndex] : [];
+    const patternIdxs = selectedPatternIndex === ALL_PATTERNS
+      ? [...Array(16)].map((_, i) => i)
+      : [selectedPatternIndex];
+    const trackIdxs = selectedTrackIndex === ALL_AUDIO_TRACKS ? [0, 1, 2, 3, 4, 5, 6, 7]
+      : selectedTrackIndex === ALL_MIDI_TRACKS ? [8, 9, 10, 11, 12, 13, 14, 15]
+      : [selectedTrackIndex];
+    bankIdxs.forEach((b) => patternIdxs.forEach((p) => {
+      const pattern = banks[b]?.parts[0]?.patterns[p];
+      if (!pattern) return;
+      trackIdxs.forEach((t) => {
+        const trackData = pattern.tracks[t];
+        if (trackData) collectUsedIndicators(trackData.steps.slice(0, pattern.length), trackData, used);
+      });
+    }));
+    return used;
+  }, [banks, loadedBankIndices, selectedBankIndex, selectedPatternIndex, selectedTrackIndex]);
 
   // Where each sample slot is used (machine assignments + sample locks),
   // computed by the backend when a slots tab is first opened.
@@ -1473,7 +1551,11 @@ export function ProjectDetail() {
                 {/* Global indicator filter: toggles apply to every pattern. Legend
                     badges on each pattern card refine this per pattern. */}
                 <div className="indicator-filters">
-                  {[INDICATOR_DEFS.slice(0, 6), INDICATOR_DEFS.slice(6)].map((row, rowIdx) => (
+                  {(() => {
+                    // MIDI Note/Chord only makes sense while MIDI tracks are displayed.
+                    const showingMidi = selectedTrackIndex === ALL_MIDI_TRACKS || selectedTrackIndex >= 8;
+                    const defs = INDICATOR_DEFS.filter((def) => def.key !== 'note' || showingMidi);
+                    return [defs.slice(0, 6), defs.slice(6)].map((row, rowIdx) => (
                     <div key={rowIdx} className="indicator-filters-row">
                       {rowIdx === 0 && <span className="indicator-filters-label">Show:</span>}
                       {rowIdx === 0 && (
@@ -1482,19 +1564,26 @@ export function ProjectDetail() {
                           <button type="button" className="indicator-filter-chip" title="Hide all indicators" onClick={() => setAllIndicators(false)}>None</button>
                         </>
                       )}
-                      {row.map((def) => (
+                      {row.map((def) => {
+                        const absent = !usedIndicatorKeys.has(def.key);
+                        return (
                         <button
                           key={def.key}
                           type="button"
+                          disabled={absent}
                           className={`indicator-filter-chip${hiddenIndicators.includes(def.key) ? ' off' : ''}`}
-                          title={`Show or hide ${def.label} indicators in all patterns`}
+                          title={absent
+                            ? `No ${def.label} trig in the displayed patterns`
+                            : `Show or hide ${def.label} trigs in all patterns`}
                           onClick={() => toggleGlobalIndicator(def.key)}
                         >
                           {def.glyph} {def.label}
                         </button>
-                      ))}
+                        );
+                      })}
                     </div>
-                  ))}
+                    ));
+                  })()}
                 </div>
 
                 {loadedBankIndices.size === 0 ? (
@@ -1719,65 +1808,16 @@ export function ProjectDetail() {
                                       return null; // Unknown chord
                                     };
 
-                                  // Helper to get all notes for a step (including default note when needed)
-                                  const getStepNotes = (step: TrigStep, trackData: any): number[] => {
-                                    // step.notes already contains all notes (NOTE, NOT2, NOT3, NOT4) from the Rust parser
-                                    let allNotes = [...step.notes];
-
-                                    // For MIDI tracks, check if we need to add the default note
-                                    if (trackData.track_type === "MIDI" && trackData.default_note !== null) {
-                                      // Check if the primary NOTE is parameter-locked
-                                      const noteIsLocked = step.midi_plocks?.midi?.note !== null && step.midi_plocks?.midi?.note !== undefined;
-
-                                      // Check if additional notes are present
-                                      const hasAdditionalNotes = step.midi_plocks?.midi?.not2 !== null ||
-                                                                  step.midi_plocks?.midi?.not3 !== null ||
-                                                                  step.midi_plocks?.midi?.not4 !== null;
-
-                                      // Add default note if:
-                                      // 1. There's a trigger but no notes at all, OR
-                                      // 2. There are additional notes but the primary note is not locked
-                                      if ((allNotes.length === 0 && step.trigger) || (hasAdditionalNotes && !noteIsLocked)) {
-                                        allNotes.unshift(trackData.default_note); // Add at the beginning
-                                      }
-                                    }
-
-                                    return allNotes;
-                                  };
-
                                   // Track which indicators are actually used in this pattern
                                   const usedIndicators = new Set<string>();
                                   const steps = trackData.steps.slice(0, pattern.length);
+                                  collectUsedIndicators(steps, trackData, usedIndicators);
 
                                   // Effective indicator visibility for this pattern card:
                                   // hidden globally (filter chips) or via this card's legend.
                                   const cardKey = `${bankIndex}-${patternIndex}-${trackIndex}`;
                                   const cardHidden = cardHiddenIndicators[cardKey] ?? [];
                                   const show = (key: string) => !hiddenIndicators.includes(key) && !cardHidden.includes(key);
-
-                                  steps.forEach((step) => {
-                                    // One-shot and lock (plock-mask) trigs stand on their own,
-                                    // without a trigger/trigless bit.
-                                    const hasTrig = step.trigger || step.trigless || step.oneshot || step.plock;
-                                    if (!hasTrig && !step.recorder) return; // Only track indicators for steps with trigs
-
-                                    const allNotes = getStepNotes(step, trackData);
-                                    if (step.trigger && !(trackData.track_type === "MIDI" && allNotes.length > 0)) usedIndicators.add('trigger');
-                                    if (step.trigless) usedIndicators.add('trigless');
-                                    if (step.plock) usedIndicators.add('lock');
-                                    if (step.plock_count > 0) usedIndicators.add('plock');
-                                    if (step.oneshot) usedIndicators.add('oneshot');
-                                    if (step.swing) usedIndicators.add('swing');
-                                    if (step.slide) usedIndicators.add('slide');
-                                    if (step.recorder && !step.recorder_oneshot) usedIndicators.add('recorder');
-                                    if (step.recorder_oneshot) usedIndicators.add('recorder-oneshot');
-                                    if (step.trig_condition) usedIndicators.add('condition');
-                                    if (step.trig_repeats > 0) usedIndicators.add('repeats');
-                                    if (step.micro_timing) usedIndicators.add('timing');
-                                    if (allNotes.length > 0) usedIndicators.add('note');
-                                    if (step.velocity !== null) usedIndicators.add('velocity');
-                                    if (step.sample_slot !== null) usedIndicators.add('sample');
-                                  });
 
                                   return (
                                     <>
@@ -1852,7 +1892,7 @@ export function ProjectDetail() {
                                             {show('plock') && step.plock_count > 1 && <span className="indicator-plock-count">{step.plock_count}P</span>}
 
                                             {/* 4. Other indicators */}
-                                            {show('slide') && step.slide && <span className="indicator-slide">/</span>}
+                                            {show('slide') && step.slide && <span className="indicator-slide">↗</span>}
                                             {show('recorder') && step.recorder && !step.recorder_oneshot && <span className="indicator-recorder">R</span>}
                                             {show('recorder-oneshot') && step.recorder_oneshot && <span className="indicator-recorder-oneshot">R</span>}
                                             {show('condition') && step.trig_condition && <span className="indicator-condition">%</span>}

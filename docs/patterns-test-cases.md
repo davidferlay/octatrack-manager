@@ -12,7 +12,7 @@
 | PT5 | Indicators | Rec trig glyph and color | Place a recorder trig | Step shows a red R |
 | PT6 | Indicators | One-shot rec trig differentiated | Place a one-shot recorder trig | Step shows a yellow R (not red), legend lists "One-Shot Rec" |
 | PT7 | Indicators | SRC3-only rec trig shown | Place a rec trig armed for SRC3 only (INAB/INCD off) | Step still shows the R indicator |
-| PT8 | Indicators | Slide glyph | Place a slide trig | Step shows a cyan "/" character |
+| PT8 | Indicators | Slide glyph | Place a slide trig | Step shows a green rising arrow character (same green as swing; the P-lock P stays blue) |
 | PT9 | Indicators | Swing shown when amount above 50 | Set track swing amount above 50, place swing trigs | Swing steps show a green wave icon |
 | PT10 | Indicators | Swing hidden at default amount | Leave track swing amount at 50, with swing trigs placed | No swing icons are displayed (50 has no audible effect) |
 | PT11 | Indicators | Sample lock shows S without P | P-lock only a sample slot on a step (no other locks) | Step shows S but no P |
@@ -31,6 +31,8 @@
 | PT22 | Filters | Legend badge is per pattern | With All Patterns displayed, click an indicator badge in one pattern's legend | Indicator disappears only in that pattern; other patterns keep it; badge appears dimmed |
 | PT23 | Filters | Legend badge restores | Click the dimmed legend badge again | Indicator reappears in that pattern |
 | PT24 | Filters | Globally hidden leaves legends | Hide an indicator via the global chip | It is removed from every pattern legend (no dead per-pattern toggle) |
+| PT33 | Filters | Absent indicators disabled | Display patterns that contain no trig of a given kind (e.g. no slide trigs anywhere) | That chip is grayed out and not clickable; it becomes active again when the bank/pattern/track selection includes such a trig |
+| PT34 | Filters | MIDI Note/Chord chip gated by track type | Display an audio track, then switch to a MIDI track or All MIDI Tracks | The "MIDI Note/Chord" chip is absent for audio tracks and appears for MIDI tracks |
 | **Keyboard Navigation** | | | | |
 | PT25 | Keyboard | Left/Right move selection | Click a step, press Right then Left | Details panel follows: next step, then back |
 | PT26 | Keyboard | Tab / Shift+Tab move selection | With a step selected, press Tab then Shift+Tab | Same movement as Right / Left |

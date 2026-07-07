@@ -3307,7 +3307,10 @@ h1 {
   position: relative;
   cursor: default;
   transition: all 0.1s ease;
-  min-height: 60px;
+  /* Reserve room for two indicator rows so toggling one indicator on or off
+     does not make the row height jump; still grows past this for extreme
+     steps stacking more */
+  min-height: 68px;
   padding: 0px 4px 3px 4px;
   overflow: hidden;
 }
@@ -3373,7 +3376,7 @@ h1 {
 }
 
 .indicator-trigless {
-  color: #66cc66;
+  color: #00cc00;
 }
 
 .indicator-trigless i {
@@ -3382,9 +3385,9 @@ h1 {
   top: -1.3px;
 }
 
-/* Trigless lock (lock trig): outlined circle, same green family as trigless */
+/* Trigless lock (lock trig): outlined circle, same green as trigless */
 .indicator-lock {
-  color: #66cc66;
+  color: #00cc00;
 }
 
 .indicator-lock i {
@@ -3410,14 +3413,16 @@ h1 {
 }
 
 .indicator-swing {
-  color: #66cc66;
+  color: #00cc00;
   display: inline-flex;
   align-items: center;
 }
 
+/* Slide: same pure green as swing; the P-lock P stays blue */
 .indicator-slide {
-  color: #00cccc;
-  font-size: 1.1rem;
+  color: #00cc00;
+  font-size: 1.05rem;
+  font-weight: 700;
 }
 
 /* Red, so it stays distinguishable from the yellow one-shot recorder R */
@@ -3444,9 +3449,12 @@ h1 {
   font-weight: 700;
 }
 
+/* Same font-size as the sibling glyphs (1.1rem, !important to beat
+   .step-indicators span): a bigger line box makes cell and legend heights
+   jump when the indicator is toggled */
 .indicator-timing {
   color: #99ccff;
-  font-size: 1.2rem !important;
+  font-size: 1.1rem !important;
   font-weight: 600;
   position: relative;
   top: -2px;
@@ -3490,17 +3498,21 @@ h1 {
 .pattern-grid-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 1.5rem;
-  padding: 1rem;
+  gap: 1.25rem;
+  padding: 0.85rem 1rem;
   background-color: var(--elektron-dark-gray);
   border-radius: 4px;
+  /* Constant height whatever mix of indicators a pattern uses (a full mix
+     renders at ~41px) */
+  min-height: 42px;
+  align-items: center;
 }
 
 .legend-item {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 1rem;
+  gap: 0.45rem;
+  font-size: 0.9rem;
   color: var(--elektron-text-primary);
   /* Legend items are buttons toggling the indicator for their pattern card */
   background: none;
@@ -3556,9 +3568,24 @@ h1 {
   border-color: var(--elektron-orange);
 }
 
+/* Hidden by the user: still solid enough to read, struck through */
 .indicator-filter-chip.off {
-  opacity: 0.35;
+  opacity: 0.5;
   text-decoration: line-through;
+}
+
+/* Indicator absent from every displayed pattern: faint dashed ghost,
+   not clickable (distinct from the user-hidden struck-through style) */
+.indicator-filter-chip:disabled {
+  opacity: 0.3;
+  border-style: dashed;
+  text-decoration: none;
+  filter: grayscale(1);
+  cursor: default;
+}
+
+.indicator-filter-chip:disabled:hover {
+  border-color: var(--elektron-border-gray);
 }
 
 /* Sample slot usage badge and popover. The cell never wraps: a stacked pair of
@@ -3651,7 +3678,7 @@ th.col-used .header-content .filter-icon {
 }
 
 .legend-item span {
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   font-weight: 700;
 }
 

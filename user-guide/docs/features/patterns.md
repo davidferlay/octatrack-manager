@@ -21,7 +21,7 @@ Each pattern is displayed as a grid of steps. It matches the global or per-track
 - **P-Lock:** Indicated by the letter **P** (or a count like **3P**). Shows that one or more parameter locks are present on that step. A step whose only lock is a sample lock shows **S** alone, without **P**.
 
 ### Specialized Indicators
-- **/:** Slide trigger.
+- **↗:** Slide trigger, shown in green.
 - **R:** Recorder trigger, shown in red - or in yellow when the recorder trig is One-Shot.
 - **%:** Trig Condition (e.g., Fill, 50%).
 - **X:** Trig Repeats.
@@ -36,7 +36,7 @@ Each pattern is displayed as a grid of steps. It matches the global or per-track
 
 With every trig type, lock and modifier displayed at once, busy patterns can get dense. Things can be filtered out using two complementary filters:
 
-- **Global filter:** The **Show:** chip row at the top of the tab lists every indicator. Click a chip to hide or show that indicator in **all patterns**; use **All** / **None** to toggle everything at once. Hidden chips appear dimmed. This filter is remembered across sessions.
+- **Global filter:** The **Show:** chip row at the top of the tab lists every indicator. Click a chip to hide or show that indicator in **all patterns**; use **All** / **None** to toggle everything at once. Hidden chips appear dimmed. Chips for indicators that do not occur anywhere in the displayed patterns are disabled, and the **MIDI Note/Chord** chip only appears while MIDI tracks are displayed. This filter is remembered across sessions.
 - **Per-pattern filter:** The legend badges below each pattern grid are clickable too. Clicking one hides that indicator in **that pattern only** (click again to restore). These per-pattern choices last until the page is reloaded.
 
 An indicator is displayed only if it is enabled both globally and in the pattern's legend. Indicators hidden globally are removed from the legends entirely.

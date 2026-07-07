@@ -271,6 +271,31 @@ test.describe('Patterns tab - indicator filters', () => {
     await expect(chip(page, 'Trigger')).not.toHaveClass(/off/)
   })
 
+  test('chips for indicators absent from the displayed patterns are disabled', async ({ page }) => {
+    // track 1 has recorder trigs but no swing/slide steps
+    await expect(chip(page, 'Recorder')).toBeEnabled()
+    await expect(chip(page, 'Swing')).toBeDisabled()
+    await expect(chip(page, 'Slide')).toBeDisabled()
+  })
+
+  test('MIDI Note/Chord chip only appears while MIDI tracks are displayed', async ({ page }) => {
+    // default view shows an audio track
+    await expect(page.locator('.indicator-filter-chip', { hasText: 'MIDI Note/Chord' })).toHaveCount(0)
+
+    await page.locator('#patterns-track-select').selectOption('-2') // All MIDI Tracks
+    await expect(chip(page, 'MIDI Note/Chord')).toBeVisible()
+    // the mocked MIDI tracks have no trigs at all, so the chip is also disabled
+    await expect(chip(page, 'MIDI Note/Chord')).toBeDisabled()
+
+    await page.locator('#patterns-track-select').selectOption('0')
+    await expect(page.locator('.indicator-filter-chip', { hasText: 'MIDI Note/Chord' })).toHaveCount(0)
+  })
+
+  test('the slide indicator uses the rising-arrow glyph', async ({ page }) => {
+    // chip glyphs come from the same INDICATOR_DEFS as the grid
+    await expect(chip(page, 'Slide').locator('.indicator-slide')).toHaveText('↗')
+  })
+
   test('legend badge hides an indicator for its own pattern only', async ({ page }) => {
     // show all 16 patterns so there are several cards with legends
     await page.locator('select[id^="pattern-select"]').selectOption('-1')
