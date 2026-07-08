@@ -3533,6 +3533,11 @@ h1 {
   margin-top: 0.5rem;
 }
 
+.rec-grid .pattern-step.selected {
+  outline-color: #f44336;
+  box-shadow: 0 0 8px rgba(244, 67, 54, 0.6);
+}
+
 .rec-grid .pattern-step.has-trig {
   background-color: rgba(244, 67, 54, 0.12);
   border-color: #f44336;

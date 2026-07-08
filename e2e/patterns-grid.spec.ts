@@ -216,6 +216,15 @@ test.describe('Patterns tab - step grid indicators', () => {
     await expect(page.locator('.rec-grid')).toBeVisible()
   })
 
+  test('selected step on the recorder grid is highlighted in red', async ({ page }) => {
+    await recCell(page, 5).click()
+    await expect(recCell(page, 5)).toHaveClass(/selected/)
+    await expect(recCell(page, 5)).toHaveCSS('outline-color', 'rgb(244, 67, 54)')
+    // track grid keeps the orange highlight
+    await expect(stepCell(page, 5)).toHaveClass(/selected/)
+    await expect(stepCell(page, 5)).not.toHaveCSS('outline-color', 'rgb(244, 67, 54)')
+  })
+
   test('sample-lock-only step shows S without P', async ({ page }) => {
     await expect(stepCell(page, 13).locator('.indicator-sample')).toHaveText('S')
     await expect(stepCell(page, 13).locator('.indicator-plock')).toHaveCount(0)
@@ -313,6 +322,26 @@ test.describe('Patterns tab - indicator filters', () => {
     await expect(chip(page, 'Recorder')).toBeEnabled()
     await expect(chip(page, 'Swing')).toBeDisabled()
     await expect(chip(page, 'Slide')).toBeDisabled()
+  })
+
+  test('chips are gated by the Trigs view selection', async ({ page }) => {
+    // default Both: track 1 has both trigger and recorder trigs
+    await expect(chip(page, 'Trigger')).toBeEnabled()
+    await expect(chip(page, 'Recorder')).toBeEnabled()
+
+    await page.locator('.tri-toggle-option', { hasText: 'Track' }).click()
+    await expect(chip(page, 'Recorder')).toBeDisabled()
+    await expect(chip(page, 'One-Shot Rec')).toBeDisabled()
+    await expect(chip(page, 'Trigger')).toBeEnabled()
+
+    await page.locator('.tri-toggle-option', { hasText: 'Rec' }).click()
+    await expect(chip(page, 'Recorder')).toBeEnabled()
+    await expect(chip(page, 'Trigger')).toBeDisabled()
+    await expect(chip(page, 'P-Lock')).toBeDisabled()
+
+    await page.locator('.tri-toggle-option', { hasText: 'Both' }).click()
+    await expect(chip(page, 'Trigger')).toBeEnabled()
+    await expect(chip(page, 'Recorder')).toBeEnabled()
   })
 
   test('MIDI Note/Chord chip only appears while MIDI tracks are displayed', async ({ page }) => {

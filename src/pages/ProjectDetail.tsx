@@ -1593,14 +1593,19 @@ export function ProjectDetail() {
                         </>
                       )}
                       {row.map((def) => {
+                        // Chips for indicators the current Trigs view can't display are disabled too.
+                        const isRec = REC_INDICATOR_KEYS.includes(def.key);
+                        const hiddenByView = trigView === 'rec' ? !isRec : trigView === 'track' ? isRec : false;
                         const absent = !usedIndicatorKeys.has(def.key);
                         return (
                         <button
                           key={def.key}
                           type="button"
-                          disabled={absent}
+                          disabled={absent || hiddenByView}
                           className={`indicator-filter-chip${hiddenIndicators.includes(def.key) ? ' off' : ''}`}
-                          title={absent
+                          title={hiddenByView
+                            ? `${def.label} trigs are not displayed in the current Trigs view`
+                            : absent
                             ? `No ${def.label} trig in the displayed patterns`
                             : `Show or hide ${def.label} trigs in all patterns`}
                           onClick={() => toggleGlobalIndicator(def.key)}

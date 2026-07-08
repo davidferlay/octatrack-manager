@@ -39,6 +39,8 @@
 | PT37 | Trig View | Rec view | Set the Trigs control to "Rec" | Only the recorder grid is displayed, even when the track has no recorder trigs |
 | PT38 | Trig View | Both hides empty recorder grid | Set the Trigs control to "Both" and display a track without recorder trigs | No recorder grid is shown for that track; tracks with rec trigs still show it |
 | PT39 | Trig View | Separate step details per grid | Click a step while both grids are displayed | Two details panels open, one below each grid: the track panel shows trig/lock data without recorder info; the recorder panel shows "Recorder Trig: Yes", "Yes (One-Shot)" or "No" |
+| PT40 | Trig View | Chips gated by Trigs view | Set the Trigs control to "Track", then "Rec" | In Track view the Rec Trig / One-Shot Rec chips are disabled; in Rec view every non-recorder chip is disabled; "Both" restores content-based gating |
+| PT41 | Trig View | Recorder grid selection color | Click a step on the recorder grid | The selected cell outline on the recorder grid is red (matching the R indicator); the track grid selection stays orange |
 | **Keyboard Navigation** | | | | |
 | PT25 | Keyboard | Left/Right move selection | Click a step, press Right then Left | Details panel follows: next step, then back |
 | PT26 | Keyboard | Tab / Shift+Tab move selection | With a step selected, press Tab then Shift+Tab | Same movement as Right / Left |

@@ -45,7 +45,7 @@ The **Trigs** control next to the bank selector picks which grids are displayed:
 
 With every trig type, lock and modifier displayed at once, busy patterns can get dense. Things can be filtered out using two complementary filters:
 
-- **Global filter:** The **Show:** chip row at the top of the tab lists every indicator. Click a chip to hide or show that indicator in **all patterns**; use **All** / **None** to toggle everything at once. Hidden chips appear dimmed. Chips for indicators that do not occur anywhere in the displayed patterns are disabled, and the **MIDI Note/Chord** chip only appears while MIDI tracks are displayed. This filter is remembered across sessions.
+- **Global filter:** The **Show:** chip row at the top of the tab lists every indicator. Click a chip to hide or show that indicator in **all patterns**; use **All** / **None** to toggle everything at once. Hidden chips appear dimmed. Chips for indicators that do not occur anywhere in the displayed patterns are disabled, as are chips the current **Trigs** view cannot display (recorder chips in Track view, everything else in Rec view), and the **MIDI Note/Chord** chip only appears while MIDI tracks are displayed. This filter is remembered across sessions.
 - **Per-pattern filter:** The legend badges below each pattern grid are clickable too. Clicking one hides that indicator in **that pattern only** (click again to restore). These per-pattern choices last until the page is reloaded.
 
 An indicator is displayed only if it is enabled both globally and in the pattern's legend. Indicators hidden globally are removed from the legends entirely.
@@ -56,7 +56,7 @@ An indicator is displayed only if it is enabled both globally and in the pattern
 
 Click on any step in the grid to open the **Parameter Details Panel**. This panel shows you every single piece of data associated with that specific trigger.
 
-Each grid has its own panel below it: the track grid's panel covers the sample/note trig data, while the recorder grid's panel reports the recorder trig state of the selected step. Selecting a step highlights it on both grids.
+Each grid has its own panel below it: the track grid's panel covers the sample/note trig data, while the recorder grid's panel reports the recorder trig state of the selected step. Selecting a step highlights it on both grids - orange on the track grid, red on the recorder grid.
 
 - **Notes & Chords:** For MIDI tracks, it shows the exact notes and even detects common chord types.
 - **P-Lock Values:** Lists every parameter lock and its exact value.
