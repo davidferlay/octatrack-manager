@@ -206,13 +206,25 @@ test.describe('Patterns tab - step grid indicators', () => {
     await expect(page.locator('.rec-grid')).toBeVisible()
   })
 
-  test('Both hides the recorder grid when the track has no rec trigs', async ({ page }) => {
-    // track 2 has no recorder trigs
+  test('empty grids follow the Hide empty toggle', async ({ page }) => {
+    // track 2 has no recorder trigs; with Hide empty off the empty rec grid still shows
     await page.locator('#patterns-track-select').selectOption('1')
     await expect(page.locator('.track-grid')).toBeVisible()
+    await expect(page.locator('.rec-grid')).toBeVisible()
+
+    // Hide empty hides the empty rec grid individually, the track grid stays
+    // the checkbox itself is visually hidden behind the slider, click the label
+    const hideEmpty = page.locator('.toggle-switch', { hasText: 'Hide empty' })
+    await hideEmpty.click()
+    await expect(page.locator('.track-grid')).toBeVisible()
     await expect(page.locator('.rec-grid')).toHaveCount(0)
-    // Rec view still shows the (empty) recorder grid explicitly
+
+    // Rec view with Hide empty on: nothing left to display, the card disappears
     await page.locator('.tri-toggle-option', { hasText: 'Rec' }).click()
+    await expect(page.locator('.pattern-card')).toHaveCount(0)
+
+    // Hide empty off again: the empty rec grid comes back
+    await hideEmpty.click()
     await expect(page.locator('.rec-grid')).toBeVisible()
   })
 

@@ -36,8 +36,8 @@
 | **Trig View** | | | | |
 | PT35 | Trig View | Recorder grid separated | Open a pattern whose track has both sample trigs and recorder trigs | Two grids without captions: the track grid, then the recorder grid below it; R indicators appear only on the recorder grid |
 | PT36 | Trig View | Track view | Set the Trigs control to "Track" | Only the track grid is displayed, no recorder grid or caption |
-| PT37 | Trig View | Rec view | Set the Trigs control to "Rec" | Only the recorder grid is displayed, even when the track has no recorder trigs |
-| PT38 | Trig View | Both hides empty recorder grid | Set the Trigs control to "Both" and display a track without recorder trigs | No recorder grid is shown for that track; tracks with rec trigs still show it |
+| PT37 | Trig View | Rec view | Set the Trigs control to "Rec" | Only the recorder grid is displayed, even when the track has no recorder trigs (Hide empty off) |
+| PT38 | Trig View | Hide empty gates each grid | Enable "Hide empty" on a track with sample trigs but no rec trigs (Trigs set to "Both") | The empty recorder grid is hidden while the track grid stays; with "Hide empty" off both grids show even when empty; if no grid has content the pattern card is hidden entirely |
 | PT39 | Trig View | Separate step details per grid | Click a step while both grids are displayed | Two details panels open, one below each grid: the track panel shows trig/lock data without recorder info; the recorder panel shows "Recorder Trig: Yes", "Yes (One-Shot)" or "No" |
 | PT40 | Trig View | Chips gated by Trigs view | Set the Trigs control to "Track", then "Rec" | In Track view the Rec Trig / One-Shot Rec chips are disabled; in Rec view every non-recorder chip is disabled; "Both" restores content-based gating |
 | PT41 | Trig View | Recorder grid selection color | Click a step on the recorder grid | The selected cell outline on the recorder grid is red (matching the R indicator); the track grid selection stays orange |

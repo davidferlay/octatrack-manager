@@ -1727,13 +1727,19 @@ export function ProjectDetail() {
                                 return tracksToDisplay.map((trackIndex) => {
                                   const trackData = pattern.tracks[trackIndex];
 
-                                  // Check if pattern/track has any trigs
-                                  const hasAnyTrigs = trackData.steps.slice(0, pattern.length).some(
-                                    (step: TrigStep) => step.trigger || step.trigless || step.oneshot || step.plock || step.recorder
+                                  // Recorder trigs render on their own grid, as on the hardware.
+                                  // Hide empty gates each grid individually; with it off both
+                                  // grids are always displayed, even when empty.
+                                  const stepsInRange = trackData.steps.slice(0, pattern.length);
+                                  const hasTrackTrigs = stepsInRange.some(
+                                    (step: TrigStep) => step.trigger || step.trigless || step.oneshot || step.plock
                                   );
+                                  const hasRecTrigs = stepsInRange.some((step: TrigStep) => step.recorder);
+                                  const showTrackGrid = trigView !== 'rec' && (!hideEmptyPatterns || hasTrackTrigs);
+                                  const showRecGrid = trigView !== 'track' && (!hideEmptyPatterns || hasRecTrigs);
 
-                                  // Skip empty patterns if hideEmptyPatterns is enabled
-                                  if (hideEmptyPatterns && !hasAnyTrigs) {
+                                  // Skip the card entirely when nothing is left to display
+                                  if (!showTrackGrid && !showRecGrid) {
                                     return null;
                                   }
 
@@ -1851,12 +1857,6 @@ export function ProjectDetail() {
                                   const cardKey = `${bankIndex}-${patternIndex}-${trackIndex}`;
                                   const cardHidden = cardHiddenIndicators[cardKey] ?? [];
                                   const show = (key: string) => !hiddenIndicators.includes(key) && !cardHidden.includes(key);
-
-                                  // Recorder trigs render on their own grid, as on the hardware.
-                                  // "Both" only shows the recorder grid when the track has rec trigs.
-                                  const showTrackGrid = trigView !== 'rec';
-                                  const showRecGrid = trigView === 'rec'
-                                    || (trigView === 'both' && steps.some((s) => s.recorder));
 
                                   return (
                                     <>
