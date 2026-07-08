@@ -12,6 +12,10 @@
 | SM85 | Copy Banks | Static-track sample lock follows remap | Source has a Static track with a sample-lock p-lock to static slot N. Copy bank with samples so the sample relocates | Locked step references the new STATIC slot holding that sample; it does not follow the flex remap or stay at the old number |
 | SM86 | Copy Banks | Sample lock to slot 1 follows remap | Source step locked to slot 1, copy bank with samples so slot 1's sample relocates | Lock follows to the new slot (slot 1 is a real lock, not treated as "no lock") |
 | SM87 | Copy Banks | Sample lock slot shown 1-based | P-lock a step to sample slot N, open the step details in the pattern view | "Sample Slot:" shows N, matching the device's 1-based slot numbering (not N-1) |
+| SM88 | Copy Banks | Reused slot wording | Copy a bank with samples whose files already exist in the destination (same filename) | Validation line and success message say "N already in destination and reused" (no "deduplicated" wording) |
+| SM89 | Destination Modal | Browse a folder containing projects | In the destination selector, click "Browse..." and pick a folder that contains projects somewhere below it (not a project itself) | The folder is scanned recursively; a "Manual Browse" section lists every project found, and clicking one selects it as destination |
+| SM90 | Destination Modal | Browse a project folder directly | Click "Browse..." and pick a folder that is itself an Octatrack project | The project is selected as destination immediately, modal closes |
+| SM91 | Destination Modal | Browse a folder without projects | Click "Browse..." and pick a folder with no Octatrack project anywhere below it | Error message states no Octatrack project was found in the selected folder |
 | SM67 OK | Copy Parts | Multi-select dest Banks | Copy Part 1 → Banks A, B, C | Part 1 copied to all 3 destination banks |
 | **Copy Parts** | | | | |
 | SM4 OK | Copy Parts | Copy single part | Copy Part 1 → Part 3 | Part 3 machines, amps, LFOs, FX match Part 1 |

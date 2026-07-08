@@ -164,6 +164,12 @@ async function setupTauriMocks(page: Page, overrides?: { sameSet?: boolean; with
             }
             return { locations: [], standalone_projects: [] }
 
+          case 'plugin:dialog|open':
+            return (window as any).__browseDialogResult__ ?? null
+
+          case 'scan_custom_directory':
+            return (window as any).__scanCustomResult__ ?? { locations: [], standalone_projects: [] }
+
           case 'check_project_in_set':
             return true
 
@@ -703,6 +709,117 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
     // Second call: source backup (project.work + audio files)
     expect(backupCalls[1].files).toContain('project.work')
     expect(backupCalls[1].label).toBe('move_to_pool_source')
+  })
+})
+
+test.describe('Tools Tab - Destination Modal Browse', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page, { sameSet: false, withOtherProject: true })
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
+    await toolsTab.click()
+    await page.waitForTimeout(500)
+
+    const operationSelect = page.locator('.tools-section .tools-select')
+    await operationSelect.selectOption('copy_sample_slots')
+    await page.waitForTimeout(300)
+
+    await page.locator('.tools-project-selector-btn').click()
+    await expect(page.locator('.project-selector-modal')).toBeVisible()
+  })
+
+  const browseBtn = (page: Page) =>
+    page.locator('.project-selector-modal .scan-button', { hasText: 'Browse...' })
+
+  test('Browse offers every project found under the selected folder', async ({ page }) => {
+    // like the homepage, browsing a plain folder scans it recursively
+    await page.evaluate(() => {
+      ;(window as any).__browseDialogResult__ = '/browse/root'
+      ;(window as any).__scanCustomResult__ = {
+        locations: [{
+          name: 'root', path: '/browse/root', device_type: 'LocalCopy',
+          sets: [{
+            name: 'SetX', path: '/browse/root/SetX', has_audio_pool: false,
+            projects: [{ name: 'SetProject', path: '/browse/root/SetX/SetProject', has_project_file: true, has_banks: true }],
+          }],
+        }],
+        standalone_projects: [
+          { name: 'LooseProject', path: '/browse/root/LooseProject', has_project_file: true, has_banks: true },
+        ],
+      }
+    })
+    await browseBtn(page).click()
+
+    const manualSection = page.locator('.project-selector-manual')
+    await expect(manualSection).toBeVisible()
+    await expect(manualSection.locator('h4')).toContainText('Manual Browse — 2 Projects')
+    await expect(manualSection.locator('.project-selector-card')).toHaveCount(2)
+
+    // the section is collapsible, open by default after a browse; the closed
+    // state collapses to zero height (grid-template-rows: 0fr + overflow hidden)
+    const contentHeight = async () =>
+      (await manualSection.locator('.sets-section-content').boundingBox())?.height ?? 0
+    await manualSection.locator('h4').click()
+    await expect(manualSection.locator('.sets-section')).toHaveClass(/closed/)
+    await expect.poll(contentHeight).toBeLessThanOrEqual(1)
+    await manualSection.locator('h4').click()
+    await expect(manualSection.locator('.sets-section')).toHaveClass(/open/)
+    await expect.poll(contentHeight).toBeGreaterThan(20)
+
+    await manualSection.locator('.project-selector-card', { hasText: 'SetProject' }).click()
+    await expect(page.locator('.project-selector-modal')).toHaveCount(0)
+    await expect(page.locator('.tools-project-selector-name')).toContainText('SetProject')
+  })
+
+  test('a long Browse result wraps instead of overflowing the modal', async ({ page }) => {
+    await page.evaluate(() => {
+      ;(window as any).__browseDialogResult__ = '/browse/root'
+      ;(window as any).__scanCustomResult__ = {
+        locations: [],
+        standalone_projects: Array(20).fill(null).map((_, i) => (
+          { name: `VERY_LONG_PROJECT_NAME_${i + 1}`, path: `/browse/root/p${i + 1}`, has_project_file: true, has_banks: true }
+        )),
+      }
+    })
+    await browseBtn(page).click()
+
+    const manualSection = page.locator('.project-selector-manual')
+    await expect(manualSection.locator('.project-selector-card')).toHaveCount(20)
+
+    const overflow = await page.evaluate(() => {
+      const modal = document.querySelector('.project-selector-modal') as HTMLElement
+      return {
+        modalOverflow: modal.scrollWidth - modal.clientWidth,
+        pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      }
+    })
+    expect(overflow.modalOverflow).toBe(0)
+    expect(overflow.pageOverflow).toBe(0)
+  })
+
+  test('Browse selects the folder directly when it is itself a project', async ({ page }) => {
+    await page.evaluate(() => {
+      ;(window as any).__browseDialogResult__ = '/browse/MyProject'
+      ;(window as any).__scanCustomResult__ = {
+        locations: [],
+        standalone_projects: [
+          { name: 'MyProject', path: '/browse/MyProject', has_project_file: true, has_banks: true },
+        ],
+      }
+    })
+    await browseBtn(page).click()
+    await expect(page.locator('.project-selector-modal')).toHaveCount(0)
+    await expect(page.locator('.tools-project-selector-name')).toContainText('MyProject')
+  })
+
+  test('Browse reports when no project is found under the folder', async ({ page }) => {
+    await page.evaluate(() => {
+      ;(window as any).__browseDialogResult__ = '/browse/empty'
+      ;(window as any).__scanCustomResult__ = { locations: [], standalone_projects: [] }
+    })
+    await browseBtn(page).click()
+    await expect(page.locator('.error-modal')).toContainText('No Octatrack project found in the selected folder')
   })
 })
 
@@ -3261,8 +3378,9 @@ test.describe('Tools Tab - Copy Banks Sample Options', () => {
 
     const validationStatus = page.locator('.tools-validation-status')
     await expect(validationStatus).toBeVisible()
-    // Mock returns is_valid=true with 5 slots to copy (3 static + 2 flex)
+    // Mock returns is_valid=true with 5 slots to copy (3 static + 2 flex, 1 dedup)
     await expect(validationStatus).toContainText('5 slots to copy')
+    await expect(validationStatus).toContainText('1 already in destination and reused')
     await expect(validationStatus).toHaveClass(/valid/)
   })
 

@@ -4716,6 +4716,8 @@ th.col-used .header-content .filter-icon {
   display: flex;
   gap: 0.75rem;
   align-items: flex-start;
+  flex: 1;
+  min-width: 0; /* allow shrinking instead of overflowing the modal */
 }
 
 .project-selector-current {
@@ -4732,12 +4734,17 @@ th.col-used .header-content .filter-icon {
   max-width: 200px;
 }
 
+/* Own full-width row below the header; cards wrap within the modal
+   instead of forcing a horizontal scrollbar */
 .project-selector-manual {
-  flex-shrink: 0;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--elektron-border-gray);
 }
 
 .project-selector-manual .projects-grid {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.75rem;
 }
 

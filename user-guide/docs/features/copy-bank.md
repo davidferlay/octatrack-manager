@@ -15,6 +15,13 @@ sidebar_position: 8
 3. **Options:** Configure sample copying behavior.
 4. **Execute:** Perform the bank copy.
 
+### Choosing the Destination Project
+
+The destination selector lists the current project and every project the app already knows about. Two buttons extend the list:
+
+- **Rescan for Projects:** Refreshes the known locations, like the Refresh button on the home page.
+- **Browse...:** Pick any folder — it is scanned recursively for Octatrack projects, exactly like **Browse** on the home page. If the folder is itself a project it is selected directly; otherwise every project found under it appears in a collapsible **Manual Browse** section for you to pick from.
+
 ---
 
 ## Data Copied
@@ -87,7 +94,7 @@ Controls where copied samples are placed in the destination's slot list:
 
 Before executing, the app validates the destination project and shows a status indicator:
 
-- **Green checkmark:** Sufficient free slots and Flex RAM available. Shows the number of slots to copy, with deduplication count if some files already exist at the destination.
+- **Green checkmark:** Sufficient free slots and Flex RAM available. Shows the number of slots to copy; when some files already exist in the destination project (same filename) they are counted as "already in destination and reused" instead of being copied again.
 
 <img
   src={require('@site/static/img/screenshots/tools-copy-bank-scope-used.png').default}

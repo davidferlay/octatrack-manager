@@ -253,9 +253,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [openLocationsInModal, setOpenLocationsInModal] = useState<Set<number>>(new Set()); // Track which locations are open in modal
   const [createModalTarget, setCreateModalTarget] = useState<{ setPath: string; setName: string } | null>(null);
   const [isIndividualProjectsOpenInModal, setIsIndividualProjectsOpenInModal] = useState<boolean>(false);
+  const [isManualBrowseOpen, setIsManualBrowseOpen] = useState<boolean>(true);
   const [isLocationsOpenInModal, setIsLocationsOpenInModal] = useState<boolean>(true);
   const [isScanning, setIsScanning] = useState<boolean>(false);
-  const [browsedProject, setBrowsedProject] = useState<{ name: string; path: string } | null>(null);
+  const [browsedProjects, setBrowsedProjects] = useState<{ name: string; path: string }[]>([]);
 
   // Rescan for devices
   async function handleRescan() {
@@ -276,51 +277,50 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     }
   }
 
-  // Browse for a project folder
+  // Browse for a folder: like the homepage, the selected folder is scanned
+  // recursively and every project found under it is offered for selection
   async function handleBrowse() {
     try {
       const selected = await open({
         directory: true,
         multiple: false,
-        title: "Select Octatrack Project Folder",
+        title: "Select a Folder to Scan for Octatrack Projects",
       });
       if (selected && typeof selected === 'string') {
-        // Validate that the selected folder is a valid Octatrack project
         try {
           const result = await invoke<ScanResult>("scan_custom_directory", { path: selected });
 
-          // Check if the selected path is a valid project
-          let validProject: OctatrackProject | null = null;
-
-          // Check standalone projects
-          validProject = result.standalone_projects.find(p => p.path === selected && p.has_project_file) || null;
-
-          // Check projects in locations/sets
-          if (!validProject) {
-            for (const location of result.locations) {
-              for (const set of location.sets) {
-                const found = set.projects.find(p => p.path === selected && p.has_project_file);
-                if (found) {
-                  validProject = found;
-                  break;
-                }
+          const found: { name: string; path: string }[] = [];
+          for (const p of result.standalone_projects) {
+            if (p.has_project_file) found.push({ name: p.name, path: p.path });
+          }
+          for (const location of result.locations) {
+            for (const set of location.sets) {
+              for (const p of set.projects) {
+                if (p.has_project_file) found.push({ name: p.name, path: p.path });
               }
-              if (validProject) break;
             }
           }
 
-          if (validProject) {
-            setBrowsedProject({ name: validProject.name, path: validProject.path });
-            setDestProject(validProject.path);
+          const exact = found.find(p => p.path === selected);
+          if (exact) {
+            // The folder itself is a project: select it directly
+            setBrowsedProjects([exact]);
+            setDestProject(exact.path);
             setShowProjectSelector(false);
+          } else if (found.length > 0) {
+            // Offer everything found in the Manual Browse section
+            found.sort((a, b) => naturalCompare(a.name, b.name));
+            setBrowsedProjects(found);
+            setIsManualBrowseOpen(true);
           } else {
             setShowProjectSelector(false);
-            setStatusMessage("Selected folder is not a valid Octatrack project. Please select a folder containing a project.oct file.");
+            setStatusMessage("No Octatrack project found in the selected folder (searched recursively).");
             setStatusType("error");
           }
         } catch (err) {
           setShowProjectSelector(false);
-          setStatusMessage("Failed to validate project folder: " + String(err));
+          setStatusMessage("Failed to scan the selected folder: " + String(err));
           setStatusType("error");
         }
       }
@@ -412,6 +412,11 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     const standalone = standaloneProjects.find(p => p.path === destProject);
     if (standalone) {
       return { name: standalone.name, isCurrentProject: false };
+    }
+    // Check in manually browsed projects
+    const browsed = browsedProjects.find(p => p.path === destProject);
+    if (browsed) {
+      return { name: browsed.name, isCurrentProject: false };
     }
     return { name: "Unknown", isCurrentProject: false };
   }
@@ -673,7 +678,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             const parts = [];
             if (bankResult.slots_copied_static > 0) parts.push(`${bankResult.slots_copied_static} Static`);
             if (bankResult.slots_copied_flex > 0) parts.push(`${bankResult.slots_copied_flex} Flex`);
-            const dedup = bankResult.slots_deduplicated > 0 ? ` (${bankResult.slots_deduplicated} deduplicated)` : '';
+            const dedup = bankResult.slots_deduplicated > 0 ? ` (${bankResult.slots_deduplicated} already in destination and reused)` : '';
             setStatusMessage(`Bank ${String.fromCharCode(65 + sourceBankIndex)} copied to ${destBankIndices.length} bank${destBankIndices.length > 1 ? 's' : ''} with ${parts.join(' + ')} sample slots${dedup}`);
           } else {
             setStatusMessage(`Bank ${String.fromCharCode(65 + sourceBankIndex)} copied to ${destBankIndices.length} bank${destBankIndices.length > 1 ? 's' : ''} successfully`);
@@ -1620,7 +1625,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                           {slotValidation.static_needed > 0 && slotValidation.flex_needed > 0 && `, ${slotValidation.flex_needed} Flex)`}
                           {slotValidation.static_needed > 0 && slotValidation.flex_needed === 0 && ')'}
                           {slotValidation.static_needed === 0 && slotValidation.flex_needed > 0 && ` (${slotValidation.flex_needed} Flex)`}
-                          {(slotValidation.static_dedup + slotValidation.flex_dedup) > 0 && ` - ${slotValidation.static_dedup + slotValidation.flex_dedup} deduplicated`}
+                          {(slotValidation.static_dedup + slotValidation.flex_dedup) > 0 && ` - ${slotValidation.static_dedup + slotValidation.flex_dedup} already in destination and reused`}
                         </span>
                       ) : (
                         <span>
@@ -3089,24 +3094,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       </div>
                     </div>
                   </div>
-                  {/* Manual Browse */}
-                  {browsedProject && browsedProject.path !== projectPath && (
-                    <div className="project-selector-section project-selector-manual">
-                      <h4>Manual Browse</h4>
-                      <div className="projects-grid">
-                        <div
-                          className={`project-card project-selector-card ${destProject === browsedProject.path ? 'selected' : ''}`}
-                          onClick={() => {
-                            setDestProject(browsedProject.path);
-                            setShowProjectSelector(false);
-                          }}
-                          title={browsedProject.path}
-                        >
-                          <div className="project-name">{browsedProject.name}</div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
                 <div className="project-selector-section project-selector-actions-section">
                   <h4>Actions</h4>
@@ -3127,6 +3114,43 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   </div>
                 </div>
               </div>
+
+              {/* Manual Browse: every project found under the browsed folder,
+                  in a collapsible full-width section below the header */}
+              {browsedProjects.some(p => p.path !== projectPath) && (() => {
+                const browseCards = browsedProjects.filter(p => p.path !== projectPath);
+                return (
+                <div className="project-selector-section project-selector-manual">
+                  <h4
+                    className="clickable"
+                    onClick={() => setIsManualBrowseOpen(!isManualBrowseOpen)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
+                  >
+                    <span className="collapse-indicator">{isManualBrowseOpen ? '▼' : '▶'}</span>
+                    Manual Browse — {browseCards.length} Project{browseCards.length !== 1 ? 's' : ''}
+                  </h4>
+                  <div className={`sets-section ${isManualBrowseOpen ? 'open' : 'closed'}`}>
+                    <div className="sets-section-content">
+                      <div className="projects-grid">
+                        {browseCards.map((p) => (
+                          <div
+                            key={p.path}
+                            className={`project-card project-selector-card ${destProject === p.path ? 'selected' : ''}`}
+                            onClick={() => {
+                              setDestProject(p.path);
+                              setShowProjectSelector(false);
+                            }}
+                            title={p.path}
+                          >
+                            <div className="project-name">{p.name}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                );
+              })()}
 
               {/* Individual Projects (collapsible, grouped by parent dir) */}
               {standaloneProjects.some(p => p.path !== projectPath && p.has_project_file) && (() => {
