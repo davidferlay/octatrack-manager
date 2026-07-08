@@ -1093,7 +1093,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     if (visibleColumns.sample) headers.push('Sample');
     if (visibleColumns.compatibility) headers.push('Compatibility');
     if (visibleColumns.status) headers.push('Status');
-    if (visibleColumns.used) headers.push('Used');
+    if (visibleColumns.used) headers.push('Usage');
     if (visibleColumns.source) headers.push('Source');
     if (visibleColumns.gain) headers.push('Gain');
     if (visibleColumns.timestretch) headers.push('Timestretch');
@@ -1449,7 +1449,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   function renderColHeader(colId: string) {
     const COL_LABELS: Record<string, string> = {
       slot: 'Slot', sample: 'Sample', compatibility: 'Compat', status: 'Status',
-      used: 'Used',
+      used: 'Usage',
       source: 'Source', gain: 'Gain', timestretch: 'Timestretch', loop: 'Loop',
       format: 'Format', bitdepth: 'Bit', samplerate: 'kHz', size: 'Size',
     };
@@ -1892,7 +1892,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
                     checked={visibleColumns.used}
                     onChange={() => toggleColumn('used')}
                   />
-                  <span>Used</span>
+                  <span>Usage</span>
                 </label>
                 <label className="column-visibility-option">
                   <input

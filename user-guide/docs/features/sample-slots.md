@@ -43,7 +43,7 @@ Every row in the table represents a slot (S1–S128 or F1–F128). The table pro
 | **Name** | The filename of the sample. Hover on it to display the full file path - relative to project's folder. |
 | **Compatibility** | Whether or not the audio file is compatible with Octatrack's audio engine. Uses same icons as on Octatrack. |
 | **Status** | Whether or not the audio file is found at the exact location set for Sample Slot. |
-| **Used** | If and where the slot is used across the project. See [Slot Usage](#slot-usage) below. |
+| **Usage** | If and where the slot is used across the project. See [Slot Usage](#slot-usage) below. |
 | **Source** | Whether the audio file is located in Project's directory or the Set's Audio pool. |
 | **Gain** | The gain setting for that sample slot. |
 | **Timestretch** | Shows the timestretch mode (Off, Normal, Beat). |
@@ -74,7 +74,7 @@ Additionally, you can also use these advanced features:
 
 ### Slot Usage
 
-The **Used** column tells you at a glance whether a slot matters to the project, with up to two badges:
+The **Usage** column tells you at a glance whether a slot matters to the project, with up to two badges:
 
 - A blue **✓ N** badge counts the places where the slot audibly plays: track machines that actually have trigs, plus sample locks on pattern steps.
 - A gray **○ N** badge counts silent references - machine assignments on tracks that never trig. The Octatrack's factory default (static slot N assigned to track N, in every part of every bank) is not counted while untrigged, so gray badges only report deliberate assignments.
