@@ -1141,7 +1141,10 @@ export function AudioPoolPage() {
               ← Back
             </button>
           )}
-          <h1 title={destinationPath}>{setName}</h1>
+          <h1 title={destinationPath} className="pool-title">
+            <span className="pool-title-name">{setName}</span>
+            <span>&nbsp;- Audio Pool</span>
+          </h1>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <button

@@ -951,6 +951,21 @@ h1 {
   -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
 }
 
+/* Audio Pool page: only the set name truncates, the suffix stays visible */
+.project-header .back-button + h1.pool-title {
+  max-width: none;
+  display: inline-flex;
+  align-items: baseline;
+  overflow: visible;
+}
+
+.pool-title .pool-title-name {
+  max-width: 11vw;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
 /* Write status indicator in project header */
 .save-status-indicator {
   font-size: 13px;
