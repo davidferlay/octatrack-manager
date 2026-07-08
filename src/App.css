@@ -1718,7 +1718,7 @@ h1 {
   margin-bottom: 0.75rem;
   display: flex;
   align-items: center;
-  gap: 4.5rem;
+  gap: 3.5rem;
 }
 
 .track-settings-header {
@@ -1735,10 +1735,13 @@ h1 {
   letter-spacing: 0.05em;
 }
 
+/* Flex with space-between: equal spacing between items regardless of
+   their width (the 1fr grid columns made the gaps look uneven) */
 .track-settings-row {
-  grid-template-columns: repeat(6, 1fr);
+  display: flex;
+  justify-content: space-between;
   gap: 1rem;
-  padding: 0;
+  padding: 0 1rem 0 0;
   flex: 1;
 }
 
