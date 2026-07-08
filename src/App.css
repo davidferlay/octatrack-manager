@@ -1709,19 +1709,23 @@ h1 {
   border-radius: 4px;
 }
 
+/* Single compact row: label + badge inline with the settings values */
 .track-settings-card {
   background-color: var(--elektron-dark-gray);
   border: 1px solid var(--elektron-border-gray);
   border-radius: 4px;
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 1rem;
   margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
 }
 
 .track-settings-header {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 0.5rem;
+  flex-shrink: 0;
 }
 
 .track-settings-title {
@@ -1734,6 +1738,8 @@ h1 {
 .track-settings-row {
   grid-template-columns: repeat(6, 1fr);
   gap: 1rem;
+  padding: 0;
+  flex: 1;
 }
 
 .trig-stats-row {
