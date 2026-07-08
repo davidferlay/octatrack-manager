@@ -3676,14 +3676,14 @@ th.col-used .header-content .filter-icon {
 .usage-badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.1rem 0.45rem;
-  font-size: 0.8rem;
+  gap: 0.3rem;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.9rem;
   font-family: inherit;
   color: #4a9eff;
   background-color: rgba(74, 158, 255, 0.12);
   border: 1px solid rgba(74, 158, 255, 0.4);
-  border-radius: 10px;
+  border-radius: 12px;
   cursor: pointer;
 }
 
@@ -3713,9 +3713,9 @@ th.col-used .header-content .filter-icon {
 
 .usage-popover {
   z-index: 1000;
-  min-width: 240px;
-  max-width: 340px;
-  max-height: 300px;
+  min-width: 300px;
+  max-width: 440px;
+  max-height: 380px;
   overflow-y: auto;
   background-color: var(--elektron-medium-gray);
   border: 1px solid var(--elektron-border-gray);
@@ -3724,21 +3724,21 @@ th.col-used .header-content .filter-icon {
 }
 
 .usage-popover-header {
-  padding: 0.5rem 0.75rem;
-  font-size: 0.85rem;
+  padding: 0.65rem 1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--elektron-text-primary);
   border-bottom: 1px solid var(--elektron-border-gray);
 }
 
 .usage-popover-list {
-  padding: 0.25rem 0;
+  padding: 0.3rem 0;
 }
 
 .usage-popover-entry {
-  padding: 0.25rem 0.75rem;
-  font-size: 0.8rem;
-  color: var(--elektron-text-secondary);
+  padding: 0.3rem 1rem;
+  font-size: 0.9rem;
+  color: #cccccc; /* between secondary (#999) and primary (#fff) */
   white-space: nowrap;
 }
 

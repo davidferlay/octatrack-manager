@@ -289,7 +289,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   const [columnSizing, setColumnSizing] = useState<Record<string, number>>({
     slot: 80, sample: 200, compatibility: 120, status: 100,
     // wide enough for both usage badges (green + gray) on one line
-    used: 130,
+    used: 150,
     source: 110, gain: 85, timestretch: 140, loop: 100,
     format: 100, bitdepth: 80, samplerate: 80, size: 95,
   });
@@ -2053,7 +2053,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
                   <div key={idx} className="usage-popover-entry">
                     {entry.kind === 'machine'
                       ? `Bank ${BANK_LETTERS[entry.bank] ?? '?'} · Part ${(entry.part ?? 0) + 1} · T${entry.track + 1} · Machine`
-                      : `Bank ${BANK_LETTERS[entry.bank] ?? '?'} · Ptn ${(entry.pattern ?? 0) + 1} · T${entry.track + 1} · Step ${(entry.step ?? 0) + 1} · Lock`}
+                      : `Bank ${BANK_LETTERS[entry.bank] ?? '?'} · Pattern ${(entry.pattern ?? 0) + 1} · T${entry.track + 1} · Step ${(entry.step ?? 0) + 1} · Lock`}
                   </div>
                 ))}
               </div>

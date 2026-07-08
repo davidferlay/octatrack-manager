@@ -276,15 +276,20 @@ export function ProjectDetail() {
   }, [banks, loadedBankIndices, selectedBankIndex, selectedPatternIndex, selectedTrackIndex]);
 
   // Where each sample slot is used (machine assignments + sample locks),
-  // computed by the backend when a slots tab is first opened.
+  // computed in the background as soon as the project opens so the badges
+  // are already there when a slots tab is first displayed. Bumping
+  // usageRefreshKey (project refresh) recomputes.
   const [slotUsage, setSlotUsage] = useState<SampleSlotUsage | null>(null);
+  const [usageRefreshKey, setUsageRefreshKey] = useState<number>(0);
   useEffect(() => {
-    if (!projectPath || slotUsage) return;
-    if (activeTab !== 'flex-slots' && activeTab !== 'static-slots') return;
+    if (!projectPath) return;
+    let cancelled = false;
+    setSlotUsage(null);
     invoke<SampleSlotUsage>('compute_sample_usage', { path: projectPath })
-      .then(setSlotUsage)
+      .then((usage) => { if (!cancelled) setSlotUsage(usage); })
       .catch((err) => console.error('Failed to compute sample usage:', err));
-  }, [activeTab, projectPath, slotUsage]);
+    return () => { cancelled = true; };
+  }, [projectPath, usageRefreshKey]);
 
   // Keyboard navigation through pattern steps once a step is selected:
   // Left/Right and Tab/Shift+Tab move by one step, Up/Down by a page row (16),
@@ -550,7 +555,7 @@ export function ProjectDetail() {
       // Reload metadata
       const projectMetadata = await invoke<ProjectMetadata>("load_project_metadata", { path: projectPath });
       setMetadata(projectMetadata);
-      setSlotUsage(null); // recomputed on next Flex/Static tab visit
+      setUsageRefreshKey((k) => k + 1); // recompute usage in the background
 
       // Reload all banks in-place
       const existingBankIndices = await invoke<number[]>("get_existing_banks", { path: projectPath });

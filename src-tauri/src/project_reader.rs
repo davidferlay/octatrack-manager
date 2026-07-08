@@ -1042,12 +1042,14 @@ pub struct SampleSlotUsage {
 
 /// Scan every bank of a project and report where each sample slot is referenced.
 ///
-/// Every machine slot assignment is reported; its `audible` flag is true only
-/// when that track has at least one trigger or one-shot trig in some pattern
-/// assigned to that part (the OT assigns default slots to every track of every
-/// empty bank, so non-audible entries are usually those defaults). Sample locks
-/// are always audible entries, but only within the pattern's played length
-/// (bank files keep leftover lock bytes beyond it).
+/// A machine slot assignment is reported with `audible: true` when that track
+/// has at least one trigger or one-shot trig in some pattern assigned to that
+/// part, and `audible: false` otherwise. The OT factory default (a static
+/// machine on slot N for track N, in every part of every bank) is skipped
+/// while untrigged: reporting it would flood every default slot with 64
+/// reference entries on a fresh project. Sample locks are always audible
+/// entries, but only within the pattern's played length (bank files keep
+/// leftover lock bytes beyond it).
 pub fn compute_sample_usage(project_path: &str) -> Result<SampleSlotUsage, String> {
     let path = Path::new(project_path);
     let mut static_usage: Vec<Vec<SlotUsageEntry>> = vec![Vec::new(); 128];
@@ -1086,11 +1088,18 @@ pub fn compute_sample_usage(project_path: &str) -> Result<SampleSlotUsage, Strin
         for (part_id, part) in bank.parts.unsaved.0.iter().enumerate() {
             for t in 0..8 {
                 let slot = &part.audio_track_machine_slots[t];
-                let (pool, slot_id) = match part.audio_track_machine_types[t] {
+                let machine_type = part.audio_track_machine_types[t];
+                let (pool, slot_id) = match machine_type {
                     0 => (&mut static_usage, slot.static_slot_id),
                     1 => (&mut flex_usage, slot.flex_slot_id),
                     _ => continue, // Thru/Neighbor/Pickup play no sample slot
                 };
+                let is_audible = audible.contains(&(part_id, t));
+                // Untrigged factory default (static machine, slot == track):
+                // pure noise, present on every track of every untouched bank.
+                if !is_audible && machine_type == 0 && slot_id as usize == t {
+                    continue;
+                }
                 if let Some(entries) = pool.get_mut(slot_id as usize) {
                     entries.push(SlotUsageEntry {
                         bank: bank_idx,
@@ -1099,7 +1108,7 @@ pub fn compute_sample_usage(project_path: &str) -> Result<SampleSlotUsage, Strin
                         part: Some(part_id as u8),
                         pattern: None,
                         step: None,
-                        audible: audible.contains(&(part_id, t)),
+                        audible: is_audible,
                     });
                 }
             }
@@ -8323,21 +8332,30 @@ mod tests {
         use super::*;
 
         #[test]
-        fn default_project_has_only_non_audible_references() {
-            // Default banks assign slots to every track but have no trigs:
-            // every reported entry must be a non-audible reference.
+        fn default_project_reports_no_references() {
+            // Default banks assign static slot N to track N everywhere but have
+            // no trigs: those untrigged factory defaults are skipped entirely.
             let project = TestProject::new();
             let usage = compute_sample_usage(&project.path).unwrap();
             let all = usage.static_usage.iter().chain(usage.flex_usage.iter());
-            let mut total = 0;
-            for entries in all {
-                for entry in entries {
-                    assert!(!entry.audible, "default assignments are never audible");
-                    assert_eq!(entry.kind, "machine");
-                    total += 1;
-                }
-            }
-            assert!(total > 0, "default machine assignments are still reported");
+            let total: usize = all.map(|entries| entries.len()).sum();
+            assert_eq!(total, 0, "untrigged factory defaults must not be reported");
+        }
+
+        #[test]
+        fn default_assignment_counts_once_trigged() {
+            // The factory default (static machine, slot == track) is reported
+            // as soon as the track actually plays.
+            let project = TestProject::with_modified_bank(0, |bank| {
+                bank.patterns.0[0].audio_track_trigs.0[3].trig_masks.trigger =
+                    [0, 1, 0, 0, 0, 0, 0, 0];
+            });
+            let usage = compute_sample_usage(&project.path).unwrap();
+            let entries = &usage.static_usage[3];
+            assert_eq!(entries.len(), 1);
+            assert!(entries[0].audible);
+            assert_eq!(entries[0].bank, 0);
+            assert_eq!(entries[0].track, 3);
         }
 
         #[test]

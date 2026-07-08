@@ -48,6 +48,7 @@ async function setupMocks(page: Page) {
               },
             }
           case 'compute_sample_usage': {
+            ;(window as any).__usageComputedAt__ = Date.now()
             const flex = emptyUsage()
             flex[0] = [
               { bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true },
@@ -104,6 +105,13 @@ test.describe('Sample slots - Used column', () => {
     await openFlexTab(page)
   })
 
+  test('usage is computed at project load, before any slots tab is opened', async ({ page }) => {
+    // fresh page load without touching the Flex/Static tabs
+    await page.goto('/#/project?path=/test/TestProject&name=TestProject')
+    await expect(page.locator('.header-tab', { hasText: 'Flex' })).toBeVisible({ timeout: 10000 })
+    await expect.poll(() => page.evaluate(() => (window as any).__usageComputedAt__ ?? null)).not.toBeNull()
+  })
+
   test('the Used header label is centered with the kebab at the right edge', async ({ page }) => {
     const layout = await page.evaluate(() => {
       const th = document.querySelector('th.col-used') as HTMLElement
@@ -145,7 +153,7 @@ test.describe('Sample slots - Used column', () => {
     await expect(popover).toBeVisible()
     await expect(popover.locator('.usage-popover-header')).toContainText('F1 played in 2 places')
     await expect(popover.locator('.usage-popover-entry').nth(0)).toHaveText('Bank A · Part 1 · T1 · Machine')
-    await expect(popover.locator('.usage-popover-entry').nth(1)).toHaveText('Bank B · Ptn 5 · T3 · Step 12 · Lock')
+    await expect(popover.locator('.usage-popover-entry').nth(1)).toHaveText('Bank B · Pattern 5 · T3 · Step 12 · Lock')
 
     await page.keyboard.press('Escape')
     await expect(popover).toHaveCount(0)
