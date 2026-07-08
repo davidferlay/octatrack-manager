@@ -1673,10 +1673,6 @@ export function ProjectDetail() {
                                   </div>
                                   <div className="pattern-detail-group track-settings-row">
                                     <div className="pattern-detail-item">
-                                      <span className="pattern-detail-label">Swing:</span>
-                                      <span className="pattern-detail-value">{trackData.swing_amount > 0 ? `${trackData.swing_amount + 50}%` : '50% (Off)'}</span>
-                                    </div>
-                                    <div className="pattern-detail-item">
                                       <span className="pattern-detail-label">Trig Mode:</span>
                                       <span className="pattern-detail-value">{trackData.pattern_settings.trig_mode}</span>
                                     </div>
@@ -1799,6 +1795,10 @@ export function ProjectDetail() {
                                   <span className="pattern-tempo-indicator">Length: {pattern.length}/{getLengthDenominator(pattern.length)}</span>
                                   <span className="pattern-tempo-indicator">Speed: {pattern.master_scale}</span>
                                 </>
+                              )}
+                              {/* Swing amount is per track per pattern; 50 means off, not shown */}
+                              {trackData.swing_amount > 0 && (
+                                <span className="pattern-tempo-indicator">Swing: {trackData.swing_amount + 50}%</span>
                               )}
                             </div>
                             {/* Pattern Grid Visualization */}

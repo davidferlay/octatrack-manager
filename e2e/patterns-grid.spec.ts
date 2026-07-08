@@ -48,7 +48,7 @@ async function setupTauriMocks(page: Page) {
       track_id: k,
       track_type: k < 8 ? 'Audio' : 'MIDI',
       steps: k === 0 ? t1Steps : k === 1 ? t2Steps : [],
-      swing_amount: 0,
+      swing_amount: k === 1 ? 12 : 0,
       per_track_len: null,
       per_track_scale: null,
       default_note: null,
@@ -226,6 +226,14 @@ test.describe('Patterns tab - step grid indicators', () => {
     // Hide empty off again: the empty rec grid comes back
     await hideEmpty.click()
     await expect(page.locator('.rec-grid')).toBeVisible()
+  })
+
+  test('pattern header shows the swing amount only when above 50', async ({ page }) => {
+    // track 1 has swing_amount 0 (device 50, off): no chip
+    await expect(page.locator('.pattern-tempo-indicator', { hasText: 'Swing:' })).toHaveCount(0)
+    // track 2 has swing_amount 12 (device 62)
+    await page.locator('#patterns-track-select').selectOption('1')
+    await expect(page.locator('.pattern-tempo-indicator', { hasText: 'Swing: 62%' })).toBeVisible()
   })
 
   test('selected step on the recorder grid is highlighted in red', async ({ page }) => {

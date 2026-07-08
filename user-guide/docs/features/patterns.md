@@ -39,7 +39,7 @@ With **Hide empty** off, the selected grids are always displayed, even when empt
 - **µ:** Micro-timing offset.
 - **V:** Velocity or Volume lock.
 - **S:** Sample slot lock.
-- **Swing:** A green wave icon indicates that a swing trig is active on that step. Swing trigs are hidden when the track's swing amount is 50 (the default), since they have no effect.
+- **Swing:** A green wave icon indicates that a swing trig is active on that step. Swing trigs are hidden when the track's swing amount is 50 (the default), since they have no effect. The swing amount is set per track and per pattern on the Octatrack, so when it is above 50 the pattern header shows it as a **Swing: N%** chip next to Length and Speed.
 
 ---
 
@@ -103,7 +103,6 @@ When viewing a single pattern, moving past its last step continues into the next
 Toggle **Track settings** in the header to see the configuration for each track within the bank.
 
 This section shows:
-- **Swing:** The swing amount (%) for each track.
 - **Trig Mode:** The track's trig mode (e.g., Plays Free, One-Shot).
 - **Quantization:** The trig quantization settings.
 - **Start Silent:** Whether the track starts silently.
