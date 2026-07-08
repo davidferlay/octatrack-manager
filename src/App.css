@@ -3527,10 +3527,12 @@ h1 {
   color: #fff;
 }
 
-/* Recorder trig grid: red accent matching the recorder R. The separating
-   margin only applies below the track grid, not in Rec-only view */
+/* Recorder trig grid: red accent matching the recorder R. The separator
+   only applies below the track grid, not in Rec-only view */
 .rec-grid:not(:first-child) {
   margin-top: 0.5rem;
+  border-top: 3px solid rgba(255, 255, 255, 0.08);
+  padding-top: 0.75rem;
 }
 
 .rec-grid .pattern-step.selected {
