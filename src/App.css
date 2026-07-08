@@ -1544,7 +1544,7 @@ h1 {
   background-color: var(--elektron-dark-gray);
   border: 1px solid var(--elektron-border-gray);
   border-left: 1px solid var(--elektron-orange);
-  padding: 7px 5px 5px 5px;
+  padding: 7px 5px 5px 7px;
   margin-bottom: 1rem;
 }
 
@@ -1576,6 +1576,7 @@ h1 {
   border-bottom: none;
   flex: 0 0 auto;
   font-size: 1rem;
+  padding: 0px 0px 0px 7px;
 }
 
 .bank-card-header .selector-group {
