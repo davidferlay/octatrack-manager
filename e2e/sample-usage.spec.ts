@@ -171,19 +171,33 @@ test.describe('Sample slots - Used column', () => {
     const rows = page.locator('.samples-table tbody tr')
     await expect(rows).toHaveCount(128)
 
+    // Columns must not reflow horizontally as filters change the visible rows
+    const usageBox = async () => (await page.locator('th.col-used').boundingBox())!
+    const initialBox = await usageBox()
+    const expectStableColumns = async () => {
+      const box = await usageBox()
+      expect(Math.abs(box.x - initialBox.x)).toBeLessThan(1)
+      expect(Math.abs(box.width - initialBox.width)).toBeLessThan(1)
+    }
+
     await page.locator('th.col-used .filter-icon').click()
     await page.locator('.filter-dropdown .dropdown-option', { hasText: 'Used (plays)' }).click()
     await expect(rows).toHaveCount(1)
     await expect(rows.first()).toContainText('F1')
+    await expectStableColumns()
 
     await page.locator('th.col-used .filter-icon').click()
     await page.locator('.filter-dropdown .dropdown-option', { hasText: 'Referenced, not triggered' }).click()
-    await expect(rows).toHaveCount(1)
-    await expect(rows.first()).toContainText('F2')
+    // F1 plays elsewhere but still has one silent reference, so it qualifies too
+    await expect(rows).toHaveCount(2)
+    await expect(rows.nth(0)).toContainText('F1')
+    await expect(rows.nth(1)).toContainText('F2')
+    await expectStableColumns()
 
     await page.locator('th.col-used .filter-icon').click()
     await page.locator('.filter-dropdown .dropdown-option', { hasText: 'Unused' }).click()
     await expect(rows).toHaveCount(126)
+    await expectStableColumns()
 
     await page.locator('th.col-used .filter-icon').click()
     await page.locator('.filter-dropdown .dropdown-option', { hasText: 'All' }).click()

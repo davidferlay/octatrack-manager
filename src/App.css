@@ -3161,6 +3161,12 @@ h1 {
   color: var(--elektron-text-primary);
 }
 
+/* Fixed layout: column widths come from the header cells, so filtering rows
+   in and out cannot reflow the columns horizontally */
+.slots-table {
+  table-layout: fixed;
+}
+
 /* Keep slot rows a constant height whether empty or filled (badges must not grow the row) */
 .slots-table td {
   height: 40px;

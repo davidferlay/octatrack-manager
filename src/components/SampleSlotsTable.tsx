@@ -1248,13 +1248,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         return false;
       }
 
-      // Filter by usage: used = audibly played somewhere; referenced = only
-      // non-audible references (machine assignments without trigs); unused = none.
+      // Filter by usage: used = audibly played somewhere; referenced = has at
+      // least one non-audible reference (machine assignment without trigs),
+      // audible usage elsewhere doesn't disqualify it; unused = none.
       if (usageFilter !== 'all') {
         const entries = usageEntries(slot);
         const audibleCount = entries.filter(e => e.audible).length;
         if (usageFilter === 'used' && audibleCount === 0) return false;
-        if (usageFilter === 'referenced' && (entries.length === 0 || audibleCount > 0)) return false;
+        if (usageFilter === 'referenced' && audibleCount === entries.length) return false;
         if (usageFilter === 'unused' && entries.length > 0) return false;
       }
 
