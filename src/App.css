@@ -5574,6 +5574,31 @@ th.col-used .header-content .filter-icon {
   overflow-x: hidden;
 }
 
+/* Fix Audio Pool Samples (Audio Pool) */
+.fix-pool-progress {
+  padding: 0.5rem 0;
+}
+
+.fix-pool-current-file {
+  color: var(--elektron-orange);
+  font-family: 'Courier New', monospace;
+}
+
+/* Content-sized results list (the base class pins height to 55vh for the missing-samples flow) */
+.fix-pool-modal .fix-confirm-table-wrapper {
+  height: auto;
+  max-height: 45vh;
+  overflow-y: auto;
+}
+
+/* Content-sized list modal: scrollbar only when the rows outgrow the cap */
+.missing-samples-list-modal.pool-list-modal .table-wrapper {
+  height: auto;
+  max-height: 70vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
 .fix-search-steps {
   display: flex;
   flex-direction: column;

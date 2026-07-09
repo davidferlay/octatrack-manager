@@ -23,6 +23,7 @@ This shows the contents of your `AUDIO/` directory. You can:
 - **Navigate:** Double-click a folder to enter it. Click the breadcrumb to go back up.
 - **Create Folders:** Click **+ New Folder** to organize your library.
 - **Inspect Metadata:** Every audio file shows its sample rate, bit depth, and number of channels and size.
+- **Check Compatibility:** The **Compat** column shows the same face icons as the Octatrack's sample browser — a smiley for playable files, a straight face for a wrong sample rate, and **??** for audio formats the device cannot play (MP3, FLAC, OGG, M4A). Non-audio files get no badge. See [Fixing Incompatible Files](#fixing-incompatible-files).
 - **Filter and Sort:** Use the toolbar to filter by name, bit depth, sample rate, or audio format.
 - **Search recursively:** Typing in the search box matches files and folders in the current directory and all of its subfolders (a spinner shows while deep folders are scanned).
 
@@ -78,6 +79,26 @@ If you try to add a file with the same name as one that already exists in your p
 - **Apply to All:** Use your choice for all subsequent conflicts in the current batch.
 
 <img src={require('@site/static/img/screenshots/audio-pool-confirmation.png').default} alt="File conflict confirmation modal" style={{width: '64%', display: 'block', margin: '0 auto'}} />
+
+---
+
+## Fixing Incompatible Files
+
+Automatic conversion covers files imported **through the app** — but a pool that was filled by hand (or by other tools) can contain MP3s, 48 kHz WAVs and other files the Octatrack silently refuses to play. Octatrack Manager finds and fixes those in place.
+
+### Fixing a single file
+
+Right-click any file with a non-smiley **Compat** badge and choose **Convert to Octatrack format**. With several incompatible files selected, the menu item converts them all at once. The same menu item is available in the [Audio Pool pane](sample-slots.md#the-audio-pool-pane) of a project's sample slots tabs.
+
+### Fixing the whole pool
+
+The **Tools** tab of the Audio Pool page hosts **Fix Audio Pool Samples**. Opening the tab scans every audio file of the pool (recursively) and reports how many the Octatrack cannot play — just like the project's [Fix Missing Samples](fix-missing-samples.md) tool. Click the status summary to browse the list (searchable, copyable to clipboard). **Execute** shows a **Review planned changes** screen describing what each conversion will do before anything is touched — untick **Review before applying changes** in the Options panel to have Execute convert right away. Conversion runs with per-file progress and a Cancel button.
+
+### What a fix does
+
+- The file is converted to **44.1 kHz 16/24-bit WAV** — the same high-quality conversion used during import.
+- The **original file is replaced**. A `loop.mp3` becomes `loop.wav` (a numbered suffix like `loop-1.wav` is used if that name is taken); a 48 kHz `snare.wav` keeps its exact name.
+- **Sample slots are repointed automatically:** every project of the Set that referenced the old file is updated to the new name. Each modified project file is backed up first (under the project's `backups/` directory), so the change is reversible.
 
 ---
 

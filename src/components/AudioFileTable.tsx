@@ -127,6 +127,8 @@ export interface AudioFileTableProps {
    * directory and all its subfolders. Omit for plain single-directory, name-only filtering.
    */
   searchRoot?: string;
+  /** Reports the freshly inspected OT-compatibility map (path -> compatibility). */
+  onCompatMap?: (map: Record<string, string>) => void;
 }
 
 /** Path relative to the Audio Pool root, prefixed "AUDIO/" — used for hover titles. */
@@ -137,14 +139,45 @@ function relativeToPool(filePath: string, poolRoot: string): string {
 }
 
 const DEFAULT_COLUMN_SIZES: Record<string, number> = {
-  name: 200, format: 90, bitrate: 70, samplerate: 75, size: 80,
+  name: 200, compat: 60, format: 90, bitrate: 70, samplerate: 75, size: 80,
 };
 const MIN_COLUMN_SIZES: Record<string, number> = {
-  name: 80, format: 60, bitrate: 50, samplerate: 55, size: 55,
+  name: 80, compat: 45, format: 60, bitrate: 50, samplerate: 55, size: 55,
 };
 const COLUMN_LABELS: Record<string, string> = {
-  name: 'Name', format: 'Format', bitrate: 'Bit', samplerate: 'kHz', size: 'Size',
+  name: 'Name', compat: 'Compat', format: 'Format', bitrate: 'Bit', samplerate: 'kHz', size: 'Size',
 };
+
+// Same OT-style compatibility badge as the Sample Slots table
+export function CompatBadge({ compatibility }: { compatibility: string | undefined }) {
+  switch (compatibility) {
+    case 'compatible':
+      return <span className="compat-badge compat-compatible" title="Compatible (WAV/AIFF, 16/24-bit, 44.1kHz)">:)</span>;
+    case 'wrong_rate':
+      return <span className="compat-badge compat-wrong-rate" title="Wrong sample rate (plays at wrong speed)">:|</span>;
+    case 'incompatible':
+      return <span className="compat-badge compat-incompatible" title="Incompatible bit depth">:(</span>;
+    case 'unsupported_format':
+      return <span className="compat-badge compat-unknown" title="Audio format the Octatrack cannot play (convert to WAV)">??</span>;
+    case 'unknown':
+      return <span className="compat-badge compat-unknown" title="Unrecognized format (not WAV or AIFF)">??</span>;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Classify a file by extension for OT-compatibility purposes:
+ * 'native' (WAV/AIFF — needs header inspection for rate/depth),
+ * 'other-audio' (audio the OT cannot play — mp3, flac, ...), or null (not audio).
+ */
+export function audioKind(name: string): 'native' | 'other-audio' | null {
+  const ext = name.split('.').pop()?.toLowerCase();
+  if (!ext) return null;
+  if (['wav', 'aif', 'aiff'].includes(ext)) return 'native';
+  if (['mp3', 'flac', 'ogg', 'm4a', 'aac'].includes(ext)) return 'other-audio';
+  return null;
+}
 
 // Directories always first, then sort within each group
 const dirFirstSort: SortingFn<AudioFile> = (rowA, rowB, columnId) => {
@@ -184,6 +217,7 @@ export function AudioFileTable({
   scrollStorageKey,
   poolRoot,
   searchRoot,
+  onCompatMap,
 }: AudioFileTableProps) {
   // Pre-filter state (applied before TanStack)
   const [searchText, setSearchText] = useState('');
@@ -218,6 +252,37 @@ export function AudioFileTable({
   // While a recursive search is resolved, browse that flattened list; otherwise the current dir.
   const baseFiles = searchRoot && searchActive && recursiveFiles ? recursiveFiles : files;
 
+  // OT compatibility per file path. Only WAV/AIFF need header inspection (rate/depth);
+  // other audio formats are unplayable by definition and non-audio files get no badge.
+  // Recomputed from scratch on every files change so in-place conversions refresh.
+  // Pool views only (poolRoot set): the plain file browser pane doesn't need it.
+  const [compatMap, setCompatMap] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!poolRoot) return;
+    const audioFiles = baseFiles.filter(f => !f.is_directory);
+    const base: Record<string, string> = {};
+    for (const f of audioFiles) {
+      if (audioKind(f.name) === 'other-audio') base[f.path] = 'unsupported_format';
+    }
+    const nativePaths = audioFiles.filter(f => audioKind(f.name) === 'native').map(f => f.path);
+    if (nativePaths.length === 0) {
+      setCompatMap(base);
+      onCompatMap?.(base);
+      return;
+    }
+    let cancelled = false;
+    Promise.resolve(invoke<{ path: string; compatibility: string }[]>('inspect_audio_files', { paths: nativePaths }))
+      .then(results => {
+        if (cancelled || !Array.isArray(results)) return;
+        const next = { ...base };
+        for (const r of results) next[r.path] = r.compatibility;
+        setCompatMap(next);
+        onCompatMap?.(next);
+      })
+      .catch(() => {}); // no Tauri (e2e without mock) → column stays empty
+    return () => { cancelled = true; };
+  }, [baseFiles, poolRoot]);
+
   // Dropdown state — use portal + position to avoid clipping issues
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
@@ -225,7 +290,7 @@ export function AudioFileTable({
   // TanStack column state
   const [sorting, setSorting] = useState<SortingState>([{ id: 'name', desc: false }]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility ?? {});
-  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>(['name', 'format', 'bitrate', 'samplerate', 'size']);
+  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>(['name', 'compat', 'format', 'bitrate', 'samplerate', 'size']);
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   const [showColumnMenu, setShowColumnMenu] = useState(false);
   const [dragOverColId, setDragOverColId] = useState<string | null>(null);
@@ -326,11 +391,13 @@ export function AudioFileTable({
 
   const columns = useMemo<ColumnDef<AudioFile>[]>(() => [
     { id: 'name', accessorKey: 'name', header: 'Name', size: DEFAULT_COLUMN_SIZES.name, minSize: MIN_COLUMN_SIZES.name, sortingFn: dirFirstSort },
+    // Compat column only in pool views — the plain file browser pane skips inspection
+    ...(poolRoot ? [{ id: 'compat', accessorFn: (row: AudioFile) => (!row.is_directory ? (compatMap[row.path] ?? '') : ''), header: 'Compat', size: DEFAULT_COLUMN_SIZES.compat, minSize: MIN_COLUMN_SIZES.compat, sortingFn: dirFirstSort } as ColumnDef<AudioFile>] : []),
     { id: 'format', accessorFn: (row) => (!row.is_directory ? getFileFormat(row.name) : ''), header: 'Format', size: DEFAULT_COLUMN_SIZES.format, minSize: MIN_COLUMN_SIZES.format, sortingFn: dirFirstSort },
     { id: 'bitrate', accessorKey: 'bit_rate', header: 'Bit', size: DEFAULT_COLUMN_SIZES.bitrate, minSize: MIN_COLUMN_SIZES.bitrate, sortingFn: dirFirstSort },
     { id: 'samplerate', accessorKey: 'sample_rate', header: 'kHz', size: DEFAULT_COLUMN_SIZES.samplerate, minSize: MIN_COLUMN_SIZES.samplerate, sortingFn: dirFirstSort },
     { id: 'size', accessorKey: 'size', header: 'Size', size: DEFAULT_COLUMN_SIZES.size, minSize: MIN_COLUMN_SIZES.size, sortingFn: dirFirstSort },
-  ], []);
+  ], [compatMap, poolRoot]);
 
   const table = useReactTable({
     data: filteredData,
@@ -359,6 +426,12 @@ export function AudioFileTable({
             style={{ overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
             {file.is_directory ? <i className="fas fa-folder folder-icon"></i> : ''}
             <span className="file-name-text">{file.name}</span>
+          </td>
+        );
+      case 'compat':
+        return (
+          <td key={colId} className="col-compat" style={{ width: w }}>
+            {!file.is_directory && <CompatBadge compatibility={compatMap[file.path]} />}
           </td>
         );
       case 'format':

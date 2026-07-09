@@ -2175,6 +2175,7 @@ export function ProjectDetail() {
                 memorySettings={metadata.memory_settings}
                 isEditMode={isEditMode}
                 audioPoolPath={audioPoolPath}
+                onPoolFixed={refreshProjectData}
                 onSlotsUpdated={(updatedSlots) => {
                   // Merge updated slots into metadata
                   setMetadata(prev => {
@@ -2227,6 +2228,7 @@ export function ProjectDetail() {
                 projectName={projectName}
                 isEditMode={isEditMode}
                 audioPoolPath={audioPoolPath}
+                onPoolFixed={refreshProjectData}
                 onSlotsUpdated={(updatedSlots) => {
                   // Merge updated slots into metadata
                   setMetadata(prev => {

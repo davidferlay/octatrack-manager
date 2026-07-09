@@ -819,6 +819,75 @@ where
     Ok(())
 }
 
+/// Outcome of fixing one pool file (serialized to the frontend).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PoolFixOutcome {
+    pub old_path: String,
+    pub new_path: Option<String>, // None when conversion failed
+    pub error: Option<String>,
+}
+
+/// Convert a pool file to Octatrack-compatible WAV in place: same directory, same
+/// stem, `.wav` extension. The original file is deleted once conversion succeeds.
+/// A source that is already a .wav keeps its exact name (converted via a temp file);
+/// otherwise a numbered suffix avoids clobbering an existing sibling .wav.
+/// Returns the absolute path of the converted file.
+pub fn convert_pool_file_in_place<F>(
+    source: &Path,
+    progress_callback: F,
+    cancel_token: Option<Arc<AtomicBool>>,
+) -> Result<PathBuf, String>
+where
+    F: Fn(&str, f32),
+{
+    let dir = source
+        .parent()
+        .ok_or_else(|| "Cannot determine parent directory".to_string())?;
+    let stem = source
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .ok_or_else(|| "Cannot determine file name".to_string())?;
+    let is_wav = source
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.eq_ignore_ascii_case("wav"))
+        .unwrap_or(false);
+
+    if is_wav {
+        // Same name after conversion: write to a temp sibling, then swap it in
+        let tmp = dir.join(format!("{}.otm-convert.tmp", stem));
+        let result = convert_to_octatrack_format_with_progress(
+            source,
+            &tmp,
+            &progress_callback,
+            &cancel_token,
+        );
+        if let Err(e) = result {
+            let _ = fs::remove_file(&tmp);
+            return Err(e);
+        }
+        fs::rename(&tmp, source).map_err(|e| {
+            let _ = fs::remove_file(&tmp);
+            format!("Failed to replace original file: {}", e)
+        })?;
+        Ok(source.to_path_buf())
+    } else {
+        let mut dest = dir.join(format!("{}.wav", stem));
+        let mut n = 1;
+        while dest.exists() {
+            dest = dir.join(format!("{}-{}.wav", stem, n));
+            n += 1;
+        }
+        convert_to_octatrack_format_with_progress(source, &dest, &progress_callback, &cancel_token)
+            .inspect_err(|_| {
+                let _ = fs::remove_file(&dest);
+            })?;
+        fs::remove_file(source)
+            .map_err(|e| format!("Converted, but failed to delete original: {}", e))?;
+        Ok(dest)
+    }
+}
+
 /// Copy and convert audio file to Octatrack-compatible format if needed
 fn copy_and_convert_audio(
     source_path: &Path,
@@ -1996,6 +2065,45 @@ mod tests {
             }
         }
         writer.finalize().unwrap();
+    }
+
+    #[test]
+    fn convert_pool_file_in_place_wav_keeps_name_and_replaces_content() {
+        let temp_dir = TempDir::new().unwrap();
+        let wav_path = temp_dir.path().join("loop.wav");
+        create_test_wav(&wav_path, 48000, 16, 100);
+
+        let new_path = super::convert_pool_file_in_place(&wav_path, |_, _| {}, None).unwrap();
+
+        assert_eq!(new_path, wav_path, "wav keeps its exact name");
+        let spec = hound::WavReader::open(&wav_path).unwrap().spec();
+        assert_eq!(spec.sample_rate, 44100, "content resampled to 44.1 kHz");
+        assert!(
+            !temp_dir.path().join("loop.otm-convert.tmp").exists(),
+            "temp file cleaned up"
+        );
+    }
+
+    #[test]
+    fn convert_pool_file_in_place_renames_and_deletes_original() {
+        let temp_dir = TempDir::new().unwrap();
+        // WAV content under a non-wav name: symphonia probes the real format,
+        // which stands in for an mp3/flac original here
+        let src_path = temp_dir.path().join("kick.mp3");
+        create_test_wav(&src_path, 48000, 16, 100);
+        // An unrelated sibling already claims kick.wav
+        create_test_wav(&temp_dir.path().join("kick.wav"), 44100, 16, 10);
+
+        let new_path = super::convert_pool_file_in_place(&src_path, |_, _| {}, None).unwrap();
+
+        assert_eq!(
+            new_path,
+            temp_dir.path().join("kick-1.wav"),
+            "existing kick.wav is not clobbered"
+        );
+        assert!(!src_path.exists(), "original deleted after conversion");
+        let spec = hound::WavReader::open(&new_path).unwrap().spec();
+        assert_eq!(spec.sample_rate, 44100);
     }
 
     #[test]

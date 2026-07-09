@@ -199,7 +199,8 @@ describe('SampleSlotsTable — Audio Pool integration', () => {
     await waitFor(() => expect(screen.queryByText('Source')).not.toBeInTheDocument())
     expect(screen.queryByText('Gain')).not.toBeInTheDocument()
     expect(screen.getByText('Sample')).toBeInTheDocument()
-    expect(screen.getByText('Compat')).toBeInTheDocument()
+    // Both the slots table and the pool pane now label a column "Compat"
+    expect(screen.getAllByText('Compat').length).toBeGreaterThanOrEqual(1)
 
     // Closing restores the previous column set
     await user.click(screen.getByTitle(/Hide Audio Pool/i))

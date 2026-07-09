@@ -102,6 +102,7 @@ interface SampleSlotsTableProps {
   onImportToAudioPool?: (paths: string[], destPath: string) => void; // Callback to import files to audio pool (uses parent's transfer hook)
   onImportToProject?: (sourcePaths: string[]) => Promise<string[]>; // Copy files into the project dir via the transfer pane; resolves with dest paths
   sidebarRefreshTrigger?: number; // Increment to trigger sidebar refresh from parent
+  onPoolFixed?: () => void; // Pool files converted in place — project slot paths may have changed
   // Transfers panel toggle (rendered in the toolbar so it stays visible on slot tabs)
   transfersOpen?: boolean;
   transferCount?: number;
@@ -169,7 +170,7 @@ function getSetRelativePath(projectPath: string | null): string {
   return projectPath;
 }
 
-export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, projectName, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated, onFlexRamUpdated, onImportToAudioPool, onImportToProject, sidebarRefreshTrigger, transfersOpen, transferCount, transfersActive, transfersSucceeded, transfersFailed, onToggleTransfers, onDragStateChange, slotUsage }: SampleSlotsTableProps) {
+export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, projectName, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated, onFlexRamUpdated, onImportToAudioPool, onImportToProject, sidebarRefreshTrigger, onPoolFixed, transfersOpen, transferCount, transfersActive, transfersSucceeded, transfersFailed, onToggleTransfers, onDragStateChange, slotUsage }: SampleSlotsTableProps) {
   const navigate = useNavigate();
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const [dndDragFiles, setDndDragFiles] = useState<string[]>([]);
@@ -1729,6 +1730,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
             onAssignToSelected={assignToSelected}
             hasSelectedSlot={selectedSlots.size > 0}
             onOpenAudioPoolPage={openAudioPoolPage}
+            onPoolFixed={onPoolFixed}
             persistKey={projectPath ? `sidebar:${projectPath}:${tableType}` : undefined}
             onActiveFile={(path, name, size) => previewCandidate(path, name, size)}
             onPlayFile={(path, name) => {

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, type ReactNode } from "react"
 import { invoke } from "@tauri-apps/api/core";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { AudioFileTable } from "./AudioFileTable";
+import { FixPoolFilesModal, type IncompatibleFile } from "./FixPoolFilesModal";
 import type { AudioFile } from "../types/audioFile";
 import "./AudioPoolSidebar.css";
 
@@ -36,6 +37,8 @@ interface AudioPoolSidebarProps {
   onPlayFile?: (path: string, name: string) => void;
   /** True when this pane has keyboard focus (drives up/down navigation). */
   active?: boolean;
+  /** Fired after pool files were converted in place (slot paths may have changed). */
+  onPoolFixed?: () => void;
 }
 
 // Parent directory of `path`, never climbing above `root`. Returns `path` unchanged
@@ -49,7 +52,7 @@ export function parentDir(path: string, root: string): string {
   return parent.startsWith(root) && parent.length >= root.length ? parent : root;
 }
 
-export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndMode = false, refreshKey, onCurrentPathChange, onImport, onAssignToFirstEmpty, hasEmptySlot = true, onAssignToSelected, hasSelectedSlot, onOpenAudioPoolPage, persistKey, onSelect, clearSelectionToken, onActiveFile, onPlayFile, active = false }: AudioPoolSidebarProps) {
+export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndMode = false, refreshKey, onCurrentPathChange, onImport, onAssignToFirstEmpty, hasEmptySlot = true, onAssignToSelected, hasSelectedSlot, onOpenAudioPoolPage, persistKey, onSelect, clearSelectionToken, onActiveFile, onPlayFile, active = false, onPoolFixed }: AudioPoolSidebarProps) {
   // Restore the last-browsed directory (only if it still sits under this pool root).
   const [currentPath, setCurrentPath] = useState(() => {
     if (persistKey) {
@@ -60,6 +63,10 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
   });
   const [files, setFiles] = useState<AudioFile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  // OT compatibility per file (fed by the table's background inspection)
+  const [compatMap, setCompatMap] = useState<Record<string, string>>({});
+  // Convert-to-OT-format modal, pre-loaded with the context-menu targets
+  const [fixFiles, setFixFiles] = useState<IncompatibleFile[] | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [cursorIndex, setCursorIndex] = useState(-1);
   const [lastClickedIndex, setLastClickedIndex] = useState(-1);
@@ -350,6 +357,7 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
         scrollStorageKey={persistKey ? `${persistKey}:scroll` : undefined}
         poolRoot={audioPoolPath}
         searchRoot={currentPath}
+        onCompatMap={setCompatMap}
         onContextMenu={handleItemContextMenu}
         headerPrefix={
           <>
@@ -438,6 +446,21 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
                   <i className="fas fa-crosshairs"></i> Assign to selected slot
                 </button>
               )}
+              {(() => {
+                const targets = menuTargets(itemMenu.file)
+                  .filter(p => compatMap[p] && compatMap[p] !== 'compatible')
+                  .map(p => ({ path: p, compatibility: compatMap[p] }));
+                return (
+                  <button
+                    className={`context-menu-item ${targets.length === 0 ? 'disabled' : ''}`}
+                    disabled={targets.length === 0}
+                    title={targets.length === 0 ? 'Already Octatrack-compatible' : undefined}
+                    onClick={() => { setFixFiles(targets); setItemMenu(null); }}
+                  >
+                    <i className="fas fa-wrench"></i> Convert to Octatrack format{targets.length > 1 ? ` (${targets.length})` : ''}
+                  </button>
+                );
+              })()}
               <div className="context-menu-separator"></div>
             </>
           )}
@@ -454,6 +477,14 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
             <i className="fas fa-copy"></i> Copy path to clipboard
           </button>
         </div>
+      )}
+      {fixFiles && (
+        <FixPoolFilesModal
+          poolPath={audioPoolPath}
+          files={fixFiles}
+          onClose={() => setFixFiles(null)}
+          onFixed={() => { loadFiles(currentPath); onPoolFixed?.(); }}
+        />
       )}
     </div>
   );

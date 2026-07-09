@@ -14,7 +14,8 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { Version } from "../components/Version";
-import { AudioFileTable } from "../components/AudioFileTable";
+import { AudioFileTable, audioKind } from "../components/AudioFileTable";
+import { FixPoolFilesModal, PoolIncompatibleListModal, type IncompatibleFile } from "../components/FixPoolFilesModal";
 import { OverwriteModal } from "../components/OverwriteModal";
 import { TransferProgressPanel } from "../components/TransferProgressPanel";
 import { useAudioPoolTransfer } from "../hooks/useAudioPoolTransfer";
@@ -163,6 +164,53 @@ export function AudioPoolPage() {
     file: null,
     panel: 'dest',
   });
+
+  // Files / Tools page tabs
+  const [activeTab, setActiveTab] = useState<'files' | 'tools'>('files');
+  // OT compatibility of pool files (fed by the Audio Pool table's background inspection)
+  const [destCompatMap, setDestCompatMap] = useState<Record<string, string>>({});
+  // Fix Audio Pool Samples modal, pre-loaded with the files to convert
+  const [fixModal, setFixModal] = useState<{ files: IncompatibleFile[]; skipReview: boolean } | null>(null);
+  // Tools tab: "Review before applying changes" option + incompatible-files list modal
+  const [reviewBeforeApply, setReviewBeforeApply] = useState(true);
+  const [showPoolList, setShowPoolList] = useState(false);
+
+  // Tools tab status: scan the whole pool for incompatible files on entry (and after a fix)
+  const [poolScanLoading, setPoolScanLoading] = useState(false);
+  const [poolScanTotal, setPoolScanTotal] = useState(0);
+  const [incompatibleFiles, setIncompatibleFiles] = useState<IncompatibleFile[]>([]);
+  const [poolScanKey, setPoolScanKey] = useState(0);
+  useEffect(() => {
+    if (activeTab !== 'tools' || !audioPoolPath) return;
+    let cancelled = false;
+    setPoolScanLoading(true);
+    (async () => {
+      try {
+        const paths = (await invoke<string[]>('list_audio_files_recursive', { path: audioPoolPath })) ?? [];
+        if (cancelled) return;
+        setPoolScanTotal(paths.length);
+        // Only WAV/AIFF need header inspection; other audio formats are unplayable by definition
+        const otherAudio = paths.filter(p => audioKind(p) === 'other-audio')
+          .map(p => ({ path: p, compatibility: 'unsupported_format' }));
+        const nativePaths = paths.filter(p => audioKind(p) === 'native');
+        const checks = nativePaths.length
+          ? await invoke<{ path: string; compatibility: string }[]>('inspect_audio_files', { paths: nativePaths })
+          : [];
+        if (cancelled) return;
+        setIncompatibleFiles([
+          ...(checks ?? [])
+            .filter(c => c.compatibility !== 'compatible')
+            .map(c => ({ path: c.path, compatibility: c.compatibility })),
+          ...otherAudio,
+        ]);
+      } catch (e) {
+        console.error('Pool compatibility scan failed:', e);
+      } finally {
+        if (!cancelled) setPoolScanLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeTab, audioPoolPath, poolScanKey]);
   const contextMenuRef = useRef<HTMLDivElement>(null);
 
   // Rename modal state
@@ -1147,6 +1195,20 @@ export function AudioPoolPage() {
           </h1>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div className="header-tabs">
+            <button
+              className={`header-tab ${activeTab === 'files' ? 'active' : ''}`}
+              onClick={() => setActiveTab('files')}
+            >
+              Files
+            </button>
+            <button
+              className={`header-tab ${activeTab === 'tools' ? 'active' : ''}`}
+              onClick={() => setActiveTab('tools')}
+            >
+              Tools
+            </button>
+          </div>
           <button
             onClick={() => setIsSourcePanelOpen(!isSourcePanelOpen)}
             className={`toolbar-button ${isSourcePanelOpen ? 'active' : ''}`}
@@ -1188,6 +1250,80 @@ export function AudioPoolPage() {
         </div>
       </div>
 
+      {activeTab === 'tools' && (
+        <div className="tools-panel pool-tools-panel">
+          <div className="tools-section">
+            <label className="tools-label">Operation</label>
+            <select className="tools-select" value="fix_audio_pool" onChange={() => {}}>
+              <option value="fix_audio_pool">Fix Audio Pool Samples</option>
+            </select>
+          </div>
+          <div className="tools-fix-missing-layout">
+            <div className="tools-description-pane">
+              <p>
+                Scans every audio file of this Set's Audio Pool and lists the ones the Octatrack
+                cannot play (wrong sample rate, bit depth or format). Execute converts them
+                to 44.1 kHz WAV in place: the original file is replaced, and sample slots referencing
+                it in any project of this Set are updated to the new file (each modified project is
+                backed up first).
+              </p>
+            </div>
+            {incompatibleFiles.length > 0 && (
+              <div className="tools-options-panel">
+                <h3>Options</h3>
+                <div className="tools-field tools-checkbox">
+                  <label title="Show the review screen listing planned conversions before applying them">
+                    <input
+                      type="checkbox"
+                      checked={reviewBeforeApply}
+                      onChange={(e) => setReviewBeforeApply(e.target.checked)}
+                    />
+                    Review before applying changes
+                  </label>
+                </div>
+              </div>
+            )}
+            <div className="tools-fix-status-panel">
+              <h3>Status</h3>
+              {poolScanLoading ? (
+                <div className="tools-fix-status loading">
+                  <span className="loading-spinner-small"></span>
+                  <span>Scanning Audio Pool...</span>
+                </div>
+              ) : incompatibleFiles.length === 0 ? (
+                <div className="tools-fix-status all-good">
+                  <div className="tools-fix-status-count">0</div>
+                  <div className="tools-fix-status-label">incompatible audio files - the whole Audio Pool is playable by the Octatrack</div>
+                </div>
+              ) : (
+                <button
+                  className="tools-missing-files-summary"
+                  onClick={() => setShowPoolList(true)}
+                  title="Click to view the incompatible files list"
+                >
+                  <span className="tools-fix-status-count">{incompatibleFiles.length}</span>
+                  {" "}incompatible audio file{incompatibleFiles.length !== 1 ? 's' : ''}
+                  <span className="tools-fix-status-detail">{" — "}of {poolScanTotal} scanned</span>
+                </button>
+              )}
+            </div>
+            {incompatibleFiles.length > 0 && (
+              <div className="tools-actions">
+                <button
+                  className="tools-execute-btn"
+                  onClick={() => setFixModal({ files: incompatibleFiles, skipReview: !reviewBeforeApply })}
+                  disabled={poolScanLoading}
+                >
+                  <i className="fas fa-wrench"></i>
+                  Execute
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'files' && (
       <div
         ref={panelContainerRef}
         className="audio-pool-container"
@@ -1303,6 +1439,7 @@ export function AudioPoolPage() {
             rowRefs={destRowRefs}
             poolRoot={audioPoolPath}
             searchRoot={destinationPath}
+            onCompatMap={setDestCompatMap}
           />
         </PoolDropZone>
 
@@ -1326,6 +1463,7 @@ export function AudioPoolPage() {
         </DragOverlay>
         </DndContext>
       </div>
+      )}
 
       {/* Transfer Queue Panel */}
       <TransferProgressPanel
@@ -1339,7 +1477,8 @@ export function AudioPoolPage() {
         onResizeStart={handleTransferResizeStart}
       />
 
-      {/* Status bar (left) + sample player (right) share one row */}
+      {/* Status bar (left) + sample player (right) share one row — Files tab only */}
+      {activeTab === 'files' && (
       <div className="audio-pool-status">
         <div className="audio-pool-status-msg">
           {selectedSourceFiles.size > 0 && (
@@ -1352,6 +1491,27 @@ export function AudioPoolPage() {
         </div>
         <SamplePlayerBar player={player} playable={activePlayable} compact={isSourcePanelOpen} />
       </div>
+      )}
+
+      {/* Incompatible files list (Tools tab status summary) */}
+      {showPoolList && (
+        <PoolIncompatibleListModal
+          poolPath={audioPoolPath}
+          files={incompatibleFiles}
+          onClose={() => setShowPoolList(false)}
+        />
+      )}
+
+      {/* Fix incompatible pool files (Tools tab, or context-menu convert) */}
+      {fixModal && (
+        <FixPoolFilesModal
+          poolPath={audioPoolPath}
+          files={fixModal.files}
+          skipReview={fixModal.skipReview}
+          onClose={() => setFixModal(null)}
+          onFixed={() => { loadDestinationFiles(destinationPath); setPoolScanKey(k => k + 1); }}
+        />
+      )}
 
       {/* Overwrite confirmation modal */}
       <OverwriteModal
@@ -1422,6 +1582,26 @@ export function AudioPoolPage() {
                     <i className="fas fa-arrow-right"></i> Copy to Audio Pool{isMultipleSelected ? ` (${selectedCount})` : ''}
                   </button>
                 )}
+                {contextMenu.panel === 'dest' && (() => {
+                  // Convert targets: the multi-selection when the clicked file is part of
+                  // it, otherwise just the clicked file — restricted to incompatible ones
+                  const targets = (isMultipleSelected
+                    ? destinationFiles.filter(f => selectedDestFiles.has(f.path))
+                    : [contextMenu.file])
+                    .filter((f): f is AudioFile => !!f && !f.is_directory)
+                    .filter(f => destCompatMap[f.path] && destCompatMap[f.path] !== 'compatible')
+                    .map(f => ({ path: f.path, compatibility: destCompatMap[f.path] }));
+                  return (
+                    <button
+                      className={`context-menu-item ${targets.length === 0 ? 'disabled' : ''}`}
+                      disabled={targets.length === 0}
+                      title={targets.length === 0 ? 'Already Octatrack-compatible' : undefined}
+                      onClick={() => { setFixModal({ files: targets, skipReview: false }); closeContextMenu(); }}
+                    >
+                      <i className="fas fa-wrench"></i> Convert to Octatrack format{targets.length > 1 ? ` (${targets.length})` : ''}
+                    </button>
+                  );
+                })()}
                 <div className="context-menu-separator"></div>
                 <button
                   className={`context-menu-item ${isMultipleSelected ? 'disabled' : ''}`}

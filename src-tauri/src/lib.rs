@@ -887,6 +887,101 @@ async fn search_directory(
     .unwrap()
 }
 
+#[derive(Clone, Serialize)]
+struct PoolFixResult {
+    outcomes: Vec<audio_pool::PoolFixOutcome>,
+    projects_updated: Vec<String>,
+    slots_updated: u32,
+}
+
+/// Convert incompatible Audio Pool files to OT-compatible WAV in place (originals
+/// replaced), then repoint sample-slot references across every project of the set.
+/// Emits "copy-progress" events per file; cancellable via cancel_audio_transfer.
+#[tauri::command]
+async fn fix_pool_files(
+    app: AppHandle,
+    pool_path: String,
+    file_paths: Vec<String>,
+    transfer_id: String,
+) -> Result<PoolFixResult, String> {
+    let cancel_token = register_cancellation_token(&transfer_id);
+    let transfer_id_for_cleanup = transfer_id.clone();
+
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let mut outcomes: Vec<audio_pool::PoolFixOutcome> = Vec::new();
+        let mut renames: Vec<(String, String)> = Vec::new();
+
+        for path in &file_paths {
+            if cancel_token.load(std::sync::atomic::Ordering::Relaxed) {
+                outcomes.push(audio_pool::PoolFixOutcome {
+                    old_path: path.clone(),
+                    new_path: None,
+                    error: Some("Cancelled".to_string()),
+                });
+                continue;
+            }
+            let app_for_cb = app.clone();
+            let tid_for_cb = transfer_id.clone();
+            let path_for_cb = path.clone();
+            let progress_callback = move |stage: &str, progress: f32| {
+                let _ = app_for_cb.emit(
+                    "copy-progress",
+                    CopyProgressEvent {
+                        file_path: path_for_cb.clone(),
+                        transfer_id: tid_for_cb.clone(),
+                        stage: stage.to_string(),
+                        progress,
+                    },
+                );
+            };
+            match audio_pool::convert_pool_file_in_place(
+                std::path::Path::new(path),
+                progress_callback,
+                Some(cancel_token.clone()),
+            ) {
+                Ok(new_path) => {
+                    let new_str = new_path.to_string_lossy().to_string();
+                    if new_str != *path {
+                        renames.push((path.clone(), new_str.clone()));
+                    }
+                    outcomes.push(audio_pool::PoolFixOutcome {
+                        old_path: path.clone(),
+                        new_path: Some(new_str),
+                        error: None,
+                    });
+                }
+                Err(e) => outcomes.push(audio_pool::PoolFixOutcome {
+                    old_path: path.clone(),
+                    new_path: None,
+                    error: Some(e),
+                }),
+            }
+        }
+
+        // Repoint slot references even if the run was cancelled midway:
+        // already-converted files must not leave projects pointing at nothing.
+        let refs = if renames.is_empty() {
+            project_reader::PoolReferenceUpdate {
+                projects_updated: vec![],
+                slots_updated: 0,
+            }
+        } else {
+            project_reader::update_pool_references(&pool_path, &renames)?
+        };
+
+        Ok(PoolFixResult {
+            outcomes,
+            projects_updated: refs.projects_updated,
+            slots_updated: refs.slots_updated,
+        })
+    })
+    .await
+    .unwrap();
+
+    remove_cancellation_token(&transfer_id_for_cleanup);
+    result
+}
+
 #[tauri::command]
 async fn fix_missing_samples(
     project_path: String,
@@ -974,6 +1069,7 @@ pub fn run() {
             search_parent_projects,
             search_directory,
             fix_missing_samples,
+            fix_pool_files,
             // Sample slot assignment
             assign_samples_to_slots,
             clear_sample_slots,

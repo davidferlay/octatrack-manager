@@ -145,6 +145,7 @@
 }
 
 /* Compact column widths for sidebar */
+.audio-pool-sidebar .col-compat,
 .audio-pool-sidebar .col-format,
 .audio-pool-sidebar .col-bitrate,
 .audio-pool-sidebar .col-samplerate {
