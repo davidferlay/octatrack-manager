@@ -552,6 +552,7 @@ td.col-size {
 }
 
 .filter-icon {
+  position: relative;
   background: none;
   border: 1px solid transparent;
   color: var(--elektron-text-secondary);
@@ -572,10 +573,10 @@ td.col-size {
   color: var(--elektron-text-primary);
 }
 
+/* Active filter: the kebab glyph itself turns orange, no box around it */
 .filter-icon.active {
-  background-color: var(--elektron-orange);
-  border-color: var(--elektron-orange);
-  color: var(--elektron-black);
+  color: var(--elektron-orange);
+  text-shadow: 0 0 6px rgba(255, 102, 0, 0.5);
 }
 
 /* Filter dropdown */
