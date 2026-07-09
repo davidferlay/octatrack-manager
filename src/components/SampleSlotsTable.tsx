@@ -1490,7 +1490,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
           <>
             <label className="dropdown-option"><input type="radio" name="used" checked={usageFilter === 'all'} onChange={() => { setUsageFilter('all'); closeDropdown(); }} /><span>All</span></label>
             <label className="dropdown-option"><input type="radio" name="used" checked={usageFilter === 'used'} onChange={() => { setUsageFilter('used'); closeDropdown(); }} /><span>Used (plays)</span></label>
-            <label className="dropdown-option"><input type="radio" name="used" checked={usageFilter === 'referenced'} onChange={() => { setUsageFilter('referenced'); closeDropdown(); }} /><span>Referenced, never trigged</span></label>
+            <label className="dropdown-option"><input type="radio" name="used" checked={usageFilter === 'referenced'} onChange={() => { setUsageFilter('referenced'); closeDropdown(); }} /><span>Referenced, not triggered</span></label>
             <label className="dropdown-option"><input type="radio" name="used" checked={usageFilter === 'unused'} onChange={() => { setUsageFilter('unused'); closeDropdown(); }} /><span>Unused</span></label>
           </>
         );
@@ -1663,7 +1663,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
             {referencedCount > 0 && (
               <button
                 className="usage-badge referenced"
-                title={`Referenced in ${referencedCount} place${referencedCount > 1 ? 's' : ''} but never trigged — click for details`}
+                title={`Referenced in ${referencedCount} place${referencedCount > 1 ? 's' : ''} but not triggered — click for details`}
                 onClick={openPopover('referenced')}
               >
                 ○ {referencedCount}
@@ -2046,7 +2046,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
               <div className="usage-popover-header">
                 {usagePopover.scope === 'audible'
                   ? `${slotPrefix}${usagePopover.slot.slot_id} played in ${scoped.length} place${scoped.length > 1 ? 's' : ''}`
-                  : `${slotPrefix}${usagePopover.slot.slot_id} referenced in ${scoped.length} place${scoped.length > 1 ? 's' : ''}, never trigged`}
+                  : `${slotPrefix}${usagePopover.slot.slot_id} referenced in ${scoped.length} place${scoped.length > 1 ? 's' : ''} but not triggered`}
               </div>
               <div className="usage-popover-list">
                 {scoped.map((entry, idx) => (

@@ -163,7 +163,7 @@ test.describe('Sample slots - Used column', () => {
     const rows = page.locator('.samples-table tbody tr')
     await rows.nth(1).locator('.usage-badge.referenced').click()
     const popover = page.locator('.usage-popover')
-    await expect(popover.locator('.usage-popover-header')).toContainText('F2 referenced in 1 place, never trigged')
+    await expect(popover.locator('.usage-popover-header')).toContainText('F2 referenced in 1 place but not triggered')
     await expect(popover.locator('.usage-popover-entry')).toHaveText('Bank C · Part 2 · T5 · Machine')
   })
 
@@ -177,7 +177,7 @@ test.describe('Sample slots - Used column', () => {
     await expect(rows.first()).toContainText('F1')
 
     await page.locator('th.col-used .filter-icon').click()
-    await page.locator('.filter-dropdown .dropdown-option', { hasText: 'Referenced, never trigged' }).click()
+    await page.locator('.filter-dropdown .dropdown-option', { hasText: 'Referenced, not triggered' }).click()
     await expect(rows).toHaveCount(1)
     await expect(rows.first()).toContainText('F2')
 

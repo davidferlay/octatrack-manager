@@ -76,17 +76,20 @@ Additionally, you can also use these advanced features:
 
 The **Usage** column tells you at a glance whether a slot matters to the project, with up to two badges:
 
-- A blue **✓ N** badge counts the places where the slot audibly plays: track machines that actually have trigs, plus sample locks on pattern steps.
-- A gray **○ N** badge counts silent references - machine assignments on tracks that never trig. The Octatrack's factory default (static slot N assigned to track N, in every part of every bank) is not counted while untrigged, so gray badges only report deliberate assignments.
+- A blue **✓ N** badge counts the places where the slot audibly plays:
+    - Track machines that actually have trigs
+    - Sample locks on pattern steps
+- A gray **○ N** badge counts silent references:
+    - Machine assignments on tracks that never trig
+    - Slots referenced by patterns whose bank contains no trigg at all are ommited (to avoid false positives from default project's assignements)
 
 Click a badge to see the exact locations:
 
 - Machine assignments read **Bank A · Part 1 · T1 · Machine**.
 - Sample locks read **Bank B · Pattern 5 · T3 · Step 12 · Lock**.
 
-The column filter offers **Used (plays)**, **Referenced, never trigged** and **Unused**, so finding samples that are safe to remove is one click: an **Unused** slot is referenced nowhere at all, and a **Referenced, never trigged** one is silent everywhere. Sorting the column ranks slots by how much they play.
+The column can be filtered by values: Used (plays), "Referenced, not triggered" and "Unused".
 
-Usage is computed in the background when loading project.
 
 ### Column Preferences
 You can customize which columns are visible. Click the column menu icon in the toolbar to toggle column visibility. These preferences are remembered across sessions.

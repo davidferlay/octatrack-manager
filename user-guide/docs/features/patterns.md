@@ -33,12 +33,12 @@ The **Trigs** control next to the bank selector picks which grids are displayed:
 With **Hide empty** off, the selected grids are always displayed, even when empty. With **Hide empty** on, each empty grid is hidden individually (for example an empty recorder grid disappears while the track grid stays), and a pattern vanishes entirely when nothing is left to display.
 
 ### Specialized Indicators
-- **↗:** Slide trigger, shown in green.
-- **%:** Trig Condition (e.g., Fill, 50%).
-- **X:** Trig Repeats.
-- **µ:** Micro-timing offset.
-- **V:** Velocity or Volume lock.
-- **S:** Sample slot lock.
+- **↗:** Slide trigger
+- **%:** Trig Condition
+- **X:** Trig Repeats
+- **µ:** Micro-timing offset
+- **V:** Volume lock
+- **S:** Sample Slot lock
 - **Swing:** A green wave icon indicates that a swing trig is active on that step. Swing trigs are hidden when the track's swing amount is 50 (the default), since they have no effect. The swing amount is set per track and per pattern on the Octatrack, so when it is above 50 the pattern header shows it as a **Swing: N%** chip next to Length and Speed.
 
 ---
@@ -47,10 +47,11 @@ With **Hide empty** off, the selected grids are always displayed, even when empt
 
 With every trig type, lock and modifier displayed at once, busy patterns can get dense. Things can be filtered out using two complementary filters:
 
-- **Global filter:** The **Show:** chip row at the top of the tab lists every indicator. Click a chip to hide or show that indicator in **all patterns**; use **All** / **None** to toggle everything at once. Hidden chips appear dimmed. Chips for indicators that do not occur anywhere in the displayed patterns are disabled, as are chips the current **Trigs** view cannot display (recorder chips in Track view, everything else in Rec view), and the **MIDI Note/Chord** chip only appears while MIDI tracks are displayed. This filter is remembered across sessions.
-- **Per-pattern filter:** The legend badges below each pattern grid are clickable too. Clicking one hides that indicator in **that pattern only** (click again to restore). These per-pattern choices last until the page is reloaded.
-
-An indicator is displayed only if it is enabled both globally and in the pattern's legend. Indicators hidden globally are removed from the legends entirely.
+- **Global filter:** The **Show:** chip row at the top of the tab lists every indicator:
+    - Click a chip to hide or show that indicator in all patterns
+    - Use **All** / **None** to toggle everything at once
+- **Per-pattern filter:** The legend badges below each pattern grid are clickable too:
+    - Clicking one hides that indicator in **that pattern only** (click again to restore)
 
 ---
 
