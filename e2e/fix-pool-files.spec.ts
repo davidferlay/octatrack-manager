@@ -201,6 +201,17 @@ test.describe('Audio Pool — fix incompatible files', () => {
     expect(calls[0].filePaths).toEqual(['/test/set/AUDIO/snare48.wav', '/test/set/AUDIO/loop.mp3'])
   })
 
+  test('the pane health glyph reports the background scan and opens the Tools tab', async ({ page }) => {
+    // The pool is scanned in the background on page load; the pane title gets a warning glyph
+    const glyph = page.locator('.pool-health-glyph')
+    await expect(glyph).toHaveClass(/warning/)
+    await expect(glyph).toHaveAttribute('title', '2 incompatible audio files found — click to fix')
+
+    await glyph.click()
+    await expect(page.locator('.pool-tools-panel')).toBeVisible()
+    await expect(page.locator('.tools-missing-files-summary')).toContainText('2')
+  })
+
   test('disabling the review option makes Execute apply immediately', async ({ page }) => {
     await page.locator('.header-tab', { hasText: 'Tools' }).click()
     await page.locator('.tools-options-panel input[type="checkbox"]').uncheck()

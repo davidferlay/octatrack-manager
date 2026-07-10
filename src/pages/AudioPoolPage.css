@@ -266,6 +266,28 @@
   white-space: nowrap;
 }
 
+/* Pool health glyph: outcome of the background compatibility scan, click opens the fix tool */
+.pool-health-glyph {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
+.pool-health-glyph.warning {
+  color: var(--elektron-orange);
+  cursor: pointer;
+}
+
+.pool-health-glyph.warning:hover {
+  filter: brightness(1.25);
+}
+
+.pool-health-glyph.ok {
+  color: #4caf50;
+}
+
 .panel-path-controls {
   display: flex;
   align-items: center;

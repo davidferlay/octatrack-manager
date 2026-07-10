@@ -86,13 +86,17 @@ If you try to add a file with the same name as one that already exists in your p
 
 Automatic conversion covers files imported **through the app** — but a pool that was filled by hand (or by other tools) can contain MP3s, 48 kHz WAVs and other files the Octatrack silently refuses to play. Octatrack Manager finds and fixes those in place.
 
+### Pool health indicator
+
+The whole pool is scanned in the background when the Audio Pool page opens. Once the scan finishes, a glyph appears in the Audio Pool pane toolbar, next to the file count: an orange warning triangle when incompatible files were found (the tooltip tells how many; clicking it opens the **Tools** tab with the fix tool ready), or a green check when everything is playable.
+
 ### Fixing a single file
 
 Right-click any file with a non-smiley **Compat** badge and choose **Convert to Octatrack format**. With several incompatible files selected, the menu item converts them all at once. The same menu item is available in the [Audio Pool pane](sample-slots.md#the-audio-pool-pane) of a project's sample slots tabs.
 
 ### Fixing the whole pool
 
-The **Tools** tab of the Audio Pool page hosts **Fix Audio Pool Samples**. Opening the tab scans every audio file of the pool (recursively) and reports how many the Octatrack cannot play — just like the project's [Fix Missing Samples](fix-missing-samples.md) tool. Click the status summary to browse the list (searchable, copyable to clipboard). **Execute** shows a **Review planned changes** screen describing what each conversion will do before anything is touched — untick **Review before applying changes** in the Options panel to have Execute convert right away. Conversion runs with per-file progress and a Cancel button.
+The **Tools** tab of the Audio Pool page hosts **Fix Audio Pool Samples**. Its Status pane reports how many audio files of the pool the Octatrack cannot play — just like the project's [Fix Missing Samples](fix-missing-samples.md) tool. Click the status summary to browse the list (searchable, copyable to clipboard). **Execute** shows a **Review planned changes** screen describing what each conversion will do before anything is touched — untick **Review before applying changes** in the Options panel to have Execute convert right away. Conversion runs with per-file progress and a Cancel button.
 
 ### What a fix does
 

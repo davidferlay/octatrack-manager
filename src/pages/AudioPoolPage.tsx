@@ -198,13 +198,15 @@ export function AudioPoolPage() {
     setTimeout(() => setToast(null), 1500);
   };
 
-  // Tools tab status: scan the whole pool for incompatible files on entry (and after a fix)
+  // Pool health: scan the whole pool for incompatible files in the background on page
+  // load (and after a fix). Feeds both the Tools tab status and the pane health glyph.
   const [poolScanLoading, setPoolScanLoading] = useState(false);
+  const [poolScanDone, setPoolScanDone] = useState(false);
   const [poolScanTotal, setPoolScanTotal] = useState(0);
   const [incompatibleFiles, setIncompatibleFiles] = useState<IncompatibleFile[]>([]);
   const [poolScanKey, setPoolScanKey] = useState(0);
   useEffect(() => {
-    if (activeTab !== 'tools' || !audioPoolPath) return;
+    if (!audioPoolPath) return;
     let cancelled = false;
     setPoolScanLoading(true);
     (async () => {
@@ -226,6 +228,7 @@ export function AudioPoolPage() {
             .map(c => ({ path: c.path, compatibility: c.compatibility })),
           ...otherAudio,
         ]);
+        setPoolScanDone(true);
       } catch (e) {
         console.error('Pool compatibility scan failed:', e);
       } finally {
@@ -233,7 +236,7 @@ export function AudioPoolPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [activeTab, audioPoolPath, poolScanKey]);
+  }, [audioPoolPath, poolScanKey]);
   const contextMenuRef = useRef<HTMLDivElement>(null);
 
   // Rename modal state
@@ -892,6 +895,8 @@ export function AudioPoolPage() {
       } else {
         setSelectedDestFiles(new Set());
         loadDestinationFiles(destinationPath);
+        // Deleted pool files may have been incompatible ones: refresh the health scan
+        setPoolScanKey(k => k + 1);
       }
     } catch (error) {
       console.error("Error deleting:", error);
@@ -1484,6 +1489,21 @@ export function AudioPoolPage() {
             poolRoot={audioPoolPath}
             searchRoot={destinationPath}
             onCompatMap={setDestCompatMap}
+            countSuffix={poolScanDone && !poolScanLoading ? (
+              incompatibleFiles.length > 0 ? (
+                <button
+                  className="pool-health-glyph warning"
+                  title={`${incompatibleFiles.length} incompatible audio file${incompatibleFiles.length !== 1 ? 's' : ''} found — click to fix`}
+                  onClick={() => setActiveTab('tools')}
+                >
+                  <i className="fas fa-exclamation-triangle"></i>
+                </button>
+              ) : (
+                <span className="pool-health-glyph ok" title="All audio pool files are compatible with Octatrack">
+                  <i className="fas fa-check-circle"></i>
+                </span>
+              )
+            ) : undefined}
           />
         </PoolDropZone>
 

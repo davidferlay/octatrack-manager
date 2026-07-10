@@ -109,6 +109,8 @@ export interface AudioFileTableProps {
   onContextMenu?: (e: React.MouseEvent, file: AudioFile | null) => void;
   rowRefs?: React.MutableRefObject<Map<number, HTMLTableRowElement>>;
   headerPrefix?: ReactNode;
+  /** Rendered in the toolbar right after the file count (e.g. the pool health glyph) */
+  countSuffix?: ReactNode;
   /** Extra controls rendered in the toolbar, just left of the Show/Hide Columns button */
   headerActions?: ReactNode;
   /** When true, rows use @dnd-kit pointer-based drag instead of HTML5 drag (fixes macOS WebKit) */
@@ -211,6 +213,7 @@ export function AudioFileTable({
   onContextMenu,
   rowRefs,
   headerPrefix,
+  countSuffix,
   headerActions,
   dndMode = false,
   initialColumnVisibility,
@@ -523,6 +526,7 @@ export function AudioFileTable({
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           {headerPrefix}
           <span>{table.getRowModel().rows.length}/{baseFiles.length} files</span>
+          {countSuffix}
           {formatFilter !== 'all' && <span className="filter-badge">Format: {formatFilter}</span>}
           {bitDepthFilter !== 'all' && <span className="filter-badge">Bit: {bitDepthFilter}</span>}
           {sampleRateFilter !== 'all' && <span className="filter-badge">Rate: {(parseInt(sampleRateFilter) / 1000).toFixed(1)}kHz</span>}
