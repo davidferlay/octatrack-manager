@@ -84,7 +84,7 @@ test.describe('Audio Pool — fix incompatible files', () => {
     }
   })
 
-  test('context menu converts an incompatible file after review', async ({ page }) => {
+  test('context menu converts an incompatible file inline, without any modal', async ({ page }) => {
     // Wait for the compat inspection before opening the menu (it gates the item)
     const row = page.locator('.dest-panel tr', { hasText: 'loop.mp3' })
     await expect(row.locator('.compat-badge')).toHaveText('??')
@@ -94,20 +94,45 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await expect(item).toBeEnabled()
     await item.click()
 
-    // Review screen mirrors the Fix Missing Samples flow
-    const modal = page.locator('.fix-pool-modal')
-    await expect(modal.getByText('Review planned changes')).toBeVisible()
-    await expect(modal.locator('tbody tr')).toHaveCount(1)
-    await expect(modal.locator('tbody tr').first()).toContainText('Convert to loop.wav')
-    await modal.getByRole('button', { name: 'Apply Changes' }).click()
-
-    await expect(modal.getByText('1 file converted.')).toBeVisible()
-    await expect(modal.getByText(/2 sample slots updated\s+across 1 project/)).toBeVisible()
+    // The conversion runs inline: no review/progress modal, just the fix call + a refresh
+    await expect.poll(async () => page.evaluate(() => (window as any).__fixCalls.length)).toBe(1)
+    await expect(page.locator('.fix-pool-modal')).toHaveCount(0)
 
     const calls = await page.evaluate(() => (window as any).__fixCalls)
-    expect(calls).toHaveLength(1)
     expect(calls[0].filePaths).toEqual(['/test/set/AUDIO/loop.mp3'])
     expect(calls[0].poolPath).toBe('/test/set/AUDIO')
+    // The file list was reloaded so the Compat badges reflect the converted files
+    await expect(page.locator('.dest-panel .compat-badge').first()).toBeVisible()
+  })
+
+  test('the Compat badge shows a throbber while a file converts inline', async ({ page }) => {
+    // Make fix_pool_files hang until released so the converting state is observable
+    await page.evaluate(() => {
+      const internals = (window as any).__TAURI_INTERNALS__
+      const original = internals.invoke
+      internals.invoke = async (cmd: string, args: any) => {
+        if (cmd === 'fix_pool_files') {
+          await new Promise<void>(resolve => { (window as any).__releaseFix = resolve })
+        }
+        return original(cmd, args)
+      }
+    })
+
+    const row = page.locator('.dest-panel tr', { hasText: 'snare48.wav' })
+    await expect(row.locator('.compat-badge')).toHaveText(':|')
+    const heightBefore = (await row.boundingBox())!.height
+    await row.click({ button: 'right' })
+    await page.locator('.context-menu-item', { hasText: 'Convert to Octatrack format' }).click()
+
+    // Badge replaced by the spinner while converting — without changing the row height
+    await expect(row.locator('.loading-spinner-small')).toBeVisible()
+    await expect(row.locator('.compat-badge')).toBeHidden()
+    expect((await row.boundingBox())!.height).toBeCloseTo(heightBefore, 1)
+
+    await page.evaluate(() => (window as any).__releaseFix())
+    // Spinner gone once done; the badge is back (mock keeps listing the same file)
+    await expect(row.locator('.loading-spinner-small')).toHaveCount(0)
+    await expect(row.locator('.compat-badge')).toBeVisible()
   })
 
   test('the review table supports search and copy to clipboard', async ({ page }) => {

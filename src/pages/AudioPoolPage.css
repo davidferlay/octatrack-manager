@@ -460,6 +460,13 @@
   font-size: 0.85rem;
 }
 
+/* Same row height in both panes: the pool pane's Compat badge line is taller than
+   plain text, which would otherwise misalign it with the Source explorer rows.
+   height on a td behaves as min-height. */
+.audio-pool-container .audio-files-table td {
+  height: 2.6rem;
+}
+
 .audio-files-table tbody tr {
   transition: background-color 0.1s ease;
 }

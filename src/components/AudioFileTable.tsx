@@ -109,6 +109,8 @@ export interface AudioFileTableProps {
   onContextMenu?: (e: React.MouseEvent, file: AudioFile | null) => void;
   rowRefs?: React.MutableRefObject<Map<number, HTMLTableRowElement>>;
   headerPrefix?: ReactNode;
+  /** Files being converted in place: their Compat badge is replaced by a throbber */
+  convertingPaths?: Set<string>;
   /** Rendered in the toolbar right after the file count (e.g. the pool health glyph) */
   countSuffix?: ReactNode;
   /** Extra controls rendered in the toolbar, just left of the Show/Hide Columns button */
@@ -213,6 +215,7 @@ export function AudioFileTable({
   onContextMenu,
   rowRefs,
   headerPrefix,
+  convertingPaths,
   countSuffix,
   headerActions,
   dndMode = false,
@@ -434,7 +437,13 @@ export function AudioFileTable({
       case 'compat':
         return (
           <td key={colId} className="col-compat" style={{ width: w }}>
-            {!file.is_directory && <CompatBadge compatibility={compatMap[file.path]} />}
+            {convertingPaths?.has(file.path)
+              // The hidden badge keeps the cell geometry so the throbber never changes the row height
+              ? <span className="compat-converting" title="Converting to Octatrack format...">
+                  <CompatBadge compatibility={compatMap[file.path]} />
+                  <span className="loading-spinner-small"></span>
+                </span>
+              : !file.is_directory && <CompatBadge compatibility={compatMap[file.path]} />}
           </td>
         );
       case 'format':

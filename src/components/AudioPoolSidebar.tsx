@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, type ReactNode } from "react"
 import { invoke } from "@tauri-apps/api/core";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { AudioFileTable } from "./AudioFileTable";
-import { FixPoolFilesModal, type IncompatibleFile } from "./FixPoolFilesModal";
+import type { IncompatibleFile, PoolFixResult } from "./FixPoolFilesModal";
 import type { AudioFile } from "../types/audioFile";
 import "./AudioPoolSidebar.css";
 
@@ -65,8 +65,36 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
   const [isLoading, setIsLoading] = useState(false);
   // OT compatibility per file (fed by the table's background inspection)
   const [compatMap, setCompatMap] = useState<Record<string, string>>({});
-  // Convert-to-OT-format modal, pre-loaded with the context-menu targets
-  const [fixFiles, setFixFiles] = useState<IncompatibleFile[] | null>(null);
+  // Context-menu conversion runs inline: the Compat badge becomes a throbber, no modal
+  const [convertingPaths, setConvertingPaths] = useState<Set<string>>(new Set());
+  async function convertFilesInline(targets: IncompatibleFile[]) {
+    if (targets.length === 0) return;
+    const paths = targets.map(t => t.path);
+    setConvertingPaths(prev => new Set([...prev, ...paths]));
+    try {
+      const result = await invoke<PoolFixResult>('fix_pool_files', {
+        poolPath: audioPoolPath,
+        filePaths: paths,
+        transferId: `ctx-fix-${Date.now()}`,
+      });
+      const failures = result.outcomes.filter(o => o.error);
+      if (failures.length > 0) {
+        alert(`Failed to convert:\n${failures.map(o => `${o.old_path.split('/').pop()}: ${o.error}`).join('\n')}`);
+      }
+      // Refresh before dropping the throbbers so the badges come back already up to date
+      await loadFiles(currentPath);
+      onPoolFixed?.();
+    } catch (error) {
+      console.error("Error converting pool files:", error);
+      alert(`Error converting: ${error}`);
+    } finally {
+      setConvertingPaths(prev => {
+        const next = new Set(prev);
+        paths.forEach(p => next.delete(p));
+        return next;
+      });
+    }
+  }
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [cursorIndex, setCursorIndex] = useState(-1);
   const [lastClickedIndex, setLastClickedIndex] = useState(-1);
@@ -358,6 +386,7 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
         poolRoot={audioPoolPath}
         searchRoot={currentPath}
         onCompatMap={setCompatMap}
+        convertingPaths={convertingPaths}
         onContextMenu={handleItemContextMenu}
         headerPrefix={
           <>
@@ -455,7 +484,7 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
                     className={`context-menu-item ${targets.length === 0 ? 'disabled' : ''}`}
                     disabled={targets.length === 0}
                     title={targets.length === 0 ? 'Already Octatrack-compatible' : undefined}
-                    onClick={() => { setFixFiles(targets); setItemMenu(null); }}
+                    onClick={() => { convertFilesInline(targets); setItemMenu(null); }}
                   >
                     <i className="fas fa-wrench"></i> Convert to Octatrack format{targets.length > 1 ? ` (${targets.length})` : ''}
                   </button>
@@ -477,14 +506,6 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
             <i className="fas fa-copy"></i> Copy path to clipboard
           </button>
         </div>
-      )}
-      {fixFiles && (
-        <FixPoolFilesModal
-          poolPath={audioPoolPath}
-          files={fixFiles}
-          onClose={() => setFixFiles(null)}
-          onFixed={() => { loadFiles(currentPath); onPoolFixed?.(); }}
-        />
       )}
     </div>
   );

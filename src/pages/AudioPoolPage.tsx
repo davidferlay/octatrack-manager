@@ -15,7 +15,7 @@ import {
 } from "@dnd-kit/core";
 import { Version } from "../components/Version";
 import { AudioFileTable, audioKind } from "../components/AudioFileTable";
-import { FixPoolFilesModal, PoolIncompatibleListModal, type IncompatibleFile } from "../components/FixPoolFilesModal";
+import { FixPoolFilesModal, PoolIncompatibleListModal, type IncompatibleFile, type PoolFixResult } from "../components/FixPoolFilesModal";
 import { OverwriteModal } from "../components/OverwriteModal";
 import { TransferProgressPanel } from "../components/TransferProgressPanel";
 import { useAudioPoolTransfer } from "../hooks/useAudioPoolTransfer";
@@ -173,6 +173,37 @@ export function AudioPoolPage() {
   const [destCompatMap, setDestCompatMap] = useState<Record<string, string>>({});
   // Fix Audio Pool Samples modal, pre-loaded with the files to convert
   const [fixModal, setFixModal] = useState<{ files: IncompatibleFile[]; skipReview: boolean } | null>(null);
+
+  // Context-menu conversion runs inline: the Compat badge becomes a throbber, no modal
+  const [convertingPaths, setConvertingPaths] = useState<Set<string>>(new Set());
+  async function convertFilesInline(files: IncompatibleFile[]) {
+    if (files.length === 0 || !audioPoolPath) return;
+    const paths = files.map(f => f.path);
+    setConvertingPaths(prev => new Set([...prev, ...paths]));
+    try {
+      const result = await invoke<PoolFixResult>('fix_pool_files', {
+        poolPath: audioPoolPath,
+        filePaths: paths,
+        transferId: `ctx-fix-${Date.now()}`,
+      });
+      const failures = result.outcomes.filter(o => o.error);
+      if (failures.length > 0) {
+        alert(`Failed to convert:\n${failures.map(o => `${o.old_path.split('/').pop()}: ${o.error}`).join('\n')}`);
+      }
+      // Refresh before dropping the throbbers so the badges come back already up to date
+      await loadDestinationFiles(destinationPath);
+      setPoolScanKey(k => k + 1);
+    } catch (error) {
+      console.error("Error converting pool files:", error);
+      alert(`Error converting: ${error}`);
+    } finally {
+      setConvertingPaths(prev => {
+        const next = new Set(prev);
+        paths.forEach(p => next.delete(p));
+        return next;
+      });
+    }
+  }
   // Tools tab: "Review before applying changes" option + incompatible-files list modal
   const [reviewBeforeApply, setReviewBeforeApply] = useState(true);
   const [showPoolList, setShowPoolList] = useState(false);
@@ -1489,6 +1520,7 @@ export function AudioPoolPage() {
             poolRoot={audioPoolPath}
             searchRoot={destinationPath}
             onCompatMap={setDestCompatMap}
+            convertingPaths={convertingPaths}
             countSuffix={poolScanDone && !poolScanLoading ? (
               incompatibleFiles.length > 0 ? (
                 <button
@@ -1660,7 +1692,7 @@ export function AudioPoolPage() {
                       className={`context-menu-item ${targets.length === 0 ? 'disabled' : ''}`}
                       disabled={targets.length === 0}
                       title={targets.length === 0 ? 'Already Octatrack-compatible' : undefined}
-                      onClick={() => { setFixModal({ files: targets, skipReview: false }); closeContextMenu(); }}
+                      onClick={() => { convertFilesInline(targets); closeContextMenu(); }}
                     >
                       <i className="fas fa-wrench"></i> Convert to Octatrack format{targets.length > 1 ? ` (${targets.length})` : ''}
                     </button>

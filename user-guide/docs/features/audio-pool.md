@@ -92,7 +92,7 @@ The whole pool is scanned in the background when the Audio Pool page opens. Once
 
 ### Fixing a single file
 
-Right-click any file with a non-smiley **Compat** badge and choose **Convert to Octatrack format**. With several incompatible files selected, the menu item converts them all at once. The same menu item is available in the [Audio Pool pane](sample-slots.md#the-audio-pool-pane) of a project's sample slots tabs.
+Right-click any file with a non-smiley **Compat** badge and choose **Convert to Octatrack format**. With several incompatible files selected, the menu item converts them all at once. The conversion starts right away — no dialog: the file's **Compat** badge turns into a progress throbber, then back into a smiley once the file is compatible. The same menu item is available in the [Audio Pool pane](sample-slots.md#the-audio-pool-pane) of a project's sample slots tabs.
 
 ### Fixing the whole pool
 
