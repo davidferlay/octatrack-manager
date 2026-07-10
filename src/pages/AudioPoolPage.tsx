@@ -63,7 +63,7 @@ function ImportDropdown({ onImportFiles, onImportFolder, disabled }: ImportDropd
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`toolbar-button ${isOpen ? 'active' : ''}`}
-        title="Import files or folder to Audio Pool"
+        title={disabled ? 'Only available on the Files tab' : 'Import files or folder to Audio Pool'}
         disabled={disabled}
       >
         <i className="fas fa-file-import"></i> Import <i className="fas fa-caret-down" style={{ marginLeft: '0.25rem', fontSize: '0.7rem' }}></i>
@@ -1254,7 +1254,7 @@ export function AudioPoolPage() {
           <button
             onClick={() => setIsSourcePanelOpen(!isSourcePanelOpen)}
             className={`toolbar-button ${isSourcePanelOpen ? 'active' : ''}`}
-            title={isSourcePanelOpen ? 'Hide source browser (B)' : 'Show source browser (B)'}
+            title={activeTab !== 'files' ? 'Only available on the Files tab' : isSourcePanelOpen ? 'Hide source browser (B)' : 'Show source browser (B)'}
             disabled={activeTab !== 'files'}
           >
             <i className="fas fa-columns"></i> Browse

@@ -151,8 +151,12 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await expect(page.locator('.tools-description-pane')).toBeVisible()
 
     // Browse and Import only make sense on the Files tab
-    await expect(page.locator('.toolbar-button', { hasText: 'Browse' })).toBeDisabled()
-    await expect(page.locator('.import-dropdown-container .toolbar-button')).toBeDisabled()
+    const browseBtn = page.locator('.toolbar-button', { hasText: 'Browse' })
+    const importBtn = page.locator('.import-dropdown-container .toolbar-button')
+    await expect(browseBtn).toBeDisabled()
+    await expect(browseBtn).toHaveAttribute('title', 'Only available on the Files tab')
+    await expect(importBtn).toBeDisabled()
+    await expect(importBtn).toHaveAttribute('title', 'Only available on the Files tab')
 
     // Files-tab shortcuts are inert here: B must not toggle the (open by default) Browse panel
     await page.keyboard.press('b')
