@@ -1268,7 +1268,7 @@ export function AudioPoolPage() {
                 backed up first).
               </p>
             </div>
-            {incompatibleFiles.length > 0 && (
+            {(poolScanLoading || incompatibleFiles.length > 0) && (
               <div className="tools-options-panel">
                 <h3>Options</h3>
                 <div className="tools-field tools-checkbox">
@@ -1307,7 +1307,7 @@ export function AudioPoolPage() {
                 </button>
               )}
             </div>
-            {incompatibleFiles.length > 0 && (
+            {(poolScanLoading || incompatibleFiles.length > 0) && (
               <div className="tools-actions">
                 <button
                   className="tools-execute-btn"

@@ -5342,9 +5342,15 @@ th.col-used .header-content .filter-icon {
   padding: 0.75rem;
   border-radius: 4px;
   border: 1px solid var(--elektron-border-gray);
+  min-height: 3.4rem;
 }
 
 .tools-fix-status.loading {
+  /* mirror the summary button's metrics so the swap between the two doesn't read as a size change */
+  padding: 1rem 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.04);
   color: var(--elektron-text-secondary);
 }
 
@@ -5408,6 +5414,7 @@ th.col-used .header-content .filter-icon {
   transition: all 0.15s;
   text-align: center;
   width: 100%;
+  min-height: 3.4rem;
 }
 
 .tools-missing-files-summary:hover {
