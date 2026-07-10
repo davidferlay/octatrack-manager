@@ -154,6 +154,12 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await expect(page.locator('.toolbar-button', { hasText: 'Browse' })).toBeDisabled()
     await expect(page.locator('.import-dropdown-container .toolbar-button')).toBeDisabled()
 
+    // Files-tab shortcuts are inert here: B must not toggle the (open by default) Browse panel
+    await page.keyboard.press('b')
+    await page.locator('.header-tab', { hasText: 'Files' }).click()
+    await expect(page.locator('.source-panel')).toBeVisible()
+    await page.locator('.header-tab', { hasText: 'Tools' }).click()
+
     // Auto-scan reports the incompatible count in the Status pane
     const summary = page.locator('.tools-missing-files-summary')
     await expect(summary).toContainText('2')

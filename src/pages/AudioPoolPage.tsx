@@ -939,6 +939,8 @@ export function AudioPoolPage() {
   // Keyboard navigation
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      // All of these shortcuts (player, pane navigation, B toggle...) belong to the Files tab
+      if (activeTab !== 'files') return;
       // Don't handle if modal is open or user is typing in an input
       if (overwriteModal.isOpen) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -1160,7 +1162,7 @@ export function AudioPoolPage() {
     activePanel, sourceFiles, destinationFiles,
     cursorIndexSource, cursorIndexDest,
     selectedSourceFiles, selectedDestFiles,
-    isSourcePanelOpen, overwriteModal.isOpen, player, previewCandidate
+    isSourcePanelOpen, overwriteModal.isOpen, player, previewCandidate, activeTab
   ]);
 
   // In-app drag from the Source pane to the Audio Pool pane uses @dnd-kit (pointer-based)

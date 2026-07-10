@@ -909,7 +909,7 @@ h1 {
 
 .toolbar-button:disabled {
   opacity: 0.4;
-  cursor: not-allowed;
+  cursor: default;
 }
 
 .toolbar-button.refreshing .fa-sync-alt {
