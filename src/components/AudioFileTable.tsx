@@ -111,6 +111,8 @@ export interface AudioFileTableProps {
   headerPrefix?: ReactNode;
   /** Files being converted in place: their Compat badge is replaced by a throbber */
   convertingPaths?: Set<string>;
+  /** Freshly converted files: their Compat badge starts green and fades to normal */
+  flashPaths?: Set<string>;
   /** Rendered in the toolbar right after the file count (e.g. the pool health glyph) */
   countSuffix?: ReactNode;
   /** Extra controls rendered in the toolbar, just left of the Show/Hide Columns button */
@@ -216,6 +218,7 @@ export function AudioFileTable({
   rowRefs,
   headerPrefix,
   convertingPaths,
+  flashPaths,
   countSuffix,
   headerActions,
   dndMode = false,
@@ -443,7 +446,11 @@ export function AudioFileTable({
                   <CompatBadge compatibility={compatMap[file.path]} />
                   <span className="loading-spinner-small"></span>
                 </span>
-              : !file.is_directory && <CompatBadge compatibility={compatMap[file.path]} />}
+              : !file.is_directory && (
+                  flashPaths?.has(file.path)
+                    ? <span className="compat-flash"><CompatBadge compatibility={compatMap[file.path]} /></span>
+                    : <CompatBadge compatibility={compatMap[file.path]} />
+                )}
           </td>
         );
       case 'format':

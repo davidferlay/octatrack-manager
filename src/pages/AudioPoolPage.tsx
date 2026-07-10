@@ -176,6 +176,7 @@ export function AudioPoolPage() {
 
   // Context-menu conversion runs inline: the Compat badge becomes a throbber, no modal
   const [convertingPaths, setConvertingPaths] = useState<Set<string>>(new Set());
+  const [flashPaths, setFlashPaths] = useState<Set<string>>(new Set());
   async function convertFilesInline(files: IncompatibleFile[]) {
     if (files.length === 0 || !audioPoolPath) return;
     const paths = files.map(f => f.path);
@@ -193,6 +194,12 @@ export function AudioPoolPage() {
       // Refresh before dropping the throbbers so the badges come back already up to date
       await loadDestinationFiles(destinationPath);
       setPoolScanKey(k => k + 1);
+      // The fresh badges (under the files' new names) flash green, then fade back
+      const converted = result.outcomes.filter(o => !o.error && o.new_path).map(o => o.new_path!);
+      if (converted.length > 0) {
+        setFlashPaths(new Set(converted));
+        setTimeout(() => setFlashPaths(new Set()), 4000);
+      }
     } catch (error) {
       console.error("Error converting pool files:", error);
       alert(`Error converting: ${error}`);
@@ -1521,6 +1528,7 @@ export function AudioPoolPage() {
             searchRoot={destinationPath}
             onCompatMap={setDestCompatMap}
             convertingPaths={convertingPaths}
+            flashPaths={flashPaths}
             countSuffix={poolScanDone && !poolScanLoading ? (
               incompatibleFiles.length > 0 ? (
                 <button
@@ -1681,17 +1689,23 @@ export function AudioPoolPage() {
                 {contextMenu.panel === 'dest' && (() => {
                   // Convert targets: the multi-selection when the clicked file is part of
                   // it, otherwise just the clicked file — restricted to incompatible ones
-                  const targets = (isMultipleSelected
+                  // that are not already being converted
+                  const candidates = (isMultipleSelected
                     ? destinationFiles.filter(f => selectedDestFiles.has(f.path))
                     : [contextMenu.file])
                     .filter((f): f is AudioFile => !!f && !f.is_directory)
-                    .filter(f => destCompatMap[f.path] && destCompatMap[f.path] !== 'compatible')
+                    .filter(f => destCompatMap[f.path] && destCompatMap[f.path] !== 'compatible');
+                  const someConverting = candidates.some(f => convertingPaths.has(f.path));
+                  const targets = candidates
+                    .filter(f => !convertingPaths.has(f.path))
                     .map(f => ({ path: f.path, compatibility: destCompatMap[f.path] }));
                   return (
                     <button
-                      className={`context-menu-item ${targets.length === 0 ? 'disabled' : ''}`}
+                      className={`context-menu-item convert ${targets.length === 0 ? 'disabled' : ''}`}
                       disabled={targets.length === 0}
-                      title={targets.length === 0 ? 'Already Octatrack-compatible' : undefined}
+                      title={targets.length === 0
+                        ? (someConverting ? 'Conversion in progress' : 'Already Octatrack-compatible')
+                        : undefined}
                       onClick={() => { convertFilesInline(targets); closeContextMenu(); }}
                     >
                       <i className="fas fa-wrench"></i> Convert to Octatrack format{targets.length > 1 ? ` (${targets.length})` : ''}

@@ -67,6 +67,7 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
   const [compatMap, setCompatMap] = useState<Record<string, string>>({});
   // Context-menu conversion runs inline: the Compat badge becomes a throbber, no modal
   const [convertingPaths, setConvertingPaths] = useState<Set<string>>(new Set());
+  const [flashPaths, setFlashPaths] = useState<Set<string>>(new Set());
   async function convertFilesInline(targets: IncompatibleFile[]) {
     if (targets.length === 0) return;
     const paths = targets.map(t => t.path);
@@ -84,6 +85,12 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
       // Refresh before dropping the throbbers so the badges come back already up to date
       await loadFiles(currentPath);
       onPoolFixed?.();
+      // The fresh badges (under the files' new names) flash green, then fade back
+      const converted = result.outcomes.filter(o => !o.error && o.new_path).map(o => o.new_path!);
+      if (converted.length > 0) {
+        setFlashPaths(new Set(converted));
+        setTimeout(() => setFlashPaths(new Set()), 4000);
+      }
     } catch (error) {
       console.error("Error converting pool files:", error);
       alert(`Error converting: ${error}`);
@@ -387,6 +394,7 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
         searchRoot={currentPath}
         onCompatMap={setCompatMap}
         convertingPaths={convertingPaths}
+        flashPaths={flashPaths}
         onContextMenu={handleItemContextMenu}
         headerPrefix={
           <>
@@ -476,14 +484,19 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
                 </button>
               )}
               {(() => {
-                const targets = menuTargets(itemMenu.file)
-                  .filter(p => compatMap[p] && compatMap[p] !== 'compatible')
+                const candidates = menuTargets(itemMenu.file)
+                  .filter(p => compatMap[p] && compatMap[p] !== 'compatible');
+                const someConverting = candidates.some(p => convertingPaths.has(p));
+                const targets = candidates
+                  .filter(p => !convertingPaths.has(p))
                   .map(p => ({ path: p, compatibility: compatMap[p] }));
                 return (
                   <button
-                    className={`context-menu-item ${targets.length === 0 ? 'disabled' : ''}`}
+                    className={`context-menu-item convert ${targets.length === 0 ? 'disabled' : ''}`}
                     disabled={targets.length === 0}
-                    title={targets.length === 0 ? 'Already Octatrack-compatible' : undefined}
+                    title={targets.length === 0
+                      ? (someConverting ? 'Conversion in progress' : 'Already Octatrack-compatible')
+                      : undefined}
                     onClick={() => { convertFilesInline(targets); setItemMenu(null); }}
                   >
                     <i className="fas fa-wrench"></i> Convert to Octatrack format{targets.length > 1 ? ` (${targets.length})` : ''}

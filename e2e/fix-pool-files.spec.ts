@@ -92,6 +92,8 @@ test.describe('Audio Pool — fix incompatible files', () => {
 
     const item = page.locator('.context-menu-item', { hasText: 'Convert to Octatrack format' })
     await expect(item).toBeEnabled()
+    // Reads as a fix action: green when available
+    await expect(item).toHaveCSS('color', 'rgb(76, 175, 80)')
     await item.click()
 
     // The conversion runs inline: no review/progress modal, just the fix call + a refresh
@@ -129,10 +131,18 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await expect(row.locator('.compat-badge')).toBeHidden()
     expect((await row.boundingBox())!.height).toBeCloseTo(heightBefore, 1)
 
+    // While the file converts, the menu item cannot start a second conversion
+    await row.click({ button: 'right' })
+    const item = page.locator('.context-menu-item', { hasText: 'Convert to Octatrack format' })
+    await expect(item).toBeDisabled()
+    await expect(item).toHaveAttribute('title', 'Conversion in progress')
+    await page.keyboard.press('Escape')
+
     await page.evaluate(() => (window as any).__releaseFix())
     // Spinner gone once done; the badge is back (mock keeps listing the same file)
+    // and flashes green (fading back to its normal color)
     await expect(row.locator('.loading-spinner-small')).toHaveCount(0)
-    await expect(row.locator('.compat-badge')).toBeVisible()
+    await expect(row.locator('.compat-flash .compat-badge')).toBeVisible()
   })
 
   test('the review table supports search and copy to clipboard', async ({ page }) => {
