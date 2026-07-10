@@ -5047,18 +5047,6 @@ th.col-used .header-content .filter-icon {
   height: 1.1rem;
 }
 
-/* Just-converted files: the badge starts green and slowly fades to its normal color */
-@keyframes compat-flash-fade {
-  from {
-    color: #4caf50;
-    opacity: 1;
-  }
-}
-
-.compat-flash .compat-badge {
-  animation: compat-flash-fade 3s ease-out;
-}
-
 /* Sample Slot Selector Widget */
 .tools-slot-selector {
   display: flex;

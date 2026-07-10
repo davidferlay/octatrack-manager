@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useLayoutEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
@@ -15,7 +16,7 @@ import {
 } from "@dnd-kit/core";
 import { Version } from "../components/Version";
 import { AudioFileTable, audioKind } from "../components/AudioFileTable";
-import { FixPoolFilesModal, PoolIncompatibleListModal, type IncompatibleFile, type PoolFixResult } from "../components/FixPoolFilesModal";
+import { FixPoolFilesModal, PoolIncompatibleListModal, type IncompatibleFile, type PoolFixResult, type CopyProgressEvent } from "../components/FixPoolFilesModal";
 import { OverwriteModal } from "../components/OverwriteModal";
 import { TransferProgressPanel } from "../components/TransferProgressPanel";
 import { useAudioPoolTransfer } from "../hooks/useAudioPoolTransfer";
@@ -174,18 +175,32 @@ export function AudioPoolPage() {
   // Fix Audio Pool Samples modal, pre-loaded with the files to convert
   const [fixModal, setFixModal] = useState<{ files: IncompatibleFile[]; skipReview: boolean } | null>(null);
 
-  // Context-menu conversion runs inline: the Compat badge becomes a throbber, no modal
-  const [convertingPaths, setConvertingPaths] = useState<Set<string>>(new Set());
-  const [flashPaths, setFlashPaths] = useState<Set<string>>(new Set());
+  // Context-menu conversion runs inline: the Compat badge becomes a throbber
+  // whose tooltip reports the per-file progress, no modal
+  const [convertingPaths, setConvertingPaths] = useState<Map<string, number>>(new Map());
   async function convertFilesInline(files: IncompatibleFile[]) {
     if (files.length === 0 || !audioPoolPath) return;
     const paths = files.map(f => f.path);
-    setConvertingPaths(prev => new Set([...prev, ...paths]));
+    const transferId = `ctx-fix-${Date.now()}`;
+    setConvertingPaths(prev => {
+      const next = new Map(prev);
+      paths.forEach(p => next.set(p, 0));
+      return next;
+    });
+    const unlisten = await listen<CopyProgressEvent>('copy-progress', (event) => {
+      if (event.payload.transfer_id !== transferId) return;
+      setConvertingPaths(prev => {
+        if (!prev.has(event.payload.file_path)) return prev;
+        const next = new Map(prev);
+        next.set(event.payload.file_path, event.payload.progress);
+        return next;
+      });
+    });
     try {
       const result = await invoke<PoolFixResult>('fix_pool_files', {
         poolPath: audioPoolPath,
         filePaths: paths,
-        transferId: `ctx-fix-${Date.now()}`,
+        transferId,
       });
       const failures = result.outcomes.filter(o => o.error);
       if (failures.length > 0) {
@@ -194,18 +209,13 @@ export function AudioPoolPage() {
       // Refresh before dropping the throbbers so the badges come back already up to date
       await loadDestinationFiles(destinationPath);
       setPoolScanKey(k => k + 1);
-      // The fresh badges (under the files' new names) flash green, then fade back
-      const converted = result.outcomes.filter(o => !o.error && o.new_path).map(o => o.new_path!);
-      if (converted.length > 0) {
-        setFlashPaths(new Set(converted));
-        setTimeout(() => setFlashPaths(new Set()), 4000);
-      }
     } catch (error) {
       console.error("Error converting pool files:", error);
       alert(`Error converting: ${error}`);
     } finally {
+      unlisten();
       setConvertingPaths(prev => {
-        const next = new Set(prev);
+        const next = new Map(prev);
         paths.forEach(p => next.delete(p));
         return next;
       });
@@ -1326,6 +1336,8 @@ export function AudioPoolPage() {
               setTimeout(() => setIsSpinning(false), 600);
               loadSourceFiles(sourcePath);
               loadDestinationFiles(destinationPath);
+              // Also rescan the pool so the health glyph / Tools status stay current
+              setPoolScanKey(k => k + 1);
             }}
             className={`toolbar-button ${isSpinning ? 'refreshing' : ''}`}
             disabled={isLoadingSource || isLoadingDest}
@@ -1528,7 +1540,6 @@ export function AudioPoolPage() {
             searchRoot={destinationPath}
             onCompatMap={setDestCompatMap}
             convertingPaths={convertingPaths}
-            flashPaths={flashPaths}
             countSuffix={poolScanDone && !poolScanLoading ? (
               incompatibleFiles.length > 0 ? (
                 <button

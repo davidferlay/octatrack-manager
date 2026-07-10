@@ -130,6 +130,8 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await expect(row.locator('.loading-spinner-small')).toBeVisible()
     await expect(row.locator('.compat-badge')).toBeHidden()
     expect((await row.boundingBox())!.height).toBeCloseTo(heightBefore, 1)
+    // Tooltip reports the conversion progress (no events delivered by the mock: 0%)
+    await expect(row.locator('.compat-converting')).toHaveAttribute('title', 'Converting to Octatrack format... 0%')
 
     // While the file converts, the menu item cannot start a second conversion
     await row.click({ button: 'right' })
@@ -140,9 +142,8 @@ test.describe('Audio Pool — fix incompatible files', () => {
 
     await page.evaluate(() => (window as any).__releaseFix())
     // Spinner gone once done; the badge is back (mock keeps listing the same file)
-    // and flashes green (fading back to its normal color)
     await expect(row.locator('.loading-spinner-small')).toHaveCount(0)
-    await expect(row.locator('.compat-flash .compat-badge')).toBeVisible()
+    await expect(row.locator('.compat-badge')).toBeVisible()
   })
 
   test('the review table supports search and copy to clipboard', async ({ page }) => {

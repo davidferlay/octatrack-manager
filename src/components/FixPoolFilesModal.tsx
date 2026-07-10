@@ -20,7 +20,7 @@ export interface PoolFixResult {
   slots_updated: number;
 }
 
-interface CopyProgressEvent {
+export interface CopyProgressEvent {
   file_path: string;
   transfer_id: string;
   stage: string;

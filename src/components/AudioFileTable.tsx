@@ -109,10 +109,8 @@ export interface AudioFileTableProps {
   onContextMenu?: (e: React.MouseEvent, file: AudioFile | null) => void;
   rowRefs?: React.MutableRefObject<Map<number, HTMLTableRowElement>>;
   headerPrefix?: ReactNode;
-  /** Files being converted in place: their Compat badge is replaced by a throbber */
-  convertingPaths?: Set<string>;
-  /** Freshly converted files: their Compat badge starts green and fades to normal */
-  flashPaths?: Set<string>;
+  /** Files being converted in place (path -> progress 0..1): badge becomes a throbber */
+  convertingPaths?: Map<string, number>;
   /** Rendered in the toolbar right after the file count (e.g. the pool health glyph) */
   countSuffix?: ReactNode;
   /** Extra controls rendered in the toolbar, just left of the Show/Hide Columns button */
@@ -218,7 +216,6 @@ export function AudioFileTable({
   rowRefs,
   headerPrefix,
   convertingPaths,
-  flashPaths,
   countSuffix,
   headerActions,
   dndMode = false,
@@ -442,15 +439,12 @@ export function AudioFileTable({
           <td key={colId} className="col-compat" style={{ width: w }}>
             {convertingPaths?.has(file.path)
               // The hidden badge keeps the cell geometry so the throbber never changes the row height
-              ? <span className="compat-converting" title="Converting to Octatrack format...">
+              ? <span className="compat-converting"
+                  title={`Converting to Octatrack format... ${Math.round((convertingPaths.get(file.path) ?? 0) * 100)}%`}>
                   <CompatBadge compatibility={compatMap[file.path]} />
                   <span className="loading-spinner-small"></span>
                 </span>
-              : !file.is_directory && (
-                  flashPaths?.has(file.path)
-                    ? <span className="compat-flash"><CompatBadge compatibility={compatMap[file.path]} /></span>
-                    : <CompatBadge compatibility={compatMap[file.path]} />
-                )}
+              : !file.is_directory && <CompatBadge compatibility={compatMap[file.path]} />}
           </td>
         );
       case 'format':
