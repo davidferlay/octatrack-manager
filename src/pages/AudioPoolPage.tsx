@@ -41,9 +41,10 @@ function PoolDropZone({ osOver, children }: { osOver: boolean; children: React.R
 interface ImportDropdownProps {
   onImportFiles: () => void;
   onImportFolder: () => void;
+  disabled?: boolean;
 }
 
-function ImportDropdown({ onImportFiles, onImportFolder }: ImportDropdownProps) {
+function ImportDropdown({ onImportFiles, onImportFolder, disabled }: ImportDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -63,6 +64,7 @@ function ImportDropdown({ onImportFiles, onImportFolder }: ImportDropdownProps) 
         onClick={() => setIsOpen(!isOpen)}
         className={`toolbar-button ${isOpen ? 'active' : ''}`}
         title="Import files or folder to Audio Pool"
+        disabled={disabled}
       >
         <i className="fas fa-file-import"></i> Import <i className="fas fa-caret-down" style={{ marginLeft: '0.25rem', fontSize: '0.7rem' }}></i>
       </button>
@@ -174,6 +176,27 @@ export function AudioPoolPage() {
   // Tools tab: "Review before applying changes" option + incompatible-files list modal
   const [reviewBeforeApply, setReviewBeforeApply] = useState(true);
   const [showPoolList, setShowPoolList] = useState(false);
+
+  // Title interactions: click copies the pool path, right-click opens a small menu (same as project title)
+  const [toast, setToast] = useState<string | null>(null);
+  const [titleMenu, setTitleMenu] = useState<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (!titleMenu) return;
+    const close = () => setTitleMenu(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setTitleMenu(null); };
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', close);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [titleMenu]);
+  const copyPoolPath = () => {
+    if (!destinationPath) return;
+    navigator.clipboard.writeText(destinationPath);
+    setToast("Path copied!");
+    setTimeout(() => setToast(null), 1500);
+  };
 
   // Tools tab status: scan the whole pool for incompatible files on entry (and after a fix)
   const [poolScanLoading, setPoolScanLoading] = useState(false);
@@ -1189,10 +1212,27 @@ export function AudioPoolPage() {
               ← Back
             </button>
           )}
-          <h1 title={destinationPath} className="pool-title">
+          <h1 title={destinationPath} className="pool-title" style={{ cursor: 'pointer' }}
+            onClick={copyPoolPath}
+            onContextMenu={(e) => { e.preventDefault(); setTitleMenu({ x: e.clientX, y: e.clientY }); }}
+          >
             <span className="pool-title-name">{setName}</span>
             <span>&nbsp;- Audio Pool</span>
           </h1>
+          {titleMenu && (
+            <div className="context-menu" style={{ position: 'fixed', top: titleMenu.y, left: titleMenu.x }} onClick={(e) => e.stopPropagation()}>
+              <button className="context-menu-item" disabled={!destinationPath}
+                onClick={() => { if (destinationPath) invoke('reveal_in_file_manager', { path: destinationPath }); setTitleMenu(null); }}
+              >
+                <i className="fas fa-folder-open"></i> Open in file explorer
+              </button>
+              <button className="context-menu-item" disabled={!destinationPath}
+                onClick={() => { copyPoolPath(); setTitleMenu(null); }}
+              >
+                <i className="fas fa-copy"></i> Copy path to clipboard
+              </button>
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <div className="header-tabs">
@@ -1213,12 +1253,14 @@ export function AudioPoolPage() {
             onClick={() => setIsSourcePanelOpen(!isSourcePanelOpen)}
             className={`toolbar-button ${isSourcePanelOpen ? 'active' : ''}`}
             title={isSourcePanelOpen ? 'Hide source browser (B)' : 'Show source browser (B)'}
+            disabled={activeTab !== 'files'}
           >
             <i className="fas fa-columns"></i> Browse
           </button>
           <ImportDropdown
             onImportFiles={directImportFiles}
             onImportFolder={directImportFolder}
+            disabled={activeTab !== 'files'}
           />
           <div className="toolbar-separator"></div>
           <button
@@ -1741,6 +1783,12 @@ export function AudioPoolPage() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className="toast-notification">
+          <i className="fas fa-check"></i> {toast}
         </div>
       )}
     </main>

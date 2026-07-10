@@ -150,6 +150,10 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await expect(page.locator('.audio-pool-status')).toHaveCount(0)
     await expect(page.locator('.tools-description-pane')).toBeVisible()
 
+    // Browse and Import only make sense on the Files tab
+    await expect(page.locator('.toolbar-button', { hasText: 'Browse' })).toBeDisabled()
+    await expect(page.locator('.import-dropdown-container .toolbar-button')).toBeDisabled()
+
     // Auto-scan reports the incompatible count in the Status pane
     const summary = page.locator('.tools-missing-files-summary')
     await expect(summary).toContainText('2')

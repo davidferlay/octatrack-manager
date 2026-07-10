@@ -135,4 +135,24 @@ test.describe('Audio Pool page — sample playback', () => {
       .toBe(true)
     expect(await readAudioPaths(page)).toEqual([])
   })
+
+  test('clicking the title copies the pool path; right-click opens the title menu', async ({ page }) => {
+    await setupMocks(page)
+    await openPage(page)
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+
+    await page.locator('h1.pool-title').click()
+    await expect(page.locator('.toast-notification')).toContainText('Path copied!')
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('/test/set/AUDIO')
+
+    await page.locator('h1.pool-title').click({ button: 'right' })
+    const menu = page.locator('.context-menu')
+    await expect(menu.getByText('Open in file explorer')).toBeVisible()
+    await menu.getByText('Open in file explorer').click()
+    await expect
+      .poll(async () => page.evaluate(() =>
+        (window as any).__invokeCalls.some(([c, a]: [string, any]) => c === 'reveal_in_file_manager' && a?.path === '/test/set/AUDIO')
+      ))
+      .toBe(true)
+  })
 })
