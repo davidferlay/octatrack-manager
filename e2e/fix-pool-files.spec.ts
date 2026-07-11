@@ -307,6 +307,29 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await expect(page.locator('.tools-missing-files-summary')).toContainText('2')
   })
 
+  test('resizing a pool modal by its bottom handle does not close it', async ({ page }) => {
+    await page.locator('.header-tab', { hasText: 'Tools' }).click()
+    await page.locator('.tools-missing-files-summary').click()
+    const listModal = page.locator('.missing-samples-list-modal')
+    await expect(listModal).toBeVisible()
+
+    const heightBefore = (await listModal.boundingBox())!.height
+    const handle = listModal.locator('.modal-resize-bottom')
+    const box = (await handle.boundingBox())!
+    // Drag well past the max-height clamp so the pointer ends over the dark overlay
+    await page.mouse.move(box.x + box.width / 2, box.y + 3)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width / 2, 719, { steps: 5 })
+    await page.mouse.up()
+
+    // The click that follows the drag must not close the modal
+    await expect(listModal).toBeVisible()
+    expect((await listModal.boundingBox())!.height).toBeGreaterThan(heightBefore + 50)
+    // A plain click on the overlay still closes it
+    await page.mouse.click(5, 5)
+    await expect(listModal).toHaveCount(0)
+  })
+
   test('Shift+digit switches tabs and t toggles the Transfers pane', async ({ page }) => {
     await expect(page.locator('.audio-pool-status')).toBeVisible()
     await page.keyboard.press('Shift+Digit2')

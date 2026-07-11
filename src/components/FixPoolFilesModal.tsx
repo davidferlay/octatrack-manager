@@ -124,7 +124,16 @@ function useModalResize() {
         setModalWidth(w);
       }
     }
-    function onUp() { dragging.current = null; }
+    // A resize drag often ends with the pointer over the overlay, which would fire
+    // its click-to-close: swallow the single click that follows a drag
+    const swallowClick = (e: MouseEvent) => e.stopPropagation();
+    function onUp() {
+      if (dragging.current) {
+        document.addEventListener('click', swallowClick, { capture: true, once: true });
+        setTimeout(() => document.removeEventListener('click', swallowClick, true), 0);
+      }
+      dragging.current = null;
+    }
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
     return () => {
@@ -137,7 +146,6 @@ function useModalResize() {
     ...(modalWidth ? { width: modalWidth, maxWidth: '95vw' } : {}),
     ...(modalHeight ? { height: modalHeight, maxHeight: '95vh' } : {}),
   };
-  const sizedClass = modalHeight ? ' user-sized' : '';
   const handles = (
     <>
       <div className="modal-resize-handle modal-resize-left" onMouseDown={(e) => onResizeMouseDown('left', e)} />
@@ -145,7 +153,7 @@ function useModalResize() {
       <div className="modal-resize-handle modal-resize-bottom" onMouseDown={(e) => onResizeMouseDown('bottom', e)} />
     </>
   );
-  return { modalRef, style, sizedClass, handles };
+  return { modalRef, style, handles };
 }
 
 interface FileMeta {
@@ -414,9 +422,13 @@ function usePoolTable(files: IncompatibleFile[], poolPath: string, withAction: b
   };
 }
 
-/** "Toggle columns" menu (same look as the file tables' column visibility button). */
-function ColumnToggle({ table }: { table: ReturnType<typeof usePoolTable> }) {
-  const { allColumns, hiddenCols, toggleCol } = table;
+/** "Toggle columns" menu (same look as the file tables' column visibility button).
+    Shared by the pool and missing-samples modals. */
+export function ColumnToggle({ columns, hiddenCols, onToggle }: {
+  columns: { id: string; label: string }[];
+  hiddenCols: Set<string>;
+  onToggle: (id: string) => void;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -439,9 +451,9 @@ function ColumnToggle({ table }: { table: ReturnType<typeof usePoolTable> }) {
         <div className="column-visibility-dropdown">
           <div className="column-visibility-header">Show/Hide Columns</div>
           <div className="dropdown-options">
-            {allColumns.map(c => (
+            {columns.map(c => (
               <label key={c.id} className="dropdown-option">
-                <input type="checkbox" checked={!hiddenCols.has(c.id)} onChange={() => toggleCol(c.id)} />
+                <input type="checkbox" checked={!hiddenCols.has(c.id)} onChange={() => onToggle(c.id)} />
                 <span>{c.label}</span>
               </label>
             ))}
@@ -571,13 +583,13 @@ export function PoolIncompatibleListModal({ poolPath, files, onClose }: {
 }) {
   const table = usePoolTable(files, poolPath, false);
   const [copyFeedback, copy] = useCopyFeedback();
-  const { modalRef, style, sizedClass, handles } = useModalResize();
+  const { modalRef, style, handles } = useModalResize();
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div
         ref={modalRef}
-        className={`modal-content missing-samples-list-modal pool-list-modal${sizedClass}`}
+        className="modal-content missing-samples-list-modal pool-list-modal"
         onClick={(e) => e.stopPropagation()}
         style={style}
       >
@@ -593,7 +605,7 @@ export function PoolIncompatibleListModal({ poolPath, files, onClose }: {
             setSearchText={table.setSearchText}
             onCopy={() => copy(poolTableTsv(table))}
             copyFeedback={copyFeedback}
-            columnToggle={<ColumnToggle table={table} />}
+            columnToggle={<ColumnToggle columns={table.allColumns} hiddenCols={table.hiddenCols} onToggle={(id) => table.toggleCol(id as PoolSortColumn)} />}
           />
           <button className="modal-close" onClick={onClose}>&times;</button>
         </div>
@@ -641,7 +653,7 @@ export function FixPoolFilesModal({ poolPath, files, skipReview = false, onClose
   // Location is hidden by default here - the Action column matters most for review
   const table = usePoolTable(files, poolPath, true, ['location']);
   const [copyFeedback, copy] = useCopyFeedback();
-  const { modalRef, style, sizedClass, handles } = useModalResize();
+  const { modalRef, style, handles } = useModalResize();
 
   const relName = (path: string) =>
     path.startsWith(poolPath) ? path.slice(poolPath.length).replace(/^[/\\]/, '') : path;
@@ -697,7 +709,7 @@ export function FixPoolFilesModal({ poolPath, files, skipReview = false, onClose
     <div className="modal-overlay" onClick={phase !== 'converting' ? onClose : undefined}>
       <div
         ref={modalRef}
-        className={`modal-content fix-missing-modal fix-pool-modal${sizedClass}`}
+        className="modal-content fix-missing-modal fix-pool-modal"
         onClick={(e) => e.stopPropagation()}
         style={style}
       >
@@ -720,7 +732,7 @@ export function FixPoolFilesModal({ poolPath, files, skipReview = false, onClose
                 setSearchText={table.setSearchText}
                 onCopy={() => copy(poolTableTsv(table))}
                 copyFeedback={copyFeedback}
-                columnToggle={<ColumnToggle table={table} />}
+                columnToggle={<ColumnToggle columns={table.allColumns} hiddenCols={table.hiddenCols} onToggle={(id) => table.toggleCol(id as PoolSortColumn)} />}
               />
             </>
           )}

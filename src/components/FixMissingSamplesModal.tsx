@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { ColumnToggle } from "./FixPoolFilesModal";
 
 interface MissingSample {
   filename: string;
@@ -138,6 +139,28 @@ export function FixMissingSamplesModal({
 
   const [copyFeedback, setCopyFeedback] = useState<"idle" | "copied">("idle");
 
+  // Column visibility for the confirmation table ("toggle columns" menu)
+  const CONFIRM_COLUMNS: { id: ConfirmSortColumn; label: string }[] = [
+    { id: "file", label: "File" },
+    { id: "found", label: "Found" },
+    { id: "location", label: "Location" },
+    { id: "action", label: "Action" },
+  ];
+  const [hiddenConfirmCols, setHiddenConfirmCols] = useState<Set<string>>(new Set());
+  const toggleConfirmCol = (id: string) => setHiddenConfirmCols(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const visibleConfirmCols = CONFIRM_COLUMNS.filter(c => !hiddenConfirmCols.has(c.id));
+  // Dragged widths were measured against the previous column set - remeasure after a toggle
+  useEffect(() => { setColWidths([]); }, [hiddenConfirmCols]);
+  // Resize handle index of a column among the visible ones (none on the last column)
+  const confirmResizeIndex = (id: ConfirmSortColumn): number | undefined => {
+    const i = visibleConfirmCols.findIndex(c => c.id === id);
+    return i >= 0 && i < visibleConfirmCols.length - 1 ? i : undefined;
+  };
+
   // Auto-apply: when skipReview enabled and all samples found, apply immediately
   const autoApplyTriggered = useRef(false);
 
@@ -161,11 +184,19 @@ export function FixMissingSamplesModal({
   }, [confirmOpenDropdown]);
 
   const copyConfirmTableToClipboard = async () => {
-    const headers = ["File", "Found", "Location", "Action"];
+    // TSV mirrors the visible columns
+    const cellValue = (row: (typeof sortedConfirmRows)[number], id: ConfirmSortColumn): string => {
+      switch (id) {
+        case "file": return row.filename;
+        case "found": return row.found ? "Yes" : "No";
+        case "location": return row.location;
+        case "action": return row.actionLabel;
+      }
+    };
     const tsvRows = sortedConfirmRows.map(
-      (row) => `${row.filename}\t${row.found ? "Yes" : "No"}\t${row.location}\t${row.actionLabel}`
+      (row) => visibleConfirmCols.map(c => cellValue(row, c.id)).join("\t")
     );
-    const tsv = [headers.join("\t"), ...tsvRows].join("\n");
+    const tsv = [visibleConfirmCols.map(c => c.label).join("\t"), ...tsvRows].join("\n");
     try {
       await navigator.clipboard.writeText(tsv);
       setCopyFeedback("copied");
@@ -230,7 +261,14 @@ export function FixMissingSamplesModal({
         });
       }
     }
+    // A resize drag often ends with the pointer over the overlay, which would fire
+    // its click-to-close: swallow the single click that follows a drag
+    const swallowClick = (e: MouseEvent) => e.stopPropagation();
     function handleMouseUp() {
+      if (isModalDragging.current) {
+        document.addEventListener("click", swallowClick, { capture: true, once: true });
+        setTimeout(() => document.removeEventListener("click", swallowClick, true), 0);
+      }
       isModalDragging.current = null;
       colDragIndex.current = null;
     }
@@ -712,7 +750,7 @@ export function FixMissingSamplesModal({
     <div className="modal-overlay" onClick={phase === "done" || phase === "search_done" || phase === "confirming" ? onClose : undefined}>
       <div
         ref={modalRef}
-        className={`modal-content fix-missing-modal${modalHeight ? " user-sized" : ""}`}
+        className="modal-content fix-missing-modal"
         onClick={(e) => e.stopPropagation()}
         style={{
           ...(modalWidth ? { width: modalWidth, maxWidth: "95vw" } : {}),
@@ -767,6 +805,7 @@ export function FixMissingSamplesModal({
                 >
                   {copyFeedback === "copied" ? "✓" : "⧉"}
                 </button>
+                <ColumnToggle columns={CONFIRM_COLUMNS} hiddenCols={hiddenConfirmCols} onToggle={toggleConfirmCol} />
               </div>
             </>
           )}
@@ -899,42 +938,52 @@ export function FixMissingSamplesModal({
                   <colgroup>
                     {colWidths.length > 0
                       ? colWidths.map((w, i) => <col key={i} style={{ width: w }} />)
-                      : <><col /><col /><col /><col /></>
+                      : visibleConfirmCols.map(c => <col key={c.id} />)
                     }
                   </colgroup>
                   <thead>
                     <tr>
-                      <th className="sortable" onClick={() => handleConfirmSort("file")} style={{ position: 'relative' }}>
-                        File {confirmSortColumn === "file" && (confirmSortDirection === "asc" ? "▲" : "▼")}
-                        <span className="col-resize-handle" onMouseDown={(e) => { e.stopPropagation(); handleColResizeMouseDown(0, e); }} />
-                      </th>
-                      {renderConfirmFilterableHeader(
+                      {!hiddenConfirmCols.has("file") && (
+                        <th className="sortable" onClick={() => handleConfirmSort("file")} style={{ position: 'relative' }}>
+                          File {confirmSortColumn === "file" && (confirmSortDirection === "asc" ? "▲" : "▼")}
+                          {confirmResizeIndex("file") !== undefined && (
+                            <span className="col-resize-handle" onMouseDown={(e) => { e.stopPropagation(); handleColResizeMouseDown(confirmResizeIndex("file")!, e); }} />
+                          )}
+                        </th>
+                      )}
+                      {!hiddenConfirmCols.has("found") && renderConfirmFilterableHeader(
                         "found", "Found", "found", foundFilter !== "all",
                         [{ value: "all", label: "All" }, { value: "yes", label: "Yes" }, { value: "no", label: "No" }],
-                        foundFilter, setFoundFilter, { textAlign: 'center' }, 1
+                        foundFilter, setFoundFilter, { textAlign: 'center' }, confirmResizeIndex("found")
                       )}
-                      <th className="sortable" onClick={() => handleConfirmSort("location")} style={{ position: 'relative' }}>
-                        Location {confirmSortColumn === "location" && (confirmSortDirection === "asc" ? "▲" : "▼")}
-                        <span className="col-resize-handle" onMouseDown={(e) => { e.stopPropagation(); handleColResizeMouseDown(2, e); }} />
-                      </th>
-                      {renderConfirmFilterableHeader(
+                      {!hiddenConfirmCols.has("location") && (
+                        <th className="sortable" onClick={() => handleConfirmSort("location")} style={{ position: 'relative' }}>
+                          Location {confirmSortColumn === "location" && (confirmSortDirection === "asc" ? "▲" : "▼")}
+                          {confirmResizeIndex("location") !== undefined && (
+                            <span className="col-resize-handle" onMouseDown={(e) => { e.stopPropagation(); handleColResizeMouseDown(confirmResizeIndex("location")!, e); }} />
+                          )}
+                        </th>
+                      )}
+                      {!hiddenConfirmCols.has("action") && renderConfirmFilterableHeader(
                         "action", "Action", "action", actionFilter !== "all",
                         [{ value: "all", label: "All" }, ...uniqueActions.map((a) => ({ value: a, label: a }))],
-                        actionFilter, setActionFilter, undefined, undefined
+                        actionFilter, setActionFilter, undefined, confirmResizeIndex("action")
                       )}
                     </tr>
                   </thead>
                   <tbody>
                     {sortedConfirmRows.map((row) => (
                       <tr key={row.filename} className={row.isNotFound ? "fix-notfound-row" : ""}>
-                        <td className="col-sample" title={row.filename}>{row.filename}</td>
-                        <td style={{ textAlign: 'center' }}>
-                          <span className={`file-status-badge ${row.found ? "file-exists" : "file-missing"}`} title={row.found ? "File was found and will be resolved" : "File could not be found in any searched location"}>
-                            {row.found ? "✓" : "✗"}
-                          </span>
-                        </td>
-                        <td className="fix-location-cell" title={row.location}>{row.location}</td>
-                        <td className={row.isNotFound ? "fix-notfound-cell" : ""} title={row.actionTooltip}>{row.actionLabel}</td>
+                        {!hiddenConfirmCols.has("file") && <td className="col-sample" title={row.filename}>{row.filename}</td>}
+                        {!hiddenConfirmCols.has("found") && (
+                          <td style={{ textAlign: 'center' }}>
+                            <span className={`file-status-badge ${row.found ? "file-exists" : "file-missing"}`} title={row.found ? "File was found and will be resolved" : "File could not be found in any searched location"}>
+                              {row.found ? "✓" : "✗"}
+                            </span>
+                          </td>
+                        )}
+                        {!hiddenConfirmCols.has("location") && <td className="fix-location-cell" title={row.location}>{row.location}</td>}
+                        {!hiddenConfirmCols.has("action") && <td className={row.isNotFound ? "fix-notfound-cell" : ""} title={row.actionTooltip}>{row.actionLabel}</td>}
                       </tr>
                     ))}
                   </tbody>

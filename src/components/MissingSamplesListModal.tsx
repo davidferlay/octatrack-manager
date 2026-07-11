@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { ColumnToggle } from "./FixPoolFilesModal";
 
 interface MissingSample {
   filename: string;
@@ -24,6 +25,13 @@ interface MissingSamplesListModalProps {
 
 type SortColumn = "slot" | "file" | "source" | "type";
 type SortDirection = "asc" | "desc";
+
+const LIST_COLUMNS: { id: SortColumn; label: string }[] = [
+  { id: "slot", label: "Slot" },
+  { id: "file", label: "File" },
+  { id: "source", label: "Source" },
+  { id: "type", label: "Type" },
+];
 
 // Derive source location from path, same logic as backend
 function getSource(path: string): string {
@@ -54,6 +62,14 @@ export function MissingSamplesListModal({
     left: number;
   } | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<"idle" | "copied">("idle");
+  // Column visibility ("toggle columns" menu in the header)
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
+  const toggleCol = (id: string) => setHiddenCols(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const visibleColumns = LIST_COLUMNS.filter(c => !hiddenCols.has(c.id));
   const [modalWidth, setModalWidth] = useState<number | null>(null);
   const [modalHeight, setModalHeight] = useState<number | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -144,7 +160,14 @@ export function MissingSamplesListModal({
       );
       setModalWidth(newWidth);
     }
+    // A resize drag often ends with the pointer over the overlay, which would fire
+    // its click-to-close: swallow the single click that follows a drag
+    const swallowClick = (e: MouseEvent) => e.stopPropagation();
     function handleMouseUp() {
+      if (isDragging.current) {
+        document.addEventListener("click", swallowClick, { capture: true, once: true });
+        setTimeout(() => document.removeEventListener("click", swallowClick, true), 0);
+      }
       isDragging.current = null;
     }
     document.addEventListener("mousemove", handleMouseMove);
@@ -230,12 +253,19 @@ export function MissingSamplesListModal({
   };
 
   const copyTableToClipboard = async () => {
-    const headers = ["Slot", "File", "Source", "Type"];
+    // TSV mirrors the visible columns
+    const cellValue = (row: MissingSampleRow, id: SortColumn): string => {
+      switch (id) {
+        case "slot": return `${row.slot_type === "Flex" ? "F" : "S"}${row.slot_id}`;
+        case "file": return row.filename;
+        case "source": return row.source;
+        case "type": return row.slot_type;
+      }
+    };
     const tsvRows = sortedRows.map(
-      (row) =>
-        `${row.slot_type === "Flex" ? "F" : "S"}${row.slot_id}\t${row.filename}\t${row.source}\t${row.slot_type}`
+      (row) => visibleColumns.map(c => cellValue(row, c.id)).join("\t")
     );
-    const tsv = [headers.join("\t"), ...tsvRows].join("\n");
+    const tsv = [visibleColumns.map(c => c.label).join("\t"), ...tsvRows].join("\n");
     try {
       await navigator.clipboard.writeText(tsv);
       setCopyFeedback("copied");
@@ -319,7 +349,7 @@ export function MissingSamplesListModal({
     <div className="modal-overlay" onClick={onClose}>
       <div
         ref={modalRef}
-        className={`modal-content missing-samples-list-modal${modalHeight ? " user-sized" : ""}`}
+        className="modal-content missing-samples-list-modal"
         onClick={(e) => e.stopPropagation()}
         style={{
           ...(modalWidth ? { width: modalWidth, maxWidth: "95vw" } : {}),
@@ -392,6 +422,7 @@ export function MissingSamplesListModal({
             >
               {copyFeedback === "copied" ? "✓" : "⧉"}
             </button>
+            <ColumnToggle columns={LIST_COLUMNS} hiddenCols={hiddenCols} onToggle={toggleCol} />
           </div>
           <button className="modal-close" onClick={onClose}>
             &times;
@@ -404,23 +435,27 @@ export function MissingSamplesListModal({
                 <table className="samples-table">
                   <thead>
                     <tr>
-                      <th
-                        onClick={() => handleSort("slot")}
-                        className="sortable col-slot"
-                      >
-                        Slot{" "}
-                        {sortColumn === "slot" &&
-                          (sortDirection === "asc" ? "▲" : "▼")}
-                      </th>
-                      <th
-                        onClick={() => handleSort("file")}
-                        className="sortable col-sample"
-                      >
-                        File{" "}
-                        {sortColumn === "file" &&
-                          (sortDirection === "asc" ? "▲" : "▼")}
-                      </th>
-                      {renderFilterableHeader(
+                      {!hiddenCols.has("slot") && (
+                        <th
+                          onClick={() => handleSort("slot")}
+                          className="sortable col-slot"
+                        >
+                          Slot{" "}
+                          {sortColumn === "slot" &&
+                            (sortDirection === "asc" ? "▲" : "▼")}
+                        </th>
+                      )}
+                      {!hiddenCols.has("file") && (
+                        <th
+                          onClick={() => handleSort("file")}
+                          className="sortable col-sample"
+                        >
+                          File{" "}
+                          {sortColumn === "file" &&
+                            (sortDirection === "asc" ? "▲" : "▼")}
+                        </th>
+                      )}
+                      {!hiddenCols.has("source") && renderFilterableHeader(
                         "source",
                         "Source",
                         "source",
@@ -436,7 +471,7 @@ export function MissingSamplesListModal({
                         sourceFilter,
                         setSourceFilter
                       )}
-                      {renderFilterableHeader(
+                      {!hiddenCols.has("type") && renderFilterableHeader(
                         "type",
                         "Type",
                         "type",
@@ -455,15 +490,19 @@ export function MissingSamplesListModal({
                   <tbody>
                     {sortedRows.map((row) => (
                       <tr key={`${row.slot_type}-${row.slot_id}`}>
-                        <td className="col-slot">
-                          {row.slot_type === "Flex" ? "F" : "S"}
-                          {row.slot_id}
-                        </td>
-                        <td className="col-sample" title={row.original_path}>
-                          {row.filename}
-                        </td>
-                        <td className="col-source">{row.source}</td>
-                        <td className="col-type">{row.slot_type}</td>
+                        {!hiddenCols.has("slot") && (
+                          <td className="col-slot">
+                            {row.slot_type === "Flex" ? "F" : "S"}
+                            {row.slot_id}
+                          </td>
+                        )}
+                        {!hiddenCols.has("file") && (
+                          <td className="col-sample" title={row.original_path}>
+                            {row.filename}
+                          </td>
+                        )}
+                        {!hiddenCols.has("source") && <td className="col-source">{row.source}</td>}
+                        {!hiddenCols.has("type") && <td className="col-type">{row.slot_type}</td>}
                       </tr>
                     ))}
                   </tbody>

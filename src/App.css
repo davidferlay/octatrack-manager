@@ -5589,12 +5589,6 @@ th.col-used .header-content .filter-icon {
   border-bottom: 1px solid var(--elektron-border-gray);
 }
 
-.missing-samples-list-modal .table-wrapper {
-  height: 55vh;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
 .missing-samples-list-modal .col-type {
   width: 80px;
   text-align: center;
@@ -5623,49 +5617,65 @@ th.col-used .header-content .filter-icon {
   right: -3px;
 }
 
-/* The bottom handle resizes height (a horizontal strip along the bottom edge) */
+/* The bottom handle resizes height (a horizontal strip along the bottom edge).
+   Kept inside the modal box: any overhang would register as scrollable overflow
+   and put a needless scrollbar on the modal itself. */
 .modal-resize-bottom {
   top: auto;
   left: 0;
   right: 0;
-  bottom: -3px;
+  bottom: 0;
   width: auto;
   height: 6px;
   cursor: ns-resize;
 }
 
-/* Once the user drags the bottom handle the modal becomes a flex column whose
-   table area absorbs the extra height (the fixed vh caps no longer apply) */
-.modal-content.user-sized {
+/* The four table modals (Missing Samples, Incompatible Audio Pool Samples and both
+   review screens) are flex columns whose table wrapper is the single scroll region:
+   content-sized by default (up to the modal max-height) and the table area absorbs
+   any extra height dragged in via the bottom handle - never a second scrollbar. */
+.modal-content.fix-missing-modal,
+.modal-content.missing-samples-list-modal {
   display: flex;
   flex-direction: column;
 }
 
-.modal-content.user-sized .modal-body {
+.fix-missing-modal .modal-body,
+.missing-samples-list-modal .modal-body {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
 
-.modal-content.user-sized .samples-tab,
-.modal-content.user-sized .samples-section {
+.fix-missing-modal .samples-tab,
+.fix-missing-modal .samples-section,
+.missing-samples-list-modal .samples-tab,
+.missing-samples-list-modal .samples-section {
   display: contents;
 }
 
-.modal-content.user-sized .fix-confirmation {
+.fix-missing-modal .fix-confirmation {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
 
-.modal-content.user-sized .fix-confirm-table-wrapper,
-.modal-content.user-sized .table-wrapper {
-  flex: 1;
+/* Bottom action rows keep their natural height - only the table wrapper flexes */
+.fix-missing-modal .fix-confirmation .fix-progress-section {
+  flex: 0 0 auto;
+}
+
+.fix-missing-modal .fix-confirm-table-wrapper,
+.fix-missing-modal .table-wrapper,
+.missing-samples-list-modal .table-wrapper {
+  flex: 1 1 auto;
   min-height: 0;
   height: auto;
   max-height: none;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* Dynamic width for filter dropdown options */
@@ -5692,13 +5702,6 @@ th.col-used .header-content .filter-icon {
   font-family: 'Courier New', monospace;
 }
 
-/* Content-sized results list (the base class pins height to 55vh for the missing-samples flow) */
-.fix-pool-modal .fix-confirm-table-wrapper {
-  height: auto;
-  max-height: 45vh;
-  overflow-y: auto;
-}
-
 /* Pool modals table: fixed layout so the colgroup widths (and drag-resizing) apply */
 .pool-files-table {
   table-layout: fixed;
@@ -5709,14 +5712,6 @@ th.col-used .header-content .filter-icon {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-
-/* Content-sized list modal: scrollbar only when the rows outgrow the cap */
-.missing-samples-list-modal.pool-list-modal .table-wrapper {
-  height: auto;
-  max-height: 70vh;
-  overflow-y: auto;
-  overflow-x: hidden;
 }
 
 .fix-search-steps {
@@ -5872,7 +5867,6 @@ th.col-used .header-content .filter-icon {
 
 
 .fix-confirm-table-wrapper {
-  height: 55vh;
   overflow-y: auto;
   overflow-x: hidden;
 }
