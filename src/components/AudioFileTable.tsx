@@ -322,12 +322,21 @@ export function AudioFileTable({
     wrapper.addEventListener('scroll', handleScroll);
     return () => wrapper.removeEventListener('scroll', handleScroll);
   }, [scrollStorageKey]);
+  const prevScrollKeyRef = useRef(scrollStorageKey);
   useLayoutEffect(() => {
-    if (prevFilesRef.current !== files && tableWrapperRef.current && scrollPositionRef.current > 0) {
-      tableWrapperRef.current.scrollTop = scrollPositionRef.current;
+    const wrapper = tableWrapperRef.current;
+    if (!wrapper) return;
+    if (prevScrollKeyRef.current !== scrollStorageKey) {
+      // Key the position by directory: navigating back to a level restores where you left off
+      const saved = scrollStorageKey ? Number(sessionStorage.getItem(scrollStorageKey)) || 0 : 0;
+      wrapper.scrollTop = saved;
+      scrollPositionRef.current = saved;
+      prevScrollKeyRef.current = scrollStorageKey;
+    } else if (prevFilesRef.current !== files && scrollPositionRef.current > 0) {
+      wrapper.scrollTop = scrollPositionRef.current;
     }
     prevFilesRef.current = files;
-  }, [files]);
+  }, [files, scrollStorageKey]);
 
   // Close filter dropdown when clicking outside (portal-aware)
   useEffect(() => {

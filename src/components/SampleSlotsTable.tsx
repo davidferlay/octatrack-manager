@@ -696,6 +696,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
       if (typing) return;
 
       if ((e.key === 'a' || e.key === 'A') && audioPoolPath) { e.preventDefault(); toggleAudioPool(!showAudioPool); return; }
+      if ((e.key === 't' || e.key === 'T') && onToggleTransfers) { e.preventDefault(); onToggleTransfers(); return; }
       if ((e.key === 'Delete' || e.key === 'Backspace') && isEditMode && selectedSlots.size > 0) { e.preventDefault(); handleDeleteKey(); return; }
 
       // Left/Right switch the focused pane (pool sits on the left, slots on the right).
@@ -711,7 +712,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [audioPoolPath, showAudioPool, isEditMode, selectedSlots, slotMenu, handleDeleteKey, player, activePane, moveSlotSelection]);
+  }, [audioPoolPath, showAudioPool, isEditMode, selectedSlots, slotMenu, handleDeleteKey, player, activePane, moveSlotSelection, onToggleTransfers]);
 
   // Expand any dragged/dropped directories into their (recursive) audio files so the
   // copy/assign flows never choke on a folder. Plain audio files pass through unchanged.
@@ -1656,7 +1657,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
             {audibleCount > 0 && (
               <button
                 className="usage-badge"
-                title={`Played in ${audibleCount} place${audibleCount > 1 ? 's' : ''} — click for details`}
+                title={`Played in ${audibleCount} place${audibleCount > 1 ? 's' : ''} - click for details`}
                 onClick={openPopover('audible')}
               >
                 ✓ {audibleCount}
@@ -1665,7 +1666,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
             {referencedCount > 0 && (
               <button
                 className="usage-badge referenced"
-                title={`Referenced in ${referencedCount} place${referencedCount > 1 ? 's' : ''} but not triggered — click for details`}
+                title={`Referenced in ${referencedCount} place${referencedCount > 1 ? 's' : ''} but not triggered - click for details`}
                 onClick={openPopover('referenced')}
               >
                 ○ {referencedCount}
@@ -1757,7 +1758,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
               <button
                 className="audio-pool-toggle-btn"
                 onClick={() => toggleAudioPool(true)}
-                title={isEditMode ? "Show Audio Pool (A)" : "Show Audio Pool (read-only — toggle Edit mode to assign samples) (A)"}
+                title={isEditMode ? "Show Audio Pool (A)" : "Show Audio Pool (read-only - toggle Edit mode to assign samples) (A)"}
               >
                 <i className="fas fa-columns"></i>
               </button>

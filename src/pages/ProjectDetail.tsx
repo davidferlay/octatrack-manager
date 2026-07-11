@@ -224,6 +224,21 @@ export function ProjectDetail() {
     const valid: TabType[] = ["overview", "parts", "patterns", "tracks", "static-slots", "flex-slots", "tools"];
     return (valid as string[]).includes(t ?? "") ? (t as TabType) : "overview";
   });
+  // Shift+1..6: switch between the page tabs (same order as the header)
+  useEffect(() => {
+    const tabOrder: TabType[] = ["overview", "parts", "patterns", "flex-slots", "static-slots", "tools"];
+    function onKey(e: KeyboardEvent) {
+      if (!e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      const m = /^Digit([1-6])$/.exec(e.code);
+      if (!m) return;
+      e.preventDefault();
+      setActiveTab(tabOrder[Number(m[1]) - 1]);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   const [selectedBankIndex, setSelectedBankIndex] = useState<number>(0);
   const [selectedTrackIndex, setSelectedTrackIndex] = useState<number>(0); // Default to track 0, will be set to active track
   const [selectedPatternIndex, setSelectedPatternIndex] = useState<number>(0); // Default to pattern 0, will be set to active pattern

@@ -8,6 +8,15 @@ import { ProjectsProvider } from "./context/ProjectsContext";
 import { TablePreferencesProvider } from "./context/TablePreferencesContext";
 import '@fortawesome/fontawesome-free/css/all.min.css';
 
+// Esc closes the topmost modal by clicking its close button, so each modal's own
+// close logic runs. Modals without a close button (e.g. mid-conversion) are unaffected.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const overlays = document.querySelectorAll('.modal-overlay');
+  const top = overlays[overlays.length - 1];
+  top?.querySelector<HTMLElement>('.modal-close')?.click();
+});
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ProjectsProvider>

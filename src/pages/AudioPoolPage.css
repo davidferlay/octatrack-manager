@@ -618,85 +618,11 @@ td.col-size {
   text-shadow: 0 0 6px rgba(255, 102, 0, 0.5);
 }
 
-/* Filter dropdown */
-.filter-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  min-width: 180px;
-  background-color: var(--elektron-dark-gray);
-  border: 1px solid var(--elektron-border-gray);
-  border-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  z-index: 100;
-  padding: 0.5rem;
-}
-
-.dropdown-search {
-  width: 100%;
-  background-color: var(--elektron-black);
-  color: var(--elektron-text-primary);
-  border: 1px solid var(--elektron-border-gray);
-  padding: 0.4rem 0.6rem;
-  border-radius: 4px;
-  font-size: 0.8rem;
-  margin-bottom: 0.5rem;
-}
-
-.dropdown-search:focus {
-  outline: none;
-  border-color: var(--elektron-orange);
-}
-
-.dropdown-checkbox {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.4rem 0;
-  cursor: pointer;
-  font-size: 0.8rem;
-  color: var(--elektron-text-secondary);
-}
-
-.dropdown-checkbox:hover {
-  color: var(--elektron-text-primary);
-}
-
+/* Filter dropdowns use the shared App.css styles (same look as the sample slot
+   pages) - the local overrides that used to live here made them inconsistent. */
 .dropdown-options {
   max-height: 200px;
   overflow-y: auto;
-}
-
-.dropdown-option {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.4rem 0;
-  cursor: pointer;
-  font-size: 0.8rem;
-  color: var(--elektron-text-secondary);
-}
-
-.dropdown-option:hover {
-  color: var(--elektron-text-primary);
-}
-
-.clear-filter-btn {
-  width: 100%;
-  background-color: transparent;
-  color: var(--elektron-text-secondary);
-  border: 1px solid var(--elektron-border-gray);
-  padding: 0.4rem;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  cursor: pointer;
-  margin-top: 0.5rem;
-  transition: all 0.15s ease;
-}
-
-.clear-filter-btn:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: var(--elektron-text-primary);
 }
 
 /* Transfer queue */

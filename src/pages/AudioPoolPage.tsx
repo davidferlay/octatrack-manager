@@ -1004,11 +1004,24 @@ export function AudioPoolPage() {
   // Keyboard navigation
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      // All of these shortcuts (player, pane navigation, B toggle...) belong to the Files tab
-      if (activeTab !== 'files') return;
       // Don't handle if modal is open or user is typing in an input
       if (overwriteModal.isOpen) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      // Shift+1/2: switch between the page tabs (works from any tab)
+      if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (e.code === 'Digit1') { e.preventDefault(); setActiveTab('files'); return; }
+        if (e.code === 'Digit2') { e.preventDefault(); setActiveTab('tools'); return; }
+      }
+      // 't': toggle the Transfers pane (works from any tab)
+      if ((e.key === 't' || e.key === 'T') && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        e.preventDefault();
+        setIsTransferQueueOpen(!isTransferQueueOpen);
+        return;
+      }
+
+      // All of the shortcuts below (player, pane navigation, B toggle...) belong to the Files tab
+      if (activeTab !== 'files') return;
 
       // Player controls take precedence over row/panel navigation.
       const tag = (e.target as HTMLElement | null)?.tagName;
@@ -1227,7 +1240,8 @@ export function AudioPoolPage() {
     activePanel, sourceFiles, destinationFiles,
     cursorIndexSource, cursorIndexDest,
     selectedSourceFiles, selectedDestFiles,
-    isSourcePanelOpen, overwriteModal.isOpen, player, previewCandidate, activeTab
+    isSourcePanelOpen, overwriteModal.isOpen, player, previewCandidate, activeTab,
+    isTransferQueueOpen, setIsTransferQueueOpen
   ]);
 
   // In-app drag from the Source pane to the Audio Pool pane uses @dnd-kit (pointer-based)
@@ -1414,7 +1428,7 @@ export function AudioPoolPage() {
                 >
                   <span className="tools-fix-status-count">{incompatibleFiles.length}</span>
                   {" "}incompatible audio file{incompatibleFiles.length !== 1 ? 's' : ''}
-                  <span className="tools-fix-status-detail">{" — "}of {poolScanTotal} scanned</span>
+                  <span className="tools-fix-status-detail">{" - "}of {poolScanTotal} scanned</span>
                 </button>
               )}
             </div>
@@ -1492,6 +1506,7 @@ export function AudioPoolPage() {
               onPanelClick={() => setActivePanel('source')}
               onContextMenu={(e, file) => handleContextMenu(e, file, 'source')}
               rowRefs={sourceRowRefs}
+              scrollStorageKey={sourcePath ? `pool-src-scroll:${sourcePath}` : undefined}
             />
           </div>
         )}
@@ -1553,11 +1568,12 @@ export function AudioPoolPage() {
             onCompatMap={setDestCompatMap}
             convertingPaths={convertingPaths}
             justConvertedPaths={justConvertedPaths}
+            scrollStorageKey={destinationPath ? `pool-dest-scroll:${destinationPath}` : undefined}
             countSuffix={poolScanDone && !poolScanLoading ? (
               incompatibleFiles.length > 0 ? (
                 <button
                   className="pool-health-glyph warning"
-                  title={`${incompatibleFiles.length} incompatible audio file${incompatibleFiles.length !== 1 ? 's' : ''} found — click to fix`}
+                  title={`${incompatibleFiles.length} incompatible audio file${incompatibleFiles.length !== 1 ? 's' : ''} found - click to fix`}
                   onClick={() => setActiveTab('tools')}
                 >
                   <i className="fas fa-wrench"></i>

@@ -135,6 +135,36 @@ pub fn list_directory(path: &str) -> Result<Vec<AudioFileInfo>, String> {
     Ok(files)
 }
 
+/// Metadata for an explicit list of audio files - feeds the Format/Bit/kHz/Size
+/// columns of the pool-fix modals, whose files are scattered across subfolders.
+pub fn files_info(paths: &[String]) -> Vec<AudioFileInfo> {
+    paths
+        .iter()
+        .map(|p| {
+            let path = Path::new(p);
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| p.clone());
+            let disk_size = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+            // A 0-frame PCM size means the header was odd - show the on-disk size instead
+            let size = crate::project_reader::ot_pcm_data_size(path)
+                .filter(|s| *s > 0)
+                .unwrap_or(disk_size);
+            let (channels, bit_rate, sample_rate) = extract_audio_metadata(&path.to_path_buf());
+            AudioFileInfo {
+                name,
+                size,
+                channels,
+                bit_rate,
+                sample_rate,
+                is_directory: false,
+                path: p.clone(),
+            }
+        })
+        .collect()
+}
+
 /// List every file/directory under `path` (recursively) with audio metadata, flattened.
 /// Used by the Audio Pool panes so the search bar can match across subfolders.
 /// ponytail: extracts metadata for every audio file in the subtree — fine for typical

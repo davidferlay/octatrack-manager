@@ -411,7 +411,7 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
         rowRefs={rowRefs}
         dndMode={dndMode}
         initialColumnVisibility={{ format: false, bitrate: false, samplerate: false }}
-        scrollStorageKey={persistKey ? `${persistKey}:scroll` : undefined}
+        scrollStorageKey={persistKey ? `${persistKey}:scroll:${currentPath}` : undefined}
         poolRoot={audioPoolPath}
         searchRoot={currentPath}
         onCompatMap={setCompatMap}

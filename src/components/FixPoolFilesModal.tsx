@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { CompatBadge, getFileFormat } from './AudioFileTable';
+import { getFileFormat, formatFileSize } from './AudioFileTable';
 
 export interface IncompatibleFile {
   path: string;
@@ -27,13 +27,6 @@ export interface CopyProgressEvent {
   progress: number;
 }
 
-const COMPAT_LABELS: Record<string, string> = {
-  wrong_rate: 'Wrong sample rate',
-  incompatible: 'Incompatible bit depth',
-  unsupported_format: 'Unsupported audio format',
-  unknown: 'Unrecognized format',
-};
-
 /** File name without its directory part. */
 function baseName(path: string): string {
   return path.split(/[\\/]/).pop() ?? path;
@@ -56,11 +49,12 @@ function actionLabel(path: string): string {
 }
 
 /** Shared modal-header search box + copy-table button (fix-missing style). */
-function HeaderActions({ searchText, setSearchText, onCopy, copyFeedback }: {
+function HeaderActions({ searchText, setSearchText, onCopy, copyFeedback, columnToggle }: {
   searchText: string;
   setSearchText: (v: string) => void;
   onCopy: () => void;
   copyFeedback: 'idle' | 'copied';
+  columnToggle?: React.ReactNode;
 }) {
   return (
     <div className="missing-samples-header-actions">
@@ -83,6 +77,7 @@ function HeaderActions({ searchText, setSearchText, onCopy, copyFeedback }: {
       >
         {copyFeedback === 'copied' ? '✓' : '⧉'}
       </button>
+      {columnToggle}
     </div>
   );
 }
@@ -100,14 +95,235 @@ function useCopyFeedback(): ['idle' | 'copied', (text: string) => void] {
   return [copyFeedback, copy];
 }
 
-type SortColumn = 'file' | 'compat' | 'location';
+/** Modal resize: left/right handles adjust width symmetrically, bottom adjusts height. */
+function useModalResize() {
+  const [modalWidth, setModalWidth] = useState<number | null>(null);
+  const [modalHeight, setModalHeight] = useState<number | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef<'left' | 'right' | 'bottom' | null>(null);
+  const dragStart = useRef({ x: 0, y: 0, w: 0, h: 0 });
 
-function useFileRows(files: IncompatibleFile[], poolPath: string) {
+  const onResizeMouseDown = useCallback((side: 'left' | 'right' | 'bottom', e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragging.current = side;
+    const rect = modalRef.current?.getBoundingClientRect();
+    dragStart.current = { x: e.clientX, y: e.clientY, w: rect?.width ?? 700, h: rect?.height ?? 500 };
+  }, []);
+
+  useEffect(() => {
+    function onMove(e: MouseEvent) {
+      if (!dragging.current) return;
+      if (dragging.current === 'bottom') {
+        const h = Math.max(240, Math.min(window.innerHeight * 0.95, dragStart.current.h + (e.clientY - dragStart.current.y)));
+        setModalHeight(h);
+      } else {
+        // Both edges expand symmetrically: multiply delta by 2
+        const mult = dragging.current === 'right' ? 2 : -2;
+        const w = Math.max(400, Math.min(window.innerWidth * 0.95, dragStart.current.w + (e.clientX - dragStart.current.x) * mult));
+        setModalWidth(w);
+      }
+    }
+    function onUp() { dragging.current = null; }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+  }, []);
+
+  const style: React.CSSProperties = {
+    ...(modalWidth ? { width: modalWidth, maxWidth: '95vw' } : {}),
+    ...(modalHeight ? { height: modalHeight, maxHeight: '95vh' } : {}),
+  };
+  const sizedClass = modalHeight ? ' user-sized' : '';
+  const handles = (
+    <>
+      <div className="modal-resize-handle modal-resize-left" onMouseDown={(e) => onResizeMouseDown('left', e)} />
+      <div className="modal-resize-handle modal-resize-right" onMouseDown={(e) => onResizeMouseDown('right', e)} />
+      <div className="modal-resize-handle modal-resize-bottom" onMouseDown={(e) => onResizeMouseDown('bottom', e)} />
+    </>
+  );
+  return { modalRef, style, sizedClass, handles };
+}
+
+interface FileMeta {
+  path: string;
+  size: number;
+  bit_rate: number | null;
+  sample_rate: number | null;
+}
+
+/** Bit/kHz/Size metadata per file, fetched once (files sit scattered across subfolders). */
+function usePoolFileMeta(files: IncompatibleFile[]): Record<string, FileMeta> {
+  const [meta, setMeta] = useState<Record<string, FileMeta>>({});
+  useEffect(() => {
+    let cancelled = false;
+    Promise.resolve(invoke<FileMeta[]>('get_audio_files_info', { paths: files.map(f => f.path) }))
+      .then(infos => {
+        if (cancelled || !Array.isArray(infos)) return;
+        setMeta(Object.fromEntries(infos.map(i => [i.path, i])));
+      })
+      .catch(() => {}); // no Tauri (e2e without mock) → columns stay empty
+    return () => { cancelled = true; };
+  }, [files]);
+  return meta;
+}
+
+interface PoolRow {
+  path: string;
+  name: string;
+  format: string;
+  bit: number | null;
+  khz: number | null;
+  size: number | null;
+  location: string;
+  action: string;
+}
+
+type PoolSortColumn = 'file' | 'format' | 'bit' | 'khz' | 'size' | 'location' | 'action';
+
+const POOL_COLUMNS: { id: PoolSortColumn; label: string }[] = [
+  { id: 'file', label: 'File' },
+  { id: 'format', label: 'Format' },
+  { id: 'bit', label: 'Bit' },
+  { id: 'khz', label: 'kHz' },
+  { id: 'size', label: 'Size' },
+  { id: 'location', label: 'Location' },
+  { id: 'action', label: 'Action' },
+];
+
+/**
+ * Shared sortable/filterable/column-resizable table for the two pool modals.
+ * Columns: File, Format, Bit, kHz, Size, Location (+ Action for the review modal).
+ */
+function usePoolTable(files: IncompatibleFile[], poolPath: string, withAction: boolean, defaultHidden: PoolSortColumn[] = []) {
+  const meta = usePoolFileMeta(files);
   const [searchText, setSearchText] = useState('');
-  const [sortColumn, setSortColumn] = useState<SortColumn>('file');
+  const [sortColumn, setSortColumn] = useState<PoolSortColumn>('file');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [formatFilter, setFormatFilter] = useState('all');
+  const [bitFilter, setBitFilter] = useState('all');
+  const [khzFilter, setKhzFilter] = useState('all');
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
 
-  const handleSort = (column: SortColumn) => {
+  // Column visibility ("toggle columns" menu in the header)
+  const allColumns = POOL_COLUMNS.filter(c => withAction || c.id !== 'action');
+  const [hiddenCols, setHiddenCols] = useState<Set<PoolSortColumn>>(new Set(defaultHidden));
+  const visibleColumns = allColumns.filter(c => !hiddenCols.has(c.id));
+  const toggleCol = (id: PoolSortColumn) => setHiddenCols(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  // Column resize (fix-missing style: widths captured from the DOM, dragged in pairs)
+  const [colWidths, setColWidths] = useState<number[]>([]);
+  const colDragIndex = useRef<number | null>(null);
+  const colDragStartX = useRef(0);
+  const colDragStartWidths = useRef<number[]>([]);
+  const tableRef = useRef<HTMLTableElement>(null);
+
+  useEffect(() => {
+    function onMove(e: MouseEvent) {
+      if (colDragIndex.current === null) return;
+      const delta = e.clientX - colDragStartX.current;
+      const idx = colDragIndex.current;
+      const prev = colDragStartWidths.current;
+      const minW = 40;
+      const newLeft = Math.max(minW, prev[idx] + delta);
+      const newRight = Math.max(minW, prev[idx + 1] - delta);
+      setColWidths((w) => {
+        const copy = [...w];
+        copy[idx] = newLeft;
+        copy[idx + 1] = newRight;
+        return copy;
+      });
+    }
+    function onUp() { colDragIndex.current = null; }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+  }, []);
+
+  // Dragged widths were measured against the previous column set - remeasure after a toggle
+  useEffect(() => { setColWidths([]); }, [hiddenCols]);
+
+  const handleColResizeMouseDown = useCallback((colIndex: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    colDragIndex.current = colIndex;
+    colDragStartX.current = e.clientX;
+    if (tableRef.current) {
+      const ths = tableRef.current.querySelectorAll('thead th');
+      const widths = Array.from(ths).map((th) => (th as HTMLElement).offsetWidth);
+      colDragStartWidths.current = widths;
+      setColWidths(widths);
+    }
+  }, []);
+
+  const closeDropdown = () => {
+    setOpenDropdown(null);
+    setDropdownPosition(null);
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!openDropdown) return;
+    function handleClick(event: MouseEvent) {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.filter-dropdown') && !target.closest('.filter-icon')) {
+        closeDropdown();
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [openDropdown]);
+
+  const allRows: PoolRow[] = files.map(f => ({
+    path: f.path,
+    name: baseName(f.path),
+    format: getFileFormat(f.path),
+    bit: meta[f.path]?.bit_rate ?? null,
+    khz: meta[f.path]?.sample_rate ?? null,
+    size: meta[f.path]?.size ?? null,
+    location: poolLocation(f.path, poolPath),
+    action: actionLabel(f.path),
+  }));
+
+  const rows = allRows
+    .filter(r => {
+      if (searchText && !r.name.toLowerCase().includes(searchText.toLowerCase())) return false;
+      if (formatFilter !== 'all' && r.format !== formatFilter) return false;
+      if (bitFilter !== 'all' && String(r.bit ?? '') !== bitFilter) return false;
+      if (khzFilter !== 'all' && String(r.khz ?? '') !== khzFilter) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      const numeric = sortColumn === 'bit' || sortColumn === 'khz' || sortColumn === 'size';
+      const key = (r: PoolRow): string | number => {
+        switch (sortColumn) {
+          case 'file': return r.name.toLowerCase();
+          case 'format': return r.format;
+          case 'bit': return r.bit ?? -1;
+          case 'khz': return r.khz ?? -1;
+          case 'size': return r.size ?? -1;
+          case 'location': return r.location.toLowerCase();
+          case 'action': return r.action;
+        }
+      };
+      const ka = key(a);
+      const kb = key(b);
+      const cmp = numeric ? (ka as number) - (kb as number) : ka < kb ? -1 : ka > kb ? 1 : 0;
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+
+  const handleSort = (column: PoolSortColumn) => {
     if (sortColumn === column) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
@@ -116,21 +332,232 @@ function useFileRows(files: IncompatibleFile[], poolPath: string) {
     }
   };
 
-  const rows = files
-    .filter(f => !searchText || baseName(f.path).toLowerCase().includes(searchText.toLowerCase()))
-    .sort((a, b) => {
-      const key = (f: IncompatibleFile) =>
-        sortColumn === 'file' ? baseName(f.path).toLowerCase()
-          : sortColumn === 'compat' ? (COMPAT_LABELS[f.compatibility] ?? f.compatibility)
-            : poolLocation(f.path, poolPath).toLowerCase();
-      return key(a) < key(b) ? (sortDirection === 'asc' ? -1 : 1)
-        : key(a) > key(b) ? (sortDirection === 'asc' ? 1 : -1) : 0;
-    });
-
-  const sortIndicator = (column: SortColumn) =>
+  const sortIndicator = (column: PoolSortColumn) =>
     sortColumn === column ? (sortDirection === 'asc' ? ' ▲' : ' ▼') : '';
 
-  return { rows, searchText, setSearchText, handleSort, sortIndicator };
+  const unique = (get: (r: PoolRow) => string) =>
+    Array.from(new Set(allRows.map(get).filter(v => v !== ''))).sort();
+
+  const hasActiveFilters = formatFilter !== 'all' || bitFilter !== 'all' || khzFilter !== 'all';
+  const resetFilters = () => {
+    setFormatFilter('all');
+    setBitFilter('all');
+    setKhzFilter('all');
+  };
+
+  /** Sortable header with a ⋮ filter dropdown, same markup as the fix-missing review table. */
+  const renderFilterableHeader = (
+    column: PoolSortColumn,
+    label: string,
+    isActive: boolean,
+    options: { value: string; label: string }[],
+    currentValue: string,
+    onChange: (value: string) => void,
+    resizeIndex?: number,
+  ) => (
+    <th key={column} className="filterable-header" style={{ position: 'relative' }}>
+      <div className="header-content">
+        <span onClick={() => handleSort(column)} className="sortable-label">
+          {label}{sortIndicator(column)}
+        </span>
+        <button
+          className={`filter-icon ${openDropdown === column || isActive ? 'active' : ''}`}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (openDropdown === column) {
+              closeDropdown();
+            } else {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setDropdownPosition({ top: rect.bottom + 4, left: rect.right - 120 });
+              setOpenDropdown(column);
+            }
+          }}
+        >
+          ⋮
+        </button>
+      </div>
+      {openDropdown === column && dropdownPosition && (
+        <div className="filter-dropdown" style={{ position: 'fixed', top: dropdownPosition.top, left: dropdownPosition.left, width: 'auto', minWidth: 'auto' }}>
+          <div className="dropdown-options" style={{ width: 'max-content' }}>
+            {options.map((opt) => (
+              <label key={opt.value} className="dropdown-option">
+                <input type="radio" name={`${column}-pool-filter`} checked={currentValue === opt.value} onChange={() => { onChange(opt.value); closeDropdown(); }} />
+                <span>{opt.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+      {resizeIndex !== undefined && (
+        <span className="col-resize-handle" onMouseDown={(e) => handleColResizeMouseDown(resizeIndex, e)} />
+      )}
+    </th>
+  );
+
+  const renderSortableHeader = (column: PoolSortColumn, label: string, resizeIndex?: number) => (
+    <th key={column} className="sortable" onClick={() => handleSort(column)} style={{ position: 'relative' }}>
+      {label}{sortIndicator(column)}
+      {resizeIndex !== undefined && (
+        <span className="col-resize-handle" onMouseDown={(e) => { e.stopPropagation(); handleColResizeMouseDown(resizeIndex, e); }} />
+      )}
+    </th>
+  );
+
+  return {
+    rows, allRows, searchText, setSearchText,
+    formatFilter, setFormatFilter, bitFilter, setBitFilter, khzFilter, setKhzFilter,
+    hasActiveFilters, resetFilters, unique,
+    renderFilterableHeader, renderSortableHeader,
+    colWidths, tableRef,
+    allColumns, visibleColumns, hiddenCols, toggleCol,
+  };
+}
+
+/** "Toggle columns" menu (same look as the file tables' column visibility button). */
+function ColumnToggle({ table }: { table: ReturnType<typeof usePoolTable> }) {
+  const { allColumns, hiddenCols, toggleCol } = table;
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+  return (
+    <div className="column-menu-wrapper" ref={ref}>
+      <button
+        className={`column-visibility-btn ${open ? 'active' : ''}`}
+        onClick={(e) => { e.stopPropagation(); setOpen(v => !v); }}
+        title="Show/Hide Columns"
+      >
+        ☰
+      </button>
+      {open && (
+        <div className="column-visibility-dropdown">
+          <div className="column-visibility-header">Show/Hide Columns</div>
+          <div className="dropdown-options">
+            {allColumns.map(c => (
+              <label key={c.id} className="dropdown-option">
+                <input type="checkbox" checked={!hiddenCols.has(c.id)} onChange={() => toggleCol(c.id)} />
+                <span>{c.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Default column widths (px) before the user resizes anything.
+    List modal: File takes the rest; review modal: Action takes the rest. */
+const POOL_COL_DEFAULTS: Record<string, number | undefined> = {
+  file: undefined, format: 95, bit: 72, khz: 78, size: 89, location: 185, action: 190,
+};
+const REVIEW_COL_DEFAULTS: Record<string, number | undefined> = {
+  file: 260, format: 93, bit: 80, khz: 78, size: 90, location: 185, action: undefined,
+};
+
+function PoolFilesTable({ table }: { table: ReturnType<typeof usePoolTable> }) {
+  const {
+    rows, visibleColumns, formatFilter, setFormatFilter, bitFilter, setBitFilter, khzFilter, setKhzFilter,
+    unique, renderFilterableHeader, renderSortableHeader, colWidths, tableRef,
+  } = table;
+
+  const filterOptions = (values: string[], fmt: (v: string) => string = v => v) =>
+    [{ value: 'all', label: 'All' }, ...values.map(v => ({ value: v, label: fmt(v) }))];
+
+  const renderHeader = (id: PoolSortColumn, label: string, i: number) => {
+    // The last visible column has no resize handle (it absorbs the leftovers)
+    const resizeIndex = i < visibleColumns.length - 1 ? i : undefined;
+    switch (id) {
+      case 'format':
+        return renderFilterableHeader('format', label, formatFilter !== 'all',
+          filterOptions(unique(r => r.format)), formatFilter, setFormatFilter, resizeIndex);
+      case 'bit':
+        return renderFilterableHeader('bit', label, bitFilter !== 'all',
+          filterOptions(unique(r => String(r.bit ?? ''))), bitFilter, setBitFilter, resizeIndex);
+      case 'khz':
+        return renderFilterableHeader('khz', label, khzFilter !== 'all',
+          filterOptions(unique(r => String(r.khz ?? '')), v => `${(Number(v) / 1000).toFixed(1)}`), khzFilter, setKhzFilter, resizeIndex);
+      case 'action':
+        return <th key="action">Action</th>;
+      default:
+        return renderSortableHeader(id, label, resizeIndex);
+    }
+  };
+
+  const renderCell = (id: PoolSortColumn, r: PoolRow) => {
+    switch (id) {
+      case 'file': return <td key={id} className="col-sample" title={r.path}>{r.name}</td>;
+      case 'format': return <td key={id}>{r.format}</td>;
+      case 'bit': return <td key={id}>{r.bit ?? ''}</td>;
+      case 'khz': return <td key={id}>{r.khz != null ? (r.khz / 1000).toFixed(1) : ''}</td>;
+      case 'size': return <td key={id}>{r.size != null ? formatFileSize(r.size) : ''}</td>;
+      case 'location': return <td key={id} className="fix-location-cell" title={r.location}>{r.location}</td>;
+      case 'action': return <td key={id} title="The original file is replaced; sample slots referencing it are updated in every project of this Set (after a backup)">{r.action}</td>;
+    }
+  };
+
+  const defaults = table.allColumns.some(c => c.id === 'action') ? REVIEW_COL_DEFAULTS : POOL_COL_DEFAULTS;
+
+  return (
+    <table className="samples-table pool-files-table" ref={tableRef}>
+      <colgroup>
+        {visibleColumns.map((c, i) => (
+          <col key={c.id} style={{ width: colWidths.length > 0 ? colWidths[i] : defaults[c.id] }} />
+        ))}
+      </colgroup>
+      <thead>
+        <tr>
+          {visibleColumns.map((c, i) => renderHeader(c.id, c.label, i))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map(r => (
+          <tr key={r.path}>
+            {visibleColumns.map(c => renderCell(c.id, r))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function poolTableTsv(table: ReturnType<typeof usePoolTable>): string {
+  const { rows, visibleColumns } = table;
+  const value = (id: PoolSortColumn, r: PoolRow): string | number => {
+    switch (id) {
+      case 'file': return r.name;
+      case 'format': return r.format;
+      case 'bit': return r.bit ?? '';
+      case 'khz': return r.khz != null ? (r.khz / 1000).toFixed(1) : '';
+      case 'size': return r.size != null ? formatFileSize(r.size) : '';
+      case 'location': return r.location;
+      case 'action': return r.action;
+    }
+  };
+  return [
+    visibleColumns.map(c => c.label).join('\t'),
+    ...rows.map(r => visibleColumns.map(c => value(c.id, r)).join('\t')),
+  ].join('\n');
+}
+
+/** Filter badges + reset button shown in the modal header when filters are active. */
+function FilterBadges({ table }: { table: ReturnType<typeof usePoolTable> }) {
+  const { formatFilter, bitFilter, khzFilter, hasActiveFilters, resetFilters } = table;
+  if (!hasActiveFilters) return null;
+  return (
+    <>
+      {formatFilter !== 'all' && <span className="filter-badge">Format: {formatFilter}</span>}
+      {bitFilter !== 'all' && <span className="filter-badge">Bit: {bitFilter}</span>}
+      {khzFilter !== 'all' && <span className="filter-badge">kHz: {(Number(khzFilter) / 1000).toFixed(1)}</span>}
+      <button className="reset-filters-btn" onClick={resetFilters} title="Reset all filters">✕ Reset</button>
+    </>
+  );
 }
 
 /**
@@ -142,52 +569,39 @@ export function PoolIncompatibleListModal({ poolPath, files, onClose }: {
   files: IncompatibleFile[];
   onClose: () => void;
 }) {
-  const { rows, searchText, setSearchText, handleSort, sortIndicator } = useFileRows(files, poolPath);
+  const table = usePoolTable(files, poolPath, false);
   const [copyFeedback, copy] = useCopyFeedback();
-
-  const copyTable = () => {
-    const tsv = [
-      ['File', 'Format', 'Compatibility', 'Location'].join('\t'),
-      ...rows.map(f => [baseName(f.path), getFileFormat(f.path), COMPAT_LABELS[f.compatibility] ?? f.compatibility, poolLocation(f.path, poolPath)].join('\t')),
-    ].join('\n');
-    copy(tsv);
-  };
+  const { modalRef, style, sizedClass, handles } = useModalResize();
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content missing-samples-list-modal pool-list-modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={modalRef}
+        className={`modal-content missing-samples-list-modal pool-list-modal${sizedClass}`}
+        onClick={(e) => e.stopPropagation()}
+        style={style}
+      >
+        {handles}
         <div className="modal-header missing-samples-header">
           <h3><i className="fas fa-list"></i> Incompatible Audio Pool Samples</h3>
           <div className="missing-samples-header-info">
-            <span className="missing-samples-header-count">Showing {rows.length} of {files.length} files</span>
+            <span className="missing-samples-header-count">Showing {table.rows.length} of {files.length} files</span>
+            <FilterBadges table={table} />
           </div>
-          <HeaderActions searchText={searchText} setSearchText={setSearchText} onCopy={copyTable} copyFeedback={copyFeedback} />
+          <HeaderActions
+            searchText={table.searchText}
+            setSearchText={table.setSearchText}
+            onCopy={() => copy(poolTableTsv(table))}
+            copyFeedback={copyFeedback}
+            columnToggle={<ColumnToggle table={table} />}
+          />
           <button className="modal-close" onClick={onClose}>&times;</button>
         </div>
         <div className="modal-body" style={{ padding: 0 }}>
           {/* Plain wrapper — the page-level .samples-tab class pins itself to viewport
               height, which would leave a tall empty body inside a modal */}
           <div className="table-wrapper">
-            <table className="samples-table">
-              <thead>
-                <tr>
-                  <th className="sortable col-sample" onClick={() => handleSort('file')}>File{sortIndicator('file')}</th>
-                  <th style={{ width: 90 }}>Format</th>
-                  <th className="sortable" style={{ width: 90, textAlign: 'center' }} onClick={() => handleSort('compat')}>Compat{sortIndicator('compat')}</th>
-                  <th className="sortable" onClick={() => handleSort('location')}>Location{sortIndicator('location')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map(f => (
-                  <tr key={f.path}>
-                    <td className="col-sample" title={f.path}>{baseName(f.path)}</td>
-                    <td>{getFileFormat(f.path)}</td>
-                    <td style={{ textAlign: 'center' }}><CompatBadge compatibility={f.compatibility} /></td>
-                    <td className="fix-location-cell" title={poolLocation(f.path, poolPath)}>{poolLocation(f.path, poolPath)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <PoolFilesTable table={table} />
           </div>
         </div>
       </div>
@@ -224,8 +638,10 @@ export function FixPoolFilesModal({ poolPath, files, skipReview = false, onClose
   const transferIdRef = useRef<string>(`fix-pool-${Date.now()}`);
   const startedRef = useRef(false);
 
-  const { rows, searchText, setSearchText, handleSort, sortIndicator } = useFileRows(files, poolPath);
+  // Location is hidden by default here - the Action column matters most for review
+  const table = usePoolTable(files, poolPath, true, ['location']);
   const [copyFeedback, copy] = useCopyFeedback();
+  const { modalRef, style, sizedClass, handles } = useModalResize();
 
   const relName = (path: string) =>
     path.startsWith(poolPath) ? path.slice(poolPath.length).replace(/^[/\\]/, '') : path;
@@ -270,14 +686,6 @@ export function FixPoolFilesModal({ poolPath, files, skipReview = false, onClose
     invoke('cancel_audio_transfer', { transferId: transferIdRef.current }).catch(() => {});
   }
 
-  const copyTable = () => {
-    const tsv = [
-      ['File', 'Compatibility', 'Location', 'Action'].join('\t'),
-      ...rows.map(f => [baseName(f.path), COMPAT_LABELS[f.compatibility] ?? f.compatibility, poolLocation(f.path, poolPath), actionLabel(f.path)].join('\t')),
-    ].join('\n');
-    copy(tsv);
-  };
-
   const converting = phase === 'converting';
   const convertingIndex = converting
     ? Math.max(0, files.findIndex(f => f.path === currentFile))
@@ -287,10 +695,16 @@ export function FixPoolFilesModal({ poolPath, files, skipReview = false, onClose
 
   return (
     <div className="modal-overlay" onClick={phase !== 'converting' ? onClose : undefined}>
-      <div className="modal-content fix-missing-modal fix-pool-modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={modalRef}
+        className={`modal-content fix-missing-modal fix-pool-modal${sizedClass}`}
+        onClick={(e) => e.stopPropagation()}
+        style={style}
+      >
+        {handles}
         <div className={`modal-header${phase === 'review' ? ' missing-samples-header' : ''}`}>
           <h3>
-            {phase === 'review' && <><i className="fas fa-clipboard-check"></i> Review planned changes</>}
+            {phase === 'review' && <><i className="fas fa-clipboard-check"></i> Review planned changes - {files.length} incompatible audio file{files.length === 1 ? '' : 's'}</>}
             {phase === 'converting' && <><i className="fas fa-wrench" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>Fixing Audio Pool Samples...</>}
             {phase === 'done' && <><i className="fas fa-wrench" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>Fix Audio Pool Samples</>}
             {phase === 'error' && 'Error'}
@@ -298,47 +712,35 @@ export function FixPoolFilesModal({ poolPath, files, skipReview = false, onClose
           {phase === 'review' && (
             <>
               <div className="missing-samples-header-info">
-                <span className="fix-confirm-status">
-                  <strong>{files.length}</strong> incompatible audio file{files.length === 1 ? '' : 's'}
-                  {rows.length !== files.length && <span style={{ color: 'var(--elektron-text-secondary)', fontWeight: 400 }}> — showing {rows.length}</span>}
-                </span>
+                <span className="missing-samples-header-count">Showing {table.rows.length} of {files.length} files</span>
+                <FilterBadges table={table} />
               </div>
-              <HeaderActions searchText={searchText} setSearchText={setSearchText} onCopy={copyTable} copyFeedback={copyFeedback} />
+              <HeaderActions
+                searchText={table.searchText}
+                setSearchText={table.setSearchText}
+                onCopy={() => copy(poolTableTsv(table))}
+                copyFeedback={copyFeedback}
+                columnToggle={<ColumnToggle table={table} />}
+              />
             </>
           )}
           {!converting && <button className="modal-close" onClick={onClose}>×</button>}
         </div>
-        <div className="modal-body">
+        <div className={`modal-body${phase === 'review' ? ' fix-confirm-body' : ''}`}>
           {phase === 'review' && (
             <div className="fix-confirmation">
               <div className="fix-confirm-table-wrapper">
-                <table className="samples-table">
-                  <thead>
-                    <tr>
-                      <th className="sortable col-sample" onClick={() => handleSort('file')}>File{sortIndicator('file')}</th>
-                      <th className="sortable" style={{ width: 90, textAlign: 'center' }} onClick={() => handleSort('compat')}>Compat{sortIndicator('compat')}</th>
-                      <th className="sortable" onClick={() => handleSort('location')}>Location{sortIndicator('location')}</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map(f => (
-                      <tr key={f.path}>
-                        <td className="col-sample" title={f.path}>{baseName(f.path)}</td>
-                        <td style={{ textAlign: 'center' }}><CompatBadge compatibility={f.compatibility} /></td>
-                        <td className="fix-location-cell" title={poolLocation(f.path, poolPath)}>{poolLocation(f.path, poolPath)}</td>
-                        <td title="The original file is replaced; sample slots referencing it are updated in every project of this Set (after a backup)">{actionLabel(f.path)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <PoolFilesTable table={table} />
               </div>
-              <div className="fix-confirm-actions">
-                <button className="fix-cancel-btn" onClick={onClose} title="Close without applying any changes">Cancel</button>
-                <div style={{ flex: 1 }} />
-                <button className="tools-execute-btn" onClick={() => setPhase('converting')}>
-                  Apply Changes
-                </button>
+              {/* Same bottom as the fix-missing search modal */}
+              <div className="fix-progress-section">
+                <div className="fix-done-actions">
+                  <button className="fix-cancel-btn" onClick={onClose} title="Close without applying any changes">Cancel</button>
+                  <div style={{ flex: 1 }} />
+                  <button className="tools-execute-btn" onClick={() => setPhase('converting')}>
+                    Apply Changes
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -373,7 +775,7 @@ export function FixPoolFilesModal({ poolPath, files, skipReview = false, onClose
                   <p>{failed.length} file{failed.length === 1 ? '' : 's'} could not be converted:</p>
                   <ul>
                     {failed.map(f => (
-                      <li key={f.old_path} title={f.old_path}>{relName(f.old_path)} — {f.error}</li>
+                      <li key={f.old_path} title={f.old_path}>{relName(f.old_path)} - {f.error}</li>
                     ))}
                   </ul>
                 </div>

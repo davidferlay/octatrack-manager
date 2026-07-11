@@ -35,6 +35,16 @@ async function setupMocks(page: Page) {
               ot_size_bytes: 1024,
               compatibility: p.endsWith('snare48.wav') ? 'wrong_rate' : p.endsWith('loop.mp3') ? 'unknown' : 'compatible',
             }))
+          case 'get_audio_files_info':
+            return (args?.paths ?? []).map((p: string) => ({
+              name: p.split('/').pop(),
+              size: p.endsWith('loop.mp3') ? 4096 : 2048,
+              channels: 2,
+              bit_rate: p.endsWith('loop.mp3') ? null : 16,
+              sample_rate: p.endsWith('snare48.wav') ? 48000 : p.endsWith('loop.mp3') ? null : 44100,
+              is_directory: false,
+              path: p,
+            }))
           case 'fix_pool_files':
             ;(window as any).__fixCalls.push(args)
             return {
@@ -158,19 +168,51 @@ test.describe('Audio Pool — fix incompatible files', () => {
     const modal = page.locator('.fix-pool-modal')
     await expect(modal.locator('tbody tr')).toHaveCount(2)
 
+    // Bold title carries the count; the table has the Format/Bit/kHz/Size columns
+    await expect(modal.locator('.modal-header h3')).toContainText('Review planned changes - 2 incompatible audio files')
+    await expect(modal.locator('thead')).toContainText('Format')
+    await expect(modal.locator('thead')).toContainText('Bit')
+    await expect(modal.locator('thead')).toContainText('kHz')
+    await expect(modal.locator('thead')).toContainText('Size')
+    // The count indicator always shows
+    await expect(modal.getByText('Showing 2 of 2 files')).toBeVisible()
+    // Location is hidden by default here; the toggle-columns menu brings it back
+    await expect(modal.locator('thead')).not.toContainText('Location')
+    await modal.locator('.column-visibility-btn').click()
+    await modal.locator('.column-visibility-dropdown .dropdown-option', { hasText: 'Location' }).locator('input').check()
+    await expect(modal.locator('thead')).toContainText('Location')
+    await modal.locator('.column-visibility-dropdown .dropdown-option', { hasText: 'Location' }).locator('input').uncheck()
+    await modal.locator('.column-visibility-btn').click()
+    const snareRow = modal.locator('tbody tr', { hasText: 'snare48.wav' })
+    await expect(snareRow).toContainText('WAV')
+    await expect(snareRow).toContainText('16')
+    await expect(snareRow).toContainText('48.0')
+    await expect(snareRow).toContainText('2.0 KB')
+
     // Search narrows the listed rows and the header shows the filtered count
     await modal.locator('.header-search-input').fill('snare')
     await expect(modal.locator('tbody tr')).toHaveCount(1)
-    await expect(modal.getByText('— showing 1')).toBeVisible()
+    await expect(modal.getByText('Showing 1 of 2 files')).toBeVisible()
 
     // Copy puts a TSV of the visible rows on the clipboard
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
     await modal.locator('.copy-table-btn').click()
     await expect(modal.locator('.copy-table-btn')).toHaveText('✓')
     const clip = await page.evaluate(() => navigator.clipboard.readText())
-    expect(clip).toContain('File\tCompatibility\tLocation\tAction')
+    // TSV mirrors the visible columns (Location hidden by default)
+    expect(clip).toContain('File\tFormat\tBit\tkHz\tSize\tAction')
     expect(clip).toContain('snare48.wav')
     expect(clip).not.toContain('loop.mp3')
+
+    // The Format filter dropdown narrows rows too
+    await modal.locator('.header-search-input').fill('')
+    await expect(modal.locator('tbody tr')).toHaveCount(2)
+    await modal.locator('.filterable-header', { hasText: 'Format' }).locator('.filter-icon').click()
+    await page.locator('.filter-dropdown .dropdown-option', { hasText: 'MP3' }).click()
+    await expect(modal.locator('tbody tr')).toHaveCount(1)
+    await expect(modal.locator('.filter-badge')).toContainText('Format: MP3')
+    await page.locator('.reset-filters-btn').click()
+    await expect(modal.locator('tbody tr')).toHaveCount(2)
   })
 
   test('context menu convert is disabled on a compatible file', async ({ page }) => {
@@ -218,6 +260,13 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await expect(listModal.locator('tbody tr')).toHaveCount(2)
     await expect(listModal.locator('.header-search-input')).toBeVisible()
     await expect(listModal.locator('.copy-table-btn')).toBeVisible()
+    // Same rich columns as the review table (Location visible here), plus the column toggle
+    await expect(listModal.locator('thead')).toContainText('Format')
+    await expect(listModal.locator('thead')).toContainText('Bit')
+    await expect(listModal.locator('thead')).toContainText('kHz')
+    await expect(listModal.locator('thead')).toContainText('Size')
+    await expect(listModal.locator('thead')).toContainText('Location')
+    await expect(listModal.locator('.column-visibility-btn')).toBeVisible()
     // Content-sized: with few rows there is no scrollbar and no dead space below the table
     const sizes = await listModal.locator('.table-wrapper').evaluate(el => ({
       scrollable: el.scrollHeight > el.clientHeight + 1,
@@ -225,7 +274,9 @@ test.describe('Audio Pool — fix incompatible files', () => {
     }))
     expect(sizes.scrollable).toBe(false)
     expect(sizes.dead).toBeLessThan(10)
-    await listModal.locator('.modal-close').click()
+    // Esc closes modals globally
+    await page.keyboard.press('Escape')
+    await expect(listModal).toHaveCount(0)
 
     // Execute with "Review before applying changes" on (default) shows the review screen
     await expect(page.locator('.tools-options-panel input[type="checkbox"]')).toBeChecked()
@@ -246,7 +297,7 @@ test.describe('Audio Pool — fix incompatible files', () => {
     // The pool is scanned in the background on page load; the pane title gets a warning glyph
     const glyph = page.locator('.pool-health-glyph')
     await expect(glyph).toHaveClass(/warning/)
-    await expect(glyph).toHaveAttribute('title', '2 incompatible audio files found — click to fix')
+    await expect(glyph).toHaveAttribute('title', '2 incompatible audio files found - click to fix')
     // Styled as a badge: wrench icon + count of incompatible files
     await expect(glyph).toHaveText('2')
     await expect(glyph.locator('.fa-wrench')).toBeVisible()
@@ -254,6 +305,20 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await glyph.click()
     await expect(page.locator('.pool-tools-panel')).toBeVisible()
     await expect(page.locator('.tools-missing-files-summary')).toContainText('2')
+  })
+
+  test('Shift+digit switches tabs and t toggles the Transfers pane', async ({ page }) => {
+    await expect(page.locator('.audio-pool-status')).toBeVisible()
+    await page.keyboard.press('Shift+Digit2')
+    await expect(page.locator('.pool-tools-panel')).toBeVisible()
+    await page.keyboard.press('Shift+Digit1')
+    await expect(page.locator('.audio-pool-status')).toBeVisible()
+
+    await expect(page.locator('.transfer-queue')).toHaveCount(0)
+    await page.keyboard.press('t')
+    await expect(page.locator('.transfer-queue')).toBeVisible()
+    await page.keyboard.press('t')
+    await expect(page.locator('.transfer-queue')).toHaveCount(0)
   })
 
   test('disabling the review option makes Execute apply immediately', async ({ page }) => {

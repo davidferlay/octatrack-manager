@@ -2074,7 +2074,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                           key={key}
                           type="button"
                           className={`tools-attr-row ${isSelected ? "selected" : ""}`}
-                          title={isSelected ? `${tip} — will be copied to destination` : `${tip} — will NOT be copied (click to include)`}
+                          title={isSelected ? `${tip} - will be copied to destination` : `${tip} - will NOT be copied (click to include)`}
                           onClick={() => {
                             setSelectedAttributes(prev =>
                               prev.includes(key) ? prev.filter(a => a !== key) : [...prev, key]
@@ -2949,7 +2949,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 <span className="tools-fix-status-count">{missingSamples.length}</span>
                 {" "}missing sample file{missingSamples.length !== 1 ? "s" : ""}
                 <span className="tools-fix-status-detail">
-                  {" — "}{missingSamples.filter(s => s.slot_type === "flex" || s.slot_type === "both").length} Flex,{" "}
+                  {" - "}{missingSamples.filter(s => s.slot_type === "flex" || s.slot_type === "both").length} Flex,{" "}
                   {missingSamples.filter(s => s.slot_type === "static" || s.slot_type === "both").length} Static
                   {missingSamples.filter(s => s.slot_type === "both").length > 0 &&
                     ` (${missingSamples.filter(s => s.slot_type === "both").length} in both)`}
@@ -3127,7 +3127,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
                   >
                     <span className="collapse-indicator">{isManualBrowseOpen ? '▼' : '▶'}</span>
-                    Manual Browse — {browseCards.length} Project{browseCards.length !== 1 ? 's' : ''}
+                    Manual Browse - {browseCards.length} Project{browseCards.length !== 1 ? 's' : ''}
                   </h4>
                   <div className={`sets-section ${isManualBrowseOpen ? 'open' : 'closed'}`}>
                     <div className="sets-section-content">
@@ -3203,7 +3203,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                           <div className="standalone-group-label" title={dir}>
                             {dir.substring(dir.lastIndexOf('/') + 1) || dir}
                             <span style={{ opacity: 0.5, marginLeft: '0.5rem', textTransform: 'none', fontFamily: 'inherit', letterSpacing: 0 }}>
-                              — {projects.length} project{projects.length > 1 ? 's' : ''}
+                              - {projects.length} project{projects.length > 1 ? 's' : ''}
                             </span>
                           </div>
                           <div className="projects-grid">
@@ -3216,7 +3216,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                           <div className="standalone-group-label">
                             Other Locations
                             <span style={{ opacity: 0.5, marginLeft: '0.5rem', textTransform: 'none', fontFamily: 'inherit', letterSpacing: 0 }}>
-                              — {loneProjects.length} project{loneProjects.length > 1 ? 's' : ''}
+                              - {loneProjects.length} project{loneProjects.length > 1 ? 's' : ''}
                             </span>
                           </div>
                           <div className="projects-grid">

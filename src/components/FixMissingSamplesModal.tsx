@@ -108,12 +108,15 @@ export function FixMissingSamplesModal({
   const [fixResult, setFixResult] = useState<FixResult | null>(null);
   const [applyError, setApplyError] = useState<string>("");
 
-  // Modal resize
+  // Modal resize (left/right: width, bottom: height)
   const [modalWidth, setModalWidth] = useState<number | null>(null);
+  const [modalHeight, setModalHeight] = useState<number | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const isModalDragging = useRef<"left" | "right" | "bottom" | null>(null);
   const modalDragStartX = useRef(0);
+  const modalDragStartY = useRef(0);
   const modalDragStartWidth = useRef(0);
+  const modalDragStartHeight = useRef(0);
 
   // Column resize
   const [colWidths, setColWidths] = useState<number[]>([]);
@@ -187,15 +190,23 @@ export function FixMissingSamplesModal({
       e.stopPropagation();
       isModalDragging.current = side;
       modalDragStartX.current = e.clientX;
-      modalDragStartWidth.current =
-        modalRef.current?.getBoundingClientRect().width ?? 700;
+      modalDragStartY.current = e.clientY;
+      const rect = modalRef.current?.getBoundingClientRect();
+      modalDragStartWidth.current = rect?.width ?? 700;
+      modalDragStartHeight.current = rect?.height ?? 500;
     },
     []
   );
 
   useEffect(() => {
     function handleMouseMove(e: MouseEvent) {
-      if (isModalDragging.current) {
+      if (isModalDragging.current === "bottom") {
+        const newHeight = Math.max(
+          240,
+          Math.min(window.innerHeight * 0.95, modalDragStartHeight.current + (e.clientY - modalDragStartY.current))
+        );
+        setModalHeight(newHeight);
+      } else if (isModalDragging.current) {
         const delta = e.clientX - modalDragStartX.current;
         const multiplier = isModalDragging.current === "right" ? 2 : -2;
         const newWidth = Math.max(
@@ -608,14 +619,14 @@ export function FixMissingSamplesModal({
         file.action === "copy_to_project" ? "Copy to project" :
         file.action === "move_to_pool" ? "Move to Pool" : "";
       const actionTooltip =
-        file.action === "update_path" && file.source === "pool" ? "File exists in Audio Pool — update the slot path to reference it" :
-        file.action === "update_path" && file.source === "project" ? "File found in project directory — update the slot path" :
+        file.action === "update_path" && file.source === "pool" ? "File exists in Audio Pool - update the slot path to reference it" :
+        file.action === "update_path" && file.source === "project" ? "File found in project directory - update the slot path" :
         file.action === "copy_to_project" ? "File will be copied into the project directory" :
         file.action === "move_to_pool" ? "File will be moved to the Audio Pool and slot path updated" : "";
       return { filename: file.filename, found: true, location: file.found_path, actionLabel, actionTooltip, isNotFound: false, color: file.color };
     }),
     ...notFoundFilenames.map((f): ConfirmRow => ({
-      filename: f, found: false, location: "—", actionLabel: "Not found", actionTooltip: "No matching file was found — this sample will remain missing", isNotFound: true,
+      filename: f, found: false, location: "—", actionLabel: "Not found", actionTooltip: "No matching file was found - this sample will remain missing", isNotFound: true,
     })),
   ];
 
@@ -701,9 +712,12 @@ export function FixMissingSamplesModal({
     <div className="modal-overlay" onClick={phase === "done" || phase === "search_done" || phase === "confirming" ? onClose : undefined}>
       <div
         ref={modalRef}
-        className="modal-content fix-missing-modal"
+        className={`modal-content fix-missing-modal${modalHeight ? " user-sized" : ""}`}
         onClick={(e) => e.stopPropagation()}
-        style={modalWidth ? { width: modalWidth, maxWidth: "95vw" } : undefined}
+        style={{
+          ...(modalWidth ? { width: modalWidth, maxWidth: "95vw" } : {}),
+          ...(modalHeight ? { height: modalHeight, maxHeight: "95vh" } : {}),
+        }}
       >
         {/* Resize handles */}
         <div
@@ -731,7 +745,7 @@ export function FixMissingSamplesModal({
               <div className="missing-samples-header-info">
                 <span className={`fix-confirm-status${resolvedFiles.length === allConfirmRows.length ? " all-resolved" : ""}`}>
                   <strong>{resolvedFiles.length}/{allConfirmRows.length}</strong> missing files found
-                  {sortedConfirmRows.length !== allConfirmRows.length && <span style={{ color: 'var(--elektron-text-secondary)', fontWeight: 400 }}> — showing {sortedConfirmRows.length}</span>}
+                  {sortedConfirmRows.length !== allConfirmRows.length && <span style={{ color: 'var(--elektron-text-secondary)', fontWeight: 400 }}> - showing {sortedConfirmRows.length}</span>}
                 </span>
                 {foundFilter !== "all" && <span className="filter-badge">Found: {foundFilter === "yes" ? "Yes" : "No"}</span>}
                 {actionFilter !== "all" && <span className="filter-badge">Action: {actionFilter}</span>}
@@ -825,7 +839,7 @@ export function FixMissingSamplesModal({
                 <span>
                   <strong>{resolvedFiles.length}/{initialMissingCount.current}</strong> missing files found
                   {phase !== "searching" && remainingFilenames.length > 0 && (
-                    <span className="fix-search-summary-remaining"> — {remainingFilenames.length} still missing</span>
+                    <span className="fix-search-summary-remaining"> - {remainingFilenames.length} still missing</span>
                   )}
                 </span>
                 {phase === "search_done" && remainingFilenames.length > 0 && (

@@ -2835,26 +2835,26 @@ h1 {
 .filter-dropdown {
   position: fixed;
   width: max-content;
-  min-width: 120px;
+  min-width: 180px;
   max-width: 300px;
-  background-color: var(--elektron-medium-gray);
-  border: 1px solid var(--elektron-orange);
+  background-color: var(--elektron-dark-gray);
+  border: 1px solid var(--elektron-border-gray);
   border-radius: 4px;
-  padding: 0.75rem;
+  padding: 0.5rem;
   z-index: 9999;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   pointer-events: auto;
 }
 
 /* Dropdown Search Input */
 .dropdown-search {
   width: 100%;
-  padding: 0.5rem;
-  background-color: var(--elektron-dark-gray);
+  padding: 0.4rem 0.6rem;
+  background-color: var(--elektron-black);
   border: 1px solid var(--elektron-border-gray);
-  border-radius: 3px;
-  color: var(--elektron-text);
-  font-size: 0.9rem;
+  border-radius: 4px;
+  color: var(--elektron-text-primary);
+  font-size: 0.8rem;
   margin-bottom: 0.5rem;
 }
 
@@ -2878,15 +2878,15 @@ h1 {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.4rem 0.5rem;
+  padding: 0.4rem 0;
   cursor: pointer;
   user-select: none;
-  border-radius: 3px;
-  transition: background-color 0.15s ease;
+  font-size: 0.8rem;
+  color: var(--elektron-text-secondary);
 }
 
 .dropdown-option:hover {
-  background-color: var(--elektron-dark-gray);
+  color: var(--elektron-text-primary);
 }
 
 .dropdown-option input[type="radio"] {
@@ -2904,15 +2904,15 @@ h1 {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.4rem 0.5rem;
+  padding: 0.4rem 0;
   cursor: pointer;
   user-select: none;
-  border-radius: 3px;
-  transition: background-color 0.15s ease;
+  font-size: 0.8rem;
+  color: var(--elektron-text-secondary);
 }
 
 .dropdown-checkbox:hover {
-  background-color: var(--elektron-dark-gray);
+  color: var(--elektron-text-primary);
 }
 
 .dropdown-checkbox input[type="checkbox"] {
@@ -2930,19 +2930,18 @@ h1 {
   width: 100%;
   margin-top: 0.5rem;
   padding: 0.4rem;
-  background-color: var(--elektron-dark-gray);
+  background-color: transparent;
   border: 1px solid var(--elektron-border-gray);
-  color: var(--elektron-orange);
-  border-radius: 3px;
+  color: var(--elektron-text-secondary);
+  border-radius: 4px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   transition: all 0.15s ease;
 }
 
 .clear-filter-btn:hover {
-  background-color: var(--elektron-orange);
-  border-color: var(--elektron-orange);
-  color: var(--elektron-black);
+  background-color: rgba(255, 255, 255, 0.1);
+  color: var(--elektron-text-primary);
 }
 
 .samples-grid {
@@ -3235,7 +3234,6 @@ h1 {
   font-family: 'Courier New', Courier, monospace;
   font-size: 0.9rem;
   font-weight: bold;
-  cursor: help;
   letter-spacing: -1px;
   -webkit-font-smoothing: none;
   -moz-osx-font-smoothing: grayscale;
@@ -5001,6 +4999,13 @@ th.col-used .header-content .filter-icon {
   transform: translateY(0);
 }
 
+/* Modal action rows (Apply Changes, Review changes...): no hover lift */
+.fix-done-actions .tools-execute-btn:hover:not(:disabled),
+.fix-confirm-actions .tools-execute-btn:hover:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+}
+
 .tools-execute-btn:disabled {
   background-color: transparent;
   border-color: var(--elektron-medium-gray);
@@ -5618,6 +5623,51 @@ th.col-used .header-content .filter-icon {
   right: -3px;
 }
 
+/* The bottom handle resizes height (a horizontal strip along the bottom edge) */
+.modal-resize-bottom {
+  top: auto;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  width: auto;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+/* Once the user drags the bottom handle the modal becomes a flex column whose
+   table area absorbs the extra height (the fixed vh caps no longer apply) */
+.modal-content.user-sized {
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-content.user-sized .modal-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-content.user-sized .samples-tab,
+.modal-content.user-sized .samples-section {
+  display: contents;
+}
+
+.modal-content.user-sized .fix-confirmation {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-content.user-sized .fix-confirm-table-wrapper,
+.modal-content.user-sized .table-wrapper {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+}
+
 /* Dynamic width for filter dropdown options */
 .missing-samples-list-modal .dropdown-options {
   width: max-content;
@@ -5647,6 +5697,18 @@ th.col-used .header-content .filter-icon {
   height: auto;
   max-height: 45vh;
   overflow-y: auto;
+}
+
+/* Pool modals table: fixed layout so the colgroup widths (and drag-resizing) apply */
+.pool-files-table {
+  table-layout: fixed;
+}
+
+.pool-files-table td {
+  font-size: 0.85rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* Content-sized list modal: scrollbar only when the rows outgrow the cap */
@@ -5869,12 +5931,12 @@ th.col-drag-over {
   top: calc(100% + 4px);
   right: 0;
   min-width: 130px;
-  background-color: var(--elektron-medium-gray);
-  border: 1px solid var(--elektron-orange);
+  background-color: var(--elektron-dark-gray);
+  border: 1px solid var(--elektron-border-gray);
   border-radius: 4px;
   padding: 0.5rem;
   z-index: 9999;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 .column-visibility-dropdown .dropdown-option {

@@ -250,6 +250,14 @@ async fn list_audio_directory_recursive(path: String) -> Result<Vec<AudioFileInf
         .unwrap()
 }
 
+/// Audio metadata (bit depth, sample rate, size) for an explicit list of files.
+#[tauri::command]
+async fn get_audio_files_info(paths: Vec<String>) -> Result<Vec<AudioFileInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || Ok(audio_pool::files_info(&paths)))
+        .await
+        .unwrap()
+}
+
 /// Expand a mixed list of dropped/dragged paths (files + directories) into a flat list of
 /// audio files, recursing into directories. Keeps copy/assign flows from choking on folders.
 #[tauri::command]
@@ -1045,6 +1053,7 @@ pub fn run() {
             read_audio_file,
             expand_audio_paths,
             inspect_audio_files,
+            get_audio_files_info,
             get_system_resources,
             // Tools Tab - Set and Audio Pool
             check_project_in_set,

@@ -58,6 +58,8 @@ These shortcuts work across the entire application:
 | <kbd>Shift</kbd> + <kbd>Click</kbd> | Select a range of files or slots. |
 | <kbd>Ctrl</kbd> + <kbd>Click</kbd> | Add or remove individual files from the selection. |
 | <kbd>A</kbd> | Toggle the Audio Pool pane on a Flex/Static tab (when the Set has a pool). |
+| <kbd>T</kbd> | Toggle the Transfers pane (Audio Pool page and Flex/Static tabs). |
+| <kbd>Shift</kbd> + <kbd>1</kbd>..<kbd>9</kbd> | Switch tabs: Files/Tools on the Audio Pool page; Overview, Parts, Patterns, Flex, Static, Tools on the project page. |
 | <kbd>Delete</kbd> / <kbd>Backspace</kbd> | In Edit mode: clear the selected slots' samples, or reset attributes on slots that are already empty. |
 
 ---

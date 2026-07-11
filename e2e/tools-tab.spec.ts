@@ -753,7 +753,7 @@ test.describe('Tools Tab - Destination Modal Browse', () => {
 
     const manualSection = page.locator('.project-selector-manual')
     await expect(manualSection).toBeVisible()
-    await expect(manualSection.locator('h4')).toContainText('Manual Browse — 2 Projects')
+    await expect(manualSection.locator('h4')).toContainText('Manual Browse - 2 Projects')
     await expect(manualSection.locator('.project-selector-card')).toHaveCount(2)
 
     // the section is collapsible, open by default after a browse; the closed

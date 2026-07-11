@@ -606,7 +606,7 @@ export function HomePage() {
                       >
                         {dir.substring(dir.lastIndexOf('/') + 1) || dir}
                         <span style={{ opacity: 0.5, marginLeft: '0.5rem', textTransform: 'none', fontFamily: 'inherit', letterSpacing: 0 }}>
-                          — {projects.length} project{projects.length > 1 ? 's' : ''}
+                          - {projects.length} project{projects.length > 1 ? 's' : ''}
                         </span>
                       </div>
                       <div className={`standalone-group-content ${isOpen ? '' : 'closed'}`}>
@@ -628,7 +628,7 @@ export function HomePage() {
                       <div className="standalone-group-label clickable" onClick={() => toggleGroup('__other__')}>
                         Other Locations
                         <span style={{ opacity: 0.5, marginLeft: '0.5rem', textTransform: 'none', fontFamily: 'inherit', letterSpacing: 0 }}>
-                          — {loneProjects.length} project{loneProjects.length > 1 ? 's' : ''}
+                          - {loneProjects.length} project{loneProjects.length > 1 ? 's' : ''}
                         </span>
                       </div>
                       <div className={`standalone-group-content ${isOpen ? '' : 'closed'}`}>

@@ -55,10 +55,13 @@ export function MissingSamplesListModal({
   } | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<"idle" | "copied">("idle");
   const [modalWidth, setModalWidth] = useState<number | null>(null);
+  const [modalHeight, setModalHeight] = useState<number | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef<"left" | "right" | "bottom" | null>(null);
   const dragStartX = useRef(0);
+  const dragStartY = useRef(0);
   const dragStartWidth = useRef(0);
+  const dragStartHeight = useRef(0);
 
   // Flatten MissingSample[] into one row per slot
   const rows: MissingSampleRow[] = [];
@@ -113,8 +116,10 @@ export function MissingSamplesListModal({
       e.stopPropagation();
       isDragging.current = side;
       dragStartX.current = e.clientX;
-      dragStartWidth.current =
-        modalRef.current?.getBoundingClientRect().width ?? 700;
+      dragStartY.current = e.clientY;
+      const rect = modalRef.current?.getBoundingClientRect();
+      dragStartWidth.current = rect?.width ?? 700;
+      dragStartHeight.current = rect?.height ?? 500;
     },
     []
   );
@@ -122,6 +127,14 @@ export function MissingSamplesListModal({
   useEffect(() => {
     function handleMouseMove(e: MouseEvent) {
       if (!isDragging.current) return;
+      if (isDragging.current === "bottom") {
+        const newHeight = Math.max(
+          240,
+          Math.min(window.innerHeight * 0.95, dragStartHeight.current + (e.clientY - dragStartY.current))
+        );
+        setModalHeight(newHeight);
+        return;
+      }
       const delta = e.clientX - dragStartX.current;
       // Both edges expand symmetrically: multiply delta by 2
       const multiplier = isDragging.current === "right" ? 2 : -2;
@@ -306,9 +319,12 @@ export function MissingSamplesListModal({
     <div className="modal-overlay" onClick={onClose}>
       <div
         ref={modalRef}
-        className="modal-content missing-samples-list-modal"
+        className={`modal-content missing-samples-list-modal${modalHeight ? " user-sized" : ""}`}
         onClick={(e) => e.stopPropagation()}
-        style={modalWidth ? { width: modalWidth, maxWidth: "95vw" } : undefined}
+        style={{
+          ...(modalWidth ? { width: modalWidth, maxWidth: "95vw" } : {}),
+          ...(modalHeight ? { height: modalHeight, maxHeight: "95vh" } : {}),
+        }}
       >
         {/* Left resize handle */}
         <div
