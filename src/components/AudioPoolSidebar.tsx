@@ -69,6 +69,8 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
   // Context-menu conversion runs inline: the Compat badge becomes a throbber
   // whose tooltip reports the per-file progress, no modal
   const [convertingPaths, setConvertingPaths] = useState<Map<string, number>>(new Map());
+  // Just-converted files briefly show a green checkmark before the normal Compat badge
+  const [justConvertedPaths, setJustConvertedPaths] = useState<Set<string>>(new Set());
   async function convertFilesInline(targets: IncompatibleFile[]) {
     if (targets.length === 0) return;
     const paths = targets.map(t => t.path);
@@ -100,6 +102,16 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
       // Refresh before dropping the throbbers so the badges come back already up to date
       await loadFiles(currentPath);
       onPoolFixed?.();
+      // Conversion may rename the file (.aif -> .wav), so flag the new path
+      const converted = result.outcomes.filter(o => !o.error).map(o => o.new_path ?? o.old_path);
+      if (converted.length > 0) {
+        setJustConvertedPaths(prev => new Set([...prev, ...converted]));
+        setTimeout(() => setJustConvertedPaths(prev => {
+          const next = new Set(prev);
+          converted.forEach(p => next.delete(p));
+          return next;
+        }), 1500);
+      }
     } catch (error) {
       console.error("Error converting pool files:", error);
       alert(`Error converting: ${error}`);
@@ -404,6 +416,7 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
         searchRoot={currentPath}
         onCompatMap={setCompatMap}
         convertingPaths={convertingPaths}
+        justConvertedPaths={justConvertedPaths}
         onContextMenu={handleItemContextMenu}
         headerPrefix={
           <>

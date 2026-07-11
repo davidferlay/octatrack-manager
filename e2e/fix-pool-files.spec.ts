@@ -141,7 +141,12 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await page.keyboard.press('Escape')
 
     await page.evaluate(() => (window as any).__releaseFix())
-    // Spinner gone once done; the badge is back (mock keeps listing the same file)
+    // On success a green checkmark shows briefly — still without changing the row height
+    await expect(row.locator('.compat-converted .fa-check-circle')).toBeVisible()
+    await expect(row.locator('.compat-converted')).toHaveAttribute('title', 'Converted to Octatrack format')
+    expect((await row.boundingBox())!.height).toBeCloseTo(heightBefore, 1)
+    // ...then fades out and the badge is back (mock keeps listing the same file)
+    await expect(row.locator('.compat-converted')).toHaveCount(0)
     await expect(row.locator('.loading-spinner-small')).toHaveCount(0)
     await expect(row.locator('.compat-badge')).toBeVisible()
   })

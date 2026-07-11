@@ -5047,6 +5047,29 @@ th.col-used .header-content .filter-icon {
   height: 1.1rem;
 }
 
+/* Brief green checkmark shown right after a successful inline conversion,
+   same hidden-badge overlay so the row height never changes. */
+.compat-converted {
+  position: relative;
+  display: inline-block;
+}
+
+.compat-converted .compat-badge {
+  visibility: hidden;
+}
+
+.compat-converted .fa-check-circle {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  height: 1em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4caf50;
+  font-size: 1.15rem;
+}
+
 /* Sample Slot Selector Widget */
 .tools-slot-selector {
   display: flex;

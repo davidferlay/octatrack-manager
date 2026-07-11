@@ -111,6 +111,8 @@ export interface AudioFileTableProps {
   headerPrefix?: ReactNode;
   /** Files being converted in place (path -> progress 0..1): badge becomes a throbber */
   convertingPaths?: Map<string, number>;
+  // Just-converted files: the badge briefly shows as a green checkmark
+  justConvertedPaths?: Set<string>;
   /** Rendered in the toolbar right after the file count (e.g. the pool health glyph) */
   countSuffix?: ReactNode;
   /** Extra controls rendered in the toolbar, just left of the Show/Hide Columns button */
@@ -216,6 +218,7 @@ export function AudioFileTable({
   rowRefs,
   headerPrefix,
   convertingPaths,
+  justConvertedPaths,
   countSuffix,
   headerActions,
   dndMode = false,
@@ -443,6 +446,12 @@ export function AudioFileTable({
                   title={`Converting to Octatrack format... ${Math.round((convertingPaths.get(file.path) ?? 0) * 100)}%`}>
                   <CompatBadge compatibility={compatMap[file.path]} />
                   <span className="loading-spinner-small"></span>
+                </span>
+              : justConvertedPaths?.has(file.path)
+              // Same hidden-badge trick: the green check overlays without changing the row height
+              ? <span className="compat-converted" title="Converted to Octatrack format">
+                  <CompatBadge compatibility={compatMap[file.path]} />
+                  <i className="fas fa-check-circle"></i>
                 </span>
               : !file.is_directory && <CompatBadge compatibility={compatMap[file.path]} />}
           </td>
