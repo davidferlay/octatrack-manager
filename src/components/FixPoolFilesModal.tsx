@@ -39,13 +39,30 @@ function poolLocation(path: string, poolPath: string): string {
   return dir ? `AUDIO/${dir}` : 'AUDIO/';
 }
 
-/** What the fix will do to this file, in user terms. */
-function actionLabel(path: string): string {
-  const name = baseName(path);
-  const stem = name.replace(/\.[^.]+$/, '');
-  return name.toLowerCase().endsWith('.wav')
-    ? 'Convert in place (44.1 kHz WAV)'
-    : `Convert to ${stem}.wav`;
+/** What the fix will actually do to this file, from its metadata: the backend rewrites
+    as WAV, resamples to 44.1 kHz and clamps the bit depth to 16..24 - only the steps
+    this file needs are listed. */
+function actionFor(name: string, bit: number | null, khz: number | null): { label: string; title: string } {
+  const isWav = name.toLowerCase().endsWith('.wav');
+  const parts: string[] = [];
+  const ops: string[] = [];
+  if (khz != null && khz !== 44100) {
+    parts.push('44.1 kHz');
+    ops.push('resampled to 44.1 kHz');
+  }
+  if (bit != null && (bit < 16 || bit > 24)) {
+    const target = bit < 16 ? 16 : 24;
+    parts.push(`${target}-bit`);
+    ops.push(`converted to ${target}-bit`);
+  }
+  if (!isWav) {
+    parts.push('WAV');
+    ops.push('rewritten as WAV');
+  }
+  const label = parts.length ? `Convert to ${parts.join(', ')}` : 'Convert to 44.1 kHz WAV';
+  const detail = ops.length ? ops.join(', ') : 'converted to 44.1 kHz WAV';
+  const title = detail.charAt(0).toUpperCase() + detail.slice(1) + '; original replaced, slot references updated';
+  return { label, title };
 }
 
 /** Shared modal-header search box + copy-table button (fix-missing style). */
@@ -188,6 +205,7 @@ interface PoolRow {
   size: number | null;
   location: string;
   action: string;
+  actionTitle: string;
 }
 
 type PoolSortColumn = 'file' | 'format' | 'bit' | 'khz' | 'size' | 'location' | 'action';
@@ -293,16 +311,23 @@ function usePoolTable(files: IncompatibleFile[], poolPath: string, withAction: b
     return () => document.removeEventListener('mousedown', handleClick);
   }, [openDropdown]);
 
-  const allRows: PoolRow[] = files.map(f => ({
-    path: f.path,
-    name: baseName(f.path),
-    format: getFileFormat(f.path),
-    bit: meta[f.path]?.bit_rate ?? null,
-    khz: meta[f.path]?.sample_rate ?? null,
-    size: meta[f.path]?.size ?? null,
-    location: poolLocation(f.path, poolPath),
-    action: actionLabel(f.path),
-  }));
+  const allRows: PoolRow[] = files.map(f => {
+    const name = baseName(f.path);
+    const bit = meta[f.path]?.bit_rate ?? null;
+    const khz = meta[f.path]?.sample_rate ?? null;
+    const { label, title } = actionFor(name, bit, khz);
+    return {
+      path: f.path,
+      name,
+      format: getFileFormat(f.path),
+      bit,
+      khz,
+      size: meta[f.path]?.size ?? null,
+      location: poolLocation(f.path, poolPath),
+      action: label,
+      actionTitle: title,
+    };
+  });
 
   const rows = allRows
     .filter(r => {
@@ -510,7 +535,7 @@ function PoolFilesTable({ table }: { table: ReturnType<typeof usePoolTable> }) {
       case 'khz': return <td key={id}>{r.khz != null ? (r.khz / 1000).toFixed(1) : ''}</td>;
       case 'size': return <td key={id}>{r.size != null ? formatFileSize(r.size) : ''}</td>;
       case 'location': return <td key={id} className="fix-location-cell" title={r.location}>{r.location}</td>;
-      case 'action': return <td key={id} title="The original file is replaced; sample slots referencing it are updated in every project of this Set (after a backup)">{r.action}</td>;
+      case 'action': return <td key={id} title={r.actionTitle}>{r.action}</td>;
     }
   };
 
