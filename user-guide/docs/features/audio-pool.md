@@ -88,7 +88,7 @@ Automatic conversion covers files imported **through the app** — but a pool th
 
 ### Pool health indicator
 
-The whole pool is scanned in the background when the Audio Pool page opens. Once the scan finishes, a glyph appears in the Audio Pool pane toolbar, next to the file count: an orange warning triangle when incompatible files were found (the tooltip tells how many; clicking it opens the **Tools** tab with the fix tool ready), or a green check when everything is playable.
+The whole pool is scanned in the background when the Audio Pool page opens. Once the scan finishes, a glyph appears in the Audio Pool pane toolbar, next to the file count: an orange badge with a wrench icon and the number of incompatible files (clicking it opens the **Tools** tab with the fix tool ready), or a green check when everything is playable.
 
 ### Fixing a single file
 

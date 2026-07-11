@@ -1560,7 +1560,8 @@ export function AudioPoolPage() {
                   title={`${incompatibleFiles.length} incompatible audio file${incompatibleFiles.length !== 1 ? 's' : ''} found — click to fix`}
                   onClick={() => setActiveTab('tools')}
                 >
-                  <i className="fas fa-exclamation-triangle"></i>
+                  <i className="fas fa-wrench"></i>
+                  {incompatibleFiles.length}
                 </button>
               ) : (
                 <span className="pool-health-glyph ok" title="All audio pool files are compatible with Octatrack">

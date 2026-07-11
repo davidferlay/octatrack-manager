@@ -247,6 +247,9 @@ test.describe('Audio Pool — fix incompatible files', () => {
     const glyph = page.locator('.pool-health-glyph')
     await expect(glyph).toHaveClass(/warning/)
     await expect(glyph).toHaveAttribute('title', '2 incompatible audio files found — click to fix')
+    // Styled as a badge: wrench icon + count of incompatible files
+    await expect(glyph).toHaveText('2')
+    await expect(glyph.locator('.fa-wrench')).toBeVisible()
 
     await glyph.click()
     await expect(page.locator('.pool-tools-panel')).toBeVisible()

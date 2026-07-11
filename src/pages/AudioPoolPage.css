@@ -275,13 +275,22 @@
   line-height: 1;
 }
 
+/* Warning is a pill badge: wrench icon + count of incompatible files */
 .pool-health-glyph.warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 6px 0.7rem;
+  border-radius: 999px;
+  background: rgba(255, 102, 0, 0.15);
   color: var(--elektron-orange);
+  font-size: 0.85rem;
+  font-weight: 600;
   cursor: pointer;
 }
 
 .pool-health-glyph.warning:hover {
-  filter: brightness(1.25);
+  background: rgba(255, 102, 0, 0.28);
 }
 
 .pool-health-glyph.ok {
