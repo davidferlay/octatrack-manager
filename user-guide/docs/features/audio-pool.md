@@ -24,6 +24,7 @@ This shows the contents of your `AUDIO/` directory. You can:
 - **Create Folders:** Click **+ New Folder** to organize your library.
 - **Inspect Metadata:** Every audio file shows its sample rate, bit depth, and number of channels and size.
 - **Check Compatibility:** The **Compat** column shows the same face icons as the Octatrack's sample browser — a smiley for playable files, a straight face for a wrong sample rate, and **??** for audio formats the device cannot play (MP3, FLAC, OGG, M4A). Non-audio files get no badge. See [Fixing Incompatible Files](#fixing-incompatible-files).
+- **See Cross-Project Usage:** The **Usage** column shows, for each pool file, whether any project in the Set actually uses it — the same blue **✓ N** / gray **○ N** badges as the [Sample Slots Usage column](sample-slots.md#slot-usage). Click a badge to open a popover listing every usage, each prefixed with the project that references it (e.g. "ProjectA - Bank A - Part 1 - T1 - Machine"). The column can be sorted and filtered by Used / Referenced / Unused, just like on the Sample Slots tabs.
 - **Filter and Sort:** Use the toolbar to filter by name, bit depth, sample rate, or audio format.
 - **Search recursively:** Typing in the search box matches files and folders in the current directory and all of its subfolders (a spinner shows while deep folders are scanned).
 

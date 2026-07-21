@@ -45,6 +45,12 @@ async function setupMocks(page: Page) {
               is_directory: false,
               path: p,
             }))
+          case 'get_pool_usage':
+            return {
+              [`${pool}/snare48.wav`.toLowerCase()]: [
+                { project: 'ProjectA', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true },
+              ],
+            }
           case 'fix_pool_files':
             ;(window as any).__fixCalls.push(args)
             return {
@@ -355,5 +361,16 @@ test.describe('Audio Pool — fix incompatible files', () => {
 
     const calls = await page.evaluate(() => (window as any).__fixCalls)
     expect(calls[0].filePaths).toEqual(['/test/set/AUDIO/snare48.wav', '/test/set/AUDIO/loop.mp3'])
+  })
+
+  test('the Usage column shows cross-project badges and a project-prefixed popover', async ({ page }) => {
+    const dest = page.locator('.dest-panel')
+    await expect(dest.getByText('Usage')).toBeVisible()
+    const row = dest.locator('tr', { hasText: 'snare48.wav' })
+    await expect(row.getByText('✓ 1')).toBeVisible()
+    // kick.wav has no usage entries in the mock
+    await expect(dest.locator('tr', { hasText: 'kick.wav' }).locator('.usage-none')).toHaveText('—')
+    await row.getByText('✓ 1').click()
+    await expect(page.getByText('ProjectA · Bank A · Part 1 · T1 · Machine')).toBeVisible()
   })
 })

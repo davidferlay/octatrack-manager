@@ -22,7 +22,7 @@ import { TransferProgressPanel } from "../components/TransferProgressPanel";
 import { useAudioPoolTransfer } from "../hooks/useAudioPoolTransfer";
 import { useAudioPreview, shouldAutoPreview, scrubTarget, volumeStep, isAudioFile } from "../hooks/useAudioPreview";
 import { SamplePlayerBar } from "../components/SamplePlayerBar";
-import type { AudioFile } from "../types/audioFile";
+import type { AudioFile, PoolUsageEntry } from "../types/audioFile";
 import "./AudioPoolPage.css";
 
 // Droppable wrapper for the Audio Pool (destination) pane. Uses @dnd-kit (pointer-based)
@@ -295,6 +295,22 @@ export function AudioPoolPage() {
         if (!cancelled) setPoolScanLoading(false);
       }
     })();
+    return () => { cancelled = true; };
+  }, [audioPoolPath, poolScanKey]);
+
+  // Cross-project pool file usage, for the Usage column. Re-fetched whenever the
+  // health scan re-runs (poolScanKey), since fixes can shift which projects
+  // reference a file (slot remap after a rename/conversion).
+  const [poolUsage, setPoolUsage] = useState<Record<string, PoolUsageEntry[]>>({});
+  const [poolUsageLoading, setPoolUsageLoading] = useState(false);
+  useEffect(() => {
+    if (!audioPoolPath) return;
+    let cancelled = false;
+    setPoolUsageLoading(true);
+    invoke<Record<string, PoolUsageEntry[]>>('get_pool_usage', { poolPath: audioPoolPath })
+      .then(result => { if (!cancelled) setPoolUsage(result ?? {}); })
+      .catch(e => console.error('Pool usage scan failed:', e))
+      .finally(() => { if (!cancelled) setPoolUsageLoading(false); });
     return () => { cancelled = true; };
   }, [audioPoolPath, poolScanKey]);
   const contextMenuRef = useRef<HTMLDivElement>(null);
@@ -1568,6 +1584,8 @@ export function AudioPoolPage() {
             onCompatMap={setDestCompatMap}
             convertingPaths={convertingPaths}
             justConvertedPaths={justConvertedPaths}
+            usageMap={poolUsage}
+            usageLoading={poolUsageLoading}
             scrollStorageKey={destinationPath ? `pool-dest-scroll:${destinationPath}` : undefined}
             countSuffix={poolScanDone && !poolScanLoading ? (
               incompatibleFiles.length > 0 ? (
