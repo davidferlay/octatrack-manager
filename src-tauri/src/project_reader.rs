@@ -1195,20 +1195,7 @@ pub fn compute_pool_usage(
     let mut result: std::collections::HashMap<String, Vec<PoolUsageEntry>> =
         std::collections::HashMap::new();
 
-    let entries =
-        std::fs::read_dir(set_dir).map_err(|e| format!("Failed to read set directory: {}", e))?;
-    for entry in entries.flatten() {
-        let project_dir = entry.path();
-        if !project_dir.is_dir() || normalize_path_lexically(&project_dir) == pool_dir {
-            continue;
-        }
-        let project_file = if project_dir.join("project.work").exists() {
-            project_dir.join("project.work")
-        } else if project_dir.join("project.strd").exists() {
-            project_dir.join("project.strd")
-        } else {
-            continue;
-        };
+    for (project_dir, project_file) in set_project_files(set_dir, &pool_dir)? {
         let project_name = project_dir
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
@@ -1231,7 +1218,10 @@ pub fn compute_pool_usage(
                 normalize_path_lexically(&project_dir.join(path_value.replace('\\', "/")))
                     .to_string_lossy()
                     .to_lowercase();
-            if !resolved.starts_with(&pool_dir_lower) {
+            let in_pool = resolved.strip_prefix(&pool_dir_lower).is_some_and(|rest| {
+                rest.is_empty() || rest.starts_with('/') || rest.starts_with('\\')
+            });
+            if !in_pool {
                 continue;
             }
             let idx = (*slot_id as usize).saturating_sub(1);
@@ -5457,6 +5447,33 @@ fn normalize_path_lexically(path: &Path) -> std::path::PathBuf {
     out
 }
 
+/// Every project directory directly under `set_dir`, paired with its project
+/// file (`project.work` preferred, falling back to `project.strd`). Skips the
+/// pool directory itself and any directory with neither project file.
+fn set_project_files(
+    set_dir: &Path,
+    pool_dir: &Path,
+) -> Result<Vec<(std::path::PathBuf, std::path::PathBuf)>, String> {
+    let entries =
+        std::fs::read_dir(set_dir).map_err(|e| format!("Failed to read set directory: {}", e))?;
+    let mut out = Vec::new();
+    for entry in entries.flatten() {
+        let project_dir = entry.path();
+        if !project_dir.is_dir() || normalize_path_lexically(&project_dir) == *pool_dir {
+            continue;
+        }
+        let project_file = if project_dir.join("project.work").exists() {
+            project_dir.join("project.work")
+        } else if project_dir.join("project.strd").exists() {
+            project_dir.join("project.strd")
+        } else {
+            continue;
+        };
+        out.push((project_dir, project_file));
+    }
+    Ok(out)
+}
+
 /// After pool files were converted and renamed, repoint every [SAMPLE] PATH= line
 /// (in every project of the set) that resolved to an old pool path onto the new
 /// file name. Only the basename of the stored path changes, so relative/absolute
@@ -5488,21 +5505,7 @@ pub fn update_pool_references(
     let mut projects_updated = Vec::new();
     let mut slots_updated: u32 = 0;
 
-    let entries =
-        std::fs::read_dir(set_dir).map_err(|e| format!("Failed to read set directory: {}", e))?;
-    for entry in entries.flatten() {
-        let project_dir = entry.path();
-        if !project_dir.is_dir() || normalize_path_lexically(&project_dir) == pool_dir {
-            continue;
-        }
-        let project_file = if project_dir.join("project.work").exists() {
-            project_dir.join("project.work")
-        } else if project_dir.join("project.strd").exists() {
-            project_dir.join("project.strd")
-        } else {
-            continue;
-        };
-
+    for (project_dir, project_file) in set_project_files(set_dir, &pool_dir)? {
         let raw_bytes = std::fs::read(&project_file)
             .map_err(|e| format!("Failed to read project file: {}", e))?;
         let (decoded, _, _) = encoding_rs::WINDOWS_1258.decode(&raw_bytes);
@@ -18210,6 +18213,53 @@ mod tests {
             assert!(
                 usage.is_empty(),
                 "project-local sample paths must not be bucketed as pool usage"
+            );
+        }
+
+        #[test]
+        fn sibling_dir_sharing_pool_name_as_prefix_is_not_bucketed() {
+            let temp = TempDir::new().unwrap();
+            let set = temp.path();
+            fs::create_dir(set.join("AUDIO")).unwrap();
+            // Sibling directory whose name has the pool dirname ("AUDIO") as a
+            // literal string prefix, but is a distinct directory.
+            fs::create_dir(set.join("AUDIO_OLD")).unwrap();
+            fs::create_dir(set.join("PROJ")).unwrap();
+
+            for bank_num in 1..=16 {
+                BankFile::default()
+                    .to_data_file(&set.join("PROJ").join(format!("bank{:02}.work", bank_num)))
+                    .unwrap();
+            }
+            let mut bank1 = BankFile::from_data_file(&set.join("PROJ").join("bank01.work")).unwrap();
+            let part = &mut bank1.parts.unsaved.0[0];
+            part.audio_track_machine_types[0] = 1; // flex machine
+            part.audio_track_machine_slots[0].flex_slot_id = 0; // 0-based slot 1
+            bank1.patterns.0[0].audio_track_trigs.0[0]
+                .trig_masks
+                .trigger = [0, 1, 0, 0, 0, 0, 0, 0];
+            bank1.checksum = bank1.calculate_checksum().unwrap();
+            bank1
+                .to_data_file(&set.join("PROJ").join("bank01.work"))
+                .unwrap();
+
+            // FLEX slot 1 points into AUDIO_OLD, not into the AUDIO pool.
+            let content = create_raw_project_work_with_custom_fields(&[(
+                "FLEX",
+                1,
+                "../AUDIO_OLD/kick.wav",
+                None,
+                None,
+                None,
+            )]);
+            write_raw_project_work(&set.join("PROJ"), &content);
+
+            let pool = set.join("AUDIO");
+            let usage = compute_pool_usage(&pool.to_string_lossy()).unwrap();
+            assert!(
+                usage.is_empty(),
+                "a sibling directory whose name merely has the pool dirname as a \
+                 string prefix (AUDIO_OLD vs AUDIO) must not be treated as pool usage"
             );
         }
     }
