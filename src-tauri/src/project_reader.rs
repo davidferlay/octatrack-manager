@@ -1158,6 +1158,113 @@ pub fn compute_sample_usage(project_path: &str) -> Result<SampleSlotUsage, Strin
     })
 }
 
+/// One place an Audio Pool file is referenced from, tagged with the project it
+/// was found in (unlike a sample slot's usage, a pool file can be referenced by
+/// any project of the set, not just one).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PoolUsageEntry {
+    pub project: String,
+    pub bank: u8,
+    pub kind: String,
+    pub track: u8,
+    pub part: Option<u8>,
+    pub pattern: Option<u8>,
+    pub step: Option<u8>,
+    pub audible: bool,
+}
+
+/// Scan every project directory in the pool's set and report where each Audio
+/// Pool file is used, keyed by normalized-lowercase absolute pool file path (the
+/// same normalization `update_pool_references` uses, so results line up with
+/// existing pool-path handling elsewhere).
+///
+/// For each project, PATH values come from `read_raw_sample_fields` (bypassing
+/// ot-tools-io parsing, same as the pool-rename path) and per-slot usage comes
+/// from `compute_sample_usage`. A project whose project file fails to parse, or
+/// whose bank files are missing, is skipped for usage purposes (matching
+/// `compute_sample_usage`'s own per-bank skip-on-error behavior).
+pub fn compute_pool_usage(
+    pool_path: &str,
+) -> Result<std::collections::HashMap<String, Vec<PoolUsageEntry>>, String> {
+    let pool_dir = normalize_path_lexically(Path::new(pool_path));
+    let pool_dir_lower = pool_dir.to_string_lossy().to_lowercase();
+    let set_dir = pool_dir
+        .parent()
+        .ok_or_else(|| "Cannot determine set directory from pool path".to_string())?;
+
+    let mut result: std::collections::HashMap<String, Vec<PoolUsageEntry>> =
+        std::collections::HashMap::new();
+
+    let entries =
+        std::fs::read_dir(set_dir).map_err(|e| format!("Failed to read set directory: {}", e))?;
+    for entry in entries.flatten() {
+        let project_dir = entry.path();
+        if !project_dir.is_dir() || normalize_path_lexically(&project_dir) == pool_dir {
+            continue;
+        }
+        let project_file = if project_dir.join("project.work").exists() {
+            project_dir.join("project.work")
+        } else if project_dir.join("project.strd").exists() {
+            project_dir.join("project.strd")
+        } else {
+            continue;
+        };
+        let project_name = project_dir
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        let raw_fields = match read_raw_sample_fields(&project_file) {
+            Ok(f) => f,
+            Err(_) => continue,
+        };
+        let usage = match compute_sample_usage(&project_dir.to_string_lossy()) {
+            Ok(u) => u,
+            Err(_) => continue,
+        };
+
+        for ((slot_type, slot_id), fields) in &raw_fields {
+            let Some(path_value) = fields.get("PATH") else {
+                continue;
+            };
+            let resolved =
+                normalize_path_lexically(&project_dir.join(path_value.replace('\\', "/")))
+                    .to_string_lossy()
+                    .to_lowercase();
+            if !resolved.starts_with(&pool_dir_lower) {
+                continue;
+            }
+            let idx = (*slot_id as usize).saturating_sub(1);
+            let slot_entries = match slot_type.to_uppercase().as_str() {
+                "STATIC" => usage.static_usage.get(idx),
+                "FLEX" => usage.flex_usage.get(idx),
+                _ => None,
+            };
+            let Some(slot_entries) = slot_entries else {
+                continue;
+            };
+            if slot_entries.is_empty() {
+                continue;
+            }
+            let bucket = result.entry(resolved).or_default();
+            for e in slot_entries {
+                bucket.push(PoolUsageEntry {
+                    project: project_name.clone(),
+                    bank: e.bank,
+                    kind: e.kind.clone(),
+                    track: e.track,
+                    part: e.part,
+                    pattern: e.pattern,
+                    step: e.step,
+                    audible: e.audible,
+                });
+            }
+        }
+    }
+
+    Ok(result)
+}
+
 pub fn read_single_bank(project_path: &str, bank_index: u8) -> Result<Option<Bank>, String> {
     if bank_index >= 16 {
         return Err(format!("Invalid bank index: {}. Must be 0-15.", bank_index));
@@ -17999,6 +18106,111 @@ mod tests {
             assert!(res.projects_updated.is_empty());
             assert_eq!(read_raw_project_work(&set.join("PROJ")), content);
             assert!(!set.join("PROJ").join("backups").exists(), "no backup made");
+        }
+    }
+
+    mod pool_usage_tests {
+        use super::surgical_write_tests::{
+            create_raw_project_work_with_custom_fields, write_raw_project_work,
+        };
+        use super::*;
+
+        #[test]
+        fn buckets_usage_by_pool_path_and_tags_the_project() {
+            let temp = TempDir::new().unwrap();
+            let set = temp.path();
+            fs::create_dir(set.join("AUDIO")).unwrap();
+            fs::create_dir(set.join("PROJ1")).unwrap();
+            fs::create_dir(set.join("PROJ2")).unwrap();
+
+            // PROJ1: FLEX slot 6 (0-based 5) points at the pool's kick.wav. Track 0
+            // of part 0 gets a flex machine on that slot, with a trig so the usage
+            // entry is audible (mirrors machine_assignment_audible_flag_follows_trigs).
+            for bank_num in 1..=16 {
+                BankFile::default()
+                    .to_data_file(&set.join("PROJ1").join(format!("bank{:02}.work", bank_num)))
+                    .unwrap();
+            }
+            let mut bank1 =
+                BankFile::from_data_file(&set.join("PROJ1").join("bank01.work")).unwrap();
+            let part = &mut bank1.parts.unsaved.0[0];
+            part.audio_track_machine_types[0] = 1; // flex machine
+            part.audio_track_machine_slots[0].flex_slot_id = 5; // 0-based slot 6
+            bank1.patterns.0[0].audio_track_trigs.0[0]
+                .trig_masks
+                .trigger = [0, 1, 0, 0, 0, 0, 0, 0];
+            bank1.checksum = bank1.calculate_checksum().unwrap();
+            bank1
+                .to_data_file(&set.join("PROJ1").join("bank01.work"))
+                .unwrap();
+            let content1 = create_raw_project_work_with_custom_fields(&[(
+                "FLEX",
+                6,
+                "../AUDIO/kick.wav",
+                None,
+                None,
+                None,
+            )]);
+            write_raw_project_work(&set.join("PROJ1"), &content1);
+
+            // PROJ2: STATIC slot 1 also points at the pool's kick.wav, but with
+            // default (untrigged) banks, so it contributes no usage entries.
+            for bank_num in 1..=16 {
+                BankFile::default()
+                    .to_data_file(&set.join("PROJ2").join(format!("bank{:02}.work", bank_num)))
+                    .unwrap();
+            }
+            let content2 = create_raw_project_work_with_custom_fields(&[(
+                "STATIC",
+                1,
+                "../AUDIO/kick.wav",
+                None,
+                None,
+                None,
+            )]);
+            write_raw_project_work(&set.join("PROJ2"), &content2);
+
+            let pool = set.join("AUDIO");
+            let usage = compute_pool_usage(&pool.to_string_lossy()).unwrap();
+            let key = normalize_path_lexically(&pool.join("kick.wav"))
+                .to_string_lossy()
+                .to_lowercase();
+
+            let entries = usage.get(&key).expect("kick.wav should have usage entries");
+            assert_eq!(entries.len(), 1, "only PROJ1's trigged machine assignment counts");
+            assert_eq!(entries[0].project, "PROJ1");
+            assert_eq!(entries[0].kind, "machine");
+            assert!(entries[0].audible);
+            assert_eq!(entries[0].track, 0);
+        }
+
+        #[test]
+        fn ignores_project_local_samples_outside_the_pool() {
+            let temp = TempDir::new().unwrap();
+            let set = temp.path();
+            fs::create_dir(set.join("AUDIO")).unwrap();
+            fs::create_dir(set.join("PROJ")).unwrap();
+            for bank_num in 1..=16 {
+                BankFile::default()
+                    .to_data_file(&set.join("PROJ").join(format!("bank{:02}.work", bank_num)))
+                    .unwrap();
+            }
+            let content = create_raw_project_work_with_custom_fields(&[(
+                "FLEX",
+                1,
+                "local.wav",
+                None,
+                None,
+                None,
+            )]);
+            write_raw_project_work(&set.join("PROJ"), &content);
+
+            let pool = set.join("AUDIO");
+            let usage = compute_pool_usage(&pool.to_string_lossy()).unwrap();
+            assert!(
+                usage.is_empty(),
+                "project-local sample paths must not be bucketed as pool usage"
+            );
         }
     }
 
