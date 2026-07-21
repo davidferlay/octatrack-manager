@@ -1183,11 +1183,19 @@ pub struct PoolUsageEntry {
 /// from `compute_sample_usage`. A project whose project file fails to parse, or
 /// whose bank files are missing, is skipped for usage purposes (matching
 /// `compute_sample_usage`'s own per-bank skip-on-error behavior).
+/// Canonical key for a pool-usage map entry: lowercase, forward-slash
+/// separators, so results are stable across Windows (`\`) and Unix (`/`)
+/// path construction — the frontend's usageKey() always normalizes lookups
+/// to forward-slash, so this side must match unconditionally.
+fn pool_usage_key(path: &Path) -> String {
+    path.to_string_lossy().to_lowercase().replace('\\', "/")
+}
+
 pub fn compute_pool_usage(
     pool_path: &str,
 ) -> Result<std::collections::HashMap<String, Vec<PoolUsageEntry>>, String> {
     let pool_dir = normalize_path_lexically(Path::new(pool_path));
-    let pool_dir_lower = pool_dir.to_string_lossy().to_lowercase();
+    let pool_dir_lower = pool_usage_key(&pool_dir);
     let set_dir = pool_dir
         .parent()
         .ok_or_else(|| "Cannot determine set directory from pool path".to_string())?;
@@ -1214,10 +1222,9 @@ pub fn compute_pool_usage(
             let Some(path_value) = fields.get("PATH") else {
                 continue;
             };
-            let resolved =
-                normalize_path_lexically(&project_dir.join(path_value.replace('\\', "/")))
-                    .to_string_lossy()
-                    .to_lowercase();
+            let resolved = pool_usage_key(&normalize_path_lexically(
+                &project_dir.join(path_value.replace('\\', "/")),
+            ));
             let in_pool = resolved.strip_prefix(&pool_dir_lower).is_some_and(|rest| {
                 rest.is_empty() || rest.starts_with('/') || rest.starts_with('\\')
             });
@@ -18261,6 +18268,12 @@ mod tests {
                 "a sibling directory whose name merely has the pool dirname as a \
                  string prefix (AUDIO_OLD vs AUDIO) must not be treated as pool usage"
             );
+        }
+
+        #[test]
+        fn pool_usage_key_is_forward_slash_and_lowercase_even_from_a_windows_style_path() {
+            let key = pool_usage_key(Path::new("C:\\Users\\Test\\AUDIO\\Kick.WAV"));
+            assert_eq!(key, "c:/users/test/audio/kick.wav");
         }
     }
 

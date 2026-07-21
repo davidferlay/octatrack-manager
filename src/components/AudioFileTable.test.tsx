@@ -202,4 +202,37 @@ describe('AudioFileTable', () => {
     expect(screen.queryByText('kick.wav')).not.toBeInTheDocument()
     expect(screen.getByText('snare.wav')).toBeInTheDocument()
   })
+
+  it('re-filters rows when usageMap arrives after mount with a Used filter already active', async () => {
+    const { rerender } = renderTable({ poolRoot: '/AUDIO', usageMap: {} })
+
+    const usageHeader = screen.getByText('Usage').closest('.header-content')!
+    await userEvent.click(usageHeader.querySelector('.filter-icon')!)
+    await userEvent.click(screen.getByText('Used (plays)'))
+
+    // usageMap is empty — nothing is used yet, so both files are filtered out.
+    expect(screen.queryByText('kick.wav')).not.toBeInTheDocument()
+    expect(screen.queryByText('snare.wav')).not.toBeInTheDocument()
+
+    const usageMap: Record<string, PoolUsageEntry[]> = {
+      '/audio/kick.wav': [
+        { project: 'PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true },
+      ],
+    }
+    rerender(
+      <AudioFileTable
+        files={files}
+        selectedFiles={new Set()}
+        onFileClick={vi.fn()}
+        isLoading={false}
+        emptyMessage="No audio files"
+        tableId="test-table"
+        poolRoot="/AUDIO"
+        usageMap={usageMap}
+      />
+    )
+
+    expect(await screen.findByText('kick.wav')).toBeInTheDocument()
+    expect(screen.queryByText('snare.wav')).not.toBeInTheDocument()
+  })
 })
