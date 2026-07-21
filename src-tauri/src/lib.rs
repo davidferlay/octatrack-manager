@@ -19,6 +19,7 @@ use project_reader::{
     check_missing_source_files as check_missing_source_files_impl,
     commit_all_parts_data,
     commit_part_data,
+    compute_pool_usage as compute_pool_usage_data,
     compute_sample_usage as compute_sample_usage_data,
     // Copy operations
     copy_bank as copy_bank_impl,
@@ -46,6 +47,7 @@ use project_reader::{
     MemorySettings,
     PartData,
     PartsDataResponse,
+    PoolUsageEntry,
     ProjectMetadata,
     SlotAssignment,
 };
@@ -113,6 +115,16 @@ async fn compute_sample_usage(
 ) -> Result<crate::project_reader::SampleSlotUsage, String> {
     // Scans all 16 bank files; run on a blocking thread pool.
     tauri::async_runtime::spawn_blocking(move || compute_sample_usage_data(&path))
+        .await
+        .unwrap()
+}
+
+#[tauri::command]
+async fn get_pool_usage(
+    pool_path: String,
+) -> Result<std::collections::HashMap<String, Vec<PoolUsageEntry>>, String> {
+    // Scans every project in the set; run on a blocking thread pool.
+    tauri::async_runtime::spawn_blocking(move || compute_pool_usage_data(&pool_path))
         .await
         .unwrap()
 }
@@ -1027,6 +1039,7 @@ pub fn run() {
             load_project_banks,
             load_single_bank,
             compute_sample_usage,
+            get_pool_usage,
             get_existing_banks,
             load_parts_data,
             save_parts,
