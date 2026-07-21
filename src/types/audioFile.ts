@@ -7,3 +7,15 @@ export interface AudioFile {
   is_directory: boolean;
   path: string;
 }
+
+/** One place an Audio Pool file is referenced from (see PoolUsageEntry in Rust). */
+export interface PoolUsageEntry {
+  project: string;
+  bank: number;
+  kind: string;
+  track: number;
+  part: number | null;
+  pattern: number | null;
+  step: number | null;
+  audible: boolean;
+}
