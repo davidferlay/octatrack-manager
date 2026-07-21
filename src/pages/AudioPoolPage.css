@@ -260,7 +260,7 @@
 .panel-title {
   font-weight: 600;
   font-size: 0.875rem;
-  color: var(--elektron-orange);
+  color: var(--elektron-white);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   white-space: nowrap;
