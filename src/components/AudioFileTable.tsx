@@ -13,7 +13,7 @@ import {
   type SortingFn,
 } from "@tanstack/react-table";
 import { useDraggable } from "@dnd-kit/core";
-import type { AudioFile } from "../types/audioFile";
+import type { AudioFile, PoolUsageEntry } from "../types/audioFile";
 
 export type SortColumn = 'name' | 'size' | 'format' | 'bitrate' | 'samplerate';
 export type SortDirection = 'asc' | 'desc';
@@ -135,6 +135,10 @@ export interface AudioFileTableProps {
   searchRoot?: string;
   /** Reports the freshly inspected OT-compatibility map (path -> compatibility). */
   onCompatMap?: (map: Record<string, string>) => void;
+  /** Cross-project usage entries per pool file path (Audio Pool pane only). */
+  usageMap?: Record<string, PoolUsageEntry[]>;
+  /** True while usageMap is still being computed - shows "…" instead of "—" for unreferenced files. */
+  usageLoading?: boolean;
 }
 
 /** Path relative to the Audio Pool root, prefixed "AUDIO/" — used for hover titles. */
@@ -145,14 +149,25 @@ function relativeToPool(filePath: string, poolRoot: string): string {
 }
 
 const DEFAULT_COLUMN_SIZES: Record<string, number> = {
-  name: 200, compat: 60, format: 90, bitrate: 70, samplerate: 75, size: 80,
+  name: 200, usage: 75, compat: 60, format: 90, bitrate: 70, samplerate: 75, size: 80,
 };
 const MIN_COLUMN_SIZES: Record<string, number> = {
-  name: 80, compat: 45, format: 60, bitrate: 50, samplerate: 55, size: 55,
+  name: 80, usage: 55, compat: 45, format: 60, bitrate: 50, samplerate: 55, size: 55,
 };
 const COLUMN_LABELS: Record<string, string> = {
-  name: 'Name', compat: 'Compat', format: 'Format', bitrate: 'Bit', samplerate: 'kHz', size: 'Size',
+  name: 'Name', usage: 'Usage', compat: 'Compat', format: 'Format', bitrate: 'Bit', samplerate: 'kHz', size: 'Size',
 };
+
+const BANK_LETTERS = 'ABCDEFGHIJKLMNOP';
+
+/**
+ * get_pool_usage keys its map by normalized-lowercase absolute path (Rust side,
+ * compute_pool_usage), while file.path here keeps its original OS casing/separators,
+ * so every usageMap read goes through this.
+ */
+function usageKey(path: string): string {
+  return path.toLowerCase().replace(/\\/g, '/');
+}
 
 // Same OT-style compatibility badge as the Sample Slots table
 export function CompatBadge({ compatibility }: { compatibility: string | undefined }) {
@@ -227,6 +242,8 @@ export function AudioFileTable({
   poolRoot,
   searchRoot,
   onCompatMap,
+  usageMap,
+  usageLoading = false,
 }: AudioFileTableProps) {
   // Pre-filter state (applied before TanStack)
   const [searchText, setSearchText] = useState('');
@@ -236,6 +253,7 @@ export function AudioFileTable({
   const [formatFilter, setFormatFilter] = useState<string>('all');
   const [bitDepthFilter, setBitDepthFilter] = useState<string>('all');
   const [sampleRateFilter, setSampleRateFilter] = useState<string>('all');
+  const [usageFilter, setUsageFilter] = useState<string>('all');
 
   // Recursive search: when a searchRoot is set and the user is searching, match across that
   // directory and all its subfolders instead of just the current level. Fetched once when
@@ -295,11 +313,23 @@ export function AudioFileTable({
   // Dropdown state — use portal + position to avoid clipping issues
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
+  const [usagePopover, setUsagePopover] = useState<{ x: number; y: number; path: string; scope: 'audible' | 'referenced' } | null>(null);
+  useEffect(() => {
+    if (!usagePopover) return;
+    const close = () => setUsagePopover(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setUsagePopover(null); };
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', close);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [usagePopover]);
 
   // TanStack column state
   const [sorting, setSorting] = useState<SortingState>([{ id: 'name', desc: false }]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility ?? {});
-  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>(['name', 'compat', 'format', 'bitrate', 'samplerate', 'size']);
+  const [columnOrder, setColumnOrder] = useState<ColumnOrderState>(['name', 'usage', 'compat', 'format', 'bitrate', 'samplerate', 'size']);
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   const [showColumnMenu, setShowColumnMenu] = useState(false);
   const [dragOverColId, setDragOverColId] = useState<string | null>(null);
@@ -404,18 +434,39 @@ export function AudioFileTable({
     if (formatFilter !== 'all' && getFileFormat(file.name) !== formatFilter) return false;
     if (bitDepthFilter !== 'all' && file.bit_rate?.toString() !== bitDepthFilter) return false;
     if (sampleRateFilter !== 'all' && file.sample_rate?.toString() !== sampleRateFilter) return false;
+    if (usageFilter !== 'all') {
+      const entries = usageMap?.[usageKey(file.path)] ?? [];
+      const audibleCount = entries.filter(e => e.audible).length;
+      if (usageFilter === 'used' && audibleCount === 0) return false;
+      if (usageFilter === 'referenced' && audibleCount === entries.length) return false;
+      if (usageFilter === 'unused' && entries.length > 0) return false;
+    }
     return true;
-  }), [baseFiles, hideDirectories, searchText, formatFilter, bitDepthFilter, sampleRateFilter]);
+  }), [baseFiles, hideDirectories, searchText, formatFilter, bitDepthFilter, sampleRateFilter, usageFilter]);
 
   const columns = useMemo<ColumnDef<AudioFile>[]>(() => [
     { id: 'name', accessorKey: 'name', header: 'Name', size: DEFAULT_COLUMN_SIZES.name, minSize: MIN_COLUMN_SIZES.name, sortingFn: dirFirstSort },
+    // Usage column only when a usageMap is supplied (Audio Pool pane) - the plain
+    // file browser pane has no cross-project usage concept.
+    ...(usageMap ? [{
+      id: 'usage',
+      accessorFn: (row: AudioFile) => {
+        if (row.is_directory) return 0;
+        const entries = usageMap[usageKey(row.path)] ?? [];
+        return entries.filter(e => e.audible).length * 1000 + entries.length;
+      },
+      header: 'Usage', size: DEFAULT_COLUMN_SIZES.usage, minSize: MIN_COLUMN_SIZES.usage, sortingFn: dirFirstSort,
+      // Numeric columns auto-default to descending-first (TanStack's getAutoSortDir);
+      // force ascending-first so "click Usage" surfaces unused files first, like Name does.
+      sortDescFirst: false,
+    } as ColumnDef<AudioFile>] : []),
     // Compat column only in pool views — the plain file browser pane skips inspection
     ...(poolRoot ? [{ id: 'compat', accessorFn: (row: AudioFile) => (!row.is_directory ? (compatMap[row.path] ?? '') : ''), header: 'Compat', size: DEFAULT_COLUMN_SIZES.compat, minSize: MIN_COLUMN_SIZES.compat, sortingFn: dirFirstSort } as ColumnDef<AudioFile>] : []),
     { id: 'format', accessorFn: (row) => (!row.is_directory ? getFileFormat(row.name) : ''), header: 'Format', size: DEFAULT_COLUMN_SIZES.format, minSize: MIN_COLUMN_SIZES.format, sortingFn: dirFirstSort },
     { id: 'bitrate', accessorKey: 'bit_rate', header: 'Bit', size: DEFAULT_COLUMN_SIZES.bitrate, minSize: MIN_COLUMN_SIZES.bitrate, sortingFn: dirFirstSort },
     { id: 'samplerate', accessorKey: 'sample_rate', header: 'kHz', size: DEFAULT_COLUMN_SIZES.samplerate, minSize: MIN_COLUMN_SIZES.samplerate, sortingFn: dirFirstSort },
     { id: 'size', accessorKey: 'size', header: 'Size', size: DEFAULT_COLUMN_SIZES.size, minSize: MIN_COLUMN_SIZES.size, sortingFn: dirFirstSort },
-  ], [compatMap, poolRoot]);
+  ], [compatMap, poolRoot, usageMap]);
 
   const table = useReactTable({
     data: filteredData,
@@ -446,6 +497,41 @@ export function AudioFileTable({
             <span className="file-name-text">{file.name}</span>
           </td>
         );
+      case 'usage': {
+        const entries = usageMap?.[usageKey(file.path)] ?? [];
+        const audibleCount = entries.filter(e => e.audible).length;
+        const referencedCount = entries.length - audibleCount;
+        const openPopover = (scope: 'audible' | 'referenced') => (e: React.MouseEvent) => {
+          e.stopPropagation();
+          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          setUsagePopover({ x: rect.left, y: rect.bottom + 4, path: file.path, scope });
+        };
+        return (
+          <td key={colId} className="col-usage" style={{ width: w }}>
+            {audibleCount > 0 && (
+              <button
+                className="usage-badge"
+                title={`Played in ${audibleCount} place${audibleCount > 1 ? 's' : ''} - click for details`}
+                onClick={openPopover('audible')}
+              >
+                ✓ {audibleCount}
+              </button>
+            )}
+            {referencedCount > 0 && (
+              <button
+                className="usage-badge referenced"
+                title={`Referenced in ${referencedCount} place${referencedCount > 1 ? 's' : ''} but not triggered - click for details`}
+                onClick={openPopover('referenced')}
+              >
+                ○ {referencedCount}
+              </button>
+            )}
+            {!file.is_directory && entries.length === 0 && (usageLoading
+              ? <span className="usage-none" title="Computing usage…">…</span>
+              : <span className="usage-none" title="Not referenced in any project of this set">—</span>)}
+          </td>
+        );
+      }
       case 'compat':
         return (
           <td key={colId} className="col-compat" style={{ width: w }}>
@@ -534,6 +620,14 @@ export function AudioFileTable({
               ))}
             </>
           )}
+          {colId === 'usage' && (
+            <>
+              <label className="dropdown-option"><input type="radio" name={dropdownKey} checked={usageFilter === 'all'} onChange={() => setUsageFilter('all')} /><span>All</span></label>
+              <label className="dropdown-option"><input type="radio" name={dropdownKey} checked={usageFilter === 'used'} onChange={() => setUsageFilter('used')} /><span>Used (plays)</span></label>
+              <label className="dropdown-option"><input type="radio" name={dropdownKey} checked={usageFilter === 'referenced'} onChange={() => setUsageFilter('referenced')} /><span>Referenced, not triggered</span></label>
+              <label className="dropdown-option"><input type="radio" name={dropdownKey} checked={usageFilter === 'unused'} onChange={() => setUsageFilter('unused')} /><span>Unused</span></label>
+            </>
+          )}
         </div>
       </div>,
       document.body
@@ -558,6 +652,7 @@ export function AudioFileTable({
           {formatFilter !== 'all' && <span className="filter-badge">Format: {formatFilter}</span>}
           {bitDepthFilter !== 'all' && <span className="filter-badge">Bit: {bitDepthFilter}</span>}
           {sampleRateFilter !== 'all' && <span className="filter-badge">Rate: {(parseInt(sampleRateFilter) / 1000).toFixed(1)}kHz</span>}
+          {usageFilter !== 'all' && <span className="filter-badge">Usage: {usageFilter === 'used' ? 'Used' : usageFilter === 'referenced' ? 'Referenced' : 'Unused'}</span>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <div className="header-search-container">
@@ -628,11 +723,12 @@ export function AudioFileTable({
                 {hg.headers.map(header => {
                   const colId = header.id;
                   const sortState = header.column.getIsSorted();
-                  const isFilterable = ['format', 'bitrate', 'samplerate'].includes(colId);
+                  const isFilterable = ['format', 'bitrate', 'samplerate', 'usage'].includes(colId);
                   const hasActiveFilter =
                     (colId === 'format' && formatFilter !== 'all') ||
                     (colId === 'bitrate' && bitDepthFilter !== 'all') ||
-                    (colId === 'samplerate' && sampleRateFilter !== 'all');
+                    (colId === 'samplerate' && sampleRateFilter !== 'all') ||
+                    (colId === 'usage' && usageFilter !== 'all');
                   const dropdownKey = `${tableId}-${colId}`;
                   return (
                     <th
@@ -734,6 +830,39 @@ export function AudioFileTable({
           </tbody>
         </table>
       </div>
+
+      {usagePopover && createPortal(
+        <div
+          className="usage-popover"
+          style={{ position: 'fixed', top: usagePopover.y, left: usagePopover.x }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {(() => {
+            const scoped = (usageMap?.[usageKey(usagePopover.path)] ?? []).filter(
+              (e) => e.audible === (usagePopover.scope === 'audible')
+            );
+            return (
+              <>
+                <div className="usage-popover-header">
+                  {usagePopover.scope === 'audible'
+                    ? `Played in ${scoped.length} place${scoped.length > 1 ? 's' : ''}`
+                    : `Referenced in ${scoped.length} place${scoped.length > 1 ? 's' : ''} but not triggered`}
+                </div>
+                <div className="usage-popover-list">
+                  {scoped.map((entry, idx) => (
+                    <div key={idx} className="usage-popover-entry">
+                      {entry.kind === 'machine'
+                        ? `${entry.project} · Bank ${BANK_LETTERS[entry.bank] ?? '?'} · Part ${(entry.part ?? 0) + 1} · T${entry.track + 1} · Machine`
+                        : `${entry.project} · Bank ${BANK_LETTERS[entry.bank] ?? '?'} · Pattern ${(entry.pattern ?? 0) + 1} · T${entry.track + 1} · Step ${(entry.step ?? 0) + 1} · Lock`}
+                    </div>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

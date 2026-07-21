@@ -1,12 +1,18 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DndContext } from '@dnd-kit/core'
 import { AudioFileTable } from './AudioFileTable'
-import type { AudioFile } from '../types/audioFile'
+import type { AudioFile, PoolUsageEntry } from '../types/audioFile'
 
 const invokeMock = vi.fn()
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invokeMock(...args) }))
+
+// invokeMock is module-scoped: without a reset, a mockResolvedValue set by one test
+// (e.g. the recursive-search test below) leaks into every later test that renders
+// with poolRoot set, resolving the unrelated compat-inspection effect with stale
+// data and triggering an unawaited setState outside act().
+beforeEach(() => { invokeMock.mockReset(); })
 
 const files: AudioFile[] = [
   { name: 'kick.wav', size: 1024, channels: 2, bit_rate: 16, sample_rate: 44100, is_directory: false, path: '/AUDIO/kick.wav' },
@@ -133,5 +139,67 @@ describe('AudioFileTable', () => {
     )
     await userEvent.dblClick(screen.getByText('Drums'))
     expect(onDouble).toHaveBeenCalledWith(dirFiles[0], 0, expect.anything())
+  })
+
+  // usageMap keys are normalized-lowercase (as produced by the Rust get_pool_usage
+  // command), while file.path ('/AUDIO/kick.wav') keeps its original case - these
+  // tests use lowercase keys throughout to prove the case-insensitive lookup works.
+  it('shows Usage badges (audible and referenced) and a dash for unreferenced files, only when usageMap is set', () => {
+    const usageMap: Record<string, PoolUsageEntry[]> = {
+      '/audio/kick.wav': [
+        { project: 'PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true },
+        { project: 'PROJ2', bank: 1, kind: 'lock', track: 2, part: null, pattern: 3, step: 5, audible: false },
+      ],
+    }
+    renderTable({ poolRoot: '/AUDIO', usageMap })
+    expect(screen.getByText('Usage')).toBeInTheDocument()
+    expect(screen.getByText('✓ 1')).toBeInTheDocument()
+    expect(screen.getByText('○ 1')).toBeInTheDocument()
+    // snare.wav has no usageMap entry
+    const snareRow = screen.getByText('snare.wav').closest('tr')!
+    expect(snareRow.querySelector('.usage-none')?.textContent).toBe('—')
+  })
+
+  it('does not show a Usage column when usageMap is absent', () => {
+    renderTable({ poolRoot: '/AUDIO' })
+    expect(screen.queryByText('Usage')).not.toBeInTheDocument()
+  })
+
+  it('opens a project-prefixed usage popover when a badge is clicked', async () => {
+    const usageMap: Record<string, PoolUsageEntry[]> = {
+      '/audio/kick.wav': [
+        { project: 'PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true },
+      ],
+    }
+    renderTable({ poolRoot: '/AUDIO', usageMap })
+    await userEvent.click(screen.getByText('✓ 1'))
+    expect(screen.getByText('PROJ1 · Bank A · Part 1 · T1 · Machine')).toBeInTheDocument()
+  })
+
+  it('sorts by Usage (audible-weighted total) when the Usage header is clicked', async () => {
+    const usageMap: Record<string, PoolUsageEntry[]> = {
+      '/audio/kick.wav': [
+        { project: 'PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true },
+      ],
+      '/audio/snare.wav': [],
+    }
+    renderTable({ poolRoot: '/AUDIO', usageMap })
+    await userEvent.click(screen.getByText('Usage'))
+    const names = screen.getAllByText(/\.wav$/).map(el => el.textContent)
+    expect(names[0]).toBe('snare.wav') // ascending: 0 usage first
+  })
+
+  it('filters rows via the Usage dropdown (Used / Referenced / Unused)', async () => {
+    const usageMap: Record<string, PoolUsageEntry[]> = {
+      '/audio/kick.wav': [
+        { project: 'PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true },
+      ],
+    }
+    renderTable({ poolRoot: '/AUDIO', usageMap })
+    const usageHeader = screen.getByText('Usage').closest('.header-content')!
+    await userEvent.click(usageHeader.querySelector('.filter-icon')!)
+    await userEvent.click(screen.getByText('Unused'))
+    expect(screen.queryByText('kick.wav')).not.toBeInTheDocument()
+    expect(screen.getByText('snare.wav')).toBeInTheDocument()
   })
 })

@@ -3702,6 +3702,21 @@ th.col-used .header-content .filter-icon {
   margin-left: 0;
 }
 
+.col-usage {
+  white-space: nowrap;
+  text-align: center;
+}
+
+th.col-usage .header-content {
+  justify-content: center;
+}
+
+th.col-usage .header-content .filter-icon {
+  position: absolute;
+  right: 0;
+  margin-left: 0;
+}
+
 .usage-badge {
   display: inline-flex;
   align-items: center;
