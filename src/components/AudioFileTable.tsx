@@ -442,7 +442,7 @@ export function AudioFileTable({
       if (usageFilter === 'unused' && entries.length > 0) return false;
     }
     return true;
-  }), [baseFiles, hideDirectories, searchText, formatFilter, bitDepthFilter, sampleRateFilter, usageFilter]);
+  }), [baseFiles, hideDirectories, searchText, formatFilter, bitDepthFilter, sampleRateFilter, usageFilter, usageMap]);
 
   const columns = useMemo<ColumnDef<AudioFile>[]>(() => [
     { id: 'name', accessorKey: 'name', header: 'Name', size: DEFAULT_COLUMN_SIZES.name, minSize: MIN_COLUMN_SIZES.name, sortingFn: dirFirstSort },
