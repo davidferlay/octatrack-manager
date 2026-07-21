@@ -44,24 +44,12 @@ function poolLocation(path: string, poolPath: string): string {
     this file needs are listed. */
 function actionFor(name: string, bit: number | null, khz: number | null): { label: string; title: string } {
   const isWav = name.toLowerCase().endsWith('.wav');
-  const parts: string[] = [];
   const ops: string[] = [];
-  if (khz != null && khz !== 44100) {
-    parts.push('44.1 kHz');
-    ops.push('resampled to 44.1 kHz');
-  }
-  if (bit != null && (bit < 16 || bit > 24)) {
-    const target = bit < 16 ? 16 : 24;
-    parts.push(`${target}-bit`);
-    ops.push(`converted to ${target}-bit`);
-  }
-  if (!isWav) {
-    parts.push('WAV');
-    ops.push('rewritten as WAV');
-  }
-  const label = parts.length ? `Convert to ${parts.join(', ')}` : 'Convert to 44.1 kHz WAV';
-  const detail = ops.length ? ops.join(', ') : 'converted to 44.1 kHz WAV';
-  const title = detail.charAt(0).toUpperCase() + detail.slice(1) + '; original replaced, slot references updated';
+  if (khz != null && khz !== 44100) ops.push('Resample to 44.1 kHz');
+  if (bit != null && (bit < 16 || bit > 24)) ops.push(`Convert to ${bit < 16 ? 16 : 24}-bit`);
+  if (!isWav) ops.push('Rewrite as WAV');
+  const label = ops.length ? ops.join(', ') : 'Convert to 44.1 kHz WAV';
+  const title = label + '; replace original file, update slot references';
   return { label, title };
 }
 
