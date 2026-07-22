@@ -151,6 +151,39 @@ describe('SampleSlotsTable', () => {
     await userEvent.click(screen.getByText('Size'))
     expect(screen.getByText('400 B')).toBeInTheDocument()
   })
+
+  it('shows a health glyph counting only this tab\'s own incompatible slots, hidden when the Audio Pool pane is open', () => {
+    const slots = [
+      { ...mockSlots[0], path: 'kick.mp3', file_exists: true, compatibility: 'unknown' },
+      { ...mockSlots[2], path: 'snare.wav', file_exists: true, compatibility: 'compatible' },
+    ]
+    const onOpen = vi.fn()
+    renderWithProvider(
+      <SampleSlotsTable slots={slots} slotPrefix="F" tableType="flex" onOpenFixProjectSamples={onOpen} />
+    )
+    const glyph = screen.getByTitle(/incompatible audio file.*click to fix/i)
+    expect(glyph).toHaveTextContent('1')
+    fireEvent.click(glyph)
+    expect(onOpen).toHaveBeenCalled()
+  })
+
+  it('shows an ok glyph when nothing is incompatible', () => {
+    const slots = [{ ...mockSlots[0], path: 'kick.wav', file_exists: true, compatibility: 'compatible' }]
+    renderWithProvider(<SampleSlotsTable slots={slots} slotPrefix="S" tableType="static" />)
+    expect(screen.getByTitle(/all.*compatible/i)).toBeInTheDocument()
+  })
+
+  it('hides the glyph entirely when the Audio Pool pane is shown', async () => {
+    // Opening the pane mounts AudioFileTable via AudioPoolSidebar's list_audio_directory
+    // call — give it an empty file list so its rendering doesn't choke on an unmocked invoke.
+    mockInvoke.mockResolvedValue([])
+    const slots = [{ ...mockSlots[0], path: 'kick.mp3', file_exists: true, compatibility: 'unknown' }]
+    renderWithProvider(
+      <SampleSlotsTable slots={slots} slotPrefix="F" tableType="flex" audioPoolPath="/set/AUDIO" />
+    )
+    await userEvent.click(screen.getByTitle(/Show Audio Pool/i))
+    expect(screen.queryByTitle(/incompatible audio file.*click to fix/i)).not.toBeInTheDocument()
+  })
 })
 
 describe('SampleSlotsTable — Audio Pool integration', () => {

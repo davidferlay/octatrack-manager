@@ -224,6 +224,9 @@ export function ProjectDetail() {
     const valid: TabType[] = ["overview", "parts", "patterns", "tracks", "static-slots", "flex-slots", "tools"];
     return (valid as string[]).includes(t ?? "") ? (t as TabType) : "overview";
   });
+  // Set once by a Sample Slots tab's health glyph, so ToolsPanel opens with
+  // "Fix Project Samples" pre-selected instead of whatever was last used.
+  const [toolsInitialOperation, setToolsInitialOperation] = useState<"fix_project_samples" | undefined>(undefined);
   // Shift+1..6: switch between the page tabs (same order as the header)
   useEffect(() => {
     const tabOrder: TabType[] = ["overview", "parts", "patterns", "flex-slots", "static-slots", "tools"];
@@ -2191,6 +2194,10 @@ export function ProjectDetail() {
                 isEditMode={isEditMode}
                 audioPoolPath={audioPoolPath}
                 onPoolFixed={refreshProjectData}
+                onOpenFixProjectSamples={() => {
+                  setToolsInitialOperation("fix_project_samples");
+                  setActiveTab("tools");
+                }}
                 onSlotsUpdated={(updatedSlots) => {
                   // Merge updated slots into metadata
                   setMetadata(prev => {
@@ -2244,6 +2251,10 @@ export function ProjectDetail() {
                 isEditMode={isEditMode}
                 audioPoolPath={audioPoolPath}
                 onPoolFixed={refreshProjectData}
+                onOpenFixProjectSamples={() => {
+                  setToolsInitialOperation("fix_project_samples");
+                  setActiveTab("tools");
+                }}
                 onSlotsUpdated={(updatedSlots) => {
                   // Merge updated slots into metadata
                   setMetadata(prev => {
@@ -2288,6 +2299,8 @@ export function ProjectDetail() {
                 loadedBankIndices={loadedBankIndices}
                 onBankUpdated={reloadBank}
                 onProjectRefresh={refreshProjectData}
+                sampleSlots={metadata.sample_slots}
+                initialOperation={toolsInitialOperation}
               />
             )}
 

@@ -103,6 +103,7 @@ interface SampleSlotsTableProps {
   onImportToProject?: (sourcePaths: string[]) => Promise<string[]>; // Copy files into the project dir via the transfer pane; resolves with dest paths
   sidebarRefreshTrigger?: number; // Increment to trigger sidebar refresh from parent
   onPoolFixed?: () => void; // Pool files converted in place — project slot paths may have changed
+  onOpenFixProjectSamples?: () => void; // Health glyph clicked — parent should open Tools > Fix Project Samples
   // Transfers panel toggle (rendered in the toolbar so it stays visible on slot tabs)
   transfersOpen?: boolean;
   transferCount?: number;
@@ -170,7 +171,7 @@ function getSetRelativePath(projectPath: string | null): string {
   return projectPath;
 }
 
-export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, projectName, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated, onFlexRamUpdated, onImportToAudioPool, onImportToProject, sidebarRefreshTrigger, onPoolFixed, transfersOpen, transferCount, transfersActive, transfersSucceeded, transfersFailed, onToggleTransfers, onDragStateChange, slotUsage }: SampleSlotsTableProps) {
+export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, projectName, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated, onFlexRamUpdated, onImportToAudioPool, onImportToProject, sidebarRefreshTrigger, onPoolFixed, onOpenFixProjectSamples, transfersOpen, transferCount, transfersActive, transfersSucceeded, transfersFailed, onToggleTransfers, onDragStateChange, slotUsage }: SampleSlotsTableProps) {
   const navigate = useNavigate();
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const [dndDragFiles, setDndDragFiles] = useState<string[]>([]);
@@ -1771,6 +1772,25 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
                   : memorySettings.flex_ram_free_mb.toFixed(2)} MB
               </span>
             )}
+            {!showAudioPool && (() => {
+              const incompatibleCount = slots.filter(
+                s => s.path && s.compatibility && s.compatibility !== 'compatible'
+              ).length;
+              return incompatibleCount > 0 ? (
+                <button
+                  className="pool-health-glyph warning"
+                  title={`${incompatibleCount} incompatible audio file${incompatibleCount !== 1 ? 's' : ''} found - click to fix`}
+                  onClick={() => onOpenFixProjectSamples?.()}
+                >
+                  <i className="fas fa-wrench"></i>
+                  {incompatibleCount}
+                </button>
+              ) : (
+                <span className="pool-health-glyph ok" title="All referenced samples of this type are compatible with Octatrack">
+                  <i className="fas fa-check-circle"></i>
+                </span>
+              );
+            })()}
             {compatibilityFilter !== 'all' && <span className="filter-badge">Compat: {compatibilityFilter}</span>}
             {statusFilter !== 'all' && <span className="filter-badge">Status: {statusFilter}</span>}
             {sourceFilter !== 'all' && <span className="filter-badge">Source: {sourceFilter}</span>}
