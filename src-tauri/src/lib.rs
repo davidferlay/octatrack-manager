@@ -32,6 +32,7 @@ use project_reader::{
     get_existing_bank_indices,
     // Set and Audio Pool helpers
     is_project_in_set,
+    list_set_projects as list_set_projects_data,
     read_parts_data,
     read_project_banks,
     read_project_metadata,
@@ -49,6 +50,7 @@ use project_reader::{
     PartsDataResponse,
     PoolUsageEntry,
     ProjectMetadata,
+    SetProjectInfo,
     SlotAssignment,
 };
 use serde::Serialize;
@@ -125,6 +127,13 @@ async fn get_pool_usage(
 ) -> Result<std::collections::HashMap<String, Vec<PoolUsageEntry>>, String> {
     // Scans every project in the set; run on a blocking thread pool.
     tauri::async_runtime::spawn_blocking(move || compute_pool_usage_data(&pool_path))
+        .await
+        .unwrap()
+}
+
+#[tauri::command]
+async fn list_set_projects(pool_path: String) -> Result<Vec<SetProjectInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || list_set_projects_data(&pool_path))
         .await
         .unwrap()
 }
@@ -1040,6 +1049,7 @@ pub fn run() {
             load_single_bank,
             compute_sample_usage,
             get_pool_usage,
+            list_set_projects,
             get_existing_banks,
             load_parts_data,
             save_parts,
