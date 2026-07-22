@@ -8,6 +8,9 @@ import "../App.css";
 import { FixMissingSamplesModal } from "./FixMissingSamplesModal";
 import { MissingSamplesListModal } from "./MissingSamplesListModal";
 import { CreateProjectModal } from "./CreateProjectModal";
+import { ProjectIncompatibleListModal, FixProjectFilesModal } from "./FixProjectFilesModal";
+import type { IncompatibleFile, PoolFixResult } from "./FixPoolFilesModal";
+import { audioKind } from "./AudioFileTable";
 
 const TOOLS_STORAGE_KEY_PREFIX = "octatrack-tools-settings-";
 
@@ -25,7 +28,7 @@ function compareLocations(a: { name: string; device_type: string }, b: { name: s
 }
 
 // Operation types
-type OperationType = "copy_bank" | "copy_parts" | "copy_patterns" | "copy_tracks" | "copy_sample_slots" | "fix_missing_samples";
+type OperationType = "copy_bank" | "copy_parts" | "copy_patterns" | "copy_tracks" | "copy_sample_slots" | "fix_missing_samples" | "fix_project_samples";
 
 // Part assignment modes for copy_patterns
 type PartAssignmentMode = "keep_original" | "copy_source_part" | "select_specific";
@@ -65,6 +68,12 @@ interface MissingSample {
 type PoolOption = "use_from_pool" | "copy_to_project";
 type OtherProjectOption = "move_to_pool" | "copy_to_project";
 
+/** Compatibility-relevant slot fields needed for the Fix Project Samples scan. */
+interface CompatSlot {
+  path: string | null;
+  compatibility: string | null;
+}
+
 interface ToolsPanelProps {
   projectPath: string;
   projectName: string;
@@ -72,6 +81,8 @@ interface ToolsPanelProps {
   loadedBankIndices: Set<number>;
   onBankUpdated?: (bankIndex: number) => void;
   onProjectRefresh?: () => void;
+  sampleSlots?: { flex_slots: CompatSlot[]; static_slots: CompatSlot[] };
+  initialOperation?: OperationType;
 }
 
 interface ProjectOption {
@@ -147,7 +158,7 @@ interface OctatrackLocation {
   sets: OctatrackSet[];
 }
 
-export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices, onBankUpdated, onProjectRefresh }: ToolsPanelProps) {
+export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices, onBankUpdated, onProjectRefresh, sampleSlots = { flex_slots: [], static_slots: [] }, initialOperation }: ToolsPanelProps) {
   const { locations, standaloneProjects, setLocations, setStandaloneProjects, setHasScanned } = useProjects();
 
   // Load saved settings (per-project, session-only)
@@ -155,6 +166,12 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
 
   // Operation selection
   const [operation, setOperation] = useState<OperationType>(savedSettings.operation || "copy_bank");
+
+  // Lets a caller (e.g. the health glyph on the Sample Slots tabs) jump straight
+  // to a specific operation instead of whatever was last selected/persisted.
+  useEffect(() => {
+    if (initialOperation) setOperation(initialOperation);
+  }, [initialOperation]);
 
   // Source selection (current project only)
   const [sourceBankIndex, setSourceBankIndex] = useState<number>(0);
@@ -236,6 +253,14 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [showFixModal, setShowFixModal] = useState<boolean>(false);
   const [showMissingSamplesListModal, setShowMissingSamplesListModal] = useState<boolean>(false);
   const [loadingMissingSamples, setLoadingMissingSamples] = useState<boolean>(false);
+
+  // Fix Project Samples state
+  const [projectIncompatibleFiles, setProjectIncompatibleFiles] = useState<IncompatibleFile[]>([]);
+  const [loadingProjectSamples, setLoadingProjectSamples] = useState<boolean>(false);
+  const [projectScanTotal, setProjectScanTotal] = useState<number>(0);
+  const [skipProjectReview, setSkipProjectReview] = useState<boolean>(false);
+  const [showFixProjectModal, setShowFixProjectModal] = useState<boolean>(false);
+  const [showProjectIncompatibleListModal, setShowProjectIncompatibleListModal] = useState<boolean>(false);
 
   // Audio Pool status
   const [audioPoolStatus, setAudioPoolStatus] = useState<AudioPoolStatus | null>(null);
@@ -369,6 +394,57 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         });
     }
   }, [operation, projectPath]);
+
+  // Scan for incompatible files when Fix Project Samples is selected: every
+  // slot (Flex or Static) with a path set and a non-compatible rating, plus
+  // any other incompatible audio file found recursively in the project's own
+  // directory that isn't already covered by a slot reference above.
+  useEffect(() => {
+    if (operation !== "fix_project_samples") return;
+    let cancelled = false;
+    setLoadingProjectSamples(true);
+    (async () => {
+      try {
+        const allSlots = [...sampleSlots.flex_slots, ...sampleSlots.static_slots];
+        const referenced: IncompatibleFile[] = [];
+        const referencedPaths = new Set<string>();
+        const poolPath = audioPoolStatus?.path ?? null;
+        for (const slot of allSlots) {
+          if (!slot.path || !slot.compatibility || slot.compatibility === 'compatible') continue;
+          const resolved = `${projectPath}/${slot.path}`;
+          referencedPaths.add(resolved);
+          const source: 'pool' | 'project' = poolPath && resolved.toLowerCase().startsWith(poolPath.toLowerCase())
+            ? 'pool'
+            : 'project';
+          referenced.push({ path: resolved, compatibility: slot.compatibility, source });
+        }
+
+        const allProjectPaths = (await invoke<string[]>('list_audio_files_recursive', { path: projectPath })) ?? [];
+        if (cancelled) return;
+        setProjectScanTotal(allProjectPaths.length);
+        const unreferencedPaths = allProjectPaths.filter(p => !referencedPaths.has(p));
+        const otherAudio = unreferencedPaths
+          .filter(p => audioKind(p) === 'other-audio')
+          .map(p => ({ path: p, compatibility: 'unsupported_format', source: 'project' as const }));
+        const nativePaths = unreferencedPaths.filter(p => audioKind(p) === 'native');
+        const checks = nativePaths.length
+          ? await invoke<{ path: string; compatibility: string }[]>('inspect_audio_files', { paths: nativePaths })
+          : [];
+        if (cancelled) return;
+        const unreferenced = (checks ?? [])
+          .filter(c => c.compatibility !== 'compatible')
+          .map(c => ({ path: c.path, compatibility: c.compatibility, source: 'project' as const }));
+
+        setProjectIncompatibleFiles([...referenced, ...unreferenced, ...otherAudio]);
+      } catch (err) {
+        console.error("Error scanning project samples:", err);
+        setProjectIncompatibleFiles([]);
+      } finally {
+        if (!cancelled) setLoadingProjectSamples(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [operation, projectPath, sampleSlots, audioPoolStatus]);
 
   // Collect all available projects from context
   const availableProjects: ProjectOption[] = [];
@@ -832,8 +908,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     <div className="tools-panel">
       {/* Operation Selector */}
       <div className="tools-section">
-        <label className="tools-label">Operation</label>
+        <label className="tools-label" htmlFor="tools-operation-select">Operation</label>
         <select
+          id="tools-operation-select"
           className="tools-select"
           value={operation}
           onChange={(e) => setOperation(e.target.value as OperationType)}
@@ -844,6 +921,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           <option value="copy_tracks">Copy Tracks</option>
           <option value="copy_sample_slots">Copy Sample Slots</option>
           <option value="fix_missing_samples">Fix Missing Samples</option>
+          <option value="fix_project_samples">Fix Project Samples</option>
         </select>
       </div>
 
@@ -2974,8 +3052,78 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         </div>
       )}
 
+      {/* Fix Project Samples Panel */}
+      {operation === "fix_project_samples" && (
+        <div className="tools-fix-missing-layout">
+          <div className="tools-description-pane">
+            <p>
+              Scans every sample slot referencing an incompatible audio file (wherever it
+              physically lives - this project's own directory or the shared Audio Pool),
+              plus any other incompatible audio file found recursively in this project's
+              own directory. Execute converts them to 44.1 kHz WAV in place: the original
+              file is replaced, and sample slots referencing it in any project of this Set
+              are updated to the new file (each modified project is backed up first).
+            </p>
+          </div>
+
+          {projectIncompatibleFiles.length > 0 && (
+            <div className="tools-options-panel">
+              <h3>Options</h3>
+              <div className="tools-field tools-checkbox">
+                <label title="Show the review screen listing planned conversions before applying them">
+                  <input
+                    type="checkbox"
+                    checked={!skipProjectReview}
+                    onChange={(e) => setSkipProjectReview(!e.target.checked)}
+                  />
+                  Review before applying changes
+                </label>
+              </div>
+            </div>
+          )}
+
+          <div className="tools-fix-status-panel">
+            <h3>Status</h3>
+            {loadingProjectSamples ? (
+              <div className="tools-fix-status loading">
+                <span className="loading-spinner-small"></span>
+                <span>Scanning project samples...</span>
+              </div>
+            ) : projectIncompatibleFiles.length === 0 ? (
+              <div className="tools-fix-status all-good">
+                <div className="tools-fix-status-count">0</div>
+                <div className="tools-fix-status-label">incompatible audio files - this project's samples are all playable by the Octatrack</div>
+              </div>
+            ) : (
+              <button
+                className="tools-missing-files-summary"
+                onClick={() => setShowProjectIncompatibleListModal(true)}
+                title="Click to view the incompatible files list"
+              >
+                <span className="tools-fix-status-count">{projectIncompatibleFiles.length}</span>
+                {" "}incompatible audio file{projectIncompatibleFiles.length !== 1 ? "s" : ""}
+                <span className="tools-fix-status-detail">{" - "}of {projectScanTotal} scanned</span>
+              </button>
+            )}
+          </div>
+
+          {projectIncompatibleFiles.length > 0 && (
+            <div className="tools-actions">
+              <button
+                className="tools-execute-btn"
+                onClick={() => setShowFixProjectModal(true)}
+                disabled={loadingProjectSamples}
+              >
+                <i className="fas fa-wrench"></i>
+                Execute
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Execute Button */}
-      {operation !== "fix_missing_samples" && (
+      {operation !== "fix_missing_samples" && operation !== "fix_project_samples" && (
       <div className="tools-actions">
         <button
           className="tools-execute-btn"
@@ -3426,6 +3574,29 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             invoke<MissingSample[]>("list_missing_samples", { projectPath })
               .then(setMissingSamples)
               .catch(() => setMissingSamples([]));
+            if (onProjectRefresh) onProjectRefresh();
+          }}
+        />
+      )}
+
+      {/* Project Incompatible Samples List Modal */}
+      {showProjectIncompatibleListModal && (
+        <ProjectIncompatibleListModal
+          projectPath={projectPath}
+          files={projectIncompatibleFiles}
+          onClose={() => setShowProjectIncompatibleListModal(false)}
+        />
+      )}
+
+      {/* Fix Project Samples Modal */}
+      {showFixProjectModal && operation === "fix_project_samples" && (
+        <FixProjectFilesModal
+          projectPath={projectPath}
+          files={projectIncompatibleFiles}
+          skipReview={skipProjectReview}
+          onClose={() => setShowFixProjectModal(false)}
+          onFixed={(_res: PoolFixResult) => {
+            setShowFixProjectModal(false);
             if (onProjectRefresh) onProjectRefresh();
           }}
         />
