@@ -4,8 +4,9 @@ import { test, expect, Page } from '@playwright/test'
 // fix_pool_files calls are recorded on window.__fixCalls for assertions. Pass
 // projectFiles to also seed one sibling project directory (PROJ1) whose
 // audio files list_audio_files_recursive returns for that project's path.
-async function setupMocks(page: Page, options: { projectFiles?: string[] } = {}) {
-  await page.addInitScript((projectFiles: string[]) => {
+async function setupMocks(page: Page, options: { projectFiles?: string[]; rejectListSetProjects?: boolean } = {}) {
+  await page.addInitScript((opts: { projectFiles: string[]; rejectListSetProjects: boolean }) => {
+    const { projectFiles, rejectListSetProjects } = opts
     ;(window as any).__fixCalls = []
     ;(window as any).__inspectCalls = []
     ;(window as any).__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} }
@@ -29,6 +30,7 @@ async function setupMocks(page: Page, options: { projectFiles?: string[] } = {})
               { name: 'loop.mp3', size: 4096, channels: 2, bit_rate: 0, sample_rate: 44100, is_directory: false, path: `${args?.path || ''}/loop.mp3` },
             ]
           case 'list_set_projects':
+            if (rejectListSetProjects) throw new Error('mocked list_set_projects failure')
             return projectFiles.length ? [{ name: 'PROJ1', path: '/test/set/PROJ1' }] : []
           case 'list_audio_files_recursive':
             if (args?.path === '/test/set/PROJ1') return projectFiles
@@ -74,7 +76,7 @@ async function setupMocks(page: Page, options: { projectFiles?: string[] } = {})
         }
       },
     }
-  }, options.projectFiles ?? [])
+  }, { projectFiles: options.projectFiles ?? [], rejectListSetProjects: options.rejectListSetProjects ?? false })
 }
 
 async function openPage(page: Page) {
@@ -426,5 +428,33 @@ test.describe('Audio Pool — include all projects of set', () => {
       '/test/set/AUDIO/loop.mp3',
       '/test/set/PROJ1/kick_project.mp3',
     ])
+  })
+
+  test('the Location column renders pool files as AUDIO/... and project-local files as PROJ1/...', async ({ page }) => {
+    await page.locator('.header-tab', { hasText: 'Tools' }).click()
+    await page.locator('.tools-missing-files-summary').click()
+    const listModal = page.locator('.missing-samples-list-modal')
+    await expect(listModal).toBeVisible()
+
+    // Location is visible by default in this modal (usePoolTable is called with no
+    // defaultHidden override for the list modal, unlike the review modal)
+    const rows = listModal.locator('tbody tr')
+    await expect(rows.filter({ hasText: 'snare48.wav' }).locator('.fix-location-cell')).toHaveText('AUDIO/')
+    await expect(rows.filter({ hasText: 'kick_project.mp3' }).locator('.fix-location-cell')).toHaveText('PROJ1/')
+  })
+})
+
+test.describe('Audio Pool — list_set_projects failure resilience', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupMocks(page, { rejectListSetProjects: true })
+    await openPage(page)
+  })
+
+  test('a failing list_set_projects does not produce a false all-compatible status for the pool itself', async ({ page }) => {
+    await page.locator('.header-tab', { hasText: 'Tools' }).click()
+    // The pool's own 2 incompatible files (snare48.wav, loop.mp3) must still be
+    // reported, not masked by the failed project-listing step
+    await expect(page.locator('.tools-missing-files-summary')).toContainText('2')
+    await expect(page.getByText('the whole Audio Pool is playable')).toHaveCount(0)
   })
 })

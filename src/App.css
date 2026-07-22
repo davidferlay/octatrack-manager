@@ -5450,6 +5450,13 @@ th.col-usage .header-content .filter-icon {
   color: var(--elektron-text-primary);
 }
 
+.tools-fix-status-skip-notice {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--elektron-text-secondary);
+  text-align: center;
+}
+
 /* Scoped toggle group for fix-missing (pill-style for 2-option toggles) */
 .tools-fix-missing-layout .tools-field label {
   color: var(--elektron-text-primary);

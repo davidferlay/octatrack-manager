@@ -265,6 +265,7 @@ export function AudioPoolPage() {
   const [poolFileCount, setPoolFileCount] = useState(0);
   const [projectFileCount, setProjectFileCount] = useState(0);
   const [projectCount, setProjectCount] = useState(0);
+  const [projectsSkipped, setProjectsSkipped] = useState(0);
   const [incompatibleFiles, setIncompatibleFiles] = useState<IncompatibleFile[]>([]);
   const [poolScanKey, setPoolScanKey] = useState(0);
   const [includeAllProjects, setIncludeAllProjects] = useState(true);
@@ -273,22 +274,25 @@ export function AudioPoolPage() {
     let cancelled = false;
     setPoolScanLoading(true);
     setProjectCount(0);
+    setProjectsSkipped(0);
     (async () => {
       try {
         const poolPaths = (await invoke<string[]>('list_audio_files_recursive', { path: audioPoolPath })) ?? [];
         if (cancelled) return;
         setPoolFileCount(poolPaths.length);
 
-        const projects = (await invoke<{ name: string; path: string }[]>('list_set_projects', { poolPath: audioPoolPath })) ?? [];
+        const projects = (await invoke<{ name: string; path: string }[]>('list_set_projects', { poolPath: audioPoolPath }).catch(() => [])) ?? [];
         if (cancelled) return;
         setProjectCount(projects.length);
 
-        const projectFileLists = await Promise.all(
-          projects.map(p => invoke<string[]>('list_audio_files_recursive', { path: p.path }).catch(() => []))
+        const projectScanResults = await Promise.allSettled(
+          projects.map(p => invoke<string[]>('list_audio_files_recursive', { path: p.path }))
         );
         if (cancelled) return;
-        const projectPaths = projectFileLists.flat();
+        const projectPaths = projectScanResults.flatMap(r => r.status === 'fulfilled' ? (r.value ?? []) : []);
+        const skippedCount = projectScanResults.filter(r => r.status === 'rejected').length;
         setProjectFileCount(projectPaths.length);
+        setProjectsSkipped(skippedCount);
 
         const tagged: { path: string; source: 'pool' | 'project' }[] = [
           ...poolPaths.map(p => ({ path: p, source: 'pool' as const })),
@@ -1474,12 +1478,12 @@ export function AudioPoolPage() {
                   <span className="loading-spinner-small"></span>
                   <span>{projectCount > 0 ? `Scanning Audio Pool and ${projectCount} project${projectCount !== 1 ? 's' : ''}...` : 'Scanning Audio Pool...'}</span>
                 </div>
-              ) : scopedIncompatibleFiles.length === 0 ? (
+              ) : poolScanDone && scopedIncompatibleFiles.length === 0 ? (
                 <div className="tools-fix-status all-good">
                   <div className="tools-fix-status-count">0</div>
                   <div className="tools-fix-status-label">incompatible audio files - the whole Audio Pool is playable by the Octatrack</div>
                 </div>
-              ) : (
+              ) : !poolScanDone ? null : (
                 <button
                   className="tools-missing-files-summary"
                   onClick={() => setShowPoolList(true)}
@@ -1489,6 +1493,11 @@ export function AudioPoolPage() {
                   {" "}incompatible audio file{scopedIncompatibleFiles.length !== 1 ? 's' : ''}
                   <span className="tools-fix-status-detail">{" - "}of {scopedScanTotal} scanned</span>
                 </button>
+              )}
+              {!poolScanLoading && projectsSkipped > 0 && (
+                <div className="tools-fix-status-skip-notice" title="These projects could not be scanned - check they still exist and are readable">
+                  {projectsSkipped} project{projectsSkipped !== 1 ? 's' : ''} could not be scanned and {projectsSkipped !== 1 ? 'were' : 'was'} skipped
+                </div>
               )}
             </div>
             {(poolScanLoading || scopedIncompatibleFiles.length > 0) && (
