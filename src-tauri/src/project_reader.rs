@@ -5481,6 +5481,35 @@ fn set_project_files(
     Ok(out)
 }
 
+/// One project directory in a set, for the Audio Pool's "include all
+/// projects of set" scan scope.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetProjectInfo {
+    pub name: String,
+    pub path: String,
+}
+
+/// Every project directory in the pool's set, as name/path pairs. Thin
+/// wrapper over `set_project_files`, dropping the project-file half of the
+/// pair since callers here only need to know where each project lives, not
+/// which of `project.work`/`.strd` it uses.
+pub fn list_set_projects(pool_path: &str) -> Result<Vec<SetProjectInfo>, String> {
+    let pool_dir = normalize_path_lexically(Path::new(pool_path));
+    let set_dir = pool_dir
+        .parent()
+        .ok_or_else(|| "Cannot determine set directory from pool path".to_string())?;
+    Ok(set_project_files(set_dir, &pool_dir)?
+        .into_iter()
+        .map(|(project_dir, _)| SetProjectInfo {
+            name: project_dir
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default(),
+            path: project_dir.to_string_lossy().to_string(),
+        })
+        .collect())
+}
+
 /// After pool files were converted and renamed, repoint every [SAMPLE] PATH= line
 /// (in every project of the set) that resolved to an old pool path onto the new
 /// file name. Only the basename of the stored path changes, so relative/absolute
@@ -18274,6 +18303,33 @@ mod tests {
         fn pool_usage_key_is_forward_slash_and_lowercase_even_from_a_windows_style_path() {
             let key = pool_usage_key(Path::new("C:\\Users\\Test\\AUDIO\\Kick.WAV"));
             assert_eq!(key, "c:/users/test/audio/kick.wav");
+        }
+    }
+
+    mod list_set_projects_tests {
+        use super::*;
+
+        #[test]
+        fn lists_project_dirs_with_name_and_path_excluding_pool_and_non_projects() {
+            let temp = TempDir::new().unwrap();
+            let set = temp.path();
+            fs::create_dir(set.join("AUDIO")).unwrap();
+            fs::create_dir(set.join("PROJ1")).unwrap();
+            fs::write(set.join("PROJ1").join("project.work"), b"").unwrap();
+            fs::create_dir(set.join("PROJ2")).unwrap();
+            fs::write(set.join("PROJ2").join("project.strd"), b"").unwrap();
+            // A directory with neither project file must be excluded
+            fs::create_dir(set.join("NotAProject")).unwrap();
+
+            let pool = set.join("AUDIO");
+            let mut projects = list_set_projects(&pool.to_string_lossy()).unwrap();
+            projects.sort_by(|a, b| a.name.cmp(&b.name));
+
+            assert_eq!(projects.len(), 2, "AUDIO and NotAProject must be excluded");
+            assert_eq!(projects[0].name, "PROJ1");
+            assert_eq!(projects[0].path, set.join("PROJ1").to_string_lossy());
+            assert_eq!(projects[1].name, "PROJ2");
+            assert_eq!(projects[1].path, set.join("PROJ2").to_string_lossy());
         }
     }
 
