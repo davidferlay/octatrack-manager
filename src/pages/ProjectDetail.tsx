@@ -2301,6 +2301,7 @@ export function ProjectDetail() {
                 onProjectRefresh={refreshProjectData}
                 sampleSlots={metadata.sample_slots}
                 initialOperation={toolsInitialOperation}
+                onInitialOperationConsumed={() => setToolsInitialOperation(undefined)}
               />
             )}
 

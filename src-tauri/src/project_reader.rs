@@ -5524,6 +5524,7 @@ fn update_references_in_set(
     exclude_dir: Option<&Path>,
     renames: &[(String, String)],
     backup_label: &str,
+    only_project: Option<&Path>,
 ) -> Result<PoolReferenceUpdate, String> {
     // old normalized absolute path (lowercased) -> new basename
     let rename_map: std::collections::HashMap<String, String> = renames
@@ -5540,7 +5541,12 @@ fn update_references_in_set(
     let mut projects_updated = Vec::new();
     let mut slots_updated: u32 = 0;
 
-    for (project_dir, project_file) in set_project_files(set_dir, exclude_dir)? {
+    let mut projects = set_project_files(set_dir, exclude_dir)?;
+    if let Some(only) = only_project {
+        projects.retain(|(dir, _)| dir.as_path() == only);
+    }
+
+    for (project_dir, project_file) in projects {
         let raw_bytes = std::fs::read(&project_file)
             .map_err(|e| format!("Failed to read project file: {}", e))?;
         let (decoded, _, _) = encoding_rs::WINDOWS_1258.decode(&raw_bytes);
@@ -5636,7 +5642,7 @@ pub fn update_pool_references(
     let set_dir = pool_dir
         .parent()
         .ok_or_else(|| "Cannot determine set directory from pool path".to_string())?;
-    update_references_in_set(set_dir, Some(&pool_dir), renames, "fix_audio_pool")
+    update_references_in_set(set_dir, Some(&pool_dir), renames, "fix_audio_pool", None)
 }
 
 /// After a project's own or pool-shared files were converted and renamed,
@@ -5650,6 +5656,13 @@ pub fn update_pool_references(
 /// naturally excludes any Audio Pool folder sitting alongside (it never
 /// contains a project file) - so no `exclude_dir` is needed here.
 ///
+/// However, sibling projects in the same parent folder are only ever scanned
+/// when this project is genuinely part of a Set (per `is_project_in_set`,
+/// i.e. an `AUDIO` folder sits alongside it). For a standalone project that
+/// merely happens to share a parent folder with other projects, only that
+/// project's own references are updated - cross-project reach is never
+/// implied just because paths happen to collide on disk.
+///
 /// `renames` holds (old_absolute_path, new_absolute_path) pairs.
 pub fn update_project_references(
     project_path: &str,
@@ -5659,7 +5672,9 @@ pub fn update_project_references(
     let set_dir = project_dir
         .parent()
         .ok_or_else(|| "Cannot determine set directory from project path".to_string())?;
-    update_references_in_set(set_dir, None, renames, "fix_project_samples")
+    let in_set = is_project_in_set(project_path).unwrap_or(false);
+    let only_project = if in_set { None } else { Some(project_dir.as_path()) };
+    update_references_in_set(set_dir, None, renames, "fix_project_samples", only_project)
 }
 
 // ============================================================================
@@ -18198,6 +18213,10 @@ mod tests {
         fn project_local_rename_updates_owning_and_sibling_projects() {
             let temp = TempDir::new().unwrap();
             let set = temp.path();
+            // An AUDIO folder alongside PROJ1/PROJ2 is what makes this a genuine
+            // Set (per `is_project_in_set`) - without it, cross-project reach
+            // into PROJ2 would now be gated off by the standalone-project fix.
+            fs::create_dir(set.join("AUDIO")).unwrap();
             fs::create_dir(set.join("PROJ1")).unwrap();
             fs::create_dir(set.join("PROJ2")).unwrap();
 
@@ -18287,6 +18306,68 @@ mod tests {
             assert!(res.projects_updated.is_empty());
             assert_eq!(read_raw_project_work(&set.join("PROJ")), content);
             assert!(!set.join("PROJ").join("backups").exists(), "no backup made");
+        }
+
+        #[test]
+        fn standalone_project_rename_does_not_update_sibling_projects() {
+            let temp = TempDir::new().unwrap();
+            let set = temp.path();
+            // Deliberately NO "AUDIO" folder here: per `is_project_in_set`, PROJ1
+            // is standalone even though PROJ2 happens to share its parent folder.
+            fs::create_dir(set.join("PROJ1")).unwrap();
+            fs::create_dir(set.join("PROJ2")).unwrap();
+
+            // PROJ1 references its own local file "kick.mp3"
+            let content1 = create_raw_project_work_with_custom_fields(&[(
+                "FLEX",
+                1,
+                "kick.mp3",
+                Some(3408),
+                Some(-1),
+                Some(400),
+            )]);
+            write_raw_project_work(&set.join("PROJ1"), &content1);
+
+            // PROJ2 happens to reference the same file via a relative path escaping
+            // into PROJ1's directory - since PROJ1 is standalone (no Set), this
+            // sibling must NOT be touched by fixing PROJ1's own samples.
+            let content2 = create_raw_project_work_with_custom_fields(&[(
+                "FLEX",
+                2,
+                "../PROJ1/kick.mp3",
+                None,
+                None,
+                None,
+            )]);
+            write_raw_project_work(&set.join("PROJ2"), &content2);
+
+            let proj1 = set.join("PROJ1");
+            let renames = vec![(
+                proj1.join("kick.mp3").to_string_lossy().to_string(),
+                proj1.join("kick.wav").to_string_lossy().to_string(),
+            )];
+            let res = update_project_references(&proj1.to_string_lossy(), &renames).unwrap();
+
+            assert_eq!(
+                res.slots_updated, 1,
+                "only the owning (standalone) project is updated"
+            );
+            assert_eq!(res.projects_updated.len(), 1);
+            assert_eq!(res.projects_updated[0], proj1.to_string_lossy().to_string());
+
+            let out1 = read_raw_project_work(&set.join("PROJ1"));
+            assert!(out1.contains("PATH=kick.wav"), "owning project's own ref updated");
+            assert!(out1.contains("BPMx24=3408"), "other fields preserved");
+
+            let out2 = read_raw_project_work(&set.join("PROJ2"));
+            assert_eq!(
+                out2, content2,
+                "sibling project must be left completely untouched (not part of a Set)"
+            );
+            assert!(
+                !set.join("PROJ2").join("backups").exists(),
+                "sibling project must not even be backed up"
+            );
         }
     }
 

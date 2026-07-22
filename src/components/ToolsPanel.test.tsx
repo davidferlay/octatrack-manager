@@ -98,4 +98,61 @@ describe('ToolsPanel - Fix Project Samples', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Execute' }))
     expect(screen.getByText(/Review planned changes/)).toBeInTheDocument()
   })
+
+  it('dedupes multiple slots referencing the same resolved file into a single incompatible entry', async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'list_audio_files_recursive') return Promise.resolve([])
+      if (cmd === 'inspect_audio_files') return Promise.resolve([])
+      return Promise.resolve(null)
+    })
+    renderPanel({
+      initialOperation: 'fix_project_samples',
+      sampleSlots: {
+        // Two Flex slots and one Static slot all resolve to the SAME physical
+        // file ('kick.mp3' in the project root). Without dedup by resolved
+        // path, this would inflate the count to 3 and list the file 3 times.
+        flex_slots: [
+          { path: 'kick.mp3', compatibility: 'unknown' },
+          { path: 'kick.mp3', compatibility: 'unsupported_format' },
+        ],
+        static_slots: [
+          { path: 'kick.mp3', compatibility: 'unknown' },
+        ],
+      },
+    })
+    // Only one incompatible file should be counted, not three, despite three
+    // slots referencing the same resolved path.
+    await waitFor(() => expect(screen.getByText('1')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /incompatible audio file/ })).toHaveTextContent('1')
+    expect(screen.queryByText(/^3$/)).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /incompatible audio file/ }))
+    // The list modal must also show a single row for this file, not three.
+    expect(await screen.findByText('Showing 1 of 1 files')).toBeInTheDocument()
+  })
+})
+
+describe('ToolsPanel - initialOperation one-shot consumption', () => {
+  it('calls onInitialOperationConsumed exactly once when initialOperation is applied', async () => {
+    invokeMock.mockResolvedValue(null)
+    const onInitialOperationConsumed = vi.fn()
+    renderPanel({ initialOperation: 'fix_project_samples', onInitialOperationConsumed })
+
+    await waitFor(() => expect(screen.getByRole('combobox', { name: /operation/i })).toHaveValue('fix_project_samples'))
+    expect(onInitialOperationConsumed).toHaveBeenCalledTimes(1)
+
+    // Flush any remaining mount-time effects so state updates settle inside
+    // an act() boundary before the test ends.
+    await waitFor(() => {})
+    expect(onInitialOperationConsumed).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not call onInitialOperationConsumed when initialOperation is not set', async () => {
+    invokeMock.mockResolvedValue(null)
+    const onInitialOperationConsumed = vi.fn()
+    renderPanel({ onInitialOperationConsumed })
+
+    await waitFor(() => {})
+    expect(onInitialOperationConsumed).not.toHaveBeenCalled()
+  })
 })

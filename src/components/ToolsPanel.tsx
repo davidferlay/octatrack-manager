@@ -84,6 +84,7 @@ interface ToolsPanelProps {
   onProjectRefresh?: () => void;
   sampleSlots?: { flex_slots: CompatSlot[]; static_slots: CompatSlot[] };
   initialOperation?: OperationType;
+  onInitialOperationConsumed?: () => void;
 }
 
 interface ProjectOption {
@@ -160,7 +161,7 @@ interface OctatrackLocation {
   sets: OctatrackSet[];
 }
 
-export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices, onBankUpdated, onProjectRefresh, sampleSlots = { flex_slots: [], static_slots: [] }, initialOperation }: ToolsPanelProps) {
+export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices, onBankUpdated, onProjectRefresh, sampleSlots = { flex_slots: [], static_slots: [] }, initialOperation, onInitialOperationConsumed }: ToolsPanelProps) {
   const { locations, standaloneProjects, setLocations, setStandaloneProjects, setHasScanned } = useProjects();
 
   // Load saved settings (per-project, session-only)
@@ -172,7 +173,14 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   // Lets a caller (e.g. the health glyph on the Sample Slots tabs) jump straight
   // to a specific operation instead of whatever was last selected/persisted.
   useEffect(() => {
-    if (initialOperation) setOperation(initialOperation);
+    if (initialOperation) {
+      setOperation(initialOperation);
+      onInitialOperationConsumed?.();
+    }
+    // onInitialOperationConsumed intentionally omitted: it's a one-shot callback,
+    // and including it would risk re-firing if the parent passes a new function
+    // reference across renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialOperation]);
 
   // Source selection (current project only)
@@ -406,11 +414,14 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   // pool-status check resolves from null to a real value shortly after mount.
   const referencedSlotEntries = useMemo(() => {
     const allSlots = [...sampleSlots.flex_slots, ...sampleSlots.static_slots];
+    const seen = new Set<string>();
     const out: { path: string; compatibility: string }[] = [];
     for (const slot of allSlots) {
       if (!slot.path || !slot.compatibility || slot.compatibility === 'compatible') continue;
       const isAbsolute = slot.path.startsWith('/') || /^[A-Za-z]:/.test(slot.path);
       const resolved = normalizePath(isAbsolute ? slot.path : `${projectPath}/${slot.path}`);
+      if (seen.has(resolved)) continue;
+      seen.add(resolved);
       out.push({ path: resolved, compatibility: slot.compatibility });
     }
     return out;
