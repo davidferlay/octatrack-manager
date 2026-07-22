@@ -99,6 +99,8 @@ Right-click any file with a non-smiley **Compat** badge and choose **Convert to 
 
 The **Tools** tab of the Audio Pool page hosts **Fix Audio Pool Samples**. Its Status pane reports how many audio files of the pool the Octatrack cannot play — just like the project's [Fix Missing Samples](fix-missing-samples.md) tool. Click the status summary to browse the list: File, Format, Bit, kHz, Size and Location columns, all sortable, filterable and drag-resizable, with search, a toggle-columns menu and copy to clipboard (the modal itself can be resized horizontally and vertically). **Execute** shows a **Review planned changes** screen with the same columns plus an Action column describing what each conversion will do before anything is touched (Location is hidden by default there — bring it back with the toggle-columns menu) — untick **Review before applying changes** in the Options panel to have Execute convert right away. Conversion runs with per-file progress and a Cancel button.
 
+The **Include all projects of set** checkbox, checked by default, widens the scan beyond the pool itself: every audio file sitting in any project's own directory is checked too, not just files already assigned to a sample slot. Untick it to narrow the Status count, the list and the review screen back down to pool files only — no rescan happens either way, it's an instant filter over what was already found. Location shows each file's own top-level folder, so a project-local file reads as `MyProject/` instead of `AUDIO/...`.
+
 ### What a fix does
 
 - The file is converted to **44.1 kHz 16/24-bit WAV** — the same high-quality conversion used during import.

@@ -1,9 +1,11 @@
 import { test, expect, Page } from '@playwright/test'
 
 // Mocks the Audio Pool page with one compatible and two incompatible pool files.
-// fix_pool_files calls are recorded on window.__fixCalls for assertions.
-async function setupMocks(page: Page) {
-  await page.addInitScript(() => {
+// fix_pool_files calls are recorded on window.__fixCalls for assertions. Pass
+// projectFiles to also seed one sibling project directory (PROJ1) whose
+// audio files list_audio_files_recursive returns for that project's path.
+async function setupMocks(page: Page, options: { projectFiles?: string[] } = {}) {
+  await page.addInitScript((projectFiles: string[]) => {
     ;(window as any).__fixCalls = []
     ;(window as any).__inspectCalls = []
     ;(window as any).__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} }
@@ -26,7 +28,10 @@ async function setupMocks(page: Page) {
               { name: 'snare48.wav', size: 2048, channels: 2, bit_rate: 16, sample_rate: 48000, is_directory: false, path: `${args?.path || ''}/snare48.wav` },
               { name: 'loop.mp3', size: 4096, channels: 2, bit_rate: 0, sample_rate: 44100, is_directory: false, path: `${args?.path || ''}/loop.mp3` },
             ]
+          case 'list_set_projects':
+            return projectFiles.length ? [{ name: 'PROJ1', path: '/test/set/PROJ1' }] : []
           case 'list_audio_files_recursive':
+            if (args?.path === '/test/set/PROJ1') return projectFiles
             return [`${pool}/kick.wav`, `${pool}/snare48.wav`, `${pool}/loop.mp3`]
           case 'inspect_audio_files':
             ;(window as any).__inspectCalls.push(args?.paths ?? [])
@@ -69,7 +74,7 @@ async function setupMocks(page: Page) {
         }
       },
     }
-  })
+  }, options.projectFiles ?? [])
 }
 
 async function openPage(page: Page) {
@@ -285,7 +290,7 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await expect(listModal).toHaveCount(0)
 
     // Execute with "Review before applying changes" on (default) shows the review screen
-    await expect(page.locator('.tools-options-panel input[type="checkbox"]')).toBeChecked()
+    await expect(page.getByLabel('Review before applying changes')).toBeChecked()
     await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()
 
     const modal = page.locator('.fix-pool-modal')
@@ -352,7 +357,7 @@ test.describe('Audio Pool — fix incompatible files', () => {
 
   test('disabling the review option makes Execute apply immediately', async ({ page }) => {
     await page.locator('.header-tab', { hasText: 'Tools' }).click()
-    await page.locator('.tools-options-panel input[type="checkbox"]').uncheck()
+    await page.getByLabel('Review before applying changes').uncheck()
     await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()
 
     const modal = page.locator('.fix-pool-modal')
@@ -372,5 +377,54 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await expect(dest.locator('tr', { hasText: 'kick.wav' }).locator('.usage-none')).toHaveText('—')
     await row.getByText('✓ 1').click()
     await expect(page.getByText('ProjectA · Bank A · Part 1 · T1 · Machine')).toBeVisible()
+  })
+})
+
+test.describe('Audio Pool — include all projects of set', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupMocks(page, { projectFiles: ['/test/set/PROJ1/kick_project.mp3'] })
+    await openPage(page)
+  })
+
+  test('scans project directories by default and lets the checkbox filter them out without rescanning', async ({ page }) => {
+    await page.locator('.header-tab', { hasText: 'Tools' }).click()
+
+    // Default: checkbox on, scan covers pool (3 files) + the project (1 file) = 4 scanned, 3 incompatible
+    const summary = page.locator('.tools-missing-files-summary')
+    await expect(summary).toContainText('3')
+    await expect(summary).toContainText('of 4 scanned')
+
+    const includeAllCheckbox = page.getByLabel('Include all projects of set')
+    await expect(includeAllCheckbox).toBeChecked()
+
+    await summary.click()
+    const listModal = page.locator('.missing-samples-list-modal')
+    await expect(listModal.locator('tbody tr')).toHaveCount(3)
+    await expect(listModal.locator('tbody')).toContainText('PROJ1')
+    await page.keyboard.press('Escape')
+
+    const scansBefore = await page.evaluate(() => (window as any).__inspectCalls.length)
+
+    // Unchecking hides the project-local file and drops the denominator, without a new scan
+    await includeAllCheckbox.uncheck()
+    await expect(summary).toContainText('2')
+    await expect(summary).toContainText('of 3 scanned')
+    const scansAfter = await page.evaluate(() => (window as any).__inspectCalls.length)
+    expect(scansAfter).toBe(scansBefore)
+  })
+
+  test('executing with the checkbox on fixes both the pool file and the project-local file', async ({ page }) => {
+    await page.locator('.header-tab', { hasText: 'Tools' }).click()
+    await expect(page.locator('.tools-missing-files-summary')).toContainText('3')
+
+    await page.getByLabel('Review before applying changes').uncheck()
+    await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()
+
+    const calls = await page.evaluate(() => (window as any).__fixCalls)
+    expect(calls[0].filePaths).toEqual([
+      '/test/set/AUDIO/snare48.wav',
+      '/test/set/AUDIO/loop.mp3',
+      '/test/set/PROJ1/kick_project.mp3',
+    ])
   })
 })

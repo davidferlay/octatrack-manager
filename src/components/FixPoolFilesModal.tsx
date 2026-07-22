@@ -6,6 +6,7 @@ import { getFileFormat, formatFileSize } from './AudioFileTable';
 export interface IncompatibleFile {
   path: string;
   compatibility: string; // "wrong_rate" | "incompatible" | "unknown"
+  source: 'pool' | 'project';
 }
 
 export interface PoolFixOutcome {
@@ -32,11 +33,19 @@ function baseName(path: string): string {
   return path.split(/[\\/]/).pop() ?? path;
 }
 
-/** Directory of `path` relative to the pool root, shown as AUDIO/... */
+/**
+ * Directory of `path` relative to the SET (the pool's parent), shown as
+ * AUDIO/... for a pool file or ProjectName/... for a project-local file -
+ * same "top-level-folder/rest" shape either way, so a pool file's rendering
+ * is unchanged from before this generalization.
+ */
 function poolLocation(path: string, poolPath: string): string {
-  const rel = path.startsWith(poolPath) ? path.slice(poolPath.length).replace(/^[/\\]/, '') : path;
-  const dir = rel.split(/[\\/]/).slice(0, -1).join('/');
-  return dir ? `AUDIO/${dir}` : 'AUDIO/';
+  const setDir = poolPath.replace(/[/\\][^/\\]+[/\\]?$/, '');
+  const rel = path.startsWith(setDir) ? path.slice(setDir.length).replace(/^[/\\]/, '') : path;
+  const parts = rel.split(/[\\/]/).slice(0, -1); // drop the filename
+  if (parts.length === 0) return '';
+  const [top, ...rest] = parts;
+  return rest.length ? `${top}/${rest.join('/')}` : `${top}/`;
 }
 
 /** What the fix will actually do to this file, from its metadata: the backend rewrites

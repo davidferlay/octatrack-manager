@@ -511,7 +511,7 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
                 const someConverting = candidates.some(p => convertingPaths.has(p));
                 const targets = candidates
                   .filter(p => !convertingPaths.has(p))
-                  .map(p => ({ path: p, compatibility: compatMap[p] }));
+                  .map(p => ({ path: p, compatibility: compatMap[p], source: 'pool' as const }));
                 return (
                   <button
                     className={`context-menu-item convert ${targets.length === 0 ? 'disabled' : ''}`}

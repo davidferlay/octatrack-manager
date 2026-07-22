@@ -262,22 +262,45 @@ export function AudioPoolPage() {
   // load (and after a fix). Feeds both the Tools tab status and the pane health glyph.
   const [poolScanLoading, setPoolScanLoading] = useState(false);
   const [poolScanDone, setPoolScanDone] = useState(false);
-  const [poolScanTotal, setPoolScanTotal] = useState(0);
+  const [poolFileCount, setPoolFileCount] = useState(0);
+  const [projectFileCount, setProjectFileCount] = useState(0);
+  const [projectCount, setProjectCount] = useState(0);
   const [incompatibleFiles, setIncompatibleFiles] = useState<IncompatibleFile[]>([]);
   const [poolScanKey, setPoolScanKey] = useState(0);
+  const [includeAllProjects, setIncludeAllProjects] = useState(true);
   useEffect(() => {
     if (!audioPoolPath) return;
     let cancelled = false;
     setPoolScanLoading(true);
+    setProjectCount(0);
     (async () => {
       try {
-        const paths = (await invoke<string[]>('list_audio_files_recursive', { path: audioPoolPath })) ?? [];
+        const poolPaths = (await invoke<string[]>('list_audio_files_recursive', { path: audioPoolPath })) ?? [];
         if (cancelled) return;
-        setPoolScanTotal(paths.length);
+        setPoolFileCount(poolPaths.length);
+
+        const projects = (await invoke<{ name: string; path: string }[]>('list_set_projects', { poolPath: audioPoolPath })) ?? [];
+        if (cancelled) return;
+        setProjectCount(projects.length);
+
+        const projectFileLists = await Promise.all(
+          projects.map(p => invoke<string[]>('list_audio_files_recursive', { path: p.path }).catch(() => []))
+        );
+        if (cancelled) return;
+        const projectPaths = projectFileLists.flat();
+        setProjectFileCount(projectPaths.length);
+
+        const tagged: { path: string; source: 'pool' | 'project' }[] = [
+          ...poolPaths.map(p => ({ path: p, source: 'pool' as const })),
+          ...projectPaths.map(p => ({ path: p, source: 'project' as const })),
+        ];
         // Only WAV/AIFF need header inspection; other audio formats are unplayable by definition
-        const otherAudio = paths.filter(p => audioKind(p) === 'other-audio')
-          .map(p => ({ path: p, compatibility: 'unsupported_format' }));
-        const nativePaths = paths.filter(p => audioKind(p) === 'native');
+        const otherAudio = tagged
+          .filter(t => audioKind(t.path) === 'other-audio')
+          .map(t => ({ path: t.path, compatibility: 'unsupported_format', source: t.source }));
+        const native = tagged.filter(t => audioKind(t.path) === 'native');
+        const sourceByPath = new Map(native.map(t => [t.path, t.source]));
+        const nativePaths = native.map(t => t.path);
         const checks = nativePaths.length
           ? await invoke<{ path: string; compatibility: string }[]>('inspect_audio_files', { paths: nativePaths })
           : [];
@@ -285,7 +308,7 @@ export function AudioPoolPage() {
         setIncompatibleFiles([
           ...(checks ?? [])
             .filter(c => c.compatibility !== 'compatible')
-            .map(c => ({ path: c.path, compatibility: c.compatibility })),
+            .map(c => ({ path: c.path, compatibility: c.compatibility, source: sourceByPath.get(c.path) ?? 'pool' as const })),
           ...otherAudio,
         ]);
         setPoolScanDone(true);
@@ -297,6 +320,14 @@ export function AudioPoolPage() {
     })();
     return () => { cancelled = true; };
   }, [audioPoolPath, poolScanKey]);
+
+  // Which incompatible files are in scope for display/execute right now - a pure
+  // client-side filter over the full (pool + all projects) scan, so toggling the
+  // checkbox never re-triggers a scan.
+  const scopedIncompatibleFiles = includeAllProjects
+    ? incompatibleFiles
+    : incompatibleFiles.filter(f => f.source === 'pool');
+  const scopedScanTotal = includeAllProjects ? poolFileCount + projectFileCount : poolFileCount;
 
   // Cross-project pool file usage, for the Usage column. Re-fetched whenever the
   // health scan re-runs (poolScanKey), since fixes can shift which projects
@@ -1403,7 +1434,9 @@ export function AudioPoolPage() {
             <div className="tools-description-pane">
               <p>
                 Scans every audio file of this Set's Audio Pool and lists the ones the Octatrack
-                cannot play (wrong sample rate, bit depth or format). Execute converts them
+                cannot play (wrong sample rate, bit depth or format). With "Include all projects
+                of set" on, every audio file found in any project's own directory is scanned too,
+                not just files assigned to a sample slot. Execute converts them
                 to 44.1 kHz WAV in place: the original file is replaced, and sample slots referencing
                 it in any project of this Set are updated to the new file (each modified project is
                 backed up first).
@@ -1412,6 +1445,16 @@ export function AudioPoolPage() {
             {(poolScanLoading || incompatibleFiles.length > 0) && (
               <div className="tools-options-panel">
                 <h3>Options</h3>
+                <div className="tools-field tools-checkbox">
+                  <label title="Also scan every project of this Set for incompatible audio files, not just the Audio Pool">
+                    <input
+                      type="checkbox"
+                      checked={includeAllProjects}
+                      onChange={(e) => setIncludeAllProjects(e.target.checked)}
+                    />
+                    Include all projects of set
+                  </label>
+                </div>
                 <div className="tools-field tools-checkbox">
                   <label title="Show the review screen listing planned conversions before applying them">
                     <input
@@ -1429,9 +1472,9 @@ export function AudioPoolPage() {
               {poolScanLoading ? (
                 <div className="tools-fix-status loading">
                   <span className="loading-spinner-small"></span>
-                  <span>Scanning Audio Pool...</span>
+                  <span>{projectCount > 0 ? `Scanning Audio Pool and ${projectCount} project${projectCount !== 1 ? 's' : ''}...` : 'Scanning Audio Pool...'}</span>
                 </div>
-              ) : incompatibleFiles.length === 0 ? (
+              ) : scopedIncompatibleFiles.length === 0 ? (
                 <div className="tools-fix-status all-good">
                   <div className="tools-fix-status-count">0</div>
                   <div className="tools-fix-status-label">incompatible audio files - the whole Audio Pool is playable by the Octatrack</div>
@@ -1442,17 +1485,17 @@ export function AudioPoolPage() {
                   onClick={() => setShowPoolList(true)}
                   title="Click to view the incompatible files list"
                 >
-                  <span className="tools-fix-status-count">{incompatibleFiles.length}</span>
-                  {" "}incompatible audio file{incompatibleFiles.length !== 1 ? 's' : ''}
-                  <span className="tools-fix-status-detail">{" - "}of {poolScanTotal} scanned</span>
+                  <span className="tools-fix-status-count">{scopedIncompatibleFiles.length}</span>
+                  {" "}incompatible audio file{scopedIncompatibleFiles.length !== 1 ? 's' : ''}
+                  <span className="tools-fix-status-detail">{" - "}of {scopedScanTotal} scanned</span>
                 </button>
               )}
             </div>
-            {(poolScanLoading || incompatibleFiles.length > 0) && (
+            {(poolScanLoading || scopedIncompatibleFiles.length > 0) && (
               <div className="tools-actions">
                 <button
                   className="tools-execute-btn"
-                  onClick={() => setFixModal({ files: incompatibleFiles, skipReview: !reviewBeforeApply })}
+                  onClick={() => setFixModal({ files: scopedIncompatibleFiles, skipReview: !reviewBeforeApply })}
                   disabled={poolScanLoading}
                 >
                   <i className="fas fa-wrench"></i>
@@ -1588,14 +1631,14 @@ export function AudioPoolPage() {
             usageLoading={poolUsageLoading}
             scrollStorageKey={destinationPath ? `pool-dest-scroll:${destinationPath}` : undefined}
             countSuffix={poolScanDone && !poolScanLoading ? (
-              incompatibleFiles.length > 0 ? (
+              scopedIncompatibleFiles.length > 0 ? (
                 <button
                   className="pool-health-glyph warning"
-                  title={`${incompatibleFiles.length} incompatible audio file${incompatibleFiles.length !== 1 ? 's' : ''} found - click to fix`}
+                  title={`${scopedIncompatibleFiles.length} incompatible audio file${scopedIncompatibleFiles.length !== 1 ? 's' : ''} found - click to fix`}
                   onClick={() => setActiveTab('tools')}
                 >
                   <i className="fas fa-wrench"></i>
-                  {incompatibleFiles.length}
+                  {scopedIncompatibleFiles.length}
                 </button>
               ) : (
                 <span className="pool-health-glyph ok" title="All audio pool files are compatible with Octatrack">
@@ -1660,7 +1703,7 @@ export function AudioPoolPage() {
       {showPoolList && (
         <PoolIncompatibleListModal
           poolPath={audioPoolPath}
-          files={incompatibleFiles}
+          files={scopedIncompatibleFiles}
           onClose={() => setShowPoolList(false)}
         />
       )}
@@ -1757,7 +1800,7 @@ export function AudioPoolPage() {
                   const someConverting = candidates.some(f => convertingPaths.has(f.path));
                   const targets = candidates
                     .filter(f => !convertingPaths.has(f.path))
-                    .map(f => ({ path: f.path, compatibility: destCompatMap[f.path] }));
+                    .map(f => ({ path: f.path, compatibility: destCompatMap[f.path], source: 'pool' as const }));
                   return (
                     <button
                       className={`context-menu-item convert ${targets.length === 0 ? 'disabled' : ''}`}
