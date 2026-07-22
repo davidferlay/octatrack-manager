@@ -63,7 +63,7 @@ function actionFor(name: string, bit: number | null, khz: number | null): { labe
 }
 
 /** Shared modal-header search box + copy-table button (fix-missing style). */
-function HeaderActions({ searchText, setSearchText, onCopy, copyFeedback, columnToggle }: {
+export function HeaderActions({ searchText, setSearchText, onCopy, copyFeedback, columnToggle }: {
   searchText: string;
   setSearchText: (v: string) => void;
   onCopy: () => void;
@@ -96,7 +96,7 @@ function HeaderActions({ searchText, setSearchText, onCopy, copyFeedback, column
   );
 }
 
-function useCopyFeedback(): ['idle' | 'copied', (text: string) => void] {
+export function useCopyFeedback(): ['idle' | 'copied', (text: string) => void] {
   const [copyFeedback, setCopyFeedback] = useState<'idle' | 'copied'>('idle');
   const copy = (text: string) => {
     navigator.clipboard.writeText(text)
@@ -110,7 +110,7 @@ function useCopyFeedback(): ['idle' | 'copied', (text: string) => void] {
 }
 
 /** Modal resize: left/right handles adjust width symmetrically, bottom adjusts height. */
-function useModalResize() {
+export function useModalResize() {
   const [modalWidth, setModalWidth] = useState<number | null>(null);
   const [modalHeight, setModalHeight] = useState<number | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -205,7 +205,7 @@ interface PoolRow {
   actionTitle: string;
 }
 
-type PoolSortColumn = 'file' | 'format' | 'bit' | 'khz' | 'size' | 'location' | 'action';
+export type PoolSortColumn = 'file' | 'format' | 'bit' | 'khz' | 'size' | 'location' | 'action';
 
 const POOL_COLUMNS: { id: PoolSortColumn; label: string }[] = [
   { id: 'file', label: 'File' },
@@ -221,7 +221,7 @@ const POOL_COLUMNS: { id: PoolSortColumn; label: string }[] = [
  * Shared sortable/filterable/column-resizable table for the two pool modals.
  * Columns: File, Format, Bit, kHz, Size, Location (+ Action for the review modal).
  */
-function usePoolTable(files: IncompatibleFile[], poolPath: string, withAction: boolean, defaultHidden: PoolSortColumn[] = []) {
+export function usePoolTable(files: IncompatibleFile[], poolPath: string, withAction: boolean, defaultHidden: PoolSortColumn[] = []) {
   const meta = usePoolFileMeta(files);
   const [searchText, setSearchText] = useState('');
   const [sortColumn, setSortColumn] = useState<PoolSortColumn>('file');
@@ -495,7 +495,7 @@ const REVIEW_COL_DEFAULTS: Record<string, number | undefined> = {
   file: 260, format: 93, bit: 80, khz: 78, size: 90, location: 185, action: undefined,
 };
 
-function PoolFilesTable({ table }: { table: ReturnType<typeof usePoolTable> }) {
+export function PoolFilesTable({ table }: { table: ReturnType<typeof usePoolTable> }) {
   const {
     rows, visibleColumns, formatFilter, setFormatFilter, bitFilter, setBitFilter, khzFilter, setKhzFilter,
     unique, renderFilterableHeader, renderSortableHeader, colWidths, tableRef,
@@ -561,7 +561,7 @@ function PoolFilesTable({ table }: { table: ReturnType<typeof usePoolTable> }) {
   );
 }
 
-function poolTableTsv(table: ReturnType<typeof usePoolTable>): string {
+export function poolTableTsv(table: ReturnType<typeof usePoolTable>): string {
   const { rows, visibleColumns } = table;
   const value = (id: PoolSortColumn, r: PoolRow): string | number => {
     switch (id) {
@@ -581,7 +581,7 @@ function poolTableTsv(table: ReturnType<typeof usePoolTable>): string {
 }
 
 /** Filter badges + reset button shown in the modal header when filters are active. */
-function FilterBadges({ table }: { table: ReturnType<typeof usePoolTable> }) {
+export function FilterBadges({ table }: { table: ReturnType<typeof usePoolTable> }) {
   const { formatFilter, bitFilter, khzFilter, hasActiveFilters, resetFilters } = table;
   if (!hasActiveFilters) return null;
   return (
