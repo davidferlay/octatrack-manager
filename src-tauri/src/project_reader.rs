@@ -1203,7 +1203,7 @@ pub fn compute_pool_usage(
     let mut result: std::collections::HashMap<String, Vec<PoolUsageEntry>> =
         std::collections::HashMap::new();
 
-    for (project_dir, project_file) in set_project_files(set_dir, &pool_dir)? {
+    for (project_dir, project_file) in set_project_files(set_dir, Some(&pool_dir))? {
         let project_name = project_dir
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
@@ -5459,14 +5459,16 @@ fn normalize_path_lexically(path: &Path) -> std::path::PathBuf {
 /// pool directory itself and any directory with neither project file.
 fn set_project_files(
     set_dir: &Path,
-    pool_dir: &Path,
+    pool_dir: Option<&Path>,
 ) -> Result<Vec<(std::path::PathBuf, std::path::PathBuf)>, String> {
     let entries =
         std::fs::read_dir(set_dir).map_err(|e| format!("Failed to read set directory: {}", e))?;
     let mut out = Vec::new();
     for entry in entries.flatten() {
         let project_dir = entry.path();
-        if !project_dir.is_dir() || normalize_path_lexically(&project_dir) == *pool_dir {
+        if !project_dir.is_dir()
+            || pool_dir.is_some_and(|p| normalize_path_lexically(&project_dir) == *p)
+        {
             continue;
         }
         let project_file = if project_dir.join("project.work").exists() {
@@ -5498,7 +5500,7 @@ pub fn list_set_projects(pool_path: &str) -> Result<Vec<SetProjectInfo>, String>
     let set_dir = pool_dir
         .parent()
         .ok_or_else(|| "Cannot determine set directory from pool path".to_string())?;
-    Ok(set_project_files(set_dir, &pool_dir)?
+    Ok(set_project_files(set_dir, Some(&pool_dir))?
         .into_iter()
         .map(|(project_dir, _)| SetProjectInfo {
             name: project_dir
@@ -5510,22 +5512,19 @@ pub fn list_set_projects(pool_path: &str) -> Result<Vec<SetProjectInfo>, String>
         .collect())
 }
 
-/// After pool files were converted and renamed, repoint every [SAMPLE] PATH= line
-/// (in every project of the set) that resolved to an old pool path onto the new
-/// file name. Only the basename of the stored path changes, so relative/absolute
-/// path style is preserved. Each modified project file is backed up first.
-///
-/// `renames` holds (old_absolute_path, new_absolute_path) pairs; both are files
-/// in the same pool directory.
-pub fn update_pool_references(
-    pool_path: &str,
+/// Core logic shared by `update_pool_references` and `update_project_references`:
+/// scan every project directory in `set_dir` (excluding `exclude_dir` if given,
+/// e.g. the Audio Pool folder) and repoint every [SAMPLE] PATH= line that
+/// resolves to an old path in `renames` onto its new basename. Only the
+/// basename of the stored path changes, so relative/absolute path style is
+/// preserved. Each modified project file is backed up first, under
+/// `backup_label`.
+fn update_references_in_set(
+    set_dir: &Path,
+    exclude_dir: Option<&Path>,
     renames: &[(String, String)],
+    backup_label: &str,
 ) -> Result<PoolReferenceUpdate, String> {
-    let pool_dir = normalize_path_lexically(Path::new(pool_path));
-    let set_dir = pool_dir
-        .parent()
-        .ok_or_else(|| "Cannot determine set directory from pool path".to_string())?;
-
     // old normalized absolute path (lowercased) -> new basename
     let rename_map: std::collections::HashMap<String, String> = renames
         .iter()
@@ -5541,7 +5540,7 @@ pub fn update_pool_references(
     let mut projects_updated = Vec::new();
     let mut slots_updated: u32 = 0;
 
-    for (project_dir, project_file) in set_project_files(set_dir, &pool_dir)? {
+    for (project_dir, project_file) in set_project_files(set_dir, exclude_dir)? {
         let raw_bytes = std::fs::read(&project_file)
             .map_err(|e| format!("Failed to read project file: {}", e))?;
         let (decoded, _, _) = encoding_rs::WINDOWS_1258.decode(&raw_bytes);
@@ -5605,7 +5604,7 @@ pub fn update_pool_references(
             crate::backup_project_files_impl(
                 &project_dir.to_string_lossy(),
                 &[file_name],
-                "fix_audio_pool",
+                backup_label,
             )?;
 
             let (encoded, _, _) = encoding_rs::WINDOWS_1258.encode(&result);
@@ -5621,6 +5620,46 @@ pub fn update_pool_references(
         projects_updated,
         slots_updated,
     })
+}
+
+/// After pool files were converted and renamed, repoint every [SAMPLE] PATH= line
+/// (in every project of the set) that resolved to an old pool path onto the new
+/// file name. Each modified project file is backed up first.
+///
+/// `renames` holds (old_absolute_path, new_absolute_path) pairs; both are files
+/// in the same pool directory.
+pub fn update_pool_references(
+    pool_path: &str,
+    renames: &[(String, String)],
+) -> Result<PoolReferenceUpdate, String> {
+    let pool_dir = normalize_path_lexically(Path::new(pool_path));
+    let set_dir = pool_dir
+        .parent()
+        .ok_or_else(|| "Cannot determine set directory from pool path".to_string())?;
+    update_references_in_set(set_dir, Some(&pool_dir), renames, "fix_audio_pool")
+}
+
+/// After a project's own or pool-shared files were converted and renamed,
+/// repoint every [SAMPLE] PATH= line (in every project of the set, including
+/// the one that owns the renamed file) that resolved to an old path onto the
+/// new file name. Each modified project file is backed up first.
+///
+/// `project_path` need not have an Audio Pool: its own parent directory is
+/// already the set directory in the Octatrack folder convention, and
+/// `set_project_files`'s own project.work/.strd-existence check already
+/// naturally excludes any Audio Pool folder sitting alongside (it never
+/// contains a project file) - so no `exclude_dir` is needed here.
+///
+/// `renames` holds (old_absolute_path, new_absolute_path) pairs.
+pub fn update_project_references(
+    project_path: &str,
+    renames: &[(String, String)],
+) -> Result<PoolReferenceUpdate, String> {
+    let project_dir = normalize_path_lexically(Path::new(project_path));
+    let set_dir = project_dir
+        .parent()
+        .ok_or_else(|| "Cannot determine set directory from project path".to_string())?;
+    update_references_in_set(set_dir, None, renames, "fix_project_samples")
 }
 
 // ============================================================================
@@ -18140,6 +18179,109 @@ mod tests {
                 pool.join("kick.wav").to_string_lossy().to_string(),
             )];
             let res = update_pool_references(&pool.to_string_lossy(), &renames).unwrap();
+
+            assert_eq!(res.slots_updated, 0);
+            assert!(res.projects_updated.is_empty());
+            assert_eq!(read_raw_project_work(&set.join("PROJ")), content);
+            assert!(!set.join("PROJ").join("backups").exists(), "no backup made");
+        }
+    }
+
+    mod update_project_references_tests {
+        use super::surgical_write_tests::{
+            create_raw_project_work_with_custom_fields, read_raw_project_work,
+            write_raw_project_work,
+        };
+        use super::*;
+
+        #[test]
+        fn project_local_rename_updates_owning_and_sibling_projects() {
+            let temp = TempDir::new().unwrap();
+            let set = temp.path();
+            fs::create_dir(set.join("PROJ1")).unwrap();
+            fs::create_dir(set.join("PROJ2")).unwrap();
+
+            // PROJ1 references its own local file "kick.mp3"
+            let content1 = create_raw_project_work_with_custom_fields(&[(
+                "FLEX",
+                1,
+                "kick.mp3",
+                Some(3408),
+                Some(-1),
+                Some(400),
+            )]);
+            write_raw_project_work(&set.join("PROJ1"), &content1);
+
+            // PROJ2 references the SAME file via a relative path escaping into PROJ1 -
+            // unusual, but must still be updated: any rename must be repointed
+            // wherever it's referenced, matching the pool tool's existing guarantee.
+            let content2 = create_raw_project_work_with_custom_fields(&[(
+                "FLEX",
+                2,
+                "../PROJ1/kick.mp3",
+                None,
+                None,
+                None,
+            )]);
+            write_raw_project_work(&set.join("PROJ2"), &content2);
+
+            let proj1 = set.join("PROJ1");
+            let renames = vec![(
+                proj1.join("kick.mp3").to_string_lossy().to_string(),
+                proj1.join("kick.wav").to_string_lossy().to_string(),
+            )];
+            let res = update_project_references(&proj1.to_string_lossy(), &renames).unwrap();
+
+            assert_eq!(
+                res.slots_updated, 2,
+                "both the owning project and the sibling get updated"
+            );
+            assert_eq!(res.projects_updated.len(), 2);
+
+            let out1 = read_raw_project_work(&set.join("PROJ1"));
+            assert!(out1.contains("PATH=kick.wav"), "owning project's own ref updated");
+            assert!(out1.contains("BPMx24=3408"), "other fields preserved");
+            let out2 = read_raw_project_work(&set.join("PROJ2"));
+            assert!(
+                out2.contains("PATH=../PROJ1/kick.wav"),
+                "sibling project's ref updated"
+            );
+
+            // project.work was backed up before the rewrite, labeled for this tool
+            let backups: Vec<_> = fs::read_dir(set.join("PROJ1").join("backups"))
+                .unwrap()
+                .flatten()
+                .collect();
+            assert_eq!(backups.len(), 1);
+            assert!(backups[0]
+                .file_name()
+                .to_string_lossy()
+                .contains("fix_project_samples"));
+            assert!(backups[0].path().join("project.work").exists());
+        }
+
+        #[test]
+        fn no_matching_refs_leaves_projects_untouched() {
+            let temp = TempDir::new().unwrap();
+            let set = temp.path();
+            fs::create_dir(set.join("PROJ")).unwrap();
+
+            let content = create_raw_project_work_with_custom_fields(&[(
+                "FLEX",
+                1,
+                "unrelated.wav",
+                None,
+                None,
+                None,
+            )]);
+            write_raw_project_work(&set.join("PROJ"), &content);
+
+            let proj = set.join("PROJ");
+            let renames = vec![(
+                proj.join("kick.mp3").to_string_lossy().to_string(),
+                proj.join("kick.wav").to_string_lossy().to_string(),
+            )];
+            let res = update_project_references(&proj.to_string_lossy(), &renames).unwrap();
 
             assert_eq!(res.slots_updated, 0);
             assert!(res.projects_updated.is_empty());
