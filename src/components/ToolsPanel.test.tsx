@@ -62,6 +62,31 @@ describe('ToolsPanel - Fix Project Samples', () => {
     expect(screen.getByRole('button', { name: /incompatible audio file/ })).toBeInTheDocument()
   })
 
+  it('normalizes a "../" slot path so a pool-referenced file is attributed to the Audio Pool, not the project', async () => {
+    // baseProps() already has a static slot at '../AUDIO/snare48.wav' (wrong_rate).
+    // Use a project path distinct from the other tests' so this test's mount-time
+    // "copy_bank" default (before initialOperation flips it to fix_project_samples)
+    // is the one that populates audioPoolStatus via get_audio_pool_status, with no
+    // sessionStorage leakage from earlier tests sharing the same projectPath key.
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'get_audio_pool_status') return Promise.resolve({ exists: true, path: '/set/AUDIO', set_path: '/set' })
+      if (cmd === 'list_audio_files_recursive') return Promise.resolve([])
+      if (cmd === 'inspect_audio_files') return Promise.resolve([])
+      return Promise.resolve(null)
+    })
+    renderPanel({ projectPath: '/set/OtherProject', initialOperation: 'fix_project_samples' })
+    await waitFor(() => expect(screen.getByRole('button', { name: /incompatible audio file/ })).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: /incompatible audio file/ }))
+
+    // `source` itself isn't rendered anywhere yet (coverage limitation - see report),
+    // but the underlying normalized path IS what the list modal's Location column
+    // renders, so the fix is observable there: a correctly-normalized pool path
+    // ('/set/OtherProject/../AUDIO/snare48.wav' -> '/set/AUDIO/snare48.wav') should
+    // show as "AUDIO/", not the un-normalized "OtherProject/../AUDIO".
+    expect(await screen.findByTitle('AUDIO/')).toBeInTheDocument()
+    expect(screen.queryByTitle('OtherProject/../AUDIO')).not.toBeInTheDocument()
+  })
+
   it('opens FixProjectFilesModal on Execute', async () => {
     invokeMock.mockImplementation((cmd: string) => {
       if (cmd === 'list_audio_files_recursive') return Promise.resolve([])

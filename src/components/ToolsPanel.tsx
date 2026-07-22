@@ -11,6 +11,7 @@ import { CreateProjectModal } from "./CreateProjectModal";
 import { ProjectIncompatibleListModal, FixProjectFilesModal } from "./FixProjectFilesModal";
 import type { IncompatibleFile, PoolFixResult } from "./FixPoolFilesModal";
 import { audioKind } from "./AudioFileTable";
+import { normalizePath } from "./SampleSlotsTable";
 
 const TOOLS_STORAGE_KEY_PREFIX = "octatrack-tools-settings-";
 
@@ -108,6 +109,7 @@ interface ToolsSettings {
   poolOption: PoolOption;
   otherProjectOption: OtherProjectOption;
   skipReview: boolean;
+  skipProjectReview: boolean;
 }
 
 function loadToolsSettings(projectPath: string): Partial<ToolsSettings> {
@@ -255,10 +257,11 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [loadingMissingSamples, setLoadingMissingSamples] = useState<boolean>(false);
 
   // Fix Project Samples state
-  const [projectIncompatibleFiles, setProjectIncompatibleFiles] = useState<IncompatibleFile[]>([]);
   const [loadingProjectSamples, setLoadingProjectSamples] = useState<boolean>(false);
   const [projectScanTotal, setProjectScanTotal] = useState<number>(0);
-  const [skipProjectReview, setSkipProjectReview] = useState<boolean>(false);
+  const [skipProjectReview, setSkipProjectReview] = useState<boolean>(
+    savedSettings.skipProjectReview ?? false
+  );
   const [showFixProjectModal, setShowFixProjectModal] = useState<boolean>(false);
   const [showProjectIncompatibleListModal, setShowProjectIncompatibleListModal] = useState<boolean>(false);
 
@@ -374,8 +377,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
       poolOption,
       otherProjectOption,
       skipReview,
+      skipProjectReview,
     });
-  }, [projectPath, operation, partAssignmentMode, trackMode, modeScope, copyTrackMode, slotType, audioMode, copyAssignments, copyAttributes, selectedAttributes, destProject, sourceSampleIndices, destSampleStart, poolOption, otherProjectOption, skipReview]);
+  }, [projectPath, operation, partAssignmentMode, trackMode, modeScope, copyTrackMode, slotType, audioMode, copyAssignments, copyAttributes, selectedAttributes, destProject, sourceSampleIndices, destSampleStart, poolOption, otherProjectOption, skipReview, skipProjectReview]);
 
   // Load missing samples when Fix Missing Samples operation is selected
   useEffect(() => {
@@ -395,34 +399,53 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     }
   }, [operation, projectPath]);
 
-  // Scan for incompatible files when Fix Project Samples is selected: every
-  // slot (Flex or Static) with a path set and a non-compatible rating, plus
-  // any other incompatible audio file found recursively in the project's own
-  // directory that isn't already covered by a slot reference above.
+  // Slot-referenced paths with a non-compatible rating, keyed for O(1) dedup
+  // against the recursive directory scan below. Cheap/synchronous - depends
+  // only on the slots and project path, not on audioPoolStatus, so it never
+  // forces the (IPC-based) unreferenced scan below to re-run just because the
+  // pool-status check resolves from null to a real value shortly after mount.
+  const referencedSlotEntries = useMemo(() => {
+    const allSlots = [...sampleSlots.flex_slots, ...sampleSlots.static_slots];
+    const out: { path: string; compatibility: string }[] = [];
+    for (const slot of allSlots) {
+      if (!slot.path || !slot.compatibility || slot.compatibility === 'compatible') continue;
+      const isAbsolute = slot.path.startsWith('/') || /^[A-Za-z]:/.test(slot.path);
+      const resolved = normalizePath(isAbsolute ? slot.path : `${projectPath}/${slot.path}`);
+      out.push({ path: resolved, compatibility: slot.compatibility });
+    }
+    return out;
+  }, [projectPath, sampleSlots]);
+
+  // Adds the 'pool' | 'project' source tag - a pure in-memory relabeling of the
+  // list above (no IPC), so recomputing it when audioPoolStatus resolves is free.
+  const referencedIncompatible = useMemo<IncompatibleFile[]>(() => {
+    const poolPath = audioPoolStatus?.path ? normalizePath(audioPoolStatus.path) : null;
+    return referencedSlotEntries.map(({ path, compatibility }) => ({
+      path,
+      compatibility,
+      source: poolPath && path.toLowerCase().startsWith(poolPath.toLowerCase()) ? 'pool' as const : 'project' as const,
+    }));
+  }, [referencedSlotEntries, audioPoolStatus]);
+
+  // Unreferenced half: recursive directory scan + compat inspection, both real
+  // IPC round trips - only re-run when the operation is (re)selected, the
+  // project changes, or the set of referenced paths actually changes (not when
+  // audioPoolStatus resolves, since referencedIncompatible above already reacts
+  // to that on its own with no IPC cost).
+  const [unreferencedIncompatible, setUnreferencedIncompatible] = useState<IncompatibleFile[]>([]);
   useEffect(() => {
     if (operation !== "fix_project_samples") return;
     let cancelled = false;
     setLoadingProjectSamples(true);
     (async () => {
       try {
-        const allSlots = [...sampleSlots.flex_slots, ...sampleSlots.static_slots];
-        const referenced: IncompatibleFile[] = [];
-        const referencedPaths = new Set<string>();
-        const poolPath = audioPoolStatus?.path ?? null;
-        for (const slot of allSlots) {
-          if (!slot.path || !slot.compatibility || slot.compatibility === 'compatible') continue;
-          const resolved = `${projectPath}/${slot.path}`;
-          referencedPaths.add(resolved);
-          const source: 'pool' | 'project' = poolPath && resolved.toLowerCase().startsWith(poolPath.toLowerCase())
-            ? 'pool'
-            : 'project';
-          referenced.push({ path: resolved, compatibility: slot.compatibility, source });
-        }
-
         const allProjectPaths = (await invoke<string[]>('list_audio_files_recursive', { path: projectPath })) ?? [];
         if (cancelled) return;
         setProjectScanTotal(allProjectPaths.length);
-        const unreferencedPaths = allProjectPaths.filter(p => !referencedPaths.has(p));
+        const referencedPaths = new Set(referencedSlotEntries.map(e => e.path));
+        const unreferencedPaths = allProjectPaths
+          .map(p => normalizePath(p))
+          .filter(p => !referencedPaths.has(p));
         const otherAudio = unreferencedPaths
           .filter(p => audioKind(p) === 'other-audio')
           .map(p => ({ path: p, compatibility: 'unsupported_format', source: 'project' as const }));
@@ -434,17 +457,21 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         const unreferenced = (checks ?? [])
           .filter(c => c.compatibility !== 'compatible')
           .map(c => ({ path: c.path, compatibility: c.compatibility, source: 'project' as const }));
-
-        setProjectIncompatibleFiles([...referenced, ...unreferenced, ...otherAudio]);
+        setUnreferencedIncompatible([...unreferenced, ...otherAudio]);
       } catch (err) {
         console.error("Error scanning project samples:", err);
-        setProjectIncompatibleFiles([]);
+        setUnreferencedIncompatible([]);
       } finally {
         if (!cancelled) setLoadingProjectSamples(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [operation, projectPath, sampleSlots, audioPoolStatus]);
+  }, [operation, projectPath, referencedSlotEntries]);
+
+  const projectIncompatibleFiles = useMemo(
+    () => [...referencedIncompatible, ...unreferencedIncompatible],
+    [referencedIncompatible, unreferencedIncompatible]
+  );
 
   // Collect all available projects from context
   const availableProjects: ProjectOption[] = [];
