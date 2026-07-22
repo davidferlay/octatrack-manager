@@ -61,7 +61,7 @@ The **Patterns** tab provides a visual representation of your sequencer data. St
 The **Flex** and **Static** tabs list all 256 sample slots in project. You can search and filter slots, check their attributes and [assign samples to slots](./sample-slots.md) using drag & drop from the Audio Pool or from OS File Explorer.
 
 ### Tools
-The **Tools** tab provides bulk operations for copying content between projects ([banks](./copy-bank.md), [parts](./copy-parts.md), [patterns](./copy-patterns.md), [tracks](./copy-tracks.md) or [sample slots](./copy-sample-slots.md)) as well as additional unique features (like [fixing missing samples](./fix-missing-samples.md)).
+The **Tools** tab provides bulk operations for copying content between projects ([banks](./copy-bank.md), [parts](./copy-parts.md), [patterns](./copy-patterns.md), [tracks](./copy-tracks.md) or [sample slots](./copy-sample-slots.md)) as well as additional unique features (like [fixing missing samples](./fix-missing-samples.md) or [fixing project samples that the Octatrack can't play](./sample-slots.md#fixing-incompatible-project-samples)).
 
 ---
 

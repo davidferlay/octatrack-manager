@@ -177,6 +177,7 @@ Right-click to any slot (in Edit mode) for operations:
 - **Clear sample & reset attributes** - same result as "Clear" operation on the Octatrack.
 - **Clear sample assignment** - removes the sample but keeps slot's attributes.
 - **Reset attributes to defaults** - restores attributes to default values while keeping the sample.
+- **Convert to Octatrack format** - only enabled for a slot whose file exists and isn't already compatible; converts that one file in place (after a backup) without leaving the Sample Slots tab. See [Fixing Incompatible Project Samples](#fixing-incompatible-project-samples) below.
 
 Multiple Sample Slots can be selected at once to perform these operations using:
 - <kbd>Shift</kbd>-click to select a range.
@@ -191,6 +192,14 @@ Three more operations can be found when right-clicking on Sample Slots, availabl
 - **Play** - plays the slot's sample (same as double-clicking the slot).
 - **Open in file explorer** - reveals the slot's sample (or a pool item) in your OS file manager.
 - **Copy path to clipboard** - copies the absolute path of the slot's sample or a pool item.
+
+### Fixing Incompatible Project Samples
+
+Each Flex/Static tab's toolbar shows a health glyph next to the slot count (hidden while the Audio Pool pane is open): an orange badge with a wrench icon and the number of slots referencing an audio file the Octatrack can't play, or a green check when every referenced file is compatible.
+
+Click the badge - or select **Fix Project Samples** from the **Tools** tab operation dropdown - to open a Status pane reporting every incompatible file referenced by a slot (wherever it physically lives - the project's own directory or the shared Audio Pool), plus any other incompatible file found recursively in the project's own directory. With **Review before applying changes** checked (the default), **Execute** shows a review screen listing the planned conversions before touching anything; unchecked, it converts right away. Either way, each affected file is converted to 44.1 kHz WAV in place, every modified project of the Set is backed up first, and every slot referencing that file - across the whole Set - is updated to the new file automatically.
+
+To fix a single slot without leaving the tab, right-click it (in Edit mode) and choose **Convert to Octatrack format** - see [Managing existing assignments](#managing-existing-assignments) above.
 
 ---
 

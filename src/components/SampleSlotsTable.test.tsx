@@ -497,6 +497,35 @@ describe('SampleSlotsTable — slot context menu & Audio Pool page button', () =
       expect(mockInvoke).toHaveBeenCalledWith('reset_slot_attributes', expect.objectContaining({ slotIndices: [2] }))
     )
   })
+
+  it('shows "Convert to Octatrack format" in the slot context menu, disabled unless Edit mode is on, a file exists, and it is incompatible', () => {
+    const slots = [{ ...mockSlots[0], path: 'kick.mp3', file_exists: true, compatibility: 'unknown' }]
+    renderWithProvider(
+      <SampleSlotsTable slots={slots} slotPrefix="F" tableType="flex" isEditMode={false} projectPath="/proj" />
+    )
+    fireEvent.contextMenu(screen.getByText('kick.mp3').closest('tr')!)
+    expect(screen.getByText(/Convert to Octatrack format/i)).toBeDisabled()
+  })
+
+  it('calls fix_project_samples with the slot\'s resolved path and shows a success toast', async () => {
+    mockInvoke.mockResolvedValue({
+      outcomes: [{ old_path: '/proj/kick.mp3', new_path: '/proj/kick.wav', error: null }],
+      projects_updated: [],
+      slots_updated: 0,
+    })
+    const slots = [{ ...mockSlots[0], path: 'kick.mp3', file_exists: true, compatibility: 'unknown' }]
+    renderWithProvider(
+      <SampleSlotsTable slots={slots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    fireEvent.contextMenu(screen.getByText('kick.mp3').closest('tr')!)
+    await userEvent.click(screen.getByText(/Convert to Octatrack format/i))
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('fix_project_samples', {
+      projectPath: '/proj',
+      filePaths: ['/proj/kick.mp3'],
+      transferId: expect.any(String),
+    }))
+    expect(await screen.findByText('Converted to Octatrack format')).toBeInTheDocument()
+  })
 })
 
 describe('SampleSlotsTable — selection & transfers toggle', () => {

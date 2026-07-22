@@ -631,6 +631,36 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     await importPathsToSlot(files, slot);
   }, [isEditMode, importPathsToSlot]);
 
+  // Convert a single incompatible slot's file to Octatrack format in place (context-menu action).
+  const [convertingSlotIds, setConvertingSlotIds] = useState<Set<number>>(new Set());
+  const convertSlotFileInline = useCallback(async (slot: SampleSlot) => {
+    if (!slot.path || !projectPath) return;
+    const absolutePath = `${projectPath}/${slot.path}`;
+    setConvertingSlotIds(prev => new Set(prev).add(slot.slot_id));
+    try {
+      const result = await invoke<{ outcomes: { old_path: string; new_path: string | null; error: string | null }[] }>('fix_project_samples', {
+        projectPath,
+        filePaths: [absolutePath],
+        transferId: `ctx-fix-slot-${Date.now()}`,
+      });
+      const failed = result.outcomes.find(o => o.error);
+      if (failed) {
+        showNotice(`Could not convert: ${failed.error}`, 'warning');
+      } else {
+        showNotice('Converted to Octatrack format', 'info');
+        onPoolFixed?.();
+      }
+    } catch (err) {
+      showNotice(`Error converting: ${err}`, 'warning');
+    } finally {
+      setConvertingSlotIds(prev => {
+        const next = new Set(prev);
+        next.delete(slot.slot_id);
+        return next;
+      });
+    }
+  }, [projectPath, onPoolFixed, showNotice]);
+
   // Navigate to the full Audio Pool page for this Set, remembering where we came from.
   const openAudioPoolPage = useCallback(() => {
     if (!audioPoolPath) return;
@@ -2125,6 +2155,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
           onClick={() => { resetSlotsAttributes(menuTargetSlots(slotMenu.slot)); setSlotMenu(null); }}
         >
           <i className="fas fa-rotate-left"></i> Reset attributes to defaults
+        </button>
+        <button
+          className="context-menu-item"
+          disabled={!isEditMode || !slotMenu.slot.path || !slotMenu.slot.file_exists || slotMenu.slot.compatibility === 'compatible' || convertingSlotIds.has(slotMenu.slot.slot_id)}
+          title={!isEditMode ? 'Toggle Edit mode to modify slots' : undefined}
+          onClick={() => { convertSlotFileInline(slotMenu.slot); setSlotMenu(null); }}
+        >
+          <i className="fas fa-wrench"></i> Convert to Octatrack format
         </button>
         <div className="context-menu-separator"></div>
         <button
