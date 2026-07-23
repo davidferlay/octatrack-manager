@@ -131,6 +131,49 @@ describe('ToolsPanel - Fix Project Samples', () => {
     expect(await screen.findByText('Showing 1 of 1 files')).toBeInTheDocument()
   })
 
+  it('does not double-count usage for a pool-resident file this project itself references (dedup by project name)', async () => {
+    // '../AUDIO/kick48.wav' resolves (from '/set/DedupUsageProject') to
+    // '/set/AUDIO/kick48.wav', which lives under the mocked Audio Pool path
+    // '/set/AUDIO'. This project's own static slot references it, producing
+    // one entry in projectUsageMap tagged with this project's own name
+    // ('MyProject', from baseProps). get_pool_usage is mocked to return the
+    // IDENTICAL usage entry for the SAME resolved path, tagged with the SAME
+    // project name - exactly what compute_pool_usage would report for a
+    // pool file the current project references itself. Pre-fix, the naive
+    // merge concatenates both and shows "✓ 2"; post-fix, the pool-side
+    // duplicate (same project) is dropped and it shows "✓ 1".
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'get_audio_pool_status') return Promise.resolve({ exists: true, path: '/set/AUDIO', set_path: '/set' })
+      if (cmd === 'list_audio_files_recursive') return Promise.resolve([])
+      if (cmd === 'inspect_audio_files') return Promise.resolve([])
+      if (cmd === 'get_pool_usage') return Promise.resolve({
+        '/set/audio/kick48.wav': [
+          { project: 'MyProject', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true },
+        ],
+      })
+      return Promise.resolve(null)
+    })
+    renderPanel({
+      projectPath: '/set/DedupUsageProject',
+      initialOperation: 'fix_project_samples',
+      sampleSlots: {
+        flex_slots: [],
+        static_slots: [{ path: '../AUDIO/kick48.wav', compatibility: 'wrong_rate' }],
+      },
+      slotUsage: {
+        static_usage: [
+          [{ bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true }],
+        ],
+        flex_usage: [],
+      },
+    })
+    await waitFor(() => expect(screen.getByRole('button', { name: /incompatible audio file/ })).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: /incompatible audio file/ }))
+
+    expect(await screen.findByTitle('Played in 1 place - click for details')).toBeInTheDocument()
+    expect(screen.queryByTitle(/Played in 2 places/)).not.toBeInTheDocument()
+  })
+
   it('collects which slot(s) reference each incompatible file, deduped by resolved path', async () => {
     invokeMock.mockImplementation((cmd: string) => {
       if (cmd === 'list_audio_files_recursive') return Promise.resolve([])

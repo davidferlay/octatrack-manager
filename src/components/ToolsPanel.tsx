@@ -499,15 +499,19 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   // Cross-project pool usage, for rows whose file lives in the Audio Pool -
   // only fetched when a pool actually exists for this project's set.
   const [poolUsageMap, setPoolUsageMap] = useState<Record<string, PoolUsageEntry[]>>({});
+  const [poolUsageLoading, setPoolUsageLoading] = useState(false);
   useEffect(() => {
     if (!audioPoolStatus?.exists || !audioPoolStatus.path) {
       setPoolUsageMap({});
+      setPoolUsageLoading(false);
       return;
     }
     let cancelled = false;
+    setPoolUsageLoading(true);
     invoke<Record<string, PoolUsageEntry[]>>('get_pool_usage', { poolPath: audioPoolStatus.path })
       .then(result => { if (!cancelled) setPoolUsageMap(result ?? {}); })
-      .catch(() => { if (!cancelled) setPoolUsageMap({}); });
+      .catch(() => { if (!cancelled) setPoolUsageMap({}); })
+      .finally(() => { if (!cancelled) setPoolUsageLoading(false); });
     return () => { cancelled = true; };
   }, [audioPoolStatus?.exists, audioPoolStatus?.path]);
 
@@ -538,10 +542,16 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const projectFilesUsageMap = useMemo(() => {
     const merged: Record<string, PoolUsageEntry[]> = { ...projectUsageMap };
     for (const [key, entries] of Object.entries(poolUsageMap)) {
-      merged[key] = [...(merged[key] ?? []), ...entries];
+      // projectUsageMap already reports every usage this project's own slots
+      // produce (compute_sample_usage scans this project directly) - drop any
+      // pool-usage entry tagged with this same project to avoid double-counting
+      // a pool-resident file this project references itself. Usage from other
+      // projects in the set is still valid and kept.
+      const otherProjectsEntries = entries.filter(e => e.project !== projectName);
+      merged[key] = [...(merged[key] ?? []), ...otherProjectsEntries];
     }
     return merged;
-  }, [projectUsageMap, poolUsageMap]);
+  }, [projectUsageMap, poolUsageMap, projectName]);
 
   // Collect all available projects from context
   const availableProjects: ProjectOption[] = [];
@@ -3682,6 +3692,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           projectPath={projectPath}
           files={projectIncompatibleFiles}
           usageMap={projectFilesUsageMap}
+          usageLoading={poolUsageLoading}
           onClose={() => setShowProjectIncompatibleListModal(false)}
         />
       )}
@@ -3693,6 +3704,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           files={projectIncompatibleFiles}
           skipReview={skipProjectReview}
           usageMap={projectFilesUsageMap}
+          usageLoading={poolUsageLoading}
           onClose={() => setShowFixProjectModal(false)}
           onFixed={(_res: PoolFixResult) => {
             if (onProjectRefresh) onProjectRefresh();

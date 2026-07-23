@@ -23,13 +23,14 @@ import type { PoolUsageEntry } from '../types/audioFile';
  * Structurally identical to PoolIncompatibleListModal, just project-scoped
  * copy and no Action column.
  */
-export function ProjectIncompatibleListModal({ projectPath, files, onClose, usageMap }: {
+export function ProjectIncompatibleListModal({ projectPath, files, onClose, usageMap, usageLoading }: {
   projectPath: string;
   files: IncompatibleFile[];
   onClose: () => void;
   usageMap?: Record<string, PoolUsageEntry[]>;
+  usageLoading?: boolean;
 }) {
-  const table = usePoolTable(files, projectPath, false, ['size'], usageMap, false, true);
+  const table = usePoolTable(files, projectPath, false, ['size'], usageMap, usageLoading, true);
   const [copyFeedback, copy] = useCopyFeedback();
   const { modalRef, style, handles } = useModalResize();
 
@@ -78,6 +79,7 @@ interface Props {
   /** Called once a fix run finished so callers can refresh their listings. */
   onFixed?: (result: PoolFixResult) => void;
   usageMap?: Record<string, PoolUsageEntry[]>;
+  usageLoading?: boolean;
 }
 
 type Phase = 'review' | 'converting' | 'done' | 'error';
@@ -89,7 +91,7 @@ type Phase = 'review' | 'converting' | 'done' | 'error';
  * the Set (each project file is backed up first). Structurally identical to
  * FixPoolFilesModal, scoped to a project path and fix_project_samples.
  */
-export function FixProjectFilesModal({ projectPath, files, skipReview = false, onClose, onFixed, usageMap }: Props) {
+export function FixProjectFilesModal({ projectPath, files, skipReview = false, onClose, onFixed, usageMap, usageLoading }: Props) {
   const [phase, setPhase] = useState<Phase>(skipReview ? 'converting' : 'review');
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [currentFile, setCurrentFile] = useState<string>('');
@@ -99,7 +101,7 @@ export function FixProjectFilesModal({ projectPath, files, skipReview = false, o
   const startedRef = useRef(false);
 
   // Location and Size are hidden by default here - the Action column matters most for review
-  const table = usePoolTable(files, projectPath, true, ['location', 'size'], usageMap, false, true);
+  const table = usePoolTable(files, projectPath, true, ['location', 'size'], usageMap, usageLoading, true);
   const [copyFeedback, copy] = useCopyFeedback();
   const { modalRef, style, handles } = useModalResize();
 
