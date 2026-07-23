@@ -5720,11 +5720,18 @@ th.col-usage .header-content .filter-icon {
 }
 
 /* Fix Audio Pool Samples (Audio Pool) */
+/* Review (confirmation) phase: a bit wider than the shared fix-missing-modal
+   default, since its table has more columns (Usage, Slot) than Fix Missing
+   Samples' own review table. */
+.modal-content.fix-pool-modal {
+  max-width: 920px;
+}
+
 /* Converting/done/error phases (Fix Audio Pool/Project Samples): narrower
    than the wide review-table layout, since their content is just a status
    line, an optional file list, and one or two buttons. */
 .modal-content.fix-pool-modal-narrow {
-  max-width: 480px;
+  max-width: 560px;
   width: 90%;
 }
 
@@ -6145,13 +6152,14 @@ th.col-drag-over {
   align-self: stretch;
   text-align: left;
   margin-top: 0.75rem;
+  margin-bottom: 1.0rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--elektron-border-gray);
 }
 
 .fix-done-failures-label {
   color: #FF8888;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 500;
   margin-bottom: 0.5rem;
 }
@@ -6165,8 +6173,9 @@ th.col-drag-over {
 
 .fix-done-failures-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
 }
 
 .fix-done-failures-table th,
@@ -6188,12 +6197,18 @@ th.col-drag-over {
   font-weight: 500;
 }
 
+.fix-done-failures-table th:first-child,
 .fix-done-failures-table td:first-child {
+  width: 37%;
   color: var(--elektron-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 140px;
+}
+
+.fix-done-failures-table th:last-child,
+.fix-done-failures-table td:last-child {
+  width: 35%;
 }
 
 .fix-done-failures-table td:last-child {

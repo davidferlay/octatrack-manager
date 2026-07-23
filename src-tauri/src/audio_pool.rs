@@ -477,7 +477,7 @@ where
             &FormatOptions::default(),
             &MetadataOptions::default(),
         )
-        .map_err(|e| format!("Failed to probe audio format: {}", e))?;
+        .map_err(|_| "Unsupported or unrecognized audio format".to_string())?;
 
     let mut format = probed.format;
 
@@ -2112,6 +2112,22 @@ mod tests {
             !temp_dir.path().join("loop.otm-convert.tmp").exists(),
             "temp file cleaned up"
         );
+    }
+
+    #[test]
+    fn convert_pool_file_in_place_reports_a_short_clear_message_for_unreadable_audio() {
+        // Regression test: the probe failure used to surface the raw Symphonia
+        // error verbatim (e.g. "Failed to probe audio format: unsupported
+        // feature: core (probe): no suitable format reader found") - shown to
+        // users unchanged in the Fix Audio Pool/Project Samples done screen.
+        // Now a short, non-technical message with no internal error jargon.
+        let temp_dir = TempDir::new().unwrap();
+        let bogus_path = temp_dir.path().join("not-audio.wav");
+        fs::write(&bogus_path, b"this is not audio data at all").unwrap();
+
+        let err = super::convert_pool_file_in_place(&bogus_path, |_, _| {}, None).unwrap_err();
+
+        assert_eq!(err, "Unsupported or unrecognized audio format");
     }
 
     #[test]
