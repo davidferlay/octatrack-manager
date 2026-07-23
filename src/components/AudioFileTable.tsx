@@ -165,7 +165,7 @@ const BANK_LETTERS = 'ABCDEFGHIJKLMNOP';
  * compute_pool_usage), while file.path here keeps its original OS casing/separators,
  * so every usageMap read goes through this.
  */
-function usageKey(path: string): string {
+export function usageKey(path: string): string {
   return path.toLowerCase().replace(/\\/g, '/');
 }
 

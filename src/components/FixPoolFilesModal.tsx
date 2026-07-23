@@ -1,12 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { getFileFormat, formatFileSize } from './AudioFileTable';
+import { getFileFormat, formatFileSize, usageKey } from './AudioFileTable';
+import type { PoolUsageEntry } from '../types/audioFile';
 
 export interface IncompatibleFile {
   path: string;
   compatibility: string; // "wrong_rate" | "incompatible" | "unknown"
   source: 'pool' | 'project';
+  /** Which slot(s) reference this file, e.g. ['F3', 'S12'] - project-scope scans only, undefined/empty for pool-scope rows and unreferenced files. */
+  slots?: string[];
 }
 
 export interface PoolFixOutcome {
@@ -203,15 +207,19 @@ interface PoolRow {
   location: string;
   action: string;
   actionTitle: string;
+  usageEntries: PoolUsageEntry[];
+  slots: string[];
 }
 
-export type PoolSortColumn = 'file' | 'format' | 'bit' | 'khz' | 'size' | 'location' | 'action';
+export type PoolSortColumn = 'file' | 'format' | 'bit' | 'khz' | 'size' | 'location' | 'action' | 'usage' | 'slot';
 
 const POOL_COLUMNS: { id: PoolSortColumn; label: string }[] = [
+  { id: 'slot', label: 'Slot' },
   { id: 'file', label: 'File' },
   { id: 'format', label: 'Format' },
   { id: 'bit', label: 'Bit' },
   { id: 'khz', label: 'kHz' },
+  { id: 'usage', label: 'Usage' },
   { id: 'size', label: 'Size' },
   { id: 'location', label: 'Location' },
   { id: 'action', label: 'Action' },
@@ -221,7 +229,15 @@ const POOL_COLUMNS: { id: PoolSortColumn; label: string }[] = [
  * Shared sortable/filterable/column-resizable table for the two pool modals.
  * Columns: File, Format, Bit, kHz, Size, Location (+ Action for the review modal).
  */
-export function usePoolTable(files: IncompatibleFile[], poolPath: string, withAction: boolean, defaultHidden: PoolSortColumn[] = []) {
+export function usePoolTable(
+  files: IncompatibleFile[],
+  poolPath: string,
+  withAction: boolean,
+  defaultHidden: PoolSortColumn[] = [],
+  usageMap?: Record<string, PoolUsageEntry[]>,
+  usageLoading?: boolean,
+  withSlot?: boolean,
+) {
   const meta = usePoolFileMeta(files);
   const [searchText, setSearchText] = useState('');
   const [sortColumn, setSortColumn] = useState<PoolSortColumn>('file');
@@ -229,11 +245,28 @@ export function usePoolTable(files: IncompatibleFile[], poolPath: string, withAc
   const [formatFilter, setFormatFilter] = useState('all');
   const [bitFilter, setBitFilter] = useState('all');
   const [khzFilter, setKhzFilter] = useState('all');
+  const [usageFilter, setUsageFilter] = useState('all');
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
+  const [usagePopover, setUsagePopover] = useState<{ x: number; y: number; path: string; scope: 'audible' | 'referenced' } | null>(null);
+  useEffect(() => {
+    if (!usagePopover) return;
+    const close = () => setUsagePopover(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setUsagePopover(null); };
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', close);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [usagePopover]);
 
   // Column visibility ("toggle columns" menu in the header)
-  const allColumns = POOL_COLUMNS.filter(c => withAction || c.id !== 'action');
+  const allColumns = POOL_COLUMNS.filter(c =>
+    (withAction || c.id !== 'action') &&
+    (usageMap || c.id !== 'usage') &&
+    (withSlot || c.id !== 'slot')
+  );
   const [hiddenCols, setHiddenCols] = useState<Set<PoolSortColumn>>(new Set(defaultHidden));
   const visibleColumns = allColumns.filter(c => !hiddenCols.has(c.id));
   const toggleCol = (id: PoolSortColumn) => setHiddenCols(prev => {
@@ -323,6 +356,8 @@ export function usePoolTable(files: IncompatibleFile[], poolPath: string, withAc
       location: poolLocation(f.path, poolPath),
       action: label,
       actionTitle: title,
+      usageEntries: usageMap?.[usageKey(f.path)] ?? [],
+      slots: f.slots ?? [],
     };
   });
 
@@ -332,10 +367,16 @@ export function usePoolTable(files: IncompatibleFile[], poolPath: string, withAc
       if (formatFilter !== 'all' && r.format !== formatFilter) return false;
       if (bitFilter !== 'all' && String(r.bit ?? '') !== bitFilter) return false;
       if (khzFilter !== 'all' && String(r.khz ?? '') !== khzFilter) return false;
+      if (usageFilter !== 'all') {
+        const audibleCount = r.usageEntries.filter(e => e.audible).length;
+        if (usageFilter === 'used' && audibleCount === 0) return false;
+        if (usageFilter === 'referenced' && audibleCount === r.usageEntries.length) return false;
+        if (usageFilter === 'unused' && r.usageEntries.length > 0) return false;
+      }
       return true;
     })
     .sort((a, b) => {
-      const numeric = sortColumn === 'bit' || sortColumn === 'khz' || sortColumn === 'size';
+      const numeric = sortColumn === 'bit' || sortColumn === 'khz' || sortColumn === 'size' || sortColumn === 'usage';
       const key = (r: PoolRow): string | number => {
         switch (sortColumn) {
           case 'file': return r.name.toLowerCase();
@@ -345,6 +386,8 @@ export function usePoolTable(files: IncompatibleFile[], poolPath: string, withAc
           case 'size': return r.size ?? -1;
           case 'location': return r.location.toLowerCase();
           case 'action': return r.action;
+          case 'usage': return r.usageEntries.filter(e => e.audible).length * 1000 + r.usageEntries.length;
+          case 'slot': return r.slots.join(', ').toLowerCase();
         }
       };
       const ka = key(a);
@@ -368,11 +411,12 @@ export function usePoolTable(files: IncompatibleFile[], poolPath: string, withAc
   const unique = (get: (r: PoolRow) => string) =>
     Array.from(new Set(allRows.map(get).filter(v => v !== ''))).sort();
 
-  const hasActiveFilters = formatFilter !== 'all' || bitFilter !== 'all' || khzFilter !== 'all';
+  const hasActiveFilters = formatFilter !== 'all' || bitFilter !== 'all' || khzFilter !== 'all' || usageFilter !== 'all';
   const resetFilters = () => {
     setFormatFilter('all');
     setBitFilter('all');
     setKhzFilter('all');
+    setUsageFilter('all');
   };
 
   /** Sortable header with a ⋮ filter dropdown, same markup as the fix-missing review table. */
@@ -437,6 +481,8 @@ export function usePoolTable(files: IncompatibleFile[], poolPath: string, withAc
   return {
     rows, allRows, searchText, setSearchText,
     formatFilter, setFormatFilter, bitFilter, setBitFilter, khzFilter, setKhzFilter,
+    usageFilter, setUsageFilter, usageLoading,
+    usagePopover, setUsagePopover,
     hasActiveFilters, resetFilters, unique,
     renderFilterableHeader, renderSortableHeader,
     colWidths, tableRef,
@@ -489,20 +535,30 @@ export function ColumnToggle({ columns, hiddenCols, onToggle }: {
 /** Default column widths (px) before the user resizes anything.
     List modal: File takes the rest; review modal: Action takes the rest. */
 const POOL_COL_DEFAULTS: Record<string, number | undefined> = {
-  file: undefined, format: 95, bit: 72, khz: 78, size: 89, location: 185, action: 190,
+  slot: 70, file: undefined, format: 95, bit: 72, khz: 78, usage: 90, size: 89, location: 185, action: 190,
 };
 const REVIEW_COL_DEFAULTS: Record<string, number | undefined> = {
-  file: 260, format: 93, bit: 80, khz: 78, size: 90, location: 185, action: undefined,
+  slot: 70, file: 260, format: 93, bit: 80, khz: 78, usage: 90, size: 90, location: 185, action: undefined,
 };
+
+const BANK_LETTERS = 'ABCDEFGHIJKLMNOP';
 
 export function PoolFilesTable({ table }: { table: ReturnType<typeof usePoolTable> }) {
   const {
     rows, visibleColumns, formatFilter, setFormatFilter, bitFilter, setBitFilter, khzFilter, setKhzFilter,
+    usageFilter, setUsageFilter, usageLoading, usagePopover, setUsagePopover,
     unique, renderFilterableHeader, renderSortableHeader, colWidths, tableRef,
   } = table;
 
   const filterOptions = (values: string[], fmt: (v: string) => string = v => v) =>
     [{ value: 'all', label: 'All' }, ...values.map(v => ({ value: v, label: fmt(v) }))];
+
+  const usageFilterOptions = [
+    { value: 'all', label: 'All' },
+    { value: 'used', label: 'Used (plays)' },
+    { value: 'referenced', label: 'Referenced, not triggered' },
+    { value: 'unused', label: 'Unused' },
+  ];
 
   const renderHeader = (id: PoolSortColumn, label: string, i: number) => {
     // The last visible column has no resize handle (it absorbs the leftovers)
@@ -517,6 +573,9 @@ export function PoolFilesTable({ table }: { table: ReturnType<typeof usePoolTabl
       case 'khz':
         return renderFilterableHeader('khz', label, khzFilter !== 'all',
           filterOptions(unique(r => String(r.khz ?? '')), v => `${(Number(v) / 1000).toFixed(1)}`), khzFilter, setKhzFilter, resizeIndex);
+      case 'usage':
+        return renderFilterableHeader('usage', label, usageFilter !== 'all',
+          usageFilterOptions, usageFilter, setUsageFilter, resizeIndex);
       case 'action':
         return <th key="action">Action</th>;
       default:
@@ -533,31 +592,87 @@ export function PoolFilesTable({ table }: { table: ReturnType<typeof usePoolTabl
       case 'size': return <td key={id}>{r.size != null ? formatFileSize(r.size) : ''}</td>;
       case 'location': return <td key={id} className="fix-location-cell" title={r.location}>{r.location}</td>;
       case 'action': return <td key={id} title={r.actionTitle}>{r.action}</td>;
+      case 'slot': return <td key={id} className="col-slot">{r.slots.length > 0 ? r.slots.join(', ') : <span className="usage-none">—</span>}</td>;
+      case 'usage': {
+        const audibleCount = r.usageEntries.filter(e => e.audible).length;
+        const referencedCount = r.usageEntries.length - audibleCount;
+        const openPopover = (scope: 'audible' | 'referenced') => (e: React.MouseEvent) => {
+          e.stopPropagation();
+          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          setUsagePopover({ x: rect.left, y: rect.bottom + 4, path: r.path, scope });
+        };
+        return (
+          <td key={id} className="col-usage">
+            {audibleCount > 0 && (
+              <button className="usage-badge" title={`Played in ${audibleCount} place${audibleCount > 1 ? 's' : ''} - click for details`} onClick={openPopover('audible')}>
+                ✓ {audibleCount}
+              </button>
+            )}
+            {referencedCount > 0 && (
+              <button className="usage-badge referenced" title={`Referenced in ${referencedCount} place${referencedCount > 1 ? 's' : ''} but not triggered - click for details`} onClick={openPopover('referenced')}>
+                ○ {referencedCount}
+              </button>
+            )}
+            {r.usageEntries.length === 0 && (usageLoading
+              ? <span className="usage-none" title="Computing usage…">…</span>
+              : <span className="usage-none" title="Not referenced anywhere">—</span>)}
+          </td>
+        );
+      }
     }
   };
 
   const defaults = table.allColumns.some(c => c.id === 'action') ? REVIEW_COL_DEFAULTS : POOL_COL_DEFAULTS;
 
   return (
-    <table className="samples-table pool-files-table" ref={tableRef}>
-      <colgroup>
-        {visibleColumns.map((c, i) => (
-          <col key={c.id} style={{ width: colWidths.length > 0 ? colWidths[i] : defaults[c.id] }} />
-        ))}
-      </colgroup>
-      <thead>
-        <tr>
-          {visibleColumns.map((c, i) => renderHeader(c.id, c.label, i))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map(r => (
-          <tr key={r.path}>
-            {visibleColumns.map(c => renderCell(c.id, r))}
+    <>
+      <table className="samples-table pool-files-table" ref={tableRef}>
+        <colgroup>
+          {visibleColumns.map((c, i) => (
+            <col key={c.id} style={{ width: colWidths.length > 0 ? colWidths[i] : defaults[c.id] }} />
+          ))}
+        </colgroup>
+        <thead>
+          <tr>
+            {visibleColumns.map((c, i) => renderHeader(c.id, c.label, i))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.path}>
+              {visibleColumns.map(c => renderCell(c.id, r))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {usagePopover && createPortal(
+        <div className="usage-popover" style={{ position: 'fixed', top: usagePopover.y, left: usagePopover.x }} onClick={(e) => e.stopPropagation()}>
+          {(() => {
+            const row = rows.find(r => r.path === usagePopover.path) ?? table.allRows.find((r: PoolRow) => r.path === usagePopover.path);
+            const scoped = (row?.usageEntries ?? []).filter((e: PoolUsageEntry) => e.audible === (usagePopover.scope === 'audible'));
+            return (
+              <>
+                <div className="usage-popover-header">
+                  {usagePopover.scope === 'audible'
+                    ? `Played in ${scoped.length} place${scoped.length > 1 ? 's' : ''}`
+                    : `Referenced in ${scoped.length} place${scoped.length > 1 ? 's' : ''} but not triggered`}
+                </div>
+                <div className="usage-popover-list">
+                  {scoped.map((entry, idx) => (
+                    <div key={idx} className="usage-popover-entry">
+                      {entry.kind === 'machine'
+                        ? `${entry.project} · Bank ${BANK_LETTERS[entry.bank] ?? '?'} · Part ${(entry.part ?? 0) + 1} · T${entry.track + 1} · Machine`
+                        : `${entry.project} · Bank ${BANK_LETTERS[entry.bank] ?? '?'} · Pattern ${(entry.pattern ?? 0) + 1} · T${entry.track + 1} · Step ${(entry.step ?? 0) + 1} · Lock`}
+                    </div>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
+        </div>,
+        document.body
+      )}
+    </>
   );
 }
 
@@ -572,6 +687,12 @@ export function poolTableTsv(table: ReturnType<typeof usePoolTable>): string {
       case 'size': return r.size != null ? formatFileSize(r.size) : '';
       case 'location': return r.location;
       case 'action': return r.action;
+      case 'slot': return r.slots.join(', ');
+      case 'usage': {
+        const audibleCount = r.usageEntries.filter(e => e.audible).length;
+        const referencedCount = r.usageEntries.length - audibleCount;
+        return `${audibleCount} played, ${referencedCount} referenced`;
+      }
     }
   };
   return [
@@ -582,13 +703,14 @@ export function poolTableTsv(table: ReturnType<typeof usePoolTable>): string {
 
 /** Filter badges + reset button shown in the modal header when filters are active. */
 export function FilterBadges({ table }: { table: ReturnType<typeof usePoolTable> }) {
-  const { formatFilter, bitFilter, khzFilter, hasActiveFilters, resetFilters } = table;
+  const { formatFilter, bitFilter, khzFilter, usageFilter, hasActiveFilters, resetFilters } = table;
   if (!hasActiveFilters) return null;
   return (
     <>
       {formatFilter !== 'all' && <span className="filter-badge">Format: {formatFilter}</span>}
       {bitFilter !== 'all' && <span className="filter-badge">Bit: {bitFilter}</span>}
       {khzFilter !== 'all' && <span className="filter-badge">kHz: {(Number(khzFilter) / 1000).toFixed(1)}</span>}
+      {usageFilter !== 'all' && <span className="filter-badge">Usage: {usageFilter === 'used' ? 'Used' : usageFilter === 'referenced' ? 'Referenced' : 'Unused'}</span>}
       <button className="reset-filters-btn" onClick={resetFilters} title="Reset all filters">✕ Reset</button>
     </>
   );
