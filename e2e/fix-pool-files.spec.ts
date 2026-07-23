@@ -347,10 +347,16 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await expect(listModal).toHaveCount(0)
   })
 
-  test('Shift+digit switches tabs and t toggles the Transfers pane', async ({ page }) => {
+  test('Shift+digit switches tabs and t toggles the Transfers pane on the Files tab only', async ({ page }) => {
     await expect(page.locator('.audio-pool-status')).toBeVisible()
     await page.keyboard.press('Shift+Digit2')
     await expect(page.locator('.pool-tools-panel')).toBeVisible()
+
+    // On the Tools tab, the transfers button is disabled and 't' is a no-op.
+    await expect(page.locator('.copy-table-btn[title="Only available on the Files tab"]')).toBeDisabled()
+    await page.keyboard.press('t')
+    await expect(page.locator('.transfer-queue')).toHaveCount(0)
+
     await page.keyboard.press('Shift+Digit1')
     await expect(page.locator('.audio-pool-status')).toBeVisible()
 

@@ -2660,14 +2660,19 @@ h1 {
   height: 28px;
 }
 
-.copy-table-btn:hover {
+.copy-table-btn:hover:not(:disabled) {
   background-color: var(--elektron-medium-gray);
   border-color: var(--elektron-orange);
   color: var(--elektron-orange);
 }
 
+.copy-table-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 /* Active toggle (e.g. transfers pane open) — same orange accent as hover */
-.copy-table-btn.active {
+.copy-table-btn.active:not(:disabled) {
   background-color: rgba(255, 102, 0, 0.15);
   border-color: var(--elektron-orange);
   color: var(--elektron-orange);

@@ -1065,15 +1065,15 @@ export function AudioPoolPage() {
         if (e.code === 'Digit1') { e.preventDefault(); setActiveTab('files'); return; }
         if (e.code === 'Digit2') { e.preventDefault(); setActiveTab('tools'); return; }
       }
-      // 't': toggle the Transfers pane (works from any tab)
+      // All of the shortcuts below (player, pane navigation, B toggle, transfers toggle...) belong to the Files tab
+      if (activeTab !== 'files') return;
+
+      // 't': toggle the Transfers pane
       if ((e.key === 't' || e.key === 'T') && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
         e.preventDefault();
         setIsTransferQueueOpen(!isTransferQueueOpen);
         return;
       }
-
-      // All of the shortcuts below (player, pane navigation, B toggle...) belong to the Files tab
-      if (activeTab !== 'files') return;
 
       // Player controls take precedence over row/panel navigation.
       const tag = (e.target as HTMLElement | null)?.tagName;
@@ -1399,7 +1399,8 @@ export function AudioPoolPage() {
           <button
             onClick={() => setIsTransferQueueOpen(!isTransferQueueOpen)}
             className={`copy-table-btn ${isTransferQueueOpen ? 'active' : ''} ${activeTransfersCount > 0 ? 'has-activity' : ''}`}
-            title={isTransferQueueOpen ? 'Hide transfers' : 'Show transfers'}
+            title={activeTab !== 'files' ? 'Only available on the Files tab' : isTransferQueueOpen ? 'Hide transfers' : 'Show transfers'}
+            disabled={activeTab !== 'files'}
           >
             <i className="fas fa-exchange-alt"></i>
             {hasTransfers && (
@@ -1438,13 +1439,11 @@ export function AudioPoolPage() {
           <div className="tools-fix-missing-layout">
             <div className="tools-description-pane">
               <p>
-                Scans every audio file of this Set's Audio Pool and lists the ones the Octatrack
-                cannot play (wrong sample rate, bit depth or format). With "Include all projects
-                of set" on, every audio file found in any project's own directory is scanned too,
-                not just files assigned to a sample slot. Execute converts them
-                to 44.1 kHz WAV in place: the original file is replaced, and sample slots referencing
-                it in any project of this Set are updated to the new file (each modified project is
-                backed up first).
+                Scans Audio Pool of Set for files the Octatrack can't play (wrong sample
+                rate, bit depth or format).
+                <br />
+                Optionally scans every project of Set too (directory and referenced samples).
+                Execute converts audio files in place and updates all references.
               </p>
             </div>
             {(poolScanLoading || incompatibleFiles.length > 0) && (
