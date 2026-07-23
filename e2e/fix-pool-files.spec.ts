@@ -181,26 +181,29 @@ test.describe('Audio Pool — fix incompatible files', () => {
     const modal = page.locator('.fix-pool-modal')
     await expect(modal.locator('tbody tr')).toHaveCount(2)
 
-    // Bold title carries the count; the table has the Format/Bit/kHz/Size columns
+    // Bold title carries the count; the table has the Format/Bit/kHz columns
     await expect(modal.locator('.modal-header h3')).toContainText('Review planned changes - 2 incompatible audio files')
     await expect(modal.locator('thead')).toContainText('Format')
     await expect(modal.locator('thead')).toContainText('Bit')
     await expect(modal.locator('thead')).toContainText('kHz')
-    await expect(modal.locator('thead')).toContainText('Size')
     // The count indicator always shows
     await expect(modal.getByText('Showing 2 of 2 files')).toBeVisible()
-    // Location is hidden by default here; the toggle-columns menu brings it back
+    // Location and Size are hidden by default here; the toggle-columns menu brings them back
     await expect(modal.locator('thead')).not.toContainText('Location')
+    await expect(modal.locator('thead')).not.toContainText('Size')
     await modal.locator('.column-visibility-btn').click()
     await modal.locator('.column-visibility-dropdown .dropdown-option', { hasText: 'Location' }).locator('input').check()
+    await modal.locator('.column-visibility-dropdown .dropdown-option', { hasText: 'Size' }).locator('input').check()
     await expect(modal.locator('thead')).toContainText('Location')
-    await modal.locator('.column-visibility-dropdown .dropdown-option', { hasText: 'Location' }).locator('input').uncheck()
-    await modal.locator('.column-visibility-btn').click()
+    await expect(modal.locator('thead')).toContainText('Size')
     const snareRow = modal.locator('tbody tr', { hasText: 'snare48.wav' })
     await expect(snareRow).toContainText('WAV')
     await expect(snareRow).toContainText('16')
     await expect(snareRow).toContainText('48.0')
     await expect(snareRow).toContainText('2.0 KB')
+    await modal.locator('.column-visibility-dropdown .dropdown-option', { hasText: 'Location' }).locator('input').uncheck()
+    await modal.locator('.column-visibility-dropdown .dropdown-option', { hasText: 'Size' }).locator('input').uncheck()
+    await modal.locator('.column-visibility-btn').click()
 
     // Search narrows the listed rows and the header shows the filtered count
     await modal.locator('.header-search-input').fill('snare')
@@ -212,8 +215,8 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await modal.locator('.copy-table-btn').click()
     await expect(modal.locator('.copy-table-btn')).toHaveText('✓')
     const clip = await page.evaluate(() => navigator.clipboard.readText())
-    // TSV mirrors the visible columns (Location hidden by default)
-    expect(clip).toContain('File\tFormat\tBit\tkHz\tSize\tAction')
+    // TSV mirrors the visible columns (Location and Size hidden by default, Usage shown)
+    expect(clip).toContain('File\tFormat\tBit\tkHz\tUsage\tAction')
     expect(clip).toContain('snare48.wav')
     expect(clip).not.toContain('loop.mp3')
 
@@ -273,11 +276,12 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await expect(listModal.locator('tbody tr')).toHaveCount(2)
     await expect(listModal.locator('.header-search-input')).toBeVisible()
     await expect(listModal.locator('.copy-table-btn')).toBeVisible()
-    // Same rich columns as the review table (Location visible here), plus the column toggle
+    // Same rich columns as the review table (Location visible here), plus the column toggle.
+    // Size is hidden by default in this modal (unlike the review table where Location differs).
     await expect(listModal.locator('thead')).toContainText('Format')
     await expect(listModal.locator('thead')).toContainText('Bit')
     await expect(listModal.locator('thead')).toContainText('kHz')
-    await expect(listModal.locator('thead')).toContainText('Size')
+    await expect(listModal.locator('thead')).not.toContainText('Size')
     await expect(listModal.locator('thead')).toContainText('Location')
     await expect(listModal.locator('.column-visibility-btn')).toBeVisible()
     // Content-sized: with few rows there is no scrollbar and no dead space below the table
@@ -380,6 +384,27 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await row.getByText('✓ 1').click()
     await expect(page.getByText('ProjectA · Bank A · Part 1 · T1 · Machine')).toBeVisible()
   })
+
+  test('the Incompatible Audio Pool Samples modals show Format/Bit/kHz/Usage/Location by default, Size hidden, with a working Usage badge', async ({ page }) => {
+    await page.locator('.header-tab', { hasText: 'Tools' }).click()
+    await page.locator('.tools-missing-files-summary').click()
+    const listModal = page.locator('.missing-samples-list-modal')
+    await expect(listModal.locator('thead')).toContainText('Format')
+    await expect(listModal.locator('thead')).toContainText('Bit')
+    await expect(listModal.locator('thead')).toContainText('kHz')
+    await expect(listModal.locator('thead')).toContainText('Usage')
+    await expect(listModal.locator('thead')).toContainText('Location')
+    await expect(listModal.locator('thead')).not.toContainText('Size')
+    // snare48.wav is already mocked with a real usage entry elsewhere in this file
+    await expect(listModal.locator('tr', { hasText: 'snare48.wav' }).getByText('✓ 1')).toBeVisible()
+    await page.keyboard.press('Escape')
+
+    await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()
+    const reviewModal = page.locator('.fix-pool-modal')
+    await expect(reviewModal.locator('thead')).toContainText('Usage')
+    await expect(reviewModal.locator('thead')).not.toContainText('Location')
+    await expect(reviewModal.locator('thead')).not.toContainText('Size')
+  })
 })
 
 test.describe('Audio Pool — include all projects of set', () => {
@@ -436,8 +461,8 @@ test.describe('Audio Pool — include all projects of set', () => {
     const listModal = page.locator('.missing-samples-list-modal')
     await expect(listModal).toBeVisible()
 
-    // Location is visible by default in this modal (usePoolTable is called with no
-    // defaultHidden override for the list modal, unlike the review modal)
+    // Location is visible by default in this modal (usePoolTable's defaultHidden here
+    // only hides Size, unlike the review modal which also hides Location)
     const rows = listModal.locator('tbody tr')
     await expect(rows.filter({ hasText: 'snare48.wav' }).locator('.fix-location-cell')).toHaveText('AUDIO/')
     await expect(rows.filter({ hasText: 'kick_project.mp3' }).locator('.fix-location-cell')).toHaveText('PROJ1/')

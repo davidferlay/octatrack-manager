@@ -1638,6 +1638,7 @@ export function AudioPoolPage() {
             justConvertedPaths={justConvertedPaths}
             usageMap={poolUsage}
             usageLoading={poolUsageLoading}
+            initialColumnVisibility={{ format: false, bitrate: false, samplerate: false }}
             scrollStorageKey={destinationPath ? `pool-dest-scroll:${destinationPath}` : undefined}
             countSuffix={poolScanDone && !poolScanLoading ? (
               scopedIncompatibleFiles.length > 0 ? (
@@ -1713,6 +1714,8 @@ export function AudioPoolPage() {
         <PoolIncompatibleListModal
           poolPath={audioPoolPath}
           files={scopedIncompatibleFiles}
+          usageMap={poolUsage}
+          usageLoading={poolUsageLoading}
           onClose={() => setShowPoolList(false)}
         />
       )}
@@ -1723,6 +1726,8 @@ export function AudioPoolPage() {
           poolPath={audioPoolPath}
           files={fixModal.files}
           skipReview={fixModal.skipReview}
+          usageMap={poolUsage}
+          usageLoading={poolUsageLoading}
           onClose={() => setFixModal(null)}
           onFixed={() => { loadDestinationFiles(destinationPath); setPoolScanKey(k => k + 1); }}
         />

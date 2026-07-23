@@ -720,12 +720,14 @@ export function FilterBadges({ table }: { table: ReturnType<typeof usePoolTable>
  * Read-only list of the incompatible pool files found by the Tools tab scan —
  * same look as the project's Missing Samples list modal.
  */
-export function PoolIncompatibleListModal({ poolPath, files, onClose }: {
+export function PoolIncompatibleListModal({ poolPath, files, onClose, usageMap, usageLoading }: {
   poolPath: string;
   files: IncompatibleFile[];
   onClose: () => void;
+  usageMap?: Record<string, PoolUsageEntry[]>;
+  usageLoading?: boolean;
 }) {
-  const table = usePoolTable(files, poolPath, false);
+  const table = usePoolTable(files, poolPath, false, ['size'], usageMap, usageLoading);
   const [copyFeedback, copy] = useCopyFeedback();
   const { modalRef, style, handles } = useModalResize();
 
@@ -775,6 +777,8 @@ interface Props {
   onClose: () => void;
   /** Called once a fix run finished so callers can refresh their listings. */
   onFixed?: (result: PoolFixResult) => void;
+  usageMap?: Record<string, PoolUsageEntry[]>;
+  usageLoading?: boolean;
 }
 
 type Phase = 'review' | 'converting' | 'done' | 'error';
@@ -785,7 +789,7 @@ type Phase = 'review' | 'converting' | 'done' | 'error';
  * references across every project of the Set (each project file is backed up first).
  * Mirrors the Fix Missing Samples review/apply flow.
  */
-export function FixPoolFilesModal({ poolPath, files, skipReview = false, onClose, onFixed }: Props) {
+export function FixPoolFilesModal({ poolPath, files, skipReview = false, onClose, onFixed, usageMap, usageLoading }: Props) {
   const [phase, setPhase] = useState<Phase>(skipReview ? 'converting' : 'review');
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [currentFile, setCurrentFile] = useState<string>('');
@@ -794,8 +798,8 @@ export function FixPoolFilesModal({ poolPath, files, skipReview = false, onClose
   const transferIdRef = useRef<string>(`fix-pool-${Date.now()}`);
   const startedRef = useRef(false);
 
-  // Location is hidden by default here - the Action column matters most for review
-  const table = usePoolTable(files, poolPath, true, ['location']);
+  // Location and Size are hidden by default here - the Action column matters most for review
+  const table = usePoolTable(files, poolPath, true, ['location', 'size'], usageMap, usageLoading);
   const [copyFeedback, copy] = useCopyFeedback();
   const { modalRef, style, handles } = useModalResize();
 
