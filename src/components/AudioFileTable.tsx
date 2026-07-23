@@ -158,6 +158,9 @@ const COLUMN_LABELS: Record<string, string> = {
   name: 'Name', usage: 'Usage', compat: 'Compat', format: 'Format', bitrate: 'Bit', samplerate: 'kHz', size: 'Size',
 };
 
+// Also defined in FixPoolFilesModal.tsx - the Usage column's popover logic is
+// intentionally ported (not shared) between this TanStack-based table and that
+// file's separate hand-rolled one; kept in sync manually.
 const BANK_LETTERS = 'ABCDEFGHIJKLMNOP';
 
 /**

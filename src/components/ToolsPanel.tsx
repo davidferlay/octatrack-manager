@@ -11,7 +11,7 @@ import { MissingSamplesListModal } from "./MissingSamplesListModal";
 import { CreateProjectModal } from "./CreateProjectModal";
 import { ProjectIncompatibleListModal, FixProjectFilesModal } from "./FixProjectFilesModal";
 import type { IncompatibleFile, PoolFixResult } from "./FixPoolFilesModal";
-import { audioKind } from "./AudioFileTable";
+import { audioKind, usageKey } from "./AudioFileTable";
 import { normalizePath } from "./SampleSlotsTable";
 
 const TOOLS_STORAGE_KEY_PREFIX = "octatrack-tools-settings-";
@@ -510,7 +510,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     setPoolUsageLoading(true);
     invoke<Record<string, PoolUsageEntry[]>>('get_pool_usage', { poolPath: audioPoolStatus.path })
       .then(result => { if (!cancelled) setPoolUsageMap(result ?? {}); })
-      .catch(() => { if (!cancelled) setPoolUsageMap({}); })
+      .catch(e => { console.error('Pool usage scan failed:', e); if (!cancelled) setPoolUsageMap({}); })
       .finally(() => { if (!cancelled) setPoolUsageLoading(false); });
     return () => { cancelled = true; };
   }, [audioPoolStatus?.exists, audioPoolStatus?.path]);
@@ -529,7 +529,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         if (entries.length === 0) return;
         const isAbsolute = slot.path.startsWith('/') || /^[A-Za-z]:/.test(slot.path);
         const resolved = normalizePath(isAbsolute ? slot.path : `${projectPath}/${slot.path}`);
-        const key = resolved.toLowerCase().replace(/\\/g, '/');
+        const key = usageKey(resolved);
         const tagged = entries.map(e => ({ ...e, project: projectName }));
         out[key] = [...(out[key] ?? []), ...tagged];
       });

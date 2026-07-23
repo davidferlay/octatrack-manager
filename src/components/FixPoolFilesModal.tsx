@@ -541,6 +541,7 @@ const REVIEW_COL_DEFAULTS: Record<string, number | undefined> = {
   slot: 70, file: 260, format: 93, bit: 80, khz: 78, usage: 90, size: 90, location: 185, action: undefined,
 };
 
+// Also defined in AudioFileTable.tsx - see that file's comment for why.
 const BANK_LETTERS = 'ABCDEFGHIJKLMNOP';
 
 export function PoolFilesTable({ table }: { table: ReturnType<typeof usePoolTable> }) {
@@ -613,6 +614,10 @@ export function PoolFilesTable({ table }: { table: ReturnType<typeof usePoolTabl
                 ○ {referencedCount}
               </button>
             )}
+            {/* Wording differs from AudioFileTable.tsx's equivalent ("...in any
+                project of this set") - this table's usage can include project-
+                local files too, not only pool-shared ones, so "anywhere" is the
+                accurate umbrella term here. */}
             {r.usageEntries.length === 0 && (usageLoading
               ? <span className="usage-none" title="Computing usage…">…</span>
               : <span className="usage-none" title="Not referenced anywhere">—</span>)}
