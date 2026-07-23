@@ -772,9 +772,11 @@ export function PoolIncompatibleListModal({ poolPath, files, onClose, usageMap, 
   );
 }
 
-interface Props {
-  /** Absolute path of the Set's AUDIO directory. */
-  poolPath: string;
+type Phase = 'review' | 'converting' | 'done' | 'error';
+
+export interface FixSamplesModalProps {
+  /** Absolute path of the pool (AUDIO dir) or project directory being scanned. */
+  scopePath: string;
   /** Incompatible files to convert. */
   files: IncompatibleFile[];
   /** Skip the review screen and start converting immediately. */
@@ -784,41 +786,52 @@ interface Props {
   onFixed?: (result: PoolFixResult) => void;
   usageMap?: Record<string, PoolUsageEntry[]>;
   usageLoading?: boolean;
+  /** Show the Slot column - project-scope only. */
+  withSlot?: boolean;
+  /** Prefix for the transfer id passed to the backend and cancel_audio_transfer. */
+  transferIdPrefix: string;
+  /** Header text while converting, e.g. "Fixing Audio Pool Samples...". */
+  progressingLabel: string;
+  /** Header text once done, e.g. "Fix Audio Pool Samples". */
+  doneLabel: string;
+  /** Kicks off the actual conversion - the only backend-command-shaped detail that differs between pool and project scope. */
+  runFix: (filePaths: string[], transferId: string) => Promise<PoolFixResult>;
 }
 
-type Phase = 'review' | 'converting' | 'done' | 'error';
-
 /**
- * Fix Audio Pool Samples: converts pool files the Octatrack cannot play to
- * 44.1 kHz 16/24-bit WAV in place (originals replaced), then repoints sample-slot
- * references across every project of the Set (each project file is backed up first).
- * Mirrors the Fix Missing Samples review/apply flow.
+ * Shared review/convert/done flow behind both "Fix Audio Pool Samples" and
+ * "Fix Project Samples" - identical in every respect except which backend
+ * command starts the conversion and a couple of labels, so both get the same
+ * UI (and any future fix) for free. Mirrors the Fix Missing Samples modal's
+ * minimalist "Converting N / M" spinner row and collapsible failure list.
  */
-export function FixPoolFilesModal({ poolPath, files, skipReview = false, onClose, onFixed, usageMap, usageLoading }: Props) {
+export function FixSamplesModal({
+  scopePath, files, skipReview = false, onClose, onFixed, usageMap, usageLoading, withSlot,
+  transferIdPrefix, progressingLabel, doneLabel, runFix,
+}: FixSamplesModalProps) {
   const [phase, setPhase] = useState<Phase>(skipReview ? 'converting' : 'review');
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [currentFile, setCurrentFile] = useState<string>('');
-  const [fileProgress, setFileProgress] = useState<number>(0);
   const [result, setResult] = useState<PoolFixResult | null>(null);
-  const transferIdRef = useRef<string>(`fix-pool-${Date.now()}`);
+  const transferIdRef = useRef<string>(`${transferIdPrefix}-${Date.now()}`);
   const startedRef = useRef(false);
 
   // Location and Size are hidden by default here - the Action column matters most for review
-  const table = usePoolTable(files, poolPath, true, ['location', 'size'], usageMap, usageLoading);
+  const table = usePoolTable(files, scopePath, true, ['location', 'size'], usageMap, usageLoading, withSlot);
   const [copyFeedback, copy] = useCopyFeedback();
   const { modalRef, style, handles } = useModalResize();
 
   const relName = (path: string) =>
-    path.startsWith(poolPath) ? path.slice(poolPath.length).replace(/^[/\\]/, '') : path;
+    path.startsWith(scopePath) ? path.slice(scopePath.length).replace(/^[/\\]/, '') : path;
 
-  // Per-file conversion progress
+  // Per-file conversion progress - drives both the N/M position and the
+  // current file name shown below it.
   useEffect(() => {
     if (phase !== 'converting') return;
     let unlisten: (() => void) | undefined;
     listen<CopyProgressEvent>('copy-progress', (event) => {
       if (event.payload.transfer_id !== transferIdRef.current) return;
       setCurrentFile(event.payload.file_path);
-      setFileProgress(event.payload.progress);
     }).then(fn => { unlisten = fn; }).catch(() => {});
     return () => { unlisten?.(); };
   }, [phase]);
@@ -829,12 +842,7 @@ export function FixPoolFilesModal({ poolPath, files, skipReview = false, onClose
     if (phase !== 'converting' || startedRef.current) return;
     startedRef.current = true;
     setCurrentFile(files[0]?.path ?? '');
-    setFileProgress(0);
-    invoke<PoolFixResult>('fix_pool_files', {
-      poolPath,
-      filePaths: files.map(f => f.path),
-      transferId: transferIdRef.current,
-    })
+    runFix(files.map(f => f.path), transferIdRef.current)
       .then(res => {
         setResult(res);
         setPhase('done');
@@ -862,7 +870,7 @@ export function FixPoolFilesModal({ poolPath, files, skipReview = false, onClose
     <div className="modal-overlay" onClick={phase !== 'converting' ? onClose : undefined}>
       <div
         ref={modalRef}
-        className="modal-content fix-missing-modal fix-pool-modal"
+        className={`modal-content fix-missing-modal fix-pool-modal${phase !== 'review' ? ' fix-pool-modal-narrow' : ''}`}
         onClick={(e) => e.stopPropagation()}
         style={style}
       >
@@ -870,8 +878,8 @@ export function FixPoolFilesModal({ poolPath, files, skipReview = false, onClose
         <div className={`modal-header${phase === 'review' ? ' missing-samples-header' : ''}`}>
           <h3>
             {phase === 'review' && <><i className="fas fa-clipboard-check"></i> Review planned changes - {files.length} incompatible audio file{files.length === 1 ? '' : 's'}</>}
-            {phase === 'converting' && <><i className="fas fa-wrench" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>Fixing Audio Pool Samples...</>}
-            {phase === 'done' && <><i className="fas fa-wrench" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>Fix Audio Pool Samples</>}
+            {phase === 'converting' && <><i className="fas fa-wrench" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>{progressingLabel}</>}
+            {phase === 'done' && <><i className="fas fa-wrench" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>{doneLabel}</>}
             {phase === 'error' && 'Error'}
           </h3>
           {phase === 'review' && (
@@ -912,13 +920,11 @@ export function FixPoolFilesModal({ poolPath, files, skipReview = false, onClose
 
           {converting && (
             <div className="fix-pool-progress">
-              <p>
-                Converting {convertingIndex + 1} / {files.length}:{' '}
-                <span className="fix-pool-current-file" title={currentFile}>{relName(currentFile)}</span>
-              </p>
-              <div className="copy-progress-bar">
-                <div className="copy-progress-bar-fill" style={{ width: `${Math.round(fileProgress * 100)}%` }}></div>
+              <div className="fix-search-step running">
+                <span className="fix-step-icon"><span className="loading-spinner-small"></span></span>
+                <span className="fix-step-label">Converting {convertingIndex + 1} / {files.length}</span>
               </div>
+              <div className="fix-pool-progress-file" title={currentFile}>{relName(currentFile)}</div>
               <div className="fix-done-actions">
                 <button className="fix-cancel-btn" onClick={handleCancelConvert}>Cancel</button>
               </div>
@@ -936,13 +942,23 @@ export function FixPoolFilesModal({ poolPath, files, skipReview = false, onClose
                 )}
               </p>
               {failed.length > 0 && (
-                <div className="fix-done-error">
-                  <p>{failed.length} file{failed.length === 1 ? '' : 's'} could not be converted:</p>
-                  <ul>
-                    {failed.map(f => (
-                      <li key={f.old_path} title={f.old_path}>{relName(f.old_path)} - {f.error}</li>
-                    ))}
-                  </ul>
+                <div className="fix-done-failures">
+                  <div className="fix-done-failures-label">{failed.length} file{failed.length === 1 ? '' : 's'} could not be converted</div>
+                  <div className="fix-done-failures-table-wrapper">
+                    <table className="fix-done-failures-table">
+                      <thead>
+                        <tr><th>File</th><th>Error</th></tr>
+                      </thead>
+                      <tbody>
+                        {failed.map(f => (
+                          <tr key={f.old_path}>
+                            <td title={f.old_path}>{relName(f.old_path)}</td>
+                            <td>{f.error}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
               <div className="fix-done-actions">
@@ -962,5 +978,42 @@ export function FixPoolFilesModal({ poolPath, files, skipReview = false, onClose
         </div>
       </div>
     </div>
+  );
+}
+
+interface Props {
+  /** Absolute path of the Set's AUDIO directory. */
+  poolPath: string;
+  /** Incompatible files to convert. */
+  files: IncompatibleFile[];
+  /** Skip the review screen and start converting immediately. */
+  skipReview?: boolean;
+  onClose: () => void;
+  /** Called once a fix run finished so callers can refresh their listings. */
+  onFixed?: (result: PoolFixResult) => void;
+  usageMap?: Record<string, PoolUsageEntry[]>;
+  usageLoading?: boolean;
+}
+
+/**
+ * Fix Audio Pool Samples: converts pool files the Octatrack cannot play to
+ * 44.1 kHz 16/24-bit WAV in place (originals replaced), then repoints sample-slot
+ * references across every project of the Set (each project file is backed up first).
+ */
+export function FixPoolFilesModal({ poolPath, files, skipReview = false, onClose, onFixed, usageMap, usageLoading }: Props) {
+  return (
+    <FixSamplesModal
+      scopePath={poolPath}
+      files={files}
+      skipReview={skipReview}
+      onClose={onClose}
+      onFixed={onFixed}
+      usageMap={usageMap}
+      usageLoading={usageLoading}
+      transferIdPrefix="fix-pool"
+      progressingLabel="Fixing Audio Pool Samples..."
+      doneLabel="Fix Audio Pool Samples"
+      runFix={(filePaths, transferId) => invoke<PoolFixResult>('fix_pool_files', { poolPath, filePaths, transferId })}
+    />
   );
 }

@@ -5720,13 +5720,53 @@ th.col-usage .header-content .filter-icon {
 }
 
 /* Fix Audio Pool Samples (Audio Pool) */
+/* Converting/done/error phases (Fix Audio Pool/Project Samples): narrower
+   than the wide review-table layout, since their content is just a status
+   line, an optional file list, and one or two buttons. */
+.modal-content.fix-pool-modal-narrow {
+  max-width: 480px;
+  width: 90%;
+}
+
+.fix-pool-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.fix-pool-summary .fix-done-actions {
+  justify-content: center;
+  width: 100%;
+}
+
+/* The Close button on the done screen shouldn't be the big Execute-sized CTA */
+.fix-pool-summary .fix-done-actions .tools-execute-btn {
+  width: auto;
+  padding: 0.5rem 1.5rem;
+  font-size: 1rem;
+}
+
 .fix-pool-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
   padding: 0.5rem 0;
 }
 
-.fix-pool-current-file {
-  color: var(--elektron-orange);
-  font-family: 'Courier New', monospace;
+.fix-pool-progress-file {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--elektron-text-secondary);
+  font-size: 0.85rem;
+}
+
+.fix-pool-progress .fix-done-actions {
+  justify-content: center;
+  width: 100%;
 }
 
 /* Pool modals table: fixed layout so the colgroup widths (and drag-resizing) apply */
@@ -6098,35 +6138,66 @@ th.col-drag-over {
   color: #dc3545;
 }
 
-.fix-done-details summary {
-  cursor: pointer;
-  color: var(--elektron-orange);
+/* Failed-conversions section on the done screen: a dedicated, height-capped,
+   independently-scrollable table rather than an inline list, so a long
+   failure list doesn't blow up the modal height. */
+.fix-done-failures {
+  align-self: stretch;
+  text-align: left;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--elektron-border-gray);
+}
+
+.fix-done-failures-label {
+  color: #FF8888;
   font-size: 0.85rem;
   font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  user-select: none;
+  margin-bottom: 0.5rem;
 }
 
-.fix-done-details summary:hover {
-  color: var(--elektron-orange-hover);
+.fix-done-failures-table-wrapper {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--elektron-border-gray);
+  border-radius: 4px;
 }
 
-.fix-done-details-content {
-  margin-top: 0.5rem;
+.fix-done-failures-table {
+  width: 100%;
+  border-collapse: collapse;
   font-size: 0.8rem;
+}
+
+.fix-done-failures-table th,
+.fix-done-failures-table td {
+  padding: 0.35rem 0.6rem;
+  text-align: left;
+  border-bottom: 1px solid var(--elektron-border-gray);
+}
+
+.fix-done-failures-table tr:last-child td {
+  border-bottom: none;
+}
+
+.fix-done-failures-table th {
+  position: sticky;
+  top: 0;
+  background: var(--elektron-dark-gray);
   color: var(--elektron-text-secondary);
+  font-weight: 500;
 }
 
-.fix-done-file-list {
-  margin-top: 0.5rem;
+.fix-done-failures-table td:first-child {
+  color: var(--elektron-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
 }
 
-.fix-done-file-item {
-  padding: 0.15rem 0;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
+.fix-done-failures-table td:last-child {
+  color: #FF8888;
 }
 
 .fix-done-error {

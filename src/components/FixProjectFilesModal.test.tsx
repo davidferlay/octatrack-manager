@@ -46,6 +46,68 @@ describe('FixProjectFilesModal', () => {
     render(<FixProjectFilesModal projectPath="/set/MyProject" files={files} skipReview onClose={vi.fn()} />)
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('fix_project_samples', expect.anything()))
   })
+
+  it('shows a minimalist, centered "Converting N / M" line with a spinner and the current file name below it, not a percent bar', async () => {
+    // Regression test for a UI cleanup: the previous design showed the raw
+    // current file path inline in orange plus a percent-fill bar - replaced
+    // with the same minimalist "Converting N / M" + spinner row Fix Missing
+    // Samples uses, with the current file name as its own grey line below.
+    let resolveInvoke: (v: unknown) => void = () => {}
+    invokeMock.mockImplementation(() => new Promise(resolve => { resolveInvoke = resolve }))
+    render(<FixProjectFilesModal projectPath="/set/MyProject" files={files} skipReview onClose={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getByText('Converting 1 / 2')).toBeInTheDocument())
+    expect(document.querySelector('.loading-spinner-small')).toBeTruthy()
+    expect(document.querySelector('.copy-progress-bar')).toBeFalsy()
+    expect(document.querySelector('.fix-pool-progress-file')?.textContent).toBe('kick.mp3')
+    // Narrower, centered modal for this phase rather than the wide review layout.
+    expect(document.querySelector('.modal-content.fix-pool-modal-narrow')).toBeTruthy()
+
+    resolveInvoke({ outcomes: [], projects_updated: [], slots_updated: 0 })
+    await waitFor(() => expect(screen.getByText(/files converted/)).toBeInTheDocument())
+  })
+
+  it('lists failed conversions in a dedicated, independently-scrollable table instead of an inline list', async () => {
+    // Regression test: reusing .fix-done-error (display:flex on a <p>+<ul> pair)
+    // put the "N files could not be converted" label and the error list side
+    // by side instead of stacked. Now a dedicated section with its own
+    // height-capped, scrollable <table> (File / Error columns).
+    invokeMock.mockResolvedValue({
+      outcomes: [
+        { old_path: '/set/MyProject/kick.mp3', new_path: null, error: 'boom' },
+        { old_path: '/set/AUDIO/snare48.wav', new_path: '/set/AUDIO/snare48.wav', error: null },
+      ],
+      projects_updated: [],
+      slots_updated: 0,
+    })
+    render(<FixProjectFilesModal projectPath="/set/MyProject" files={files} skipReview onClose={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getByText('1 file could not be converted')).toBeInTheDocument())
+    const wrapper = document.querySelector('.fix-done-failures-table-wrapper')
+    expect(wrapper).toBeTruthy()
+    const table = wrapper?.querySelector('table.fix-done-failures-table')
+    expect(table).toBeTruthy()
+    expect(table?.querySelectorAll('tbody tr')).toHaveLength(1)
+    const cells = table?.querySelectorAll('tbody tr td')
+    expect(cells?.[0].textContent).toBe('kick.mp3')
+    expect(cells?.[1].textContent).toBe('boom')
+    // Only the failed file is listed, not the successfully-converted one.
+    expect(screen.queryByText('snare48.wav')).not.toBeInTheDocument()
+  })
+
+  it('narrows the done screen too, and keeps its Close button compact rather than the big Execute-sized CTA', async () => {
+    invokeMock.mockResolvedValue({ outcomes: [], projects_updated: [], slots_updated: 0 })
+    render(<FixProjectFilesModal projectPath="/set/MyProject" files={files} skipReview onClose={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getByText(/files converted/)).toBeInTheDocument())
+    expect(document.querySelector('.modal-content.fix-pool-modal-narrow')).toBeTruthy()
+    const closeBtn = screen.getByRole('button', { name: 'Close' })
+    expect(closeBtn).toHaveClass('tools-execute-btn')
+    // Not asserting computed style (jsdom doesn't load CSS), just that it's
+    // the same button element the scoped .fix-pool-summary override targets
+    // (which also centers this whole screen's content, message included).
+    expect(closeBtn.closest('.fix-pool-summary')).toBeTruthy()
+  })
 })
 
 function TestHarness({ files, usageMap, withSlot }: { files: IncompatibleFile[]; usageMap?: Record<string, any>; withSlot?: boolean }) {
