@@ -167,6 +167,22 @@ describe('SampleSlotsTable', () => {
     expect(onOpen).toHaveBeenCalled()
   })
 
+  it('does not count a slot whose file is missing from disk toward the health glyph', () => {
+    // A missing file can't be judged incompatible - it was never inspected
+    // (the backend reports its compatibility as "unknown" regardless, the
+    // same string used for a genuinely-inspected unrecognized format) and
+    // there's nothing to convert. That case belongs to Fix Missing Samples.
+    const slots = [
+      { ...mockSlots[0], path: 'missing.wav', file_exists: false, compatibility: 'unknown' },
+    ]
+    const onOpen = vi.fn()
+    renderWithProvider(
+      <SampleSlotsTable slots={slots} slotPrefix="F" tableType="flex" onOpenFixProjectSamples={onOpen} />
+    )
+    expect(screen.queryByTitle(/incompatible audio file.*click to fix/i)).not.toBeInTheDocument()
+    expect(screen.getByTitle(/all.*compatible/i)).toBeInTheDocument()
+  })
+
   it('shows an ok glyph when nothing is incompatible', () => {
     const slots = [{ ...mockSlots[0], path: 'kick.wav', file_exists: true, compatibility: 'compatible' }]
     renderWithProvider(<SampleSlotsTable slots={slots} slotPrefix="S" tableType="static" />)

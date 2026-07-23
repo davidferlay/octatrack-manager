@@ -16,11 +16,11 @@ function baseProps() {
     loadedBankIndices: new Set<number>(),
     sampleSlots: {
       flex_slots: [
-        { path: 'kick.mp3', compatibility: 'unknown' },
-        { path: null, compatibility: null },
+        { path: 'kick.mp3', compatibility: 'unknown', file_exists: true },
+        { path: null, compatibility: null, file_exists: false },
       ],
       static_slots: [
-        { path: '../AUDIO/snare48.wav', compatibility: 'wrong_rate' },
+        { path: '../AUDIO/snare48.wav', compatibility: 'wrong_rate', file_exists: true },
       ],
     },
   }
@@ -87,6 +87,30 @@ describe('ToolsPanel - Fix Project Samples', () => {
     expect(screen.queryByTitle('OtherProject/../AUDIO')).not.toBeInTheDocument()
   })
 
+  it('does not count a slot whose file is missing from disk as incompatible', async () => {
+    // A missing file (file_exists: false) is never inspected by the backend,
+    // which reports its compatibility as "unknown" anyway (project_reader.rs)
+    // - the same string used for a genuinely-inspected unrecognized format.
+    // Without checking file_exists, a missing file would be double-booked
+    // into this tool (which can't fix a file that isn't there) as well as
+    // Fix Missing Samples (the actual tool for this case).
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'list_audio_files_recursive') return Promise.resolve([])
+      if (cmd === 'inspect_audio_files') return Promise.resolve([])
+      return Promise.resolve(null)
+    })
+    renderPanel({
+      initialOperation: 'fix_project_samples',
+      sampleSlots: {
+        flex_slots: [{ path: 'missing.wav', compatibility: 'unknown', file_exists: false }],
+        static_slots: [],
+      },
+    })
+    await waitFor(() => expect(screen.getByText('0')).toBeInTheDocument())
+    expect(screen.getByText(/all playable by the Octatrack/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /incompatible audio file/ })).not.toBeInTheDocument()
+  })
+
   it('opens FixProjectFilesModal on Execute', async () => {
     invokeMock.mockImplementation((cmd: string) => {
       if (cmd === 'list_audio_files_recursive') return Promise.resolve([])
@@ -112,11 +136,11 @@ describe('ToolsPanel - Fix Project Samples', () => {
         // file ('kick.mp3' in the project root). Without dedup by resolved
         // path, this would inflate the count to 3 and list the file 3 times.
         flex_slots: [
-          { path: 'kick.mp3', compatibility: 'unknown' },
-          { path: 'kick.mp3', compatibility: 'unsupported_format' },
+          { path: 'kick.mp3', compatibility: 'unknown', file_exists: true },
+          { path: 'kick.mp3', compatibility: 'unsupported_format', file_exists: true },
         ],
         static_slots: [
-          { path: 'kick.mp3', compatibility: 'unknown' },
+          { path: 'kick.mp3', compatibility: 'unknown', file_exists: true },
         ],
       },
     })
@@ -151,7 +175,7 @@ describe('ToolsPanel - Fix Project Samples', () => {
       projectPath: 'C:\\Project',
       initialOperation: 'fix_project_samples',
       sampleSlots: {
-        flex_slots: [{ path: 'kick.mp3', compatibility: 'unknown' }],
+        flex_slots: [{ path: 'kick.mp3', compatibility: 'unknown', file_exists: true }],
         static_slots: [],
       },
     })
@@ -191,7 +215,7 @@ describe('ToolsPanel - Fix Project Samples', () => {
       initialOperation: 'fix_project_samples',
       sampleSlots: {
         flex_slots: [],
-        static_slots: [{ path: '../AUDIO/kick48.wav', compatibility: 'wrong_rate' }],
+        static_slots: [{ path: '../AUDIO/kick48.wav', compatibility: 'wrong_rate', file_exists: true }],
       },
       slotUsage: {
         static_usage: [
@@ -217,8 +241,8 @@ describe('ToolsPanel - Fix Project Samples', () => {
     renderPanel({
       initialOperation: 'fix_project_samples',
       sampleSlots: {
-        flex_slots: [{ path: 'kick.mp3', compatibility: 'unknown' }],
-        static_slots: [{ path: 'kick.mp3', compatibility: 'unknown' }],
+        flex_slots: [{ path: 'kick.mp3', compatibility: 'unknown', file_exists: true }],
+        static_slots: [{ path: 'kick.mp3', compatibility: 'unknown', file_exists: true }],
       },
     })
     await waitFor(() => expect(screen.getByRole('button', { name: 'Execute' })).toBeEnabled())

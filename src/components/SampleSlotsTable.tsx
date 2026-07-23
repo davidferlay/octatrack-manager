@@ -1803,25 +1803,6 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
                   : memorySettings.flex_ram_free_mb.toFixed(2)} MB
               </span>
             )}
-            {!showAudioPool && (() => {
-              const incompatibleCount = slots.filter(
-                s => s.path && s.compatibility && s.compatibility !== 'compatible'
-              ).length;
-              return incompatibleCount > 0 ? (
-                <button
-                  className="pool-health-glyph warning"
-                  title={`${incompatibleCount} incompatible audio file${incompatibleCount !== 1 ? 's' : ''} found - click to fix`}
-                  onClick={() => onOpenFixProjectSamples?.()}
-                >
-                  <i className="fas fa-wrench"></i>
-                  {incompatibleCount}
-                </button>
-              ) : (
-                <span className="pool-health-glyph ok" title="All referenced samples of this type are compatible with Octatrack">
-                  <i className="fas fa-check-circle"></i>
-                </span>
-              );
-            })()}
             {compatibilityFilter !== 'all' && <span className="filter-badge">Compat: {compatibilityFilter}</span>}
             {statusFilter !== 'all' && <span className="filter-badge">Status: {statusFilter}</span>}
             {sourceFilter !== 'all' && <span className="filter-badge">Source: {sourceFilter}</span>}
@@ -1842,6 +1823,25 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            {!showAudioPool && (() => {
+              const incompatibleCount = slots.filter(
+                s => s.path && s.file_exists && s.compatibility && s.compatibility !== 'compatible'
+              ).length;
+              return incompatibleCount > 0 ? (
+                <button
+                  className="pool-health-glyph warning"
+                  title={`${incompatibleCount} incompatible audio file${incompatibleCount !== 1 ? 's' : ''} found - click to fix`}
+                  onClick={() => onOpenFixProjectSamples?.()}
+                >
+                  <i className="fas fa-wrench"></i>
+                  {incompatibleCount}
+                </button>
+              ) : (
+                <span className="pool-health-glyph ok" title="All referenced samples of this type are compatible with Octatrack">
+                  <i className="fas fa-check-circle"></i>
+                </span>
+              );
+            })()}
             <div className="header-search-container">
               <input
                 type="text"

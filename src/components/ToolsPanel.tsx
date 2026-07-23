@@ -74,6 +74,7 @@ type OtherProjectOption = "move_to_pool" | "copy_to_project";
 interface CompatSlot {
   path: string | null;
   compatibility: string | null;
+  file_exists: boolean;
 }
 
 interface ToolsPanelProps {
@@ -418,7 +419,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     const labeled: { path: string; compatibility: string; slotLabel: string }[] = [];
     const collect = (slots: CompatSlot[], prefix: string) => {
       slots.forEach((slot, i) => {
-        if (!slot.path || !slot.compatibility || slot.compatibility === 'compatible') return;
+        // A missing file can't be judged incompatible - it was never inspected
+        // (the backend reports "unknown" for it) and there's nothing to convert;
+        // that case belongs to Fix Missing Samples, not this tool.
+        if (!slot.path || !slot.file_exists || !slot.compatibility || slot.compatibility === 'compatible') return;
         const isAbsolute = slot.path.startsWith('/') || /^[A-Za-z]:/.test(slot.path);
         const resolved = normalizePath(isAbsolute ? slot.path : `${projectPath}/${slot.path}`);
         labeled.push({ path: resolved, compatibility: slot.compatibility, slotLabel: `${prefix}${i + 1}` });

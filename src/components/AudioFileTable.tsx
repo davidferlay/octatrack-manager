@@ -651,13 +651,13 @@ export function AudioFileTable({
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           {headerPrefix}
           <span>{table.getRowModel().rows.length}/{baseFiles.length} files</span>
-          {countSuffix}
           {formatFilter !== 'all' && <span className="filter-badge">Format: {formatFilter}</span>}
           {bitDepthFilter !== 'all' && <span className="filter-badge">Bit: {bitDepthFilter}</span>}
           {sampleRateFilter !== 'all' && <span className="filter-badge">Rate: {(parseInt(sampleRateFilter) / 1000).toFixed(1)}kHz</span>}
           {usageFilter !== 'all' && <span className="filter-badge">Usage: {usageFilter === 'used' ? 'Used' : usageFilter === 'referenced' ? 'Referenced' : 'Unused'}</span>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          {countSuffix}
           <div className="header-search-container">
             <input
               type="text"
