@@ -1034,7 +1034,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         </select>
       </div>
 
-      {operation !== "fix_missing_samples" && (
+      {operation !== "fix_missing_samples" && operation !== "fix_project_samples" && (
       <div className="tools-panels">
         {/* Source Panel */}
         <div className="tools-source-panel">
@@ -3166,12 +3166,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         <div className="tools-fix-missing-layout">
           <div className="tools-description-pane">
             <p>
-              Scans every sample slot referencing an incompatible audio file (wherever it
-              physically lives - this project's own directory or the shared Audio Pool),
-              plus any other incompatible audio file found recursively in this project's
-              own directory. Execute converts them to 44.1 kHz WAV in place: the original
-              file is replaced, and sample slots referencing it in any project of this Set
-              are updated to the new file (each modified project is backed up first).
+              Scans Project for files the Octatrack can't play (wrong sample
+                rate, bit depth or format).<br />
+Handles audio files referenced by Samples Slots as well as audio files simply located in Project's directory which may be referenced or not.<br /> Execute converts audio files in place and updates all references.
             </p>
           </div>
 

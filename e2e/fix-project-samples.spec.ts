@@ -243,6 +243,15 @@ test.describe('Fix Project Samples - Tools tab', () => {
     await expect(summary).toContainText('of 4 scanned')
   })
 
+  test('does not show the Source/Destination panes, and shows exactly one description pane', async ({ page }) => {
+    // Fix Project Samples always operates on the currently loaded project, so
+    // the generic Source/Destination layout (used by Copy Bank/Parts/etc.)
+    // does not apply here - same as Fix Missing Samples.
+    await expect(page.locator('.tools-source-panel')).toHaveCount(0)
+    await expect(page.locator('h3', { hasText: 'Destination' })).toHaveCount(0)
+    await expect(page.locator('.tools-description-pane')).toHaveCount(1)
+  })
+
   test('opens the Incompatible Project Samples list modal with all 3 files', async ({ page }) => {
     await page.locator('.tools-missing-files-summary').click()
     const listModal = page.locator('.missing-samples-list-modal')
