@@ -526,6 +526,31 @@ describe('SampleSlotsTable — slot context menu & Audio Pool page button', () =
     }))
     expect(await screen.findByText('Converted to Octatrack format')).toBeInTheDocument()
   })
+
+  it('does not double the projectPath prefix when the slot path is already absolute (e.g. a pool-referenced file)', async () => {
+    // Sibling resolvers in this file (resolveSlotPath, projectUsageMap's `record`)
+    // all check for an absolute slot.path before joining with projectPath;
+    // convertSlotFileInline previously skipped that check and always built
+    // `${projectPath}/${slot.path}`, producing a malformed doubled path
+    // ('/some/project//pool/kick.wav') for any pool-referenced (absolute) slot.
+    mockInvoke.mockResolvedValue({
+      outcomes: [{ old_path: '/pool/kick.wav', new_path: '/pool/kick.wav', error: null }],
+      projects_updated: [],
+      slots_updated: 0,
+    })
+    const slots = [{ ...mockSlots[0], path: '/pool/kick.wav', file_exists: true, compatibility: 'unknown' }]
+    renderWithProvider(
+      <SampleSlotsTable slots={slots} slotPrefix="F" tableType="flex" isEditMode projectPath="/some/project" />
+    )
+    fireEvent.contextMenu(screen.getByText('kick.wav').closest('tr')!)
+    await userEvent.click(screen.getByText(/Convert to Octatrack format/i))
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('fix_project_samples', {
+      projectPath: '/some/project',
+      filePaths: ['/pool/kick.wav'],
+      transferId: expect.any(String),
+    }))
+    expect(await screen.findByText('Converted to Octatrack format')).toBeInTheDocument()
+  })
 })
 
 describe('SampleSlotsTable — selection & transfers toggle', () => {

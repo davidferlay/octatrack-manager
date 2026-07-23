@@ -635,7 +635,8 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   const [convertingSlotIds, setConvertingSlotIds] = useState<Set<number>>(new Set());
   const convertSlotFileInline = useCallback(async (slot: SampleSlot) => {
     if (!slot.path || !projectPath) return;
-    const absolutePath = `${projectPath}/${slot.path}`;
+    const isAbsolute = slot.path.startsWith('/') || /^[A-Za-z]:/.test(slot.path);
+    const absolutePath = normalizePath(isAbsolute ? slot.path : `${projectPath}/${slot.path}`);
     setConvertingSlotIds(prev => new Set(prev).add(slot.slot_id));
     try {
       const result = await invoke<{ outcomes: { old_path: string; new_path: string | null; error: string | null }[] }>('fix_project_samples', {

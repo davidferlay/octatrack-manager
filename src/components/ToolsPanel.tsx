@@ -465,10 +465,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         const allProjectPaths = (await invoke<string[]>('list_audio_files_recursive', { path: projectPath })) ?? [];
         if (cancelled) return;
         setProjectScanTotal(allProjectPaths.length);
-        const referencedPaths = new Set(referencedSlotEntries.map(e => e.path));
+        const referencedPaths = new Set(referencedSlotEntries.map(e => usageKey(e.path)));
         const unreferencedPaths = allProjectPaths
           .map(p => normalizePath(p))
-          .filter(p => !referencedPaths.has(p));
+          .filter(p => !referencedPaths.has(usageKey(p)));
         const otherAudio = unreferencedPaths
           .filter(p => audioKind(p) === 'other-audio')
           .map(p => ({ path: p, compatibility: 'unsupported_format', source: 'project' as const, slots: [] as string[] }));
@@ -538,6 +538,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     record(sampleSlots.static_slots, slotUsage.static_usage);
     return out;
   }, [slotUsage, sampleSlots, projectPath, projectName]);
+
+  const usageLoading = poolUsageLoading || !slotUsage;
 
   const projectFilesUsageMap = useMemo(() => {
     const merged: Record<string, PoolUsageEntry[]> = { ...projectUsageMap };
@@ -3692,7 +3694,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           projectPath={projectPath}
           files={projectIncompatibleFiles}
           usageMap={projectFilesUsageMap}
-          usageLoading={poolUsageLoading}
+          usageLoading={usageLoading}
           onClose={() => setShowProjectIncompatibleListModal(false)}
         />
       )}
@@ -3704,7 +3706,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           files={projectIncompatibleFiles}
           skipReview={skipProjectReview}
           usageMap={projectFilesUsageMap}
-          usageLoading={poolUsageLoading}
+          usageLoading={usageLoading}
           onClose={() => setShowFixProjectModal(false)}
           onFixed={(_res: PoolFixResult) => {
             if (onProjectRefresh) onProjectRefresh();

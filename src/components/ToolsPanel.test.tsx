@@ -131,6 +131,39 @@ describe('ToolsPanel - Fix Project Samples', () => {
     expect(await screen.findByText('Showing 1 of 1 files')).toBeInTheDocument()
   })
 
+  it('dedupes a referenced Windows-path slot against the same file returned with native backslashes by the recursive scan', async () => {
+    // Windows-only bug: referencedSlotEntries resolves 'kick.mp3' by joining
+    // `${projectPath}/${slot.path}` (a forward slash), then normalizePath() only
+    // rewrites '/'-separated segments and never touches '\', so with a backslash
+    // projectPath the resolved referenced path keeps mixed separators
+    // ('C:\Project/kick.mp3'). Meanwhile list_audio_files_recursive (Rust, native)
+    // returns the SAME file with all-backslash separators ('C:\Project\kick.mp3').
+    // Pre-fix, the plain Set.has() comparison treated these as two different files,
+    // so the file showed up in BOTH the referenced bucket and the unreferenced
+    // bucket (duplicate row, count of 2). Post-fix, comparing via usageKey()
+    // (lowercase + backslash-to-forward-slash) recognizes them as the same file.
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'list_audio_files_recursive') return Promise.resolve(['C:\\Project\\kick.mp3'])
+      if (cmd === 'inspect_audio_files') return Promise.resolve([])
+      return Promise.resolve(null)
+    })
+    renderPanel({
+      projectPath: 'C:\\Project',
+      initialOperation: 'fix_project_samples',
+      sampleSlots: {
+        flex_slots: [{ path: 'kick.mp3', compatibility: 'unknown' }],
+        static_slots: [],
+      },
+    })
+    await waitFor(() => expect(screen.getByText('1')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /incompatible audio file/ })).toHaveTextContent('1')
+    expect(screen.queryByText(/^2$/)).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /incompatible audio file/ }))
+    // The list modal must also show a single row for this file, not two.
+    expect(await screen.findByText('Showing 1 of 1 files')).toBeInTheDocument()
+  })
+
   it('does not double-count usage for a pool-resident file this project itself references (dedup by project name)', async () => {
     // '../AUDIO/kick48.wav' resolves (from '/set/DedupUsageProject') to
     // '/set/AUDIO/kick48.wav', which lives under the mocked Audio Pool path
@@ -192,6 +225,28 @@ describe('ToolsPanel - Fix Project Samples', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Execute' }))
     // one row for the one physical file, tagged with both slots that reference it
     expect(await screen.findByText('F1, S1')).toBeInTheDocument()
+  })
+
+  it('shows "Computing usage…" (not "Not referenced") while this project\'s own slotUsage prop has not resolved yet, even though poolUsageLoading is already false', async () => {
+    // baseProps() passes no slotUsage prop, so it defaults to null ("not yet
+    // arrived"), while poolUsageLoading resolves to false almost immediately here
+    // since get_audio_pool_status/get_pool_usage aren't mocked to report a pool.
+    // Pre-fix, usageLoading was poolUsageLoading alone, so the incompatible
+    // kick.mp3 row (no usage entries yet) would flash "Not referenced" even
+    // though slotUsage genuinely hasn't loaded. Post-fix, usageLoading also
+    // factors in `!slotUsage`, so it shows the loading state instead.
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'list_audio_files_recursive') return Promise.resolve([])
+      if (cmd === 'inspect_audio_files') return Promise.resolve([])
+      return Promise.resolve(null)
+    })
+    renderPanel({ initialOperation: 'fix_project_samples' })
+    await waitFor(() => expect(screen.getByRole('button', { name: /incompatible audio file/ })).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: /incompatible audio file/ }))
+    // Both incompatible slots from baseProps() (kick.mp3, snare48.wav) have no
+    // usage entries yet, so both should show the loading state.
+    expect((await screen.findAllByTitle('Computing usage…')).length).toBe(2)
+    expect(screen.queryByTitle('Not referenced in any project of this set')).not.toBeInTheDocument()
   })
 })
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useLayoutEffect, useCallback } from "react";
+import { useState, useEffect, useRef, useLayoutEffect, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -328,9 +328,10 @@ export function AudioPoolPage() {
   // Which incompatible files are in scope for display/execute right now - a pure
   // client-side filter over the full (pool + all projects) scan, so toggling the
   // checkbox never re-triggers a scan.
-  const scopedIncompatibleFiles = includeAllProjects
-    ? incompatibleFiles
-    : incompatibleFiles.filter(f => f.source === 'pool');
+  const scopedIncompatibleFiles = useMemo(
+    () => includeAllProjects ? incompatibleFiles : incompatibleFiles.filter(f => f.source === 'pool'),
+    [incompatibleFiles, includeAllProjects]
+  );
   const scopedScanTotal = includeAllProjects ? poolFileCount + projectFileCount : poolFileCount;
 
   // Cross-project pool file usage, for the Usage column. Re-fetched whenever the
