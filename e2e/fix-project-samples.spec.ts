@@ -20,9 +20,10 @@ import { test, expect, Page } from '@playwright/test'
  *   - good.wav   - NOT referenced by any slot, compatible (native, inspected)
  * So: 4 files scanned, 3 incompatible (kick.mp3, snare48.wav, loop.mp3).
  */
-async function setupMocks(page: Page, options: { withAudioPool?: boolean } = {}) {
+async function setupMocks(page: Page, options: { withAudioPool?: boolean; flexSlotPath?: string } = {}) {
   const withAudioPool = options.withAudioPool ?? false
-  await page.addInitScript((opts: { withAudioPool: boolean }) => {
+  const flexSlotPath = options.flexSlotPath ?? 'kick.mp3'
+  await page.addInitScript((opts: { withAudioPool: boolean; flexSlotPath: string }) => {
     ;(window as any).__fixCalls = []
     ;(window as any).__backupCalls = []
     ;(window as any).__TAURI_INTERNALS__ = {
@@ -57,7 +58,7 @@ async function setupMocks(page: Page, options: { withAudioPool?: boolean } = {})
               },
               sample_slots: {
                 flex_slots: Array(128).fill(null).map((_, i) => i === 0 ? {
-                  slot_id: 0, slot_type: 'Flex', path: 'kick.mp3', gain: 0,
+                  slot_id: 0, slot_type: 'Flex', path: opts.flexSlotPath, gain: 0,
                   loop_mode: null, timestretch_mode: null, source_location: null,
                   file_exists: true, compatibility: 'unknown', file_format: null,
                   bit_depth: null, sample_rate: null,
@@ -219,7 +220,7 @@ async function setupMocks(page: Page, options: { withAudioPool?: boolean } = {})
       transformCallback: () => {},
     }
     ;(window as any).__TAURI__ = { invoke: (window as any).__TAURI_INTERNALS__.invoke }
-  }, { withAudioPool })
+  }, { withAudioPool, flexSlotPath })
 }
 
 async function openProjectPage(page: Page) {
@@ -429,5 +430,32 @@ test.describe('Fix Project Samples - Convert to Octatrack format context menu', 
     const calls = await page.evaluate(() => (window as any).__fixCalls)
     expect(calls[0].projectPath).toBe('/test/project')
     expect(calls[0].filePaths).toEqual(['/test/project/kick.mp3'])
+  })
+})
+
+test.describe('Fix Project Samples - Convert to Octatrack format on a pool-referenced (absolute-path) slot', () => {
+  // Regression coverage for a bug where convertSlotFileInline always joined
+  // `${projectPath}/${slot.path}`, even when slot.path was already absolute
+  // (as it is for a slot referencing the shared Audio Pool rather than a file
+  // in the project's own directory) - producing a malformed doubled path and
+  // a silent conversion failure.
+  test('sends the slot\'s own absolute path unchanged, not doubled with projectPath', async ({ page }) => {
+    await setupMocks(page, { flexSlotPath: '/pool/kick.mp3' })
+    await openProjectPage(page)
+    await page.locator('.header-tab', { hasText: 'Flex' }).click()
+    await page.locator('.mode-toggle').click() // View -> Edit
+    await expect(page.locator('.mode-toggle-btn.active', { hasText: 'Edit' })).toBeVisible()
+
+    const row = page.locator('tr', { hasText: 'kick.mp3' })
+    await row.click({ button: 'right' })
+    const item = page.locator('.context-menu-item', { hasText: 'Convert to Octatrack format' })
+    await expect(item).toBeEnabled()
+    await item.click()
+
+    await expect.poll(async () => page.evaluate(() => (window as any).__fixCalls.length)).toBe(1)
+    const calls = await page.evaluate(() => (window as any).__fixCalls)
+    expect(calls[0].projectPath).toBe('/test/project')
+    expect(calls[0].filePaths).toEqual(['/pool/kick.mp3'])
+    await expect(page.getByText('Converted to Octatrack format')).toBeVisible()
   })
 })

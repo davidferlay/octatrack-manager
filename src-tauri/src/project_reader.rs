@@ -5673,7 +5673,11 @@ pub fn update_project_references(
         .parent()
         .ok_or_else(|| "Cannot determine set directory from project path".to_string())?;
     let in_set = is_project_in_set(project_path).unwrap_or(false);
-    let only_project = if in_set { None } else { Some(project_dir.as_path()) };
+    let only_project = if in_set {
+        None
+    } else {
+        Some(project_dir.as_path())
+    };
     update_references_in_set(set_dir, None, renames, "fix_project_samples", only_project)
 }
 
@@ -18258,7 +18262,10 @@ mod tests {
             assert_eq!(res.projects_updated.len(), 2);
 
             let out1 = read_raw_project_work(&set.join("PROJ1"));
-            assert!(out1.contains("PATH=kick.wav"), "owning project's own ref updated");
+            assert!(
+                out1.contains("PATH=kick.wav"),
+                "owning project's own ref updated"
+            );
             assert!(out1.contains("BPMx24=3408"), "other fields preserved");
             let out2 = read_raw_project_work(&set.join("PROJ2"));
             assert!(
@@ -18356,7 +18363,10 @@ mod tests {
             assert_eq!(res.projects_updated[0], proj1.to_string_lossy().to_string());
 
             let out1 = read_raw_project_work(&set.join("PROJ1"));
-            assert!(out1.contains("PATH=kick.wav"), "owning project's own ref updated");
+            assert!(
+                out1.contains("PATH=kick.wav"),
+                "owning project's own ref updated"
+            );
             assert!(out1.contains("BPMx24=3408"), "other fields preserved");
 
             let out2 = read_raw_project_work(&set.join("PROJ2"));
@@ -18439,7 +18449,11 @@ mod tests {
                 .to_lowercase();
 
             let entries = usage.get(&key).expect("kick.wav should have usage entries");
-            assert_eq!(entries.len(), 1, "only PROJ1's trigged machine assignment counts");
+            assert_eq!(
+                entries.len(),
+                1,
+                "only PROJ1's trigged machine assignment counts"
+            );
             assert_eq!(entries[0].project, "PROJ1");
             assert_eq!(entries[0].kind, "machine");
             assert!(entries[0].audible);
@@ -18490,7 +18504,8 @@ mod tests {
                     .to_data_file(&set.join("PROJ").join(format!("bank{:02}.work", bank_num)))
                     .unwrap();
             }
-            let mut bank1 = BankFile::from_data_file(&set.join("PROJ").join("bank01.work")).unwrap();
+            let mut bank1 =
+                BankFile::from_data_file(&set.join("PROJ").join("bank01.work")).unwrap();
             let part = &mut bank1.parts.unsaved.0[0];
             part.audio_track_machine_types[0] = 1; // flex machine
             part.audio_track_machine_slots[0].flex_slot_id = 0; // 0-based slot 1
