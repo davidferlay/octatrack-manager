@@ -130,6 +130,26 @@ describe('ToolsPanel - Fix Project Samples', () => {
     // The list modal must also show a single row for this file, not three.
     expect(await screen.findByText('Showing 1 of 1 files')).toBeInTheDocument()
   })
+
+  it('collects which slot(s) reference each incompatible file, deduped by resolved path', async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'list_audio_files_recursive') return Promise.resolve([])
+      if (cmd === 'inspect_audio_files') return Promise.resolve([])
+      if (cmd === 'get_pool_usage') return Promise.resolve({})
+      return Promise.resolve(null)
+    })
+    renderPanel({
+      initialOperation: 'fix_project_samples',
+      sampleSlots: {
+        flex_slots: [{ path: 'kick.mp3', compatibility: 'unknown' }],
+        static_slots: [{ path: 'kick.mp3', compatibility: 'unknown' }],
+      },
+    })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Execute' })).toBeEnabled())
+    await userEvent.click(screen.getByRole('button', { name: 'Execute' }))
+    // one row for the one physical file, tagged with both slots that reference it
+    expect(await screen.findByText('F1, S1')).toBeInTheDocument()
+  })
 })
 
 describe('ToolsPanel - initialOperation one-shot consumption', () => {

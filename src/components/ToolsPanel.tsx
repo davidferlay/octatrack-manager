@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useProjects } from "../context/ProjectsContext";
-import type { Bank } from "../context/ProjectsContext";
+import type { Bank, SampleSlotUsage, SlotUsageEntry } from "../context/ProjectsContext";
+import type { PoolUsageEntry } from "../types/audioFile";
 import { formatBankName } from "./BankSelector";
 import "../App.css";
 import { FixMissingSamplesModal } from "./FixMissingSamplesModal";
@@ -83,6 +84,7 @@ interface ToolsPanelProps {
   onBankUpdated?: (bankIndex: number) => void;
   onProjectRefresh?: () => void;
   sampleSlots?: { flex_slots: CompatSlot[]; static_slots: CompatSlot[] };
+  slotUsage?: SampleSlotUsage | null;
   initialOperation?: OperationType;
   onInitialOperationConsumed?: () => void;
 }
@@ -161,7 +163,7 @@ interface OctatrackLocation {
   sets: OctatrackSet[];
 }
 
-export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices, onBankUpdated, onProjectRefresh, sampleSlots = { flex_slots: [], static_slots: [] }, initialOperation, onInitialOperationConsumed }: ToolsPanelProps) {
+export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices, onBankUpdated, onProjectRefresh, sampleSlots = { flex_slots: [], static_slots: [] }, slotUsage = null, initialOperation, onInitialOperationConsumed }: ToolsPanelProps) {
   const { locations, standaloneProjects, setLocations, setStandaloneProjects, setHasScanned } = useProjects();
 
   // Load saved settings (per-project, session-only)
@@ -413,28 +415,38 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   // forces the (IPC-based) unreferenced scan below to re-run just because the
   // pool-status check resolves from null to a real value shortly after mount.
   const referencedSlotEntries = useMemo(() => {
-    const allSlots = [...sampleSlots.flex_slots, ...sampleSlots.static_slots];
-    const seen = new Set<string>();
-    const out: { path: string; compatibility: string }[] = [];
-    for (const slot of allSlots) {
-      if (!slot.path || !slot.compatibility || slot.compatibility === 'compatible') continue;
-      const isAbsolute = slot.path.startsWith('/') || /^[A-Za-z]:/.test(slot.path);
-      const resolved = normalizePath(isAbsolute ? slot.path : `${projectPath}/${slot.path}`);
-      if (seen.has(resolved)) continue;
-      seen.add(resolved);
-      out.push({ path: resolved, compatibility: slot.compatibility });
+    const labeled: { path: string; compatibility: string; slotLabel: string }[] = [];
+    const collect = (slots: CompatSlot[], prefix: string) => {
+      slots.forEach((slot, i) => {
+        if (!slot.path || !slot.compatibility || slot.compatibility === 'compatible') return;
+        const isAbsolute = slot.path.startsWith('/') || /^[A-Za-z]:/.test(slot.path);
+        const resolved = normalizePath(isAbsolute ? slot.path : `${projectPath}/${slot.path}`);
+        labeled.push({ path: resolved, compatibility: slot.compatibility, slotLabel: `${prefix}${i + 1}` });
+      });
+    };
+    collect(sampleSlots.flex_slots, 'F');
+    collect(sampleSlots.static_slots, 'S');
+
+    // Dedup by resolved path, collecting every slot label that points at it -
+    // a file may be referenced by more than one slot after the earlier dedup fix.
+    const byPath = new Map<string, { compatibility: string; slots: string[] }>();
+    for (const { path, compatibility, slotLabel } of labeled) {
+      const existing = byPath.get(path);
+      if (existing) existing.slots.push(slotLabel);
+      else byPath.set(path, { compatibility, slots: [slotLabel] });
     }
-    return out;
+    return Array.from(byPath.entries()).map(([path, { compatibility, slots }]) => ({ path, compatibility, slots }));
   }, [projectPath, sampleSlots]);
 
   // Adds the 'pool' | 'project' source tag - a pure in-memory relabeling of the
   // list above (no IPC), so recomputing it when audioPoolStatus resolves is free.
   const referencedIncompatible = useMemo<IncompatibleFile[]>(() => {
     const poolPath = audioPoolStatus?.path ? normalizePath(audioPoolStatus.path) : null;
-    return referencedSlotEntries.map(({ path, compatibility }) => ({
+    return referencedSlotEntries.map(({ path, compatibility, slots }) => ({
       path,
       compatibility,
       source: poolPath && path.toLowerCase().startsWith(poolPath.toLowerCase()) ? 'pool' as const : 'project' as const,
+      slots,
     }));
   }, [referencedSlotEntries, audioPoolStatus]);
 
@@ -459,7 +471,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           .filter(p => !referencedPaths.has(p));
         const otherAudio = unreferencedPaths
           .filter(p => audioKind(p) === 'other-audio')
-          .map(p => ({ path: p, compatibility: 'unsupported_format', source: 'project' as const }));
+          .map(p => ({ path: p, compatibility: 'unsupported_format', source: 'project' as const, slots: [] as string[] }));
         const nativePaths = unreferencedPaths.filter(p => audioKind(p) === 'native');
         const checks = nativePaths.length
           ? await invoke<{ path: string; compatibility: string }[]>('inspect_audio_files', { paths: nativePaths })
@@ -467,7 +479,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         if (cancelled) return;
         const unreferenced = (checks ?? [])
           .filter(c => c.compatibility !== 'compatible')
-          .map(c => ({ path: c.path, compatibility: c.compatibility, source: 'project' as const }));
+          .map(c => ({ path: c.path, compatibility: c.compatibility, source: 'project' as const, slots: [] as string[] }));
         setUnreferencedIncompatible([...unreferenced, ...otherAudio]);
       } catch (err) {
         console.error("Error scanning project samples:", err);
@@ -483,6 +495,53 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     () => [...referencedIncompatible, ...unreferencedIncompatible],
     [referencedIncompatible, unreferencedIncompatible]
   );
+
+  // Cross-project pool usage, for rows whose file lives in the Audio Pool -
+  // only fetched when a pool actually exists for this project's set.
+  const [poolUsageMap, setPoolUsageMap] = useState<Record<string, PoolUsageEntry[]>>({});
+  useEffect(() => {
+    if (!audioPoolStatus?.exists || !audioPoolStatus.path) {
+      setPoolUsageMap({});
+      return;
+    }
+    let cancelled = false;
+    invoke<Record<string, PoolUsageEntry[]>>('get_pool_usage', { poolPath: audioPoolStatus.path })
+      .then(result => { if (!cancelled) setPoolUsageMap(result ?? {}); })
+      .catch(() => { if (!cancelled) setPoolUsageMap({}); });
+    return () => { cancelled = true; };
+  }, [audioPoolStatus?.exists, audioPoolStatus?.path]);
+
+  // This project's own per-slot usage (already computed by ProjectDetail for its
+  // Sample Slot tables via compute_sample_usage), reformatted to the same
+  // PoolUsageEntry shape the pool-wide map uses - both feed the same Usage
+  // column/popover code in usePoolTable, tagged with this project's own name.
+  const projectUsageMap = useMemo(() => {
+    const out: Record<string, PoolUsageEntry[]> = {};
+    if (!slotUsage) return out;
+    const record = (slots: CompatSlot[], usageBySlot: SlotUsageEntry[][]) => {
+      slots.forEach((slot, i) => {
+        if (!slot.path) return;
+        const entries = usageBySlot[i] ?? [];
+        if (entries.length === 0) return;
+        const isAbsolute = slot.path.startsWith('/') || /^[A-Za-z]:/.test(slot.path);
+        const resolved = normalizePath(isAbsolute ? slot.path : `${projectPath}/${slot.path}`);
+        const key = resolved.toLowerCase().replace(/\\/g, '/');
+        const tagged = entries.map(e => ({ ...e, project: projectName }));
+        out[key] = [...(out[key] ?? []), ...tagged];
+      });
+    };
+    record(sampleSlots.flex_slots, slotUsage.flex_usage);
+    record(sampleSlots.static_slots, slotUsage.static_usage);
+    return out;
+  }, [slotUsage, sampleSlots, projectPath, projectName]);
+
+  const projectFilesUsageMap = useMemo(() => {
+    const merged: Record<string, PoolUsageEntry[]> = { ...projectUsageMap };
+    for (const [key, entries] of Object.entries(poolUsageMap)) {
+      merged[key] = [...(merged[key] ?? []), ...entries];
+    }
+    return merged;
+  }, [projectUsageMap, poolUsageMap]);
 
   // Collect all available projects from context
   const availableProjects: ProjectOption[] = [];
@@ -3622,6 +3681,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         <ProjectIncompatibleListModal
           projectPath={projectPath}
           files={projectIncompatibleFiles}
+          usageMap={projectFilesUsageMap}
           onClose={() => setShowProjectIncompatibleListModal(false)}
         />
       )}
@@ -3632,6 +3692,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           projectPath={projectPath}
           files={projectIncompatibleFiles}
           skipReview={skipProjectReview}
+          usageMap={projectFilesUsageMap}
           onClose={() => setShowFixProjectModal(false)}
           onFixed={(_res: PoolFixResult) => {
             if (onProjectRefresh) onProjectRefresh();

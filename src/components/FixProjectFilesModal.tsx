@@ -15,6 +15,7 @@ import {
   type PoolFixResult,
   type PoolSortColumn,
 } from './FixPoolFilesModal';
+import type { PoolUsageEntry } from '../types/audioFile';
 
 /**
  * Read-only list of a project's incompatible audio files (referenced-slot
@@ -22,12 +23,13 @@ import {
  * Structurally identical to PoolIncompatibleListModal, just project-scoped
  * copy and no Action column.
  */
-export function ProjectIncompatibleListModal({ projectPath, files, onClose }: {
+export function ProjectIncompatibleListModal({ projectPath, files, onClose, usageMap }: {
   projectPath: string;
   files: IncompatibleFile[];
   onClose: () => void;
+  usageMap?: Record<string, PoolUsageEntry[]>;
 }) {
-  const table = usePoolTable(files, projectPath, false);
+  const table = usePoolTable(files, projectPath, false, ['size'], usageMap, false, true);
   const [copyFeedback, copy] = useCopyFeedback();
   const { modalRef, style, handles } = useModalResize();
 
@@ -75,6 +77,7 @@ interface Props {
   onClose: () => void;
   /** Called once a fix run finished so callers can refresh their listings. */
   onFixed?: (result: PoolFixResult) => void;
+  usageMap?: Record<string, PoolUsageEntry[]>;
 }
 
 type Phase = 'review' | 'converting' | 'done' | 'error';
@@ -86,7 +89,7 @@ type Phase = 'review' | 'converting' | 'done' | 'error';
  * the Set (each project file is backed up first). Structurally identical to
  * FixPoolFilesModal, scoped to a project path and fix_project_samples.
  */
-export function FixProjectFilesModal({ projectPath, files, skipReview = false, onClose, onFixed }: Props) {
+export function FixProjectFilesModal({ projectPath, files, skipReview = false, onClose, onFixed, usageMap }: Props) {
   const [phase, setPhase] = useState<Phase>(skipReview ? 'converting' : 'review');
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [currentFile, setCurrentFile] = useState<string>('');
@@ -95,8 +98,8 @@ export function FixProjectFilesModal({ projectPath, files, skipReview = false, o
   const transferIdRef = useRef<string>(`fix-project-${Date.now()}`);
   const startedRef = useRef(false);
 
-  // Location is hidden by default here - the Action column matters most for review
-  const table = usePoolTable(files, projectPath, true, ['location']);
+  // Location and Size are hidden by default here - the Action column matters most for review
+  const table = usePoolTable(files, projectPath, true, ['location', 'size'], usageMap, false, true);
   const [copyFeedback, copy] = useCopyFeedback();
   const { modalRef, style, handles } = useModalResize();
 

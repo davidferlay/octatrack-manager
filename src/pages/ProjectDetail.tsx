@@ -2300,6 +2300,7 @@ export function ProjectDetail() {
                 onBankUpdated={reloadBank}
                 onProjectRefresh={refreshProjectData}
                 sampleSlots={metadata.sample_slots}
+                slotUsage={slotUsage}
                 initialOperation={toolsInitialOperation}
                 onInitialOperationConsumed={() => setToolsInitialOperation(undefined)}
               />

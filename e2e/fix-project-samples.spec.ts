@@ -125,6 +125,23 @@ async function setupMocks(page: Page, options: { withAudioPool?: boolean } = {})
               ? { exists: true, path: '/test/project/../AUDIO', set_path: '/test' }
               : { exists: false, path: null, set_path: null }
 
+          // This project's own per-slot usage, as ProjectDetail's Sample Slot tables
+          // already compute it — kick.mp3 (Flex slot 0) is used by one machine
+          // assignment; snare48.wav (Static slot 0) has none, to exercise the
+          // "—" no-usage state alongside a real badge.
+          case 'compute_sample_usage':
+            return {
+              flex_usage: Array(128).fill(null).map((_, i) => i === 0
+                ? [{ bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true }]
+                : []),
+              static_usage: Array(128).fill(null).map(() => []),
+            }
+
+          // Cross-project pool usage - only fetched by ToolsPanel when an Audio
+          // Pool exists for this project's set (see withAudioPool).
+          case 'get_pool_usage':
+            return {}
+
           case 'get_system_resources':
             return { cpu_cores: 4, available_memory_mb: 8000, recommended_concurrency: 4 }
 
@@ -278,6 +295,59 @@ test.describe('Fix Project Samples - Tools tab', () => {
       '/test/project/snare48.wav',
       '/test/project/loop.mp3',
     ])
+  })
+})
+
+test.describe('Fix Project Samples - Usage and Slot columns', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupMocks(page)
+    await openProjectPage(page)
+    await page.locator('.header-tab', { hasText: 'Tools' }).click()
+    await page.locator('.tools-section .tools-select').selectOption('fix_project_samples')
+  })
+
+  test('the Incompatible Project Samples list modal shows Slot/File/Format/Bit/kHz/Usage/Location by default, Size hidden', async ({ page }) => {
+    await page.locator('.tools-missing-files-summary').click()
+    const listModal = page.locator('.missing-samples-list-modal')
+    await expect(listModal.locator('thead')).toContainText('Slot')
+    await expect(listModal.locator('thead')).toContainText('Format')
+    await expect(listModal.locator('thead')).toContainText('Bit')
+    await expect(listModal.locator('thead')).toContainText('kHz')
+    await expect(listModal.locator('thead')).toContainText('Usage')
+    await expect(listModal.locator('thead')).toContainText('Location')
+    await expect(listModal.locator('thead')).not.toContainText('Size')
+  })
+
+  test('the Fix Project Samples review modal shows Slot/File/Format/Bit/kHz/Usage/Action by default, Size and Location hidden', async ({ page }) => {
+    await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()
+    const reviewModal = page.locator('.fix-pool-modal')
+    await expect(reviewModal.locator('thead')).toContainText('Slot')
+    await expect(reviewModal.locator('thead')).toContainText('Usage')
+    await expect(reviewModal.locator('thead')).toContainText('Action')
+    await expect(reviewModal.locator('thead')).not.toContainText('Size')
+    await expect(reviewModal.locator('thead')).not.toContainText('Location')
+  })
+
+  test('the Slot column shows which slot(s) reference each file, and — for unreferenced files', async ({ page }) => {
+    await page.locator('.tools-missing-files-summary').click()
+    const listModal = page.locator('.missing-samples-list-modal')
+    // kick.mp3 is referenced by Flex slot 0 (1-based label F1)
+    await expect(listModal.locator('tr', { hasText: 'kick.mp3' }).locator('.col-slot')).toHaveText('F1')
+    // snare48.wav is referenced by Static slot 0 (1-based label S1)
+    await expect(listModal.locator('tr', { hasText: 'snare48.wav' }).locator('.col-slot')).toHaveText('S1')
+    // loop.mp3 is not referenced by any slot - unreferenced-scan rows carry no slot label
+    await expect(listModal.locator('tr', { hasText: 'loop.mp3' }).locator('.col-slot')).toHaveText('—')
+  })
+
+  test('the Usage column shows a badge for kick.mp3 (used by one machine assignment) and — for snare48.wav (unused), with a project-tagged popover', async ({ page }) => {
+    await page.locator('.tools-missing-files-summary').click()
+    const listModal = page.locator('.missing-samples-list-modal')
+    const kickRow = listModal.locator('tr', { hasText: 'kick.mp3' })
+    await expect(kickRow.getByText('✓ 1')).toBeVisible()
+    await expect(listModal.locator('tr', { hasText: 'snare48.wav' }).locator('.usage-none')).toHaveText('—')
+
+    await kickRow.getByText('✓ 1').click()
+    await expect(page.getByText('TestProject · Bank A · Part 1 · T1 · Machine')).toBeVisible()
   })
 })
 
