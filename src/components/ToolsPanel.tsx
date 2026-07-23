@@ -3634,7 +3634,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           skipReview={skipProjectReview}
           onClose={() => setShowFixProjectModal(false)}
           onFixed={(_res: PoolFixResult) => {
-            setShowFixProjectModal(false);
             if (onProjectRefresh) onProjectRefresh();
           }}
         />

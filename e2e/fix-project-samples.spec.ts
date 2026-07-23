@@ -245,11 +245,13 @@ test.describe('Fix Project Samples - Tools tab', () => {
     await expect(modal.locator('tbody tr')).toHaveCount(3)
     await modal.getByRole('button', { name: 'Apply Changes' }).click()
 
-    // ToolsPanel's onFixed callback closes the modal as soon as the fix call
-    // resolves (see FixProjectFilesModal usage in ToolsPanel.tsx), so the
-    // observable outcome here is the call itself and the modal closing -
-    // not a lingering "done" summary screen.
+    // ToolsPanel's onFixed callback only refreshes data - it does not close the
+    // modal itself (mirrors AudioPoolPage's equivalent handler). The modal stays
+    // open on its own "done" summary screen until the user clicks Close.
     await expect.poll(async () => page.evaluate(() => (window as any).__fixCalls.length)).toBe(1)
+    await expect(modal.getByText('3 files converted.')).toBeVisible()
+
+    await modal.getByRole('button', { name: 'Close' }).click()
     await expect(modal).toHaveCount(0)
 
     const calls = await page.evaluate(() => (window as any).__fixCalls)
@@ -266,8 +268,9 @@ test.describe('Fix Project Samples - Tools tab', () => {
     await page.getByLabel('Review before applying changes').uncheck()
     await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()
 
-    await expect.poll(async () => page.evaluate(() => (window as any).__fixCalls.length)).toBe(1)
-    await expect(page.locator('.fix-pool-modal')).toHaveCount(0)
+    const modal = page.locator('.fix-pool-modal')
+    await expect(modal.getByText('3 files converted.')).toBeVisible()
+    await expect(modal.getByText('Review planned changes')).toHaveCount(0)
 
     const calls = await page.evaluate(() => (window as any).__fixCalls)
     expect(calls[0].filePaths).toEqual([
