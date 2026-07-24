@@ -1682,7 +1682,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         const openPopover = (scope: 'audible' | 'referenced') => (e: React.MouseEvent) => {
           e.stopPropagation();
           const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-          setUsagePopover({ x: rect.left, y: rect.bottom + 4, slot, scope });
+          // Clamp against the .usage-popover CSS box (max-width 440px, max-height
+          // 380px) so it always stays fully within the window instead of being
+          // cut off when the badge is near the right or bottom edge.
+          const MARGIN = 8, POPOVER_W = 440, POPOVER_H = 380;
+          const x = Math.min(rect.left, window.innerWidth - POPOVER_W - MARGIN);
+          const fitsBelow = rect.bottom + 4 + POPOVER_H <= window.innerHeight;
+          const y = fitsBelow ? rect.bottom + 4 : Math.max(MARGIN, rect.top - 4 - POPOVER_H);
+          setUsagePopover({ x: Math.max(MARGIN, x), y, slot, scope });
         };
         return (
           <td key={colId} className="col-used">
@@ -2158,7 +2165,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
           <i className="fas fa-rotate-left"></i> Reset attributes to defaults
         </button>
         <button
-          className="context-menu-item"
+          className={`context-menu-item convert ${!isEditMode || !slotMenu.slot.path || !slotMenu.slot.file_exists || slotMenu.slot.compatibility === 'compatible' || convertingSlotIds.has(slotMenu.slot.slot_id) ? 'disabled' : ''}`}
           disabled={!isEditMode || !slotMenu.slot.path || !slotMenu.slot.file_exists || slotMenu.slot.compatibility === 'compatible' || convertingSlotIds.has(slotMenu.slot.slot_id)}
           title={!isEditMode ? 'Toggle Edit mode to modify slots' : undefined}
           onClick={() => { convertSlotFileInline(slotMenu.slot); setSlotMenu(null); }}

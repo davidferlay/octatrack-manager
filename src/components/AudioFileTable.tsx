@@ -507,7 +507,14 @@ export function AudioFileTable({
         const openPopover = (scope: 'audible' | 'referenced') => (e: React.MouseEvent) => {
           e.stopPropagation();
           const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-          setUsagePopover({ x: rect.left, y: rect.bottom + 4, path: file.path, scope });
+          // Clamp against the .usage-popover CSS box (max-width 440px, max-height
+          // 380px) so it always stays fully within the window instead of being
+          // cut off when the badge is near the right or bottom edge.
+          const MARGIN = 8, POPOVER_W = 440, POPOVER_H = 380;
+          const x = Math.min(rect.left, window.innerWidth - POPOVER_W - MARGIN);
+          const fitsBelow = rect.bottom + 4 + POPOVER_H <= window.innerHeight;
+          const y = fitsBelow ? rect.bottom + 4 : Math.max(MARGIN, rect.top - 4 - POPOVER_H);
+          setUsagePopover({ x: Math.max(MARGIN, x), y, path: file.path, scope });
         };
         return (
           <td key={colId} className="col-usage" style={{ width: w }}>

@@ -273,6 +273,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [skipProjectReview, setSkipProjectReview] = useState<boolean>(
     savedSettings.skipProjectReview ?? false
   );
+  const [includeUnreferenced, setIncludeUnreferenced] = useState<boolean>(false);
   const [showFixProjectModal, setShowFixProjectModal] = useState<boolean>(false);
   const [showProjectIncompatibleListModal, setShowProjectIncompatibleListModal] = useState<boolean>(false);
 
@@ -496,8 +497,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   }, [operation, projectPath, referencedSlotEntries]);
 
   const projectIncompatibleFiles = useMemo(
-    () => [...referencedIncompatible, ...unreferencedIncompatible],
-    [referencedIncompatible, unreferencedIncompatible]
+    () => includeUnreferenced ? [...referencedIncompatible, ...unreferencedIncompatible] : referencedIncompatible,
+    [referencedIncompatible, unreferencedIncompatible, includeUnreferenced]
   );
 
   // Cross-project pool usage, for rows whose file lives in the Audio Pool -
@@ -3172,13 +3173,25 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             <p>
               Scans Project for files the Octatrack can't play (wrong sample
                 rate, bit depth or format).<br />
-Handles audio files referenced by Samples Slots as well as audio files simply located in Project's directory which may be referenced or not.<br /> Execute converts audio files in place and updates all references.
+              Handles audio files referenced by Sample Slots. Optionally also scans
+              this project's own directory for other, un-referenced audio files.<br />
+              Execute converts audio files in place and updates all references.
             </p>
           </div>
 
-          {projectIncompatibleFiles.length > 0 && (
+          {(loadingProjectSamples || referencedIncompatible.length > 0 || unreferencedIncompatible.length > 0) && (
             <div className="tools-options-panel">
               <h3>Options</h3>
+              <div className="tools-field tools-checkbox">
+                <label title="Also scan this project's own directory for incompatible audio files that aren't referenced by any sample slot">
+                  <input
+                    type="checkbox"
+                    checked={includeUnreferenced}
+                    onChange={(e) => setIncludeUnreferenced(e.target.checked)}
+                  />
+                  Include un-referenced samples of project
+                </label>
+              </div>
               <div className="tools-field tools-checkbox">
                 <label title="Show the review screen listing planned conversions before applying them">
                   <input

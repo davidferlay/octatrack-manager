@@ -419,35 +419,36 @@ test.describe('Audio Pool — include all projects of set', () => {
     await openPage(page)
   })
 
-  test('scans project directories by default and lets the checkbox filter them out without rescanning', async ({ page }) => {
+  test('scans project directories in the background by default and lets the checkbox include them without rescanning', async ({ page }) => {
     await page.locator('.header-tab', { hasText: 'Tools' }).click()
 
-    // Default: checkbox on, scan covers pool (3 files) + the project (1 file) = 4 scanned, 3 incompatible
+    // Default: checkbox off, count/denominator reflect the pool only (2 of 3)
     const summary = page.locator('.tools-missing-files-summary')
-    await expect(summary).toContainText('3')
-    await expect(summary).toContainText('of 4 scanned')
+    await expect(summary).toContainText('2')
+    await expect(summary).toContainText('of 3 scanned')
 
     const includeAllCheckbox = page.getByLabel('Include all projects of set')
-    await expect(includeAllCheckbox).toBeChecked()
+    await expect(includeAllCheckbox).not.toBeChecked()
+
+    const scansBefore = await page.evaluate(() => (window as any).__inspectCalls.length)
+
+    // Checking it reveals the project-local file and grows the denominator, without a new scan
+    await includeAllCheckbox.check()
+    await expect(summary).toContainText('3')
+    await expect(summary).toContainText('of 4 scanned')
+    const scansAfter = await page.evaluate(() => (window as any).__inspectCalls.length)
+    expect(scansAfter).toBe(scansBefore)
 
     await summary.click()
     const listModal = page.locator('.missing-samples-list-modal')
     await expect(listModal.locator('tbody tr')).toHaveCount(3)
     await expect(listModal.locator('tbody')).toContainText('PROJ1')
     await page.keyboard.press('Escape')
-
-    const scansBefore = await page.evaluate(() => (window as any).__inspectCalls.length)
-
-    // Unchecking hides the project-local file and drops the denominator, without a new scan
-    await includeAllCheckbox.uncheck()
-    await expect(summary).toContainText('2')
-    await expect(summary).toContainText('of 3 scanned')
-    const scansAfter = await page.evaluate(() => (window as any).__inspectCalls.length)
-    expect(scansAfter).toBe(scansBefore)
   })
 
   test('executing with the checkbox on fixes both the pool file and the project-local file', async ({ page }) => {
     await page.locator('.header-tab', { hasText: 'Tools' }).click()
+    await page.getByLabel('Include all projects of set').check()
     await expect(page.locator('.tools-missing-files-summary')).toContainText('3')
 
     await page.getByLabel('Review before applying changes').uncheck()
@@ -463,6 +464,7 @@ test.describe('Audio Pool — include all projects of set', () => {
 
   test('the Location column renders pool files as AUDIO/... and project-local files as PROJ1/...', async ({ page }) => {
     await page.locator('.header-tab', { hasText: 'Tools' }).click()
+    await page.getByLabel('Include all projects of set').check()
     await page.locator('.tools-missing-files-summary').click()
     const listModal = page.locator('.missing-samples-list-modal')
     await expect(listModal).toBeVisible()

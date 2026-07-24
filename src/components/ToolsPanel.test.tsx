@@ -50,16 +50,21 @@ describe('ToolsPanel - Fix Project Samples', () => {
     await waitFor(() => expect(screen.getByRole('combobox', { name: /operation/i })).toHaveValue('fix_project_samples'))
   })
 
-  it('scans referenced-incompatible slots and unreferenced project files, and shows a combined count', async () => {
+  it('scans referenced-incompatible slots only by default, and shows unreferenced project files too once the option is checked', async () => {
     invokeMock.mockImplementation((cmd: string) => {
       if (cmd === 'list_audio_files_recursive') return Promise.resolve(['/set/MyProject/loop.aif'])
       if (cmd === 'inspect_audio_files') return Promise.resolve([{ path: '/set/MyProject/loop.aif', compatibility: 'unknown' }])
       return Promise.resolve(null)
     })
     renderPanel({ initialOperation: 'fix_project_samples' })
-    // 2 referenced-incompatible slots (kick.mp3, snare48.wav) + 1 unreferenced file (loop.aif) = 3
-    await waitFor(() => expect(screen.getByText('3')).toBeInTheDocument())
+    // 2 referenced-incompatible slots (kick.mp3, snare48.wav); the unreferenced
+    // file (loop.aif) is scanned in the background but excluded from the count
+    // until "Include un-referenced samples of project" is checked (off by default).
+    await waitFor(() => expect(screen.getByText('2')).toBeInTheDocument())
     expect(screen.getByRole('button', { name: /incompatible audio file/ })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('checkbox', { name: /Include un-referenced samples of project/ }))
+    await waitFor(() => expect(screen.getByText('3')).toBeInTheDocument())
   })
 
   it('normalizes a "../" slot path so a pool-referenced file is attributed to the Audio Pool, not the project', async () => {

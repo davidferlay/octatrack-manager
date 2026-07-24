@@ -236,10 +236,17 @@ test.describe('Fix Project Samples - Tools tab', () => {
     await page.locator('.tools-section .tools-select').selectOption('fix_project_samples')
   })
 
-  test('scans referenced and unreferenced project files and shows a combined status count', async ({ page }) => {
+  test('scans referenced files only by default, and includes unreferenced project files once the option is checked', async ({ page }) => {
     const summary = page.locator('.tools-missing-files-summary')
-    await expect(summary).toContainText('3')
+    await expect(summary).toContainText('2')
     await expect(summary).toContainText('incompatible audio file')
+    await expect(summary).toContainText('of 4 scanned')
+
+    const includeUnreferencedCheckbox = page.getByLabel('Include un-referenced samples of project')
+    await expect(includeUnreferencedCheckbox).not.toBeChecked()
+
+    await includeUnreferencedCheckbox.check()
+    await expect(summary).toContainText('3')
     await expect(summary).toContainText('of 4 scanned')
   })
 
@@ -253,6 +260,7 @@ test.describe('Fix Project Samples - Tools tab', () => {
   })
 
   test('opens the Incompatible Project Samples list modal with all 3 files', async ({ page }) => {
+    await page.getByLabel('Include un-referenced samples of project').check()
     await page.locator('.tools-missing-files-summary').click()
     const listModal = page.locator('.missing-samples-list-modal')
     await expect(listModal.getByText('Incompatible Project Samples')).toBeVisible()
@@ -264,6 +272,7 @@ test.describe('Fix Project Samples - Tools tab', () => {
   })
 
   test('Execute opens the review modal, and Apply Changes calls fix_project_samples with the project path and file paths', async ({ page }) => {
+    await page.getByLabel('Include un-referenced samples of project').check()
     await expect(page.getByLabel('Review before applying changes')).toBeChecked()
     await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()
 
@@ -292,6 +301,7 @@ test.describe('Fix Project Samples - Tools tab', () => {
   })
 
   test('disabling the review option makes Execute apply immediately', async ({ page }) => {
+    await page.getByLabel('Include un-referenced samples of project').check()
     await page.getByLabel('Review before applying changes').uncheck()
     await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()
 
@@ -343,6 +353,7 @@ test.describe('Fix Project Samples - Usage and Slot columns', () => {
   })
 
   test('the Slot column shows which slot(s) reference each file, and — for unreferenced files', async ({ page }) => {
+    await page.getByLabel('Include un-referenced samples of project').check()
     await page.locator('.tools-missing-files-summary').click()
     const listModal = page.locator('.missing-samples-list-modal')
     // kick.mp3 is referenced by Flex slot 0 (1-based label F1)

@@ -294,6 +294,7 @@
 }
 
 .pool-health-glyph.ok {
+  font-size: 1.1rem;
   color: #4caf50;
 }
 

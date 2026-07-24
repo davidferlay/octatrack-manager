@@ -268,7 +268,7 @@ export function AudioPoolPage() {
   const [projectsSkipped, setProjectsSkipped] = useState(0);
   const [incompatibleFiles, setIncompatibleFiles] = useState<IncompatibleFile[]>([]);
   const [poolScanKey, setPoolScanKey] = useState(0);
-  const [includeAllProjects, setIncludeAllProjects] = useState(true);
+  const [includeAllProjects, setIncludeAllProjects] = useState(false);
   useEffect(() => {
     if (!audioPoolPath) return;
     let cancelled = false;
@@ -333,6 +333,12 @@ export function AudioPoolPage() {
     [incompatibleFiles, includeAllProjects]
   );
   const scopedScanTotal = includeAllProjects ? poolFileCount + projectFileCount : poolFileCount;
+  // The pane health glyph reflects the Audio Pool itself only, never projects
+  // of the set, regardless of the "Include all projects" toggle above.
+  const poolOnlyIncompatibleFiles = useMemo(
+    () => incompatibleFiles.filter(f => f.source === 'pool'),
+    [incompatibleFiles]
+  );
 
   // Cross-project pool file usage, for the Usage column. Re-fetched whenever the
   // health scan re-runs (poolScanKey), since fixes can shift which projects
@@ -1641,14 +1647,14 @@ export function AudioPoolPage() {
             initialColumnVisibility={{ format: false, bitrate: false, samplerate: false }}
             scrollStorageKey={destinationPath ? `pool-dest-scroll:${destinationPath}` : undefined}
             countSuffix={poolScanDone && !poolScanLoading ? (
-              scopedIncompatibleFiles.length > 0 ? (
+              poolOnlyIncompatibleFiles.length > 0 ? (
                 <button
                   className="pool-health-glyph warning"
-                  title={`${scopedIncompatibleFiles.length} incompatible audio file${scopedIncompatibleFiles.length !== 1 ? 's' : ''} found - click to fix`}
+                  title={`${poolOnlyIncompatibleFiles.length} incompatible audio file${poolOnlyIncompatibleFiles.length !== 1 ? 's' : ''} found - click to fix`}
                   onClick={() => setActiveTab('tools')}
                 >
                   <i className="fas fa-wrench"></i>
-                  {scopedIncompatibleFiles.length}
+                  {poolOnlyIncompatibleFiles.length}
                 </button>
               ) : (
                 <span className="pool-health-glyph ok" title="All audio pool files are compatible with Octatrack">
