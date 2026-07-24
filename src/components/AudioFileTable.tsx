@@ -204,12 +204,20 @@ export function UsagePopoverBox({ anchor, onClose, onClick, children }: {
   useEffect(() => {
     const close = () => onClose();
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('click', close);
-    document.addEventListener('keydown', onKey);
-    // 'scroll' doesn't bubble, so listen on the capture phase to catch it from
-    // any scrollable ancestor (table wrapper, modal body, ...), not just window.
-    window.addEventListener('scroll', close, true);
+    // Deferred by a tick: opening the popover focuses its trigger badge, which
+    // can itself synchronously scroll a scrollable ancestor into view (e.g. a
+    // fixed-height resizable modal) - attaching immediately would catch that
+    // and close the popover before it was ever shown.
+    const timer = window.setTimeout(() => {
+      document.addEventListener('click', close);
+      document.addEventListener('keydown', onKey);
+      // 'scroll' doesn't bubble, so listen on the capture phase to catch it
+      // from any scrollable ancestor (table wrapper, modal body, ...), not
+      // just window.
+      window.addEventListener('scroll', close, true);
+    }, 0);
     return () => {
+      window.clearTimeout(timer);
       document.removeEventListener('click', close);
       document.removeEventListener('keydown', onKey);
       window.removeEventListener('scroll', close, true);
