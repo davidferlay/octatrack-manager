@@ -158,10 +158,70 @@ const COLUMN_LABELS: Record<string, string> = {
   name: 'Name', usage: 'Usage', compat: 'Compat', format: 'Format', bitrate: 'Bit', samplerate: 'kHz', size: 'Size',
 };
 
-// Also defined in FixPoolFilesModal.tsx - the Usage column's popover logic is
-// intentionally ported (not shared) between this TanStack-based table and that
-// file's separate hand-rolled one; kept in sync manually.
+// Also defined in FixPoolFilesModal.tsx and SampleSlotsTable.tsx - the Usage
+// column's popover *content* (header wording, entry-list formatting) is
+// intentionally ported (not shared) between those hand-rolled tables and this
+// TanStack-based one; kept in sync manually.
 const BANK_LETTERS = 'ABCDEFGHIJKLMNOP';
+
+/** A clicked usage badge's bounding rect - the anchor a popover positions itself against. */
+export interface PopoverAnchor {
+  left: number;
+  top: number;
+  bottom: number;
+}
+
+/**
+ * Positions a usage popover against its anchor badge: opens below by default,
+ * flips above when the popover (measured after it renders, not guessed from
+ * CSS max-height) wouldn't fit below, and clamps left/right to the viewport.
+ * Re-measures whenever `anchor` changes - not just on mount - since clicking
+ * a second badge while a popover is already open updates `anchor` on the same
+ * mounted instance rather than remounting it. Also owns closing on outside
+ * click, Escape, and scroll (its `position: fixed` anchor snapshot goes stale
+ * the moment the table scrolls, so it closes rather than drift from the badge).
+ * Unlike the popover content above, none of this has a reason to vary, so it's
+ * shared by every "Usage" popover (this file, FixPoolFilesModal.tsx,
+ * SampleSlotsTable.tsx) instead of being re-derived per call site.
+ */
+export function UsagePopoverBox({ anchor, onClose, onClick, children }: {
+  anchor: PopoverAnchor;
+  onClose: () => void;
+  onClick?: (e: React.MouseEvent) => void;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState(() => ({ top: anchor.bottom + 4, left: anchor.left }));
+  useLayoutEffect(() => {
+    if (!ref.current) return;
+    const { width, height } = ref.current.getBoundingClientRect();
+    const MARGIN = 8;
+    const fitsBelow = anchor.bottom + 4 + height <= window.innerHeight - MARGIN;
+    const top = fitsBelow ? anchor.bottom + 4 : Math.max(MARGIN, anchor.top - 4 - height);
+    const left = Math.max(MARGIN, Math.min(anchor.left, window.innerWidth - width - MARGIN));
+    setPos({ top, left });
+  }, [anchor.left, anchor.top, anchor.bottom]);
+  useEffect(() => {
+    const close = () => onClose();
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+    // 'scroll' doesn't bubble, so listen on the capture phase to catch it from
+    // any scrollable ancestor (table wrapper, modal body, ...), not just window.
+    window.addEventListener('scroll', close, true);
+    return () => {
+      document.removeEventListener('click', close);
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [onClose]);
+  return createPortal(
+    <div ref={ref} className="usage-popover" style={{ position: 'fixed', top: pos.top, left: pos.left }} onClick={onClick}>
+      {children}
+    </div>,
+    document.body
+  );
+}
 
 /**
  * get_pool_usage keys its map by normalized-lowercase absolute path (Rust side,
@@ -316,18 +376,7 @@ export function AudioFileTable({
   // Dropdown state — use portal + position to avoid clipping issues
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
-  const [usagePopover, setUsagePopover] = useState<{ x: number; y: number; path: string; scope: 'audible' | 'referenced' } | null>(null);
-  useEffect(() => {
-    if (!usagePopover) return;
-    const close = () => setUsagePopover(null);
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setUsagePopover(null); };
-    document.addEventListener('click', close);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('click', close);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [usagePopover]);
+  const [usagePopover, setUsagePopover] = useState<(PopoverAnchor & { path: string; scope: 'audible' | 'referenced' }) | null>(null);
 
   // TanStack column state
   const [sorting, setSorting] = useState<SortingState>([{ id: 'name', desc: false }]);
@@ -507,14 +556,7 @@ export function AudioFileTable({
         const openPopover = (scope: 'audible' | 'referenced') => (e: React.MouseEvent) => {
           e.stopPropagation();
           const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-          // Clamp against the .usage-popover CSS box (max-width 440px, max-height
-          // 380px) so it always stays fully within the window instead of being
-          // cut off when the badge is near the right or bottom edge.
-          const MARGIN = 8, POPOVER_W = 440, POPOVER_H = 380;
-          const x = Math.min(rect.left, window.innerWidth - POPOVER_W - MARGIN);
-          const fitsBelow = rect.bottom + 4 + POPOVER_H <= window.innerHeight;
-          const y = fitsBelow ? rect.bottom + 4 : Math.max(MARGIN, rect.top - 4 - POPOVER_H);
-          setUsagePopover({ x: Math.max(MARGIN, x), y, path: file.path, scope });
+          setUsagePopover({ left: rect.left, top: rect.top, bottom: rect.bottom, path: file.path, scope });
         };
         return (
           <td key={colId} className="col-usage" style={{ width: w }}>
@@ -841,12 +883,8 @@ export function AudioFileTable({
         </table>
       </div>
 
-      {usagePopover && createPortal(
-        <div
-          className="usage-popover"
-          style={{ position: 'fixed', top: usagePopover.y, left: usagePopover.x }}
-          onClick={(e) => e.stopPropagation()}
-        >
+      {usagePopover && (
+        <UsagePopoverBox anchor={usagePopover} onClose={() => setUsagePopover(null)} onClick={(e) => e.stopPropagation()}>
           {(() => {
             const scoped = (usageMap?.[usageKey(usagePopover.path)] ?? []).filter(
               (e) => e.audible === (usagePopover.scope === 'audible')
@@ -870,8 +908,7 @@ export function AudioFileTable({
               </>
             );
           })()}
-        </div>,
-        document.body
+        </UsagePopoverBox>
       )}
     </div>
   );

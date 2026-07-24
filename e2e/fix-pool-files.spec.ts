@@ -57,6 +57,9 @@ async function setupMocks(page: Page, options: { projectFiles?: string[]; reject
               [`${pool}/snare48.wav`.toLowerCase()]: [
                 { project: 'ProjectA', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true },
               ],
+              [`${pool}/loop.mp3`.toLowerCase()]: [
+                { project: 'ProjectB', bank: 1, kind: 'lock', track: 2, part: null, pattern: 0, step: 3, audible: false },
+              ],
             }
           case 'fix_pool_files':
             ;(window as any).__fixCalls.push(args)
@@ -389,6 +392,37 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await expect(dest.locator('tr', { hasText: 'kick.wav' }).locator('.usage-none')).toHaveText('—')
     await row.getByText('✓ 1').click()
     await expect(page.getByText('ProjectA · Bank A · Part 1 · T1 · Machine')).toBeVisible()
+  })
+
+  test('clicking a different usage badge directly repositions the popover instead of leaving it at the first badge', async ({ page }) => {
+    const dest = page.locator('.dest-panel')
+    const popover = page.locator('.usage-popover')
+
+    await dest.locator('tr', { hasText: 'snare48.wav' }).getByText('✓ 1').click()
+    await expect(page.getByText('ProjectA · Bank A · Part 1 · T1 · Machine')).toBeVisible()
+    const firstBox = (await popover.boundingBox())!
+
+    // Click straight through to a badge on a different row, without an
+    // intermediate close - this used to leave the popover stuck at the first
+    // badge's position instead of re-anchoring to the new one.
+    await dest.locator('tr', { hasText: 'loop.mp3' }).getByText('○ 1').click()
+    await expect(page.getByText('ProjectB · Bank B · Pattern 1 · T3 · Step 4 · Lock')).toBeVisible()
+    const secondBox = (await popover.boundingBox())!
+
+    expect(secondBox.y).not.toBe(firstBox.y)
+  })
+
+  test('scrolling the table closes an open usage popover instead of leaving it stranded', async ({ page }) => {
+    const dest = page.locator('.dest-panel')
+    await dest.locator('tr', { hasText: 'snare48.wav' }).getByText('✓ 1').click()
+    await expect(page.locator('.usage-popover')).toBeVisible()
+
+    // Dispatched directly rather than via a real scrollTop change: this mock
+    // table has too few rows to overflow (nothing to actually scroll), and the
+    // close listener only cares that a 'scroll' event reached it, not that the
+    // wrapper's content moved.
+    await dest.locator('.table-wrapper').evaluate(el => el.dispatchEvent(new Event('scroll')))
+    await expect(page.locator('.usage-popover')).toHaveCount(0)
   })
 
   test('the Incompatible Audio Pool Samples modals show Format/Bit/kHz/Usage/Location by default, Size hidden, with a working Usage badge', async ({ page }) => {

@@ -15,7 +15,7 @@ import {
 import { useTablePreferences } from "../context/TablePreferencesContext";
 import type { SlotUsageEntry } from "../context/ProjectsContext";
 import { AudioPoolSidebar } from "./AudioPoolSidebar";
-import { formatFileSize } from "./AudioFileTable";
+import { formatFileSize, UsagePopoverBox, type PopoverAnchor } from "./AudioFileTable";
 import { useAudioPreview, shouldAutoPreview, scrubTarget, volumeStep, isAudioFile } from '../hooks/useAudioPreview';
 import { SamplePlayerBar } from './SamplePlayerBar';
 
@@ -309,18 +309,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   );
   // Popover listing a slot's usages, anchored at the clicked badge and scoped
   // to the badge's kind (audible usages vs never-trigged references)
-  const [usagePopover, setUsagePopover] = useState<{ x: number; y: number; slot: SampleSlot; scope: 'audible' | 'referenced' } | null>(null);
-  useEffect(() => {
-    if (!usagePopover) return;
-    const close = () => setUsagePopover(null);
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setUsagePopover(null); };
-    document.addEventListener('click', close);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('click', close);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [usagePopover]);
+  const [usagePopover, setUsagePopover] = useState<(PopoverAnchor & { slot: SampleSlot; scope: 'audible' | 'referenced' }) | null>(null);
   const [dragOverColId, setDragOverColId] = useState<string | null>(null);
 
   // Copy to clipboard state
@@ -1682,14 +1671,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         const openPopover = (scope: 'audible' | 'referenced') => (e: React.MouseEvent) => {
           e.stopPropagation();
           const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-          // Clamp against the .usage-popover CSS box (max-width 440px, max-height
-          // 380px) so it always stays fully within the window instead of being
-          // cut off when the badge is near the right or bottom edge.
-          const MARGIN = 8, POPOVER_W = 440, POPOVER_H = 380;
-          const x = Math.min(rect.left, window.innerWidth - POPOVER_W - MARGIN);
-          const fitsBelow = rect.bottom + 4 + POPOVER_H <= window.innerHeight;
-          const y = fitsBelow ? rect.bottom + 4 : Math.max(MARGIN, rect.top - 4 - POPOVER_H);
-          setUsagePopover({ x: Math.max(MARGIN, x), y, slot, scope });
+          setUsagePopover({ left: rect.left, top: rect.top, bottom: rect.bottom, slot, scope });
         };
         return (
           <td key={colId} className="col-used">
@@ -2091,12 +2073,8 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         <i className={`fas ${notice.kind === 'warning' ? 'fa-exclamation-triangle' : 'fa-circle-info'}`}></i> {notice.message}
       </div>
     )}
-    {usagePopover && createPortal(
-      <div
-        className="usage-popover"
-        style={{ position: 'fixed', top: usagePopover.y, left: usagePopover.x }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    {usagePopover && (
+      <UsagePopoverBox anchor={usagePopover} onClose={() => setUsagePopover(null)} onClick={(e) => e.stopPropagation()}>
         {(() => {
           // Each badge opens its own scope: the green badge lists audible
           // usages, the gray one lists never-trigged references.
@@ -2122,8 +2100,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
             </>
           );
         })()}
-      </div>,
-      document.body
+      </UsagePopoverBox>
     )}
     {slotMenu && (
       <div

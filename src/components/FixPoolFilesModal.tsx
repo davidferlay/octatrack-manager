@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { createPortal } from 'react-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { getFileFormat, formatFileSize, usageKey } from './AudioFileTable';
+import { getFileFormat, formatFileSize, usageKey, UsagePopoverBox, type PopoverAnchor } from './AudioFileTable';
 import type { PoolUsageEntry } from '../types/audioFile';
 
 export interface IncompatibleFile {
@@ -248,18 +247,7 @@ export function usePoolTable(
   const [usageFilter, setUsageFilter] = useState('all');
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
-  const [usagePopover, setUsagePopover] = useState<{ x: number; y: number; path: string; scope: 'audible' | 'referenced' } | null>(null);
-  useEffect(() => {
-    if (!usagePopover) return;
-    const close = () => setUsagePopover(null);
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setUsagePopover(null); };
-    document.addEventListener('click', close);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('click', close);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [usagePopover]);
+  const [usagePopover, setUsagePopover] = useState<(PopoverAnchor & { path: string; scope: 'audible' | 'referenced' }) | null>(null);
 
   // Column visibility ("toggle columns" menu in the header)
   const allColumns = POOL_COLUMNS.filter(c =>
@@ -600,14 +588,7 @@ export function PoolFilesTable({ table }: { table: ReturnType<typeof usePoolTabl
         const openPopover = (scope: 'audible' | 'referenced') => (e: React.MouseEvent) => {
           e.stopPropagation();
           const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-          // Clamp against the .usage-popover CSS box (max-width 440px, max-height
-          // 380px) so it always stays fully within the window instead of being
-          // cut off when the badge is near the right or bottom edge.
-          const MARGIN = 8, POPOVER_W = 440, POPOVER_H = 380;
-          const x = Math.min(rect.left, window.innerWidth - POPOVER_W - MARGIN);
-          const fitsBelow = rect.bottom + 4 + POPOVER_H <= window.innerHeight;
-          const y = fitsBelow ? rect.bottom + 4 : Math.max(MARGIN, rect.top - 4 - POPOVER_H);
-          setUsagePopover({ x: Math.max(MARGIN, x), y, path: r.path, scope });
+          setUsagePopover({ left: rect.left, top: rect.top, bottom: rect.bottom, path: r.path, scope });
         };
         return (
           <td key={id} className="col-usage">
@@ -657,8 +638,8 @@ export function PoolFilesTable({ table }: { table: ReturnType<typeof usePoolTabl
           ))}
         </tbody>
       </table>
-      {usagePopover && createPortal(
-        <div className="usage-popover" style={{ position: 'fixed', top: usagePopover.y, left: usagePopover.x }} onClick={(e) => e.stopPropagation()}>
+      {usagePopover && (
+        <UsagePopoverBox anchor={usagePopover} onClose={() => setUsagePopover(null)} onClick={(e) => e.stopPropagation()}>
           {(() => {
             const row = rows.find(r => r.path === usagePopover.path) ?? table.allRows.find((r: PoolRow) => r.path === usagePopover.path);
             const scoped = (row?.usageEntries ?? []).filter((e: PoolUsageEntry) => e.audible === (usagePopover.scope === 'audible'));
@@ -681,8 +662,7 @@ export function PoolFilesTable({ table }: { table: ReturnType<typeof usePoolTabl
               </>
             );
           })()}
-        </div>,
-        document.body
+        </UsagePopoverBox>
       )}
     </>
   );
