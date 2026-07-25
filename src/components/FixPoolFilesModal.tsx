@@ -417,35 +417,42 @@ export function usePoolTable(
     onChange: (value: string) => void,
     resizeIndex?: number,
   ) => (
-    <th key={column} className="filterable-header" style={{ position: 'relative' }}>
+    <th key={column} className={`filterable-header${column === 'usage' ? ' col-usage' : ''}`} style={{ position: 'relative' }}>
       <div className="header-content">
+        {column === 'usage' && (
+          <span className="usage-header-left">
+            <span
+              className={`usage-header-spinner${usageLoading ? '' : ' usage-header-spinner-hidden'}`}
+              title="Checking usage of Audio Pool files across every project of this Set…"
+            >
+              <span className="loading-spinner-small"></span>
+            </span>
+          </span>
+        )}
         <span onClick={() => handleSort(column)} className="sortable-label">
           {label}{sortIndicator(column)}
         </span>
-        {column === 'usage' && usageLoading && (
-          <span
-            className="usage-header-spinner"
-            title="Checking usage of Audio Pool files across every project of this Set…"
-          >
-            <span className="loading-spinner-small"></span>
-          </span>
-        )}
-        <button
-          className={`filter-icon ${openDropdown === column || isActive ? 'active' : ''}`}
-          onMouseDown={(e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            if (openDropdown === column) {
-              closeDropdown();
-            } else {
-              const rect = e.currentTarget.getBoundingClientRect();
-              setDropdownPosition({ top: rect.bottom + 4, left: rect.right - 120 });
-              setOpenDropdown(column);
-            }
-          }}
-        >
-          ⋮
-        </button>
+        {(() => {
+          const kebab = (
+            <button
+              className={`filter-icon ${openDropdown === column || isActive ? 'active' : ''}`}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                if (openDropdown === column) {
+                  closeDropdown();
+                } else {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setDropdownPosition({ top: rect.bottom + 4, left: rect.right - 120 });
+                  setOpenDropdown(column);
+                }
+              }}
+            >
+              ⋮
+            </button>
+          );
+          return column === 'usage' ? <span className="usage-header-right">{kebab}</span> : kebab;
+        })()}
       </div>
       {openDropdown === column && dropdownPosition && (
         <div className="filter-dropdown" style={{ position: 'fixed', top: dropdownPosition.top, left: dropdownPosition.left, width: 'auto', minWidth: 'auto' }}>

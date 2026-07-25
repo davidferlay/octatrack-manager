@@ -146,15 +146,17 @@ describe('usePoolTable/PoolFilesTable - Usage and Slot columns', () => {
     expect(screen.queryByText('Slot')).not.toBeInTheDocument()
   })
 
-  it('shows a spinner next to the Usage header while usage is loading, and none once resolved', () => {
+  it('shows a spinner next to the Usage header while usage is loading, and hides (not unmounts) it once resolved', () => {
     const files: IncompatibleFile[] = [
       { path: '/proj/kick.mp3', compatibility: 'unknown', source: 'project', slots: ['F1'] },
     ]
     const { rerender } = render(<TestHarness files={files} usageMap={{}} withSlot usageLoading />)
     const usageHeader = screen.getByText('Usage').closest('.header-content')!
-    expect(usageHeader.querySelector('.usage-header-spinner')).toBeTruthy()
+    const spinner = usageHeader.querySelector('.usage-header-spinner')
+    expect(spinner).toBeTruthy()
+    expect(spinner).not.toHaveClass('usage-header-spinner-hidden')
 
     rerender(<TestHarness files={files} usageMap={{}} withSlot usageLoading={false} />)
-    expect(screen.getByText('Usage').closest('.header-content')!.querySelector('.usage-header-spinner')).toBeFalsy()
+    expect(screen.getByText('Usage').closest('.header-content')!.querySelector('.usage-header-spinner')).toHaveClass('usage-header-spinner-hidden')
   })
 })

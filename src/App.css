@@ -3712,14 +3712,35 @@ th.col-used .header-content .filter-icon {
   text-align: center;
 }
 
+/* True centering for the "Usage" label that holds regardless of whether the
+   spinner is shown/hidden or how wide the kebab button is: .usage-header-left
+   and .usage-header-right are equal-growing flex spacers, so the label
+   between them always sits at the header's true center - matching the
+   centered badges below - instead of drifting when either side's content
+   changes width. */
 th.col-usage .header-content {
   justify-content: center;
 }
 
-th.col-usage .header-content .filter-icon {
-  position: absolute;
-  right: 0;
-  margin-left: 0;
+th.col-usage .header-content .usage-header-left,
+th.col-usage .header-content .usage-header-right {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+th.col-usage .header-content .usage-header-left {
+  justify-content: flex-start;
+}
+
+th.col-usage .header-content .usage-header-right {
+  justify-content: flex-end;
+}
+
+th.col-usage .header-content .sortable-label,
+th.col-usage .header-content .sort-indicator {
+  flex: 0 0 auto;
 }
 
 .usage-badge {
@@ -3783,8 +3804,14 @@ th.col-usage .header-content .filter-icon {
    file operations, since this is passive/read-only. Disappears once usage resolves. */
 .usage-header-spinner {
   display: inline-flex;
-  margin-left: 0.4rem;
+  margin-right: 0.3rem;
   cursor: default;
+}
+
+/* Always mounted so the "Usage" label's position never shifts when scanning
+   starts/stops - only visibility toggles, geometry stays reserved. */
+.usage-header-spinner.usage-header-spinner-hidden {
+  visibility: hidden;
 }
 
 .usage-header-spinner .loading-spinner-small {
@@ -3792,16 +3819,6 @@ th.col-usage .header-content .filter-icon {
   height: 0.8rem;
   border-color: rgba(74, 158, 255, 0.3);
   border-top-color: #4a9eff;
-}
-
-/* Audio Pool page's Usage header centers its label (th.col-usage above) - the
-   spinner must sit outside that centering flex group, or the "Usage" label
-   shifts left/right whenever the spinner toggles on/off. Anchored to the left
-   edge, mirroring how the filter icon is anchored to the right edge there. */
-th.col-usage .usage-header-spinner {
-  position: absolute;
-  left: 0;
-  margin-left: 0;
 }
 
 .usage-popover {

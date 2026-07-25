@@ -189,10 +189,12 @@ describe('AudioFileTable', () => {
     expect(screen.queryByText('Usage')).not.toBeInTheDocument()
   })
 
-  it('shows a spinner next to the Usage header while cross-project usage is loading, and hides it once resolved', () => {
+  it('shows a spinner next to the Usage header while cross-project usage is loading, and hides (not unmounts) it once resolved', () => {
     const { rerender } = renderTable({ poolRoot: '/AUDIO', usageMap: {}, usageLoading: true })
     const usageHeader = screen.getByText('Usage').closest('.header-content')!
-    expect(usageHeader.querySelector('.usage-header-spinner')).toBeTruthy()
+    const spinner = usageHeader.querySelector('.usage-header-spinner')
+    expect(spinner).toBeTruthy()
+    expect(spinner).not.toHaveClass('usage-header-spinner-hidden')
 
     rerender(
       <AudioFileTable
@@ -207,7 +209,7 @@ describe('AudioFileTable', () => {
         usageLoading={false}
       />
     )
-    expect(screen.getByText('Usage').closest('.header-content')!.querySelector('.usage-header-spinner')).toBeFalsy()
+    expect(screen.getByText('Usage').closest('.header-content')!.querySelector('.usage-header-spinner')).toHaveClass('usage-header-spinner-hidden')
   })
 
   it('opens a project-prefixed usage popover when a badge is clicked', async () => {

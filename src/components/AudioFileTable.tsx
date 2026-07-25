@@ -818,26 +818,39 @@ export function AudioFileTable({
                         onDragStart={(e) => handleColDragStart(e, colId)}
                         style={{ cursor: 'grab' }}
                       >
+                        {colId === 'usage' && (
+                          <span className="usage-header-left">
+                            <span
+                              className={`usage-header-spinner${usageLoading ? '' : ' usage-header-spinner-hidden'}`}
+                              title="Checking usage of Audio Pool files across every project of this Set…"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <span className="loading-spinner-small"></span>
+                            </span>
+                          </span>
+                        )}
                         <span className="sortable-label">
                           {typeof header.column.columnDef.header === 'string' ? header.column.columnDef.header : colId}
                         </span>
-                        {colId === 'usage' && usageLoading && (
-                          <span
-                            className="usage-header-spinner"
-                            title="Checking usage of Audio Pool files across every project of this Set…"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <span className="loading-spinner-small"></span>
-                          </span>
-                        )}
                         {sortState && <span className="sort-indicator">{sortState === 'asc' ? '▲' : '▼'}</span>}
                         {isFilterable && (
-                          <button
-                            className={`filter-icon ${openDropdown === dropdownKey || hasActiveFilter ? 'active' : ''}`}
-                            onClick={(e) => handleFilterButtonClick(e, dropdownKey)}
-                          >
-                            ⋮
-                          </button>
+                          colId === 'usage' ? (
+                            <span className="usage-header-right">
+                              <button
+                                className={`filter-icon ${openDropdown === dropdownKey || hasActiveFilter ? 'active' : ''}`}
+                                onClick={(e) => handleFilterButtonClick(e, dropdownKey)}
+                              >
+                                ⋮
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              className={`filter-icon ${openDropdown === dropdownKey || hasActiveFilter ? 'active' : ''}`}
+                              onClick={(e) => handleFilterButtonClick(e, dropdownKey)}
+                            >
+                              ⋮
+                            </button>
+                          )
                         )}
                       </div>
                       {isFilterable && renderFilterDropdown(dropdownKey, colId)}
