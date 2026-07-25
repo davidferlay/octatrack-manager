@@ -189,6 +189,27 @@ describe('AudioFileTable', () => {
     expect(screen.queryByText('Usage')).not.toBeInTheDocument()
   })
 
+  it('shows a spinner next to the Usage header while cross-project usage is loading, and hides it once resolved', () => {
+    const { rerender } = renderTable({ poolRoot: '/AUDIO', usageMap: {}, usageLoading: true })
+    const usageHeader = screen.getByText('Usage').closest('.header-content')!
+    expect(usageHeader.querySelector('.usage-header-spinner')).toBeTruthy()
+
+    rerender(
+      <AudioFileTable
+        files={files}
+        selectedFiles={new Set()}
+        onFileClick={vi.fn()}
+        isLoading={false}
+        emptyMessage="No audio files"
+        tableId="test-table"
+        poolRoot="/AUDIO"
+        usageMap={{}}
+        usageLoading={false}
+      />
+    )
+    expect(screen.getByText('Usage').closest('.header-content')!.querySelector('.usage-header-spinner')).toBeFalsy()
+  })
+
   it('opens a project-prefixed usage popover when a badge is clicked', async () => {
     const usageMap: Record<string, PoolUsageEntry[]> = {
       '/audio/kick.wav': [

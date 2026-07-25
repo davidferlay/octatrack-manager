@@ -3778,6 +3778,32 @@ th.col-usage .header-content .filter-icon {
   color: var(--elektron-text-dim);
 }
 
+/* Shown next to the Usage column header while cross-project usage (get_pool_usage)
+   is still being computed - blue rather than the orange used elsewhere for active
+   file operations, since this is passive/read-only. Disappears once usage resolves. */
+.usage-header-spinner {
+  display: inline-flex;
+  margin-left: 0.4rem;
+  cursor: default;
+}
+
+.usage-header-spinner .loading-spinner-small {
+  width: 0.8rem;
+  height: 0.8rem;
+  border-color: rgba(74, 158, 255, 0.3);
+  border-top-color: #4a9eff;
+}
+
+/* Audio Pool page's Usage header centers its label (th.col-usage above) - the
+   spinner must sit outside that centering flex group, or the "Usage" label
+   shifts left/right whenever the spinner toggles on/off. Anchored to the left
+   edge, mirroring how the filter icon is anchored to the right edge there. */
+th.col-usage .usage-header-spinner {
+  position: absolute;
+  left: 0;
+  margin-left: 0;
+}
+
 .usage-popover {
   z-index: 1000;
   min-width: 300px;

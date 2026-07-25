@@ -422,6 +422,14 @@ export function usePoolTable(
         <span onClick={() => handleSort(column)} className="sortable-label">
           {label}{sortIndicator(column)}
         </span>
+        {column === 'usage' && usageLoading && (
+          <span
+            className="usage-header-spinner"
+            title="Checking usage of Audio Pool files across every project of this Set…"
+          >
+            <span className="loading-spinner-small"></span>
+          </span>
+        )}
         <button
           className={`filter-icon ${openDropdown === column || isActive ? 'active' : ''}`}
           onMouseDown={(e) => {

@@ -821,6 +821,15 @@ export function AudioFileTable({
                         <span className="sortable-label">
                           {typeof header.column.columnDef.header === 'string' ? header.column.columnDef.header : colId}
                         </span>
+                        {colId === 'usage' && usageLoading && (
+                          <span
+                            className="usage-header-spinner"
+                            title="Checking usage of Audio Pool files across every project of this Set…"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <span className="loading-spinner-small"></span>
+                          </span>
+                        )}
                         {sortState && <span className="sort-indicator">{sortState === 'asc' ? '▲' : '▼'}</span>}
                         {isFilterable && (
                           <button

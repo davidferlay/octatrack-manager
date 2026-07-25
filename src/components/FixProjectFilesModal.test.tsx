@@ -110,8 +110,8 @@ describe('FixProjectFilesModal', () => {
   })
 })
 
-function TestHarness({ files, usageMap, withSlot }: { files: IncompatibleFile[]; usageMap?: Record<string, any>; withSlot?: boolean }) {
-  const table = usePoolTable(files, '/proj', true, [], usageMap, false, withSlot)
+function TestHarness({ files, usageMap, withSlot, usageLoading }: { files: IncompatibleFile[]; usageMap?: Record<string, any>; withSlot?: boolean; usageLoading?: boolean }) {
+  const table = usePoolTable(files, '/proj', true, [], usageMap, usageLoading ?? false, withSlot)
   return <PoolFilesTable table={table} />
 }
 
@@ -144,5 +144,17 @@ describe('usePoolTable/PoolFilesTable - Usage and Slot columns', () => {
     render(<TestHarness files={files} />)
     expect(screen.queryByText('Usage')).not.toBeInTheDocument()
     expect(screen.queryByText('Slot')).not.toBeInTheDocument()
+  })
+
+  it('shows a spinner next to the Usage header while usage is loading, and none once resolved', () => {
+    const files: IncompatibleFile[] = [
+      { path: '/proj/kick.mp3', compatibility: 'unknown', source: 'project', slots: ['F1'] },
+    ]
+    const { rerender } = render(<TestHarness files={files} usageMap={{}} withSlot usageLoading />)
+    const usageHeader = screen.getByText('Usage').closest('.header-content')!
+    expect(usageHeader.querySelector('.usage-header-spinner')).toBeTruthy()
+
+    rerender(<TestHarness files={files} usageMap={{}} withSlot usageLoading={false} />)
+    expect(screen.getByText('Usage').closest('.header-content')!.querySelector('.usage-header-spinner')).toBeFalsy()
   })
 })
