@@ -282,4 +282,20 @@ describe('AudioFileTable', () => {
     expect(await screen.findByText('kick.wav')).toBeInTheDocument()
     expect(screen.queryByText('snare.wav')).not.toBeInTheDocument()
   })
+
+  it('filters rows via the Compat dropdown, matching the Sample Slots table categories', async () => {
+    invokeMock.mockResolvedValue([
+      { path: '/AUDIO/kick.wav', compatibility: 'compatible' },
+      { path: '/AUDIO/snare.wav', compatibility: 'wrong_rate' },
+    ])
+    renderTable({ poolRoot: '/AUDIO' })
+    await screen.findByTitle('Compatible (WAV/AIFF, 16/24-bit, 44.1kHz)')
+
+    const compatHeader = screen.getByText('Compat').closest('.header-content')!
+    await userEvent.click(compatHeader.querySelector('.filter-icon')!)
+    await userEvent.click(screen.getByText('Wrong Rate :|'))
+
+    expect(screen.queryByText('kick.wav')).not.toBeInTheDocument()
+    expect(screen.getByText('snare.wav')).toBeInTheDocument()
+  })
 })

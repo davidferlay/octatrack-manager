@@ -329,6 +329,7 @@ export function AudioFileTable({
   const [bitDepthFilter, setBitDepthFilter] = useState<string>('all');
   const [sampleRateFilter, setSampleRateFilter] = useState<string>('all');
   const [usageFilter, setUsageFilter] = useState<string>('all');
+  const [compatFilter, setCompatFilter] = useState<string>('all');
 
   // Recursive search: when a searchRoot is set and the user is searching, match across that
   // directory and all its subfolders instead of just the current level. Fetched once when
@@ -505,8 +506,15 @@ export function AudioFileTable({
       if (usageFilter === 'referenced' && audibleCount === entries.length) return false;
       if (usageFilter === 'unused' && entries.length > 0) return false;
     }
+    if (compatFilter !== 'all') {
+      // 'unsupported_format' (mp3 etc.) renders the same "??" badge as 'unknown' - grouped
+      // into the same filter bucket, matching the Sample Slots table's compat filter options.
+      const raw = compatMap[file.path];
+      const bucket = raw === 'unsupported_format' ? 'unknown' : raw;
+      if (bucket !== compatFilter) return false;
+    }
     return true;
-  }), [baseFiles, hideDirectories, searchText, formatFilter, bitDepthFilter, sampleRateFilter, usageFilter, usageMap]);
+  }), [baseFiles, hideDirectories, searchText, formatFilter, bitDepthFilter, sampleRateFilter, usageFilter, usageMap, compatFilter, compatMap]);
 
   const columns = useMemo<ColumnDef<AudioFile>[]>(() => [
     { id: 'name', accessorKey: 'name', header: 'Name', size: DEFAULT_COLUMN_SIZES.name, minSize: MIN_COLUMN_SIZES.name, sortingFn: dirFirstSort },
@@ -702,6 +710,15 @@ export function AudioFileTable({
               <label className="dropdown-option"><input type="radio" name={dropdownKey} checked={usageFilter === 'unused'} onChange={() => setUsageFilter('unused')} /><span>Unused</span></label>
             </>
           )}
+          {colId === 'compat' && (
+            <>
+              <label className="dropdown-option"><input type="radio" name={dropdownKey} checked={compatFilter === 'all'} onChange={() => setCompatFilter('all')} /><span>All</span></label>
+              <label className="dropdown-option"><input type="radio" name={dropdownKey} checked={compatFilter === 'compatible'} onChange={() => setCompatFilter('compatible')} /><span>Compatible :)</span></label>
+              <label className="dropdown-option"><input type="radio" name={dropdownKey} checked={compatFilter === 'wrong_rate'} onChange={() => setCompatFilter('wrong_rate')} /><span>Wrong Rate :|</span></label>
+              <label className="dropdown-option"><input type="radio" name={dropdownKey} checked={compatFilter === 'incompatible'} onChange={() => setCompatFilter('incompatible')} /><span>Incompatible :(</span></label>
+              <label className="dropdown-option"><input type="radio" name={dropdownKey} checked={compatFilter === 'unknown'} onChange={() => setCompatFilter('unknown')} /><span>Unknown ??</span></label>
+            </>
+          )}
         </div>
       </div>,
       document.body
@@ -726,6 +743,7 @@ export function AudioFileTable({
           {bitDepthFilter !== 'all' && <span className="filter-badge">Bit: {bitDepthFilter}</span>}
           {sampleRateFilter !== 'all' && <span className="filter-badge">Rate: {(parseInt(sampleRateFilter) / 1000).toFixed(1)}kHz</span>}
           {usageFilter !== 'all' && <span className="filter-badge">Usage: {usageFilter === 'used' ? 'Used' : usageFilter === 'referenced' ? 'Referenced' : 'Unused'}</span>}
+          {compatFilter !== 'all' && <span className="filter-badge">Compat: {compatFilter}</span>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           {countSuffix}
@@ -797,12 +815,13 @@ export function AudioFileTable({
                 {hg.headers.map(header => {
                   const colId = header.id;
                   const sortState = header.column.getIsSorted();
-                  const isFilterable = ['format', 'bitrate', 'samplerate', 'usage'].includes(colId);
+                  const isFilterable = ['format', 'bitrate', 'samplerate', 'usage', 'compat'].includes(colId);
                   const hasActiveFilter =
                     (colId === 'format' && formatFilter !== 'all') ||
                     (colId === 'bitrate' && bitDepthFilter !== 'all') ||
                     (colId === 'samplerate' && sampleRateFilter !== 'all') ||
-                    (colId === 'usage' && usageFilter !== 'all');
+                    (colId === 'usage' && usageFilter !== 'all') ||
+                    (colId === 'compat' && compatFilter !== 'all');
                   const dropdownKey = `${tableId}-${colId}`;
                   return (
                     <th
