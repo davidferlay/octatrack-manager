@@ -2795,6 +2795,9 @@ h1 {
   justify-content: center;
   font-size: 0.7rem;
   cursor: pointer;
+  /* The ▲▼ glyphs sit low in their own line-box relative to uppercase text -
+     nudge up so they read as vertically centered against the column label. */
+  transform: translateY(-1.5px);
 }
 
 .sortable-label {
