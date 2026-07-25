@@ -538,10 +538,10 @@ export function ColumnToggle({ columns, hiddenCols, onToggle }: {
 /** Default column widths (px) before the user resizes anything.
     List modal: File takes the rest; review modal: Action takes the rest. */
 const POOL_COL_DEFAULTS: Record<string, number | undefined> = {
-  slot: 70, file: undefined, format: 95, bit: 72, khz: 78, usage: 90, size: 89, location: 185, action: 190,
+  slot: 70, file: undefined, format: 95, bit: 72, khz: 78, usage: 120, size: 89, location: 185, action: 190,
 };
 const REVIEW_COL_DEFAULTS: Record<string, number | undefined> = {
-  slot: 70, file: 260, format: 93, bit: 80, khz: 78, usage: 90, size: 90, location: 185, action: undefined,
+  slot: 70, file: 260, format: 93, bit: 80, khz: 78, usage: 120, size: 90, location: 185, action: undefined,
 };
 
 // Also defined in AudioFileTable.tsx - see that file's comment for why.

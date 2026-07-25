@@ -5852,6 +5852,16 @@ th.col-usage .header-content .sort-indicator {
   text-overflow: ellipsis;
 }
 
+/* When a 3rd usage badge doesn't fit, the browser clips it with an ellipsis
+   using this cell's own text color - badges each set their own explicit
+   `color`, which always wins over this regardless of !important, so only the
+   generated "…"/"..." glyph (which has no color of its own) is affected.
+   !important because the base .pool-files-table td rule above would
+   otherwise win on source order for that glyph's inherited color. */
+.pool-files-table td.col-usage {
+  color: var(--elektron-text-dim) !important;
+}
+
 .fix-search-steps {
   display: flex;
   flex-direction: column;

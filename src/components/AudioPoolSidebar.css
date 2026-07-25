@@ -140,6 +140,16 @@
   text-overflow: ellipsis;
 }
 
+/* When a 3rd usage badge doesn't fit, the browser clips it with an ellipsis
+   using this cell's own text color - badges each set their own explicit
+   `color`, which always wins over this regardless of !important, so only the
+   generated "…"/"..." glyph (which has no color of its own) is affected.
+   !important because the base .audio-files-table td rule above would
+   otherwise win on source order for that glyph's inherited color. */
+.audio-pool-sidebar .audio-files-table td.col-usage {
+  color: var(--elektron-text-dim) !important;
+}
+
 .audio-pool-sidebar .audio-files-table tbody tr {
   border-bottom: 1px solid var(--elektron-border-gray, #333);
 }

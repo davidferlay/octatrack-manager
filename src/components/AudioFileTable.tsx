@@ -149,7 +149,7 @@ function relativeToPool(filePath: string, poolRoot: string): string {
 }
 
 const DEFAULT_COLUMN_SIZES: Record<string, number> = {
-  name: 200, usage: 75, compat: 60, format: 90, bitrate: 70, samplerate: 75, size: 80,
+  name: 200, usage: 120, compat: 60, format: 90, bitrate: 70, samplerate: 75, size: 80,
 };
 const MIN_COLUMN_SIZES: Record<string, number> = {
   name: 80, usage: 55, compat: 45, format: 60, bitrate: 50, samplerate: 55, size: 55,
