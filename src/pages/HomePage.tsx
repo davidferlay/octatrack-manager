@@ -15,6 +15,7 @@ import {
   type Modifier,
 } from '@dnd-kit/core';
 import { useProjects } from "../context/ProjectsContext";
+import { invalidatePoolUsage } from "../hooks/usePoolUsage";
 import { Version } from "../components/Version";
 import { ScrollToTop } from "../components/ScrollToTop";
 import { ProjectGrid } from "../components/ProjectGrid";
@@ -396,6 +397,9 @@ export function HomePage() {
     setStandaloneProjects([]);
     setOpenLocations(new Set());
     setHasScanned(false);
+    // A full rescan can surface project/slot changes made outside the app (or since
+    // last launch) across every Set - drop every pool's cached usage, not just one.
+    invalidatePoolUsage();
   }
 
   return (

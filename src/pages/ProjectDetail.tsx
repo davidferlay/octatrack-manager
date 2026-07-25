@@ -11,6 +11,7 @@ import ToolsPanel from "../components/ToolsPanel";
 import { OverwriteModal } from "../components/OverwriteModal";
 import { TransferProgressPanel } from "../components/TransferProgressPanel";
 import { useAudioPoolTransfer } from "../hooks/useAudioPoolTransfer";
+import { invalidatePoolUsage } from "../hooks/usePoolUsage";
 import { WriteStatus, IDLE_STATUS } from "../types/writeStatus";
 import { TrackBadge } from "../components/TrackBadge";
 import { ScrollToTop } from "../components/ScrollToTop";
@@ -886,6 +887,7 @@ export function ProjectDetail() {
     // Trigger spin animation
     setIsSpinning(true);
     setTimeout(() => setIsSpinning(false), 600);
+    if (audioPoolPath) invalidatePoolUsage(audioPoolPath);
     loadProjectData();
   };
 
