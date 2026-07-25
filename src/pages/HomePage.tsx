@@ -1,4 +1,4 @@
-import { useState, useTransition, useEffect, useRef } from "react";
+import { useState, useTransition, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useNavigate } from "react-router-dom";
@@ -31,6 +31,8 @@ import type {
   OctatrackSet,
 } from "../types/projectManagement";
 import "../App.css";
+
+const HOMEPAGE_SCROLL_KEY = 'otm.homepage.scrollY';
 
 // Natural sort comparator: "Project_2" < "Project_10" (not lexicographic)
 function naturalCompare(a: string, b: string): number {
@@ -122,6 +124,15 @@ export function HomePage() {
   const [isSpinning, setIsSpinning] = useState(false);
   const navigate = useNavigate();
   const [, startTransition] = useTransition();
+  // Set the instant a navigation is requested (not when it commits) - startTransition
+  // defers the actual route swap, and during that window a stray 'scroll' event (the
+  // outgoing page's content briefly changing height) can fire on HomePage's own
+  // still-mounted listener and clobber the just-saved scroll position with 0.
+  const navigatingAwayRef = useRef(false);
+  const goTo = useCallback((path: string) => {
+    navigatingAwayRef.current = true;
+    startTransition(() => { navigate(path); });
+  }, [navigate, startTransition]);
 
   // Project management state
   const [createModalTarget, setCreateModalTarget] = useState<{ setPath: string; setName: string } | null>(null);
@@ -231,6 +242,32 @@ export function HomePage() {
     }
     el.addEventListener('contextmenu', handler);
     return () => el.removeEventListener('contextmenu', handler);
+  }, []);
+
+  // Remember scroll position across navigation (e.g. opening a project and hitting
+  // Back) - the project list data already persists via ProjectsContext, but the
+  // window's own scroll position is lost on unmount unless restored explicitly.
+  useEffect(() => {
+    const handleScroll = () => {
+      if (navigatingAwayRef.current) return;
+      sessionStorage.setItem(HOMEPAGE_SCROLL_KEY, String(window.scrollY));
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+  useLayoutEffect(() => {
+    const saved = Number(sessionStorage.getItem(HOMEPAGE_SCROLL_KEY)) || 0;
+    if (saved <= 0) return;
+    window.scrollTo(0, saved);
+    // Per-project/per-set async content (health badges, etc.) can still grow the
+    // page a frame or two after this first paint - reapply a couple more times
+    // so the restore isn't undone by that, without fighting a manual scroll for
+    // any longer than that (no open-ended loop/timer).
+    const raf1 = requestAnimationFrame(() => {
+      window.scrollTo(0, saved);
+      requestAnimationFrame(() => window.scrollTo(0, saved));
+    });
+    return () => cancelAnimationFrame(raf1);
   }, []);
 
   // Helper to sort projects within a location's sets
@@ -481,9 +518,7 @@ export function HomePage() {
                 className="project-card clickable-project"
                 tabIndex={0}
                 onClick={() => {
-                  startTransition(() => {
-                    navigate(`/project?path=${encodeURIComponent(project.path)}&name=${encodeURIComponent(project.name)}`);
-                  });
+                  goTo(`/project?path=${encodeURIComponent(project.path)}&name=${encodeURIComponent(project.name)}`);
                 }}
                 onContextMenu={(e) => {
                   e.preventDefault();
@@ -498,9 +533,7 @@ export function HomePage() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
-                    startTransition(() => {
-                      navigate(`/project?path=${encodeURIComponent(project.path)}&name=${encodeURIComponent(project.name)}`);
-                    });
+                    goTo(`/project?path=${encodeURIComponent(project.path)}&name=${encodeURIComponent(project.name)}`);
                   } else if (e.key === 'F2') {
                     e.preventDefault();
                     const setPath = project.path.substring(0, project.path.lastIndexOf('/'));
@@ -794,9 +827,7 @@ export function HomePage() {
                                           <div
                                             className={`audio-pool-card ${!set.has_audio_pool ? 'audio-pool-empty' : ''}`}
                                             onClick={() => {
-                                              startTransition(() => {
-                                                navigate(`/audio-pool?path=${encodeURIComponent(set.path + '/AUDIO')}&name=${encodeURIComponent(set.name)}`);
-                                              });
+                                              goTo(`/audio-pool?path=${encodeURIComponent(set.path + '/AUDIO')}&name=${encodeURIComponent(set.name)}`);
                                             }}
                                             title={set.has_audio_pool ? "Audio Pool - Click to view samples" : "Audio Pool - No samples found"}
                                           >
@@ -810,9 +841,7 @@ export function HomePage() {
                                             setName={set.name}
                                             projects={[...set.projects].sort((a, b) => naturalCompare(a.name, b.name))}
                                             onProjectClick={(p) => {
-                                              startTransition(() => {
-                                                navigate(`/project?path=${encodeURIComponent(p.path)}&name=${encodeURIComponent(p.name)}`);
-                                              });
+                                              goTo(`/project?path=${encodeURIComponent(p.path)}&name=${encodeURIComponent(p.name)}`);
                                             }}
                                             onCreateNew={() => setCreateModalTarget({ setPath: set.path, setName: set.name })}
                                             onContextMenu={setContextMenu}

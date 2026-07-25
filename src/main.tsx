@@ -8,6 +8,15 @@ import { ProjectsProvider } from "./context/ProjectsContext";
 import { TablePreferencesProvider } from "./context/TablePreferencesContext";
 import '@fortawesome/fontawesome-free/css/all.min.css';
 
+// The browser's own history-based scroll restoration fights HomePage's manual
+// save/restore (sessionStorage-keyed, see HomePage.tsx) on route changes -
+// most noticeably in the Tauri webview (WebKit), which is more eager than
+// Chromium about auto-resetting scroll on SPA navigation. Manual mode makes
+// our own restore the sole authority.
+if ('scrollRestoration' in window.history) {
+  window.history.scrollRestoration = 'manual';
+}
+
 // Esc closes the topmost modal by clicking its close button, so each modal's own
 // close logic runs. Modals without a close button (e.g. mid-conversion) are unaffected.
 document.addEventListener('keydown', (e) => {
