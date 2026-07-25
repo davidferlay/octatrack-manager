@@ -3756,6 +3756,24 @@ th.col-usage .header-content .filter-icon {
   margin-left: 0;
 }
 
+/* Loaded into a slot but not referenced by any track machine or p-lock at
+   all: dimmer than "referenced" (which at least has a real machine/lock
+   pointing at it, just untriggered) - this is the least noteworthy tier. */
+.usage-badge.assigned {
+  color: var(--elektron-text-dim);
+  background-color: rgba(153, 153, 153, 0.06);
+  border-color: rgba(153, 153, 153, 0.25);
+  margin-left: 0.3rem;
+}
+
+.usage-badge.assigned:hover {
+  border-color: var(--elektron-text-secondary);
+}
+
+.usage-badge.assigned:first-child {
+  margin-left: 0;
+}
+
 .usage-none {
   color: var(--elektron-text-dim);
 }

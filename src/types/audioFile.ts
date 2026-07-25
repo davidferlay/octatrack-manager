@@ -12,10 +12,12 @@ export interface AudioFile {
 export interface PoolUsageEntry {
   project: string;
   bank: number;
-  kind: string;
+  kind: string; // "machine" | "lock" | "assigned"
   track: number;
   part: number | null;
   pattern: number | null;
   step: number | null;
   audible: boolean;
+  /** Slot label (e.g. "F46", "S16"), set only when kind === "assigned". */
+  slot: string | null;
 }

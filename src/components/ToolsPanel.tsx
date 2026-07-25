@@ -535,7 +535,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         const isAbsolute = slot.path.startsWith('/') || /^[A-Za-z]:/.test(slot.path);
         const resolved = normalizePath(isAbsolute ? slot.path : `${projectPath}/${slot.path}`);
         const key = usageKey(resolved);
-        const tagged = entries.map(e => ({ ...e, project: projectName }));
+        const tagged = entries.map(e => ({ ...e, project: projectName, slot: null }));
         out[key] = [...(out[key] ?? []), ...tagged];
       });
     };
@@ -549,12 +549,13 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const projectFilesUsageMap = useMemo(() => {
     const merged: Record<string, PoolUsageEntry[]> = { ...projectUsageMap };
     for (const [key, entries] of Object.entries(poolUsageMap)) {
-      // projectUsageMap already reports every usage this project's own slots
-      // produce (compute_sample_usage scans this project directly) - drop any
-      // pool-usage entry tagged with this same project to avoid double-counting
-      // a pool-resident file this project references itself. Usage from other
-      // projects in the set is still valid and kept.
-      const otherProjectsEntries = entries.filter(e => e.project !== projectName);
+      // projectUsageMap already reports every machine/lock usage this project's
+      // own slots produce (compute_sample_usage scans this project directly) -
+      // drop pool-usage entries of that same kind tagged with this project to
+      // avoid double-counting. "assigned" entries are pool-only (compute_sample_usage
+      // never emits them - see projectUsageMap above), so this project's own
+      // "assigned" entries are the only place they come from and must be kept.
+      const otherProjectsEntries = entries.filter(e => e.project !== projectName || e.kind === 'assigned');
       merged[key] = [...(merged[key] ?? []), ...otherProjectsEntries];
     }
     return merged;

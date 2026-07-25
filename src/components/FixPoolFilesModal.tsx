@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { getFileFormat, formatFileSize, usageKey, UsagePopoverBox, type PopoverAnchor } from './AudioFileTable';
+import { getFileFormat, formatFileSize, usageKey, UsagePopoverBox, type PopoverAnchor, type UsagePopoverScope } from './AudioFileTable';
 import type { PoolUsageEntry } from '../types/audioFile';
 
 export interface IncompatibleFile {
@@ -247,7 +247,7 @@ export function usePoolTable(
   const [usageFilter, setUsageFilter] = useState('all');
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
-  const [usagePopover, setUsagePopover] = useState<(PopoverAnchor & { path: string; scope: 'audible' | 'referenced' }) | null>(null);
+  const [usagePopover, setUsagePopover] = useState<(PopoverAnchor & { path: string; scope: UsagePopoverScope }) | null>(null);
 
   // Column visibility ("toggle columns" menu in the header)
   const allColumns = POOL_COLUMNS.filter(c =>
@@ -584,8 +584,9 @@ export function PoolFilesTable({ table }: { table: ReturnType<typeof usePoolTabl
       case 'slot': return <td key={id} className="col-slot">{r.slots.length > 0 ? r.slots.join(', ') : <span className="usage-none">—</span>}</td>;
       case 'usage': {
         const audibleCount = r.usageEntries.filter(e => e.audible).length;
-        const referencedCount = r.usageEntries.length - audibleCount;
-        const openPopover = (scope: 'audible' | 'referenced') => (e: React.MouseEvent) => {
+        const assignedCount = r.usageEntries.filter(e => e.kind === 'assigned').length;
+        const referencedCount = r.usageEntries.length - audibleCount - assignedCount;
+        const openPopover = (scope: UsagePopoverScope) => (e: React.MouseEvent) => {
           e.stopPropagation();
           const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
           setUsagePopover({ left: rect.left, top: rect.top, bottom: rect.bottom, path: r.path, scope });
@@ -600,6 +601,11 @@ export function PoolFilesTable({ table }: { table: ReturnType<typeof usePoolTabl
             {referencedCount > 0 && (
               <button className="usage-badge referenced" title={`Referenced in ${referencedCount} place${referencedCount > 1 ? 's' : ''} but not triggered - click for details`} onClick={openPopover('referenced')}>
                 ○ {referencedCount}
+              </button>
+            )}
+            {assignedCount > 0 && (
+              <button className="usage-badge assigned" title={`Loaded into ${assignedCount} slot${assignedCount > 1 ? 's' : ''}, not referenced by any track or pattern - click for details`} onClick={openPopover('assigned')}>
+                · {assignedCount}
               </button>
             )}
             {/* Wording differs from AudioFileTable.tsx's equivalent ("...in any
@@ -642,12 +648,18 @@ export function PoolFilesTable({ table }: { table: ReturnType<typeof usePoolTabl
         <UsagePopoverBox anchor={usagePopover} onClose={() => setUsagePopover(null)} onClick={(e) => e.stopPropagation()}>
           {(() => {
             const row = rows.find(r => r.path === usagePopover.path) ?? table.allRows.find((r: PoolRow) => r.path === usagePopover.path);
-            const scoped = (row?.usageEntries ?? []).filter((e: PoolUsageEntry) => e.audible === (usagePopover.scope === 'audible'));
+            const scoped = (row?.usageEntries ?? []).filter((e: PoolUsageEntry) =>
+              usagePopover.scope === 'assigned' ? e.kind === 'assigned'
+                : usagePopover.scope === 'audible' ? e.audible
+                : !e.audible && e.kind !== 'assigned'
+            );
             return (
               <>
                 <div className="usage-popover-header">
                   {usagePopover.scope === 'audible'
                     ? `Played in ${scoped.length} place${scoped.length > 1 ? 's' : ''}`
+                    : usagePopover.scope === 'assigned'
+                    ? `Loaded into ${scoped.length} slot${scoped.length > 1 ? 's' : ''}, not referenced`
                     : `Referenced in ${scoped.length} place${scoped.length > 1 ? 's' : ''} but not triggered`}
                 </div>
                 <div className="usage-popover-list">
@@ -655,6 +667,8 @@ export function PoolFilesTable({ table }: { table: ReturnType<typeof usePoolTabl
                     <div key={idx} className="usage-popover-entry">
                       {entry.kind === 'machine'
                         ? `${entry.project} · Bank ${BANK_LETTERS[entry.bank] ?? '?'} · Part ${(entry.part ?? 0) + 1} · T${entry.track + 1} · Machine`
+                        : entry.kind === 'assigned'
+                        ? `${entry.project} · Slot ${entry.slot}`
                         : `${entry.project} · Bank ${BANK_LETTERS[entry.bank] ?? '?'} · Pattern ${(entry.pattern ?? 0) + 1} · T${entry.track + 1} · Step ${(entry.step ?? 0) + 1} · Lock`}
                     </div>
                   ))}
@@ -682,8 +696,9 @@ export function poolTableTsv(table: ReturnType<typeof usePoolTable>): string {
       case 'slot': return r.slots.join(', ');
       case 'usage': {
         const audibleCount = r.usageEntries.filter(e => e.audible).length;
-        const referencedCount = r.usageEntries.length - audibleCount;
-        return `${audibleCount} played, ${referencedCount} referenced`;
+        const assignedCount = r.usageEntries.filter(e => e.kind === 'assigned').length;
+        const referencedCount = r.usageEntries.length - audibleCount - assignedCount;
+        return `${audibleCount} played, ${referencedCount} referenced, ${assignedCount} assigned`;
       }
     }
   };

@@ -1171,6 +1171,11 @@ pub struct PoolUsageEntry {
     pub pattern: Option<u8>,
     pub step: Option<u8>,
     pub audible: bool,
+    /// Slot label (e.g. "F46", "S16"), set only for `kind == "assigned"`:
+    /// the slot has this pool file loaded but no machine assignment or p-lock
+    /// anywhere references it - distinct from "machine"/"lock" kinds (already
+    /// identified by bank/track/part/pattern/step) and from no usage at all.
+    pub slot: Option<String>,
 }
 
 /// Scan every project directory in the pool's set and report where each Audio
@@ -1231,8 +1236,9 @@ pub fn compute_pool_usage(
             if !in_pool {
                 continue;
             }
+            let slot_type_upper = slot_type.to_uppercase();
             let idx = (*slot_id as usize).saturating_sub(1);
-            let slot_entries = match slot_type.to_uppercase().as_str() {
+            let slot_entries = match slot_type_upper.as_str() {
                 "STATIC" => usage.static_usage.get(idx),
                 "FLEX" => usage.flex_usage.get(idx),
                 _ => None,
@@ -1241,6 +1247,22 @@ pub fn compute_pool_usage(
                 continue;
             };
             if slot_entries.is_empty() {
+                // The slot has this pool file loaded but nothing (no machine
+                // assignment, no p-lock) ever references it - still real usage
+                // (renaming/deleting the file would break the slot), just not
+                // audible or even referenced by a pattern.
+                let prefix = if slot_type_upper == "FLEX" { "F" } else { "S" };
+                result.entry(resolved).or_default().push(PoolUsageEntry {
+                    project: project_name.clone(),
+                    bank: 0,
+                    kind: "assigned".to_string(),
+                    track: 0,
+                    part: None,
+                    pattern: None,
+                    step: None,
+                    audible: false,
+                    slot: Some(format!("{}{}", prefix, slot_id)),
+                });
                 continue;
             }
             let bucket = result.entry(resolved).or_default();
@@ -1254,6 +1276,7 @@ pub fn compute_pool_usage(
                     pattern: e.pattern,
                     step: e.step,
                     audible: e.audible,
+                    slot: None,
                 });
             }
         }
@@ -18426,7 +18449,10 @@ mod tests {
             write_raw_project_work(&set.join("PROJ1"), &content1);
 
             // PROJ2: STATIC slot 1 also points at the pool's kick.wav, but with
-            // default (untrigged) banks, so it contributes no usage entries.
+            // default (untrigged) banks, so it contributes no machine/lock entry
+            // - just the fallback "assigned" entry (the slot's factory-default
+            // machine mapping is itself suppressed as noise by compute_sample_usage,
+            // but the file is still genuinely loaded into a real project's slot).
             for bank_num in 1..=16 {
                 BankFile::default()
                     .to_data_file(&set.join("PROJ2").join(format!("bank{:02}.work", bank_num)))
@@ -18451,13 +18477,59 @@ mod tests {
             let entries = usage.get(&key).expect("kick.wav should have usage entries");
             assert_eq!(
                 entries.len(),
-                1,
-                "only PROJ1's trigged machine assignment counts"
+                2,
+                "PROJ1's trigged machine assignment plus PROJ2's fallback 'assigned' entry"
             );
-            assert_eq!(entries[0].project, "PROJ1");
-            assert_eq!(entries[0].kind, "machine");
-            assert!(entries[0].audible);
+            let proj1 = entries.iter().find(|e| e.project == "PROJ1").unwrap();
+            assert_eq!(proj1.kind, "machine");
+            assert!(proj1.audible);
+            assert_eq!(proj1.track, 0);
+
+            let proj2 = entries.iter().find(|e| e.project == "PROJ2").unwrap();
+            assert_eq!(proj2.kind, "assigned");
+            assert!(!proj2.audible);
+            assert_eq!(proj2.slot.as_deref(), Some("S1"));
+        }
+
+        #[test]
+        fn a_slot_loaded_but_never_machine_assigned_or_locked_reports_a_fallback_assigned_entry() {
+            let temp = TempDir::new().unwrap();
+            let set = temp.path();
+            fs::create_dir(set.join("AUDIO")).unwrap();
+            fs::create_dir(set.join("PROJ")).unwrap();
+            // Completely default banks: no machine anywhere is assigned to FLEX
+            // slot 5 (not the factory-default 1:1 mapping, so no ambiguity with
+            // the noise-suppression compute_sample_usage otherwise applies).
+            for bank_num in 1..=16 {
+                BankFile::default()
+                    .to_data_file(&set.join("PROJ").join(format!("bank{:02}.work", bank_num)))
+                    .unwrap();
+            }
+            let content = create_raw_project_work_with_custom_fields(&[(
+                "FLEX",
+                5,
+                "../AUDIO/loop.wav",
+                None,
+                None,
+                None,
+            )]);
+            write_raw_project_work(&set.join("PROJ"), &content);
+
+            let pool = set.join("AUDIO");
+            let usage = compute_pool_usage(&pool.to_string_lossy()).unwrap();
+            let key = normalize_path_lexically(&pool.join("loop.wav"))
+                .to_string_lossy()
+                .to_lowercase();
+
+            let entries = usage.get(&key).expect("loop.wav should have a usage entry");
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].project, "PROJ");
+            assert_eq!(entries[0].kind, "assigned");
+            assert!(!entries[0].audible);
+            assert_eq!(entries[0].slot.as_deref(), Some("F5"));
+            assert_eq!(entries[0].bank, 0);
             assert_eq!(entries[0].track, 0);
+            assert_eq!(entries[0].part, None);
         }
 
         #[test]

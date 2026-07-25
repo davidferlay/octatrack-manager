@@ -147,8 +147,8 @@ describe('AudioFileTable', () => {
   it('shows Usage badges (audible and referenced) and a dash for unreferenced files, only when usageMap is set', () => {
     const usageMap: Record<string, PoolUsageEntry[]> = {
       '/audio/kick.wav': [
-        { project: 'PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true },
-        { project: 'PROJ2', bank: 1, kind: 'lock', track: 2, part: null, pattern: 3, step: 5, audible: false },
+        { project: 'PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: null },
+        { project: 'PROJ2', bank: 1, kind: 'lock', track: 2, part: null, pattern: 3, step: 5, audible: false, slot: null },
       ],
     }
     renderTable({ poolRoot: '/AUDIO', usageMap })
@@ -160,6 +160,30 @@ describe('AudioFileTable', () => {
     expect(snareRow.querySelector('.usage-none')?.textContent).toBe('—')
   })
 
+  it('shows a dim "assigned" badge for a file loaded into a slot but not referenced by any track or pattern', () => {
+    const usageMap: Record<string, PoolUsageEntry[]> = {
+      '/audio/kick.wav': [
+        { project: 'PROJ1', bank: 0, kind: 'assigned', track: 0, part: null, pattern: null, step: null, audible: false, slot: 'F5' },
+      ],
+    }
+    renderTable({ poolRoot: '/AUDIO', usageMap })
+    const badge = screen.getByText('· 1')
+    expect(badge).toHaveClass('usage-badge', 'assigned')
+    expect(screen.queryByText('✓ 1')).not.toBeInTheDocument()
+    expect(screen.queryByText('○ 1')).not.toBeInTheDocument()
+  })
+
+  it('opens an "assigned" popover listing the project and slot label, not bank/track/pattern', async () => {
+    const usageMap: Record<string, PoolUsageEntry[]> = {
+      '/audio/kick.wav': [
+        { project: 'PROJ1', bank: 0, kind: 'assigned', track: 0, part: null, pattern: null, step: null, audible: false, slot: 'F5' },
+      ],
+    }
+    renderTable({ poolRoot: '/AUDIO', usageMap })
+    await userEvent.click(screen.getByText('· 1'))
+    expect(screen.getByText('PROJ1 · Slot F5')).toBeInTheDocument()
+  })
+
   it('does not show a Usage column when usageMap is absent', () => {
     renderTable({ poolRoot: '/AUDIO' })
     expect(screen.queryByText('Usage')).not.toBeInTheDocument()
@@ -168,7 +192,7 @@ describe('AudioFileTable', () => {
   it('opens a project-prefixed usage popover when a badge is clicked', async () => {
     const usageMap: Record<string, PoolUsageEntry[]> = {
       '/audio/kick.wav': [
-        { project: 'PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true },
+        { project: 'PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: null },
       ],
     }
     renderTable({ poolRoot: '/AUDIO', usageMap })
@@ -179,7 +203,7 @@ describe('AudioFileTable', () => {
   it('sorts by Usage (audible-weighted total) when the Usage header is clicked', async () => {
     const usageMap: Record<string, PoolUsageEntry[]> = {
       '/audio/kick.wav': [
-        { project: 'PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true },
+        { project: 'PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: null },
       ],
       '/audio/snare.wav': [],
     }
@@ -192,7 +216,7 @@ describe('AudioFileTable', () => {
   it('filters rows via the Usage dropdown (Used / Referenced / Unused)', async () => {
     const usageMap: Record<string, PoolUsageEntry[]> = {
       '/audio/kick.wav': [
-        { project: 'PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true },
+        { project: 'PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: null },
       ],
     }
     renderTable({ poolRoot: '/AUDIO', usageMap })
@@ -216,7 +240,7 @@ describe('AudioFileTable', () => {
 
     const usageMap: Record<string, PoolUsageEntry[]> = {
       '/audio/kick.wav': [
-        { project: 'PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true },
+        { project: 'PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: null },
       ],
     }
     rerender(

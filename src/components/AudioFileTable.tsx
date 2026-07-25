@@ -171,6 +171,10 @@ export interface PopoverAnchor {
   bottom: number;
 }
 
+/** Which usage badge was clicked: audible (played), referenced (machine/lock but
+ * untriggered), or assigned (loaded into a slot but not referenced at all). */
+export type UsagePopoverScope = 'audible' | 'referenced' | 'assigned';
+
 /**
  * Positions a usage popover against its anchor badge: opens below by default,
  * flips above when the popover (measured after it renders, not guessed from
@@ -384,7 +388,7 @@ export function AudioFileTable({
   // Dropdown state — use portal + position to avoid clipping issues
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
-  const [usagePopover, setUsagePopover] = useState<(PopoverAnchor & { path: string; scope: 'audible' | 'referenced' }) | null>(null);
+  const [usagePopover, setUsagePopover] = useState<(PopoverAnchor & { path: string; scope: UsagePopoverScope }) | null>(null);
 
   // TanStack column state
   const [sorting, setSorting] = useState<SortingState>([{ id: 'name', desc: false }]);
@@ -560,8 +564,9 @@ export function AudioFileTable({
       case 'usage': {
         const entries = usageMap?.[usageKey(file.path)] ?? [];
         const audibleCount = entries.filter(e => e.audible).length;
-        const referencedCount = entries.length - audibleCount;
-        const openPopover = (scope: 'audible' | 'referenced') => (e: React.MouseEvent) => {
+        const assignedCount = entries.filter(e => e.kind === 'assigned').length;
+        const referencedCount = entries.length - audibleCount - assignedCount;
+        const openPopover = (scope: UsagePopoverScope) => (e: React.MouseEvent) => {
           e.stopPropagation();
           const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
           setUsagePopover({ left: rect.left, top: rect.top, bottom: rect.bottom, path: file.path, scope });
@@ -584,6 +589,15 @@ export function AudioFileTable({
                 onClick={openPopover('referenced')}
               >
                 ○ {referencedCount}
+              </button>
+            )}
+            {assignedCount > 0 && (
+              <button
+                className="usage-badge assigned"
+                title={`Loaded into ${assignedCount} slot${assignedCount > 1 ? 's' : ''}, not referenced by any track or pattern - click for details`}
+                onClick={openPopover('assigned')}
+              >
+                · {assignedCount}
               </button>
             )}
             {!file.is_directory && entries.length === 0 && (usageLoading
@@ -894,14 +908,18 @@ export function AudioFileTable({
       {usagePopover && (
         <UsagePopoverBox anchor={usagePopover} onClose={() => setUsagePopover(null)} onClick={(e) => e.stopPropagation()}>
           {(() => {
-            const scoped = (usageMap?.[usageKey(usagePopover.path)] ?? []).filter(
-              (e) => e.audible === (usagePopover.scope === 'audible')
+            const scoped = (usageMap?.[usageKey(usagePopover.path)] ?? []).filter((e) =>
+              usagePopover.scope === 'assigned' ? e.kind === 'assigned'
+                : usagePopover.scope === 'audible' ? e.audible
+                : !e.audible && e.kind !== 'assigned'
             );
             return (
               <>
                 <div className="usage-popover-header">
                   {usagePopover.scope === 'audible'
                     ? `Played in ${scoped.length} place${scoped.length > 1 ? 's' : ''}`
+                    : usagePopover.scope === 'assigned'
+                    ? `Loaded into ${scoped.length} slot${scoped.length > 1 ? 's' : ''}, not referenced`
                     : `Referenced in ${scoped.length} place${scoped.length > 1 ? 's' : ''} but not triggered`}
                 </div>
                 <div className="usage-popover-list">
@@ -909,6 +927,8 @@ export function AudioFileTable({
                     <div key={idx} className="usage-popover-entry">
                       {entry.kind === 'machine'
                         ? `${entry.project} · Bank ${BANK_LETTERS[entry.bank] ?? '?'} · Part ${(entry.part ?? 0) + 1} · T${entry.track + 1} · Machine`
+                        : entry.kind === 'assigned'
+                        ? `${entry.project} · Slot ${entry.slot}`
                         : `${entry.project} · Bank ${BANK_LETTERS[entry.bank] ?? '?'} · Pattern ${(entry.pattern ?? 0) + 1} · T${entry.track + 1} · Step ${(entry.step ?? 0) + 1} · Lock`}
                     </div>
                   ))}
