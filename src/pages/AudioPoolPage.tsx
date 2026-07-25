@@ -21,8 +21,9 @@ import { OverwriteModal } from "../components/OverwriteModal";
 import { TransferProgressPanel } from "../components/TransferProgressPanel";
 import { useAudioPoolTransfer } from "../hooks/useAudioPoolTransfer";
 import { useAudioPreview, shouldAutoPreview, scrubTarget, volumeStep, isAudioFile } from "../hooks/useAudioPreview";
+import { usePoolUsage, invalidatePoolUsage } from "../hooks/usePoolUsage";
 import { SamplePlayerBar } from "../components/SamplePlayerBar";
-import type { AudioFile, PoolUsageEntry } from "../types/audioFile";
+import type { AudioFile } from "../types/audioFile";
 import "./AudioPoolPage.css";
 
 // Droppable wrapper for the Audio Pool (destination) pane. Uses @dnd-kit (pointer-based)
@@ -211,6 +212,7 @@ export function AudioPoolPage() {
       // Refresh before dropping the throbbers so the badges come back already up to date
       await loadDestinationFiles(destinationPath);
       setPoolScanKey(k => k + 1);
+      invalidatePoolUsage(audioPoolPath);
       // Conversion may rename the file (.aif -> .wav), so flag the new path
       const converted = result.outcomes.filter(o => !o.error).map(o => o.new_path ?? o.old_path);
       if (converted.length > 0) {
@@ -340,21 +342,11 @@ export function AudioPoolPage() {
     [incompatibleFiles]
   );
 
-  // Cross-project pool file usage, for the Usage column. Re-fetched whenever the
-  // health scan re-runs (poolScanKey), since fixes can shift which projects
-  // reference a file (slot remap after a rename/conversion).
-  const [poolUsage, setPoolUsage] = useState<Record<string, PoolUsageEntry[]>>({});
-  const [poolUsageLoading, setPoolUsageLoading] = useState(false);
-  useEffect(() => {
-    if (!audioPoolPath) return;
-    let cancelled = false;
-    setPoolUsageLoading(true);
-    invoke<Record<string, PoolUsageEntry[]>>('get_pool_usage', { poolPath: audioPoolPath })
-      .then(result => { if (!cancelled) setPoolUsage(result ?? {}); })
-      .catch(e => console.error('Pool usage scan failed:', e))
-      .finally(() => { if (!cancelled) setPoolUsageLoading(false); });
-    return () => { cancelled = true; };
-  }, [audioPoolPath, poolScanKey]);
+  // Cross-project pool file usage, for the Usage column. Cached per pool path
+  // (see usePoolUsage) - invalidated explicitly wherever a fix/rename/delete
+  // below can shift which projects reference a file, rather than re-fetched
+  // on every health-scan rerun.
+  const { usageMap: poolUsage, usageLoading: poolUsageLoading } = usePoolUsage(audioPoolPath);
   const contextMenuRef = useRef<HTMLDivElement>(null);
 
   // Rename modal state
@@ -959,6 +951,7 @@ export function AudioPoolPage() {
         loadSourceFiles(sourcePath);
       } else {
         loadDestinationFiles(destinationPath);
+        invalidatePoolUsage(audioPoolPath);
       }
     } catch (error) {
       console.error("Error renaming:", error);
@@ -1015,6 +1008,7 @@ export function AudioPoolPage() {
         loadDestinationFiles(destinationPath);
         // Deleted pool files may have been incompatible ones: refresh the health scan
         setPoolScanKey(k => k + 1);
+        invalidatePoolUsage(audioPoolPath);
       }
     } catch (error) {
       console.error("Error deleting:", error);
@@ -1423,6 +1417,7 @@ export function AudioPoolPage() {
               loadDestinationFiles(destinationPath);
               // Also rescan the pool so the health glyph / Tools status stay current
               setPoolScanKey(k => k + 1);
+              invalidatePoolUsage(audioPoolPath);
             }}
             className={`toolbar-button ${isSpinning ? 'refreshing' : ''}`}
             disabled={isLoadingSource || isLoadingDest}
@@ -1735,7 +1730,7 @@ export function AudioPoolPage() {
           usageMap={poolUsage}
           usageLoading={poolUsageLoading}
           onClose={() => setFixModal(null)}
-          onFixed={() => { loadDestinationFiles(destinationPath); setPoolScanKey(k => k + 1); }}
+          onFixed={() => { loadDestinationFiles(destinationPath); setPoolScanKey(k => k + 1); invalidatePoolUsage(audioPoolPath); }}
         />
       )}
 

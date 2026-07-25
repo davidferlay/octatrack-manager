@@ -5,6 +5,7 @@ import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { AudioFileTable } from "./AudioFileTable";
 import type { IncompatibleFile, PoolFixResult, CopyProgressEvent } from "./FixPoolFilesModal";
 import type { AudioFile } from "../types/audioFile";
+import { usePoolUsage, invalidatePoolUsage } from "../hooks/usePoolUsage";
 import "./AudioPoolSidebar.css";
 
 interface AudioPoolSidebarProps {
@@ -64,6 +65,9 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
   });
   const [files, setFiles] = useState<AudioFile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  // Cross-project usage (Used/Referenced/Assigned badges), cached per pool path -
+  // shared with the Audio Pool page and Fix Project Samples (see usePoolUsage).
+  const { usageMap: poolUsageMap, usageLoading: poolUsageLoading } = usePoolUsage(audioPoolPath);
   // OT compatibility per file (fed by the table's background inspection)
   const [compatMap, setCompatMap] = useState<Record<string, string>>({});
   // Context-menu conversion runs inline: the Compat badge becomes a throbber
@@ -101,6 +105,7 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
       }
       // Refresh before dropping the throbbers so the badges come back already up to date
       await loadFiles(currentPath);
+      invalidatePoolUsage(audioPoolPath);
       onPoolFixed?.();
       // Conversion may rename the file (.aif -> .wav), so flag the new path
       const converted = result.outcomes.filter(o => !o.error).map(o => o.new_path ?? o.old_path);
@@ -415,6 +420,8 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
         poolRoot={audioPoolPath}
         searchRoot={currentPath}
         onCompatMap={setCompatMap}
+        usageMap={poolUsageMap}
+        usageLoading={poolUsageLoading}
         convertingPaths={convertingPaths}
         justConvertedPaths={justConvertedPaths}
         onContextMenu={handleItemContextMenu}

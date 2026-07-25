@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useProjects } from "../context/ProjectsContext";
 import type { Bank, SampleSlotUsage, SlotUsageEntry } from "../context/ProjectsContext";
 import type { PoolUsageEntry } from "../types/audioFile";
+import { usePoolUsage, invalidatePoolUsage } from "../hooks/usePoolUsage";
 import { formatBankName } from "./BankSelector";
 import "../App.css";
 import { FixMissingSamplesModal } from "./FixMissingSamplesModal";
@@ -502,23 +503,11 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   );
 
   // Cross-project pool usage, for rows whose file lives in the Audio Pool -
-  // only fetched when a pool actually exists for this project's set.
-  const [poolUsageMap, setPoolUsageMap] = useState<Record<string, PoolUsageEntry[]>>({});
-  const [poolUsageLoading, setPoolUsageLoading] = useState(false);
-  useEffect(() => {
-    if (!audioPoolStatus?.exists || !audioPoolStatus.path) {
-      setPoolUsageMap({});
-      setPoolUsageLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setPoolUsageLoading(true);
-    invoke<Record<string, PoolUsageEntry[]>>('get_pool_usage', { poolPath: audioPoolStatus.path })
-      .then(result => { if (!cancelled) setPoolUsageMap(result ?? {}); })
-      .catch(e => { console.error('Pool usage scan failed:', e); if (!cancelled) setPoolUsageMap({}); })
-      .finally(() => { if (!cancelled) setPoolUsageLoading(false); });
-    return () => { cancelled = true; };
-  }, [audioPoolStatus?.exists, audioPoolStatus?.path]);
+  // only fetched when a pool actually exists for this project's set. Shares
+  // the same per-pool-path cache as the Audio Pool page and the Sample Slots
+  // sidebar (see usePoolUsage).
+  const poolPathForUsage = audioPoolStatus?.exists ? audioPoolStatus.path : undefined;
+  const { usageMap: poolUsageMap, usageLoading: poolUsageLoading } = usePoolUsage(poolPathForUsage);
 
   // This project's own per-slot usage (already computed by ProjectDetail for its
   // Sample Slot tables via compute_sample_usage), reformatted to the same
@@ -3724,6 +3713,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           usageLoading={usageLoading}
           onClose={() => setShowFixProjectModal(false)}
           onFixed={(_res: PoolFixResult) => {
+            if (audioPoolStatus?.exists && audioPoolStatus.path) invalidatePoolUsage(audioPoolStatus.path);
             if (onProjectRefresh) onProjectRefresh();
           }}
         />

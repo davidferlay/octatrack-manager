@@ -17,6 +17,7 @@ import type { SlotUsageEntry } from "../context/ProjectsContext";
 import { AudioPoolSidebar } from "./AudioPoolSidebar";
 import { formatFileSize, UsagePopoverBox, type PopoverAnchor } from "./AudioFileTable";
 import { useAudioPreview, shouldAutoPreview, scrubTarget, volumeStep, isAudioFile } from '../hooks/useAudioPreview';
+import { invalidatePoolUsage } from '../hooks/usePoolUsage';
 import { SamplePlayerBar } from './SamplePlayerBar';
 
 // Droppable slot row for dnd-kit (pointer-based, cross-platform)
@@ -454,6 +455,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         });
         if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
         if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb, result.flex_ram_free_bytes);
+        if (audioPoolPath) invalidatePoolUsage(audioPoolPath);
       }
 
       // Surface validation feedback.
@@ -470,7 +472,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     } finally {
       setIsAssigning(false);
     }
-  }, [isEditMode, projectPath, tableType, slots, memorySettings, buildRelativePath, onSlotsUpdated, onFlexRamUpdated, showNotice]);
+  }, [isEditMode, projectPath, tableType, slots, memorySettings, buildRelativePath, onSlotsUpdated, onFlexRamUpdated, showNotice, audioPoolPath]);
 
   // Live ref so the mount-time OS drag-drop listener can call the latest doAssignFiles.
   const doAssignFilesRef = useRef(doAssignFiles);
@@ -520,12 +522,13 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
       });
       if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
       if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb, result.flex_ram_free_bytes);
+      if (audioPoolPath) invalidatePoolUsage(audioPoolPath);
     } catch (error) {
       console.error("Error clearing sample slot(s):", error);
     } finally {
       setIsAssigning(false);
     }
-  }, [isEditMode, projectPath, slotType, onSlotsUpdated, onFlexRamUpdated]);
+  }, [isEditMode, projectPath, slotType, onSlotsUpdated, onFlexRamUpdated, audioPoolPath]);
 
   // Delete the entire [SAMPLE] block for every target slot that has one, returning it to the
   // hardware's fully-empty state (no sample, attributes back to OT defaults). For slots still
@@ -548,12 +551,13 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
       });
       if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
       if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb, result.flex_ram_free_bytes);
+      if (audioPoolPath) invalidatePoolUsage(audioPoolPath);
     } catch (error) {
       console.error("Error deleting sample slot block(s):", error);
     } finally {
       setIsAssigning(false);
     }
-  }, [isEditMode, projectPath, slotType, onSlotsUpdated, onFlexRamUpdated]);
+  }, [isEditMode, projectPath, slotType, onSlotsUpdated, onFlexRamUpdated, audioPoolPath]);
 
   // Reset the given slots' audio-editor attributes to OT defaults. Attributes are tied to the
   // slot (not the audio file), so this also applies to empty slots; the backend additionally
@@ -638,6 +642,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         showNotice(`Could not convert: ${failed.error}`, 'warning');
       } else {
         showNotice('Converted to Octatrack format', 'info');
+        if (audioPoolPath) invalidatePoolUsage(audioPoolPath);
         onPoolFixed?.();
       }
     } catch (err) {
@@ -649,7 +654,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         return next;
       });
     }
-  }, [projectPath, onPoolFixed, showNotice]);
+  }, [projectPath, onPoolFixed, showNotice, audioPoolPath]);
 
   // Navigate to the full Audio Pool page for this Set, remembering where we came from.
   const openAudioPoolPage = useCallback(() => {
