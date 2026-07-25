@@ -1744,6 +1744,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         <div className={`sidebar-os-drop-zone${osDragOverSidebar ? ' os-drag-over' : ''}`}>
           <AudioPoolSidebar
             audioPoolPath={audioPoolPath}
+            projectName={projectName}
             isEditMode={isEditMode ?? false}
             dndMode={true}
             refreshKey={sidebarRefreshKey}

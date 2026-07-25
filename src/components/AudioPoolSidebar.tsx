@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { AudioFileTable } from "./AudioFileTable";
 import type { IncompatibleFile, PoolFixResult, CopyProgressEvent } from "./FixPoolFilesModal";
-import type { AudioFile } from "../types/audioFile";
+import type { AudioFile, PoolUsageEntry } from "../types/audioFile";
 import { usePoolUsage, invalidatePoolUsage } from "../hooks/usePoolUsage";
 import "./AudioPoolSidebar.css";
 
@@ -41,6 +41,12 @@ interface AudioPoolSidebarProps {
   active?: boolean;
   /** Fired after pool files were converted in place (slot paths may have changed). */
   onPoolFixed?: () => void;
+  /**
+   * Currently loaded project's name. When set, Usage badges are scoped to this
+   * project only (the Sample Slots page's per-project view), unlike the Audio
+   * Pool page's global view across every project of the Set.
+   */
+  projectName?: string | null;
 }
 
 // Parent directory of `path`, never climbing above `root`. Returns `path` unchanged
@@ -54,7 +60,7 @@ export function parentDir(path: string, root: string): string {
   return parent.startsWith(root) && parent.length >= root.length ? parent : root;
 }
 
-export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndMode = false, refreshKey, onCurrentPathChange, onImport, onAssignToFirstEmpty, hasEmptySlot = true, onAssignToSelected, hasSelectedSlot, onOpenAudioPoolPage, persistKey, onSelect, clearSelectionToken, onActiveFile, onPlayFile, active = false, onPoolFixed }: AudioPoolSidebarProps) {
+export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndMode = false, refreshKey, onCurrentPathChange, onImport, onAssignToFirstEmpty, hasEmptySlot = true, onAssignToSelected, hasSelectedSlot, onOpenAudioPoolPage, persistKey, onSelect, clearSelectionToken, onActiveFile, onPlayFile, active = false, onPoolFixed, projectName }: AudioPoolSidebarProps) {
   // Restore the last-browsed directory (only if it still sits under this pool root).
   const [currentPath, setCurrentPath] = useState(() => {
     if (persistKey) {
@@ -68,6 +74,19 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
   // Cross-project usage (Used/Referenced/Assigned badges), cached per pool path -
   // shared with the Audio Pool page and Fix Project Samples (see usePoolUsage).
   const { usageMap: poolUsageMap, usageLoading: poolUsageLoading } = usePoolUsage(audioPoolPath);
+  // Scoped to just the currently loaded project: the Audio Pool page shows usage
+  // across the whole Set, but here (browsing a specific project's slots) the
+  // relevant question is "does *this* project use this file" - other projects'
+  // entries would just be noise.
+  const usageMap = useMemo(() => {
+    if (!projectName) return poolUsageMap;
+    const scoped: Record<string, PoolUsageEntry[]> = {};
+    for (const [key, entries] of Object.entries(poolUsageMap)) {
+      const filtered = entries.filter(e => e.project === projectName);
+      if (filtered.length > 0) scoped[key] = filtered;
+    }
+    return scoped;
+  }, [poolUsageMap, projectName]);
   // OT compatibility per file (fed by the table's background inspection)
   const [compatMap, setCompatMap] = useState<Record<string, string>>({});
   // Context-menu conversion runs inline: the Compat badge becomes a throbber
@@ -420,7 +439,7 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
         poolRoot={audioPoolPath}
         searchRoot={currentPath}
         onCompatMap={setCompatMap}
-        usageMap={poolUsageMap}
+        usageMap={usageMap}
         usageLoading={poolUsageLoading}
         convertingPaths={convertingPaths}
         justConvertedPaths={justConvertedPaths}

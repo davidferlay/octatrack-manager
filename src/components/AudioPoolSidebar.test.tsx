@@ -116,4 +116,26 @@ describe('AudioPoolSidebar', () => {
     await userEvent.click(screen.getByText(/Assign to selected slot/i))
     expect(onAssignToSelected).toHaveBeenCalledWith(['/set/AUDIO/kick.wav'])
   })
+
+  it('scopes the Usage badge to the current project when projectName is set, unlike the Set-wide Audio Pool page', async () => {
+    // Dedicated pool path so this test's get_pool_usage response can't be served
+    // from another test's cached entry for '/set/AUDIO' (usePoolUsage caches per path).
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'list_audio_directory') return files
+      if (cmd === 'get_pool_usage') {
+        return {
+          '/set/audio/kick.wav': [
+            { project: 'ThisProject', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: null },
+            { project: 'OtherProject', bank: 1, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: null },
+            { project: 'OtherProject', bank: 2, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: null },
+          ],
+        }
+      }
+      return undefined
+    })
+    render(<AudioPoolSidebar audioPoolPath="/set2/AUDIO" isEditMode={false} projectName="ThisProject" />)
+    await waitFor(() => expect(screen.getByText('kick.wav')).toBeInTheDocument())
+    // Only ThisProject's single entry counts, not the 3 total across both projects.
+    await waitFor(() => expect(screen.getByText('✓ 1')).toBeInTheDocument())
+  })
 })
