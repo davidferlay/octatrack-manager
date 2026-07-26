@@ -270,6 +270,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
 
   // Fix Project Samples state
   const [loadingProjectSamples, setLoadingProjectSamples] = useState<boolean>(false);
+  const [projectScanProgress, setProjectScanProgress] = useState<number>(0);
   const [projectScanTotal, setProjectScanTotal] = useState<number>(0);
   const [skipProjectReview, setSkipProjectReview] = useState<boolean>(
     savedSettings.skipProjectReview ?? false
@@ -466,11 +467,13 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     if (operation !== "fix_project_samples") return;
     let cancelled = false;
     setLoadingProjectSamples(true);
+    setProjectScanProgress(0);
     (async () => {
       try {
         const allProjectPaths = (await invoke<string[]>('list_audio_files_recursive', { path: projectPath })) ?? [];
         if (cancelled) return;
         setProjectScanTotal(allProjectPaths.length);
+        setProjectScanProgress(20); // directory listing is fast; inspect below owns the rest
         const referencedPaths = new Set(referencedSlotEntries.map(e => usageKey(e.path)));
         const unreferencedPaths = allProjectPaths
           .map(p => normalizePath(p))
@@ -479,10 +482,19 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           .filter(p => audioKind(p) === 'other-audio')
           .map(p => ({ path: p, compatibility: 'unsupported_format', source: 'project' as const, slots: [] as string[] }));
         const nativePaths = unreferencedPaths.filter(p => audioKind(p) === 'native');
-        const checks = nativePaths.length
-          ? await invoke<{ path: string; compatibility: string }[]>('inspect_audio_files', { paths: nativePaths })
-          : [];
+        // Chunked (not one giant call) so progress can advance smoothly across the
+        // slowest phase of the scan.
+        const INSPECT_CHUNK_SIZE = 200;
+        const checks: { path: string; compatibility: string }[] = [];
+        for (let i = 0; i < nativePaths.length; i += INSPECT_CHUNK_SIZE) {
+          const chunk = nativePaths.slice(i, i + INSPECT_CHUNK_SIZE);
+          const result = await invoke<{ path: string; compatibility: string }[]>('inspect_audio_files', { paths: chunk });
+          if (cancelled) return;
+          checks.push(...(result ?? []));
+          setProjectScanProgress(20 + Math.round((checks.length / nativePaths.length) * 80));
+        }
         if (cancelled) return;
+        setProjectScanProgress(100);
         const unreferenced = (checks ?? [])
           .filter(c => c.compatibility !== 'compatible')
           .map(c => ({ path: c.path, compatibility: c.compatibility, source: 'project' as const, slots: [] as string[] }));
@@ -3200,7 +3212,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             {loadingProjectSamples ? (
               <div className="tools-fix-status loading">
                 <span className="loading-spinner-small"></span>
-                <span>Scanning project samples...</span>
+                <span>Scanning project samples... {projectScanProgress}%</span>
               </div>
             ) : projectIncompatibleFiles.length === 0 ? (
               <div className="tools-fix-status all-good">

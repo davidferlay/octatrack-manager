@@ -263,6 +263,7 @@ export function AudioPoolPage() {
   // Pool health: scan the whole pool for incompatible files in the background on page
   // load (and after a fix). Feeds both the Tools tab status and the pane health glyph.
   const [poolScanLoading, setPoolScanLoading] = useState(false);
+  const [poolScanProgress, setPoolScanProgress] = useState(0);
   const [poolScanDone, setPoolScanDone] = useState(false);
   const [poolFileCount, setPoolFileCount] = useState(0);
   const [projectFileCount, setProjectFileCount] = useState(0);
@@ -275,6 +276,7 @@ export function AudioPoolPage() {
     if (!audioPoolPath) return;
     let cancelled = false;
     setPoolScanLoading(true);
+    setPoolScanProgress(0);
     setProjectCount(0);
     setProjectsSkipped(0);
     (async () => {
@@ -287,8 +289,14 @@ export function AudioPoolPage() {
         if (cancelled) return;
         setProjectCount(projects.length);
 
+        // Listing directories is fast; reserve the first 20% of the bar for it and
+        // let the (slower, header-parsing) inspect phase below own the rest.
+        const listTotal = 1 + projects.length;
+        let listDone = 1; // pool listing above already finished
+        setPoolScanProgress(Math.round((listDone / listTotal) * 20));
         const projectScanResults = await Promise.allSettled(
-          projects.map(p => invoke<string[]>('list_audio_files_recursive', { path: p.path }))
+          projects.map(p => invoke<string[]>('list_audio_files_recursive', { path: p.path })
+            .finally(() => { listDone++; setPoolScanProgress(Math.round((listDone / listTotal) * 20)); }))
         );
         if (cancelled) return;
         const projectPaths = projectScanResults.flatMap(r => r.status === 'fulfilled' ? (r.value ?? []) : []);
@@ -307,10 +315,19 @@ export function AudioPoolPage() {
         const native = tagged.filter(t => audioKind(t.path) === 'native');
         const sourceByPath = new Map(native.map(t => [t.path, t.source]));
         const nativePaths = native.map(t => t.path);
-        const checks = nativePaths.length
-          ? await invoke<{ path: string; compatibility: string }[]>('inspect_audio_files', { paths: nativePaths })
-          : [];
+        // Chunked (not one giant call) so progress can advance smoothly across the
+        // slowest phase of the scan.
+        const INSPECT_CHUNK_SIZE = 200;
+        const checks: { path: string; compatibility: string }[] = [];
+        for (let i = 0; i < nativePaths.length; i += INSPECT_CHUNK_SIZE) {
+          const chunk = nativePaths.slice(i, i + INSPECT_CHUNK_SIZE);
+          const result = await invoke<{ path: string; compatibility: string }[]>('inspect_audio_files', { paths: chunk });
+          if (cancelled) return;
+          checks.push(...(result ?? []));
+          setPoolScanProgress(20 + Math.round((checks.length / nativePaths.length) * 80));
+        }
         if (cancelled) return;
+        setPoolScanProgress(100);
         setIncompatibleFiles([
           ...(checks ?? [])
             .filter(c => c.compatibility !== 'compatible')
@@ -1477,7 +1494,7 @@ export function AudioPoolPage() {
               {poolScanLoading ? (
                 <div className="tools-fix-status loading">
                   <span className="loading-spinner-small"></span>
-                  <span>{projectCount > 0 ? `Scanning Audio Pool and ${projectCount} project${projectCount !== 1 ? 's' : ''}...` : 'Scanning Audio Pool...'}</span>
+                  <span>{(projectCount > 0 ? `Scanning Audio Pool and ${projectCount} project${projectCount !== 1 ? 's' : ''}...` : 'Scanning Audio Pool...')} {poolScanProgress}%</span>
                 </div>
               ) : poolScanDone && scopedIncompatibleFiles.length === 0 ? (
                 <div className="tools-fix-status all-good">
