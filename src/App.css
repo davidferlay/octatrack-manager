@@ -5512,6 +5512,7 @@ th.col-usage .header-content .sort-indicator {
 .tools-fix-status-label {
   font-weight: 500;
   color: var(--elektron-text-primary);
+  text-align: center;
 }
 
 .tools-fix-status-detail {
