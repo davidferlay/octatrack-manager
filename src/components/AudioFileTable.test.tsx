@@ -189,6 +189,27 @@ describe('AudioFileTable', () => {
     expect(screen.queryByText('Usage')).not.toBeInTheDocument()
   })
 
+  it('Usage header tooltip defaults to Set-wide scope, and switches to project scope when usageScope="project"', () => {
+    const { rerender } = renderTable({ poolRoot: '/AUDIO', usageMap: {} })
+    const headerContent = () => screen.getByText('Usage').closest('.header-content')!
+    expect(headerContent().getAttribute('title')).toMatch(/across every project of this Set/)
+
+    rerender(
+      <AudioFileTable
+        files={files}
+        selectedFiles={new Set()}
+        onFileClick={vi.fn()}
+        isLoading={false}
+        emptyMessage="No audio files"
+        tableId="test-table"
+        poolRoot="/AUDIO"
+        usageMap={{}}
+        usageScope="project"
+      />
+    )
+    expect(headerContent().getAttribute('title')).toMatch(/currently loaded project only/)
+  })
+
   it('shows a spinner next to the Usage header while cross-project usage is loading, and hides (not unmounts) it once resolved', () => {
     const { rerender } = renderTable({ poolRoot: '/AUDIO', usageMap: {}, usageLoading: true })
     const usageHeader = screen.getByText('Usage').closest('.header-content')!

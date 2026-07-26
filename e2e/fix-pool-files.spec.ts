@@ -9,6 +9,7 @@ async function setupMocks(page: Page, options: { projectFiles?: string[]; reject
     const { projectFiles, rejectListSetProjects } = opts
     ;(window as any).__fixCalls = []
     ;(window as any).__inspectCalls = []
+    ;(window as any).__revealCalls = []
     ;(window as any).__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} }
     ;(window as any).__TAURI_INTERNALS__ = {
       transformCallback: () => 0,
@@ -74,6 +75,9 @@ async function setupMocks(page: Page, options: { projectFiles?: string[]; reject
             }
           case 'read_audio_file':
             return new ArrayBuffer(8)
+          case 'reveal_in_file_manager':
+            ;(window as any).__revealCalls.push(args?.path)
+            return null
           default:
             return null
         }
@@ -394,6 +398,12 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await expect(page.getByText('ProjectA · Bank A · Part 1 · T1 · Machine')).toBeVisible()
   })
 
+  test('the Usage column header tooltip explains this is a Set-wide view', async ({ page }) => {
+    const dest = page.locator('.dest-panel')
+    const header = dest.getByText('Usage').locator('..')
+    await expect(header).toHaveAttribute('title', /across every project of this Set/)
+  })
+
   test('clicking a different usage badge directly repositions the popover instead of leaving it at the first badge', async ({ page }) => {
     const dest = page.locator('.dest-panel')
     const popover = page.locator('.usage-popover')
@@ -444,6 +454,31 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await expect(reviewModal.locator('thead')).toContainText('Usage')
     await expect(reviewModal.locator('thead')).not.toContainText('Location')
     await expect(reviewModal.locator('thead')).not.toContainText('Size')
+  })
+
+  test('re-scanning the pool shows a live percentage in the Tools tab status label', async ({ page }) => {
+    await page.locator('.header-tab', { hasText: 'Tools' }).click()
+    await expect(page.locator('.tools-missing-files-summary')).toBeVisible()
+
+    // Hang the pool listing call so the 0% state is observable before releasing it.
+    await page.evaluate(() => {
+      const internals = (window as any).__TAURI_INTERNALS__
+      const original = internals.invoke
+      internals.invoke = async (cmd: string, args: any) => {
+        if (cmd === 'list_audio_files_recursive' && args?.path === '/test/set/AUDIO') {
+          await new Promise<void>(resolve => { (window as any).__releaseList = resolve })
+        }
+        return original(cmd, args)
+      }
+    })
+
+    await page.locator('.header-tab', { hasText: 'Files' }).click()
+    await page.locator('.toolbar-button[title="Refresh file lists"]').click()
+    await page.locator('.header-tab', { hasText: 'Tools' }).click()
+    await expect(page.locator('.tools-fix-status.loading')).toContainText('0%')
+
+    await page.evaluate(() => (window as any).__releaseList())
+    await expect(page.locator('.tools-missing-files-summary')).toContainText('2')
   })
 })
 
@@ -508,6 +543,40 @@ test.describe('Audio Pool — include all projects of set', () => {
     const rows = listModal.locator('tbody tr')
     await expect(rows.filter({ hasText: 'snare48.wav' }).locator('.fix-location-cell')).toHaveText('AUDIO/')
     await expect(rows.filter({ hasText: 'kick_project.mp3' }).locator('.fix-location-cell')).toHaveText('PROJ1/')
+  })
+
+  test('the list modal\'s row context menu offers Open in file explorer everywhere, and Go to project only on project-local rows', async ({ page }) => {
+    await page.locator('.header-tab', { hasText: 'Tools' }).click()
+    await page.getByLabel('Include all projects of set').check()
+    await page.locator('.tools-missing-files-summary').click()
+    const listModal = page.locator('.missing-samples-list-modal')
+    await expect(listModal).toBeVisible()
+
+    const poolRow = listModal.locator('tbody tr', { hasText: 'snare48.wav' })
+    await poolRow.click({ button: 'right' })
+    await expect(page.locator('.context-menu-item', { hasText: 'Open in file explorer' })).toBeVisible()
+    await expect(page.locator('.context-menu-item', { hasText: 'Go to project' })).toHaveCount(0)
+    await page.locator('.context-menu-item', { hasText: 'Open in file explorer' }).click()
+    expect(await page.evaluate(() => (window as any).__revealCalls)).toEqual(['/test/set/AUDIO/snare48.wav'])
+
+    const projRow = listModal.locator('tbody tr', { hasText: 'kick_project.mp3' })
+    await projRow.click({ button: 'right' })
+    await expect(page.locator('.context-menu-item', { hasText: 'Go to project' })).toBeVisible()
+    await page.locator('.context-menu-item', { hasText: 'Go to project' }).click()
+    await expect(page).toHaveURL(/\/project\?path=%2Ftest%2Fset%2FPROJ1&name=PROJ1/)
+  })
+
+  test('the review modal\'s row context menu also offers Go to project on project-local rows', async ({ page }) => {
+    await page.locator('.header-tab', { hasText: 'Tools' }).click()
+    await page.getByLabel('Include all projects of set').check()
+    await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()
+    const reviewModal = page.locator('.fix-pool-modal')
+    await expect(reviewModal.getByText('Review planned changes')).toBeVisible()
+
+    const projRow = reviewModal.locator('tbody tr', { hasText: 'kick_project.mp3' })
+    await projRow.click({ button: 'right' })
+    await expect(page.locator('.context-menu-item', { hasText: 'Open in file explorer' })).toBeVisible()
+    await expect(page.locator('.context-menu-item', { hasText: 'Go to project' })).toBeVisible()
   })
 })
 

@@ -1583,6 +1583,63 @@ mod tests {
         assert_eq!(file_entry.size, content.len() as u64);
     }
 
+    // ==================== FILES_INFO TESTS ====================
+    // files_info takes an explicit, possibly-scattered path list (unlike
+    // list_directory's single-folder scan) - feeds the Format/Bit/kHz/Size
+    // columns of the Fix Audio Pool/Project Samples modals.
+
+    #[test]
+    fn test_files_info_reports_audio_metadata_for_a_wav_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let wav_path = temp_dir.path().join("kick.wav");
+        create_test_wav(&wav_path, 44100, 16, 100);
+
+        let infos = super::files_info(&[wav_path.to_string_lossy().to_string()]);
+        assert_eq!(infos.len(), 1);
+        assert_eq!(infos[0].name, "kick.wav");
+        assert_eq!(infos[0].path, wav_path.to_string_lossy());
+        assert!(!infos[0].is_directory);
+        assert_eq!(infos[0].sample_rate, Some(44100));
+        assert_eq!(infos[0].bit_rate, Some(16));
+        assert_eq!(infos[0].channels, Some(2));
+    }
+
+    #[test]
+    fn test_files_info_missing_file_falls_back_gracefully_instead_of_panicking() {
+        let temp_dir = TempDir::new().unwrap();
+        let missing = temp_dir.path().join("does-not-exist.wav");
+
+        let infos = super::files_info(&[missing.to_string_lossy().to_string()]);
+        assert_eq!(infos.len(), 1);
+        assert_eq!(infos[0].name, "does-not-exist.wav");
+        assert_eq!(infos[0].size, 0, "unreadable metadata falls back to 0");
+        assert_eq!(infos[0].sample_rate, None);
+        assert_eq!(infos[0].bit_rate, None);
+        assert_eq!(infos[0].channels, None);
+    }
+
+    #[test]
+    fn test_files_info_preserves_input_order_across_mixed_valid_and_missing_paths() {
+        // Unlike list_directory (which sorts), files_info must return results
+        // in the same order the caller's scattered path list was given.
+        let temp_dir = TempDir::new().unwrap();
+        let a = temp_dir.path().join("z_first.wav");
+        let b = temp_dir.path().join("a_second.wav");
+        create_test_wav(&a, 44100, 16, 10);
+        create_test_wav(&b, 44100, 16, 10);
+        let missing = temp_dir.path().join("missing.wav");
+
+        let infos = super::files_info(&[
+            a.to_string_lossy().to_string(),
+            missing.to_string_lossy().to_string(),
+            b.to_string_lossy().to_string(),
+        ]);
+        assert_eq!(
+            infos.iter().map(|i| i.name.as_str()).collect::<Vec<_>>(),
+            vec!["z_first.wav", "missing.wav", "a_second.wav"]
+        );
+    }
+
     // ==================== GET PARENT DIRECTORY TESTS ====================
 
     #[test]
@@ -2150,6 +2207,25 @@ mod tests {
         assert!(!src_path.exists(), "original deleted after conversion");
         let spec = hound::WavReader::open(&new_path).unwrap().spec();
         assert_eq!(spec.sample_rate, 44100);
+    }
+
+    #[test]
+    fn convert_pool_file_in_place_pre_cancelled_token_fails_without_touching_the_original() {
+        // Mirrors test_copy_single_file_cancelled_before_start for the Fix Audio
+        // Pool/Project Samples cancel button's underlying conversion call.
+        let temp_dir = TempDir::new().unwrap();
+        let src_path = temp_dir.path().join("kick.mp3");
+        create_test_wav(&src_path, 48000, 16, 100);
+
+        let cancel_token = Arc::new(AtomicBool::new(true));
+        let result = super::convert_pool_file_in_place(&src_path, |_, _| {}, Some(cancel_token));
+
+        assert!(result.is_err(), "pre-cancelled conversion must fail");
+        assert!(src_path.exists(), "original file left untouched");
+        assert!(
+            !temp_dir.path().join("kick.wav").exists(),
+            "no partial output left behind"
+        );
     }
 
     #[test]

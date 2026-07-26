@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { render as rtlRender, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { ProjectIncompatibleListModal, FixProjectFilesModal } from './FixProjectFilesModal'
 import { usePoolTable, PoolFilesTable, type IncompatibleFile } from './FixPoolFilesModal'
 
@@ -25,6 +25,13 @@ describe('ProjectIncompatibleListModal', () => {
     expect(screen.getByText('Incompatible Project Samples')).toBeInTheDocument()
     expect(screen.getAllByRole('row')).toHaveLength(files.length + 1) // +1 header row
   })
+
+  it('right-click offers Open in file explorer but never Go to project (this IS the current project)', () => {
+    render(<ProjectIncompatibleListModal projectPath="/set/MyProject" files={files} onClose={vi.fn()} />)
+    fireEvent.contextMenu(screen.getByText('kick.mp3').closest('tr')!)
+    expect(screen.getByText('Open in file explorer')).toBeInTheDocument()
+    expect(screen.queryByText('Go to project')).not.toBeInTheDocument()
+  })
 })
 
 describe('FixProjectFilesModal', () => {
@@ -32,6 +39,13 @@ describe('FixProjectFilesModal', () => {
     render(<FixProjectFilesModal projectPath="/set/MyProject" files={files} onClose={vi.fn()} />)
     expect(screen.getByText(/Review planned changes/)).toBeInTheDocument()
     expect(screen.getByText(/2 incompatible audio files/)).toBeInTheDocument()
+  })
+
+  it('review table right-click offers Open in file explorer but never Go to project', () => {
+    render(<FixProjectFilesModal projectPath="/set/MyProject" files={files} onClose={vi.fn()} />)
+    fireEvent.contextMenu(screen.getByText('kick.mp3').closest('tr')!)
+    expect(screen.getByText('Open in file explorer')).toBeInTheDocument()
+    expect(screen.queryByText('Go to project')).not.toBeInTheDocument()
   })
 
   it('calls fix_project_samples (not fix_pool_files) with projectPath on Apply Changes', async () => {
@@ -116,9 +130,9 @@ describe('FixProjectFilesModal', () => {
   })
 })
 
-function TestHarness({ files, usageMap, withSlot, usageLoading }: { files: IncompatibleFile[]; usageMap?: Record<string, any>; withSlot?: boolean; usageLoading?: boolean }) {
-  const table = usePoolTable(files, '/proj', true, [], usageMap, usageLoading ?? false, withSlot)
-  return <PoolFilesTable table={table} />
+function TestHarness({ files, usageMap, withSlot, usageLoading, poolPath = '/proj', showGoToProject }: { files: IncompatibleFile[]; usageMap?: Record<string, any>; withSlot?: boolean; usageLoading?: boolean; poolPath?: string; showGoToProject?: boolean }) {
+  const table = usePoolTable(files, poolPath, true, [], usageMap, usageLoading ?? false, withSlot)
+  return <PoolFilesTable table={table} showGoToProject={showGoToProject} />
 }
 
 describe('usePoolTable/PoolFilesTable - Usage and Slot columns', () => {
@@ -164,5 +178,52 @@ describe('usePoolTable/PoolFilesTable - Usage and Slot columns', () => {
 
     rerender(<MemoryRouter><TestHarness files={files} usageMap={{}} withSlot usageLoading={false} /></MemoryRouter>)
     expect(screen.getByText('Usage').closest('.header-content')!.querySelector('.usage-header-spinner')).toHaveClass('usage-header-spinner-hidden')
+  })
+})
+
+function LocationDisplay() {
+  const location = useLocation()
+  return <div data-testid="location">{location.pathname}{location.search}</div>
+}
+
+describe('PoolFilesTable - row context menu', () => {
+  const poolFile: IncompatibleFile = { path: '/set/AUDIO/snare48.wav', compatibility: 'wrong_rate', source: 'pool' }
+  const projectFile: IncompatibleFile = { path: '/set/PROJ1/kick.mp3', compatibility: 'unknown', source: 'project' }
+
+  it('right-click always offers "Open in file explorer", which reveals that exact file', async () => {
+    render(<TestHarness files={[poolFile]} poolPath="/set/AUDIO" />)
+    fireEvent.contextMenu(screen.getByText('snare48.wav').closest('tr')!)
+    const item = screen.getByText('Open in file explorer')
+    expect(item).toBeInTheDocument()
+    await userEvent.click(item)
+    expect(invokeMock).toHaveBeenCalledWith('reveal_in_file_manager', { path: '/set/AUDIO/snare48.wav' })
+  })
+
+  it('never offers "Go to project" when showGoToProject is unset, even for a project-local row', () => {
+    render(<TestHarness files={[projectFile]} poolPath="/set/AUDIO" />)
+    fireEvent.contextMenu(screen.getByText('kick.mp3').closest('tr')!)
+    expect(screen.queryByText('Go to project')).not.toBeInTheDocument()
+  })
+
+  it('with showGoToProject: offers "Go to project" only for project-local rows, not pool-root rows', () => {
+    render(<TestHarness files={[poolFile, projectFile]} poolPath="/set/AUDIO" showGoToProject />)
+
+    fireEvent.contextMenu(screen.getByText('snare48.wav').closest('tr')!)
+    expect(screen.queryByText('Go to project')).not.toBeInTheDocument()
+
+    fireEvent.contextMenu(screen.getByText('kick.mp3').closest('tr')!)
+    expect(screen.getByText('Go to project')).toBeInTheDocument()
+  })
+
+  it('"Go to project" navigates to the owning project, name-and-path-encoded', async () => {
+    rtlRender(
+      <MemoryRouter>
+        <TestHarness files={[projectFile]} poolPath="/set/AUDIO" showGoToProject />
+        <LocationDisplay />
+      </MemoryRouter>
+    )
+    fireEvent.contextMenu(screen.getByText('kick.mp3').closest('tr')!)
+    await userEvent.click(screen.getByText('Go to project'))
+    expect(screen.getByTestId('location').textContent).toBe('/project?path=%2Fset%2FPROJ1&name=PROJ1')
   })
 })

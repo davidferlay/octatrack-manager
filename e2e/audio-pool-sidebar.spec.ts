@@ -225,6 +225,24 @@ test.describe('Audio Pool sidebar in Flex slots', () => {
     await expect(page.locator('.audio-pool-page-btn')).toBeVisible()
   })
 
+  test('path row: Reset-to-AUDIO button sits between the path and the Go up button, disabled at the root', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    await page.locator('.audio-pool-toggle-btn').first().click()
+    const pathRow = page.locator('.sidebar-path-row')
+    const reset = pathRow.locator('button[title="Reset to AUDIO directory"]')
+    const up = pathRow.locator('button[title^="Go up"]')
+    await expect(reset).toBeVisible()
+    await expect(reset).toBeDisabled()
+
+    // Left-to-right order: path text, then Reset, then Go up.
+    const pathBox = (await pathRow.locator('.sidebar-path').boundingBox())!
+    const resetBox = (await reset.boundingBox())!
+    const upBox = (await up.boundingBox())!
+    expect(pathBox.x).toBeLessThan(resetBox.x)
+    expect(resetBox.x).toBeLessThan(upBox.x)
+  })
+
   test('slot context menu offers "Open in file explorer"', async ({ page }) => {
     await setupMocks(page, { withAudioPool: true })
     await openFlexTab(page)

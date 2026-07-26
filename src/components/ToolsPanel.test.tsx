@@ -70,6 +70,25 @@ describe('ToolsPanel - Fix Project Samples', () => {
     await waitFor(() => expect(screen.getByText('3')).toBeInTheDocument())
   })
 
+  it('shows scan progress advancing from 0% (listing) through 20% (inspecting) to done', async () => {
+    let resolveList: (v: string[]) => void = () => {}
+    let resolveInspect: (v: unknown[]) => void = () => {}
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'list_audio_files_recursive') return new Promise(resolve => { resolveList = resolve })
+      if (cmd === 'inspect_audio_files') return new Promise(resolve => { resolveInspect = resolve })
+      return Promise.resolve(null)
+    })
+    renderPanel({ initialOperation: 'fix_project_samples' })
+
+    await waitFor(() => expect(screen.getByText(/Scanning project samples\.\.\. 0%/)).toBeInTheDocument())
+    resolveList(['/set/MyProject/loop.aif'])
+    await waitFor(() => expect(screen.getByText(/Scanning project samples\.\.\. 20%/)).toBeInTheDocument())
+    resolveInspect([{ path: '/set/MyProject/loop.aif', compatibility: 'unknown' }])
+    // Scan finished - the loading row (with its percentage) is replaced by the count.
+    await waitFor(() => expect(screen.getByText('2')).toBeInTheDocument())
+    expect(screen.queryByText(/Scanning project samples/)).not.toBeInTheDocument()
+  })
+
   it('normalizes a "../" slot path so a pool-referenced file is attributed to the Audio Pool, not the project', async () => {
     // baseProps() already has a static slot at '../AUDIO/snare48.wav' (wrong_rate).
     // Use a project path distinct from the other tests' so this test's mount-time

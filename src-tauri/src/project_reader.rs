@@ -18614,6 +18614,118 @@ mod tests {
             let key = pool_usage_key(Path::new("C:\\Users\\Test\\AUDIO\\Kick.WAV"));
             assert_eq!(key, "c:/users/test/audio/kick.wav");
         }
+
+        #[test]
+        fn sample_lock_reference_propagates_as_lock_kind_with_pattern_and_step() {
+            // buckets_usage_by_pool_path_and_tags_the_project already covers "machine"
+            // and the fallback "assigned" kinds surviving the pool-wide re-bucketing;
+            // this closes the gap for "lock" (p-lock), which carries pattern/step
+            // instead of part - both must survive compute_pool_usage's aggregation.
+            let temp = TempDir::new().unwrap();
+            let set = temp.path();
+            fs::create_dir(set.join("AUDIO")).unwrap();
+            fs::create_dir(set.join("PROJ")).unwrap();
+            for bank_num in 1..=16 {
+                BankFile::default()
+                    .to_data_file(&set.join("PROJ").join(format!("bank{:02}.work", bank_num)))
+                    .unwrap();
+            }
+            let mut bank1 =
+                BankFile::from_data_file(&set.join("PROJ").join("bank01.work")).unwrap();
+            bank1.parts.unsaved.0[0].audio_track_machine_types[2] = 1; // track 3: flex machine
+            let pattern = &mut bank1.patterns.0[1]; // pattern 2
+            pattern.scale.master_len = 16;
+            pattern.audio_track_trigs.0[2].plocks.0[4].flex_slot_id = 8; // step 5, 0-based slot 8 (F9)
+            bank1.checksum = bank1.calculate_checksum().unwrap();
+            bank1
+                .to_data_file(&set.join("PROJ").join("bank01.work"))
+                .unwrap();
+            let content = create_raw_project_work_with_custom_fields(&[(
+                "FLEX",
+                9,
+                "../AUDIO/snare.wav",
+                None,
+                None,
+                None,
+            )]);
+            write_raw_project_work(&set.join("PROJ"), &content);
+
+            let pool = set.join("AUDIO");
+            let usage = compute_pool_usage(&pool.to_string_lossy()).unwrap();
+            let key = normalize_path_lexically(&pool.join("snare.wav"))
+                .to_string_lossy()
+                .to_lowercase();
+            let entries = usage
+                .get(&key)
+                .expect("snare.wav should have a usage entry");
+            let lock = entries
+                .iter()
+                .find(|e| e.kind == "lock")
+                .expect("p-lock entry must survive pool-wide bucketing");
+            assert_eq!(lock.project, "PROJ");
+            assert_eq!(lock.track, 2);
+            assert_eq!(lock.pattern, Some(1));
+            assert_eq!(lock.step, Some(4));
+            assert!(lock.audible);
+        }
+    }
+
+    mod normalize_path_lexically_tests {
+        use super::*;
+
+        #[test]
+        fn plain_path_is_unchanged() {
+            assert_eq!(
+                normalize_path_lexically(Path::new("/set/AUDIO/kick.wav")),
+                Path::new("/set/AUDIO/kick.wav")
+            );
+        }
+
+        #[test]
+        fn current_dir_components_are_dropped() {
+            assert_eq!(
+                normalize_path_lexically(Path::new("/set/./AUDIO/./kick.wav")),
+                Path::new("/set/AUDIO/kick.wav")
+            );
+        }
+
+        #[test]
+        fn parent_dir_pops_the_preceding_component() {
+            assert_eq!(
+                normalize_path_lexically(Path::new("/set/PROJ1/../AUDIO/kick.wav")),
+                Path::new("/set/AUDIO/kick.wav")
+            );
+        }
+
+        #[test]
+        fn a_single_leading_parent_dir_with_nothing_to_pop_stays_literal() {
+            assert_eq!(
+                normalize_path_lexically(Path::new("../kick.wav")),
+                Path::new("../kick.wav")
+            );
+        }
+
+        #[test]
+        fn a_second_leading_parent_dir_pops_the_first_ones_literal_placeholder() {
+            // Documents an actual quirk (not a bug worth fixing - this function is
+            // only ever called on paths already anchored to a real filesystem root
+            // by the caller, so a bare leading ".." pair never occurs in practice):
+            // the function does not distinguish a literal ".." placeholder from a
+            // real directory component, so a second ".." pops the first one's
+            // placeholder away instead of stacking another literal "..".
+            assert_eq!(
+                normalize_path_lexically(Path::new("../../kick.wav")),
+                Path::new("kick.wav")
+            );
+        }
+
+        #[test]
+        fn combined_relative_traversal_resolves_to_the_shortest_form() {
+            assert_eq!(
+                normalize_path_lexically(Path::new("/set/PROJ1/foo/../../AUDIO/./kick.wav")),
+                Path::new("/set/AUDIO/kick.wav")
+            );
+        }
     }
 
     mod list_set_projects_tests {
@@ -18640,6 +18752,28 @@ mod tests {
             assert_eq!(projects[0].path, set.join("PROJ1").to_string_lossy());
             assert_eq!(projects[1].name, "PROJ2");
             assert_eq!(projects[1].path, set.join("PROJ2").to_string_lossy());
+        }
+
+        #[test]
+        fn a_set_with_no_sibling_projects_returns_an_empty_list() {
+            let temp = TempDir::new().unwrap();
+            let set = temp.path();
+            fs::create_dir(set.join("AUDIO")).unwrap();
+
+            let pool = set.join("AUDIO");
+            let projects = list_set_projects(&pool.to_string_lossy()).unwrap();
+            assert!(projects.is_empty());
+        }
+
+        #[test]
+        fn a_nonexistent_set_directory_returns_an_error_not_a_panic() {
+            let temp = TempDir::new().unwrap();
+            // AUDIO itself is never created, so its parent (the "set" dir) is real
+            // but AUDIO's sibling-scan starts from a set dir that also doesn't exist
+            // once we point pool_path at a pool with no real parent on disk.
+            let pool = temp.path().join("nonexistent_set").join("AUDIO");
+            let result = list_set_projects(&pool.to_string_lossy());
+            assert!(result.is_err());
         }
     }
 

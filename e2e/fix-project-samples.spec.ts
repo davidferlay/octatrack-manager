@@ -26,6 +26,7 @@ async function setupMocks(page: Page, options: { withAudioPool?: boolean; flexSl
   await page.addInitScript((opts: { withAudioPool: boolean; flexSlotPath: string }) => {
     ;(window as any).__fixCalls = []
     ;(window as any).__backupCalls = []
+    ;(window as any).__revealCalls = []
     ;(window as any).__TAURI_INTERNALS__ = {
       invoke: async (cmd: string, args?: any) => {
         switch (cmd) {
@@ -212,6 +213,9 @@ async function setupMocks(page: Page, options: { withAudioPool?: boolean; flexSl
             return null
           case 'plugin:dialog|open':
             return null
+          case 'reveal_in_file_manager':
+            ;(window as any).__revealCalls.push(args?.path)
+            return null
 
           default:
             return null
@@ -269,6 +273,32 @@ test.describe('Fix Project Samples - Tools tab', () => {
     await expect(listModal.locator('tbody')).toContainText('snare48.wav')
     await expect(listModal.locator('tbody')).toContainText('loop.mp3')
     await expect(listModal.locator('tbody')).not.toContainText('good.wav')
+  })
+
+  test('the list modal\'s row context menu offers Open in file explorer but never Go to project (already the current project)', async ({ page }) => {
+    await page.getByLabel('Include un-referenced samples of project').check()
+    await page.locator('.tools-missing-files-summary').click()
+    const listModal = page.locator('.missing-samples-list-modal')
+    await expect(listModal).toBeVisible()
+
+    const row = listModal.locator('tbody tr', { hasText: 'kick.mp3' })
+    await row.click({ button: 'right' })
+    await expect(page.locator('.context-menu-item', { hasText: 'Open in file explorer' })).toBeVisible()
+    await expect(page.locator('.context-menu-item', { hasText: 'Go to project' })).toHaveCount(0)
+    await page.locator('.context-menu-item', { hasText: 'Open in file explorer' }).click()
+    expect(await page.evaluate(() => (window as any).__revealCalls)).toEqual(['/test/project/kick.mp3'])
+  })
+
+  test('the review modal\'s row context menu also offers Open in file explorer but never Go to project', async ({ page }) => {
+    await page.getByLabel('Include un-referenced samples of project').check()
+    await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()
+    const reviewModal = page.locator('.fix-pool-modal')
+    await expect(reviewModal.getByText('Review planned changes')).toBeVisible()
+
+    const row = reviewModal.locator('tbody tr', { hasText: 'kick.mp3' })
+    await row.click({ button: 'right' })
+    await expect(page.locator('.context-menu-item', { hasText: 'Open in file explorer' })).toBeVisible()
+    await expect(page.locator('.context-menu-item', { hasText: 'Go to project' })).toHaveCount(0)
   })
 
   test('Execute opens the review modal, and Apply Changes calls fix_project_samples with the project path and file paths', async ({ page }) => {

@@ -101,6 +101,39 @@ describe('AudioPoolSidebar', () => {
     expect(screen.queryByText(/Assign to selected slot/i)).not.toBeInTheDocument()
   })
 
+  it('path row: shows path then Reset-to-AUDIO then Go-up, both disabled at root and enabled once inside a subfolder', async () => {
+    mockInvoke.mockImplementation(async (cmd: string, args?: any) => {
+      if (cmd !== 'list_audio_directory') return undefined
+      const path = args?.path ?? '/set/AUDIO'
+      return path === '/set/AUDIO'
+        ? [{ name: 'drums', size: 0, channels: null, bit_rate: null, sample_rate: null, is_directory: true, path: '/set/AUDIO/drums' }]
+        : [{ name: 'kick.wav', size: 1024, channels: 2, bit_rate: 16, sample_rate: 44100, is_directory: false, path: '/set/AUDIO/drums/kick.wav' }]
+    })
+    render(<AudioPoolSidebar audioPoolPath="/set/AUDIO" isEditMode={false} />)
+    await waitFor(() => expect(screen.getByText('drums')).toBeInTheDocument())
+
+    const resetBtn = screen.getByTitle('Reset to AUDIO directory')
+    const upBtn = screen.getByTitle('Go up (Backspace)')
+    expect(resetBtn).toBeDisabled()
+    expect(upBtn).toBeDisabled()
+    // Path renders before the buttons (buttons live at the right of the path row).
+    const pathRow = resetBtn.closest('.sidebar-path-row')!
+    const children = Array.from(pathRow.children)
+    expect(children.indexOf(screen.getByText('AUDIO/'))).toBeLessThan(children.indexOf(resetBtn))
+    expect(children.indexOf(resetBtn)).toBeLessThan(children.indexOf(upBtn))
+
+    await userEvent.click(screen.getByText('drums'))
+    await waitFor(() => expect(screen.getByText('kick.wav')).toBeInTheDocument())
+    expect(resetBtn).not.toBeDisabled()
+    expect(upBtn).not.toBeDisabled()
+    expect(screen.getByText('AUDIO/drums/')).toBeInTheDocument()
+
+    await userEvent.click(resetBtn)
+    await waitFor(() => expect(screen.getByText('drums')).toBeInTheDocument())
+    expect(resetBtn).toBeDisabled()
+    expect(screen.getByText('AUDIO/')).toBeInTheDocument()
+  })
+
   it('shows "Assign to selected slot" only when a slot is selected', async () => {
     const onAssignToSelected = vi.fn()
     const { rerender } = render(
