@@ -481,6 +481,15 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
         }
       />
       <div className="sidebar-path-row" title={getRelativePath()}>
+        <span className="sidebar-path">{getRelativePath()}</span>
+        <button
+          className="icon-button"
+          onClick={() => setCurrentPath(audioPoolPath)}
+          disabled={isAtRoot}
+          title="Reset to AUDIO directory"
+        >
+          <i className="fas fa-undo"></i>
+        </button>
         <button
           className="icon-button"
           onClick={navigateUp}
@@ -489,7 +498,6 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
         >
           <i className="fas fa-arrow-up"></i>
         </button>
-        <span className="sidebar-path">{getRelativePath()}</span>
       </div>
       <div
         className="sidebar-resize-handle"
