@@ -30,6 +30,7 @@ const sidebars = {
         'features/copy-tracks',
         'features/copy-sample-slots',
         'features/fix-missing-samples',
+        'features/fix-incompatible-samples',
       ],
     },
     {

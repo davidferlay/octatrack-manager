@@ -133,11 +133,12 @@ When a project belongs to a Set that has an `AUDIO/` pool, an **Audio Pool toggl
 
 ![Audio Pool pane open next to the slot table](/img/screenshots/sample-slots-audio-pool-pane.png)
 
-- **Browse:** Double-click a folder to enter it; use the up (↑) button in the bottom path row to go back until you reach `AUDIO/` root.
+- **Browse:** Double-click a folder to enter it. The bottom path row shows the current path, a **Reset to AUDIO directory** button to jump straight back to the pool root, and the up (↑) button to go back one level at a time.
 - **Search recursively:** Type in the search box to match files and folders in the current directory and all of its subfolders. A small spinner shows up while search is in progress. Clear the box to return to the plain directory listing.
 - **Full path on hover:** Hover any item to see its path relative to the pool root (e.g. `AUDIO/Drums/kick.wav`).
 - **Import into the pool:** Click the **Import** dropdown button to import and convert files or directories to Audio Pool on the fly Files… or a whole Folder… (recursive) into the directory you are browsing.
 - **Check compatibility:** The **Compat** column shows the Octatrack face icons for each pool file. Right-click an incompatible file and choose **Convert to Octatrack format** to fix it in place - slot references across the Set's projects are updated automatically (after a backup). See [Fixing Incompatible Files](audio-pool.md#fixing-incompatible-files).
+- **See this project's own usage:** The **Usage** column shows the same blue **✓ N** / gray **○ N** badges as the [Audio Pool page](audio-pool.md#browsing-the-pool), but scoped to *this project only* - hover the column header for a reminder of that. Open the full Audio Pool page instead for a Set-wide view of who else uses a file.
 - **Open the full page:** Click the second top left icon to nevigate to the complete [Audio Pool](audio-pool.md) page of current Set. Once there, click the **Back to project** button (top left corner) to go back to the project you came from.
 
 <div style={{display: 'flex', gap: '0.75rem', alignItems: 'flex-start', justifyContent: 'center'}}>
@@ -195,11 +196,9 @@ Three more operations can be found when right-clicking on Sample Slots, availabl
 
 ### Fixing Incompatible Project Samples
 
-Each Flex/Static tab's toolbar shows a health glyph next to the slot count (hidden while the Audio Pool pane is open): an orange badge with a wrench icon and the number of slots referencing an audio file the Octatrack can't play, or a green check when every referenced file is compatible.
+Each Flex/Static tab's toolbar shows a health glyph next to the slot count (hidden while the Audio Pool pane is open): an orange badge with a wrench icon and the number of slots referencing an audio file the Octatrack can't play, or a green check when every referenced file is compatible. Click it - or select **Fix Project Samples** from the **Tools** tab operation dropdown - to fix every incompatible file this project touches in one pass. To fix a single slot without leaving the tab, right-click it (in Edit mode) and choose **Convert to Octatrack format** - see [Managing existing assignments](#managing-existing-assignments) above.
 
-Click the badge - or select **Fix Project Samples** from the **Tools** tab operation dropdown - to open a Status pane reporting every incompatible file referenced by a slot (wherever it physically lives - the project's own directory or the shared Audio Pool), plus any other incompatible file found recursively in the project's own directory. With **Review before applying changes** checked (the default), **Execute** shows a review screen listing the planned conversions before touching anything; unchecked, it converts right away. Either way, each affected file is converted to 44.1 kHz WAV in place, every modified project of the Set is backed up first, and every slot referencing that file - across the whole Set - is updated to the new file automatically.
-
-To fix a single slot without leaving the tab, right-click it (in Edit mode) and choose **Convert to Octatrack format** - see [Managing existing assignments](#managing-existing-assignments) above.
+See [Fix Incompatible Samples](fix-incompatible-samples.md) for the full walkthrough of both tools.
 
 ---
 

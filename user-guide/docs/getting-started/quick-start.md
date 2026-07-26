@@ -86,7 +86,7 @@ The **Tools** tab lets you copy content between banks and projects without touch
 
 ![Tools - Copy](/img/screenshots/tools-copy-bank.png)
 
-### Available Operations
+Available Operations:
 
 - **[Copy Banks](../features/copy-bank.md):** Copy an entire bank (all 4 Parts + 16 Patterns) with optional sample slot transfer and automatic remapping.
 - **[Copy Parts](../features/copy-parts.md):** Transfer Part sound design (machines, amps, LFOs, FX) between parts and banks.
@@ -109,9 +109,21 @@ Your copy settings (selected operation, destination project, slot ranges, etc.) 
 
 ## 8. Fix Missing Samples
 
-The **Tools** tab also includes a **[Fix Missing Samples](../features/fix-missing-samples.md)** operation that scans your project for broken sample slot references and automatically locates and reconnects missing audio files. It searches the project directory, Audio Pool, and sibling projects, with the option to browse additional directories manually.
+The **Tools** tab also includes a **[Fix Missing Samples](../features/fix-missing-samples.md)** operation that scans your project for broken sample slot references and automatically locates and reconnects missing audio files.
 
-## 9. Automatic Backups
+It searches the project directory, Audio Pool, and sibling projects, with the option to browse additional directories manually.
+
+## 9. Fix Incompatible Samples
+
+The Tools tab includes a **[Fix Incompatible Samples](../features/fix-incompatible-samples.md)** operation which will bulk fix any incompatible audio files the Octatrack can't read (wrong sample rate, wrong bit depth, or a format like MP3).
+
+This can be done from either:
+- **Fix Audio Pool Samples** (the whole Set's shared pool)
+- **Fix Project Samples** (this project's own files)
+
+Both convert affected files to 44.1 kHz 16/24-bit WAV in place and repoint every sample slot that referenced them, across the whole Set.
+
+## 10. Automatic Backups
 
 Octatrack Manager automatically backs up your project files before any write operation — whether you are enabling Edit mode, saving a Part, or executing a copy operation via Tools.
 
