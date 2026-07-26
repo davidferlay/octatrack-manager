@@ -5799,6 +5799,13 @@ th.col-usage .header-content .sort-indicator {
   width: 90%;
 }
 
+/* Converting has more rows (step label + filename + Cancel) than the done
+   summary usually does (one line + Close), which shrank the modal on that
+   transition. Floor the body so it never shrinks going converting -> done. */
+.modal-content.fix-pool-modal-narrow .modal-body {
+  min-height: 144px;
+}
+
 .fix-pool-summary {
   display: flex;
   flex-direction: column;

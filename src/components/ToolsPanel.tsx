@@ -3217,7 +3217,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             ) : projectIncompatibleFiles.length === 0 ? (
               <div className="tools-fix-status all-good">
                 <div className="tools-fix-status-count">0</div>
-                <div className="tools-fix-status-label">incompatible audio files - this project's samples can all be played</div>
+                <div className="tools-fix-status-label">incompatible audio files - this project's samples can all be played by the Octatrack</div>
               </div>
             ) : (
               <button

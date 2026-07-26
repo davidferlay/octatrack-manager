@@ -112,7 +112,7 @@ describe('ToolsPanel - Fix Project Samples', () => {
       },
     })
     await waitFor(() => expect(screen.getByText('0')).toBeInTheDocument())
-    expect(screen.getByText(/samples can all be played/)).toBeInTheDocument()
+    expect(screen.getByText(/samples can all be played by the Octatrack/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /incompatible audio file/ })).not.toBeInTheDocument()
   })
 

@@ -954,7 +954,7 @@ export function FixSamplesModal({
                 <i className="fas fa-check" style={{ color: '#2ecc71', marginRight: '0.5rem' }}></i>
                 {converted.length} file{converted.length === 1 ? '' : 's'} converted.
                 {result.slots_updated > 0 && (
-                  <> {result.slots_updated} sample slot{result.slots_updated === 1 ? '' : 's'} updated
+                  <><br />{result.slots_updated} sample slot{result.slots_updated === 1 ? '' : 's'} updated
                     {' '}across {result.projects_updated.length} project{result.projects_updated.length === 1 ? '' : 's'} (backed up first).</>
                 )}
               </p>

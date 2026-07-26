@@ -139,6 +139,12 @@ export interface AudioFileTableProps {
   usageMap?: Record<string, PoolUsageEntry[]>;
   /** True while usageMap is still being computed - shows "…" instead of "—" for unreferenced files. */
   usageLoading?: boolean;
+  /**
+   * Whether usageMap covers every project of the Set (Audio Pool page) or was
+   * filtered down to just the currently loaded project (Sample Slots sidebar).
+   * Drives the Usage column's header tooltip so the scope is never ambiguous.
+   */
+  usageScope?: 'set' | 'project';
 }
 
 /** Path relative to the Audio Pool root, prefixed "AUDIO/" — used for hover titles. */
@@ -319,7 +325,12 @@ export function AudioFileTable({
   onCompatMap,
   usageMap,
   usageLoading = false,
+  usageScope = 'set',
 }: AudioFileTableProps) {
+  const usageScopeTooltip = usageScope === 'project'
+    ? 'How this file is used by the currently loaded project only.\nSee the Audio Pool page for usage across the whole Set.'
+    : 'How this file is used across every project of this Set';
+
   // Pre-filter state (applied before TanStack)
   const [searchText, setSearchText] = useState('');
   const [hideDirectories, setHideDirectories] = useState(false);
@@ -836,12 +847,15 @@ export function AudioFileTable({
                         draggable
                         onDragStart={(e) => handleColDragStart(e, colId)}
                         style={{ cursor: 'grab' }}
+                        title={colId === 'usage' ? usageScopeTooltip : undefined}
                       >
                         {colId === 'usage' && (
                           <span className="usage-header-left">
                             <span
                               className={`usage-header-spinner${usageLoading ? '' : ' usage-header-spinner-hidden'}`}
-                              title="Checking usage of Audio Pool files across every project of this Set…"
+                              title={usageScope === 'project'
+                                ? 'Checking usage of Audio Pool files within this project…'
+                                : 'Checking usage of Audio Pool files across every project of this Set…'}
                               onClick={(e) => e.stopPropagation()}
                             >
                               <span className="loading-spinner-small"></span>

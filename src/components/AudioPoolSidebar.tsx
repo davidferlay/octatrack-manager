@@ -441,6 +441,7 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
         onCompatMap={setCompatMap}
         usageMap={usageMap}
         usageLoading={poolUsageLoading}
+        usageScope={projectName ? 'project' : 'set'}
         convertingPaths={convertingPaths}
         justConvertedPaths={justConvertedPaths}
         onContextMenu={handleItemContextMenu}
