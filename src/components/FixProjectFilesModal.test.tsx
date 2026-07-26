@@ -1,8 +1,14 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render as rtlRender, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { ProjectIncompatibleListModal, FixProjectFilesModal } from './FixProjectFilesModal'
 import { usePoolTable, PoolFilesTable, type IncompatibleFile } from './FixPoolFilesModal'
+
+// PoolFilesTable's context menu uses useNavigate(), which requires a Router ancestor.
+function render(ui: React.ReactElement) {
+  return rtlRender(<MemoryRouter>{ui}</MemoryRouter>)
+}
 
 const invokeMock = vi.fn()
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invokeMock(...args) }))
@@ -156,7 +162,7 @@ describe('usePoolTable/PoolFilesTable - Usage and Slot columns', () => {
     expect(spinner).toBeTruthy()
     expect(spinner).not.toHaveClass('usage-header-spinner-hidden')
 
-    rerender(<TestHarness files={files} usageMap={{}} withSlot usageLoading={false} />)
+    rerender(<MemoryRouter><TestHarness files={files} usageMap={{}} withSlot usageLoading={false} /></MemoryRouter>)
     expect(screen.getByText('Usage').closest('.header-content')!.querySelector('.usage-header-spinner')).toHaveClass('usage-header-spinner-hidden')
   })
 })

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { ToolsPanel } from './ToolsPanel'
 import { ProjectsProvider } from '../context/ProjectsContext'
 
@@ -28,9 +29,11 @@ function baseProps() {
 
 function renderPanel(props: Partial<React.ComponentProps<typeof ToolsPanel>> = {}) {
   return render(
-    <ProjectsProvider>
-      <ToolsPanel {...baseProps()} {...props} />
-    </ProjectsProvider>
+    <MemoryRouter>
+      <ProjectsProvider>
+        <ToolsPanel {...baseProps()} {...props} />
+      </ProjectsProvider>
+    </MemoryRouter>
   )
 }
 

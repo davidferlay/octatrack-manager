@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getFileFormat, formatFileSize, usageKey, UsagePopoverBox, type PopoverAnchor, type UsagePopoverScope } from './AudioFileTable';
@@ -49,6 +50,16 @@ function poolLocation(path: string, poolPath: string): string {
   if (parts.length === 0) return '';
   const [top, ...rest] = parts;
   return rest.length ? `${top}/${rest.join('/')}` : `${top}/`;
+}
+
+/** Name + absolute path of the project directory `path` lives inside - null for pool-root (AUDIO/) files. */
+function projectRootFor(path: string, poolPath: string, source: 'pool' | 'project'): { name: string; path: string } | null {
+  if (source !== 'project') return null;
+  const setDir = poolPath.replace(/[/\\][^/\\]+[/\\]?$/, '');
+  const rel = path.startsWith(setDir) ? path.slice(setDir.length).replace(/^[/\\]/, '') : path;
+  const name = rel.split(/[\\/]/)[0];
+  if (!name) return null;
+  return { name, path: `${setDir}/${name}` };
 }
 
 /** What the fix will actually do to this file, from its metadata: the backend rewrites
@@ -208,6 +219,9 @@ interface PoolRow {
   actionTitle: string;
   usageEntries: PoolUsageEntry[];
   slots: string[];
+  /** Absolute path/name of the project this file lives inside - null for pool-root (AUDIO/) files. */
+  projectPath: string | null;
+  projectName: string | null;
 }
 
 export type PoolSortColumn = 'file' | 'format' | 'bit' | 'khz' | 'size' | 'location' | 'action' | 'usage' | 'slot';
@@ -334,6 +348,7 @@ export function usePoolTable(
     const bit = meta[f.path]?.bit_rate ?? null;
     const khz = meta[f.path]?.sample_rate ?? null;
     const { label, title } = actionFor(name, bit, khz);
+    const projectRoot = projectRootFor(f.path, poolPath, f.source);
     return {
       path: f.path,
       name,
@@ -346,6 +361,8 @@ export function usePoolTable(
       actionTitle: title,
       usageEntries: usageMap?.[usageKey(f.path)] ?? [],
       slots: f.slots ?? [],
+      projectPath: projectRoot?.path ?? null,
+      projectName: projectRoot?.name ?? null,
     };
   });
 
@@ -547,12 +564,26 @@ const REVIEW_COL_DEFAULTS: Record<string, number | undefined> = {
 // Also defined in AudioFileTable.tsx - see that file's comment for why.
 const BANK_LETTERS = 'ABCDEFGHIJKLMNOP';
 
-export function PoolFilesTable({ table }: { table: ReturnType<typeof usePoolTable> }) {
+export function PoolFilesTable({ table, showGoToProject = false }: { table: ReturnType<typeof usePoolTable>; showGoToProject?: boolean }) {
   const {
     rows, visibleColumns, formatFilter, setFormatFilter, bitFilter, setBitFilter, khzFilter, setKhzFilter,
     usageFilter, setUsageFilter, usageLoading, usagePopover, setUsagePopover,
     unique, renderFilterableHeader, renderSortableHeader, colWidths, tableRef,
   } = table;
+
+  const navigate = useNavigate();
+  const [rowMenu, setRowMenu] = useState<{ x: number; y: number; row: PoolRow } | null>(null);
+  useEffect(() => {
+    if (!rowMenu) return;
+    const close = () => setRowMenu(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setRowMenu(null); };
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', close);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [rowMenu]);
 
   const filterOptions = (values: string[], fmt: (v: string) => string = v => v) =>
     [{ value: 'all', label: 'All' }, ...values.map(v => ({ value: v, label: fmt(v) }))];
@@ -653,12 +684,37 @@ export function PoolFilesTable({ table }: { table: ReturnType<typeof usePoolTabl
         </thead>
         <tbody>
           {rows.map(r => (
-            <tr key={r.path}>
+            <tr key={r.path} onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setRowMenu({ x: e.clientX, y: e.clientY, row: r }); }}>
               {visibleColumns.map(c => renderCell(c.id, r))}
             </tr>
           ))}
         </tbody>
       </table>
+      {rowMenu && (
+        <div
+          className="context-menu"
+          style={{ position: 'fixed', top: rowMenu.y, left: rowMenu.x }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="context-menu-item"
+            onClick={() => { invoke('reveal_in_file_manager', { path: rowMenu.row.path }); setRowMenu(null); }}
+          >
+            <i className="fas fa-folder-open"></i> Open in file explorer
+          </button>
+          {showGoToProject && rowMenu.row.projectPath && (
+            <button
+              className="context-menu-item"
+              onClick={() => {
+                navigate(`/project?path=${encodeURIComponent(rowMenu.row.projectPath!)}&name=${encodeURIComponent(rowMenu.row.projectName!)}`);
+                setRowMenu(null);
+              }}
+            >
+              <i className="fas fa-arrow-right"></i> Go to project
+            </button>
+          )}
+        </div>
+      )}
       {usagePopover && (
         <UsagePopoverBox anchor={usagePopover} onClose={() => setUsagePopover(null)} onClick={(e) => e.stopPropagation()}>
           {(() => {
@@ -781,7 +837,7 @@ export function PoolIncompatibleListModal({ poolPath, files, onClose, usageMap, 
           {/* Plain wrapper — the page-level .samples-tab class pins itself to viewport
               height, which would leave a tall empty body inside a modal */}
           <div className="table-wrapper">
-            <PoolFilesTable table={table} />
+            <PoolFilesTable table={table} showGoToProject />
           </div>
         </div>
       </div>
@@ -805,6 +861,8 @@ export interface FixSamplesModalProps {
   usageLoading?: boolean;
   /** Show the Slot column - project-scope only. */
   withSlot?: boolean;
+  /** Offer "Go to project" on project-local rows in the context menu - pool scope only. */
+  showGoToProject?: boolean;
   /** Prefix for the transfer id passed to the backend and cancel_audio_transfer. */
   transferIdPrefix: string;
   /** Header text while converting, e.g. "Fixing Audio Pool Samples...". */
@@ -823,7 +881,7 @@ export interface FixSamplesModalProps {
  * minimalist "Converting N / M" spinner row and collapsible failure list.
  */
 export function FixSamplesModal({
-  scopePath, files, skipReview = false, onClose, onFixed, usageMap, usageLoading, withSlot,
+  scopePath, files, skipReview = false, onClose, onFixed, usageMap, usageLoading, withSlot, showGoToProject,
   transferIdPrefix, progressingLabel, doneLabel, runFix,
 }: FixSamplesModalProps) {
   const [phase, setPhase] = useState<Phase>(skipReview ? 'converting' : 'review');
@@ -920,7 +978,7 @@ export function FixSamplesModal({
           {phase === 'review' && (
             <div className="fix-confirmation">
               <div className="fix-confirm-table-wrapper">
-                <PoolFilesTable table={table} />
+                <PoolFilesTable table={table} showGoToProject={showGoToProject} />
               </div>
               {/* Same bottom as the fix-missing search modal */}
               <div className="fix-progress-section">
@@ -1027,6 +1085,7 @@ export function FixPoolFilesModal({ poolPath, files, skipReview = false, onClose
       onFixed={onFixed}
       usageMap={usageMap}
       usageLoading={usageLoading}
+      showGoToProject
       transferIdPrefix="fix-pool"
       progressingLabel="Fixing Audio Pool Samples..."
       doneLabel="Fix Audio Pool Samples"
