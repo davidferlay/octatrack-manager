@@ -145,3 +145,6 @@
 | PM112 | Overview | Soloed audio tracks listed | On the device, solo one or more audio tracks, save project, open Overview tab | Audio Mode section shows a "Soloed" row listing the soloed tracks as badges (like Muted and Cued); "—" when none |
 | PM113 | Overview | Soloed MIDI tracks listed | Solo one or more MIDI tracks on the device, save, open Overview tab | MIDI Mode section shows a "Soloed" row with the soloed MIDI track badges; "—" when none |
 | PM114 | Overview | Mute and solo shown independently | On the device, mute a track AND solo the same track, save, open Overview tab | The track appears in both the Muted and Soloed rows (independent masks in project.work, not mutually exclusive) |
+| **Home Page Scroll Position** | | | | |
+| PM115 | Navigation | Scroll survives a project round trip | On the home page, scroll down far enough that the top of the grid is off-screen, open any project, then click "Back" | The home page reopens scrolled to the same position (not jumped back to the top) |
+| PM116 | Navigation | Scroll survives an Audio Pool round trip | Scroll down on the home page, click a Set's Audio Pool card, then click "Back" on the Audio Pool page | The home page reopens at the same scroll position |
