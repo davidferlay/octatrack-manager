@@ -66,7 +66,11 @@ In **Fix Project Samples:**
 
 - Each file is converted to **44.1 kHz 16/24-bit WAV** — the same high-quality conversion used during import into the pool.
 - The **original file is replaced**: `loop.mp3` becomes `loop.wav` (a numbered suffix like `loop-1.wav` is used if that name is already taken); a 48 kHz `snare.wav` keeps its exact name.
-- **Sample Slots references are updated automatically:** every project of Set that referenced an incompatible file is updated to use converted one if needed. Each modified project file is backed up first (under that project's `backups/` directory)
+- **Sample Slots references are updated automatically:** every project of Set that referenced an incompatible file is updated to use converted one if needed.
+
+:::info
+Each modified project file is backed up first (under that project's `backups/` directory)
+:::
 
 ---
 
