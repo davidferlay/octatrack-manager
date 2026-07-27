@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatBytes, formatMixerLevel } from './format'
+import { formatBytes, formatMixerLevel, formatMetronomePitch } from './format'
 
 describe('formatBytes', () => {
   it('formats 0 bytes', () => {
@@ -42,5 +42,19 @@ describe('formatMixerLevel', () => {
 
   it('shows a negative offset with a leading -', () => {
     expect(formatMixerLevel(0)).toBe('-64')
+  })
+})
+
+describe('formatMetronomePitch', () => {
+  it('shows the factory default (raw 12) as C6', () => {
+    expect(formatMetronomePitch(12)).toBe('C6')
+  })
+
+  it('shows raw 0 as C5', () => {
+    expect(formatMetronomePitch(0)).toBe('C5')
+  })
+
+  it('shows a sharp note', () => {
+    expect(formatMetronomePitch(1)).toBe('C#5')
   })
 })

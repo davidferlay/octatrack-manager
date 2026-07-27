@@ -33,7 +33,7 @@ async function setupTauriMocks(page: Page) {
               mixer_settings: { gain_ab: 76, gain_cd: 58, dir_ab: 0, dir_cd: 0, phones_mix: 32, main_level: 100, cue_level: 90 },
               memory_settings: { load_24bit_flex: false, dynamic_recorders: false, record_24bit: false, reserved_recorder_count: 8, reserved_recorder_length: 16, flex_ram_free_mb: 85.5 },
               midi_settings: { trig_channels: [0, 1, 2, 3, 4, 5, -1, 7], auto_channel: 10, clock_send: true, clock_receive: true, transport_send: true, transport_receive: true, prog_change_send: false, prog_change_send_channel: 1, prog_change_receive: false, prog_change_receive_channel: 1 },
-              metronome_settings: { enabled: false, main_volume: 64, cue_volume: 64, pitch: 64, tonal: false, preroll: 0, time_signature_numerator: 4, time_signature_denominator: 4 },
+              metronome_settings: { enabled: false, main_volume: 0, cue_volume: 32, pitch: 12, tonal: false, preroll: 0, time_signature_numerator: 4, time_signature_denominator: 4 },
               sample_slots: {
                 flex_slots: Array(128).fill(null).map((_, i) => ({ slot_id: i, slot_type: 'Flex', path: null, gain: null, loop_mode: null, timestretch_mode: null, source_location: null, file_exists: false, compatibility: null, file_format: null, bit_depth: null, sample_rate: null })),
                 static_slots: Array(128).fill(null).map((_, i) => ({ slot_id: i, slot_type: 'Static', path: null, gain: null, loop_mode: null, timestretch_mode: null, source_location: null, file_exists: false, compatibility: null, file_format: null, bit_depth: null, sample_rate: null })),
@@ -155,6 +155,20 @@ test.describe('Overview - Metadata display', () => {
     await expect(compactItem(page, 'T7').locator('.compact-value')).toHaveText('Off')
     await expect(compactItem(page, 'T8').locator('.compact-value')).toHaveText('8')
     await expect(compactItem(page, 'Auto').locator('.compact-value')).toHaveText('11')
+  })
+
+  test('metronome section matches the Octatrack CONTROL > METRONOME screen order and formatting', async ({ page }) => {
+    const metronome = page.locator('.overview-section', { has: page.locator('h2', { hasText: 'Metronome' }) })
+    const labels = await metronome.locator('.compact-label').allTextContents()
+    expect(labels).toEqual(['Active', 'Time Sig Numer', 'Time Sig Denom', 'Preroll', 'Cue Vol', 'Main Vol', 'Tonal', 'Pitch'])
+    await expect(compactItem(page, 'Active').locator('.compact-value')).toHaveText('No')
+    await expect(compactItem(page, 'Time Sig Numer').locator('.compact-value')).toHaveText('4/4')
+    await expect(compactItem(page, 'Time Sig Denom').locator('.compact-value')).toHaveText('4/4')
+    await expect(compactItem(page, 'Preroll').locator('.compact-value')).toHaveText('Off') // raw 0
+    await expect(compactItem(page, 'Cue Vol').locator('.compact-value')).toHaveText('32')
+    await expect(compactItem(page, 'Main Vol').locator('.compact-value')).toHaveText('0')
+    await expect(compactItem(page, 'Tonal').locator('.compact-value')).toHaveText('No')
+    await expect(compactItem(page, 'Pitch').locator('.compact-value')).toHaveText('C6') // raw 12, factory default
   })
 
   test('memory section shows read-only values in View mode', async ({ page }) => {

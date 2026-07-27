@@ -15129,6 +15129,49 @@ mod tests {
             );
         }
 
+        /// Writes a project.work with a custom metronome time signature (raw, 0-indexed) and
+        /// reads back the resulting numerator/denominator metadata.
+        fn read_time_signature(raw_numerator: u8, raw_denominator: u8) -> (u8, u8) {
+            let temp_dir = TempDir::new().unwrap();
+            let mut project_file = ProjectFile::default();
+            project_file
+                .settings
+                .control
+                .metronome
+                .metronome_time_signature = raw_numerator;
+            project_file
+                .settings
+                .control
+                .metronome
+                .metronome_time_signature_denominator = raw_denominator;
+            project_file
+                .to_data_file(&temp_dir.path().join("project.work"))
+                .unwrap();
+
+            let metadata = read_project_metadata(&temp_dir.path().to_string_lossy()).unwrap();
+            (
+                metadata.metronome_settings.time_signature_numerator,
+                metadata.metronome_settings.time_signature_denominator,
+            )
+        }
+
+        #[test]
+        fn test_time_signature_numerator_covers_the_1_to_16_range() {
+            // Numerator raw is 0-indexed: 0 -> 1/x (minimum), 15 -> 16/x (maximum)
+            assert_eq!(read_time_signature(0, 0).0, 1);
+            assert_eq!(read_time_signature(15, 0).0, 16);
+        }
+
+        #[test]
+        fn test_time_signature_denominator_covers_the_power_of_two_range() {
+            // Denominator raw selects a power of two: 0 -> 1, 1 -> 2, 2 -> 4, 3 -> 8, 4 -> 16
+            assert_eq!(read_time_signature(0, 0).1, 1);
+            assert_eq!(read_time_signature(0, 1).1, 2);
+            assert_eq!(read_time_signature(0, 2).1, 4);
+            assert_eq!(read_time_signature(0, 3).1, 8);
+            assert_eq!(read_time_signature(0, 4).1, 16);
+        }
+
         #[test]
         fn test_metadata_exposes_exact_flex_ram_free_bytes() {
             let project = TestProject::new();

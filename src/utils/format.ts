@@ -12,3 +12,11 @@ export function formatMixerLevel(raw: number): string {
   const value = raw - 64
   return value >= 0 ? `+${value}` : `${value}`
 }
+
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+
+// Metronome pitch raw value 12 (factory default) displays as "C6" on the Octatrack.
+export function formatMetronomePitch(raw: number): string {
+  const octave = Math.floor(raw / 12) + 5
+  return `${NOTE_NAMES[raw % 12]}${octave}`
+}

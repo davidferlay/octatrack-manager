@@ -16,7 +16,7 @@ import { WriteStatus, IDLE_STATUS } from "../types/writeStatus";
 import { TrackBadge } from "../components/TrackBadge";
 import { ScrollToTop } from "../components/ScrollToTop";
 import { Version } from "../components/Version";
-import { formatMixerLevel } from "../utils/format";
+import { formatMixerLevel, formatMetronomePitch } from "../utils/format";
 import "../App.css";
 
 // Most type definitions are now imported from ProjectsContext via Bank and ProjectMetadata types
@@ -1398,32 +1398,36 @@ export function ProjectDetail() {
                     <h2>Metronome</h2>
                     <div className="compact-grid">
                       <div className="compact-item">
-                        <span className="compact-label">Enabled</span>
+                        <span className="compact-label">Active</span>
                         <span className="compact-value">{metadata.metronome_settings.enabled ? "Yes" : "No"}</span>
                       </div>
                       <div className="compact-item">
-                        <span className="compact-label">Main Vol</span>
-                        <span className="compact-value">{metadata.metronome_settings.main_volume}</span>
+                        <span className="compact-label">Time Sig Numer</span>
+                        <span className="compact-value">{metadata.metronome_settings.time_signature_numerator}/{metadata.metronome_settings.time_signature_denominator}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Time Sig Denom</span>
+                        <span className="compact-value">{metadata.metronome_settings.time_signature_numerator}/{metadata.metronome_settings.time_signature_denominator}</span>
+                      </div>
+                      <div className="compact-item">
+                        <span className="compact-label">Preroll</span>
+                        <span className="compact-value">{metadata.metronome_settings.preroll === 0 ? "Off" : metadata.metronome_settings.preroll}</span>
                       </div>
                       <div className="compact-item">
                         <span className="compact-label">Cue Vol</span>
                         <span className="compact-value">{metadata.metronome_settings.cue_volume}</span>
                       </div>
                       <div className="compact-item">
-                        <span className="compact-label">Pitch</span>
-                        <span className="compact-value">{metadata.metronome_settings.pitch}</span>
+                        <span className="compact-label">Main Vol</span>
+                        <span className="compact-value">{metadata.metronome_settings.main_volume}</span>
                       </div>
                       <div className="compact-item">
                         <span className="compact-label">Tonal</span>
                         <span className="compact-value">{metadata.metronome_settings.tonal ? "Yes" : "No"}</span>
                       </div>
                       <div className="compact-item">
-                        <span className="compact-label">Preroll</span>
-                        <span className="compact-value">{metadata.metronome_settings.preroll}</span>
-                      </div>
-                      <div className="compact-item">
-                        <span className="compact-label">Time Sig</span>
-                        <span className="compact-value">{metadata.metronome_settings.time_signature_numerator}/{metadata.metronome_settings.time_signature_denominator}</span>
+                        <span className="compact-label">Pitch</span>
+                        <span className="compact-value">{formatMetronomePitch(metadata.metronome_settings.pitch)}</span>
                       </div>
                     </div>
                   </section>
