@@ -27,7 +27,7 @@ Just like on the Octatrack itself, recorder trigs are displayed separately from 
 The **Trigs** control next to the bank selector picks which grids are displayed:
 
 - **Track:** Sample and note trigs only.
-- **Both:** The track grid plus the recorder grid.
+- **All:** The track grid plus the recorder grid.
 - **Rec:** Recorder trigs only.
 
 With **Hide empty** off, the selected grids are always displayed, even when empty. With **Hide empty** on, each empty grid is hidden individually (for example an empty recorder grid disappears while the track grid stays), and a pattern vanishes entirely when nothing is left to display.

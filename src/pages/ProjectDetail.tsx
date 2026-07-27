@@ -1563,7 +1563,7 @@ export function ProjectDetail() {
                     <div className="tri-toggle">
                       {([
                         { value: 'track', label: 'Track', title: 'Sample and note trigs only' },
-                        { value: 'both', label: 'Both', title: 'Track and recorder trig grids' },
+                        { value: 'both', label: 'All', title: 'Track and recorder trig grids' },
                         { value: 'rec', label: 'Rec', title: 'Recorder trigs only' },
                       ] as const).map((opt) => (
                         <button

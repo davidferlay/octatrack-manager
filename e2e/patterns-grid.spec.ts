@@ -188,8 +188,8 @@ test.describe('Patterns tab - step grid indicators', () => {
     await expect(page.locator('.track-grid .indicator-recorder')).toHaveCount(0)
   })
 
-  test('trig view toggle switches between track, both and rec grids', async ({ page }) => {
-    // default "Both": track 1 has rec trigs, so both grids show
+  test('trig view toggle switches between track, all and rec grids', async ({ page }) => {
+    // default "All": track 1 has rec trigs, so both grids show
     await expect(page.locator('.track-grid')).toBeVisible()
     await expect(page.locator('.rec-grid')).toBeVisible()
 
@@ -201,7 +201,7 @@ test.describe('Patterns tab - step grid indicators', () => {
     await expect(page.locator('.track-grid')).toHaveCount(0)
     await expect(page.locator('.rec-grid')).toBeVisible()
 
-    await page.locator('.tri-toggle-option', { hasText: 'Both' }).click()
+    await page.locator('.tri-toggle-option', { hasText: 'All' }).click()
     await expect(page.locator('.track-grid')).toBeVisible()
     await expect(page.locator('.rec-grid')).toBeVisible()
   })
@@ -359,7 +359,7 @@ test.describe('Patterns tab - indicator filters', () => {
     await expect(chip(page, 'Trigger')).toBeDisabled()
     await expect(chip(page, 'P-Lock')).toBeDisabled()
 
-    await page.locator('.tri-toggle-option', { hasText: 'Both' }).click()
+    await page.locator('.tri-toggle-option', { hasText: 'All' }).click()
     await expect(chip(page, 'Trigger')).toBeEnabled()
     await expect(chip(page, 'Recorder')).toBeEnabled()
   })
