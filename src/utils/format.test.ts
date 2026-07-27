@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatBytes } from './format'
+import { formatBytes, formatMixerLevel } from './format'
 
 describe('formatBytes', () => {
   it('formats 0 bytes', () => {
@@ -28,5 +28,19 @@ describe('formatBytes', () => {
   it('drops trailing .0', () => {
     expect(formatBytes(1024)).toBe('1 KB')
     expect(formatBytes(1048576)).toBe('1 MB')
+  })
+})
+
+describe('formatMixerLevel', () => {
+  it('shows the default raw value (64) as +0', () => {
+    expect(formatMixerLevel(64)).toBe('+0')
+  })
+
+  it('shows a positive offset with a leading +', () => {
+    expect(formatMixerLevel(127)).toBe('+63')
+  })
+
+  it('shows a negative offset with a leading -', () => {
+    expect(formatMixerLevel(0)).toBe('-64')
   })
 })

@@ -30,9 +30,9 @@ async function setupTauriMocks(page: Page) {
                 audio_muted_tracks: [1, 2], audio_soloed_tracks: [4], audio_cued_tracks: [],
                 midi_muted_tracks: [], midi_soloed_tracks: [6],
               },
-              mixer_settings: { gain_ab: 12, gain_cd: -6, dir_ab: 0, dir_cd: 0, phones_mix: 32, main_level: 100, cue_level: 90 },
+              mixer_settings: { gain_ab: 76, gain_cd: 58, dir_ab: 0, dir_cd: 0, phones_mix: 32, main_level: 100, cue_level: 90 },
               memory_settings: { load_24bit_flex: false, dynamic_recorders: false, record_24bit: false, reserved_recorder_count: 8, reserved_recorder_length: 16, flex_ram_free_mb: 85.5 },
-              midi_settings: { trig_channels: [1, 2, 3, 4, 5, 6, 7, 8], auto_channel: 10, clock_send: true, clock_receive: true, transport_send: true, transport_receive: true, prog_change_send: false, prog_change_send_channel: 1, prog_change_receive: false, prog_change_receive_channel: 1 },
+              midi_settings: { trig_channels: [0, 1, 2, 3, 4, 5, -1, 7], auto_channel: 10, clock_send: true, clock_receive: true, transport_send: true, transport_receive: true, prog_change_send: false, prog_change_send_channel: 1, prog_change_receive: false, prog_change_receive_channel: 1 },
               metronome_settings: { enabled: false, main_volume: 64, cue_volume: 64, pitch: 64, tonal: false, preroll: 0, time_signature_numerator: 4, time_signature_denominator: 4 },
               sample_slots: {
                 flex_slots: Array(128).fill(null).map((_, i) => ({ slot_id: i, slot_type: 'Flex', path: null, gain: null, loop_mode: null, timestretch_mode: null, source_location: null, file_exists: false, compatibility: null, file_format: null, bit_depth: null, sample_rate: null })),
@@ -136,10 +136,25 @@ test.describe('Overview - Metadata display', () => {
     await expect(compactItem(page, 'Mode').locator('.compact-value')).toHaveText('Audio')
   })
 
-  test('mixer section shows the project mixer values', async ({ page }) => {
+  test('mixer section shows signed levels (raw 0-127, centered on 64) in Octatrack screen order', async ({ page }) => {
     const mixer = page.locator('.overview-section', { has: page.locator('h2', { hasText: 'Mixer' }) })
-    await expect(mixer.locator('.compact-value').nth(0)).toHaveText('12') // gain_ab
-    await expect(mixer.locator('.compact-value').nth(1)).toHaveText('-6') // gain_cd
+    const labels = await mixer.locator('.compact-label').allTextContents()
+    expect(labels).toEqual(['Main', 'Dir AB', 'Gain AB', 'Cue', 'Dir CD', 'Gain CD', 'Phones Mix'])
+    await expect(compactItem(page, 'Phones Mix').locator('.compact-value')).toHaveText('-32')
+    await expect(compactItem(page, 'Main').locator('.compact-value')).toHaveText('+36')
+    await expect(compactItem(page, 'Cue').locator('.compact-value')).toHaveText('+26')
+    await expect(compactItem(page, 'Dir AB').locator('.compact-value')).toHaveText('0')
+    await expect(compactItem(page, 'Gain AB').locator('.compact-value')).toHaveText('+12')
+    await expect(compactItem(page, 'Dir CD').locator('.compact-value')).toHaveText('0')
+    await expect(compactItem(page, 'Gain CD').locator('.compact-value')).toHaveText('-6')
+  })
+
+  test('MIDI channels section shows 1-based channel numbers', async ({ page }) => {
+    await expect(compactItem(page, 'T1').locator('.compact-value')).toHaveText('1')
+    await expect(compactItem(page, 'T6').locator('.compact-value')).toHaveText('6')
+    await expect(compactItem(page, 'T7').locator('.compact-value')).toHaveText('Off')
+    await expect(compactItem(page, 'T8').locator('.compact-value')).toHaveText('8')
+    await expect(compactItem(page, 'Auto').locator('.compact-value')).toHaveText('11')
   })
 
   test('memory section shows read-only values in View mode', async ({ page }) => {
