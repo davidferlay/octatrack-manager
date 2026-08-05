@@ -5108,6 +5108,19 @@ th.col-usage .header-content .sort-indicator {
   font-size: 1rem;
 }
 
+/* Destructive variant (Purge "delete" mode's Apply Changes button) - same
+   #dc3545 red used by .modal-button.danger and DeleteProjectDialog. */
+.tools-execute-btn.tools-execute-btn-danger {
+  border-color: #dc3545;
+  color: #dc3545;
+}
+
+.tools-execute-btn.tools-execute-btn-danger:hover:not(:disabled) {
+  background-color: #dc3545;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+}
+
 .loading-spinner-small {
   width: 1rem;
   height: 1rem;

@@ -1192,7 +1192,7 @@ pub struct PoolUsageEntry {
 /// separators, so results are stable across Windows (`\`) and Unix (`/`)
 /// path construction — the frontend's usageKey() always normalizes lookups
 /// to forward-slash, so this side must match unconditionally.
-fn pool_usage_key(path: &Path) -> String {
+pub(crate) fn pool_usage_key(path: &Path) -> String {
     path.to_string_lossy().to_lowercase().replace('\\', "/")
 }
 
@@ -4174,10 +4174,12 @@ pub fn search_directory(
 /// Read raw field values from `[SAMPLE]` blocks in a project.work file.
 /// Returns a map of (TYPE, SLOT) → (field_name_upper → raw_value_string).
 /// This bypasses ot-tools-io parsing to preserve original values like TRIGQUANTIZATION=-1.
-type RawSampleFieldsMap =
+pub(crate) type RawSampleFieldsMap =
     std::collections::HashMap<(String, u16), std::collections::HashMap<String, String>>;
 
-fn read_raw_sample_fields(project_file_path: &Path) -> Result<RawSampleFieldsMap, String> {
+pub(crate) fn read_raw_sample_fields(
+    project_file_path: &Path,
+) -> Result<RawSampleFieldsMap, String> {
     let raw_bytes = std::fs::read(project_file_path)
         .map_err(|e| format!("Failed to read project file: {}", e))?;
     let (decoded, _, _) = encoding_rs::WINDOWS_1258.decode(&raw_bytes);
@@ -5461,7 +5463,7 @@ pub struct PoolReferenceUpdate {
 
 /// Lexically resolve `.` and `..` components without touching the filesystem
 /// (the old pool file may already be deleted when references get updated).
-fn normalize_path_lexically(path: &Path) -> std::path::PathBuf {
+pub(crate) fn normalize_path_lexically(path: &Path) -> std::path::PathBuf {
     let mut out = std::path::PathBuf::new();
     for comp in path.components() {
         match comp {

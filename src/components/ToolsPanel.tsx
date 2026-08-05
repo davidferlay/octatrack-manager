@@ -12,6 +12,7 @@ import { MissingSamplesListModal } from "./MissingSamplesListModal";
 import { CreateProjectModal } from "./CreateProjectModal";
 import { ProjectIncompatibleListModal, FixProjectFilesModal } from "./FixProjectFilesModal";
 import type { IncompatibleFile, PoolFixResult } from "./FixPoolFilesModal";
+import { PurgeFilesModal, PurgeUnusedListModal, type PurgeUnit } from "./PurgeFilesModal";
 import { audioKind, usageKey } from "./AudioFileTable";
 import { normalizePath } from "./SampleSlotsTable";
 
@@ -31,7 +32,7 @@ function compareLocations(a: { name: string; device_type: string }, b: { name: s
 }
 
 // Operation types
-type OperationType = "copy_bank" | "copy_parts" | "copy_patterns" | "copy_tracks" | "copy_sample_slots" | "fix_missing_samples" | "fix_project_samples";
+type OperationType = "copy_bank" | "copy_parts" | "copy_patterns" | "copy_tracks" | "copy_sample_slots" | "fix_missing_samples" | "fix_project_samples" | "purge_project_samples";
 
 // Part assignment modes for copy_patterns
 type PartAssignmentMode = "keep_original" | "copy_source_part" | "select_specific";
@@ -279,6 +280,27 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [showFixProjectModal, setShowFixProjectModal] = useState<boolean>(false);
   const [showProjectIncompatibleListModal, setShowProjectIncompatibleListModal] = useState<boolean>(false);
 
+  // Purge Project Samples state
+  const [purgeScanLoading, setPurgeScanLoading] = useState<boolean>(false);
+  const [purgeScanTotal, setPurgeScanTotal] = useState<number>(0);
+  const [purgeUnits, setPurgeUnits] = useState<PurgeUnit[]>([]);
+  // Count of loaded-but-untriggered slots that would also be cleared this
+  // run, computed alongside the scan whenever clearUnusedSlots is on - see
+  // count_unused_slot_assignments. null when the option is off (or not yet
+  // resolved), which PurgeFilesModal treats as "don't show that line".
+  const [purgeSlotsToClear, setPurgeSlotsToClear] = useState<number | null>(null);
+  const [clearUnusedSlots, setClearUnusedSlots] = useState<boolean>(false);
+  const [excludeBackups, setExcludeBackups] = useState<boolean>(true);
+  const [purgeReviewBeforeApply, setPurgeReviewBeforeApply] = useState<boolean>(true);
+  const [purgeMode, setPurgeMode] = useState<'delete' | 'move'>('delete');
+  const [purgeDestination, setPurgeDestination] = useState<string>('');
+  const [showPurgeListModal, setShowPurgeListModal] = useState<boolean>(false);
+  const [showPurgeModal, setShowPurgeModal] = useState<boolean>(false);
+  // Bumped after a successful purge to force the scan effect below to re-run
+  // (its own dependencies don't otherwise change), so the Status panel/list
+  // modal don't keep showing already-removed-or-moved files.
+  const [purgeRescanKey, setPurgeRescanKey] = useState<number>(0);
+
   // Audio Pool status
   const [audioPoolStatus, setAudioPoolStatus] = useState<AudioPoolStatus | null>(null);
   const [sameSetStatus, setSameSetStatus] = useState<boolean>(false);
@@ -509,6 +531,51 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     return () => { cancelled = true; };
   }, [operation, projectPath, referencedSlotEntries]);
 
+  // Purge Project Samples: scan for unused audio files, re-run whenever the
+  // operation is (re)selected or the scan-affecting options change.
+  useEffect(() => {
+    if (operation !== "purge_project_samples") return;
+    let cancelled = false;
+    setPurgeScanLoading(true);
+    Promise.all([
+      invoke<PurgeUnit[]>('scan_project_unused_files', {
+        projectPath,
+        excludeBackups,
+        simulateClearedSlots: clearUnusedSlots,
+      }),
+      // Only computed when the option is actually on - the review screen
+      // has nothing extra to say about slot-clearing otherwise.
+      clearUnusedSlots
+        ? invoke<number>('count_unused_slot_assignments', { projectPath })
+        : Promise.resolve(null),
+    ]).then(([units, slotsToClear]) => {
+      if (cancelled) return;
+      setPurgeUnits(units);
+      setPurgeScanTotal(units.length);
+      setPurgeSlotsToClear(slotsToClear);
+    }).catch((err) => {
+      console.error("Error scanning project unused files:", err);
+      if (!cancelled) {
+        setPurgeUnits([]);
+        setPurgeSlotsToClear(null);
+      }
+    }).finally(() => {
+      if (!cancelled) setPurgeScanLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [operation, projectPath, excludeBackups, clearUnusedSlots, purgeRescanKey]);
+
+  // Purge Project Samples: resolve the default Move-mode destination once,
+  // the first time the operation is selected (never overwrites a user edit).
+  useEffect(() => {
+    if (operation !== "purge_project_samples" || purgeDestination) return;
+    const inSet = audioPoolStatus?.exists ?? false;
+    const guaranteedFallback = inSet && audioPoolStatus?.set_path ? audioPoolStatus.set_path : projectPath;
+    invoke<string>('resolve_default_purge_destination', { guaranteedFallback })
+      .then(setPurgeDestination)
+      .catch((err) => console.error("Error resolving default purge destination:", err));
+  }, [operation, audioPoolStatus, projectPath, purgeDestination]);
+
   const projectIncompatibleFiles = useMemo(
     () => includeUnreferenced ? [...referencedIncompatible, ...unreferencedIncompatible] : referencedIncompatible,
     [referencedIncompatible, unreferencedIncompatible, includeUnreferenced]
@@ -618,7 +685,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   // Check audio pool status when destination project changes
   useEffect(() => {
     async function checkAudioPool() {
-      if (destProject && (operation === "copy_sample_slots" || operation === "fix_missing_samples" || operation === "copy_bank")) {
+      if (destProject && (operation === "copy_sample_slots" || operation === "fix_missing_samples" || operation === "copy_bank" || operation === "purge_project_samples")) {
         try {
           const status = await invoke<AudioPoolStatus>("get_audio_pool_status", { projectPath });
           setAudioPoolStatus(status);
@@ -1038,10 +1105,11 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           <option value="copy_sample_slots">Copy Sample Slots</option>
           <option value="fix_missing_samples">Fix Missing Samples</option>
           <option value="fix_project_samples">Fix Project Samples</option>
+          <option value="purge_project_samples">Purge Project Samples</option>
         </select>
       </div>
 
-      {operation !== "fix_missing_samples" && operation !== "fix_project_samples" && (
+      {operation !== "fix_missing_samples" && operation !== "fix_project_samples" && operation !== "purge_project_samples" && (
       <div className="tools-panels">
         {/* Source Panel */}
         <div className="tools-source-panel">
@@ -3247,8 +3315,109 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         </div>
       )}
 
+      {/* Purge Project Samples Panel */}
+      {operation === "purge_project_samples" && (
+        <div className="tools-fix-missing-layout">
+          <div className="tools-description-pane">
+            <p>
+              Scans this project's own directory for audio files no sample slot
+              references anywhere (machine assignment, p-lock, or a loaded slot).<br />
+              Execute deletes them (to the Trash/Recycle Bin) or moves them into a
+              chosen folder - whole directories are removed/moved as a unit when
+              every audio file inside is unused.
+            </p>
+          </div>
+
+          <div className="tools-options-panel">
+            <h3>Options</h3>
+            <div className="tools-field tools-checkbox">
+              <label title="Slots that have a file loaded but are never triggered by any machine assignment or p-lock get their assignment cleared too, freeing the file for removal in this same run">
+                <input type="checkbox" checked={clearUnusedSlots} onChange={(e) => setClearUnusedSlots(e.target.checked)} />
+                Clear unused sample slot assignments
+              </label>
+            </div>
+            <div className="tools-field tools-checkbox">
+              <label title="Keep this project's backups/ directory untouched by the scan">
+                <input type="checkbox" checked={excludeBackups} onChange={(e) => setExcludeBackups(e.target.checked)} />
+                Exclude backups/ directory
+              </label>
+            </div>
+            <div className="tools-field tools-checkbox">
+              <label title={purgeMode === 'delete' ? 'Required when deleting files' : 'Show the review screen listing planned changes before applying them'}>
+                <input
+                  type="checkbox"
+                  checked={purgeMode === 'delete' ? true : purgeReviewBeforeApply}
+                  disabled={purgeMode === 'delete'}
+                  onChange={(e) => setPurgeReviewBeforeApply(e.target.checked)}
+                />
+                Review before applying changes
+              </label>
+            </div>
+            <div className="tools-field">
+              <label>
+                <input type="radio" name="purge-mode" checked={purgeMode === 'delete'} onChange={() => setPurgeMode('delete')} />
+                Delete files
+              </label>
+              <label>
+                <input type="radio" name="purge-mode" checked={purgeMode === 'move'} onChange={() => setPurgeMode('move')} />
+                Move files to folder
+              </label>
+            </div>
+            {purgeMode === 'move' && (
+              <div className="tools-field">
+                <input type="text" value={purgeDestination} onChange={(e) => setPurgeDestination(e.target.value)} />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const selected = await open({ directory: true, multiple: false, title: 'Select destination folder' });
+                    if (typeof selected === 'string') setPurgeDestination(selected);
+                  }}
+                >
+                  Browse...
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="tools-fix-status-panel">
+            <h3>Status</h3>
+            {purgeScanLoading ? (
+              <div className="tools-fix-status loading">
+                <span className="loading-spinner-small"></span>
+                <span>Scanning project samples...</span>
+              </div>
+            ) : purgeUnits.length === 0 ? (
+              <div className="tools-fix-status all-good">
+                <div className="tools-fix-status-count">0</div>
+                <div className="tools-fix-status-label">unused audio files - every sample in this project is referenced</div>
+              </div>
+            ) : (
+              <button className="tools-missing-files-summary" onClick={() => setShowPurgeListModal(true)} title="Click to view the unused files list">
+                <span className="tools-fix-status-count">{purgeUnits.length}</span>
+                {" "}unused audio file{purgeUnits.length !== 1 ? "s" : ""}
+                <span className="tools-fix-status-detail">{" - "}of {purgeScanTotal} scanned</span>
+              </button>
+            )}
+          </div>
+
+          {purgeUnits.length > 0 && (
+            <div className="tools-actions">
+              <button
+                className="tools-execute-btn"
+                onClick={() => setShowPurgeModal(true)}
+                disabled={purgeScanLoading || (purgeMode === 'move' && purgeDestination.trim() === '')}
+                title={purgeMode === 'move' && purgeDestination.trim() === '' ? 'Choose a destination folder first' : undefined}
+              >
+                <i className="fas fa-trash"></i>
+                Execute
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Execute Button */}
-      {operation !== "fix_missing_samples" && operation !== "fix_project_samples" && (
+      {operation !== "fix_missing_samples" && operation !== "fix_project_samples" && operation !== "purge_project_samples" && (
       <div className="tools-actions">
         <button
           className="tools-execute-btn"
@@ -3728,6 +3897,35 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             if (audioPoolStatus?.exists && audioPoolStatus.path) invalidatePoolUsage(audioPoolStatus.path);
             if (onProjectRefresh) onProjectRefresh();
           }}
+        />
+      )}
+
+      {/* Unused Project Samples List Modal */}
+      {showPurgeListModal && (
+        <PurgeUnusedListModal units={purgeUnits} scope="project" onClose={() => setShowPurgeListModal(false)} />
+      )}
+
+      {/* Purge Project Samples Modal */}
+      {showPurgeModal && operation === "purge_project_samples" && (
+        <PurgeFilesModal
+          scope="project"
+          scopePath={projectPath}
+          units={purgeUnits}
+          mode={purgeMode === 'delete' ? 'delete' : { destinationDir: purgeDestination }}
+          skipReview={purgeMode === 'move' && !purgeReviewBeforeApply}
+          slotsToClear={clearUnusedSlots ? purgeSlotsToClear : null}
+          onClose={() => setShowPurgeModal(false)}
+          onPurged={() => {
+            setPurgeRescanKey(k => k + 1);
+            if (audioPoolStatus?.exists && audioPoolStatus.path) invalidatePoolUsage(audioPoolStatus.path);
+            if (onProjectRefresh) onProjectRefresh();
+          }}
+          runPurge={(plan, destinationDir) => invoke('purge_project_files', {
+            projectPath,
+            plan,
+            clearUnusedSlots,
+            destinationDir,
+          })}
         />
       )}
     </div>

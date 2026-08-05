@@ -242,7 +242,7 @@ fn collect_audio_files_inner(dir: &Path, out: &mut Vec<String>) -> Result<(), St
 }
 
 /// Check if a file is an audio file based on extension
-fn is_audio_file(filename: &str) -> bool {
+pub(crate) fn is_audio_file(filename: &str) -> bool {
     let lower = filename.to_lowercase();
     lower.ends_with(".wav")
         || lower.ends_with(".aif")

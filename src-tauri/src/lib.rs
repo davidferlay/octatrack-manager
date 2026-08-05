@@ -5,6 +5,7 @@ mod audio_pool;
 mod device_detection;
 pub mod project_manager;
 mod project_reader;
+mod purge;
 
 use audio_pool::{
     cancel_transfer, collect_audio_files_recursive, copy_audio_files_or_use_existing,
@@ -311,6 +312,11 @@ fn navigate_to_parent(path: String) -> Result<String, String> {
 #[tauri::command]
 fn create_new_directory(path: String, name: String) -> Result<String, String> {
     create_directory(&path, &name)
+}
+
+#[tauri::command]
+fn resolve_default_purge_destination(guaranteed_fallback: String) -> String {
+    purge::resolve_default_purge_destination(&guaranteed_fallback)
 }
 
 #[tauri::command]
@@ -1112,6 +1118,131 @@ async fn fix_missing_samples(
     .unwrap()
 }
 
+#[tauri::command]
+async fn scan_project_unused_files(
+    project_path: String,
+    exclude_backups: bool,
+    simulate_cleared_slots: bool,
+) -> Result<Vec<purge::PurgeUnit>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        purge::compute_project_unused_files(&project_path, exclude_backups, simulate_cleared_slots)
+    })
+    .await
+    .unwrap()
+}
+
+#[tauri::command]
+async fn scan_pool_unused_files(
+    pool_path: String,
+    simulate_cleared_slots_for: Vec<String>,
+) -> Result<Vec<purge::PurgeUnit>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        purge::compute_pool_unused_files(&pool_path, &simulate_cleared_slots_for)
+    })
+    .await
+    .unwrap()
+}
+
+/// Purges (deletes to Trash, or moves) the reviewed `plan` for a single
+/// project. `destination_dir: None` means delete; `Some(dir)` means move.
+/// If `clear_unused_slots` is set, loaded-but-untriggered slots are cleared
+/// first so the plan's already-simulated orphaned files are consistent with
+/// what actually happens on disk.
+#[tauri::command]
+async fn purge_project_files(
+    project_path: String,
+    plan: Vec<purge::PurgeUnit>,
+    clear_unused_slots: bool,
+    destination_dir: Option<String>,
+) -> Result<purge::PurgeResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut origin_roots = std::collections::HashMap::new();
+        let project_name = std::path::Path::new(&project_path)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        origin_roots.insert(project_name, project_path.clone());
+
+        let mut result = match destination_dir {
+            Some(dest) => purge::move_purge_units(&plan, &dest, &origin_roots)?,
+            None => purge::trash_purge_units(&plan, &origin_roots)?,
+        };
+
+        if clear_unused_slots {
+            // The delete/move step above already succeeded - a slot-clearing
+            // failure must be surfaced via result.errors, not `?`, or the
+            // frontend would land on the modal's error phase claiming the
+            // whole operation failed when the files are, in fact, already
+            // gone/moved.
+            purge::clear_unused_slots_for_projects(
+                &mut result,
+                std::slice::from_ref(&project_path),
+            );
+        }
+
+        Ok(result)
+    })
+    .await
+    .unwrap()
+}
+
+/// Purges the reviewed `plan` for the Audio Pool, optionally also clearing
+/// unused slot assignments in every project of `included_project_paths`
+/// (populated by the frontend only when "Include all projects of set" and
+/// "Clear unused sample slot assignments" are both on).
+#[tauri::command]
+async fn purge_pool_files(
+    pool_path: String,
+    plan: Vec<purge::PurgeUnit>,
+    clear_unused_slots: bool,
+    included_project_paths: Vec<String>,
+    destination_dir: Option<String>,
+) -> Result<purge::PurgeResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut origin_roots = std::collections::HashMap::new();
+        origin_roots.insert("Audio Pool".to_string(), pool_path.clone());
+        for p in &included_project_paths {
+            let name = std::path::Path::new(p)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            origin_roots.insert(name, p.clone());
+        }
+
+        let mut result = match destination_dir {
+            Some(dest) => purge::move_purge_units(&plan, &dest, &origin_roots)?,
+            None => purge::trash_purge_units(&plan, &origin_roots)?,
+        };
+
+        if clear_unused_slots {
+            // Same reasoning as purge_project_files: the delete/move step
+            // already succeeded, so a slot-clearing failure for one project
+            // must not discard the result or abort the remaining projects in
+            // included_project_paths - it's surfaced per-project in
+            // result.errors instead, and every other project is still tried.
+            purge::clear_unused_slots_for_projects(&mut result, &included_project_paths);
+        }
+
+        Ok(result)
+    })
+    .await
+    .unwrap()
+}
+
+/// Non-mutating count of slots `clear_unused_slot_assignments` would clear
+/// for `project_path` - lets the purge review screen show the scope of the
+/// "Clear unused sample slot assignments" option's second, less obvious
+/// destructive effect (clearing loaded-but-untriggered slots) before the
+/// user executes anything.
+#[tauri::command]
+async fn count_unused_slot_assignments(project_path: String) -> Result<u32, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        purge::count_slots_eligible_for_clearing(&project_path)
+    })
+    .await
+    .unwrap()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1151,6 +1282,7 @@ pub fn run() {
             list_audio_directory_recursive,
             navigate_to_parent,
             create_new_directory,
+            resolve_default_purge_destination,
             copy_audio_files,
             copy_audio_files_to_project,
             copy_audio_file_with_progress,
@@ -1192,6 +1324,12 @@ pub fn run() {
             fix_missing_samples,
             fix_pool_files,
             fix_project_samples,
+            // Purge Unused Samples
+            scan_project_unused_files,
+            scan_pool_unused_files,
+            purge_project_files,
+            purge_pool_files,
+            count_unused_slot_assignments,
             // Sample slot assignment
             assign_samples_to_slots,
             clear_sample_slots,

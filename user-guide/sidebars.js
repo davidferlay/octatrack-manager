@@ -31,6 +31,7 @@ const sidebars = {
         'features/copy-sample-slots',
         'features/fix-missing-samples',
         'features/fix-incompatible-samples',
+        'features/purge-unused-samples',
       ],
     },
     {

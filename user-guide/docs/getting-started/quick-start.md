@@ -123,7 +123,17 @@ This can be done from either:
 
 Both convert affected files to 44.1 kHz 16/24-bit WAV in place and repoint every sample slot that referenced them, across the whole Set.
 
-## 10. Automatic Backups
+## 10. Purge Unused Samples
+
+The Tools tab also includes a **[Purge Unused Samples](../features/purge-unused-samples.md)** operation that finds audio files no sample slot references anywhere, then deletes them (to the Trash/Recycle Bin) or moves them into a user-selected folder.
+
+This can be done from either:
+- **Purge Project Samples** from Projects Tools tab
+- **Purge Audio Pool Samples** from Audio pool Tools tab (and optionally include all projects of Set)
+
+---
+
+## 11. Automatic Backups
 
 Octatrack Manager automatically backs up your project files before any write operation — whether you are enabling Edit mode, saving a Part, or executing a copy operation via Tools.
 
@@ -148,6 +158,7 @@ This means you can always revert changes by copying the backed-up files back int
 | Copy Sample Slots (Copy) | Destination: `project.work`, `markers.work`, and audio files (`.wav` + `.ot`) that would be overwritten |
 | Copy Sample Slots (Move to Pool) | Destination: `project.work`, `markers.work`<br/>Source: `project.work` and audio files (`.wav` + `.ot`) that will be moved/deleted |
 | Fix Missing Samples | `project.work` (and sibling projects' `project.work` when using Move to Pool) |
+| Purge Unused Samples (Clear unused sample slot assignments) | `project.work` - only when the option is enabled and at least one slot is cleared |
 | Edit mode toggle (in header)| Current bank file |
 
 
@@ -157,8 +168,6 @@ This means you can always revert changes by copying the backed-up files back int
 :::tip
 While automatic backups provide a safety net, it’s strongly advised to keep your own copies of your projects as well.
 :::
-
----
 
 ## Tips
 
