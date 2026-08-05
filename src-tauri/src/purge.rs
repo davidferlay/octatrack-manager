@@ -1,6 +1,6 @@
 //! Detection and execution logic for the "Purge Project Samples" / "Purge
 //! Audio Pool Samples" tools: finds audio files no sample slot references
-//! anywhere, and deletes (to the OS Trash/Recycle Bin) or moves them,
+//! anywhere, and deletes (to the OS Trash Bin) or moves them,
 //! collapsing whole directories instead of emptying them file by file.
 
 use serde::{Deserialize, Serialize};
@@ -23,6 +23,12 @@ pub enum PurgeUnit {
         origin: String,
         file_count: u32,
         size: u64,
+        /// Every audio file absorbed into this collapsed directory
+        /// (recursively, including from absorbed subdirectories), as
+        /// absolute paths sorted alphabetically - lets the review/preview
+        /// tables list them tree-style under the directory row instead of
+        /// just showing a count.
+        files: Vec<String>,
     },
 }
 
@@ -104,8 +110,8 @@ fn build_purge_plan(
     let mut ordered: Vec<PathBuf> = candidate_dirs.into_iter().collect();
     ordered.sort_by_key(|p| std::cmp::Reverse(p.components().count()));
 
-    // dir -> (origin, total audio file count, total audio size) for dirs that fully collapse.
-    let mut collapsed: HashMap<PathBuf, (String, u32, u64)> = HashMap::new();
+    // dir -> (origin, total audio file count, total audio size, absorbed audio file paths) for dirs that fully collapse.
+    let mut collapsed: HashMap<PathBuf, (String, u32, u64, Vec<PathBuf>)> = HashMap::new();
     let mut absorbed: HashSet<PathBuf> = HashSet::new();
 
     for dir in &ordered {
@@ -117,14 +123,16 @@ fn build_purge_plan(
         let mut origin: Option<String> = None;
         let mut all_covered = true;
         let mut items_to_absorb: Vec<PathBuf> = Vec::new();
+        let mut files: Vec<PathBuf> = Vec::new();
 
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                if let Some((sub_origin, sub_count, sub_size)) = collapsed.get(&path) {
+                if let Some((sub_origin, sub_count, sub_size, sub_files)) = collapsed.get(&path) {
                     origin.get_or_insert_with(|| sub_origin.clone());
                     file_count += sub_count;
                     total_size += sub_size;
+                    files.extend(sub_files.iter().cloned());
                     items_to_absorb.push(path);
                 } else {
                     all_covered = false;
@@ -133,6 +141,7 @@ fn build_purge_plan(
                 origin.get_or_insert_with(|| file_origin.clone());
                 file_count += 1;
                 total_size += size;
+                files.push(path.clone());
                 items_to_absorb.push(path);
             } else {
                 let name = path
@@ -149,7 +158,7 @@ fn build_purge_plan(
 
         if all_covered && file_count > 0 && dir.as_path() != root {
             if let Some(origin) = origin {
-                collapsed.insert(dir.clone(), (origin, file_count, total_size));
+                collapsed.insert(dir.clone(), (origin, file_count, total_size, files));
                 for path in items_to_absorb {
                     absorbed.insert(path);
                 }
@@ -161,14 +170,20 @@ fn build_purge_plan(
 
     // Only emit the top of each collapsed chain (a collapsed dir whose
     // parent also collapsed is already accounted for by that parent).
-    for (dir, (origin, file_count, size)) in &collapsed {
+    for (dir, (origin, file_count, size, files)) in &collapsed {
         let parent_collapsed = dir.parent().is_some_and(|p| collapsed.contains_key(p));
         if !parent_collapsed {
+            let mut file_paths: Vec<String> = files
+                .iter()
+                .map(|p| p.to_string_lossy().to_string())
+                .collect();
+            file_paths.sort();
             units.push(PurgeUnit::Directory {
                 path: dir.to_string_lossy().to_string(),
                 origin: origin.clone(),
                 file_count: *file_count,
                 size: *size,
+                files: file_paths,
             });
         }
     }
@@ -495,11 +510,11 @@ fn ot_sidecar_if_unshared(
     Some(ot_path)
 }
 
-/// Sends every unit in `plan` to the OS Trash/Recycle Bin (files and
+/// Sends every unit in `plan` to the OS Trash Bin (files and
 /// directories alike - the `trash` crate moves a directory as a whole,
 /// consistent with the directory-collapse goal of removing whole dirs
 /// instead of emptying them out file by file). Recoverable by the user via
-/// their system Trash/Recycle Bin until they empty it - not a permanent,
+/// their system Trash Bin until they empty it - not a permanent,
 /// unrecoverable delete. A `PurgeUnit::File`'s `.ot` sidecar (if any) is
 /// trashed alongside it; a missing sidecar is not an error.
 pub fn trash_purge_units(
@@ -741,6 +756,7 @@ mod tests {
             origin: "Audio Pool".to_string(),
             file_count: 3,
             size: 9000,
+            files: vec!["/set/AUDIO/oldkit/kick.wav".to_string()],
         };
         assert_eq!(dir.path(), "/set/AUDIO/oldkit");
         assert_eq!(dir.size(), 9000);
@@ -805,6 +821,44 @@ mod tests {
             } => {
                 assert_eq!(path, &dir.to_string_lossy().to_string());
                 assert_eq!(*file_count, 2);
+            }
+            other => panic!("expected a Directory unit, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn a_collapsed_directory_lists_every_audio_file_it_absorbed() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let dir = temp.path().join("kit");
+        std::fs::create_dir(&dir).unwrap();
+        touch(&dir.join("kick.wav"));
+        touch(&dir.join("snare.wav"));
+
+        let unused = vec![
+            (
+                dir.join("kick.wav").to_string_lossy().to_string(),
+                "Audio Pool".to_string(),
+                1,
+            ),
+            (
+                dir.join("snare.wav").to_string_lossy().to_string(),
+                "Audio Pool".to_string(),
+                1,
+            ),
+        ];
+        let plan = build_purge_plan(unused, temp.path());
+
+        assert_eq!(plan.len(), 1);
+        match &plan[0] {
+            PurgeUnit::Directory { files, .. } => {
+                assert_eq!(
+                    files,
+                    &vec![
+                        dir.join("kick.wav").to_string_lossy().to_string(),
+                        dir.join("snare.wav").to_string_lossy().to_string(),
+                    ],
+                    "files should be sorted alphabetically"
+                );
             }
             other => panic!("expected a Directory unit, got {:?}", other),
         }
@@ -883,10 +937,23 @@ mod tests {
         assert_eq!(plan.len(), 1);
         match &plan[0] {
             PurgeUnit::Directory {
-                path, file_count, ..
+                path,
+                file_count,
+                files,
+                ..
             } => {
                 assert_eq!(path, &outer.to_string_lossy().to_string());
                 assert_eq!(*file_count, 2);
+                // The inner (absorbed) directory's file is carried forward into
+                // the outer unit's file list, not just its count/size -
+                // sorted alphabetically by full path ("808/..." < "clap.wav").
+                assert_eq!(
+                    files,
+                    &vec![
+                        inner.join("kick.wav").to_string_lossy().to_string(),
+                        outer.join("clap.wav").to_string_lossy().to_string(),
+                    ]
+                );
             }
             other => panic!("expected a Directory unit, got {:?}", other),
         }
@@ -1311,6 +1378,7 @@ mod tests {
             origin: "Audio Pool".to_string(),
             file_count: 1,
             size: 1,
+            files: vec![kit_dir.join("kick.wav").to_string_lossy().to_string()],
         }];
         let mut origin_roots = std::collections::HashMap::new();
         origin_roots.insert(

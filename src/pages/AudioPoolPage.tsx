@@ -376,13 +376,15 @@ export function AudioPoolPage() {
   const [purgeReviewBeforeApply, setPurgeReviewBeforeApply] = useState(true);
   const [purgeMode, setPurgeMode] = useState<'delete' | 'move'>('delete');
   const [purgeDestination, setPurgeDestination] = useState('');
-  // Both the "as-is" and "slots simulated cleared" scans are pre-fetched in
-  // the background (always with excludeBackups: false, the maximal set) so
-  // toggling "Exclude backups/ directory" or "Clear unused sample slot
-  // assignments" is instant instead of re-hitting the backend - see the
-  // effect below and isUnderBackupsDir. null means "not fetched yet".
-  const [purgeUnitsAsIs, setPurgeUnitsAsIs] = useState<PurgeUnit[] | null>(null);
-  const [purgeUnitsSimulated, setPurgeUnitsSimulated] = useState<PurgeUnit[] | null>(null);
+  // All three scan variants are pre-fetched in the background up front
+  // (always with excludeBackups: false, the maximal set) so toggling
+  // "Include all projects of set", "Exclude backups/ directory", or "Clear
+  // unused sample slot assignments" is instant instead of re-hitting the
+  // backend - see the effect below and isUnderBackupsDir. null means "not
+  // fetched yet".
+  const [purgePoolOnlyUnits, setPurgePoolOnlyUnits] = useState<PurgeUnit[] | null>(null);
+  const [purgeIncludeAllAsIs, setPurgeIncludeAllAsIs] = useState<PurgeUnit[] | null>(null);
+  const [purgeIncludeAllSimulated, setPurgeIncludeAllSimulated] = useState<PurgeUnit[] | null>(null);
   // Total loaded-but-untriggered slots that would be cleared across every
   // included project this run - only computed when both "Include all
   // projects of set" and "Clear unused sample slot assignments" are on
@@ -398,40 +400,36 @@ export function AudioPoolPage() {
   // purgeRescanKey for the Purge Project Samples flow.
   const [purgeRescanKey, setPurgeRescanKey] = useState(0);
 
-  // Purge Audio Pool Samples: pre-fetch both the "as-is" and "slots
-  // simulated cleared" scans in the background whenever the operation is
-  // (re)selected or "Include all projects of set" changes (a real scope
-  // change, unlike the two checkboxes below it - always with
+  // Purge Audio Pool Samples: pre-fetch every scan variant in the background
+  // as soon as the operation is (re)selected, so toggling any of "Include
+  // all projects of set", "Exclude backups/ directory" or "Clear unused
+  // sample slot assignments" is instant instead of re-hitting the backend -
+  // see the derived values below and isUnderBackupsDir. Always
   // excludeBackups: false for project scans, since that option is applied
-  // as a client-side filter instead of a re-scan). "Include all projects of
-  // set" off means neither variant depends on slot-clearing at all (pool-
-  // only purges never simulate it), so both are set to the same single scan.
+  // as a client-side filter instead of a re-scan.
   useEffect(() => {
     if (poolOperation !== 'purge_pool_samples') return;
     let cancelled = false;
-    setPurgeUnitsAsIs(null);
-    setPurgeUnitsSimulated(null);
+    setPurgePoolOnlyUnits(null);
+    setPurgeIncludeAllAsIs(null);
+    setPurgeIncludeAllSimulated(null);
     setPurgeIncludedProjectPaths([]);
     setPurgeSlotsToClear(null);
 
     (async () => {
-      const poolSetProjects = purgeIncludeAllProjects
-        ? ((await invoke<{ name: string; path: string }[]>('list_set_projects', { poolPath: audioPoolPath }).catch(() => [])) ?? [])
-        : [];
+      const poolSetProjects = (await invoke<{ name: string; path: string }[]>('list_set_projects', { poolPath: audioPoolPath }).catch(() => [])) ?? [];
       if (cancelled) return;
       setPurgeIncludedProjectPaths(poolSetProjects.map(p => p.path));
-
-      if (!purgeIncludeAllProjects) {
-        const poolUnits = await invoke<PurgeUnit[]>('scan_pool_unused_files', { poolPath: audioPoolPath, simulateClearedSlotsFor: [] });
-        if (cancelled) return;
-        setPurgeUnitsAsIs(poolUnits);
-        setPurgeUnitsSimulated(poolUnits);
-        return;
-      }
-
       const projectNames = poolSetProjects.map(p => p.name);
 
-      async function scanVariant(simulate: boolean): Promise<PurgeUnit[]> {
+      invoke<PurgeUnit[]>('scan_pool_unused_files', { poolPath: audioPoolPath, simulateClearedSlotsFor: [] }).then((units) => {
+        if (!cancelled) setPurgePoolOnlyUnits(units);
+      }).catch((err) => {
+        console.error('Error scanning pool unused files:', err);
+        if (!cancelled) setPurgePoolOnlyUnits([]);
+      });
+
+      async function scanIncludeAllVariant(simulate: boolean): Promise<PurgeUnit[]> {
         const [poolUnits, perProject] = await Promise.all([
           invoke<PurgeUnit[]>('scan_pool_unused_files', {
             poolPath: audioPoolPath,
@@ -448,18 +446,18 @@ export function AudioPoolPage() {
         return [...poolUnits, ...perProject.flat()];
       }
 
-      scanVariant(false).then((units) => {
-        if (!cancelled) setPurgeUnitsAsIs(units);
+      scanIncludeAllVariant(false).then((units) => {
+        if (!cancelled) setPurgeIncludeAllAsIs(units);
       }).catch((err) => {
-        console.error('Error scanning pool unused files:', err);
-        if (!cancelled) setPurgeUnitsAsIs([]);
+        console.error('Error scanning pool+projects unused files:', err);
+        if (!cancelled) setPurgeIncludeAllAsIs([]);
       });
 
-      scanVariant(true).then((units) => {
-        if (!cancelled) setPurgeUnitsSimulated(units);
+      scanIncludeAllVariant(true).then((units) => {
+        if (!cancelled) setPurgeIncludeAllSimulated(units);
       }).catch((err) => {
-        console.error('Error scanning pool unused files (slots simulated cleared):', err);
-        if (!cancelled) setPurgeUnitsSimulated([]);
+        console.error('Error scanning pool+projects unused files (slots simulated cleared):', err);
+        if (!cancelled) setPurgeIncludeAllSimulated([]);
       });
 
       const perProjectSlotCounts = await Promise.all(poolSetProjects.map(p =>
@@ -469,17 +467,20 @@ export function AudioPoolPage() {
     })().catch((err) => {
       console.error('Error scanning pool unused files:', err);
       if (!cancelled) {
-        setPurgeUnitsAsIs([]);
-        setPurgeUnitsSimulated([]);
+        setPurgePoolOnlyUnits([]);
+        setPurgeIncludeAllAsIs([]);
+        setPurgeIncludeAllSimulated([]);
         setPurgeIncludedProjectPaths([]);
         setPurgeSlotsToClear(null);
       }
     });
 
     return () => { cancelled = true; };
-  }, [poolOperation, audioPoolPath, purgeIncludeAllProjects, purgeRescanKey]);
+  }, [poolOperation, audioPoolPath, purgeRescanKey]);
 
-  const purgeUnitsRaw = purgeClearUnusedSlots ? purgeUnitsSimulated : purgeUnitsAsIs;
+  const purgeUnitsRaw = !purgeIncludeAllProjects
+    ? purgePoolOnlyUnits
+    : (purgeClearUnusedSlots ? purgeIncludeAllSimulated : purgeIncludeAllAsIs);
   const purgeScanLoading = poolOperation === 'purge_pool_samples' && purgeUnitsRaw === null;
   const purgeUnits = useMemo(() => {
     if (!purgeUnitsRaw) return [];
@@ -1682,7 +1683,7 @@ export function AudioPoolPage() {
                 <p>
                   Scans the Audio Pool for files no project of this Set references
                   anywhere.<br />
-                  Execute deletes them (to the Trash/Recycle Bin) or moves them into a
+                  Execute deletes them (to the Trash Bin) or moves them into a
                   chosen folder - whole directories are removed/moved as a unit when
                   every audio file inside is unused.
                 </p>
@@ -1742,7 +1743,7 @@ export function AudioPoolPage() {
                       type="button"
                       className={`tools-toggle-btn ${purgeMode === 'delete' ? 'selected' : ''}`}
                       onClick={() => setPurgeMode('delete')}
-                      title="Send unused files to the OS Trash/Recycle Bin - recoverable there until you empty it"
+                      title="Send unused files to the OS Trash Bin - recoverable there until you empty it"
                     >
                       Delete files
                     </button>
@@ -2060,8 +2061,14 @@ export function AudioPoolPage() {
           runPurge={(plan, destinationDir) => invoke('purge_pool_files', {
             poolPath: audioPoolPath,
             plan,
-            clearUnusedSlots: purgeClearUnusedSlots,
-            includedProjectPaths: purgeIncludedProjectPaths,
+            // purgeIncludedProjectPaths is now always populated in the
+            // background (pre-fetched regardless of the toggle, so switching
+            // "Include all projects of set" on is instant) - gate both here
+            // so a pool-only purge never clears slots outside the pool, even
+            // if purgeClearUnusedSlots was left checked before the user
+            // turned "Include all projects of set" back off.
+            clearUnusedSlots: purgeIncludeAllProjects && purgeClearUnusedSlots,
+            includedProjectPaths: purgeIncludeAllProjects ? purgeIncludedProjectPaths : [],
             destinationDir,
           })}
         />

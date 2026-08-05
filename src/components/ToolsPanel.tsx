@@ -3347,7 +3347,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             <p>
               Scans this project's own directory for audio files no sample slot
               references anywhere (machine assignment, p-lock, or a loaded slot).<br />
-              Execute deletes them (to the Trash/Recycle Bin) or moves them into a
+              Execute deletes them (to the Trash Bin) or moves them into a
               chosen folder - whole directories are removed/moved as a unit when
               every audio file inside is unused.
             </p>
@@ -3385,7 +3385,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   type="button"
                   className={`tools-toggle-btn ${purgeMode === 'delete' ? 'selected' : ''}`}
                   onClick={() => setPurgeMode('delete')}
-                  title="Send unused files to the OS Trash/Recycle Bin - recoverable there until you empty it"
+                  title="Send unused files to the OS Trash Bin - recoverable there until you empty it"
                 >
                   Delete files
                 </button>

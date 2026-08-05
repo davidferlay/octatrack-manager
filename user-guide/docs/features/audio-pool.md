@@ -93,7 +93,7 @@ See [Fix Incompatible Samples](fix-incompatible-samples.md) for the full walkthr
 
 ## Purging Unused Samples
 
-Pools tend to accumulate samples that no project references anymore. The **Tools** tab's **Purge Audio Pool Samples** operation finds every unused audio file in the pool — optionally across every project of the Set too — and removes it, either to the OS Trash/Recycle Bin or moved into a folder of your choice.
+Pools tend to accumulate samples that no project references anymore. The **Tools** tab's **Purge Audio Pool Samples** operation finds every unused audio file in the pool — optionally across every project of the Set too — and removes it, either to the OS Trash Bin or moved into a folder of your choice.
 
 See [Purge Unused Samples](purge-unused-samples.md) for the full walkthrough — what counts as unused, directory collapsing, and the move/delete options.
 

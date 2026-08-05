@@ -152,19 +152,19 @@ test.describe('Purge Audio Pool Samples', () => {
     await expect(page.getByLabel('Exclude backups/ directory')).toHaveCount(0)
   })
 
-  test('toggling Exclude backups/ directory and Clear unused sample slot assignments never re-scans the backend', async ({ page }) => {
+  test('toggling Include all projects of set, Exclude backups/ directory and Clear unused sample slot assignments never re-scans the backend', async ({ page }) => {
     await openPurgeOperation(page)
     await expect(page.locator('.tools-missing-files-summary')).toContainText('1')
 
-    // Pool-only scope: a single background scan, no simulate variant needed.
-    await expect.poll(async () => page.evaluate(() => (window as any).__scanCalls.length)).toBe(1)
-
-    await page.getByLabel('Include all projects of set').check()
-    // Scope genuinely changed - both the "as-is" and "slots simulated
-    // cleared" variants are (re)fetched in the background.
+    // All three scan variants (pool-only, include-all as-is, include-all
+    // slots-simulated) are pre-fetched up front, in the background.
     await expect.poll(async () => page.evaluate(() => (window as any).__scanCalls.length)).toBe(3)
+    const scanCallsAfterInitialLoad = await page.evaluate(() => (window as any).__scanCalls.length)
 
-    const scanCallsAfterScopeChange = await page.evaluate(() => (window as any).__scanCalls.length)
+    const includeAllCheckbox = page.getByLabel('Include all projects of set')
+    await includeAllCheckbox.check()
+    await includeAllCheckbox.uncheck()
+    await includeAllCheckbox.check()
 
     const excludeBackupsCheckbox = page.getByLabel('Exclude backups/ directory')
     const clearSlotsCheckbox = page.getByLabel('Clear unused sample slot assignments')
@@ -174,7 +174,7 @@ test.describe('Purge Audio Pool Samples', () => {
     await clearSlotsCheckbox.uncheck()
 
     await expect(page.locator('.tools-fix-status.loading')).toHaveCount(0)
-    expect(await page.evaluate(() => (window as any).__scanCalls.length)).toBe(scanCallsAfterScopeChange)
+    expect(await page.evaluate(() => (window as any).__scanCalls.length)).toBe(scanCallsAfterInitialLoad)
   })
 
   test('Execute with Delete mode moves reviewed files to Trash and refreshes pool usage', async ({ page }) => {
@@ -227,6 +227,35 @@ test.describe('Purge Audio Pool Samples', () => {
 
     await modal.getByRole('button', { name: 'Close' }).click()
     await expect(modal).toHaveCount(0)
+  })
+
+  test('turning Include all projects of set back off never sends project paths or clearUnusedSlots, even if Clear unused slots was left checked', async ({ page }) => {
+    // list_set_projects returns [] by default in this spec's shared mock -
+    // override it with a real project so includedProjectPaths would be
+    // non-empty if the fix below regressed.
+    await page.addInitScript(() => {
+      const internals = (window as any).__TAURI_INTERNALS__
+      const orig = internals.invoke
+      internals.invoke = async (cmd: string, args?: any) => {
+        if (cmd === 'list_set_projects') return [{ name: 'ProjA', path: '/test/set/ProjA' }]
+        return orig(cmd, args)
+      }
+    })
+
+    await openPurgeOperation(page)
+    await expect(page.locator('.tools-missing-files-summary')).toContainText('1')
+
+    await page.getByLabel('Include all projects of set').check()
+    await page.getByLabel('Clear unused sample slot assignments').check()
+    await page.getByLabel('Include all projects of set').uncheck()
+
+    await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()
+    await page.locator('.missing-samples-list-modal').getByRole('button', { name: 'Apply Changes' }).click()
+
+    await expect.poll(async () => page.evaluate(() => (window as any).__purgeCalls.length)).toBe(1)
+    const calls = await page.evaluate(() => (window as any).__purgeCalls)
+    expect(calls[0].clearUnusedSlots).toBe(false)
+    expect(calls[0].includedProjectPaths).toEqual([])
   })
 
   test('Move mode with review unchecked skips the review screen entirely and calls purge_pool_files directly', async ({ page }) => {

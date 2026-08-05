@@ -225,6 +225,51 @@ test.describe('Purge Project Samples', () => {
     await expect(listModal.locator('tbody')).toContainText('orphan.wav')
   })
 
+  test('a collapsed directory lists its files tree-style and sorts before lone files', async ({ page }) => {
+    await page.addInitScript(() => {
+      const internals = (window as any).__TAURI_INTERNALS__
+      const orig = internals.invoke
+      internals.invoke = async (cmd: string, args?: any) => {
+        if (cmd === 'scan_project_unused_files') {
+          return [
+            { kind: 'File', path: '/projects/TestProject/orphan.wav', origin: 'TestProject', size: 2048 },
+            {
+              kind: 'Directory',
+              path: '/projects/TestProject/AUDIO/oldkit',
+              origin: 'TestProject',
+              file_count: 2,
+              size: 3072,
+              files: [
+                '/projects/TestProject/AUDIO/oldkit/clap.wav',
+                '/projects/TestProject/AUDIO/oldkit/kick.wav',
+              ],
+            },
+          ]
+        }
+        return orig(cmd, args)
+      }
+    })
+
+    await openPurgeOperation(page)
+    const summary = page.locator('.tools-missing-files-summary')
+    await expect(summary).toContainText('2')
+
+    await summary.click()
+    const listModal = page.locator('.missing-samples-list-modal')
+    await expect(listModal.getByText('Unused Project Samples')).toBeVisible()
+
+    // Directory row (with its two tree-style child rows) sorts before the lone file.
+    const rows = listModal.locator('tbody tr')
+    await expect(rows).toHaveCount(4)
+    await expect(rows.nth(0)).toContainText('oldkit')
+    await expect(rows.nth(0)).toContainText('2 files')
+    await expect(rows.nth(1)).toHaveClass(/purge-tree-child-row/)
+    await expect(rows.nth(1)).toContainText('clap.wav')
+    await expect(rows.nth(2)).toHaveClass(/purge-tree-child-row/)
+    await expect(rows.nth(2)).toContainText('kick.wav')
+    await expect(rows.nth(3)).toContainText('orphan.wav')
+  })
+
   test('toggling Exclude backups/ directory and Clear unused sample slot assignments never re-scans the backend', async ({ page }) => {
     await openPurgeOperation(page)
 

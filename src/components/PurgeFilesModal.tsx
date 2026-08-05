@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ColumnToggle, HeaderActions, useCopyFeedback, useModalResize } from './FixPoolFilesModal';
 
 /** Matches the Rust `PurgeUnit` enum's `#[serde(tag = "kind")]` shape exactly. */
 export type PurgeUnit =
   | { kind: 'File'; path: string; origin: string; size: number }
-  | { kind: 'Directory'; path: string; origin: string; file_count: number; size: number };
+  | { kind: 'Directory'; path: string; origin: string; file_count: number; size: number; files: string[] };
 
 function baseName(path: string): string {
   const idx = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
@@ -18,6 +18,17 @@ function baseName(path: string): string {
 function dirName(path: string): string {
   const idx = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
   return idx >= 0 ? path.slice(0, idx) : '';
+}
+
+/** `filePath` relative to `dirPath` (its containing `PurgeUnit::Directory`),
+ * for the tree-style child list below a directory row - "808/kick.wav"
+ * reads better there than the full absolute path. */
+function relativeToDir(filePath: string, dirPath: string): string {
+  const normalizedFile = filePath.replace(/\\/g, '/');
+  const normalizedDir = dirPath.replace(/\\/g, '/').replace(/\/+$/, '');
+  return normalizedFile.startsWith(`${normalizedDir}/`)
+    ? normalizedFile.slice(normalizedDir.length + 1)
+    : baseName(filePath);
 }
 
 function formatSize(bytes: number): string {
@@ -157,6 +168,10 @@ export function usePurgeTable(units: PurgeUnit[]) {
     }
 
     filtered.sort((a, b) => {
+      // Directories always group before lone files, regardless of the
+      // active sort column - only within each group does that column apply.
+      const kindCmp = (a.unit.kind === 'Directory' ? 0 : 1) - (b.unit.kind === 'Directory' ? 0 : 1);
+      if (kindCmp !== 0) return kindCmp;
       const dir = sortDirection === 'asc' ? 1 : -1;
       if (sortColumn === 'size') return (a.size - b.size) * dir;
       return a[sortColumn].localeCompare(b[sortColumn]) * dir;
@@ -297,27 +312,36 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
       </thead>
       <tbody>
         {rows.map(r => (
-          <tr key={r.unit.path}>
-            {visibleColumns.map(c => {
-              switch (c.id) {
-                case 'name':
-                  return (
-                    <td key="name" className="col-sample" title={r.unit.path}>
-                      {r.unit.kind === 'Directory' && <i className="fas fa-folder" title={`${r.unit.file_count} files`}></i>}
-                      {' '}
-                      {r.name}
-                      {r.unit.kind === 'Directory' && <span className="pool-dir-file-count"> ({r.unit.file_count} files)</span>}
-                    </td>
-                  );
-                case 'location':
-                  return <td key="location" className="fix-location-cell" title={r.location}>{r.location}</td>;
-                case 'origin':
-                  return <td key="origin">{r.origin}</td>;
-                case 'size':
-                  return <td key="size">{formatSize(r.size)}</td>;
-              }
-            })}
-          </tr>
+          <Fragment key={r.unit.path}>
+            <tr>
+              {visibleColumns.map(c => {
+                switch (c.id) {
+                  case 'name':
+                    return (
+                      <td key="name" className="col-sample" title={r.unit.path}>
+                        {r.unit.kind === 'Directory' && <i className="fas fa-folder" title={`${r.unit.file_count} files`}></i>}
+                        {' '}
+                        {r.name}
+                        {r.unit.kind === 'Directory' && <span className="pool-dir-file-count"> ({r.unit.file_count} files)</span>}
+                      </td>
+                    );
+                  case 'location':
+                    return <td key="location" className="fix-location-cell" title={r.location}>{r.location}</td>;
+                  case 'origin':
+                    return <td key="origin">{r.origin}</td>;
+                  case 'size':
+                    return <td key="size">{formatSize(r.size)}</td>;
+                }
+              })}
+            </tr>
+            {r.unit.kind === 'Directory' && r.unit.files.map(filePath => (
+              <tr key={filePath} className="purge-tree-child-row">
+                <td colSpan={visibleColumns.length} title={filePath}>
+                  <i className="fas fa-file-audio"></i> {relativeToDir(filePath, r.unit.path)}
+                </td>
+              </tr>
+            ))}
+          </Fragment>
         ))}
       </tbody>
     </table>

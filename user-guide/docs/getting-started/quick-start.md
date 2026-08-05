@@ -125,7 +125,7 @@ Both convert affected files to 44.1 kHz 16/24-bit WAV in place and repoint every
 
 ## 10. Purge Unused Samples
 
-The Tools tab also includes a **[Purge Unused Samples](../features/purge-unused-samples.md)** operation that finds audio files no sample slot references anywhere, then deletes them (to the Trash/Recycle Bin) or moves them into a user-selected folder.
+The Tools tab also includes a **[Purge Unused Samples](../features/purge-unused-samples.md)** operation that finds audio files no sample slot references anywhere, then deletes them (to the Trash Bin) or moves them into a user-selected folder.
 
 This can be done from either:
 - **Purge Project Samples** from Projects Tools tab
