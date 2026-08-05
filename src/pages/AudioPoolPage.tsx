@@ -1578,16 +1578,6 @@ export function AudioPoolPage() {
               <div className="tools-options-panel">
                 <h3>Options</h3>
                 <div className="tools-field tools-checkbox">
-                  <label title="Also scan every project of this Set for incompatible audio files, not just the Audio Pool">
-                    <input
-                      type="checkbox"
-                      checked={includeAllProjects}
-                      onChange={(e) => setIncludeAllProjects(e.target.checked)}
-                    />
-                    Include all projects of set
-                  </label>
-                </div>
-                <div className="tools-field tools-checkbox">
                   <label title="Show the review screen listing planned conversions before applying them">
                     <input
                       type="checkbox"
@@ -1595,6 +1585,16 @@ export function AudioPoolPage() {
                       onChange={(e) => setReviewBeforeApply(e.target.checked)}
                     />
                     Review before applying changes
+                  </label>
+                </div>
+                <div className="tools-field tools-checkbox">
+                  <label title="Also scan every project of this Set for incompatible audio files, not just the Audio Pool">
+                    <input
+                      type="checkbox"
+                      checked={includeAllProjects}
+                      onChange={(e) => setIncludeAllProjects(e.target.checked)}
+                    />
+                    Include all projects of set
                   </label>
                 </div>
               </div>
@@ -1658,6 +1658,17 @@ export function AudioPoolPage() {
               <div className="tools-options-panel">
                 <h3>Options</h3>
                 <div className="tools-field tools-checkbox">
+                  <label title={purgeMode === 'delete' ? 'Required when deleting files' : 'Show the review screen listing planned changes before applying them'}>
+                    <input
+                      type="checkbox"
+                      checked={purgeMode === 'delete' ? true : purgeReviewBeforeApply}
+                      disabled={purgeMode === 'delete'}
+                      onChange={(e) => setPurgeReviewBeforeApply(e.target.checked)}
+                    />
+                    Review before applying changes
+                  </label>
+                </div>
+                <div className="tools-field tools-checkbox">
                   <label title="Also scan every project of this Set for its own unused audio files, not just the Audio Pool">
                     <input
                       type="checkbox"
@@ -1670,16 +1681,6 @@ export function AudioPoolPage() {
                 {purgeIncludeAllProjects && (
                   <>
                     <div className="tools-field tools-checkbox tools-field-nested">
-                      <label title="Slots that have a file loaded but are never triggered by any machine assignment or p-lock get their assignment cleared too, freeing the file for removal in this same run">
-                        <input
-                          type="checkbox"
-                          checked={purgeClearUnusedSlots}
-                          onChange={(e) => setPurgeClearUnusedSlots(e.target.checked)}
-                        />
-                        Clear unused sample slot assignments
-                      </label>
-                    </div>
-                    <div className="tools-field tools-checkbox tools-field-nested">
                       <label title="Keep every included project's backups/ directory untouched by the scan">
                         <input
                           type="checkbox"
@@ -1689,41 +1690,60 @@ export function AudioPoolPage() {
                         Exclude backups/ directory
                       </label>
                     </div>
+                    <div className="tools-field tools-checkbox tools-field-nested">
+                      <label title="Slots that have a file loaded but are never triggered by any machine assignment or p-lock get their assignment cleared too, freeing the file for removal in this same run">
+                        <input
+                          type="checkbox"
+                          checked={purgeClearUnusedSlots}
+                          onChange={(e) => setPurgeClearUnusedSlots(e.target.checked)}
+                        />
+                        Clear unused sample slot assignments
+                      </label>
+                    </div>
                   </>
                 )}
-                <div className="tools-field tools-checkbox">
-                  <label title={purgeMode === 'delete' ? 'Required when deleting files' : 'Show the review screen listing planned changes before applying them'}>
-                    <input
-                      type="checkbox"
-                      checked={purgeMode === 'delete' ? true : purgeReviewBeforeApply}
-                      disabled={purgeMode === 'delete'}
-                      onChange={(e) => setPurgeReviewBeforeApply(e.target.checked)}
-                    />
-                    Review before applying changes
-                  </label>
-                </div>
                 <div className="tools-field">
-                  <label>
-                    <input type="radio" name="pool-purge-mode" checked={purgeMode === 'delete'} onChange={() => setPurgeMode('delete')} />
-                    Delete files
-                  </label>
-                  <label>
-                    <input type="radio" name="pool-purge-mode" checked={purgeMode === 'move'} onChange={() => setPurgeMode('move')} />
-                    Move files to folder
-                  </label>
+                  <label>Action</label>
+                  <div className="tools-toggle-group">
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn ${purgeMode === 'delete' ? 'selected' : ''}`}
+                      onClick={() => setPurgeMode('delete')}
+                      title="Send unused files to the OS Trash/Recycle Bin - recoverable there until you empty it"
+                    >
+                      Delete files
+                    </button>
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn ${purgeMode === 'move' ? 'selected' : ''}`}
+                      onClick={() => setPurgeMode('move')}
+                      title="Move unused files into a folder of your choice instead of deleting them"
+                    >
+                      Move files to folder
+                    </button>
+                  </div>
                 </div>
                 {purgeMode === 'move' && (
                   <div className="tools-field">
-                    <input type="text" value={purgeDestination} onChange={(e) => setPurgeDestination(e.target.value)} />
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        const selected = await open({ directory: true, multiple: false, title: 'Select destination folder' });
-                        if (typeof selected === 'string') setPurgeDestination(selected);
-                      }}
-                    >
-                      Browse...
-                    </button>
+                    <div className="tools-project-selector-btn tools-destination-input-wrapper">
+                      <input
+                        type="text"
+                        className="tools-destination-input"
+                        value={purgeDestination}
+                        onChange={(e) => setPurgeDestination(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="tools-destination-browse-icon"
+                        title="Browse..."
+                        onClick={async () => {
+                          const selected = await open({ directory: true, multiple: false, title: 'Select destination folder' });
+                          if (typeof selected === 'string') setPurgeDestination(selected);
+                        }}
+                      >
+                        <i className="fas fa-folder-open"></i>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

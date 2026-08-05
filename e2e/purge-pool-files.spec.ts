@@ -159,7 +159,7 @@ test.describe('Purge Audio Pool Samples', () => {
     await expect(summary).toContainText('unused audio file')
 
     // Delete files is the default selection.
-    await expect(page.getByLabel('Delete files')).toBeChecked()
+    await expect(page.getByRole('button', { name: 'Delete files' })).toHaveClass(/selected/)
 
     const poolUsageCallsBefore = await page.evaluate(() => (window as any).__poolUsageCalls.length)
     const destListCallsBefore = await page.evaluate(() => (window as any).__destListCalls.length)
@@ -208,7 +208,7 @@ test.describe('Purge Audio Pool Samples', () => {
     // Wait for the scan to resolve before Execute is available.
     await expect(page.locator('.tools-missing-files-summary')).toContainText('1')
 
-    await page.getByLabel('Move files to folder').check()
+    await page.getByRole('button', { name: 'Move files to folder' }).click()
     // Wait for resolve_default_purge_destination to fill the destination
     // field - Execute stays disabled while it's blank (Finding 1's fix).
     const destinationInput = page.locator('.tools-options-panel input[type="text"]')

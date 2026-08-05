@@ -3253,16 +3253,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             <div className="tools-options-panel">
               <h3>Options</h3>
               <div className="tools-field tools-checkbox">
-                <label title="Also scan this project's own directory for incompatible audio files that aren't referenced by any sample slot">
-                  <input
-                    type="checkbox"
-                    checked={includeUnreferenced}
-                    onChange={(e) => setIncludeUnreferenced(e.target.checked)}
-                  />
-                  Include un-referenced samples of project
-                </label>
-              </div>
-              <div className="tools-field tools-checkbox">
                 <label title="Show the review screen listing planned conversions before applying them">
                   <input
                     type="checkbox"
@@ -3270,6 +3260,16 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     onChange={(e) => setSkipProjectReview(!e.target.checked)}
                   />
                   Review before applying changes
+                </label>
+              </div>
+              <div className="tools-field tools-checkbox">
+                <label title="Also scan this project's own directory for incompatible audio files that aren't referenced by any sample slot">
+                  <input
+                    type="checkbox"
+                    checked={includeUnreferenced}
+                    onChange={(e) => setIncludeUnreferenced(e.target.checked)}
+                  />
+                  Include un-referenced samples of project
                 </label>
               </div>
             </div>
@@ -3331,18 +3331,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           <div className="tools-options-panel">
             <h3>Options</h3>
             <div className="tools-field tools-checkbox">
-              <label title="Slots that have a file loaded but are never triggered by any machine assignment or p-lock get their assignment cleared too, freeing the file for removal in this same run">
-                <input type="checkbox" checked={clearUnusedSlots} onChange={(e) => setClearUnusedSlots(e.target.checked)} />
-                Clear unused sample slot assignments
-              </label>
-            </div>
-            <div className="tools-field tools-checkbox">
-              <label title="Keep this project's backups/ directory untouched by the scan">
-                <input type="checkbox" checked={excludeBackups} onChange={(e) => setExcludeBackups(e.target.checked)} />
-                Exclude backups/ directory
-              </label>
-            </div>
-            <div className="tools-field tools-checkbox">
               <label title={purgeMode === 'delete' ? 'Required when deleting files' : 'Show the review screen listing planned changes before applying them'}>
                 <input
                   type="checkbox"
@@ -3353,28 +3341,60 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 Review before applying changes
               </label>
             </div>
+            <div className="tools-field tools-checkbox">
+              <label title="Keep this project's backups/ directory untouched by the scan">
+                <input type="checkbox" checked={excludeBackups} onChange={(e) => setExcludeBackups(e.target.checked)} />
+                Exclude backups/ directory
+              </label>
+            </div>
+            <div className="tools-field tools-checkbox">
+              <label title="Slots that have a file loaded but are never triggered by any machine assignment or p-lock get their assignment cleared too, freeing the file for removal in this same run">
+                <input type="checkbox" checked={clearUnusedSlots} onChange={(e) => setClearUnusedSlots(e.target.checked)} />
+                Clear unused sample slot assignments
+              </label>
+            </div>
             <div className="tools-field">
-              <label>
-                <input type="radio" name="purge-mode" checked={purgeMode === 'delete'} onChange={() => setPurgeMode('delete')} />
-                Delete files
-              </label>
-              <label>
-                <input type="radio" name="purge-mode" checked={purgeMode === 'move'} onChange={() => setPurgeMode('move')} />
-                Move files to folder
-              </label>
+              <label>Action</label>
+              <div className="tools-toggle-group">
+                <button
+                  type="button"
+                  className={`tools-toggle-btn ${purgeMode === 'delete' ? 'selected' : ''}`}
+                  onClick={() => setPurgeMode('delete')}
+                  title="Send unused files to the OS Trash/Recycle Bin - recoverable there until you empty it"
+                >
+                  Delete files
+                </button>
+                <button
+                  type="button"
+                  className={`tools-toggle-btn ${purgeMode === 'move' ? 'selected' : ''}`}
+                  onClick={() => setPurgeMode('move')}
+                  title="Move unused files into a folder of your choice instead of deleting them"
+                >
+                  Move files to folder
+                </button>
+              </div>
             </div>
             {purgeMode === 'move' && (
               <div className="tools-field">
-                <input type="text" value={purgeDestination} onChange={(e) => setPurgeDestination(e.target.value)} />
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const selected = await open({ directory: true, multiple: false, title: 'Select destination folder' });
-                    if (typeof selected === 'string') setPurgeDestination(selected);
-                  }}
-                >
-                  Browse...
-                </button>
+                <div className="tools-project-selector-btn tools-destination-input-wrapper">
+                  <input
+                    type="text"
+                    className="tools-destination-input"
+                    value={purgeDestination}
+                    onChange={(e) => setPurgeDestination(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="tools-destination-browse-icon"
+                    title="Browse..."
+                    onClick={async () => {
+                      const selected = await open({ directory: true, multiple: false, title: 'Select destination folder' });
+                      if (typeof selected === 'string') setPurgeDestination(selected);
+                    }}
+                  >
+                    <i className="fas fa-folder-open"></i>
+                  </button>
+                </div>
               </div>
             )}
           </div>

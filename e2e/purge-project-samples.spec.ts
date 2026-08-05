@@ -228,12 +228,12 @@ test.describe('Purge Project Samples', () => {
     await openPurgeOperation(page)
 
     // Delete files is the default selection.
-    await expect(page.getByLabel('Delete files')).toBeChecked()
+    await expect(page.getByRole('button', { name: 'Delete files' })).toHaveClass(/selected/)
     const reviewCheckbox = page.getByLabel('Review before applying changes')
     await expect(reviewCheckbox).toBeChecked()
     await expect(reviewCheckbox).toBeDisabled()
 
-    await page.getByLabel('Move files to folder').check()
+    await page.getByRole('button', { name: 'Move files to folder' }).click()
     await expect(reviewCheckbox).toBeEnabled()
     await expect(reviewCheckbox).toBeChecked()
   })
@@ -280,7 +280,7 @@ test.describe('Purge Project Samples', () => {
     // Wait for the scan to resolve before Execute is available.
     await expect(page.locator('.tools-missing-files-summary')).toContainText('1')
 
-    await page.getByLabel('Move files to folder').check()
+    await page.getByRole('button', { name: 'Move files to folder' }).click()
     // Wait for resolve_default_purge_destination to fill the destination
     // field - Execute stays disabled while it's blank (Finding 1's fix).
     const destinationInput = page.locator('.tools-options-panel input[type="text"]')

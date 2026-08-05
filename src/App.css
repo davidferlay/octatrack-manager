@@ -4804,6 +4804,42 @@ th.col-usage .header-content .sort-indicator {
   border-radius: 3px;
 }
 
+/* Destination input wrapper: a single .tools-project-selector-btn-styled
+   box containing an editable path (not just a static button label) and a
+   folder icon trigger flush right - same look as the Project selector
+   button, but editable like a text field. */
+.tools-destination-input-wrapper {
+  cursor: text;
+}
+
+.tools-destination-input-wrapper .tools-destination-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 0;
+  font-size: inherit;
+  font-family: inherit;
+  color: var(--elektron-text-primary);
+}
+
+.tools-destination-input-wrapper .tools-destination-browse-icon {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  color: var(--elektron-text-secondary);
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+
+.tools-destination-input-wrapper .tools-destination-browse-icon:hover {
+  color: var(--elektron-orange);
+}
+
 /* Project Selector Modal */
 .modal-content.project-selector-modal {
   max-width: 950px;
