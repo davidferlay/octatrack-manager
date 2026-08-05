@@ -25,6 +25,7 @@ async function setupMocks(page: Page) {
     ;(window as any).__purgeCalls = []
     ;(window as any).__poolUsageCalls = []
     ;(window as any).__destListCalls = []
+    ;(window as any).__scanCalls = []
     ;(window as any).__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} }
     ;(window as any).__TAURI_INTERNALS__ = {
       transformCallback: () => 0,
@@ -65,6 +66,7 @@ async function setupMocks(page: Page) {
           // Purge-specific commands (Task 13's "Purge Audio Pool Samples" operation)
 
           case 'scan_pool_unused_files':
+            ;(window as any).__scanCalls.push(args)
             return [
               { kind: 'File', path: '/test/set/AUDIO/unused.wav', origin: 'AUDIO', size: 4096 },
             ]
@@ -150,6 +152,31 @@ test.describe('Purge Audio Pool Samples', () => {
     await expect(page.getByLabel('Exclude backups/ directory')).toHaveCount(0)
   })
 
+  test('toggling Exclude backups/ directory and Clear unused sample slot assignments never re-scans the backend', async ({ page }) => {
+    await openPurgeOperation(page)
+    await expect(page.locator('.tools-missing-files-summary')).toContainText('1')
+
+    // Pool-only scope: a single background scan, no simulate variant needed.
+    await expect.poll(async () => page.evaluate(() => (window as any).__scanCalls.length)).toBe(1)
+
+    await page.getByLabel('Include all projects of set').check()
+    // Scope genuinely changed - both the "as-is" and "slots simulated
+    // cleared" variants are (re)fetched in the background.
+    await expect.poll(async () => page.evaluate(() => (window as any).__scanCalls.length)).toBe(3)
+
+    const scanCallsAfterScopeChange = await page.evaluate(() => (window as any).__scanCalls.length)
+
+    const excludeBackupsCheckbox = page.getByLabel('Exclude backups/ directory')
+    const clearSlotsCheckbox = page.getByLabel('Clear unused sample slot assignments')
+    await excludeBackupsCheckbox.uncheck()
+    await excludeBackupsCheckbox.check()
+    await clearSlotsCheckbox.check()
+    await clearSlotsCheckbox.uncheck()
+
+    await expect(page.locator('.tools-fix-status.loading')).toHaveCount(0)
+    expect(await page.evaluate(() => (window as any).__scanCalls.length)).toBe(scanCallsAfterScopeChange)
+  })
+
   test('Execute with Delete mode moves reviewed files to Trash and refreshes pool usage', async ({ page }) => {
     await openPurgeOperation(page)
 
@@ -211,8 +238,8 @@ test.describe('Purge Audio Pool Samples', () => {
     await page.getByRole('button', { name: 'Move files to folder' }).click()
     // Wait for resolve_default_purge_destination to fill the destination
     // field - Execute stays disabled while it's blank (Finding 1's fix).
-    const destinationInput = page.locator('.tools-options-panel input[type="text"]')
-    await expect(destinationInput).toHaveValue('/home/testuser/Downloads')
+    const destinationButton = page.locator('.tools-destination-path')
+    await expect(destinationButton).toHaveText('/home/testuser/Downloads')
 
     const reviewCheckbox = page.getByLabel('Review before applying changes')
     await expect(reviewCheckbox).toBeChecked()

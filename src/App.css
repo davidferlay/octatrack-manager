@@ -4804,39 +4804,29 @@ th.col-usage .header-content .sort-indicator {
   border-radius: 3px;
 }
 
-/* Destination input wrapper: a single .tools-project-selector-btn-styled
-   box containing an editable path (not just a static button label) and a
-   folder icon trigger flush right - same look as the Project selector
-   button, but editable like a text field. */
-.tools-destination-input-wrapper {
-  cursor: text;
-}
-
-.tools-destination-input-wrapper .tools-destination-input {
+/* Destination picker: a plain .tools-project-selector-btn - not editable,
+   the whole button opens the folder browse dialog. */
+.tools-destination-path {
   flex: 1;
   min-width: 0;
-  background: transparent;
-  border: none;
-  outline: none;
-  padding: 0;
-  font-size: inherit;
-  font-family: inherit;
-  color: var(--elektron-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
 }
 
-.tools-destination-input-wrapper .tools-destination-browse-icon {
+.tools-destination-browse-label {
   flex-shrink: 0;
-  background: transparent;
-  border: none;
-  padding: 0;
   display: flex;
   align-items: center;
+  gap: 0.35rem;
   color: var(--elektron-text-secondary);
-  cursor: pointer;
   font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
-.tools-destination-input-wrapper .tools-destination-browse-icon:hover {
+.tools-project-selector-btn:hover .tools-destination-browse-label {
   color: var(--elektron-orange);
 }
 

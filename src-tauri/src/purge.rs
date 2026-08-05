@@ -1639,12 +1639,18 @@ mod tests {
             size: 1,
         }];
         let mut origin_roots = std::collections::HashMap::new();
-        origin_roots.insert("PROJ".to_string(), project_dir.to_string_lossy().to_string());
+        origin_roots.insert(
+            "PROJ".to_string(),
+            project_dir.to_string_lossy().to_string(),
+        );
 
         trash_purge_units(&plan, &origin_roots).unwrap();
 
         let backups_dir = project_dir.join("backups");
-        assert!(backups_dir.is_dir(), "expected a backups/ dir to be created");
+        assert!(
+            backups_dir.is_dir(),
+            "expected a backups/ dir to be created"
+        );
         let backed_up = std::fs::read_dir(&backups_dir)
             .unwrap()
             .flatten()
@@ -1669,7 +1675,10 @@ mod tests {
             size: 1,
         }];
         let mut origin_roots = std::collections::HashMap::new();
-        origin_roots.insert("Audio Pool".to_string(), pool_dir.to_string_lossy().to_string());
+        origin_roots.insert(
+            "Audio Pool".to_string(),
+            pool_dir.to_string_lossy().to_string(),
+        );
 
         trash_purge_units(&plan, &origin_roots).unwrap();
 
@@ -1763,7 +1772,10 @@ mod tests {
             size: 1,
         }];
         let mut origin_roots = std::collections::HashMap::new();
-        origin_roots.insert("Audio Pool".to_string(), pool_dir.to_string_lossy().to_string());
+        origin_roots.insert(
+            "Audio Pool".to_string(),
+            pool_dir.to_string_lossy().to_string(),
+        );
 
         let result = move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots).unwrap();
 
@@ -1800,13 +1812,19 @@ mod tests {
             size: 1,
         }];
         let mut origin_roots = std::collections::HashMap::new();
-        origin_roots.insert("PROJ".to_string(), project_dir.to_string_lossy().to_string());
+        origin_roots.insert(
+            "PROJ".to_string(),
+            project_dir.to_string_lossy().to_string(),
+        );
 
         let result = move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots).unwrap();
 
         assert!(result.errors.is_empty());
         let backups_dir = project_dir.join("backups");
-        assert!(backups_dir.is_dir(), "expected a backups/ dir to be created");
+        assert!(
+            backups_dir.is_dir(),
+            "expected a backups/ dir to be created"
+        );
         let backed_up = std::fs::read_dir(&backups_dir)
             .unwrap()
             .flatten()
@@ -1841,7 +1859,10 @@ mod tests {
             },
         ];
         let mut origin_roots = std::collections::HashMap::new();
-        origin_roots.insert("Audio Pool".to_string(), pool_dir.to_string_lossy().to_string());
+        origin_roots.insert(
+            "Audio Pool".to_string(),
+            pool_dir.to_string_lossy().to_string(),
+        );
 
         let result = move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots).unwrap();
 

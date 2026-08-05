@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ColumnToggle, HeaderActions, useCopyFeedback, useModalResize } from './FixPoolFilesModal';
 
 /** Matches the Rust `PurgeUnit` enum's `#[serde(tag = "kind")]` shape exactly. */
@@ -43,12 +43,19 @@ interface PurgeRow {
   size: number;
 }
 
+/** Default column widths (px) before the user resizes anything - Name fills the rest. */
+const PURGE_COL_DEFAULTS: Record<PurgeSortColumn, number | undefined> = {
+  name: undefined, location: 185, origin: 140, size: 90,
+};
+
 /**
- * Lightweight sortable/filterable table for purge rows - deliberately
- * separate from `usePoolTable` (FixPoolFilesModal.tsx), which is built
+ * Sortable/filterable/resizable table for purge rows - deliberately a
+ * separate hook from `usePoolTable` (FixPoolFilesModal.tsx), which is built
  * around per-file Format/Bit/kHz inspection and single-file convert
  * actions, neither of which apply to already-known-unused files or to
- * whole-directory rows.
+ * whole-directory rows. Reuses the exact same UI patterns (sortable/
+ * filterable header rendering, column-resize drag math, filter dropdown)
+ * so the two tables look and behave identically to the user.
  */
 export function usePurgeTable(units: PurgeUnit[]) {
   const [searchText, setSearchText] = useState('');
@@ -56,8 +63,82 @@ export function usePurgeTable(units: PurgeUnit[]) {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [originFilter, setOriginFilter] = useState('all');
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
 
   const allColumns = PURGE_COLUMNS;
+  const visibleColumns = allColumns.filter(c => !hiddenCols.has(c.id));
+  const toggleCol = (id: string) => setHiddenCols(s => {
+    const next = new Set(s);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  // Column resize (same drag math as usePoolTable - widths captured from the DOM, dragged in pairs)
+  const [colWidths, setColWidths] = useState<number[]>([]);
+  const colDragIndex = useRef<number | null>(null);
+  const colDragStartX = useRef(0);
+  const colDragStartWidths = useRef<number[]>([]);
+  const tableRef = useRef<HTMLTableElement>(null);
+
+  useEffect(() => {
+    function onMove(e: MouseEvent) {
+      if (colDragIndex.current === null) return;
+      const delta = e.clientX - colDragStartX.current;
+      const idx = colDragIndex.current;
+      const prev = colDragStartWidths.current;
+      const minW = 40;
+      const newLeft = Math.max(minW, prev[idx] + delta);
+      const newRight = Math.max(minW, prev[idx + 1] - delta);
+      setColWidths((w) => {
+        const copy = [...w];
+        copy[idx] = newLeft;
+        copy[idx + 1] = newRight;
+        return copy;
+      });
+    }
+    function onUp() { colDragIndex.current = null; }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+  }, []);
+
+  // Dragged widths were measured against the previous column set - remeasure after a toggle
+  useEffect(() => { setColWidths([]); }, [hiddenCols]);
+
+  const handleColResizeMouseDown = useCallback((colIndex: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    colDragIndex.current = colIndex;
+    colDragStartX.current = e.clientX;
+    if (tableRef.current) {
+      const ths = tableRef.current.querySelectorAll('thead th');
+      const widths = Array.from(ths).map((th) => (th as HTMLElement).offsetWidth);
+      colDragStartWidths.current = widths;
+      setColWidths(widths);
+    }
+  }, []);
+
+  const closeDropdown = () => {
+    setOpenDropdown(null);
+    setDropdownPosition(null);
+  };
+
+  useEffect(() => {
+    if (!openDropdown) return;
+    function handleClick(event: MouseEvent) {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.filter-dropdown') && !target.closest('.filter-icon')) {
+        closeDropdown();
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [openDropdown]);
+
   const origins = useMemo(() => Array.from(new Set(units.map(u => u.origin))).sort(), [units]);
 
   const rows = useMemo<PurgeRow[]>(() => {
@@ -84,18 +165,89 @@ export function usePurgeTable(units: PurgeUnit[]) {
     return filtered;
   }, [units, searchText, originFilter, sortColumn, sortDirection]);
 
+  const handleSort = (column: PurgeSortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+  const sortIndicator = (column: PurgeSortColumn) =>
+    sortColumn === column ? (sortDirection === 'asc' ? ' ▲' : ' ▼') : '';
+
+  const hasActiveFilters = originFilter !== 'all';
+  const resetFilters = () => setOriginFilter('all');
+
+  const renderSortableHeader = (column: PurgeSortColumn, label: string, resizeIndex?: number) => (
+    <th key={column} className="sortable" onClick={() => handleSort(column)} style={{ position: 'relative' }}>
+      {label}{sortIndicator(column)}
+      {resizeIndex !== undefined && (
+        <span className="col-resize-handle" onMouseDown={(e) => { e.stopPropagation(); handleColResizeMouseDown(resizeIndex, e); }} />
+      )}
+    </th>
+  );
+
+  const renderFilterableHeader = (
+    column: PurgeSortColumn,
+    label: string,
+    isActive: boolean,
+    options: { value: string; label: string }[],
+    currentValue: string,
+    onChange: (value: string) => void,
+    resizeIndex?: number,
+  ) => (
+    <th key={column} className="filterable-header" style={{ position: 'relative' }}>
+      <div className="header-content">
+        <span onClick={() => handleSort(column)} className="sortable-label">
+          {label}{sortIndicator(column)}
+        </span>
+        <button
+          className={`filter-icon ${openDropdown === column || isActive ? 'active' : ''}`}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (openDropdown === column) {
+              closeDropdown();
+            } else {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setDropdownPosition({ top: rect.bottom + 4, left: rect.right - 120 });
+              setOpenDropdown(column);
+            }
+          }}
+        >
+          ⋮
+        </button>
+      </div>
+      {openDropdown === column && dropdownPosition && (
+        <div className="filter-dropdown" style={{ position: 'fixed', top: dropdownPosition.top, left: dropdownPosition.left, width: 'auto', minWidth: 'auto' }}>
+          <div className="dropdown-options" style={{ width: 'max-content' }}>
+            {options.map((opt) => (
+              <label key={opt.value} className="dropdown-option">
+                <input type="radio" name={`${column}-purge-filter`} checked={currentValue === opt.value} onChange={() => { onChange(opt.value); closeDropdown(); }} />
+                <span>{opt.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+      {resizeIndex !== undefined && (
+        <span className="col-resize-handle" onMouseDown={(e) => handleColResizeMouseDown(resizeIndex, e)} />
+      )}
+    </th>
+  );
+
   const totalSize = useMemo(() => units.reduce((sum, u) => sum + u.size, 0), [units]);
   const totalDirs = useMemo(() => units.filter(u => u.kind === 'Directory').length, [units]);
 
   return {
-    rows, allColumns, hiddenCols, toggleCol: (id: string) => setHiddenCols(s => {
-      const next = new Set(s);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    }),
+    rows, allColumns, visibleColumns, hiddenCols, toggleCol,
     searchText, setSearchText,
-    sortColumn, setSortColumn, sortDirection, setSortDirection,
+    sortColumn, sortDirection,
     originFilter, setOriginFilter, origins,
+    hasActiveFilters, resetFilters,
+    renderSortableHeader, renderFilterableHeader,
+    colWidths, tableRef,
     totalSize, totalDirs,
   };
 }
@@ -106,32 +258,65 @@ export function purgeTableTsv(table: ReturnType<typeof usePurgeTable>): string {
   return [header, ...lines].join('\n');
 }
 
-export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTable> }) {
-  const { rows, hiddenCols } = table;
+/** "Origin: X ✕ Reset" badge, same look/placement as FixPoolFilesModal's FilterBadges. */
+export function PurgeFilterBadges({ table }: { table: ReturnType<typeof usePurgeTable> }) {
+  const { originFilter, hasActiveFilters, resetFilters } = table;
+  if (!hasActiveFilters) return null;
   return (
-    <table className="pool-files-table">
+    <>
+      <span className="filter-badge">Origin: {originFilter}</span>
+      <button className="reset-filters-btn" onClick={resetFilters} title="Reset all filters">✕ Reset</button>
+    </>
+  );
+}
+
+export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTable> }) {
+  const { rows, visibleColumns, originFilter, setOriginFilter, origins, renderSortableHeader, renderFilterableHeader, colWidths, tableRef } = table;
+
+  const originOptions = [{ value: 'all', label: 'All' }, ...origins.map(o => ({ value: o, label: o }))];
+
+  const renderHeader = (id: PurgeSortColumn, label: string, i: number) => {
+    const resizeIndex = i < visibleColumns.length - 1 ? i : undefined;
+    if (id === 'origin') {
+      return renderFilterableHeader('origin', label, originFilter !== 'all', originOptions, originFilter, setOriginFilter, resizeIndex);
+    }
+    return renderSortableHeader(id, label, resizeIndex);
+  };
+
+  return (
+    <table className="samples-table pool-files-table" ref={tableRef}>
+      <colgroup>
+        {visibleColumns.map((c, i) => (
+          <col key={c.id} style={{ width: colWidths.length > 0 ? colWidths[i] : PURGE_COL_DEFAULTS[c.id] }} />
+        ))}
+      </colgroup>
       <thead>
         <tr>
-          {!hiddenCols.has('name') && <th>Name</th>}
-          {!hiddenCols.has('location') && <th>Location</th>}
-          {!hiddenCols.has('origin') && <th>Origin</th>}
-          {!hiddenCols.has('size') && <th>Size</th>}
+          {visibleColumns.map((c, i) => renderHeader(c.id, c.label, i))}
         </tr>
       </thead>
       <tbody>
         {rows.map(r => (
           <tr key={r.unit.path}>
-            {!hiddenCols.has('name') && (
-              <td title={r.unit.path}>
-                {r.unit.kind === 'Directory' && <i className="fas fa-folder" title={`${r.unit.file_count} files`}></i>}
-                {' '}
-                {r.name}
-                {r.unit.kind === 'Directory' && <span className="pool-dir-file-count"> ({r.unit.file_count} files)</span>}
-              </td>
-            )}
-            {!hiddenCols.has('location') && <td title={r.location}>{r.location}</td>}
-            {!hiddenCols.has('origin') && <td>{r.origin}</td>}
-            {!hiddenCols.has('size') && <td>{formatSize(r.size)}</td>}
+            {visibleColumns.map(c => {
+              switch (c.id) {
+                case 'name':
+                  return (
+                    <td key="name" className="col-sample" title={r.unit.path}>
+                      {r.unit.kind === 'Directory' && <i className="fas fa-folder" title={`${r.unit.file_count} files`}></i>}
+                      {' '}
+                      {r.name}
+                      {r.unit.kind === 'Directory' && <span className="pool-dir-file-count"> ({r.unit.file_count} files)</span>}
+                    </td>
+                  );
+                case 'location':
+                  return <td key="location" className="fix-location-cell" title={r.location}>{r.location}</td>;
+                case 'origin':
+                  return <td key="origin">{r.origin}</td>;
+                case 'size':
+                  return <td key="size">{formatSize(r.size)}</td>;
+              }
+            })}
           </tr>
         ))}
       </tbody>
@@ -158,6 +343,7 @@ export function PurgeUnusedListModal({ units, scope, onClose }: {
           <h3><i className="fas fa-list"></i> {title}</h3>
           <div className="missing-samples-header-info">
             <span className="missing-samples-header-count">Showing {table.rows.length} of {units.length} items</span>
+            <PurgeFilterBadges table={table} />
           </div>
           <HeaderActions
             searchText={table.searchText}
@@ -272,7 +458,7 @@ export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsT
     <div className="modal-overlay" onClick={phase !== 'removing' ? onClose : undefined}>
       <div
         ref={modalRef}
-        className={`modal-content missing-samples-list-modal pool-list-modal${phase !== 'review' ? ' fix-pool-modal-narrow' : ''}`}
+        className={`modal-content missing-samples-list-modal pool-list-modal${phase === 'review' ? ' fix-pool-modal' : ' fix-pool-modal-narrow'}`}
         onClick={(e) => e.stopPropagation()}
         style={style}
       >
@@ -285,13 +471,19 @@ export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsT
             {phase === 'error' && 'Error'}
           </h3>
           {phase === 'review' && (
-            <HeaderActions
-              searchText={table.searchText}
-              setSearchText={table.setSearchText}
-              onCopy={() => copy(purgeTableTsv(table))}
-              copyFeedback={copyFeedback}
-              columnToggle={<ColumnToggle columns={table.allColumns} hiddenCols={table.hiddenCols} onToggle={table.toggleCol} />}
-            />
+            <>
+              <div className="missing-samples-header-info">
+                <span className="missing-samples-header-count">Showing {table.rows.length} of {units.length} items</span>
+                <PurgeFilterBadges table={table} />
+              </div>
+              <HeaderActions
+                searchText={table.searchText}
+                setSearchText={table.setSearchText}
+                onCopy={() => copy(purgeTableTsv(table))}
+                copyFeedback={copyFeedback}
+                columnToggle={<ColumnToggle columns={table.allColumns} hiddenCols={table.hiddenCols} onToggle={table.toggleCol} />}
+              />
+            </>
           )}
           {phase !== 'removing' && <button className="modal-close" onClick={onClose}>&times;</button>}
         </div>

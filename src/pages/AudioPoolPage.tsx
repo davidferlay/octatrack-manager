@@ -18,6 +18,7 @@ import { Version } from "../components/Version";
 import { AudioFileTable, audioKind } from "../components/AudioFileTable";
 import { FixPoolFilesModal, PoolIncompatibleListModal, type IncompatibleFile, type PoolFixResult, type CopyProgressEvent } from "../components/FixPoolFilesModal";
 import { PurgeFilesModal, PurgeUnusedListModal, type PurgeUnit } from "../components/PurgeFilesModal";
+import { isUnderBackupsDir } from "../utils/purgeBackups";
 import { OverwriteModal } from "../components/OverwriteModal";
 import { TransferProgressPanel } from "../components/TransferProgressPanel";
 import { useAudioPoolTransfer } from "../hooks/useAudioPoolTransfer";
@@ -375,9 +376,13 @@ export function AudioPoolPage() {
   const [purgeReviewBeforeApply, setPurgeReviewBeforeApply] = useState(true);
   const [purgeMode, setPurgeMode] = useState<'delete' | 'move'>('delete');
   const [purgeDestination, setPurgeDestination] = useState('');
-  const [purgeScanLoading, setPurgeScanLoading] = useState(false);
-  const [purgeScanTotal, setPurgeScanTotal] = useState(0);
-  const [purgeUnits, setPurgeUnits] = useState<PurgeUnit[]>([]);
+  // Both the "as-is" and "slots simulated cleared" scans are pre-fetched in
+  // the background (always with excludeBackups: false, the maximal set) so
+  // toggling "Exclude backups/ directory" or "Clear unused sample slot
+  // assignments" is instant instead of re-hitting the backend - see the
+  // effect below and isUnderBackupsDir. null means "not fetched yet".
+  const [purgeUnitsAsIs, setPurgeUnitsAsIs] = useState<PurgeUnit[] | null>(null);
+  const [purgeUnitsSimulated, setPurgeUnitsSimulated] = useState<PurgeUnit[] | null>(null);
   // Total loaded-but-untriggered slots that would be cleared across every
   // included project this run - only computed when both "Include all
   // projects of set" and "Clear unused sample slot assignments" are on
@@ -393,67 +398,95 @@ export function AudioPoolPage() {
   // purgeRescanKey for the Purge Project Samples flow.
   const [purgeRescanKey, setPurgeRescanKey] = useState(0);
 
-  // Purge Audio Pool Samples: scan for unused audio files, re-run whenever
-  // the operation is (re)selected, a scan-affecting option changes, or a
-  // purge just completed (purgeRescanKey).
+  // Purge Audio Pool Samples: pre-fetch both the "as-is" and "slots
+  // simulated cleared" scans in the background whenever the operation is
+  // (re)selected or "Include all projects of set" changes (a real scope
+  // change, unlike the two checkboxes below it - always with
+  // excludeBackups: false for project scans, since that option is applied
+  // as a client-side filter instead of a re-scan). "Include all projects of
+  // set" off means neither variant depends on slot-clearing at all (pool-
+  // only purges never simulate it), so both are set to the same single scan.
   useEffect(() => {
     if (poolOperation !== 'purge_pool_samples') return;
     let cancelled = false;
-    setPurgeScanLoading(true);
+    setPurgeUnitsAsIs(null);
+    setPurgeUnitsSimulated(null);
+    setPurgeIncludedProjectPaths([]);
+    setPurgeSlotsToClear(null);
 
     (async () => {
-      // Only needed to simulate cleared slots pool-wide or to scan each
-      // project individually - skip the extra IPC round-trip otherwise.
       const poolSetProjects = purgeIncludeAllProjects
         ? ((await invoke<{ name: string; path: string }[]>('list_set_projects', { poolPath: audioPoolPath }).catch(() => [])) ?? [])
         : [];
-      const simulateFor = purgeIncludeAllProjects && purgeClearUnusedSlots
-        ? poolSetProjects.map(p => p.name)
-        : [];
-      const poolUnits = await invoke<PurgeUnit[]>('scan_pool_unused_files', { poolPath: audioPoolPath, simulateClearedSlotsFor: simulateFor });
+      if (cancelled) return;
+      setPurgeIncludedProjectPaths(poolSetProjects.map(p => p.path));
 
-      let projectUnits: PurgeUnit[] = [];
-      let includedPaths: string[] = [];
-      let slotsToClear: number | null = null;
-      if (purgeIncludeAllProjects) {
-        includedPaths = poolSetProjects.map(p => p.path);
-        const perProject = await Promise.all(poolSetProjects.map(p =>
-          invoke<PurgeUnit[]>('scan_project_unused_files', {
-            projectPath: p.path,
-            excludeBackups: purgeExcludeBackups,
-            simulateClearedSlots: purgeClearUnusedSlots,
-          }).catch(() => [] as PurgeUnit[])
-        ));
-        projectUnits = perProject.flat();
-
-        if (purgeClearUnusedSlots) {
-          const perProjectSlotCounts = await Promise.all(poolSetProjects.map(p =>
-            invoke<number>('count_unused_slot_assignments', { projectPath: p.path }).catch(() => 0)
-          ));
-          slotsToClear = perProjectSlotCounts.reduce((a, b) => a + b, 0);
-        }
+      if (!purgeIncludeAllProjects) {
+        const poolUnits = await invoke<PurgeUnit[]>('scan_pool_unused_files', { poolPath: audioPoolPath, simulateClearedSlotsFor: [] });
+        if (cancelled) return;
+        setPurgeUnitsAsIs(poolUnits);
+        setPurgeUnitsSimulated(poolUnits);
+        return;
       }
 
-      if (cancelled) return;
-      const merged = [...poolUnits, ...projectUnits];
-      setPurgeUnits(merged);
-      setPurgeScanTotal(merged.length);
-      setPurgeIncludedProjectPaths(includedPaths);
-      setPurgeSlotsToClear(slotsToClear);
+      const projectNames = poolSetProjects.map(p => p.name);
+
+      async function scanVariant(simulate: boolean): Promise<PurgeUnit[]> {
+        const [poolUnits, perProject] = await Promise.all([
+          invoke<PurgeUnit[]>('scan_pool_unused_files', {
+            poolPath: audioPoolPath,
+            simulateClearedSlotsFor: simulate ? projectNames : [],
+          }),
+          Promise.all(poolSetProjects.map(p =>
+            invoke<PurgeUnit[]>('scan_project_unused_files', {
+              projectPath: p.path,
+              excludeBackups: false,
+              simulateClearedSlots: simulate,
+            }).catch(() => [] as PurgeUnit[])
+          )),
+        ]);
+        return [...poolUnits, ...perProject.flat()];
+      }
+
+      scanVariant(false).then((units) => {
+        if (!cancelled) setPurgeUnitsAsIs(units);
+      }).catch((err) => {
+        console.error('Error scanning pool unused files:', err);
+        if (!cancelled) setPurgeUnitsAsIs([]);
+      });
+
+      scanVariant(true).then((units) => {
+        if (!cancelled) setPurgeUnitsSimulated(units);
+      }).catch((err) => {
+        console.error('Error scanning pool unused files (slots simulated cleared):', err);
+        if (!cancelled) setPurgeUnitsSimulated([]);
+      });
+
+      const perProjectSlotCounts = await Promise.all(poolSetProjects.map(p =>
+        invoke<number>('count_unused_slot_assignments', { projectPath: p.path }).catch(() => 0)
+      ));
+      if (!cancelled) setPurgeSlotsToClear(perProjectSlotCounts.reduce((a, b) => a + b, 0));
     })().catch((err) => {
       console.error('Error scanning pool unused files:', err);
       if (!cancelled) {
-        setPurgeUnits([]);
-        setPurgeScanTotal(0);
+        setPurgeUnitsAsIs([]);
+        setPurgeUnitsSimulated([]);
         setPurgeIncludedProjectPaths([]);
         setPurgeSlotsToClear(null);
       }
-    }).finally(() => {
-      if (!cancelled) setPurgeScanLoading(false);
     });
 
     return () => { cancelled = true; };
-  }, [poolOperation, audioPoolPath, purgeIncludeAllProjects, purgeClearUnusedSlots, purgeExcludeBackups, purgeRescanKey]);
+  }, [poolOperation, audioPoolPath, purgeIncludeAllProjects, purgeRescanKey]);
+
+  const purgeUnitsRaw = purgeClearUnusedSlots ? purgeUnitsSimulated : purgeUnitsAsIs;
+  const purgeScanLoading = poolOperation === 'purge_pool_samples' && purgeUnitsRaw === null;
+  const purgeUnits = useMemo(() => {
+    if (!purgeUnitsRaw) return [];
+    if (!purgeExcludeBackups) return purgeUnitsRaw;
+    return purgeUnitsRaw.filter((u) => !isUnderBackupsDir(u.path, purgeIncludedProjectPaths));
+  }, [purgeUnitsRaw, purgeExcludeBackups, purgeIncludedProjectPaths]);
+  const purgeScanTotal = purgeUnits.length;
 
   // Purge Audio Pool Samples: resolve the default Move-mode destination once,
   // the first time the operation is selected (never overwrites a user edit).
@@ -1725,25 +1758,21 @@ export function AudioPoolPage() {
                 </div>
                 {purgeMode === 'move' && (
                   <div className="tools-field">
-                    <div className="tools-project-selector-btn tools-destination-input-wrapper">
-                      <input
-                        type="text"
-                        className="tools-destination-input"
-                        value={purgeDestination}
-                        onChange={(e) => setPurgeDestination(e.target.value)}
-                      />
-                      <button
-                        type="button"
-                        className="tools-destination-browse-icon"
-                        title="Browse..."
-                        onClick={async () => {
-                          const selected = await open({ directory: true, multiple: false, title: 'Select destination folder' });
-                          if (typeof selected === 'string') setPurgeDestination(selected);
-                        }}
-                      >
+                    <button
+                      type="button"
+                      className="tools-project-selector-btn"
+                      title="Browse..."
+                      onClick={async () => {
+                        const selected = await open({ directory: true, multiple: false, title: 'Select destination folder' });
+                        if (typeof selected === 'string') setPurgeDestination(selected);
+                      }}
+                    >
+                      <span className="tools-destination-path">{purgeDestination || 'Choose a destination folder...'}</span>
+                      <span className="tools-destination-browse-label">
                         <i className="fas fa-folder-open"></i>
-                      </button>
-                    </div>
+                        Browse
+                      </span>
+                    </button>
                   </div>
                 )}
               </div>

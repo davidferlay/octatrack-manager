@@ -15,6 +15,7 @@ import type { IncompatibleFile, PoolFixResult } from "./FixPoolFilesModal";
 import { PurgeFilesModal, PurgeUnusedListModal, type PurgeUnit } from "./PurgeFilesModal";
 import { audioKind, usageKey } from "./AudioFileTable";
 import { normalizePath } from "./SampleSlotsTable";
+import { isUnderBackupsDir } from "../utils/purgeBackups";
 
 const TOOLS_STORAGE_KEY_PREFIX = "octatrack-tools-settings-";
 
@@ -280,10 +281,13 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [showFixProjectModal, setShowFixProjectModal] = useState<boolean>(false);
   const [showProjectIncompatibleListModal, setShowProjectIncompatibleListModal] = useState<boolean>(false);
 
-  // Purge Project Samples state
-  const [purgeScanLoading, setPurgeScanLoading] = useState<boolean>(false);
-  const [purgeScanTotal, setPurgeScanTotal] = useState<number>(0);
-  const [purgeUnits, setPurgeUnits] = useState<PurgeUnit[]>([]);
+  // Purge Project Samples state.
+  // Both the "as-is" and "slots simulated cleared" scans are pre-fetched in
+  // the background (always with excludeBackups: false, the maximal set) so
+  // toggling either checkbox never re-hits the backend - see the effect
+  // below and isUnderBackupsDir. null means "not fetched yet".
+  const [purgeUnitsAsIs, setPurgeUnitsAsIs] = useState<PurgeUnit[] | null>(null);
+  const [purgeUnitsSimulated, setPurgeUnitsSimulated] = useState<PurgeUnit[] | null>(null);
   // Count of loaded-but-untriggered slots that would also be cleared this
   // run, computed alongside the scan whenever clearUnusedSlots is on - see
   // count_unused_slot_assignments. null when the option is off (or not yet
@@ -531,39 +535,60 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     return () => { cancelled = true; };
   }, [operation, projectPath, referencedSlotEntries]);
 
-  // Purge Project Samples: scan for unused audio files, re-run whenever the
-  // operation is (re)selected or the scan-affecting options change.
+  // Purge Project Samples: pre-fetch both the "as-is" and "slots simulated
+  // cleared" scans in the background whenever the operation is (re)selected
+  // - always with excludeBackups: false (the maximal set), since that option
+  // is applied as a client-side filter below instead of a re-scan. This
+  // means toggling either "Exclude backups/ directory" or "Clear unused
+  // sample slot assignments" is instant once both have resolved, instead of
+  // re-hitting the backend and showing a loading spinner on every toggle.
   useEffect(() => {
     if (operation !== "purge_project_samples") return;
     let cancelled = false;
-    setPurgeScanLoading(true);
-    Promise.all([
-      invoke<PurgeUnit[]>('scan_project_unused_files', {
-        projectPath,
-        excludeBackups,
-        simulateClearedSlots: clearUnusedSlots,
-      }),
-      // Only computed when the option is actually on - the review screen
-      // has nothing extra to say about slot-clearing otherwise.
-      clearUnusedSlots
-        ? invoke<number>('count_unused_slot_assignments', { projectPath })
-        : Promise.resolve(null),
-    ]).then(([units, slotsToClear]) => {
-      if (cancelled) return;
-      setPurgeUnits(units);
-      setPurgeScanTotal(units.length);
-      setPurgeSlotsToClear(slotsToClear);
+    setPurgeUnitsAsIs(null);
+    setPurgeUnitsSimulated(null);
+    setPurgeSlotsToClear(null);
+
+    invoke<PurgeUnit[]>('scan_project_unused_files', {
+      projectPath,
+      excludeBackups: false,
+      simulateClearedSlots: false,
+    }).then((units) => {
+      if (!cancelled) setPurgeUnitsAsIs(units);
     }).catch((err) => {
       console.error("Error scanning project unused files:", err);
-      if (!cancelled) {
-        setPurgeUnits([]);
-        setPurgeSlotsToClear(null);
-      }
-    }).finally(() => {
-      if (!cancelled) setPurgeScanLoading(false);
+      if (!cancelled) setPurgeUnitsAsIs([]);
     });
+
+    invoke<PurgeUnit[]>('scan_project_unused_files', {
+      projectPath,
+      excludeBackups: false,
+      simulateClearedSlots: true,
+    }).then((units) => {
+      if (!cancelled) setPurgeUnitsSimulated(units);
+    }).catch((err) => {
+      console.error("Error scanning project unused files (slots simulated cleared):", err);
+      if (!cancelled) setPurgeUnitsSimulated([]);
+    });
+
+    invoke<number>('count_unused_slot_assignments', { projectPath }).then((count) => {
+      if (!cancelled) setPurgeSlotsToClear(count);
+    }).catch((err) => {
+      console.error("Error counting unused slot assignments:", err);
+      if (!cancelled) setPurgeSlotsToClear(null);
+    });
+
     return () => { cancelled = true; };
-  }, [operation, projectPath, excludeBackups, clearUnusedSlots, purgeRescanKey]);
+  }, [operation, projectPath, purgeRescanKey]);
+
+  const purgeUnitsRaw = clearUnusedSlots ? purgeUnitsSimulated : purgeUnitsAsIs;
+  const purgeScanLoading = operation === "purge_project_samples" && purgeUnitsRaw === null;
+  const purgeUnits = useMemo(() => {
+    if (!purgeUnitsRaw) return [];
+    if (!excludeBackups) return purgeUnitsRaw;
+    return purgeUnitsRaw.filter((u) => !isUnderBackupsDir(u.path, [projectPath]));
+  }, [purgeUnitsRaw, excludeBackups, projectPath]);
+  const purgeScanTotal = purgeUnits.length;
 
   // Purge Project Samples: resolve the default Move-mode destination once,
   // the first time the operation is selected (never overwrites a user edit).
@@ -3376,25 +3401,21 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             </div>
             {purgeMode === 'move' && (
               <div className="tools-field">
-                <div className="tools-project-selector-btn tools-destination-input-wrapper">
-                  <input
-                    type="text"
-                    className="tools-destination-input"
-                    value={purgeDestination}
-                    onChange={(e) => setPurgeDestination(e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className="tools-destination-browse-icon"
-                    title="Browse..."
-                    onClick={async () => {
-                      const selected = await open({ directory: true, multiple: false, title: 'Select destination folder' });
-                      if (typeof selected === 'string') setPurgeDestination(selected);
-                    }}
-                  >
+                <button
+                  type="button"
+                  className="tools-project-selector-btn"
+                  title="Browse..."
+                  onClick={async () => {
+                    const selected = await open({ directory: true, multiple: false, title: 'Select destination folder' });
+                    if (typeof selected === 'string') setPurgeDestination(selected);
+                  }}
+                >
+                  <span className="tools-destination-path">{purgeDestination || 'Choose a destination folder...'}</span>
+                  <span className="tools-destination-browse-label">
                     <i className="fas fa-folder-open"></i>
-                  </button>
-                </div>
+                    Browse
+                  </span>
+                </button>
               </div>
             )}
           </div>

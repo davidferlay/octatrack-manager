@@ -22,9 +22,15 @@ import { test, expect, Page } from '@playwright/test'
 async function setupMocks(page: Page) {
   await page.addInitScript(() => {
     ;(window as any).__purgeCalls = []
+    ;(window as any).__scanCalls = []
     ;(window as any).__TAURI_INTERNALS__ = {
       invoke: async (cmd: string, args?: any) => {
         switch (cmd) {
+          case 'scan_project_unused_files':
+            ;(window as any).__scanCalls.push(args)
+            return [
+              { kind: 'File', path: '/projects/TestProject/orphan.wav', origin: 'TestProject', size: 2048 },
+            ]
           case 'load_project_metadata':
             return {
               name: 'TestProject',
@@ -162,11 +168,6 @@ async function setupMocks(page: Page) {
 
           // Purge-specific commands (Task 12's "Purge Project Samples" operation)
 
-          case 'scan_project_unused_files':
-            return [
-              { kind: 'File', path: '/projects/TestProject/orphan.wav', origin: 'TestProject', size: 2048 },
-            ]
-
           case 'resolve_default_purge_destination':
             return '/home/testuser/Downloads'
 
@@ -222,6 +223,32 @@ test.describe('Purge Project Samples', () => {
     await expect(listModal.getByText('Unused Project Samples')).toBeVisible()
     await expect(listModal.locator('tbody tr')).toHaveCount(1)
     await expect(listModal.locator('tbody')).toContainText('orphan.wav')
+  })
+
+  test('toggling Exclude backups/ directory and Clear unused sample slot assignments never re-scans the backend', async ({ page }) => {
+    await openPurgeOperation(page)
+
+    const summary = page.locator('.tools-missing-files-summary')
+    await expect(summary).toContainText('1')
+
+    // Both "as-is" and "slots simulated cleared" variants are pre-fetched
+    // once in the background as soon as the operation is selected.
+    await expect.poll(async () => page.evaluate(() => (window as any).__scanCalls.length)).toBe(2)
+
+    const excludeBackupsCheckbox = page.getByLabel('Exclude backups/ directory')
+    const clearSlotsCheckbox = page.getByLabel('Clear unused sample slot assignments')
+
+    await excludeBackupsCheckbox.uncheck()
+    await excludeBackupsCheckbox.check()
+    await clearSlotsCheckbox.check()
+    await clearSlotsCheckbox.uncheck()
+
+    // No spinner should ever appear for these toggles - status stays visible throughout.
+    await expect(summary).toContainText('1')
+    await expect(page.locator('.tools-fix-status.loading')).toHaveCount(0)
+
+    // Still exactly the 2 scans from the initial background prefetch.
+    expect(await page.evaluate(() => (window as any).__scanCalls.length)).toBe(2)
   })
 
   test('Review before applying changes is forced on and disabled when Delete files is selected', async ({ page }) => {
@@ -283,8 +310,8 @@ test.describe('Purge Project Samples', () => {
     await page.getByRole('button', { name: 'Move files to folder' }).click()
     // Wait for resolve_default_purge_destination to fill the destination
     // field - Execute stays disabled while it's blank (Finding 1's fix).
-    const destinationInput = page.locator('.tools-options-panel input[type="text"]')
-    await expect(destinationInput).toHaveValue('/home/testuser/Downloads')
+    const destinationButton = page.locator('.tools-destination-path')
+    await expect(destinationButton).toHaveText('/home/testuser/Downloads')
 
     const reviewCheckbox = page.getByLabel('Review before applying changes')
     await expect(reviewCheckbox).toBeChecked()
