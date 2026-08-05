@@ -3345,11 +3345,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         <div className="tools-fix-missing-layout">
           <div className="tools-description-pane">
             <p>
-              Scans this project's own directory for audio files no sample slot
-              references anywhere (machine assignment, p-lock, or a loaded slot).<br />
-              Execute deletes them (to the Trash Bin) or moves them into a
-              chosen folder - whole directories are removed/moved as a unit when
-              every audio file inside is unused.
+              Finds audio files no sample slot references, then deletes them
+              (Trash Bin) or moves them to a chosen folder. Directories are
+              removed as a whole when everything inside is unused.
             </p>
           </div>
 
