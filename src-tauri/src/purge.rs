@@ -954,6 +954,49 @@ mod tests {
     }
 
     #[test]
+    fn build_purge_plan_attaches_provided_slot_labels_to_both_files_and_directory_children() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let dir = temp.path().join("kit");
+        std::fs::create_dir(&dir).unwrap();
+        touch(&dir.join("kick.wav"));
+        touch(&temp.path().join("lone.wav"));
+
+        let lone_path = temp.path().join("lone.wav").to_string_lossy().to_string();
+        let kick_path = dir.join("kick.wav").to_string_lossy().to_string();
+
+        let unused = vec![
+            (lone_path.clone(), "Audio Pool".to_string(), 1),
+            (kick_path.clone(), "Audio Pool".to_string(), 1),
+        ];
+        let mut slot_labels = std::collections::HashMap::new();
+        slot_labels.insert(lone_path.clone(), vec!["S3".to_string()]);
+        slot_labels.insert(kick_path.clone(), vec!["F5".to_string()]);
+
+        let plan = build_purge_plan(unused, temp.path(), &slot_labels);
+
+        assert_eq!(plan.len(), 2);
+        let file_unit = plan
+            .iter()
+            .find(|u| matches!(u, PurgeUnit::File { .. }))
+            .expect("lone.wav should be a standalone File unit");
+        match file_unit {
+            PurgeUnit::File { slots, .. } => assert_eq!(slots, &vec!["S3".to_string()]),
+            _ => unreachable!(),
+        }
+        let dir_unit = plan
+            .iter()
+            .find(|u| matches!(u, PurgeUnit::Directory { .. }))
+            .expect("kit/ should collapse into a Directory unit");
+        match dir_unit {
+            PurgeUnit::Directory { files, .. } => {
+                assert_eq!(files.len(), 1);
+                assert_eq!(files[0].slots, vec!["F5".to_string()]);
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
     fn a_directory_with_one_still_used_audio_file_does_not_collapse() {
         let temp = tempfile::TempDir::new().unwrap();
         let dir = temp.path().join("kit");
@@ -1104,6 +1147,81 @@ mod tests {
         }
     }
 
+    /// Same as `write_minimal_project_with_sample_block` but with two
+    /// `[SAMPLE]` blocks, both loaded (`PATH=`) but never triggered - used
+    /// to verify a file loaded into more than one slot at once collects
+    /// every one of those slots' labels, not just the first found.
+    fn write_minimal_project_with_two_sample_blocks(
+        project_dir: &std::path::Path,
+        first: (&str, u16, &str),
+        second: (&str, u16, &str),
+    ) {
+        use ot_tools_io::{BankFile, OctatrackFileIO};
+
+        let mut content = String::new();
+        content.push_str("[META]\r\nTYPE=OCTATRACK DPS-1 PROJECT\r\nVERSION=19\r\n[/META]\r\n\r\n");
+        for (slot_type, slot, path) in [first, second] {
+            content.push_str("[SAMPLE]\r\n");
+            content.push_str(&format!("TYPE={}\r\n", slot_type));
+            content.push_str(&format!("SLOT={}\r\n", slot));
+            content.push_str(&format!("PATH={}\r\n", path));
+            content.push_str("[/SAMPLE]\r\n\r\n");
+        }
+        std::fs::write(project_dir.join("project.work"), content).unwrap();
+
+        for bank_num in 1..=16 {
+            BankFile::default()
+                .to_data_file(&project_dir.join(format!("bank{:02}.work", bank_num)))
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn a_flex_slot_loaded_but_never_triggered_only_frees_its_file_when_simulating_clear() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let project_dir = temp.path().join("PROJ");
+        std::fs::create_dir(&project_dir).unwrap();
+        write_minimal_project_with_sample_block(&project_dir, "FLEX", 2, "loaded.wav");
+        touch(&project_dir.join("loaded.wav"));
+
+        let with_simulation =
+            compute_project_unused_files(&project_dir.to_string_lossy(), true, true).unwrap();
+        assert_eq!(with_simulation.len(), 1);
+        match &with_simulation[0] {
+            PurgeUnit::File { slots, .. } => assert_eq!(
+                slots,
+                &vec!["F2".to_string()],
+                "FLEX slot 2 should be labeled with the F prefix, not S"
+            ),
+            other => panic!("expected a File unit, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn a_file_loaded_into_two_slots_at_once_collects_both_slot_labels() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let project_dir = temp.path().join("PROJ");
+        std::fs::create_dir(&project_dir).unwrap();
+        write_minimal_project_with_two_sample_blocks(
+            &project_dir,
+            ("STATIC", 1, "loaded.wav"),
+            ("FLEX", 2, "loaded.wav"),
+        );
+        touch(&project_dir.join("loaded.wav"));
+
+        let with_simulation =
+            compute_project_unused_files(&project_dir.to_string_lossy(), true, true).unwrap();
+        assert_eq!(with_simulation.len(), 1);
+        match &with_simulation[0] {
+            PurgeUnit::File { slots, .. } => {
+                let mut sorted = slots.clone();
+                sorted.sort();
+                assert_eq!(sorted, vec!["F2".to_string(), "S1".to_string()]);
+            }
+            other => panic!("expected a File unit, got {:?}", other),
+        }
+    }
+
     #[test]
     fn a_file_with_no_slot_referencing_it_is_unused() {
         let temp = tempfile::TempDir::new().unwrap();
@@ -1238,6 +1356,48 @@ mod tests {
                 &vec!["S1".to_string()],
                 "the slot label of PROJ's STATIC slot 1 should carry over from the dropped 'assigned' usage entry"
             ),
+            other => panic!("expected a File unit, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn a_pool_file_assigned_in_two_projects_being_slot_cleared_collects_both_slot_labels() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let set_dir = temp.path();
+        let pool_dir = set_dir.join("AUDIO");
+        std::fs::create_dir(&pool_dir).unwrap();
+        touch(&pool_dir.join("loaded.wav"));
+
+        let proj_a = set_dir.join("PROJA");
+        std::fs::create_dir(&proj_a).unwrap();
+        write_minimal_project_with_sample_block(&proj_a, "STATIC", 1, "../AUDIO/loaded.wav");
+
+        let proj_b = set_dir.join("PROJB");
+        std::fs::create_dir(&proj_b).unwrap();
+        write_minimal_project_with_sample_block(&proj_b, "FLEX", 2, "../AUDIO/loaded.wav");
+
+        // Only PROJA is included in slot-clearing simulation - the file is
+        // still real usage via PROJB's loaded slot, so it must not appear
+        // as purgeable yet.
+        let partial_simulation =
+            compute_pool_unused_files(&pool_dir.to_string_lossy(), &["PROJA".to_string()]).unwrap();
+        assert!(
+            partial_simulation.is_empty(),
+            "PROJB's slot is still real usage until it too is simulated as cleared"
+        );
+
+        let with_both_simulated = compute_pool_unused_files(
+            &pool_dir.to_string_lossy(),
+            &["PROJA".to_string(), "PROJB".to_string()],
+        )
+        .unwrap();
+        assert_eq!(with_both_simulated.len(), 1);
+        match &with_both_simulated[0] {
+            PurgeUnit::File { slots, .. } => {
+                let mut sorted = slots.clone();
+                sorted.sort();
+                assert_eq!(sorted, vec!["F2".to_string(), "S1".to_string()]);
+            }
             other => panic!("expected a File unit, got {:?}", other),
         }
     }

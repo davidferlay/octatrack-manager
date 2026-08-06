@@ -124,6 +124,81 @@ test.describe('Purge Audio Pool Samples', () => {
     await expect(options.nth(1)).toHaveAttribute('value', 'purge_pool_samples')
   })
 
+  test('a collapsed directory lists its files tree-style with Slot/Size, is collapsible, and offers a context menu', async ({ page }) => {
+    await page.addInitScript(() => {
+      ;(window as any).__revealCalls = []
+      const internals = (window as any).__TAURI_INTERNALS__
+      const orig = internals.invoke
+      internals.invoke = async (cmd: string, args?: any) => {
+        if (cmd === 'reveal_in_file_manager') {
+          ;(window as any).__revealCalls.push(args?.path)
+          return null
+        }
+        if (cmd === 'scan_pool_unused_files') {
+          return [
+            { kind: 'File', path: '/test/set/AUDIO/orphan.wav', origin: 'AUDIO', size: 2048, slots: [] },
+            {
+              kind: 'Directory',
+              path: '/test/set/AUDIO/oldkit',
+              origin: 'AUDIO',
+              file_count: 2,
+              size: 3072,
+              files: [
+                { path: '/test/set/AUDIO/oldkit/clap.wav', size: 1024, slots: [] },
+                { path: '/test/set/AUDIO/oldkit/kick.wav', size: 2048, slots: ['F3'] },
+              ],
+            },
+          ]
+        }
+        return orig(cmd, args)
+      }
+    })
+
+    await openPurgeOperation(page)
+    const summary = page.locator('.tools-missing-files-summary')
+    // 1 lone file + the directory's own file_count (2) = 3 unused audio files.
+    await expect(summary).toContainText('3')
+
+    await summary.click()
+    const listModal = page.locator('.missing-samples-list-modal')
+    await expect(listModal.getByText('Unused Audio Pool Samples')).toBeVisible()
+
+    const rows = listModal.locator('tbody tr')
+    await expect(rows).toHaveCount(4)
+    await expect(rows.nth(0)).toContainText('oldkit')
+    await expect(rows.nth(0)).toContainText('2 files')
+    await expect(rows.nth(1)).toHaveClass(/purge-tree-child-row/)
+    await expect(rows.nth(1)).toContainText('clap.wav')
+    await expect(rows.nth(1)).toContainText('1.0 KB')
+    await expect(rows.nth(2)).toHaveClass(/purge-tree-child-row/)
+    await expect(rows.nth(2)).toContainText('kick.wav')
+    await expect(rows.nth(2)).toContainText('2.0 KB')
+    await expect(rows.nth(2)).toContainText('F3')
+    await expect(rows.nth(3)).toContainText('orphan.wav')
+
+    // Collapsing the directory hides its tree-child rows; expanding restores them.
+    await rows.first().locator('.purge-dir-collapse-btn').click()
+    await expect(listModal.locator('tbody tr')).toHaveCount(2)
+    await rows.first().locator('.purge-dir-collapse-btn').click()
+    await expect(listModal.locator('tbody tr')).toHaveCount(4)
+
+    // Right-click the lone file row -> context menu, each action targeting that exact row's path.
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+    const orphanPath = '/test/set/AUDIO/orphan.wav'
+
+    await rows.nth(3).click({ button: 'right' })
+    let menu = page.locator('.context-menu')
+    await expect(menu.getByText('Open in file explorer')).toBeVisible()
+    await menu.getByText('Open in file explorer').click()
+    await expect.poll(async () => page.evaluate(() => (window as any).__revealCalls)).toEqual([orphanPath])
+
+    await rows.nth(3).click({ button: 'right' })
+    menu = page.locator('.context-menu')
+    await menu.getByText('Copy file path').click()
+    await expect(menu).toHaveCount(0)
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(orphanPath)
+  })
+
   test('Include all projects of set reveals the two nested sub-options', async ({ page }) => {
     await openPurgeOperation(page)
 
@@ -187,6 +262,7 @@ test.describe('Purge Audio Pool Samples', () => {
 
     // Move files to folder is the default selection - switch to Delete for
     // this test's Trash flow (destinationDir: null below).
+    await expect(page.getByRole('button', { name: 'Move files to folder' })).toHaveClass(/selected/)
     await page.getByRole('button', { name: 'Delete files' }).click()
     await expect(page.getByRole('button', { name: 'Delete files' })).toHaveClass(/selected/)
 

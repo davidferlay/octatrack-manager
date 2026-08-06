@@ -199,6 +199,17 @@ describe('PoolFilesTable - row context menu', () => {
     expect(invokeMock).toHaveBeenCalledWith('reveal_in_file_manager', { path: '/set/AUDIO/snare48.wav' })
   })
 
+  it('right-click always offers "Copy file path", which copies that exact file\'s path to the clipboard', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.assign(navigator, { clipboard: { writeText } })
+    render(<TestHarness files={[poolFile]} poolPath="/set/AUDIO" />)
+    fireEvent.contextMenu(screen.getByText('snare48.wav').closest('tr')!)
+    const item = screen.getByText('Copy file path')
+    expect(item).toBeInTheDocument()
+    await userEvent.click(item)
+    expect(writeText).toHaveBeenCalledWith('/set/AUDIO/snare48.wav')
+  })
+
   it('never offers "Go to project" when showGoToProject is unset, even for a project-local row', () => {
     render(<TestHarness files={[projectFile]} poolPath="/set/AUDIO" />)
     fireEvent.contextMenu(screen.getByText('kick.mp3').closest('tr')!)

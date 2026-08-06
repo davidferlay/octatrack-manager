@@ -227,9 +227,14 @@ test.describe('Purge Project Samples', () => {
 
   test('a collapsed directory lists its files tree-style and sorts before lone files', async ({ page }) => {
     await page.addInitScript(() => {
+      ;(window as any).__revealCalls = []
       const internals = (window as any).__TAURI_INTERNALS__
       const orig = internals.invoke
       internals.invoke = async (cmd: string, args?: any) => {
+        if (cmd === 'reveal_in_file_manager') {
+          ;(window as any).__revealCalls.push(args?.path)
+          return null
+        }
         if (cmd === 'scan_project_unused_files') {
           return [
             { kind: 'File', path: '/projects/TestProject/orphan.wav', origin: 'TestProject', size: 2048, slots: [] },
@@ -282,11 +287,22 @@ test.describe('Purge Project Samples', () => {
     await rows.first().locator('.purge-dir-collapse-btn').click()
     await expect(listModal.locator('tbody tr')).toHaveCount(4)
 
-    // Right-click a tree-child row -> context menu with Open in file explorer + Copy file path.
+    // Right-click a tree-child row -> context menu with Open in file explorer + Copy file path,
+    // each acting on that exact child file's path (not the parent directory's).
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+    const kickPath = '/projects/TestProject/AUDIO/oldkit/kick.wav'
+
     await rows.nth(2).click({ button: 'right' })
-    const menu = page.locator('.context-menu')
+    let menu = page.locator('.context-menu')
     await expect(menu.getByText('Open in file explorer')).toBeVisible()
-    await expect(menu.getByText('Copy file path')).toBeVisible()
+    await menu.getByText('Open in file explorer').click()
+    await expect.poll(async () => page.evaluate(() => (window as any).__revealCalls)).toEqual([kickPath])
+
+    await rows.nth(2).click({ button: 'right' })
+    menu = page.locator('.context-menu')
+    await menu.getByText('Copy file path').click()
+    await expect(menu).toHaveCount(0)
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(kickPath)
   })
 
   test('toggling Exclude backups/ directory and Clear unused sample slot assignments never re-scans the backend', async ({ page }) => {
