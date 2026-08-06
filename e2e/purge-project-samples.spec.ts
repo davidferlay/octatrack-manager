@@ -225,6 +225,29 @@ test.describe('Purge Project Samples', () => {
     await expect(listModal.locator('tbody')).toContainText('orphan.wav')
   })
 
+  test('scanning shows a live percentage that advances as each background call resolves', async ({ page }) => {
+    await page.addInitScript(() => {
+      const internals = (window as any).__TAURI_INTERNALS__
+      const orig = internals.invoke
+      internals.invoke = async (cmd: string, args?: any) => {
+        // The loading state is gated on the "as-is" scan (simulateClearedSlots:
+        // false) specifically - hold just that one back so the other 2 of the
+        // 3 background calls resolve first and progress reads 67% (2/3).
+        if (cmd === 'scan_project_unused_files' && args?.simulateClearedSlots === false) {
+          await new Promise<void>(resolve => { (window as any).__releaseAsIsScan = resolve })
+        }
+        return orig(cmd, args)
+      }
+    })
+
+    await openPurgeOperation(page)
+
+    await expect(page.locator('.tools-fix-status.loading')).toContainText('67%')
+
+    await page.evaluate(() => (window as any).__releaseAsIsScan())
+    await expect(page.locator('.tools-missing-files-summary')).toContainText('1')
+  })
+
   test('a collapsed directory lists its files tree-style and sorts before lone files', async ({ page }) => {
     await page.addInitScript(() => {
       ;(window as any).__revealCalls = []

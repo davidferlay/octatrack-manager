@@ -293,6 +293,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   // count_unused_slot_assignments. null when the option is off (or not yet
   // resolved), which PurgeFilesModal treats as "don't show that line".
   const [purgeSlotsToClear, setPurgeSlotsToClear] = useState<number | null>(null);
+  // Fraction of the 3 background scan calls below (as-is, simulated,
+  // slot count) that have resolved so far, as a whole percentage - mirrors
+  // Fix Project Samples's "Scanning... N%" status label.
+  const [purgeScanProgress, setPurgeScanProgress] = useState<number>(0);
   const [clearUnusedSlots, setClearUnusedSlots] = useState<boolean>(false);
   const [excludeBackups, setExcludeBackups] = useState<boolean>(true);
   const [purgeReviewBeforeApply, setPurgeReviewBeforeApply] = useState<boolean>(true);
@@ -548,6 +552,13 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     setPurgeUnitsAsIs(null);
     setPurgeUnitsSimulated(null);
     setPurgeSlotsToClear(null);
+    setPurgeScanProgress(0);
+    let callsDone = 0;
+    const CALL_COUNT = 3;
+    const markCallDone = () => {
+      callsDone += 1;
+      if (!cancelled) setPurgeScanProgress(Math.round((callsDone / CALL_COUNT) * 100));
+    };
 
     invoke<PurgeUnit[]>('scan_project_unused_files', {
       projectPath,
@@ -558,7 +569,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     }).catch((err) => {
       console.error("Error scanning project unused files:", err);
       if (!cancelled) setPurgeUnitsAsIs([]);
-    });
+    }).finally(markCallDone);
 
     invoke<PurgeUnit[]>('scan_project_unused_files', {
       projectPath,
@@ -569,14 +580,14 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     }).catch((err) => {
       console.error("Error scanning project unused files (slots simulated cleared):", err);
       if (!cancelled) setPurgeUnitsSimulated([]);
-    });
+    }).finally(markCallDone);
 
     invoke<number>('count_unused_slot_assignments', { projectPath }).then((count) => {
       if (!cancelled) setPurgeSlotsToClear(count);
     }).catch((err) => {
       console.error("Error counting unused slot assignments:", err);
       if (!cancelled) setPurgeSlotsToClear(null);
-    });
+    }).finally(markCallDone);
 
     return () => { cancelled = true; };
   }, [operation, projectPath, purgeRescanKey]);
@@ -3427,7 +3438,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             {purgeScanLoading ? (
               <div className="tools-fix-status loading">
                 <span className="loading-spinner-small"></span>
-                <span>Scanning project samples...</span>
+                <span>Scanning project samples... {purgeScanProgress}%</span>
               </div>
             ) : purgeUnits.length === 0 ? (
               <div className="tools-fix-status all-good">

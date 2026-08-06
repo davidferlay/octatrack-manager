@@ -391,6 +391,11 @@ export function AudioPoolPage() {
   // (pool-only purges never clear slots). null otherwise, which
   // PurgeFilesModal treats as "don't show that line".
   const [purgeSlotsToClear, setPurgeSlotsToClear] = useState<number | null>(null);
+  // Fraction of the 5 background scan steps below (project list, pool-only
+  // scan, as-is include-all scan, simulated include-all scan, slot counts)
+  // that have resolved so far, as a whole percentage - mirrors Fix Project
+  // Samples's "Scanning... N%" status label.
+  const [purgeScanProgress, setPurgeScanProgress] = useState<number>(0);
   const [showPurgeListModal, setShowPurgeListModal] = useState(false);
   const [showPurgeModal, setShowPurgeModal] = useState(false);
   const [purgeIncludedProjectPaths, setPurgeIncludedProjectPaths] = useState<string[]>([]);
@@ -415,10 +420,18 @@ export function AudioPoolPage() {
     setPurgeIncludeAllSimulated(null);
     setPurgeIncludedProjectPaths([]);
     setPurgeSlotsToClear(null);
+    setPurgeScanProgress(0);
+    let stepsDone = 0;
+    const STEP_COUNT = 5;
+    const markStepDone = () => {
+      stepsDone += 1;
+      if (!cancelled) setPurgeScanProgress(Math.round((stepsDone / STEP_COUNT) * 100));
+    };
 
     (async () => {
       const poolSetProjects = (await invoke<{ name: string; path: string }[]>('list_set_projects', { poolPath: audioPoolPath }).catch(() => [])) ?? [];
       if (cancelled) return;
+      markStepDone();
       setPurgeIncludedProjectPaths(poolSetProjects.map(p => p.path));
       const projectNames = poolSetProjects.map(p => p.name);
 
@@ -427,7 +440,7 @@ export function AudioPoolPage() {
       }).catch((err) => {
         console.error('Error scanning pool unused files:', err);
         if (!cancelled) setPurgePoolOnlyUnits([]);
-      });
+      }).finally(markStepDone);
 
       async function scanIncludeAllVariant(simulate: boolean): Promise<PurgeUnit[]> {
         const [poolUnits, perProject] = await Promise.all([
@@ -451,18 +464,19 @@ export function AudioPoolPage() {
       }).catch((err) => {
         console.error('Error scanning pool+projects unused files:', err);
         if (!cancelled) setPurgeIncludeAllAsIs([]);
-      });
+      }).finally(markStepDone);
 
       scanIncludeAllVariant(true).then((units) => {
         if (!cancelled) setPurgeIncludeAllSimulated(units);
       }).catch((err) => {
         console.error('Error scanning pool+projects unused files (slots simulated cleared):', err);
         if (!cancelled) setPurgeIncludeAllSimulated([]);
-      });
+      }).finally(markStepDone);
 
       const perProjectSlotCounts = await Promise.all(poolSetProjects.map(p =>
         invoke<number>('count_unused_slot_assignments', { projectPath: p.path }).catch(() => 0)
       ));
+      markStepDone();
       if (!cancelled) setPurgeSlotsToClear(perProjectSlotCounts.reduce((a, b) => a + b, 0));
     })().catch((err) => {
       console.error('Error scanning pool unused files:', err);
@@ -1784,7 +1798,7 @@ export function AudioPoolPage() {
                 {purgeScanLoading ? (
                   <div className="tools-fix-status loading">
                     <span className="loading-spinner-small"></span>
-                    <span>Scanning Audio Pool{purgeIncludeAllProjects ? ' and set projects' : ''}...</span>
+                    <span>Scanning Audio Pool{purgeIncludeAllProjects ? ' and set projects' : ''}... {purgeScanProgress}%</span>
                   </div>
                 ) : purgeUnits.length === 0 ? (
                   <div className="tools-fix-status all-good">

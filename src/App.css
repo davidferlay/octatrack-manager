@@ -4721,6 +4721,12 @@ th.col-usage .header-content .sort-indicator {
   flex-direction: column;
 }
 
+/* Slightly tighter vertical rhythm between stacked checkbox options than
+   the general .tools-field spacing (dropdowns/toggle groups keep 1rem). */
+.tools-field.tools-checkbox {
+  margin-bottom: 0.40rem;
+}
+
 .tools-checkbox label {
   display: flex;
   align-items: center;

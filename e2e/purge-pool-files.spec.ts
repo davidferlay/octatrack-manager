@@ -124,6 +124,35 @@ test.describe('Purge Audio Pool Samples', () => {
     await expect(options.nth(1)).toHaveAttribute('value', 'purge_pool_samples')
   })
 
+  test('scanning shows a live percentage that advances as each of the 5 background steps resolves', async ({ page }) => {
+    await page.addInitScript(() => {
+      const internals = (window as any).__TAURI_INTERNALS__
+      const orig = internals.invoke
+      let poolScanCalls = 0
+      internals.invoke = async (cmd: string, args?: any) => {
+        // The loading state is gated on the pool-only scan (the first of the
+        // 3 scan_pool_unused_files calls this effect fires) - hold just that
+        // one back so the other 4 of the 5 background steps (project list,
+        // both include-all variants, slot counts) resolve first and
+        // progress reads 80% (4/5).
+        if (cmd === 'scan_pool_unused_files') {
+          poolScanCalls += 1
+          if (poolScanCalls === 1) {
+            await new Promise<void>(resolve => { (window as any).__releasePoolOnlyScan = resolve })
+          }
+        }
+        return orig(cmd, args)
+      }
+    })
+
+    await openPurgeOperation(page)
+
+    await expect(page.locator('.tools-fix-status.loading')).toContainText('80%')
+
+    await page.evaluate(() => (window as any).__releasePoolOnlyScan())
+    await expect(page.locator('.tools-missing-files-summary')).toContainText('1')
+  })
+
   test('a collapsed directory lists its files tree-style with Slot/Size, is collapsible, and offers a context menu', async ({ page }) => {
     await page.addInitScript(() => {
       ;(window as any).__revealCalls = []
