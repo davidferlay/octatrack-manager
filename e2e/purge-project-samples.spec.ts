@@ -29,7 +29,7 @@ async function setupMocks(page: Page) {
           case 'scan_project_unused_files':
             ;(window as any).__scanCalls.push(args)
             return [
-              { kind: 'File', path: '/projects/TestProject/orphan.wav', origin: 'TestProject', size: 2048 },
+              { kind: 'File', path: '/projects/TestProject/orphan.wav', origin: 'TestProject', size: 2048, slots: [] },
             ]
           case 'load_project_metadata':
             return {
@@ -232,7 +232,7 @@ test.describe('Purge Project Samples', () => {
       internals.invoke = async (cmd: string, args?: any) => {
         if (cmd === 'scan_project_unused_files') {
           return [
-            { kind: 'File', path: '/projects/TestProject/orphan.wav', origin: 'TestProject', size: 2048 },
+            { kind: 'File', path: '/projects/TestProject/orphan.wav', origin: 'TestProject', size: 2048, slots: [] },
             {
               kind: 'Directory',
               path: '/projects/TestProject/AUDIO/oldkit',
@@ -240,8 +240,8 @@ test.describe('Purge Project Samples', () => {
               file_count: 2,
               size: 3072,
               files: [
-                '/projects/TestProject/AUDIO/oldkit/clap.wav',
-                '/projects/TestProject/AUDIO/oldkit/kick.wav',
+                { path: '/projects/TestProject/AUDIO/oldkit/clap.wav', size: 1024, slots: [] },
+                { path: '/projects/TestProject/AUDIO/oldkit/kick.wav', size: 2048, slots: ['S1'] },
               ],
             },
           ]
@@ -252,7 +252,9 @@ test.describe('Purge Project Samples', () => {
 
     await openPurgeOperation(page)
     const summary = page.locator('.tools-missing-files-summary')
-    await expect(summary).toContainText('2')
+    // 1 lone file + the directory's own file_count (2) = 3 unused audio
+    // files - not 2 (which would be counting the directory as one item).
+    await expect(summary).toContainText('3')
 
     await summary.click()
     const listModal = page.locator('.missing-samples-list-modal')
@@ -265,9 +267,26 @@ test.describe('Purge Project Samples', () => {
     await expect(rows.nth(0)).toContainText('2 files')
     await expect(rows.nth(1)).toHaveClass(/purge-tree-child-row/)
     await expect(rows.nth(1)).toContainText('clap.wav')
+    await expect(rows.nth(1)).toContainText('1.0 KB')
     await expect(rows.nth(2)).toHaveClass(/purge-tree-child-row/)
     await expect(rows.nth(2)).toContainText('kick.wav')
+    await expect(rows.nth(2)).toContainText('2.0 KB')
+    // Slot ID column - only kick.wav is still slot-loaded.
+    await expect(rows.nth(2)).toContainText('S1')
     await expect(rows.nth(3)).toContainText('orphan.wav')
+
+    // Collapsing the directory hides its tree-child rows; expanding again restores them.
+    await rows.nth(0).locator('.purge-dir-collapse-btn').click()
+    await expect(listModal.locator('tbody tr')).toHaveCount(2)
+    await expect(listModal.locator('tbody tr').nth(0)).not.toContainText('clap.wav')
+    await rows.first().locator('.purge-dir-collapse-btn').click()
+    await expect(listModal.locator('tbody tr')).toHaveCount(4)
+
+    // Right-click a tree-child row -> context menu with Open in file explorer + Copy file path.
+    await rows.nth(2).click({ button: 'right' })
+    const menu = page.locator('.context-menu')
+    await expect(menu.getByText('Open in file explorer')).toBeVisible()
+    await expect(menu.getByText('Copy file path')).toBeVisible()
   })
 
   test('toggling Exclude backups/ directory and Clear unused sample slot assignments never re-scans the backend', async ({ page }) => {
@@ -299,8 +318,10 @@ test.describe('Purge Project Samples', () => {
   test('Review before applying changes is forced on and disabled when Delete files is selected', async ({ page }) => {
     await openPurgeOperation(page)
 
-    // Delete files is the default selection.
-    await expect(page.getByRole('button', { name: 'Delete files' })).toHaveClass(/selected/)
+    // Move files to folder is the default selection.
+    await expect(page.getByRole('button', { name: 'Move files to folder' })).toHaveClass(/selected/)
+
+    await page.getByRole('button', { name: 'Delete files' }).click()
     const reviewCheckbox = page.getByLabel('Review before applying changes')
     await expect(reviewCheckbox).toBeChecked()
     await expect(reviewCheckbox).toBeDisabled()
@@ -316,6 +337,10 @@ test.describe('Purge Project Samples', () => {
     // Wait for the scan to resolve before Execute is available.
     await expect(page.locator('.tools-missing-files-summary')).toContainText('1')
 
+    // Move files to folder is the default selection - switch to Delete for
+    // this test's Trash flow (destinationDir: null below).
+    await page.getByRole('button', { name: 'Delete files' }).click()
+
     await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()
 
     const modal = page.locator('.missing-samples-list-modal')
@@ -330,7 +355,7 @@ test.describe('Purge Project Samples', () => {
     expect(calls).toHaveLength(1)
     expect(calls[0].projectPath).toBe('/test/project')
     expect(calls[0].plan).toEqual([
-      { kind: 'File', path: '/projects/TestProject/orphan.wav', origin: 'TestProject', size: 2048 },
+      { kind: 'File', path: '/projects/TestProject/orphan.wav', origin: 'TestProject', size: 2048, slots: [] },
     ])
     expect(calls[0].clearUnusedSlots).toBe(false)
     expect(calls[0].destinationDir).toBe(null)
@@ -375,7 +400,7 @@ test.describe('Purge Project Samples', () => {
     expect(calls).toHaveLength(1)
     expect(calls[0].projectPath).toBe('/test/project')
     expect(calls[0].plan).toEqual([
-      { kind: 'File', path: '/projects/TestProject/orphan.wav', origin: 'TestProject', size: 2048 },
+      { kind: 'File', path: '/projects/TestProject/orphan.wav', origin: 'TestProject', size: 2048, slots: [] },
     ])
     expect(calls[0].destinationDir).toBe('/home/testuser/Downloads')
 

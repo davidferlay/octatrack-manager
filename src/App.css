@@ -3178,14 +3178,12 @@ h1 {
   color: var(--elektron-text-primary);
 }
 
-/* Tree-style file list under a collapsed PurgeUnit::Directory row - purely
-   informational, not a real interactive row (no hover highlight). */
-.purge-tree-child-row:hover {
-  background-color: transparent;
-}
-
+/* Tree-style file list under an expanded PurgeUnit::Directory row - each
+   absorbed file still gets its own Slot/Size cells (only the Name cell is
+   indented), just in a smaller/muted style since these rows aren't
+   independently selectable. */
 .purge-tree-child-row td {
-  padding: 0.2rem 1rem 0.2rem 2.5rem;
+  padding: 0.2rem 1rem;
   color: var(--elektron-text-secondary);
   font-size: 0.8rem;
   white-space: nowrap;
@@ -3193,9 +3191,28 @@ h1 {
   text-overflow: ellipsis;
 }
 
+.purge-tree-child-name {
+  padding-left: 2.5rem !important;
+}
+
 .purge-tree-child-row td i {
   margin-right: 0.35rem;
   opacity: 0.7;
+}
+
+.purge-dir-collapse-btn {
+  background: none;
+  border: none;
+  color: var(--elektron-text-secondary);
+  cursor: pointer;
+  padding: 0 0.35rem 0 0;
+  font-size: 0.75rem;
+  width: 1rem;
+  display: inline-block;
+}
+
+.purge-dir-collapse-btn:hover {
+  color: var(--elektron-text-primary);
 }
 
 /* Fixed layout: column widths come from the header cells, so filtering rows

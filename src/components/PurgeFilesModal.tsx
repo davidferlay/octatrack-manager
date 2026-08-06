@@ -1,10 +1,21 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { ColumnToggle, HeaderActions, useCopyFeedback, useModalResize } from './FixPoolFilesModal';
+
+/** Matches the Rust `PurgeFileEntry` struct exactly. */
+export interface PurgeFileEntry {
+  path: string;
+  size: number;
+  /** Slot label(s) ("S1", "F2", ...) currently loading this file - only
+   * ever non-empty when it became unused via a simulated "Clear unused
+   * sample slot assignments" run. */
+  slots: string[];
+}
 
 /** Matches the Rust `PurgeUnit` enum's `#[serde(tag = "kind")]` shape exactly. */
 export type PurgeUnit =
-  | { kind: 'File'; path: string; origin: string; size: number }
-  | { kind: 'Directory'; path: string; origin: string; file_count: number; size: number; files: string[] };
+  | { kind: 'File'; path: string; origin: string; size: number; slots: string[] }
+  | { kind: 'Directory'; path: string; origin: string; file_count: number; size: number; files: PurgeFileEntry[] };
 
 function baseName(path: string): string {
   const idx = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
@@ -31,15 +42,26 @@ function relativeToDir(filePath: string, dirPath: string): string {
     : baseName(filePath);
 }
 
+/** Total unused audio files a purge plan represents - a `PurgeUnit::File`
+ * counts as 1, a collapsed `PurgeUnit::Directory` counts as its own
+ * `file_count` (every audio file it absorbed), not as a single item. Plain
+ * `units.length` undercounts whenever any directory collapsed (e.g. 15 root
+ * files + 1 directory absorbing 6 more reads as 16 items, not the 21 audio
+ * files actually found). */
+export function purgeAudioFileCount(units: PurgeUnit[]): number {
+  return units.reduce((sum, u) => sum + (u.kind === 'Directory' ? u.file_count : 1), 0);
+}
+
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-type PurgeSortColumn = 'name' | 'location' | 'origin' | 'size';
+type PurgeSortColumn = 'slot' | 'name' | 'location' | 'origin' | 'size';
 
 const PURGE_COLUMNS: { id: PurgeSortColumn; label: string }[] = [
+  { id: 'slot', label: 'Slot' },
   { id: 'name', label: 'Name' },
   { id: 'location', label: 'Location' },
   { id: 'origin', label: 'Origin' },
@@ -52,11 +74,12 @@ interface PurgeRow {
   location: string;
   origin: string;
   size: number;
+  slots: string[];
 }
 
 /** Default column widths (px) before the user resizes anything - Name fills the rest. */
 const PURGE_COL_DEFAULTS: Record<PurgeSortColumn, number | undefined> = {
-  name: undefined, location: 185, origin: 140, size: 90,
+  slot: 70, name: undefined, location: 185, origin: 140, size: 90,
 };
 
 /**
@@ -76,6 +99,14 @@ export function usePurgeTable(units: PurgeUnit[]) {
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
+  // Directory rows expanded by default (matches the previous always-shown
+  // tree-child behavior) - collapsed via the caret next to the folder icon.
+  const [collapsedDirs, setCollapsedDirs] = useState<Set<string>>(new Set());
+  const toggleDirCollapsed = (path: string) => setCollapsedDirs(s => {
+    const next = new Set(s);
+    next.has(path) ? next.delete(path) : next.add(path);
+    return next;
+  });
 
   const allColumns = PURGE_COLUMNS;
   const visibleColumns = allColumns.filter(c => !hiddenCols.has(c.id));
@@ -159,6 +190,7 @@ export function usePurgeTable(units: PurgeUnit[]) {
       location: dirName(unit.path),
       origin: unit.origin,
       size: unit.size,
+      slots: unit.kind === 'File' ? unit.slots : [],
     }));
 
     if (originFilter !== 'all') filtered = filtered.filter(r => r.origin === originFilter);
@@ -174,6 +206,7 @@ export function usePurgeTable(units: PurgeUnit[]) {
       if (kindCmp !== 0) return kindCmp;
       const dir = sortDirection === 'asc' ? 1 : -1;
       if (sortColumn === 'size') return (a.size - b.size) * dir;
+      if (sortColumn === 'slot') return a.slots.join(', ').localeCompare(b.slots.join(', ')) * dir;
       return a[sortColumn].localeCompare(b[sortColumn]) * dir;
     });
 
@@ -261,6 +294,7 @@ export function usePurgeTable(units: PurgeUnit[]) {
     sortColumn, sortDirection,
     originFilter, setOriginFilter, origins,
     hasActiveFilters, resetFilters,
+    collapsedDirs, toggleDirCollapsed,
     renderSortableHeader, renderFilterableHeader,
     colWidths, tableRef,
     totalSize, totalDirs,
@@ -268,8 +302,8 @@ export function usePurgeTable(units: PurgeUnit[]) {
 }
 
 export function purgeTableTsv(table: ReturnType<typeof usePurgeTable>): string {
-  const header = ['Name', 'Location', 'Origin', 'Size'].join('\t');
-  const lines = table.rows.map(r => [r.name, r.location, r.origin, formatSize(r.size)].join('\t'));
+  const header = ['Slot', 'Name', 'Location', 'Origin', 'Size'].join('\t');
+  const lines = table.rows.map(r => [r.slots.join(', '), r.name, r.location, r.origin, formatSize(r.size)].join('\t'));
   return [header, ...lines].join('\n');
 }
 
@@ -285,8 +319,46 @@ export function PurgeFilterBadges({ table }: { table: ReturnType<typeof usePurge
   );
 }
 
+/** "Open in file explorer" + "Copy file path" - same actions/wording as
+ * FixPoolFilesModal's row context menu, generalized to a bare path since a
+ * purge row's menu also has to work for a tree-child row (a plain absorbed
+ * file path, not a full PurgeUnit). */
+function PurgeRowContextMenu({ menu, onClose }: { menu: { x: number; y: number; path: string }; onClose: () => void }) {
+  return (
+    <div className="context-menu" style={{ position: 'fixed', top: menu.y, left: menu.x }} onClick={(e) => e.stopPropagation()}>
+      <button className="context-menu-item" onClick={() => { invoke('reveal_in_file_manager', { path: menu.path }); onClose(); }}>
+        <i className="fas fa-folder-open"></i> Open in file explorer
+      </button>
+      <button className="context-menu-item" onClick={() => { navigator.clipboard.writeText(menu.path); onClose(); }}>
+        <i className="fas fa-copy"></i> Copy file path
+      </button>
+    </div>
+  );
+}
+
 export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTable> }) {
-  const { rows, visibleColumns, originFilter, setOriginFilter, origins, renderSortableHeader, renderFilterableHeader, colWidths, tableRef } = table;
+  const {
+    rows, visibleColumns, originFilter, setOriginFilter, origins, renderSortableHeader, renderFilterableHeader,
+    colWidths, tableRef, collapsedDirs, toggleDirCollapsed,
+  } = table;
+
+  const [rowMenu, setRowMenu] = useState<{ x: number; y: number; path: string } | null>(null);
+  useEffect(() => {
+    if (!rowMenu) return;
+    const close = () => setRowMenu(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setRowMenu(null); };
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', close);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [rowMenu]);
+  const openRowMenu = (path: string) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setRowMenu({ x: e.clientX, y: e.clientY, path });
+  };
 
   const originOptions = [{ value: 'all', label: 'All' }, ...origins.map(o => ({ value: o, label: o }))];
 
@@ -299,52 +371,91 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
   };
 
   return (
-    <table className="samples-table pool-files-table" ref={tableRef}>
-      <colgroup>
-        {visibleColumns.map((c, i) => (
-          <col key={c.id} style={{ width: colWidths.length > 0 ? colWidths[i] : PURGE_COL_DEFAULTS[c.id] }} />
-        ))}
-      </colgroup>
-      <thead>
-        <tr>
-          {visibleColumns.map((c, i) => renderHeader(c.id, c.label, i))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map(r => (
-          <Fragment key={r.unit.path}>
-            <tr>
-              {visibleColumns.map(c => {
-                switch (c.id) {
-                  case 'name':
-                    return (
-                      <td key="name" className="col-sample" title={r.unit.path}>
-                        {r.unit.kind === 'Directory' && <i className="fas fa-folder" title={`${r.unit.file_count} files`}></i>}
-                        {' '}
-                        {r.name}
-                        {r.unit.kind === 'Directory' && <span className="pool-dir-file-count"> ({r.unit.file_count} files)</span>}
-                      </td>
-                    );
-                  case 'location':
-                    return <td key="location" className="fix-location-cell" title={r.location}>{r.location}</td>;
-                  case 'origin':
-                    return <td key="origin">{r.origin}</td>;
-                  case 'size':
-                    return <td key="size">{formatSize(r.size)}</td>;
-                }
-              })}
-            </tr>
-            {r.unit.kind === 'Directory' && r.unit.files.map(filePath => (
-              <tr key={filePath} className="purge-tree-child-row">
-                <td colSpan={visibleColumns.length} title={filePath}>
-                  <i className="fas fa-file-audio"></i> {relativeToDir(filePath, r.unit.path)}
-                </td>
-              </tr>
-            ))}
-          </Fragment>
-        ))}
-      </tbody>
-    </table>
+    <>
+      <table className="samples-table pool-files-table" ref={tableRef}>
+        <colgroup>
+          {visibleColumns.map((c, i) => (
+            <col key={c.id} style={{ width: colWidths.length > 0 ? colWidths[i] : PURGE_COL_DEFAULTS[c.id] }} />
+          ))}
+        </colgroup>
+        <thead>
+          <tr>
+            {visibleColumns.map((c, i) => renderHeader(c.id, c.label, i))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => {
+            const isDir = r.unit.kind === 'Directory';
+            const collapsed = isDir && collapsedDirs.has(r.unit.path);
+            return (
+              <Fragment key={r.unit.path}>
+                <tr onContextMenu={openRowMenu(r.unit.path)}>
+                  {visibleColumns.map(c => {
+                    switch (c.id) {
+                      case 'slot':
+                        return (
+                          <td key="slot" className="col-slot">
+                            {r.slots.length > 0 ? r.slots.join(', ') : <span className="usage-none">—</span>}
+                          </td>
+                        );
+                      case 'name':
+                        return (
+                          <td key="name" className="col-sample" title={r.unit.path}>
+                            {r.unit.kind === 'Directory' && (
+                              <button
+                                className="purge-dir-collapse-btn"
+                                onClick={(e) => { e.stopPropagation(); toggleDirCollapsed(r.unit.path); }}
+                                title={collapsed ? 'Expand' : 'Collapse'}
+                              >
+                                <i className={`fas fa-caret-${collapsed ? 'right' : 'down'}`}></i>
+                              </button>
+                            )}
+                            {isDir && <i className="fas fa-folder"></i>}
+                            {' '}
+                            {r.name}
+                            {r.unit.kind === 'Directory' && <span className="pool-dir-file-count"> ({r.unit.file_count} files)</span>}
+                          </td>
+                        );
+                      case 'location':
+                        return <td key="location" className="fix-location-cell" title={r.location}>{r.location}</td>;
+                      case 'origin':
+                        return <td key="origin">{r.origin}</td>;
+                      case 'size':
+                        return <td key="size">{formatSize(r.size)}</td>;
+                    }
+                  })}
+                </tr>
+                {r.unit.kind === 'Directory' && !collapsed && r.unit.files.map(file => (
+                  <tr key={file.path} className="purge-tree-child-row" onContextMenu={openRowMenu(file.path)}>
+                    {visibleColumns.map(c => {
+                      switch (c.id) {
+                        case 'slot':
+                          return (
+                            <td key="slot">
+                              {file.slots.length > 0 ? file.slots.join(', ') : ''}
+                            </td>
+                          );
+                        case 'name':
+                          return (
+                            <td key="name" className="purge-tree-child-name" title={file.path}>
+                              <i className="fas fa-file-audio"></i> {relativeToDir(file.path, r.unit.kind === 'Directory' ? r.unit.path : '')}
+                            </td>
+                          );
+                        case 'size':
+                          return <td key="size">{formatSize(file.size)}</td>;
+                        default:
+                          return <td key={c.id}></td>;
+                      }
+                    })}
+                  </tr>
+                ))}
+              </Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+      {rowMenu && <PurgeRowContextMenu menu={rowMenu} onClose={() => setRowMenu(null)} />}
+    </>
   );
 }
 

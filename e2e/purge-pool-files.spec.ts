@@ -68,7 +68,7 @@ async function setupMocks(page: Page) {
           case 'scan_pool_unused_files':
             ;(window as any).__scanCalls.push(args)
             return [
-              { kind: 'File', path: '/test/set/AUDIO/unused.wav', origin: 'AUDIO', size: 4096 },
+              { kind: 'File', path: '/test/set/AUDIO/unused.wav', origin: 'AUDIO', size: 4096, slots: [] },
             ]
           case 'scan_project_unused_files':
             return []
@@ -185,7 +185,9 @@ test.describe('Purge Audio Pool Samples', () => {
     await expect(summary).toContainText('1')
     await expect(summary).toContainText('unused audio file')
 
-    // Delete files is the default selection.
+    // Move files to folder is the default selection - switch to Delete for
+    // this test's Trash flow (destinationDir: null below).
+    await page.getByRole('button', { name: 'Delete files' }).click()
     await expect(page.getByRole('button', { name: 'Delete files' })).toHaveClass(/selected/)
 
     const poolUsageCallsBefore = await page.evaluate(() => (window as any).__poolUsageCalls.length)
@@ -205,7 +207,7 @@ test.describe('Purge Audio Pool Samples', () => {
     expect(calls).toHaveLength(1)
     expect(calls[0].poolPath).toBe('/test/set/AUDIO')
     expect(calls[0].plan).toEqual([
-      { kind: 'File', path: '/test/set/AUDIO/unused.wav', origin: 'AUDIO', size: 4096 },
+      { kind: 'File', path: '/test/set/AUDIO/unused.wav', origin: 'AUDIO', size: 4096, slots: [] },
     ])
     expect(calls[0].clearUnusedSlots).toBe(false)
     expect(calls[0].includedProjectPaths).toEqual([])
@@ -287,7 +289,7 @@ test.describe('Purge Audio Pool Samples', () => {
     expect(calls).toHaveLength(1)
     expect(calls[0].poolPath).toBe('/test/set/AUDIO')
     expect(calls[0].plan).toEqual([
-      { kind: 'File', path: '/test/set/AUDIO/unused.wav', origin: 'AUDIO', size: 4096 },
+      { kind: 'File', path: '/test/set/AUDIO/unused.wav', origin: 'AUDIO', size: 4096, slots: [] },
     ])
     expect(calls[0].includedProjectPaths).toEqual([])
     expect(calls[0].destinationDir).toBe('/home/testuser/Downloads')

@@ -702,6 +702,12 @@ export function PoolFilesTable({ table, showGoToProject = false }: { table: Retu
           >
             <i className="fas fa-folder-open"></i> Open in file explorer
           </button>
+          <button
+            className="context-menu-item"
+            onClick={() => { navigator.clipboard.writeText(rowMenu.row.path); setRowMenu(null); }}
+          >
+            <i className="fas fa-copy"></i> Copy file path
+          </button>
           {showGoToProject && rowMenu.row.projectPath && (
             <button
               className="context-menu-item"

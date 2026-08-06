@@ -12,7 +12,7 @@ import { MissingSamplesListModal } from "./MissingSamplesListModal";
 import { CreateProjectModal } from "./CreateProjectModal";
 import { ProjectIncompatibleListModal, FixProjectFilesModal } from "./FixProjectFilesModal";
 import type { IncompatibleFile, PoolFixResult } from "./FixPoolFilesModal";
-import { PurgeFilesModal, PurgeUnusedListModal, type PurgeUnit } from "./PurgeFilesModal";
+import { PurgeFilesModal, purgeAudioFileCount, PurgeUnusedListModal, type PurgeUnit } from "./PurgeFilesModal";
 import { audioKind, usageKey } from "./AudioFileTable";
 import { normalizePath } from "./SampleSlotsTable";
 import { isUnderBackupsDir } from "../utils/purgeBackups";
@@ -296,7 +296,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [clearUnusedSlots, setClearUnusedSlots] = useState<boolean>(false);
   const [excludeBackups, setExcludeBackups] = useState<boolean>(true);
   const [purgeReviewBeforeApply, setPurgeReviewBeforeApply] = useState<boolean>(true);
-  const [purgeMode, setPurgeMode] = useState<'delete' | 'move'>('delete');
+  const [purgeMode, setPurgeMode] = useState<'delete' | 'move'>('move');
   const [purgeDestination, setPurgeDestination] = useState<string>('');
   const [showPurgeListModal, setShowPurgeListModal] = useState<boolean>(false);
   const [showPurgeModal, setShowPurgeModal] = useState<boolean>(false);
@@ -588,7 +588,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     if (!excludeBackups) return purgeUnitsRaw;
     return purgeUnitsRaw.filter((u) => !isUnderBackupsDir(u.path, [projectPath]));
   }, [purgeUnitsRaw, excludeBackups, projectPath]);
-  const purgeScanTotal = purgeUnits.length;
+  // Audio-file counts, not row counts - a collapsed directory is one row but
+  // may represent many unused files (see purgeAudioFileCount).
+  const purgeScanTotal = purgeAudioFileCount(purgeUnitsRaw ?? []);
+  const purgeUnusedFileCount = purgeAudioFileCount(purgeUnits);
 
   // Purge Project Samples: resolve the default Move-mode destination once,
   // the first time the operation is selected (never overwrites a user edit).
@@ -3345,9 +3348,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         <div className="tools-fix-missing-layout">
           <div className="tools-description-pane">
             <p>
-              Finds audio files no sample slot references, then deletes them
-              (Trash Bin) or moves them to a chosen folder. Directories are
-              removed as a whole when everything inside is unused.
+              Scans this project's directory for audio files not referenced
+              anywhere in Sample Slots (machine assignment, p-lock, or a
+              loaded slot). Moves them into a chosen folder or deletes them
+              (to the Trash Bin).
             </p>
           </div>
 
@@ -3432,8 +3436,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               </div>
             ) : (
               <button className="tools-missing-files-summary" onClick={() => setShowPurgeListModal(true)} title="Click to view the unused files list">
-                <span className="tools-fix-status-count">{purgeUnits.length}</span>
-                {" "}unused audio file{purgeUnits.length !== 1 ? "s" : ""}
+                <span className="tools-fix-status-count">{purgeUnusedFileCount}</span>
+                {" "}unused audio file{purgeUnusedFileCount !== 1 ? "s" : ""}
                 <span className="tools-fix-status-detail">{" - "}of {purgeScanTotal} scanned</span>
               </button>
             )}

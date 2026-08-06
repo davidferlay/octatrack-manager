@@ -17,7 +17,7 @@ import {
 import { Version } from "../components/Version";
 import { AudioFileTable, audioKind } from "../components/AudioFileTable";
 import { FixPoolFilesModal, PoolIncompatibleListModal, type IncompatibleFile, type PoolFixResult, type CopyProgressEvent } from "../components/FixPoolFilesModal";
-import { PurgeFilesModal, PurgeUnusedListModal, type PurgeUnit } from "../components/PurgeFilesModal";
+import { PurgeFilesModal, purgeAudioFileCount, PurgeUnusedListModal, type PurgeUnit } from "../components/PurgeFilesModal";
 import { isUnderBackupsDir } from "../utils/purgeBackups";
 import { OverwriteModal } from "../components/OverwriteModal";
 import { TransferProgressPanel } from "../components/TransferProgressPanel";
@@ -374,7 +374,7 @@ export function AudioPoolPage() {
   const [purgeClearUnusedSlots, setPurgeClearUnusedSlots] = useState(false);
   const [purgeExcludeBackups, setPurgeExcludeBackups] = useState(true);
   const [purgeReviewBeforeApply, setPurgeReviewBeforeApply] = useState(true);
-  const [purgeMode, setPurgeMode] = useState<'delete' | 'move'>('delete');
+  const [purgeMode, setPurgeMode] = useState<'delete' | 'move'>('move');
   const [purgeDestination, setPurgeDestination] = useState('');
   // All three scan variants are pre-fetched in the background up front
   // (always with excludeBackups: false, the maximal set) so toggling
@@ -487,7 +487,10 @@ export function AudioPoolPage() {
     if (!purgeExcludeBackups) return purgeUnitsRaw;
     return purgeUnitsRaw.filter((u) => !isUnderBackupsDir(u.path, purgeIncludedProjectPaths));
   }, [purgeUnitsRaw, purgeExcludeBackups, purgeIncludedProjectPaths]);
-  const purgeScanTotal = purgeUnits.length;
+  // Audio-file counts, not row counts - a collapsed directory is one row but
+  // may represent many unused files (see purgeAudioFileCount).
+  const purgeScanTotal = purgeAudioFileCount(purgeUnitsRaw ?? []);
+  const purgeUnusedFileCount = purgeAudioFileCount(purgeUnits);
 
   // Purge Audio Pool Samples: resolve the default Move-mode destination once,
   // the first time the operation is selected (never overwrites a user edit).
@@ -1681,10 +1684,9 @@ export function AudioPoolPage() {
             <div className="tools-fix-missing-layout">
               <div className="tools-description-pane">
                 <p>
-                  Finds Audio Pool files no project of this Set references, then
-                  deletes them (Trash Bin) or moves them to a chosen folder.
-                  Directories are removed as a whole when everything inside is
-                  unused.
+                  Scans the Audio Pool for audio files not referenced in any
+                  project of Set. Moves them into a chosen folder or deletes
+                  them (to the Trash Bin).
                 </p>
               </div>
 
@@ -1795,8 +1797,8 @@ export function AudioPoolPage() {
                     onClick={() => setShowPurgeListModal(true)}
                     title="Click to view the unused files list"
                   >
-                    <span className="tools-fix-status-count">{purgeUnits.length}</span>
-                    {" "}unused audio file{purgeUnits.length !== 1 ? "s" : ""}
+                    <span className="tools-fix-status-count">{purgeUnusedFileCount}</span>
+                    {" "}unused audio file{purgeUnusedFileCount !== 1 ? "s" : ""}
                     <span className="tools-fix-status-detail">{" - "}of {purgeScanTotal} scanned</span>
                   </button>
                 )}
