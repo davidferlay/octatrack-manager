@@ -6119,6 +6119,13 @@ th.col-usage .header-content .sort-indicator {
 .fix-confirmation .samples-table col:nth-child(3) { width: 25%; }
 .fix-confirmation .samples-table col:nth-child(4) { width: 150px; }
 
+/* Purge's review table has its own per-column widths (Slot/Location/Origin/
+   Size all set explicitly inline), matching the preview/status modal's
+   table exactly - the generic 4-column nth-child sizing above (written for
+   Fix's own review table) would otherwise squash its flexible Name column
+   to a fixed 90px here but not in the preview modal. */
+.fix-confirmation .pool-files-table.purge-units-table col:nth-child(2) { width: auto; }
+
 .fix-confirmation .samples-table td {
   font-size: 0.85rem;
   overflow: hidden;

@@ -372,7 +372,7 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
 
   return (
     <>
-      <table className="samples-table pool-files-table" ref={tableRef}>
+      <table className="samples-table pool-files-table purge-units-table" ref={tableRef}>
         <colgroup>
           {visibleColumns.map((c, i) => (
             <col key={c.id} style={{ width: colWidths.length > 0 ? colWidths[i] : PURGE_COL_DEFAULTS[c.id] }} />
@@ -593,7 +593,7 @@ export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsT
     <div className="modal-overlay" onClick={phase !== 'removing' ? onClose : undefined}>
       <div
         ref={modalRef}
-        className={`modal-content missing-samples-list-modal pool-list-modal${phase === 'review' ? ' fix-pool-modal' : ' fix-pool-modal-narrow'}`}
+        className={`modal-content missing-samples-list-modal pool-list-modal${phase === 'review' ? '' : ' fix-pool-modal-narrow'}`}
         onClick={(e) => e.stopPropagation()}
         style={style}
       >
