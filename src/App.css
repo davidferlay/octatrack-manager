@@ -3180,11 +3180,12 @@ h1 {
 
 /* Tree-style file list under an expanded PurgeUnit::Directory row - each
    absorbed file still gets its own Slot/Size cells (only the Name cell is
-   indented), just in a smaller/muted style since these rows aren't
-   independently selectable. */
+   indented), same row height as every other table row (matching padding),
+   just slightly smaller text since these rows aren't independently
+   selectable. */
 .purge-tree-child-row td {
-  padding: 0.2rem 1rem;
-  color: var(--elektron-text-secondary);
+  padding: 0.5rem 1rem;
+  color: #cccccc;
   font-size: 0.8rem;
   white-space: nowrap;
   overflow: hidden;
@@ -3203,9 +3204,10 @@ h1 {
 .purge-dir-collapse-btn {
   background: none;
   border: none;
-  color: var(--elektron-text-secondary);
+  color: var(--elektron-text-primary);
   cursor: pointer;
-  padding: 0 0.35rem 0 0;
+  padding: 0;
+  margin-right: 0.6rem;
   font-size: 0.75rem;
   width: 1rem;
   display: inline-block;
