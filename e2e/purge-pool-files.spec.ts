@@ -305,6 +305,13 @@ test.describe('Purge Audio Pool Samples', () => {
     await expect(modal.locator('tbody tr')).toHaveCount(1)
     await expect(modal.locator('tbody')).toContainText('unused.wav')
 
+    // Review modal is the same width as the preview/status modal (no wider
+    // 'fix-pool-modal' class), and its Name column isn't squashed to a fixed
+    // width by the Fix modals' generic 4-column review-table CSS.
+    await expect(modal).not.toHaveClass(/fix-pool-modal(?!-narrow)/)
+    const nameColWidth = await modal.locator('.purge-units-table colgroup col').nth(1).evaluate(el => (el as HTMLElement).style.width)
+    expect(nameColWidth).toBe('')
+
     await modal.getByRole('button', { name: 'Apply Changes' }).click()
 
     await expect.poll(async () => page.evaluate(() => (window as any).__purgeCalls.length)).toBe(1)
