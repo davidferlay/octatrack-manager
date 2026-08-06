@@ -79,7 +79,7 @@ interface PurgeRow {
 
 /** Default column widths (px) before the user resizes anything - Name fills the rest. */
 const PURGE_COL_DEFAULTS: Record<PurgeSortColumn, number | undefined> = {
-  slot: 70, name: undefined, location: 185, origin: 140, size: 90,
+  slot: 55, name: undefined, location: 185, origin: 140, size: 90,
 };
 
 /**
