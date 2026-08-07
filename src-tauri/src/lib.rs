@@ -1719,3 +1719,38 @@ mod tests {
         assert!(read_audio_bytes(missing.to_str().unwrap()).is_err());
     }
 }
+
+/// Byte buffers for the default Octatrack files that test fixtures write
+/// over and over.
+///
+/// A test project needs 17 files (16 banks + the project), and many tests
+/// build two or three of them. Encoding a `BankFile` is expensive enough
+/// that doing it per file dominated the entire test suite - it was ~2.8s of
+/// fixture setup on every single test that touched a project, roughly 70s of
+/// the 100s `cargo test` used to take.
+///
+/// `to_data_file` is just `to_bytes` followed by `File::create` +
+/// `write_all`, and `default()` is a constant, so encoding once per process
+/// and writing the cached buffer produces byte-identical files.
+#[cfg(test)]
+pub mod test_fixtures {
+    use ot_tools_io::{BankFile, OctatrackFileIO, ProjectFile};
+
+    pub fn default_bank_bytes() -> &'static [u8] {
+        static BYTES: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+        BYTES.get_or_init(|| {
+            BankFile::default()
+                .to_bytes()
+                .expect("Failed to encode default bank")
+        })
+    }
+
+    pub fn default_project_bytes() -> &'static [u8] {
+        static BYTES: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+        BYTES.get_or_init(|| {
+            ProjectFile::default()
+                .to_bytes()
+                .expect("Failed to encode default project")
+        })
+    }
+}

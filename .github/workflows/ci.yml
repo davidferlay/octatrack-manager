@@ -39,42 +39,60 @@ jobs:
     name: Rust Tests
     runs-on: ubuntu-22.04
 
+    env:
+      # Incremental compilation only pays off across edits in a working tree.
+      # CI always starts from a restored cache, so it just adds artifacts to
+      # write out and bloats what has to be cached.
+      CARGO_INCREMENTAL: 0
+      # Debug info is the bulk of target/ (tens of GB locally) and CI never
+      # attaches a debugger. Dropping it shrinks the cache and cuts link time.
+      # Kept identical across the clippy and test steps below - a differing
+      # RUSTFLAGS between them would force a full rebuild for the second one.
+      RUSTFLAGS: -C debuginfo=0
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Cargo dependencies
-        uses: actions/cache@v5
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            src-tauri/target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+          components: clippy, rustfmt
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-
-      - name: Run Rust tests
-        working-directory: src-tauri
-        run: cargo test --verbose
-
+      # Needs no build, so a bad format fails in seconds instead of after the
+      # compile.
       - name: Check Rust formatting
         working-directory: src-tauri
         run: cargo fmt --check
 
+      # Purpose-built for Rust: prunes stale artifacts and registry sources
+      # before saving, and keys on the rustc version as well as the lockfile.
+      # The previous hand-rolled actions/cache tried to store all of
+      # src-tauri/target, which is far past the 10 GB per-repo cache limit -
+      # so it never restored and every run rebuilt all dependencies.
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libssl-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev
+
+      # Check-only pass (no codegen), so it surfaces compile errors well
+      # before the slower test build gets there. Scope deliberately unchanged
+      # (lib and bins, not --all-targets): test code has pre-existing lint
+      # failures, so widening it here would be a separate cleanup.
       - name: Run Clippy lints
         working-directory: src-tauri
         run: cargo clippy -- -D warnings
+
+      - name: Run Rust tests
+        working-directory: src-tauri
+        run: cargo test
 
   frontend-checks:
     name: Frontend Checks
@@ -119,8 +137,27 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")" >> "$GITHUB_OUTPUT"
+
+      # Downloading Chromium is ~1 minute of the job; keyed on the exact
+      # Playwright version so an upgrade fetches a matching browser.
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
+
       - name: Install Playwright browsers
+        if: steps.pw-cache.outputs.cache-hit != 'true'
         run: npx playwright install chromium --with-deps
+
+      # The cached browser still needs its system libraries on a fresh runner.
+      - name: Install Playwright system dependencies
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
 
       - name: Run E2E tests
         run: npm run test:e2e

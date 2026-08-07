@@ -8829,19 +8829,16 @@ mod tests {
             let temp_dir = TempDir::new().expect("Failed to create temp directory");
             let path = temp_dir.path().to_string_lossy().to_string();
 
-            // Create default project.work file
-            let project_file = ProjectFile::default();
-            let project_path = temp_dir.path().join("project.work");
-            project_file
-                .to_data_file(&project_path)
+            std::fs::write(
+                temp_dir.path().join("project.work"),
+                crate::test_fixtures::default_project_bytes(),
+            )
                 .expect("Failed to create project.work");
 
             // Create default bank files (bank01.work through bank16.work)
             for bank_num in 1..=16 {
-                let bank_file = BankFile::default();
                 let bank_path = temp_dir.path().join(format!("bank{:02}.work", bank_num));
-                bank_file
-                    .to_data_file(&bank_path)
+                std::fs::write(&bank_path, crate::test_fixtures::default_bank_bytes())
                     .unwrap_or_else(|_| panic!("Failed to create bank{:02}.work", bank_num));
             }
 

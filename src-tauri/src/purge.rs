@@ -1428,8 +1428,6 @@ mod tests {
         slot: u16,
         path: &str,
     ) {
-        use ot_tools_io::{BankFile, OctatrackFileIO};
-
         let mut content = String::new();
         content.push_str("[META]\r\nTYPE=OCTATRACK DPS-1 PROJECT\r\nVERSION=19\r\n[/META]\r\n\r\n");
         content.push_str("[SAMPLE]\r\n");
@@ -1440,9 +1438,11 @@ mod tests {
         std::fs::write(project_dir.join("project.work"), content).unwrap();
 
         for bank_num in 1..=16 {
-            BankFile::default()
-                .to_data_file(&project_dir.join(format!("bank{:02}.work", bank_num)))
-                .unwrap();
+            std::fs::write(
+                project_dir.join(format!("bank{:02}.work", bank_num)),
+                crate::test_fixtures::default_bank_bytes(),
+            )
+            .unwrap();
         }
     }
 
@@ -1455,8 +1455,6 @@ mod tests {
         first: (&str, u16, &str),
         second: (&str, u16, &str),
     ) {
-        use ot_tools_io::{BankFile, OctatrackFileIO};
-
         let mut content = String::new();
         content.push_str("[META]\r\nTYPE=OCTATRACK DPS-1 PROJECT\r\nVERSION=19\r\n[/META]\r\n\r\n");
         for (slot_type, slot, path) in [first, second] {
@@ -1469,9 +1467,11 @@ mod tests {
         std::fs::write(project_dir.join("project.work"), content).unwrap();
 
         for bank_num in 1..=16 {
-            BankFile::default()
-                .to_data_file(&project_dir.join(format!("bank{:02}.work", bank_num)))
-                .unwrap();
+            std::fs::write(
+                project_dir.join(format!("bank{:02}.work", bank_num)),
+                crate::test_fixtures::default_bank_bytes(),
+            )
+            .unwrap();
         }
     }
 
@@ -1716,7 +1716,6 @@ mod tests {
         slot: u16,
         path: &str,
     ) {
-        use ot_tools_io::{BankFile, OctatrackFileIO};
 
         let mut content = String::new();
         content.push_str("[META]\r\n");
@@ -1800,9 +1799,11 @@ mod tests {
         std::fs::write(project_dir.join("project.work"), &*encoded).unwrap();
 
         for bank_num in 1..=16 {
-            BankFile::default()
-                .to_data_file(&project_dir.join(format!("bank{:02}.work", bank_num)))
-                .unwrap();
+            std::fs::write(
+                project_dir.join(format!("bank{:02}.work", bank_num)),
+                crate::test_fixtures::default_bank_bytes(),
+            )
+            .unwrap();
         }
     }
 
