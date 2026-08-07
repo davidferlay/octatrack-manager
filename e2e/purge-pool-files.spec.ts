@@ -357,7 +357,7 @@ test.describe('Purge Audio Pool Samples', () => {
     // "done" summary screen until the user clicks Close, rather than being
     // torn down by the parent the instant the purge call resolves.
     await expect(modal).toHaveCount(1)
-    await expect(modal.getByText('1 audio file sent to the Trash Bin - 4.0 KB reclaimed.')).toBeVisible()
+    await expect(modal.getByText(/1 audio file,\s*sent to the Trash Bin\s*4\.0 KB reclaimed/)).toBeVisible()
 
     // onPurged's refresh: get_pool_usage is re-fetched (invalidatePoolUsage)
     // and the destination (pool) file listing is reloaded.
@@ -436,6 +436,6 @@ test.describe('Purge Audio Pool Samples', () => {
     // Modal lands directly on its "done" summary screen (skipReview jumps
     // straight from mount to the removing/done phases).
     const modal = page.locator('.missing-samples-list-modal')
-    await expect(modal.getByText('1 audio file moved to /home/testuser/Downloads - 4.0 KB reclaimed.')).toBeVisible()
+    await expect(modal.getByText(/1 audio file,\s*moved to \/home\/testuser\/Downloads\s*4\.0 KB reclaimed/)).toBeVisible()
   })
 })

@@ -5928,6 +5928,18 @@ th.col-usage .header-content .sort-indicator {
   text-align: center;
 }
 
+/* Purge done screen: what was removed on its own bolded line, then where it
+   went and how much was reclaimed underneath - the destination is often a
+   long absolute path that used to wrap mid-sentence. */
+.purge-done-summary {
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.purge-done-summary strong {
+  font-weight: 600;
+}
+
 .fix-pool-summary .fix-done-actions {
   justify-content: center;
   width: 100%;
@@ -6175,7 +6187,7 @@ th.col-usage .header-content .sort-indicator {
 
 .purge-confirm-target {
   margin-top: 0.5rem;
-  font-size: 0.9rem;
+  font-size: 1rem;
   color: var(--elektron-text-primary);
   overflow-wrap: anywhere;
 }

@@ -747,17 +747,19 @@ export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsT
 
           {phase === 'done' && result && (
             <div className="fix-pool-summary">
-              <p>
+              <p className="purge-done-summary">
                 <i className="fas fa-check" style={{ color: '#2ecc71', marginRight: '0.5rem' }}></i>
-                {result.audio_files_removed} audio file{result.audio_files_removed !== 1 ? 's' : ''}
-                {nonAudioSuffix(result.non_audio_files_removed)}
-                {result.dirs_removed.length > 0 && (
-                  <>, across {result.dirs_removed.length} director{result.dirs_removed.length !== 1 ? 'ies' : 'y'},</>
-                )}
-                {isDelete ? ' sent to the Trash Bin' : ` moved to ${mode.destinationDir}`}
-                {' - '}{formatSize(result.bytes_reclaimed)} reclaimed.
+                <strong>
+                  {result.audio_files_removed} audio file{result.audio_files_removed !== 1 ? 's' : ''}
+                  {nonAudioSuffix(result.non_audio_files_removed)}
+                  {result.dirs_removed.length > 0 && (
+                    <>, across {result.dirs_removed.length} director{result.dirs_removed.length !== 1 ? 'ies' : 'y'}</>
+                  )},
+                </strong>
+                <br />{isDelete ? 'sent to the Trash Bin' : `moved to ${mode.destinationDir}`}
+                <br />{formatSize(result.bytes_reclaimed)} reclaimed
                 {result.slots_cleared > 0 && (
-                  <><br />{result.slots_cleared} unused sample slot assignment{result.slots_cleared !== 1 ? 's' : ''} cleared.</>
+                  <><br />{result.slots_cleared} unused sample slot assignment{result.slots_cleared !== 1 ? 's' : ''} cleared</>
                 )}
               </p>
               {result.errors.length > 0 && (
