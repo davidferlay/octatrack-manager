@@ -391,6 +391,10 @@ export function AudioPoolPage() {
   // (pool-only purges never clear slots). null otherwise, which
   // PurgeFilesModal treats as "don't show that line".
   const [purgeSlotsToClear, setPurgeSlotsToClear] = useState<number | null>(null);
+  // Total audio files each scope's scan walked - the "of N scanned"
+  // denominator, kept per-scope so the include-all toggle needs no re-scan.
+  const [purgeScanTotalPoolOnly, setPurgeScanTotalPoolOnly] = useState<number | null>(null);
+  const [purgeScanTotalAll, setPurgeScanTotalAll] = useState<number | null>(null);
   // Fraction of the 5 background scan steps below (project list, pool-only
   // scan, as-is include-all scan, simulated include-all scan, slot counts)
   // that have resolved so far, as a whole percentage - mirrors Fix Project
@@ -421,8 +425,10 @@ export function AudioPoolPage() {
     setPurgeIncludedProjectPaths([]);
     setPurgeSlotsToClear(null);
     setPurgeScanProgress(0);
+    setPurgeScanTotalPoolOnly(null);
+    setPurgeScanTotalAll(null);
     let stepsDone = 0;
-    const STEP_COUNT = 5;
+    const STEP_COUNT = 6;
     const markStepDone = () => {
       stepsDone += 1;
       if (!cancelled) setPurgeScanProgress(Math.round((stepsDone / STEP_COUNT) * 100));
@@ -473,6 +479,18 @@ export function AudioPoolPage() {
         if (!cancelled) setPurgeIncludeAllSimulated([]);
       }).finally(markStepDone);
 
+      // "of N scanned": how many audio files the scan actually walked, for
+      // both scopes up front so toggling "Include all projects of set" stays
+      // instant (same no-rescan rule as the unused-file results themselves).
+      Promise.all([
+        invoke<string[]>('list_audio_files_recursive', { path: audioPoolPath }).catch(() => [] as string[]),
+        ...poolSetProjects.map(p => invoke<string[]>('list_audio_files_recursive', { path: p.path }).catch(() => [] as string[])),
+      ]).then(([poolFiles, ...projectFiles]) => {
+        if (cancelled) return;
+        setPurgeScanTotalPoolOnly(poolFiles?.length ?? 0);
+        setPurgeScanTotalAll((poolFiles?.length ?? 0) + projectFiles.reduce((sum, f) => sum + (f?.length ?? 0), 0));
+      }).finally(markStepDone);
+
       const perProjectSlotCounts = await Promise.all(poolSetProjects.map(p =>
         invoke<number>('count_unused_slot_assignments', { projectPath: p.path }).catch(() => 0)
       ));
@@ -501,9 +519,9 @@ export function AudioPoolPage() {
     if (!purgeExcludeBackups) return purgeUnitsRaw;
     return purgeUnitsRaw.filter((u) => !isUnderBackupsDir(u.path, purgeIncludedProjectPaths));
   }, [purgeUnitsRaw, purgeExcludeBackups, purgeIncludedProjectPaths]);
+  const purgeScanTotal = purgeIncludeAllProjects ? purgeScanTotalAll : purgeScanTotalPoolOnly;
   // Audio-file counts, not row counts - a collapsed directory is one row but
   // may represent many unused files (see purgeAudioFileCount).
-  const purgeScanTotal = purgeAudioFileCount(purgeUnitsRaw ?? []);
   const purgeUnusedFileCount = purgeAudioFileCount(purgeUnits);
   // Non-audio files only ever ride along inside a collapsed directory unit.
   const purgeNonAudioCount = purgeNonAudioFileCount(purgeUnits);
@@ -1818,7 +1836,9 @@ export function AudioPoolPage() {
                     {purgeNonAudioCount > 0 && (
                       <span className="tools-fix-status-other">{" + "}{purgeNonAudioCount} other file{purgeNonAudioCount !== 1 ? "s" : ""}</span>
                     )}
-                    <span className="tools-fix-status-detail">{" - "}of {purgeScanTotal} scanned</span>
+                    {purgeScanTotal !== null && (
+                      <span className="tools-fix-status-detail">{" - "}of {purgeScanTotal} scanned</span>
+                    )}
                   </button>
                 )}
               </div>

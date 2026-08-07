@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { nonAudioSuffix, purgeAudioFileCount, purgeNonAudioFileCount, type PurgeUnit } from './PurgeFilesModal'
+import { nonAudioSuffix, purgeAudioFileCount, purgeNonAudioFileCount, purgeTotalSize, unitChildFiles, type PurgeUnit } from './PurgeFilesModal'
 
 describe('purgeAudioFileCount', () => {
   it('is 0 for an empty plan', () => {
@@ -8,8 +8,8 @@ describe('purgeAudioFileCount', () => {
 
   it('counts each lone File unit as 1', () => {
     const units: PurgeUnit[] = [
-      { kind: 'File', path: '/a.wav', origin: 'PROJ', size: 1, slots: [] },
-      { kind: 'File', path: '/b.wav', origin: 'PROJ', size: 1, slots: [] },
+      { kind: 'File', path: '/a.wav', origin: 'PROJ', size: 1, slots: [], sidecar: null },
+      { kind: 'File', path: '/b.wav', origin: 'PROJ', size: 1, slots: [], sidecar: null },
     ]
     expect(purgeAudioFileCount(units)).toBe(2)
   })
@@ -37,6 +37,7 @@ describe('purgeAudioFileCount', () => {
         origin: 'PROJ',
         size: 1,
         slots: [],
+        sidecar: null,
       })),
       {
         kind: 'Directory',
@@ -58,13 +59,13 @@ describe('purgeAudioFileCount', () => {
 describe('purgeNonAudioFileCount', () => {
   it('is 0 when nothing collapsed into a directory', () => {
     expect(purgeNonAudioFileCount([
-      { kind: 'File', path: '/a.wav', origin: 'PROJ', size: 1, slots: [] },
+      { kind: 'File', path: '/a.wav', origin: 'PROJ', size: 1, slots: [], sidecar: null },
     ])).toBe(0)
   })
 
   it('sums non_audio_count across directory units only', () => {
     const units: PurgeUnit[] = [
-      { kind: 'File', path: '/a.wav', origin: 'PROJ', size: 1, slots: [] },
+      { kind: 'File', path: '/a.wav', origin: 'PROJ', size: 1, slots: [], sidecar: null },
       { kind: 'Directory', path: '/kit', origin: 'PROJ', file_count: 6, non_audio_count: 3, size: 100, files: [] },
       { kind: 'Directory', path: '/kit2', origin: 'PROJ', file_count: 2, non_audio_count: 1, size: 50, files: [] },
     ]
@@ -85,5 +86,39 @@ describe('nonAudioSuffix', () => {
 
   it('pluralizes more than one', () => {
     expect(nonAudioSuffix(3)).toBe(' + 3 other files')
+  })
+})
+
+describe('unitChildFiles / .ot sidecars', () => {
+  const otEntry = { path: '/a.ot', size: 200, slots: [], is_audio: false }
+
+  it('lists a lone file\'s .ot sidecar as its single tree child', () => {
+    const unit: PurgeUnit = { kind: 'File', path: '/a.wav', origin: 'PROJ', size: 1000, slots: [], sidecar: otEntry }
+    expect(unitChildFiles(unit)).toEqual([otEntry])
+  })
+
+  it('gives a file with no sidecar no children at all', () => {
+    const unit: PurgeUnit = { kind: 'File', path: '/a.wav', origin: 'PROJ', size: 1000, slots: [], sidecar: null }
+    expect(unitChildFiles(unit)).toEqual([])
+  })
+
+  it('lists a directory\'s absorbed files as its children', () => {
+    const files = [{ path: '/kit/k.wav', size: 1, slots: [], is_audio: true }]
+    expect(unitChildFiles({ kind: 'Directory', path: '/kit', origin: 'P', file_count: 1, non_audio_count: 0, size: 1, files }))
+      .toEqual(files)
+  })
+
+  it('counts a sidecar as a non-audio file', () => {
+    expect(purgeNonAudioFileCount([
+      { kind: 'File', path: '/a.wav', origin: 'PROJ', size: 1000, slots: [], sidecar: otEntry },
+      { kind: 'File', path: '/b.wav', origin: 'PROJ', size: 1000, slots: [], sidecar: null },
+    ])).toBe(1)
+  })
+
+  it('adds sidecar bytes to the total, since the backend keeps them out of size', () => {
+    expect(purgeTotalSize([
+      { kind: 'File', path: '/a.wav', origin: 'PROJ', size: 1000, slots: [], sidecar: otEntry },
+      { kind: 'Directory', path: '/kit', origin: 'P', file_count: 1, non_audio_count: 0, size: 500, files: [] },
+    ])).toBe(1700)
   })
 })

@@ -68,7 +68,7 @@ async function setupMocks(page: Page) {
           case 'scan_pool_unused_files':
             ;(window as any).__scanCalls.push(args)
             return [
-              { kind: 'File', path: '/test/set/AUDIO/unused.wav', origin: 'AUDIO', size: 4096, slots: [] },
+              { kind: 'File', path: '/test/set/AUDIO/unused.wav', origin: 'AUDIO', size: 4096, slots: [], sidecar: null },
             ]
           case 'scan_project_unused_files':
             return []
@@ -134,9 +134,9 @@ test.describe('Purge Audio Pool Samples', () => {
       internals.invoke = async (cmd: string, args?: any) => {
         // The loading state is gated on the pool-only scan (the first of the
         // 3 scan_pool_unused_files calls this effect fires) - hold just that
-        // one back so the other 4 of the 5 background steps (project list,
-        // both include-all variants, slot counts) resolve first and
-        // progress reads 80% (4/5).
+        // one back so the other 5 of the 6 background steps (project list,
+        // both include-all variants, file totals, slot counts) resolve first and
+        // progress reads 83% (5/6).
         if (cmd === 'scan_pool_unused_files') {
           poolScanCalls += 1
           if (poolScanCalls === 1) {
@@ -149,7 +149,7 @@ test.describe('Purge Audio Pool Samples', () => {
 
     await openPurgeOperation(page)
 
-    await expect(page.locator('.tools-fix-status.loading')).toContainText('80%')
+    await expect(page.locator('.tools-fix-status.loading')).toContainText('83%')
 
     await page.evaluate(() => (window as any).__releasePoolOnlyScan())
     await expect(page.locator('.tools-missing-files-summary')).toContainText('1')
@@ -167,7 +167,7 @@ test.describe('Purge Audio Pool Samples', () => {
         }
         if (cmd === 'scan_pool_unused_files') {
           return [
-            { kind: 'File', path: '/test/set/AUDIO/orphan.wav', origin: 'AUDIO', size: 2048, slots: [] },
+            { kind: 'File', path: '/test/set/AUDIO/orphan.wav', origin: 'AUDIO', size: 2048, slots: [], sidecar: null },
             {
               kind: 'Directory',
               path: '/test/set/AUDIO/oldkit',
@@ -193,6 +193,8 @@ test.describe('Purge Audio Pool Samples', () => {
     // The swept-along cover.jpg is reported apart from that headline count.
     await expect(summary).toContainText('3')
     await expect(summary).toContainText('+ 1 other file')
+    // Real total from the recursive audio listing (the pool holds kick.wav).
+    await expect(summary).toContainText('of 1 scanned')
 
     await summary.click()
     const listModal = page.locator('.missing-samples-list-modal')
@@ -204,7 +206,7 @@ test.describe('Purge Audio Pool Samples', () => {
     const rows = listModal.locator('tbody tr')
     await expect(rows).toHaveCount(5)
     await expect(rows.nth(0)).toContainText('oldkit')
-    await expect(rows.nth(0)).toContainText('2 files + 1 other file')
+    await expect(rows.nth(0)).toContainText('2 audio + 1 other file')
     await expect(rows.nth(1)).toHaveClass(/purge-tree-child-row/)
     await expect(rows.nth(1)).toContainText('clap.wav')
     await expect(rows.nth(1)).toContainText('1.0 KB')
@@ -223,6 +225,14 @@ test.describe('Purge Audio Pool Samples', () => {
     await rows.first().locator('.purge-dir-collapse-btn').click()
     await expect(listModal.locator('tbody tr')).toHaveCount(2)
     await rows.first().locator('.purge-dir-collapse-btn').click()
+    await expect(listModal.locator('tbody tr')).toHaveCount(5)
+
+    // Searching reaches files inside the collapsed directory, narrowed to hits.
+    const search = listModal.locator('.header-search-input')
+    await search.fill('cover')
+    await expect(listModal.locator('tbody tr')).toHaveCount(2)
+    await expect(listModal.locator('tbody tr').nth(1)).toContainText('cover.jpg')
+    await search.fill('')
     await expect(listModal.locator('tbody tr')).toHaveCount(5)
 
     // Right-click the lone file row -> context menu, each action targeting that exact row's path.
@@ -336,7 +346,7 @@ test.describe('Purge Audio Pool Samples', () => {
     expect(calls).toHaveLength(1)
     expect(calls[0].poolPath).toBe('/test/set/AUDIO')
     expect(calls[0].plan).toEqual([
-      { kind: 'File', path: '/test/set/AUDIO/unused.wav', origin: 'AUDIO', size: 4096, slots: [] },
+      { kind: 'File', path: '/test/set/AUDIO/unused.wav', origin: 'AUDIO', size: 4096, slots: [], sidecar: null },
     ])
     expect(calls[0].clearUnusedSlots).toBe(false)
     expect(calls[0].includedProjectPaths).toEqual([])
@@ -418,7 +428,7 @@ test.describe('Purge Audio Pool Samples', () => {
     expect(calls).toHaveLength(1)
     expect(calls[0].poolPath).toBe('/test/set/AUDIO')
     expect(calls[0].plan).toEqual([
-      { kind: 'File', path: '/test/set/AUDIO/unused.wav', origin: 'AUDIO', size: 4096, slots: [] },
+      { kind: 'File', path: '/test/set/AUDIO/unused.wav', origin: 'AUDIO', size: 4096, slots: [], sidecar: null },
     ])
     expect(calls[0].includedProjectPaths).toEqual([])
     expect(calls[0].destinationDir).toBe('/home/testuser/Downloads')

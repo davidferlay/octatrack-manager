@@ -287,6 +287,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   // toggling either checkbox never re-hits the backend - see the effect
   // below and isUnderBackupsDir. null means "not fetched yet".
   const [purgeUnitsAsIs, setPurgeUnitsAsIs] = useState<PurgeUnit[] | null>(null);
+  // Total audio files the purge scan walked - the "of N scanned" denominator.
+  const [purgeScanTotal, setPurgeScanTotal] = useState<number | null>(null);
   const [purgeUnitsSimulated, setPurgeUnitsSimulated] = useState<PurgeUnit[] | null>(null);
   // Count of loaded-but-untriggered slots that would also be cleared this
   // run, computed alongside the scan whenever clearUnusedSlots is on - see
@@ -553,12 +555,23 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     setPurgeUnitsSimulated(null);
     setPurgeSlotsToClear(null);
     setPurgeScanProgress(0);
+    setPurgeScanTotal(null);
     let callsDone = 0;
-    const CALL_COUNT = 3;
+    const CALL_COUNT = 4;
     const markCallDone = () => {
       callsDone += 1;
       if (!cancelled) setPurgeScanProgress(Math.round((callsDone / CALL_COUNT) * 100));
     };
+
+    // How many audio files the scan actually looked at - the "of N scanned"
+    // denominator. Derived from the same recursive listing the backend scan
+    // walks, not from the unused results (which only ever counts findings).
+    invoke<string[]>('list_audio_files_recursive', { path: projectPath }).then((paths) => {
+      if (!cancelled) setPurgeScanTotal(paths?.length ?? 0);
+    }).catch((err) => {
+      console.error('Error counting project audio files:', err);
+      if (!cancelled) setPurgeScanTotal(0);
+    }).finally(markCallDone);
 
     invoke<PurgeUnit[]>('scan_project_unused_files', {
       projectPath,
@@ -601,7 +614,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   }, [purgeUnitsRaw, excludeBackups, projectPath]);
   // Audio-file counts, not row counts - a collapsed directory is one row but
   // may represent many unused files (see purgeAudioFileCount).
-  const purgeScanTotal = purgeAudioFileCount(purgeUnitsRaw ?? []);
   const purgeUnusedFileCount = purgeAudioFileCount(purgeUnits);
   // Non-audio files only ever ride along inside a collapsed directory unit.
   const purgeNonAudioCount = purgeNonAudioFileCount(purgeUnits);
@@ -3454,7 +3466,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 {purgeNonAudioCount > 0 && (
                   <span className="tools-fix-status-other">{" + "}{purgeNonAudioCount} other file{purgeNonAudioCount !== 1 ? "s" : ""}</span>
                 )}
-                <span className="tools-fix-status-detail">{" - "}of {purgeScanTotal} scanned</span>
+                {purgeScanTotal !== null && (
+                  <span className="tools-fix-status-detail">{" - "}of {purgeScanTotal} scanned</span>
+                )}
               </button>
             )}
           </div>

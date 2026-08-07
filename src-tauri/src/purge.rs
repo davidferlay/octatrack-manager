@@ -39,6 +39,14 @@ pub enum PurgeUnit {
         origin: String,
         size: u64,
         slots: Vec<String>,
+        /// The `.ot` sidecar this file drags along when purged, if one exists
+        /// on disk and isn't shared with a surviving same-stem sibling (see
+        /// `ot_sidecar_if_unshared`). Listed so the review table accounts for
+        /// every byte that leaves the disk instead of quietly sweeping it.
+        /// Not folded into `size`: the execution paths add the sidecar's
+        /// bytes themselves, and double-counting here would inflate
+        /// `bytes_reclaimed`.
+        sidecar: Option<PurgeFileEntry>,
     },
     Directory {
         path: String,
@@ -270,13 +278,29 @@ fn build_purge_plan(
         }
     }
 
+    // `ot_sidecar_if_unshared` decides sharing against the set of paths being
+    // purged as individual files - exactly the non-absorbed keys below.
+    let lone_paths: HashSet<String> = unused_map
+        .keys()
+        .filter(|p| !absorbed.contains(*p))
+        .map(|p| p.to_string_lossy().to_string())
+        .collect();
+
     for (path, (origin, size)) in &unused_map {
         if !absorbed.contains(path) {
+            let path_str = path.to_string_lossy().to_string();
+            let sidecar = ot_sidecar_if_unshared(&path_str, &lone_paths).map(|ot| PurgeFileEntry {
+                size: std::fs::metadata(&ot).map(|m| m.len()).unwrap_or(0),
+                path: ot.to_string_lossy().to_string(),
+                slots: Vec::new(),
+                is_audio: false,
+            });
             units.push(PurgeUnit::File {
-                path: path.to_string_lossy().to_string(),
+                path: path_str,
                 origin: origin.clone(),
                 size: *size,
                 slots: slots_for(path).clone(),
+                sidecar,
             });
         }
     }
@@ -611,9 +635,12 @@ impl PurgeResult {
     /// can never disagree on what a removed directory contributes.
     fn tally(&mut self, unit: &PurgeUnit) {
         match unit {
-            PurgeUnit::File { path, .. } => {
+            PurgeUnit::File { path, sidecar, .. } => {
                 self.files_removed.push(path.clone());
                 self.audio_files_removed += 1;
+                if sidecar.is_some() {
+                    self.non_audio_files_removed += 1;
+                }
             }
             PurgeUnit::Directory {
                 path,
@@ -907,6 +934,7 @@ mod tests {
             origin: "Audio Pool".to_string(),
             size: 1234,
             slots: vec![],
+            sidecar: None,
         };
         let json = serde_json::to_value(&file).unwrap();
         assert_eq!(json["kind"], "File");
@@ -1038,6 +1066,75 @@ mod tests {
             }
             other => panic!("expected a Directory unit, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn a_lone_file_carries_its_ot_sidecar_into_the_plan_so_the_review_table_can_show_it() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let wav = temp.path().join("kick.wav");
+        touch(&wav);
+        std::fs::write(temp.path().join("kick.ot"), b"0123456789").unwrap();
+        let no_sidecar = temp.path().join("snare.wav");
+        touch(&no_sidecar);
+
+        let unused = vec![
+            (
+                wav.to_string_lossy().to_string(),
+                "Audio Pool".to_string(),
+                1,
+            ),
+            (
+                no_sidecar.to_string_lossy().to_string(),
+                "Audio Pool".to_string(),
+                1,
+            ),
+        ];
+        let plan = build_purge_plan(unused, temp.path(), &std::collections::HashMap::new());
+
+        let kick = plan
+            .iter()
+            .find(|u| u.path() == wav.to_string_lossy())
+            .unwrap();
+        match kick {
+            PurgeUnit::File { size, sidecar, .. } => {
+                let sidecar = sidecar.as_ref().expect("kick.wav drags kick.ot along");
+                assert!(sidecar.path.ends_with("kick.ot"));
+                assert_eq!(sidecar.size, 10);
+                assert!(!sidecar.is_audio);
+                // Not folded into the audio file's own size - the execution
+                // paths add the sidecar's bytes separately.
+                assert_eq!(*size, 1);
+            }
+            other => panic!("expected a File unit, got {:?}", other),
+        }
+
+        let snare = plan
+            .iter()
+            .find(|u| u.path() == no_sidecar.to_string_lossy())
+            .unwrap();
+        assert!(matches!(snare, PurgeUnit::File { sidecar: None, .. }));
+    }
+
+    /// Same rule the execution paths already follow: an `.ot` shared with a
+    /// same-stem audio sibling that is NOT being purged must not be listed as
+    /// going anywhere, because it isn't.
+    #[test]
+    fn a_shared_ot_sidecar_is_not_listed_when_a_same_stem_sibling_survives() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let wav = temp.path().join("kick.wav");
+        touch(&wav);
+        touch(&temp.path().join("kick.flac")); // survives - still referenced
+        std::fs::write(temp.path().join("kick.ot"), b"x").unwrap();
+
+        let unused = vec![(
+            wav.to_string_lossy().to_string(),
+            "Audio Pool".to_string(),
+            1,
+        )];
+        let plan = build_purge_plan(unused, temp.path(), &std::collections::HashMap::new());
+
+        assert_eq!(plan.len(), 1);
+        assert!(matches!(&plan[0], PurgeUnit::File { sidecar: None, .. }));
     }
 
     #[test]
@@ -1736,6 +1833,7 @@ mod tests {
             origin: "Audio Pool".to_string(),
             size: 1,
             slots: vec![],
+            sidecar: None,
         }];
 
         let result = trash_purge_units(&plan, &std::collections::HashMap::new()).unwrap();
@@ -1763,6 +1861,7 @@ mod tests {
             origin: "Audio Pool".to_string(),
             size: 1,
             slots: vec![],
+            sidecar: None,
         }];
         let mut origin_roots = std::collections::HashMap::new();
         origin_roots.insert(
@@ -1815,6 +1914,7 @@ mod tests {
                     origin: "Audio Pool".to_string(),
                     size: 1,
                     slots: vec![],
+                    sidecar: None,
                 },
             ];
             let mut origin_roots = std::collections::HashMap::new();
@@ -1894,6 +1994,7 @@ mod tests {
             origin: "Audio Pool".to_string(),
             size: 1,
             slots: vec![],
+            sidecar: None,
         }];
         let mut origin_roots = std::collections::HashMap::new();
         origin_roots.insert(
@@ -1963,6 +2064,7 @@ mod tests {
             origin: "Audio Pool".to_string(),
             size: 1,
             slots: vec![],
+            sidecar: None,
         }];
         let origin_roots = std::collections::HashMap::new();
 
@@ -1982,6 +2084,7 @@ mod tests {
             origin: "Audio Pool".to_string(),
             size: 1,
             slots: vec![],
+            sidecar: None,
         }];
         let mut origin_roots = std::collections::HashMap::new();
         origin_roots.insert(
@@ -2067,6 +2170,7 @@ mod tests {
             origin: "Audio Pool".to_string(),
             size: 1,
             slots: vec![],
+            sidecar: None,
         }];
 
         let result = trash_purge_units(&plan, &std::collections::HashMap::new()).unwrap();
@@ -2099,6 +2203,7 @@ mod tests {
             origin: "Audio Pool".to_string(),
             size: 1,
             slots: vec![],
+            sidecar: None,
         }];
 
         let result = trash_purge_units(&plan, &std::collections::HashMap::new()).unwrap();
@@ -2123,6 +2228,7 @@ mod tests {
             origin: "Audio Pool".to_string(),
             size: 1,
             slots: vec![],
+            sidecar: None,
         }];
         let mut origin_roots = std::collections::HashMap::new();
         origin_roots.insert(
@@ -2161,6 +2267,7 @@ mod tests {
             origin: "Audio Pool".to_string(),
             size: 1,
             slots: vec![],
+            sidecar: None,
         }];
         let mut origin_roots = std::collections::HashMap::new();
         origin_roots.insert(
@@ -2194,6 +2301,7 @@ mod tests {
             origin: "PROJ".to_string(),
             size: 1,
             slots: vec![],
+            sidecar: None,
         }];
         let mut origin_roots = std::collections::HashMap::new();
         origin_roots.insert(
@@ -2231,6 +2339,7 @@ mod tests {
             origin: "Audio Pool".to_string(),
             size: 1,
             slots: vec![],
+            sidecar: None,
         }];
         let mut origin_roots = std::collections::HashMap::new();
         origin_roots.insert(
@@ -2261,12 +2370,14 @@ mod tests {
                 origin: "Audio Pool".to_string(),
                 size: 1,
                 slots: vec![],
+                sidecar: None,
             },
             PurgeUnit::File {
                 path: pool_dir.join("kick.flac").to_string_lossy().to_string(),
                 origin: "Audio Pool".to_string(),
                 size: 1,
                 slots: vec![],
+                sidecar: None,
             },
         ];
 
@@ -2300,6 +2411,7 @@ mod tests {
             origin: "Audio Pool".to_string(),
             size: 1,
             slots: vec![],
+            sidecar: None,
         }];
 
         let result = trash_purge_units(&plan, &std::collections::HashMap::new()).unwrap();
@@ -2332,6 +2444,7 @@ mod tests {
             origin: "Audio Pool".to_string(),
             size: 1,
             slots: vec![],
+            sidecar: None,
         }];
         let mut origin_roots = std::collections::HashMap::new();
         origin_roots.insert(
@@ -2373,6 +2486,7 @@ mod tests {
             origin: "PROJ".to_string(),
             size: 1,
             slots: vec![],
+            sidecar: None,
         }];
         let mut origin_roots = std::collections::HashMap::new();
         origin_roots.insert(
@@ -2415,12 +2529,14 @@ mod tests {
                 origin: "Audio Pool".to_string(),
                 size: 1,
                 slots: vec![],
+                sidecar: None,
             },
             PurgeUnit::File {
                 path: pool_dir.join("kick.flac").to_string_lossy().to_string(),
                 origin: "Audio Pool".to_string(),
                 size: 1,
                 slots: vec![],
+                sidecar: None,
             },
         ];
         let mut origin_roots = std::collections::HashMap::new();
@@ -2463,6 +2579,7 @@ mod tests {
             origin: "Audio Pool".to_string(),
             size: 1,
             slots: vec![],
+            sidecar: None,
         }];
 
         let result = trash_purge_units(&plan, &std::collections::HashMap::new()).unwrap();
@@ -2494,6 +2611,7 @@ mod tests {
             origin: "PROJ".to_string(),
             size: 1,
             slots: vec![],
+            sidecar: None,
         }];
         // origin_roots deliberately does not contain "PROJ".
         let origin_roots = std::collections::HashMap::new();

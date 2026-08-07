@@ -575,12 +575,19 @@ export function PoolFilesTable({ table, showGoToProject = false }: { table: Retu
   const [rowMenu, setRowMenu] = useState<{ x: number; y: number; row: PoolRow } | null>(null);
   useEffect(() => {
     if (!rowMenu) return;
-    const close = () => setRowMenu(null);
+    // Capture phase: the modal box stops click propagation to keep overlay
+    // clicks from closing it, so a bubbling listener here never fires for
+    // clicks inside the modal - which is everywhere the menu can be opened.
+    // Clicks on the menu itself are left to its own buttons to handle.
+    const close = (e: MouseEvent) => {
+      if ((e.target as HTMLElement | null)?.closest?.('.context-menu')) return;
+      setRowMenu(null);
+    };
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setRowMenu(null); };
-    document.addEventListener('click', close);
+    document.addEventListener('click', close, true);
     document.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener('click', close);
+      document.removeEventListener('click', close, true);
       document.removeEventListener('keydown', onKey);
     };
   }, [rowMenu]);

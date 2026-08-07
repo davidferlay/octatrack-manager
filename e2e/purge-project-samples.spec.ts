@@ -29,7 +29,7 @@ async function setupMocks(page: Page) {
           case 'scan_project_unused_files':
             ;(window as any).__scanCalls.push(args)
             return [
-              { kind: 'File', path: '/projects/TestProject/orphan.wav', origin: 'TestProject', size: 2048, slots: [] },
+              { kind: 'File', path: '/projects/TestProject/orphan.wav', origin: 'TestProject', size: 2048, slots: [], sidecar: null },
             ]
           case 'load_project_metadata':
             return {
@@ -149,7 +149,13 @@ async function setupMocks(page: Page) {
             return '1.0.0'
 
           case 'list_audio_files_recursive':
-            return []
+            // 3 audio files in the project; only orphan.wav is unused. This
+            // is the "of N scanned" denominator on the status button.
+            return [
+              '/projects/TestProject/orphan.wav',
+              '/projects/TestProject/kick.wav',
+              '/projects/TestProject/snare.wav',
+            ]
 
           case 'inspect_audio_files':
             return []
@@ -237,7 +243,7 @@ test.describe('Purge Project Samples', () => {
       internals.invoke = async (cmd: string, args?: any) => {
         // The loading state is gated on the "as-is" scan (simulateClearedSlots:
         // false) specifically - hold just that one back so the other 2 of the
-        // 3 background calls resolve first and progress reads 67% (2/3).
+        // 4 background calls resolve first and progress reads 75% (3/4).
         if (cmd === 'scan_project_unused_files' && args?.simulateClearedSlots === false) {
           await new Promise<void>(resolve => { (window as any).__releaseAsIsScan = resolve })
         }
@@ -247,7 +253,7 @@ test.describe('Purge Project Samples', () => {
 
     await openPurgeOperation(page)
 
-    await expect(page.locator('.tools-fix-status.loading')).toContainText('67%')
+    await expect(page.locator('.tools-fix-status.loading')).toContainText('75%')
 
     await page.evaluate(() => (window as any).__releaseAsIsScan())
     await expect(page.locator('.tools-missing-files-summary')).toContainText('1')
@@ -265,7 +271,14 @@ test.describe('Purge Project Samples', () => {
         }
         if (cmd === 'scan_project_unused_files') {
           return [
-            { kind: 'File', path: '/projects/TestProject/orphan.wav', origin: 'TestProject', size: 2048, slots: [] },
+            {
+              kind: 'File',
+              path: '/projects/TestProject/orphan.wav',
+              origin: 'TestProject',
+              size: 2048,
+              slots: [],
+              sidecar: { path: '/projects/TestProject/orphan.ot', size: 256, slots: [], is_audio: false },
+            },
             {
               kind: 'Directory',
               path: '/projects/TestProject/AUDIO/oldkit',
@@ -292,7 +305,10 @@ test.describe('Purge Project Samples', () => {
     // The swept-along cover.jpg is reported separately, never folded into
     // the "unused audio files" headline.
     await expect(summary).toContainText('3')
-    await expect(summary).toContainText('+ 1 other file')
+    // cover.jpg inside the directory + orphan.wav's own .ot sidecar
+    await expect(summary).toContainText('+ 2 other files')
+    // Real total from the recursive audio listing, not the unused count.
+    await expect(summary).toContainText('of 3 scanned')
 
     await summary.click()
     const listModal = page.locator('.missing-samples-list-modal')
@@ -300,9 +316,9 @@ test.describe('Purge Project Samples', () => {
 
     // Directory row (with its three tree-style child rows) sorts before the lone file.
     const rows = listModal.locator('tbody tr')
-    await expect(rows).toHaveCount(5)
+    await expect(rows).toHaveCount(6)
     await expect(rows.nth(0)).toContainText('oldkit')
-    await expect(rows.nth(0)).toContainText('2 files + 1 other file')
+    await expect(rows.nth(0)).toContainText('2 audio + 1 other file')
     await expect(rows.nth(1)).toHaveClass(/purge-tree-child-row/)
     await expect(rows.nth(1)).toContainText('clap.wav')
     await expect(rows.nth(1)).toContainText('1.0 KB')
@@ -317,13 +333,31 @@ test.describe('Purge Project Samples', () => {
     // Slot ID column - only kick.wav is still slot-loaded.
     await expect(rows.nth(3)).toContainText('S1')
     await expect(rows.nth(4)).toContainText('orphan.wav')
+    // A lone file's .ot sidecar gets its own tree-child row, so nothing
+    // leaves the disk unlisted.
+    await expect(rows.nth(5)).toHaveClass(/purge-tree-child-non-audio/)
+    await expect(rows.nth(5)).toContainText('orphan.ot')
+    await expect(rows.nth(5)).toContainText('256 B')
 
     // Collapsing the directory hides its tree-child rows; expanding again restores them.
     await rows.nth(0).locator('.purge-dir-collapse-btn').click()
-    await expect(listModal.locator('tbody tr')).toHaveCount(2)
+    await expect(listModal.locator('tbody tr')).toHaveCount(3)
     await expect(listModal.locator('tbody tr').nth(0)).not.toContainText('clap.wav')
     await rows.first().locator('.purge-dir-collapse-btn').click()
-    await expect(listModal.locator('tbody tr')).toHaveCount(5)
+    await expect(listModal.locator('tbody tr')).toHaveCount(6)
+
+    // Searching matches files inside a collapsed directory, not just the
+    // folder name - and narrows the tree to the hits.
+    const search = listModal.locator('.header-search-input')
+    await search.fill('clap')
+    await expect(listModal.locator('tbody tr')).toHaveCount(2)
+    await expect(listModal.locator('tbody tr').nth(0)).toContainText('oldkit')
+    await expect(listModal.locator('tbody tr').nth(1)).toContainText('clap.wav')
+    // Matching the folder itself keeps all of its children visible.
+    await search.fill('oldkit')
+    await expect(listModal.locator('tbody tr')).toHaveCount(4)
+    await search.fill('')
+    await expect(listModal.locator('tbody tr')).toHaveCount(6)
 
     // Right-click a tree-child row -> context menu with Open in file explorer + Copy file path,
     // each acting on that exact child file's path (not the parent directory's).
@@ -341,6 +375,14 @@ test.describe('Purge Project Samples', () => {
     await menu.getByText('Copy file path').click()
     await expect(menu).toHaveCount(0)
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(kickPath)
+
+    // A plain left-click anywhere else dismisses the menu. The modal box
+    // stops click propagation, so this only works with a capture-phase
+    // listener - it silently regressed to "unclosable" without one.
+    await rows.nth(3).click({ button: 'right' })
+    await expect(page.locator('.context-menu')).toBeVisible()
+    await listModal.locator('.modal-header h3').click()
+    await expect(page.locator('.context-menu')).toHaveCount(0)
   })
 
   test('toggling Exclude backups/ directory and Clear unused sample slot assignments never re-scans the backend', async ({ page }) => {
@@ -429,7 +471,7 @@ test.describe('Purge Project Samples', () => {
     expect(calls).toHaveLength(1)
     expect(calls[0].projectPath).toBe('/test/project')
     expect(calls[0].plan).toEqual([
-      { kind: 'File', path: '/projects/TestProject/orphan.wav', origin: 'TestProject', size: 2048, slots: [] },
+      { kind: 'File', path: '/projects/TestProject/orphan.wav', origin: 'TestProject', size: 2048, slots: [], sidecar: null },
     ])
     expect(calls[0].clearUnusedSlots).toBe(false)
     expect(calls[0].destinationDir).toBe(null)
@@ -510,7 +552,7 @@ test.describe('Purge Project Samples', () => {
     expect(calls).toHaveLength(1)
     expect(calls[0].projectPath).toBe('/test/project')
     expect(calls[0].plan).toEqual([
-      { kind: 'File', path: '/projects/TestProject/orphan.wav', origin: 'TestProject', size: 2048, slots: [] },
+      { kind: 'File', path: '/projects/TestProject/orphan.wav', origin: 'TestProject', size: 2048, slots: [], sidecar: null },
     ])
     expect(calls[0].destinationDir).toBe('/home/testuser/Downloads')
 

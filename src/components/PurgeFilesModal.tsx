@@ -18,8 +18,14 @@ export interface PurgeFileEntry {
 
 /** Matches the Rust `PurgeUnit` enum's `#[serde(tag = "kind")]` shape exactly. */
 export type PurgeUnit =
-  | { kind: 'File'; path: string; origin: string; size: number; slots: string[] }
+  | { kind: 'File'; path: string; origin: string; size: number; slots: string[]; sidecar: PurgeFileEntry | null }
   | { kind: 'Directory'; path: string; origin: string; file_count: number; non_audio_count: number; size: number; files: PurgeFileEntry[] };
+
+/** The non-audio files a unit drags along, as tree-child rows: a directory's
+ * absorbed non-audio contents, or a lone file's `.ot` sidecar. */
+export function unitChildFiles(unit: PurgeUnit): PurgeFileEntry[] {
+  return unit.kind === 'Directory' ? unit.files : (unit.sidecar ? [unit.sidecar] : []);
+}
 
 function baseName(path: string): string {
   const idx = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
@@ -62,7 +68,14 @@ export function purgeAudioFileCount(units: PurgeUnit[]): number {
  * unit. Reported apart from `purgeAudioFileCount` so "N unused audio files"
  * keeps meaning exactly that. */
 export function purgeNonAudioFileCount(units: PurgeUnit[]): number {
-  return units.reduce((sum, u) => sum + (u.kind === 'Directory' ? u.non_audio_count : 0), 0);
+  return units.reduce((sum, u) => sum + (u.kind === 'Directory' ? u.non_audio_count : (u.sidecar ? 1 : 0)), 0);
+}
+
+/** Bytes the plan reclaims: each unit's own size plus any `.ot` sidecar,
+ * which the backend deliberately keeps out of `PurgeUnit::File.size` to
+ * avoid double-counting at execution time. */
+export function purgeTotalSize(units: PurgeUnit[]): number {
+  return units.reduce((sum, u) => sum + u.size + (u.kind === 'File' && u.sidecar ? u.sidecar.size : 0), 0);
 }
 
 /** " + 3 other files" / "" - the shared suffix wording for a non-audio count. */
@@ -93,6 +106,10 @@ interface PurgeRow {
   origin: string;
   size: number;
   slots: string[];
+  /** Tree-child rows to render under this one. Same as `unitChildFiles(unit)`
+   * normally; narrowed to the matching children when a search only matched
+   * inside the unit rather than on the unit's own name/path. */
+  children: PurgeFileEntry[];
 }
 
 /** Default column widths (px) before the user resizes anything - Name fills the rest. */
@@ -202,19 +219,28 @@ export function usePurgeTable(units: PurgeUnit[]) {
   const origins = useMemo(() => Array.from(new Set(units.map(u => u.origin))).sort(), [units]);
 
   const rows = useMemo<PurgeRow[]>(() => {
-    let filtered = units.map(unit => ({
+    let filtered: PurgeRow[] = units.map(unit => ({
       unit,
       name: baseName(unit.path),
       location: dirName(unit.path),
       origin: unit.origin,
       size: unit.size,
       slots: unit.kind === 'File' ? unit.slots : [],
+      children: unitChildFiles(unit),
     }));
 
     if (originFilter !== 'all') filtered = filtered.filter(r => r.origin === originFilter);
     if (searchText.trim()) {
+      // A collapsed directory row shows a folder name, not the file names
+      // inside it - searching for one of those files has to still find the
+      // row that will actually remove it. When only the children matched,
+      // narrow the tree to those so the hit is visible, not buried.
       const needle = searchText.toLowerCase();
-      filtered = filtered.filter(r => r.name.toLowerCase().includes(needle) || r.unit.path.toLowerCase().includes(needle));
+      filtered = filtered.flatMap(r => {
+        if (r.name.toLowerCase().includes(needle) || r.unit.path.toLowerCase().includes(needle)) return [r];
+        const hits = r.children.filter(f => f.path.toLowerCase().includes(needle));
+        return hits.length > 0 ? [{ ...r, children: hits }] : [];
+      });
     }
 
     filtered.sort((a, b) => {
@@ -303,7 +329,7 @@ export function usePurgeTable(units: PurgeUnit[]) {
     </th>
   );
 
-  const totalSize = useMemo(() => units.reduce((sum, u) => sum + u.size, 0), [units]);
+  const totalSize = useMemo(() => purgeTotalSize(units), [units]);
   const totalDirs = useMemo(() => units.filter(u => u.kind === 'Directory').length, [units]);
   const totalAudio = useMemo(() => purgeAudioFileCount(units), [units]);
   const totalNonAudio = useMemo(() => purgeNonAudioFileCount(units), [units]);
@@ -365,12 +391,19 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
   const [rowMenu, setRowMenu] = useState<{ x: number; y: number; path: string } | null>(null);
   useEffect(() => {
     if (!rowMenu) return;
-    const close = () => setRowMenu(null);
+    // Capture phase: the modal box stops click propagation to keep overlay
+    // clicks from closing it, so a bubbling listener here never fires for
+    // clicks inside the modal - which is everywhere the menu can be opened.
+    // Clicks on the menu itself are left to its own buttons to handle.
+    const close = (e: MouseEvent) => {
+      if ((e.target as HTMLElement | null)?.closest?.('.context-menu')) return;
+      setRowMenu(null);
+    };
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setRowMenu(null); };
-    document.addEventListener('click', close);
+    document.addEventListener('click', close, true);
     document.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener('click', close);
+      document.removeEventListener('click', close, true);
       document.removeEventListener('keydown', onKey);
     };
   }, [rowMenu]);
@@ -406,7 +439,7 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
         <tbody>
           {rows.map(r => {
             const isDir = r.unit.kind === 'Directory';
-            const collapsed = isDir && collapsedDirs.has(r.unit.path);
+            const collapsed = r.children.length > 0 && collapsedDirs.has(r.unit.path);
             return (
               <Fragment key={r.unit.path}>
                 <tr onContextMenu={openRowMenu(r.unit.path)}>
@@ -421,7 +454,7 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
                       case 'name':
                         return (
                           <td key="name" className="col-sample" title={r.unit.path}>
-                            {r.unit.kind === 'Directory' && (
+                            {r.children.length > 0 && (
                               <button
                                 className="purge-dir-collapse-btn"
                                 onClick={(e) => { e.stopPropagation(); toggleDirCollapsed(r.unit.path); }}
@@ -435,7 +468,7 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
                             {r.name}
                             {r.unit.kind === 'Directory' && (
                               <span className="pool-dir-file-count">
-                                {' '}({r.unit.file_count} files{nonAudioSuffix(r.unit.non_audio_count)})
+                                {' '}({r.unit.file_count} audio{nonAudioSuffix(r.unit.non_audio_count)})
                               </span>
                             )}
                           </td>
@@ -449,7 +482,7 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
                     }
                   })}
                 </tr>
-                {r.unit.kind === 'Directory' && !collapsed && r.unit.files.map(file => (
+                {!collapsed && r.children.map(file => (
                   <tr key={file.path} className={`purge-tree-child-row${file.is_audio ? '' : ' purge-tree-child-non-audio'}`} onContextMenu={openRowMenu(file.path)}>
                     {visibleColumns.map(c => {
                       switch (c.id) {
@@ -462,7 +495,8 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
                         case 'name':
                           return (
                             <td key="name" className="purge-tree-child-name" title={file.path}>
-                              <i className={`fas ${file.is_audio ? 'fa-file-audio' : 'fa-file'}`}></i> {relativeToDir(file.path, r.unit.kind === 'Directory' ? r.unit.path : '')}
+                              <i className={`fas ${file.is_audio ? 'fa-file-audio' : 'fa-file'}`}></i>
+                              {' '}{relativeToDir(file.path, isDir ? r.unit.path : dirName(r.unit.path))}
                             </td>
                           );
                         case 'size':
