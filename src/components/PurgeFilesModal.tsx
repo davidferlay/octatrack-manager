@@ -10,12 +10,16 @@ export interface PurgeFileEntry {
    * ever non-empty when it became unused via a simulated "Clear unused
    * sample slot assignments" run. */
   slots: string[];
+  /** `false` for a non-audio file swept along because the directory around
+   * it collapsed - listed so the tables show everything that actually
+   * leaves the disk, but counted separately from the unused samples. */
+  is_audio: boolean;
 }
 
 /** Matches the Rust `PurgeUnit` enum's `#[serde(tag = "kind")]` shape exactly. */
 export type PurgeUnit =
   | { kind: 'File'; path: string; origin: string; size: number; slots: string[] }
-  | { kind: 'Directory'; path: string; origin: string; file_count: number; size: number; files: PurgeFileEntry[] };
+  | { kind: 'Directory'; path: string; origin: string; file_count: number; non_audio_count: number; size: number; files: PurgeFileEntry[] };
 
 function baseName(path: string): string {
   const idx = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
@@ -50,6 +54,20 @@ function relativeToDir(filePath: string, dirPath: string): string {
  * files actually found). */
 export function purgeAudioFileCount(units: PurgeUnit[]): number {
   return units.reduce((sum, u) => sum + (u.kind === 'Directory' ? u.file_count : 1), 0);
+}
+
+/** Non-audio files (artwork, readmes, `.ot` sidecars, ...) that a purge plan
+ * would also move/delete - they only ever come from a collapsed
+ * `PurgeUnit::Directory` being removed as a whole, never from a lone file
+ * unit. Reported apart from `purgeAudioFileCount` so "N unused audio files"
+ * keeps meaning exactly that. */
+export function purgeNonAudioFileCount(units: PurgeUnit[]): number {
+  return units.reduce((sum, u) => sum + (u.kind === 'Directory' ? u.non_audio_count : 0), 0);
+}
+
+/** " + 3 other files" / "" - the shared suffix wording for a non-audio count. */
+export function nonAudioSuffix(count: number): string {
+  return count > 0 ? ` + ${count} other file${count !== 1 ? 's' : ''}` : '';
 }
 
 function formatSize(bytes: number): string {
@@ -287,6 +305,8 @@ export function usePurgeTable(units: PurgeUnit[]) {
 
   const totalSize = useMemo(() => units.reduce((sum, u) => sum + u.size, 0), [units]);
   const totalDirs = useMemo(() => units.filter(u => u.kind === 'Directory').length, [units]);
+  const totalAudio = useMemo(() => purgeAudioFileCount(units), [units]);
+  const totalNonAudio = useMemo(() => purgeNonAudioFileCount(units), [units]);
 
   return {
     rows, allColumns, visibleColumns, hiddenCols, toggleCol,
@@ -297,7 +317,7 @@ export function usePurgeTable(units: PurgeUnit[]) {
     collapsedDirs, toggleDirCollapsed,
     renderSortableHeader, renderFilterableHeader,
     colWidths, tableRef,
-    totalSize, totalDirs,
+    totalSize, totalDirs, totalAudio, totalNonAudio,
   };
 }
 
@@ -413,7 +433,11 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
                             {isDir && <i className="fas fa-folder"></i>}
                             {' '}
                             {r.name}
-                            {r.unit.kind === 'Directory' && <span className="pool-dir-file-count"> ({r.unit.file_count} files)</span>}
+                            {r.unit.kind === 'Directory' && (
+                              <span className="pool-dir-file-count">
+                                {' '}({r.unit.file_count} files{nonAudioSuffix(r.unit.non_audio_count)})
+                              </span>
+                            )}
                           </td>
                         );
                       case 'location':
@@ -426,7 +450,7 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
                   })}
                 </tr>
                 {r.unit.kind === 'Directory' && !collapsed && r.unit.files.map(file => (
-                  <tr key={file.path} className="purge-tree-child-row" onContextMenu={openRowMenu(file.path)}>
+                  <tr key={file.path} className={`purge-tree-child-row${file.is_audio ? '' : ' purge-tree-child-non-audio'}`} onContextMenu={openRowMenu(file.path)}>
                     {visibleColumns.map(c => {
                       switch (c.id) {
                         case 'slot':
@@ -438,7 +462,7 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
                         case 'name':
                           return (
                             <td key="name" className="purge-tree-child-name" title={file.path}>
-                              <i className="fas fa-file-audio"></i> {relativeToDir(file.path, r.unit.kind === 'Directory' ? r.unit.path : '')}
+                              <i className={`fas ${file.is_audio ? 'fa-file-audio' : 'fa-file'}`}></i> {relativeToDir(file.path, r.unit.kind === 'Directory' ? r.unit.path : '')}
                             </td>
                           );
                         case 'size':
@@ -500,8 +524,14 @@ export function PurgeUnusedListModal({ units, scope, onClose }: {
 }
 
 export interface PurgeResult {
+  /** Standalone file units only - a file removed inside a collapsed
+   * directory is NOT listed here. Use `audio_files_removed` to count. */
   files_removed: string[];
   dirs_removed: string[];
+  /** Every audio file that left the disk, directory contents included. */
+  audio_files_removed: number;
+  /** Non-audio files swept along inside removed directories. */
+  non_audio_files_removed: number;
   bytes_reclaimed: number;
   slots_cleared: number;
   projects_updated: string[];
@@ -630,15 +660,30 @@ export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsT
                 <PurgeUnitsTable table={table} />
               </div>
               <div className="fix-progress-section">
-                <p className="fix-confirm-status" style={isDelete ? { color: '#dc3545' } : undefined}>
-                  {units.length} item{units.length !== 1 ? 's' : ''}, {table.totalDirs} director{table.totalDirs !== 1 ? 'ies' : 'y'}, ~{formatSize(table.totalSize)}
-                  {isDelete ? ' will be moved to the Trash.' : ` will be moved to ${mode.destinationDir}.`}
-                </p>
-                {typeof slotsToClear === 'number' && (
-                  <p className="fix-confirm-status">
-                    {slotsToClear} unused sample slot assignment{slotsToClear !== 1 ? 's' : ''} will also be cleared.
-                  </p>
-                )}
+                <div className={`purge-confirm-banner${isDelete ? ' purge-confirm-banner-danger' : ''}`}>
+                  <div className="purge-confirm-headline">
+                    <i className={`fas ${isDelete ? 'fa-trash' : 'fa-folder-open'}`}></i>
+                    {' '}{table.totalAudio} audio file{table.totalAudio !== 1 ? 's' : ''}
+                    {table.totalNonAudio > 0 && (
+                      <span className="purge-confirm-other">{nonAudioSuffix(table.totalNonAudio)}</span>
+                    )}
+                  </div>
+                  <div className="purge-confirm-sub">
+                    {units.length} item{units.length !== 1 ? 's' : ''}
+                    {' · '}{table.totalDirs} director{table.totalDirs !== 1 ? 'ies' : 'y'}
+                    {' · '}~{formatSize(table.totalSize)}
+                  </div>
+                  <div className="purge-confirm-target">
+                    {isDelete
+                      ? <>will be sent to the <strong>Trash Bin</strong></>
+                      : <>will be moved to <strong>{mode.destinationDir}</strong></>}
+                  </div>
+                  {typeof slotsToClear === 'number' && (
+                    <div className="purge-confirm-slots">
+                      {slotsToClear} unused sample slot assignment{slotsToClear !== 1 ? 's' : ''} will also be cleared
+                    </div>
+                  )}
+                </div>
                 <div className="fix-done-actions">
                   <button className="fix-cancel-btn" onClick={onClose} title="Close without applying any changes">Cancel</button>
                   <div style={{ flex: 1 }} />
@@ -666,7 +711,13 @@ export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsT
             <div className="fix-pool-summary">
               <p>
                 <i className="fas fa-check" style={{ color: '#2ecc71', marginRight: '0.5rem' }}></i>
-                {result.files_removed.length} file{result.files_removed.length !== 1 ? 's' : ''} and {result.dirs_removed.length} director{result.dirs_removed.length !== 1 ? 'ies' : 'y'} removed ({formatSize(result.bytes_reclaimed)} reclaimed).
+                {result.audio_files_removed} audio file{result.audio_files_removed !== 1 ? 's' : ''}
+                {nonAudioSuffix(result.non_audio_files_removed)}
+                {result.dirs_removed.length > 0 && (
+                  <>, across {result.dirs_removed.length} director{result.dirs_removed.length !== 1 ? 'ies' : 'y'},</>
+                )}
+                {isDelete ? ' sent to the Trash Bin' : ` moved to ${mode.destinationDir}`}
+                {' - '}{formatSize(result.bytes_reclaimed)} reclaimed.
                 {result.slots_cleared > 0 && (
                   <><br />{result.slots_cleared} unused sample slot assignment{result.slots_cleared !== 1 ? 's' : ''} cleared.</>
                 )}

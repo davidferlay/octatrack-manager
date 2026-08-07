@@ -18,6 +18,12 @@ pub struct PurgeFileEntry {
     /// unused sample slot assignments" run (see `slot_labels` below); a
     /// file no slot has ever loaded has none.
     pub slots: Vec<String>,
+    /// `false` for a non-audio file (artwork, readme, `.ot` sidecar, ...)
+    /// swept along because the directory around it collapsed. Such files are
+    /// listed so the review/preview tables show everything that will actually
+    /// be moved/deleted, but they're counted separately from audio files
+    /// everywhere a count is shown.
+    pub is_audio: bool,
 }
 
 /// One row in a purge plan: either a single unused audio file, or a whole
@@ -37,13 +43,21 @@ pub enum PurgeUnit {
     Directory {
         path: String,
         origin: String,
+        /// Audio files only - this is the number the "N unused audio files"
+        /// counters add up.
         file_count: u32,
+        /// Non-audio files swept along with the directory, counted and shown
+        /// separately since they were never "unused samples" in the first
+        /// place - they just happen to sit inside a directory that collapsed.
+        non_audio_count: u32,
+        /// Total bytes of everything inside, audio and non-audio alike -
+        /// removing the directory reclaims all of it.
         size: u64,
-        /// Every audio file absorbed into this collapsed directory
-        /// (recursively, including from absorbed subdirectories), sorted
-        /// alphabetically by path - lets the review/preview tables list
-        /// them tree-style under the directory row instead of just showing
-        /// a count.
+        /// Every file absorbed into this collapsed directory (recursively,
+        /// including from absorbed subdirectories, audio and non-audio
+        /// alike), sorted alphabetically by path - lets the review/preview
+        /// tables list them tree-style under the directory row instead of
+        /// just showing a count.
         files: Vec<PurgeFileEntry>,
     },
 }
@@ -140,8 +154,17 @@ fn build_purge_plan(
     let mut ordered: Vec<PathBuf> = candidate_dirs.into_iter().collect();
     ordered.sort_by_key(|p| std::cmp::Reverse(p.components().count()));
 
-    // dir -> (origin, total audio file count, total audio size, absorbed audio file entries) for dirs that fully collapse.
-    let mut collapsed: HashMap<PathBuf, (String, u32, u64, Vec<PurgeFileEntry>)> = HashMap::new();
+    /// Running totals for a directory that fully collapses, including
+    /// everything rolled up from already-collapsed subdirectories.
+    struct Collapsed {
+        origin: String,
+        file_count: u32,
+        non_audio_count: u32,
+        size: u64,
+        files: Vec<PurgeFileEntry>,
+    }
+
+    let mut collapsed: HashMap<PathBuf, Collapsed> = HashMap::new();
     let mut absorbed: HashSet<PathBuf> = HashSet::new();
 
     for dir in &ordered {
@@ -149,6 +172,7 @@ fn build_purge_plan(
             continue;
         };
         let mut file_count = 0u32;
+        let mut non_audio_count = 0u32;
         let mut total_size = 0u64;
         let mut origin: Option<String> = None;
         let mut all_covered = true;
@@ -158,11 +182,12 @@ fn build_purge_plan(
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                if let Some((sub_origin, sub_count, sub_size, sub_files)) = collapsed.get(&path) {
-                    origin.get_or_insert_with(|| sub_origin.clone());
-                    file_count += sub_count;
-                    total_size += sub_size;
-                    files.extend(sub_files.iter().cloned());
+                if let Some(sub) = collapsed.get(&path) {
+                    origin.get_or_insert_with(|| sub.origin.clone());
+                    file_count += sub.file_count;
+                    non_audio_count += sub.non_audio_count;
+                    total_size += sub.size;
+                    files.extend(sub.files.iter().cloned());
                     items_to_absorb.push(path);
                 } else {
                     all_covered = false;
@@ -175,6 +200,7 @@ fn build_purge_plan(
                     path: path.to_string_lossy().to_string(),
                     size: *size,
                     slots: slots_for(&path).clone(),
+                    is_audio: true,
                 });
                 items_to_absorb.push(path);
             } else {
@@ -185,14 +211,38 @@ fn build_purge_plan(
                 if crate::audio_pool::is_audio_file(&name) {
                     // A real, still-referenced audio file - blocks collapse.
                     all_covered = false;
+                } else {
+                    // Swept along once the directory collapses. Listed and
+                    // sized like any other row so the review table shows the
+                    // full truth of what leaves the disk, but counted apart
+                    // from the audio files.
+                    non_audio_count += 1;
+                    let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+                    total_size += size;
+                    files.push(PurgeFileEntry {
+                        path: path.to_string_lossy().to_string(),
+                        size,
+                        slots: Vec::new(),
+                        is_audio: false,
+                    });
                 }
-                // else: a non-audio file, swept along once the directory collapses.
             }
         }
 
+        // `file_count > 0`: a directory holding nothing but non-audio files
+        // is not an "unused samples" finding and must never be purged.
         if all_covered && file_count > 0 && dir.as_path() != root {
             if let Some(origin) = origin {
-                collapsed.insert(dir.clone(), (origin, file_count, total_size, files));
+                collapsed.insert(
+                    dir.clone(),
+                    Collapsed {
+                        origin,
+                        file_count,
+                        non_audio_count,
+                        size: total_size,
+                        files,
+                    },
+                );
                 for path in items_to_absorb {
                     absorbed.insert(path);
                 }
@@ -204,16 +254,17 @@ fn build_purge_plan(
 
     // Only emit the top of each collapsed chain (a collapsed dir whose
     // parent also collapsed is already accounted for by that parent).
-    for (dir, (origin, file_count, size, files)) in &collapsed {
+    for (dir, c) in &collapsed {
         let parent_collapsed = dir.parent().is_some_and(|p| collapsed.contains_key(p));
         if !parent_collapsed {
-            let mut file_entries = files.clone();
+            let mut file_entries = c.files.clone();
             file_entries.sort_by(|a, b| a.path.cmp(&b.path));
             units.push(PurgeUnit::Directory {
                 path: dir.to_string_lossy().to_string(),
-                origin: origin.clone(),
-                file_count: *file_count,
-                size: *size,
+                origin: c.origin.clone(),
+                file_count: c.file_count,
+                non_audio_count: c.non_audio_count,
+                size: c.size,
                 files: file_entries,
             });
         }
@@ -536,12 +587,46 @@ pub fn clear_unused_slots_for_projects(result: &mut PurgeResult, project_paths: 
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct PurgeResult {
+    /// Paths of the standalone `PurgeUnit::File` units only - a file removed
+    /// as part of a collapsed directory is not listed here (the directory is,
+    /// under `dirs_removed`). Use `audio_files_removed` for a total count.
     pub files_removed: Vec<String>,
     pub dirs_removed: Vec<String>,
+    /// Every audio file that left the disk: standalone units plus everything
+    /// inside each removed directory. `files_removed.len()` undercounts by
+    /// exactly the directory contents, which is what made the done screen
+    /// report "0 files and 1 directory removed" for a 50-file directory.
+    pub audio_files_removed: u32,
+    /// Non-audio files swept along inside removed directories.
+    pub non_audio_files_removed: u32,
     pub bytes_reclaimed: u64,
     pub slots_cleared: u32,
     pub projects_updated: Vec<String>,
     pub errors: Vec<String>,
+}
+
+impl PurgeResult {
+    /// Records one successfully removed unit into the path lists and the
+    /// audio/non-audio totals. Shared by the trash and move paths so the two
+    /// can never disagree on what a removed directory contributes.
+    fn tally(&mut self, unit: &PurgeUnit) {
+        match unit {
+            PurgeUnit::File { path, .. } => {
+                self.files_removed.push(path.clone());
+                self.audio_files_removed += 1;
+            }
+            PurgeUnit::Directory {
+                path,
+                file_count,
+                non_audio_count,
+                ..
+            } => {
+                self.dirs_removed.push(path.clone());
+                self.audio_files_removed += file_count;
+                self.non_audio_files_removed += non_audio_count;
+            }
+        }
+    }
 }
 
 /// The `.ot` sidecar (Octatrack per-sample Audio Editor attribute file) for
@@ -650,10 +735,7 @@ pub fn trash_purge_units(
     result.errors.extend(backup_errors);
     for unit in plan {
         result.bytes_reclaimed += unit.size();
-        match unit {
-            PurgeUnit::File { path, .. } => result.files_removed.push(path.clone()),
-            PurgeUnit::Directory { path, .. } => result.dirs_removed.push(path.clone()),
-        }
+        result.tally(unit);
     }
     result.bytes_reclaimed += ot_bytes;
     Ok(result)
@@ -742,9 +824,9 @@ pub fn move_purge_units(
         }
 
         result.bytes_reclaimed += unit.size();
+        result.tally(unit);
         match unit {
             PurgeUnit::File { path, .. } => {
-                result.files_removed.push(unit.path().to_string());
                 // Sweep the .ot sidecar along too (Finding 5): derive its
                 // destination from the audio file's own (already
                 // collision-resolved) target so the pair stays named
@@ -779,7 +861,7 @@ pub fn move_purge_units(
                     }
                 }
             }
-            PurgeUnit::Directory { .. } => result.dirs_removed.push(unit.path().to_string()),
+            PurgeUnit::Directory { .. } => {} // no per-file sidecar work: the whole dir moves as a unit
         }
     }
 
@@ -835,11 +917,13 @@ mod tests {
             path: "/set/AUDIO/oldkit".to_string(),
             origin: "Audio Pool".to_string(),
             file_count: 3,
+            non_audio_count: 0,
             size: 9000,
             files: vec![PurgeFileEntry {
                 path: "/set/AUDIO/oldkit/kick.wav".to_string(),
                 size: 500,
                 slots: vec![],
+                is_audio: true,
             }],
         };
         assert_eq!(dir.path(), "/set/AUDIO/oldkit");
@@ -908,6 +992,76 @@ mod tests {
             }
             other => panic!("expected a Directory unit, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn a_collapsed_directory_lists_and_counts_the_non_audio_files_it_sweeps_along() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let dir = temp.path().join("kit");
+        std::fs::create_dir(&dir).unwrap();
+        touch(&dir.join("kick.wav"));
+        std::fs::write(dir.join("cover.jpg"), b"1234567890").unwrap();
+        std::fs::write(dir.join("readme.txt"), b"abc").unwrap();
+
+        let unused = vec![(
+            dir.join("kick.wav").to_string_lossy().to_string(),
+            "Audio Pool".to_string(),
+            100,
+        )];
+        let plan = build_purge_plan(unused, temp.path(), &std::collections::HashMap::new());
+
+        assert_eq!(plan.len(), 1);
+        match &plan[0] {
+            PurgeUnit::Directory {
+                file_count,
+                non_audio_count,
+                size,
+                files,
+                ..
+            } => {
+                assert_eq!(*file_count, 1, "audio count stays audio-only");
+                assert_eq!(*non_audio_count, 2);
+                // 100 (declared audio size) + 10 (cover.jpg) + 3 (readme.txt)
+                assert_eq!(*size, 113, "non-audio bytes are reclaimed too");
+                let listed: Vec<(&str, bool)> = files
+                    .iter()
+                    .map(|f| (f.path.rsplit('/').next().unwrap_or(&f.path), f.is_audio))
+                    .collect();
+                assert_eq!(
+                    listed,
+                    vec![
+                        ("cover.jpg", false),
+                        ("kick.wav", true),
+                        ("readme.txt", false)
+                    ]
+                );
+            }
+            other => panic!("expected a Directory unit, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn a_directory_holding_only_non_audio_files_is_never_purged() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let lone = temp.path().join("stray.wav");
+        touch(&lone);
+        let docs = temp.path().join("docs");
+        std::fs::create_dir(&docs).unwrap();
+        touch(&docs.join("notes.txt"));
+
+        let unused = vec![(
+            lone.to_string_lossy().to_string(),
+            "Audio Pool".to_string(),
+            1,
+        )];
+        let plan = build_purge_plan(unused, temp.path(), &std::collections::HashMap::new());
+
+        // Only the lone audio file - `docs/` holds no unused sample, so it is
+        // not a finding no matter what else is inside it.
+        assert_eq!(plan.len(), 1);
+        assert!(
+            matches!(&plan[0], PurgeUnit::File { path, .. } if path == &lone.to_string_lossy().to_string())
+        );
     }
 
     #[test]
@@ -1631,6 +1785,59 @@ mod tests {
         assert_eq!(result.files_removed, vec![plan[0].path().to_string()]);
     }
 
+    /// The done screen used to read "0 files and 1 directory removed" for a
+    /// directory holding 50 files, because `files_removed` only ever lists
+    /// standalone units. Both execution paths must roll the directory's own
+    /// contents into the audio/non-audio totals.
+    #[test]
+    fn removing_a_directory_counts_the_files_inside_it_not_just_the_directory() {
+        for delete in [true, false] {
+            let temp = tempfile::TempDir::new().unwrap();
+            let pool_dir = temp.path().join("AUDIO");
+            let kit_dir = pool_dir.join("oldkit");
+            std::fs::create_dir_all(&kit_dir).unwrap();
+            let lone = pool_dir.join("stray.wav");
+            touch(&lone);
+            let dest = temp.path().join("dest");
+            std::fs::create_dir(&dest).unwrap();
+
+            let plan = vec![
+                PurgeUnit::Directory {
+                    path: kit_dir.to_string_lossy().to_string(),
+                    origin: "Audio Pool".to_string(),
+                    file_count: 50,
+                    non_audio_count: 3,
+                    size: 1,
+                    files: vec![],
+                },
+                PurgeUnit::File {
+                    path: lone.to_string_lossy().to_string(),
+                    origin: "Audio Pool".to_string(),
+                    size: 1,
+                    slots: vec![],
+                },
+            ];
+            let mut origin_roots = std::collections::HashMap::new();
+            origin_roots.insert(
+                "Audio Pool".to_string(),
+                pool_dir.to_string_lossy().to_string(),
+            );
+
+            let result = if delete {
+                trash_purge_units(&plan, &origin_roots).unwrap()
+            } else {
+                move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots).unwrap()
+            };
+
+            assert_eq!(result.errors, Vec::<String>::new(), "delete={}", delete);
+            assert_eq!(result.dirs_removed.len(), 1, "delete={}", delete);
+            assert_eq!(result.files_removed.len(), 1, "delete={}", delete);
+            // 50 inside the directory + the 1 standalone file
+            assert_eq!(result.audio_files_removed, 51, "delete={}", delete);
+            assert_eq!(result.non_audio_files_removed, 3, "delete={}", delete);
+        }
+    }
+
     #[test]
     fn move_purge_units_preserves_relative_subpaths_for_directory_units() {
         let temp = tempfile::TempDir::new().unwrap();
@@ -1645,11 +1852,13 @@ mod tests {
             path: kit_dir.to_string_lossy().to_string(),
             origin: "Audio Pool".to_string(),
             file_count: 1,
+            non_audio_count: 0,
             size: 1,
             files: vec![PurgeFileEntry {
                 path: kit_dir.join("kick.wav").to_string_lossy().to_string(),
                 size: 1,
                 slots: vec![],
+                is_audio: true,
             }],
         }];
         let mut origin_roots = std::collections::HashMap::new();

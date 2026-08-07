@@ -81,6 +81,8 @@ async function setupMocks(page: Page) {
             return {
               files_removed: [args.plan[0].path],
               dirs_removed: [],
+              audio_files_removed: 1,
+              non_audio_files_removed: 0,
               bytes_reclaimed: 4096,
               slots_cleared: 0,
               projects_updated: [],
@@ -171,10 +173,12 @@ test.describe('Purge Audio Pool Samples', () => {
               path: '/test/set/AUDIO/oldkit',
               origin: 'AUDIO',
               file_count: 2,
-              size: 3072,
+              non_audio_count: 1,
+              size: 3584,
               files: [
-                { path: '/test/set/AUDIO/oldkit/clap.wav', size: 1024, slots: [] },
-                { path: '/test/set/AUDIO/oldkit/kick.wav', size: 2048, slots: ['F3'] },
+                { path: '/test/set/AUDIO/oldkit/clap.wav', size: 1024, slots: [], is_audio: true },
+                { path: '/test/set/AUDIO/oldkit/cover.jpg', size: 512, slots: [], is_audio: false },
+                { path: '/test/set/AUDIO/oldkit/kick.wav', size: 2048, slots: ['F3'], is_audio: true },
               ],
             },
           ]
@@ -186,45 +190,52 @@ test.describe('Purge Audio Pool Samples', () => {
     await openPurgeOperation(page)
     const summary = page.locator('.tools-missing-files-summary')
     // 1 lone file + the directory's own file_count (2) = 3 unused audio files.
+    // The swept-along cover.jpg is reported apart from that headline count.
     await expect(summary).toContainText('3')
+    await expect(summary).toContainText('+ 1 other file')
 
     await summary.click()
     const listModal = page.locator('.missing-samples-list-modal')
     await expect(listModal.getByText('Unused Audio Pool Samples')).toBeVisible()
 
     // A short plan must not collapse the modal to a squat strip.
-    expect(await listModal.evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(360)
+    expect(await listModal.evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThan(355) // 360px floor, minus sub-pixel rounding
 
     const rows = listModal.locator('tbody tr')
-    await expect(rows).toHaveCount(4)
+    await expect(rows).toHaveCount(5)
     await expect(rows.nth(0)).toContainText('oldkit')
-    await expect(rows.nth(0)).toContainText('2 files')
+    await expect(rows.nth(0)).toContainText('2 files + 1 other file')
     await expect(rows.nth(1)).toHaveClass(/purge-tree-child-row/)
     await expect(rows.nth(1)).toContainText('clap.wav')
     await expect(rows.nth(1)).toContainText('1.0 KB')
-    await expect(rows.nth(2)).toHaveClass(/purge-tree-child-row/)
-    await expect(rows.nth(2)).toContainText('kick.wav')
-    await expect(rows.nth(2)).toContainText('2.0 KB')
-    await expect(rows.nth(2)).toContainText('F3')
-    await expect(rows.nth(3)).toContainText('orphan.wav')
+    // The non-audio file is listed too, flagged as such rather than hidden.
+    await expect(rows.nth(2)).toHaveClass(/purge-tree-child-non-audio/)
+    await expect(rows.nth(2)).toContainText('cover.jpg')
+    await expect(rows.nth(2)).toContainText('512 B')
+    await expect(rows.nth(3)).toHaveClass(/purge-tree-child-row/)
+    await expect(rows.nth(3)).not.toHaveClass(/purge-tree-child-non-audio/)
+    await expect(rows.nth(3)).toContainText('kick.wav')
+    await expect(rows.nth(3)).toContainText('2.0 KB')
+    await expect(rows.nth(3)).toContainText('F3')
+    await expect(rows.nth(4)).toContainText('orphan.wav')
 
     // Collapsing the directory hides its tree-child rows; expanding restores them.
     await rows.first().locator('.purge-dir-collapse-btn').click()
     await expect(listModal.locator('tbody tr')).toHaveCount(2)
     await rows.first().locator('.purge-dir-collapse-btn').click()
-    await expect(listModal.locator('tbody tr')).toHaveCount(4)
+    await expect(listModal.locator('tbody tr')).toHaveCount(5)
 
     // Right-click the lone file row -> context menu, each action targeting that exact row's path.
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
     const orphanPath = '/test/set/AUDIO/orphan.wav'
 
-    await rows.nth(3).click({ button: 'right' })
+    await rows.nth(4).click({ button: 'right' })
     let menu = page.locator('.context-menu')
     await expect(menu.getByText('Open in file explorer')).toBeVisible()
     await menu.getByText('Open in file explorer').click()
     await expect.poll(async () => page.evaluate(() => (window as any).__revealCalls)).toEqual([orphanPath])
 
-    await rows.nth(3).click({ button: 'right' })
+    await rows.nth(4).click({ button: 'right' })
     menu = page.locator('.context-menu')
     await menu.getByText('Copy file path').click()
     await expect(menu).toHaveCount(0)
@@ -316,7 +327,7 @@ test.describe('Purge Audio Pool Samples', () => {
     expect(nameColWidth).toBe('')
 
     // Same min-height floor as the preview modal, so the two match on a one-row plan.
-    expect(await modal.evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(360)
+    expect(await modal.evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThan(355) // 360px floor, minus sub-pixel rounding
 
     await modal.getByRole('button', { name: 'Apply Changes' }).click()
 
@@ -336,7 +347,7 @@ test.describe('Purge Audio Pool Samples', () => {
     // "done" summary screen until the user clicks Close, rather than being
     // torn down by the parent the instant the purge call resolves.
     await expect(modal).toHaveCount(1)
-    await expect(modal.getByText('1 file and 0 directories removed (4.0 KB reclaimed).')).toBeVisible()
+    await expect(modal.getByText('1 audio file sent to the Trash Bin - 4.0 KB reclaimed.')).toBeVisible()
 
     // onPurged's refresh: get_pool_usage is re-fetched (invalidatePoolUsage)
     // and the destination (pool) file listing is reloaded.
@@ -415,6 +426,6 @@ test.describe('Purge Audio Pool Samples', () => {
     // Modal lands directly on its "done" summary screen (skipReview jumps
     // straight from mount to the removing/done phases).
     const modal = page.locator('.missing-samples-list-modal')
-    await expect(modal.getByText('1 file and 0 directories removed (4.0 KB reclaimed).')).toBeVisible()
+    await expect(modal.getByText('1 audio file moved to /home/testuser/Downloads - 4.0 KB reclaimed.')).toBeVisible()
   })
 })

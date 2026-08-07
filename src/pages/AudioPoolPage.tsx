@@ -17,7 +17,7 @@ import {
 import { Version } from "../components/Version";
 import { AudioFileTable, audioKind } from "../components/AudioFileTable";
 import { FixPoolFilesModal, PoolIncompatibleListModal, type IncompatibleFile, type PoolFixResult, type CopyProgressEvent } from "../components/FixPoolFilesModal";
-import { PurgeFilesModal, purgeAudioFileCount, PurgeUnusedListModal, type PurgeUnit } from "../components/PurgeFilesModal";
+import { PurgeFilesModal, purgeAudioFileCount, purgeNonAudioFileCount, PurgeUnusedListModal, type PurgeUnit } from "../components/PurgeFilesModal";
 import { isUnderBackupsDir } from "../utils/purgeBackups";
 import { OverwriteModal } from "../components/OverwriteModal";
 import { TransferProgressPanel } from "../components/TransferProgressPanel";
@@ -505,6 +505,8 @@ export function AudioPoolPage() {
   // may represent many unused files (see purgeAudioFileCount).
   const purgeScanTotal = purgeAudioFileCount(purgeUnitsRaw ?? []);
   const purgeUnusedFileCount = purgeAudioFileCount(purgeUnits);
+  // Non-audio files only ever ride along inside a collapsed directory unit.
+  const purgeNonAudioCount = purgeNonAudioFileCount(purgeUnits);
 
   // Purge Audio Pool Samples: resolve the default Move-mode destination once,
   // the first time the operation is selected (never overwrites a user edit).
@@ -1813,6 +1815,9 @@ export function AudioPoolPage() {
                   >
                     <span className="tools-fix-status-count">{purgeUnusedFileCount}</span>
                     {" "}unused audio file{purgeUnusedFileCount !== 1 ? "s" : ""}
+                    {purgeNonAudioCount > 0 && (
+                      <span className="tools-fix-status-other">{" + "}{purgeNonAudioCount} other file{purgeNonAudioCount !== 1 ? "s" : ""}</span>
+                    )}
                     <span className="tools-fix-status-detail">{" - "}of {purgeScanTotal} scanned</span>
                   </button>
                 )}

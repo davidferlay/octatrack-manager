@@ -12,7 +12,7 @@ import { MissingSamplesListModal } from "./MissingSamplesListModal";
 import { CreateProjectModal } from "./CreateProjectModal";
 import { ProjectIncompatibleListModal, FixProjectFilesModal } from "./FixProjectFilesModal";
 import type { IncompatibleFile, PoolFixResult } from "./FixPoolFilesModal";
-import { PurgeFilesModal, purgeAudioFileCount, PurgeUnusedListModal, type PurgeUnit } from "./PurgeFilesModal";
+import { PurgeFilesModal, purgeAudioFileCount, purgeNonAudioFileCount, PurgeUnusedListModal, type PurgeUnit } from "./PurgeFilesModal";
 import { audioKind, usageKey } from "./AudioFileTable";
 import { normalizePath } from "./SampleSlotsTable";
 import { isUnderBackupsDir } from "../utils/purgeBackups";
@@ -603,6 +603,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   // may represent many unused files (see purgeAudioFileCount).
   const purgeScanTotal = purgeAudioFileCount(purgeUnitsRaw ?? []);
   const purgeUnusedFileCount = purgeAudioFileCount(purgeUnits);
+  // Non-audio files only ever ride along inside a collapsed directory unit.
+  const purgeNonAudioCount = purgeNonAudioFileCount(purgeUnits);
 
   // Purge Project Samples: resolve the default Move-mode destination once,
   // the first time the operation is selected (never overwrites a user edit).
@@ -3449,6 +3451,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               <button className="tools-missing-files-summary" onClick={() => setShowPurgeListModal(true)} title="Click to view the unused files list">
                 <span className="tools-fix-status-count">{purgeUnusedFileCount}</span>
                 {" "}unused audio file{purgeUnusedFileCount !== 1 ? "s" : ""}
+                {purgeNonAudioCount > 0 && (
+                  <span className="tools-fix-status-other">{" + "}{purgeNonAudioCount} other file{purgeNonAudioCount !== 1 ? "s" : ""}</span>
+                )}
                 <span className="tools-fix-status-detail">{" - "}of {purgeScanTotal} scanned</span>
               </button>
             )}
