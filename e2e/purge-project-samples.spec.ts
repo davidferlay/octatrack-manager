@@ -223,6 +223,9 @@ test.describe('Purge Project Samples', () => {
     await expect(listModal.getByText('Unused Project Samples')).toBeVisible()
     await expect(listModal.locator('tbody tr')).toHaveCount(1)
     await expect(listModal.locator('tbody')).toContainText('orphan.wav')
+
+    // A single-row plan must not collapse the modal to a squat strip.
+    expect(await listModal.evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(360)
   })
 
   test('scanning shows a live percentage that advances as each background call resolves', async ({ page }) => {
@@ -393,6 +396,9 @@ test.describe('Purge Project Samples', () => {
     await expect(modal).not.toHaveClass(/fix-pool-modal(?!-narrow)/)
     const nameColWidth = await modal.locator('.purge-units-table colgroup col').nth(1).evaluate(el => (el as HTMLElement).style.width)
     expect(nameColWidth).toBe('')
+
+    // Same min-height floor as the preview modal, so the two match on a one-row plan.
+    expect(await modal.evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(360)
 
     await modal.getByRole('button', { name: 'Apply Changes' }).click()
 

@@ -79,7 +79,7 @@ interface PurgeRow {
 
 /** Default column widths (px) before the user resizes anything - Name fills the rest. */
 const PURGE_COL_DEFAULTS: Record<PurgeSortColumn, number | undefined> = {
-  slot: 55, name: undefined, location: 185, origin: 140, size: 90,
+  slot: 60, name: undefined, location: 185, origin: 140, size: 90,
 };
 
 /**
@@ -472,7 +472,7 @@ export function PurgeUnusedListModal({ units, scope, onClose }: {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div ref={modalRef} className="modal-content missing-samples-list-modal pool-list-modal" onClick={(e) => e.stopPropagation()} style={style}>
+      <div ref={modalRef} className="modal-content missing-samples-list-modal pool-list-modal purge-list-modal" onClick={(e) => e.stopPropagation()} style={style}>
         {handles}
         <div className="modal-header missing-samples-header">
           <h3><i className="fas fa-list"></i> {title}</h3>
@@ -593,7 +593,7 @@ export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsT
     <div className="modal-overlay" onClick={phase !== 'removing' ? onClose : undefined}>
       <div
         ref={modalRef}
-        className={`modal-content missing-samples-list-modal pool-list-modal${phase === 'review' ? '' : ' fix-pool-modal-narrow'}`}
+        className={`modal-content missing-samples-list-modal pool-list-modal purge-list-modal${phase === 'review' ? '' : ' fix-pool-modal-narrow'}`}
         onClick={(e) => e.stopPropagation()}
         style={style}
       >

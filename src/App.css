@@ -5728,6 +5728,18 @@ th.col-usage .header-content .sort-indicator {
   overflow-x: hidden;
 }
 
+/* Purge's preview and review modals: a purge plan is often a single row (one
+   directory standing in for 50 files), which would collapse the modal to a
+   squat strip barely taller than its own header. Floor them so both keep the
+   same shape regardless of row count - the table wrapper flexes to absorb the
+   slack. Deliberately NOT applied to the Missing Samples / Fix list modals,
+   which are content-sized by contract (no dead space below the table).
+   Excludes the narrow status phases (removing/done/error), whose own
+   .fix-pool-modal-narrow .modal-body floor already sizes them. */
+.modal-content.purge-list-modal:not(.fix-pool-modal-narrow) {
+  min-height: 360px;
+}
+
 .missing-samples-header {
   gap: 0.5rem;
 }
@@ -5830,7 +5842,8 @@ th.col-usage .header-content .sort-indicator {
   display: contents;
 }
 
-.fix-missing-modal .fix-confirmation {
+.fix-missing-modal .fix-confirmation,
+.purge-list-modal .fix-confirmation {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -5838,11 +5851,13 @@ th.col-usage .header-content .sort-indicator {
 }
 
 /* Bottom action rows keep their natural height - only the table wrapper flexes */
-.fix-missing-modal .fix-confirmation .fix-progress-section {
+.fix-missing-modal .fix-confirmation .fix-progress-section,
+.purge-list-modal .fix-confirmation .fix-progress-section {
   flex: 0 0 auto;
 }
 
 .fix-missing-modal .fix-confirm-table-wrapper,
+.purge-list-modal .fix-confirm-table-wrapper,
 .fix-missing-modal .table-wrapper,
 .missing-samples-list-modal .table-wrapper {
   flex: 1 1 auto;

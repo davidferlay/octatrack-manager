@@ -192,6 +192,9 @@ test.describe('Purge Audio Pool Samples', () => {
     const listModal = page.locator('.missing-samples-list-modal')
     await expect(listModal.getByText('Unused Audio Pool Samples')).toBeVisible()
 
+    // A short plan must not collapse the modal to a squat strip.
+    expect(await listModal.evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(360)
+
     const rows = listModal.locator('tbody tr')
     await expect(rows).toHaveCount(4)
     await expect(rows.nth(0)).toContainText('oldkit')
@@ -311,6 +314,9 @@ test.describe('Purge Audio Pool Samples', () => {
     await expect(modal).not.toHaveClass(/fix-pool-modal(?!-narrow)/)
     const nameColWidth = await modal.locator('.purge-units-table colgroup col').nth(1).evaluate(el => (el as HTMLElement).style.width)
     expect(nameColWidth).toBe('')
+
+    // Same min-height floor as the preview modal, so the two match on a one-row plan.
+    expect(await modal.evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(360)
 
     await modal.getByRole('button', { name: 'Apply Changes' }).click()
 
