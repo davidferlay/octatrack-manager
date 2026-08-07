@@ -8833,7 +8833,7 @@ mod tests {
                 temp_dir.path().join("project.work"),
                 crate::test_fixtures::default_project_bytes(),
             )
-                .expect("Failed to create project.work");
+            .expect("Failed to create project.work");
 
             // Create default bank files (bank01.work through bank16.work)
             for bank_num in 1..=16 {

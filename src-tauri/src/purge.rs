@@ -1716,7 +1716,6 @@ mod tests {
         slot: u16,
         path: &str,
     ) {
-
         let mut content = String::new();
         content.push_str("[META]\r\n");
         content.push_str("TYPE=OCTATRACK DPS-1 PROJECT\r\n");
