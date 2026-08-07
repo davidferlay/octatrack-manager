@@ -152,8 +152,8 @@ test.describe('Sample slots - Used column', () => {
     const popover = page.locator('.usage-popover')
     await expect(popover).toBeVisible()
     await expect(popover.locator('.usage-popover-header')).toContainText('F1 played in 2 places')
-    await expect(popover.locator('.usage-popover-entry').nth(0)).toHaveText('Bank A · Part 1 · T1 · Machine')
-    await expect(popover.locator('.usage-popover-entry').nth(1)).toHaveText('Bank B · Pattern 5 · T3 · Step 12 · Lock')
+    await expect(popover.locator('.usage-popover-entry').nth(0)).toHaveText('Bank A (1) · Part 1 · T1 · Machine')
+    await expect(popover.locator('.usage-popover-entry').nth(1)).toHaveText('Bank B (2) · Pattern 5 · T3 · Step 12 · Lock')
 
     await page.keyboard.press('Escape')
     await expect(popover).toHaveCount(0)
@@ -164,7 +164,7 @@ test.describe('Sample slots - Used column', () => {
     await rows.nth(1).locator('.usage-badge.referenced').click()
     const popover = page.locator('.usage-popover')
     await expect(popover.locator('.usage-popover-header')).toContainText('F2 referenced in 1 place but not triggered')
-    await expect(popover.locator('.usage-popover-entry')).toHaveText('Bank C · Part 2 · T5 · Machine')
+    await expect(popover.locator('.usage-popover-entry')).toHaveText('Bank C (3) · Part 2 · T5 · Machine')
   })
 
   test('Used, Referenced and Unused filters narrow the rows', async ({ page }) => {

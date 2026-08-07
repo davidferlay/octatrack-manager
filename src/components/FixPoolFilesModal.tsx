@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getFileFormat, formatFileSize, usageKey, UsagePopoverBox, type PopoverAnchor, type UsagePopoverScope } from './AudioFileTable';
 import type { PoolUsageEntry } from '../types/audioFile';
+import { formatBankRef } from './BankSelector';
 
 export interface IncompatibleFile {
   path: string;
@@ -382,6 +383,14 @@ export function usePoolTable(
     })
     .sort((a, b) => {
       const numeric = sortColumn === 'bit' || sortColumn === 'khz' || sortColumn === 'size' || sortColumn === 'usage';
+      // Slot needs a real comparator, not a sort key - handled before the
+      // generic key path below so slot-less rows can stay last either way.
+      if (sortColumn === 'slot') {
+        const [ea, eb] = [a.slots.length === 0, b.slots.length === 0];
+        if (ea !== eb) return ea ? 1 : -1;
+        const cmp = compareSlotLists(a.slots, b.slots);
+        return sortDirection === 'asc' ? cmp : -cmp;
+      }
       const key = (r: PoolRow): string | number => {
         switch (sortColumn) {
           case 'file': return r.name.toLowerCase();
@@ -392,7 +401,6 @@ export function usePoolTable(
           case 'location': return r.location.toLowerCase();
           case 'action': return r.action;
           case 'usage': return r.usageEntries.filter(e => e.audible).length * 1000 + r.usageEntries.length;
-          case 'slot': return r.slots.join(', ').toLowerCase();
         }
       };
       const ka = key(a);
@@ -562,7 +570,26 @@ const REVIEW_COL_DEFAULTS: Record<string, number | undefined> = {
 };
 
 // Also defined in AudioFileTable.tsx - see that file's comment for why.
-const BANK_LETTERS = 'ABCDEFGHIJKLMNOP';
+
+/**
+ * Orders slot labels ("S1", "F12", ...) the way the device numbers them,
+ * not the way strings compare: a plain compare puts S99 above S9 and S10
+ * above S2. Prefix first (F before S, so the two pools stay grouped), then
+ * the id numerically. Multi-slot rows compare element by element, shorter
+ * list first when one is a prefix of the other.
+ *
+ * Does NOT decide where slot-less rows go - callers keep those last in both
+ * directions, since "no slot" is an absence rather than a low value.
+ */
+export function compareSlotLists(a: string[], b: string[]): number {
+  for (let i = 0; i < Math.min(a.length, b.length); i++) {
+    const [pa, pb] = [a[i][0] ?? '', b[i][0] ?? ''];
+    if (pa !== pb) return pa < pb ? -1 : 1;
+    const [na, nb] = [parseInt(a[i].slice(1), 10) || 0, parseInt(b[i].slice(1), 10) || 0];
+    if (na !== nb) return na - nb;
+  }
+  return a.length - b.length;
+}
 
 export function PoolFilesTable({ table, showGoToProject = false }: { table: ReturnType<typeof usePoolTable>; showGoToProject?: boolean }) {
   const {
@@ -750,10 +777,10 @@ export function PoolFilesTable({ table, showGoToProject = false }: { table: Retu
                   {scoped.map((entry, idx) => (
                     <div key={idx} className="usage-popover-entry">
                       {entry.kind === 'machine'
-                        ? `${entry.project} · Bank ${BANK_LETTERS[entry.bank] ?? '?'} · Part ${(entry.part ?? 0) + 1} · T${entry.track + 1} · Machine`
+                        ? `${entry.project} · ${formatBankRef(entry.bank)} · Part ${(entry.part ?? 0) + 1} · T${entry.track + 1} · Machine`
                         : entry.kind === 'assigned'
                         ? `${entry.project} · Slot ${entry.slot}`
-                        : `${entry.project} · Bank ${BANK_LETTERS[entry.bank] ?? '?'} · Pattern ${(entry.pattern ?? 0) + 1} · T${entry.track + 1} · Step ${(entry.step ?? 0) + 1} · Lock`}
+                        : `${entry.project} · ${formatBankRef(entry.bank)} · Pattern ${(entry.pattern ?? 0) + 1} · T${entry.track + 1} · Step ${(entry.step ?? 0) + 1} · Lock`}
                     </div>
                   ))}
                 </div>

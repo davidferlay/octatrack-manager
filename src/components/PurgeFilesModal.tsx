@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { ColumnToggle, HeaderActions, useCopyFeedback, useModalResize } from './FixPoolFilesModal';
+import { ColumnToggle, compareSlotLists, HeaderActions, useCopyFeedback, useModalResize } from './FixPoolFilesModal';
 
 /** Matches the Rust `PurgeFileEntry` struct exactly. */
 export interface PurgeFileEntry {
@@ -289,7 +289,13 @@ export function usePurgeTable(units: PurgeUnit[]) {
       if (kindCmp !== 0) return kindCmp;
       const dir = sortDirection === 'asc' ? 1 : -1;
       if (sortColumn === 'size') return (a.size - b.size) * dir;
-      if (sortColumn === 'slot') return a.slots.join(', ').localeCompare(b.slots.join(', ')) * dir;
+      if (sortColumn === 'slot') {
+        // Slot-less rows stay at the bottom whichever way the column points -
+        // "no slot" is an absence, not a low value.
+        const [ea, eb] = [a.slots.length === 0, b.slots.length === 0];
+        if (ea !== eb) return ea ? 1 : -1;
+        return compareSlotLists(a.slots, b.slots) * dir;
+      }
       if (sortColumn === 'format') return a.format.localeCompare(b.format) * dir;
       return a[sortColumn].localeCompare(b[sortColumn]) * dir;
     });

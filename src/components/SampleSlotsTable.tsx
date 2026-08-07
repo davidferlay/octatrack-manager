@@ -19,6 +19,7 @@ import { formatFileSize, UsagePopoverBox, type PopoverAnchor } from "./AudioFile
 import { useAudioPreview, shouldAutoPreview, scrubTarget, volumeStep, isAudioFile } from '../hooks/useAudioPreview';
 import { invalidatePoolUsage } from '../hooks/usePoolUsage';
 import { SamplePlayerBar } from './SamplePlayerBar';
+import { formatBankRef } from './BankSelector';
 
 // Droppable slot row for dnd-kit (pointer-based, cross-platform)
 function DroppableSlotRow({
@@ -121,7 +122,6 @@ interface SampleSlotsTableProps {
 type SortColumn = 'slot' | 'sample' | 'status' | 'used' | 'source' | 'gain' | 'timestretch' | 'loop' | 'compatibility' | 'format' | 'bitdepth' | 'samplerate' | 'size';
 type SortDirection = 'asc' | 'desc';
 
-const BANK_LETTERS = 'ABCDEFGHIJKLMNOP';
 
 // A slot "has a [SAMPLE] block" in the project file when it references a sample or carries any
 // slot-tied attribute. Truly-empty slots (never assigned, no stored attributes) have all null.
@@ -2098,8 +2098,8 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
                 {scoped.map((entry, idx) => (
                   <div key={idx} className="usage-popover-entry">
                     {entry.kind === 'machine'
-                      ? `Bank ${BANK_LETTERS[entry.bank] ?? '?'} · Part ${(entry.part ?? 0) + 1} · T${entry.track + 1} · Machine`
-                      : `Bank ${BANK_LETTERS[entry.bank] ?? '?'} · Pattern ${(entry.pattern ?? 0) + 1} · T${entry.track + 1} · Step ${(entry.step ?? 0) + 1} · Lock`}
+                      ? `${formatBankRef(entry.bank)} · Part ${(entry.part ?? 0) + 1} · T${entry.track + 1} · Machine`
+                      : `${formatBankRef(entry.bank)} · Pattern ${(entry.pattern ?? 0) + 1} · T${entry.track + 1} · Step ${(entry.step ?? 0) + 1} · Lock`}
                   </div>
                 ))}
               </div>

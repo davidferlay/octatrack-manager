@@ -536,6 +536,49 @@ test.describe('Purge Project Samples', () => {
     await expect(banner.locator('.purge-confirm-target')).toHaveText('will be moved to /home/testuser/Downloads')
   })
 
+  test('the Slot column sorts by real slot number, not as text, keeping slot-less rows last', async ({ page }) => {
+    await page.addInitScript(() => {
+      const internals = (window as any).__TAURI_INTERNALS__
+      const orig = internals.invoke
+      internals.invoke = async (cmd: string, args?: any) => {
+        if (cmd === 'scan_project_unused_files') {
+          const file = (name: string, slots: string[]) => ({
+            kind: 'File',
+            path: `/projects/TestProject/${name}.wav`,
+            origin: 'TestProject',
+            size: 1024,
+            slots,
+            sidecar: null,
+          })
+          return [
+            file('e', ['S99']),
+            file('c', ['S9']),
+            file('d', ['S10']),
+            file('a', ['F2']),
+            file('none', []),
+            file('b', ['S1']),
+          ]
+        }
+        return orig(cmd, args)
+      }
+    })
+
+    await openPurgeOperation(page)
+    await page.locator('.tools-missing-files-summary').click()
+    const listModal = page.locator('.missing-samples-list-modal')
+    const slotCells = listModal.locator('tbody tr td.col-slot')
+
+    await listModal.locator('th', { hasText: 'Slot' }).click()
+    // Numeric, and flex grouped before static. Text sorting gave S1, S10,
+    // S99, S9 - the reported bug.
+    await expect(slotCells).toHaveText(['F2', 'S1', 'S9', 'S10', 'S99', '—'])
+
+    // Reversing keeps the slot-less row last: "no slot" is an absence, not
+    // a low value, so it never jumps to the top.
+    await listModal.locator('th', { hasText: 'Slot' }).click()
+    await expect(slotCells).toHaveText(['S99', 'S10', 'S9', 'S1', 'F2', '—'])
+  })
+
   test('the Format column is hidden by default and filters the tree down to audio or non-audio files', async ({ page }) => {
     await page.addInitScript(() => {
       const internals = (window as any).__TAURI_INTERNALS__

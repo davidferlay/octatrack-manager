@@ -395,7 +395,7 @@ test.describe('Audio Pool — fix incompatible files', () => {
     // kick.wav has no usage entries in the mock
     await expect(dest.locator('tr', { hasText: 'kick.wav' }).locator('.usage-none')).toHaveText('—')
     await row.getByText('✓ 1').click()
-    await expect(page.getByText('ProjectA · Bank A · Part 1 · T1 · Machine')).toBeVisible()
+    await expect(page.getByText('ProjectA · Bank A (1) · Part 1 · T1 · Machine')).toBeVisible()
   })
 
   test('the Usage column header tooltip explains this is a Set-wide view', async ({ page }) => {
@@ -409,14 +409,14 @@ test.describe('Audio Pool — fix incompatible files', () => {
     const popover = page.locator('.usage-popover')
 
     await dest.locator('tr', { hasText: 'snare48.wav' }).getByText('✓ 1').click()
-    await expect(page.getByText('ProjectA · Bank A · Part 1 · T1 · Machine')).toBeVisible()
+    await expect(page.getByText('ProjectA · Bank A (1) · Part 1 · T1 · Machine')).toBeVisible()
     const firstBox = (await popover.boundingBox())!
 
     // Click straight through to a badge on a different row, without an
     // intermediate close - this used to leave the popover stuck at the first
     // badge's position instead of re-anchoring to the new one.
     await dest.locator('tr', { hasText: 'loop.mp3' }).getByText('○ 1').click()
-    await expect(page.getByText('ProjectB · Bank B · Pattern 1 · T3 · Step 4 · Lock')).toBeVisible()
+    await expect(page.getByText('ProjectB · Bank B (2) · Pattern 1 · T3 · Step 4 · Lock')).toBeVisible()
     const secondBox = (await popover.boundingBox())!
 
     expect(secondBox.y).not.toBe(firstBox.y)

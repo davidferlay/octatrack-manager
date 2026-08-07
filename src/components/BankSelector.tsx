@@ -22,6 +22,12 @@ export function formatBankName(bankName: string, bankIndex: number): string {
   return `${bankName} (${bankIndex + 1})`;
 }
 
+/** "Bank A (1)" - how a bank is referred to inside usage tooltips, matching
+ * the letter-plus-number form `formatBankName` gives the selector lists. */
+export function formatBankRef(bankIndex: number): string {
+  return `Bank ${BANK_LETTERS[bankIndex] ?? '?'} (${bankIndex + 1})`;
+}
+
 export function BankSelector({ id, banks, value, onChange, currentBank, loadedBankIndices, failedBankIndices, allBanksLoaded = false }: BankSelectorProps) {
   const hasAnyBanks = loadedBankIndices ? loadedBankIndices.size > 0 : banks.length > 0;
   const isFullyDisabled = !hasAnyBanks;

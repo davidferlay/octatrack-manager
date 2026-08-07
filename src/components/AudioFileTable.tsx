@@ -14,6 +14,7 @@ import {
 } from "@tanstack/react-table";
 import { useDraggable } from "@dnd-kit/core";
 import type { AudioFile, PoolUsageEntry } from "../types/audioFile";
+import { formatBankRef } from './BankSelector';
 
 export type SortColumn = 'name' | 'size' | 'format' | 'bitrate' | 'samplerate';
 export type SortDirection = 'asc' | 'desc';
@@ -168,7 +169,6 @@ const COLUMN_LABELS: Record<string, string> = {
 // column's popover *content* (header wording, entry-list formatting) is
 // intentionally ported (not shared) between those hand-rolled tables and this
 // TanStack-based one; kept in sync manually.
-const BANK_LETTERS = 'ABCDEFGHIJKLMNOP';
 
 /** A clicked usage badge's bounding rect - the anchor a popover positions itself against. */
 export interface PopoverAnchor {
@@ -981,10 +981,10 @@ export function AudioFileTable({
                   {scoped.map((entry, idx) => (
                     <div key={idx} className="usage-popover-entry">
                       {entry.kind === 'machine'
-                        ? `${entry.project} · Bank ${BANK_LETTERS[entry.bank] ?? '?'} · Part ${(entry.part ?? 0) + 1} · T${entry.track + 1} · Machine`
+                        ? `${entry.project} · ${formatBankRef(entry.bank)} · Part ${(entry.part ?? 0) + 1} · T${entry.track + 1} · Machine`
                         : entry.kind === 'assigned'
                         ? `${entry.project} · Slot ${entry.slot}`
-                        : `${entry.project} · Bank ${BANK_LETTERS[entry.bank] ?? '?'} · Pattern ${(entry.pattern ?? 0) + 1} · T${entry.track + 1} · Step ${(entry.step ?? 0) + 1} · Lock`}
+                        : `${entry.project} · ${formatBankRef(entry.bank)} · Pattern ${(entry.pattern ?? 0) + 1} · T${entry.track + 1} · Step ${(entry.step ?? 0) + 1} · Lock`}
                     </div>
                   ))}
                 </div>

@@ -402,7 +402,7 @@ test.describe('Fix Project Samples - Usage and Slot columns', () => {
     await expect(listModal.locator('tr', { hasText: 'snare48.wav' }).locator('.usage-none')).toHaveText('—')
 
     await kickRow.getByText('✓ 1').click()
-    await expect(page.getByText('TestProject · Bank A · Part 1 · T1 · Machine')).toBeVisible()
+    await expect(page.getByText('TestProject · Bank A (1) · Part 1 · T1 · Machine')).toBeVisible()
   })
 })
 

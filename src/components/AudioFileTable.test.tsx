@@ -241,7 +241,7 @@ describe('AudioFileTable', () => {
     }
     renderTable({ poolRoot: '/AUDIO', usageMap })
     await userEvent.click(screen.getByText('✓ 1'))
-    expect(screen.getByText('PROJ1 · Bank A · Part 1 · T1 · Machine')).toBeInTheDocument()
+    expect(screen.getByText('PROJ1 · Bank A (1) · Part 1 · T1 · Machine')).toBeInTheDocument()
   })
 
   it('sorts by Usage (audible-weighted total) when the Usage header is clicked', async () => {
