@@ -429,9 +429,9 @@ pub fn compute_project_unused_files(
 /// "assigned but never triggered still counts as usage" semantics). When
 /// `simulate_cleared_slots_for` names project(s) whose unused slot
 /// assignments would also be cleared in this same run, an "assigned" entry
-/// contributed by one of those projects is dropped from consideration first
-/// - if that leaves a pool file with zero usage entries anywhere, it's
-/// purgeable in this same preview too.
+/// contributed by one of those projects is dropped from consideration
+/// first - if that leaves a pool file with zero usage entries anywhere,
+/// it's purgeable in this same preview too.
 pub fn compute_pool_unused_files(
     pool_path: &str,
     simulate_cleared_slots_for: &[String],
@@ -532,11 +532,11 @@ fn slots_eligible_for_clearing(project_path: &str) -> Result<(Vec<u16>, Vec<u16>
 }
 
 /// Clears every slot in `project_path` that has a file loaded but zero
-/// usage entries from `compute_sample_usage` (machine assignment or p-lock)
-/// - i.e. loaded but never actually triggered. Backs up `project.work`
-/// first via the same `backup_project_files_impl` convention
-/// `update_references_in_set` already relies on. Returns the number of
-/// slots cleared.
+/// usage entries from `compute_sample_usage` (machine assignment or
+/// p-lock) - i.e. loaded but never actually triggered. Backs up
+/// `project.work` first via the same `backup_project_files_impl`
+/// convention `update_references_in_set` already relies on. Returns the
+/// number of slots cleared.
 pub fn clear_unused_slot_assignments(project_path: &str) -> Result<u32, String> {
     use std::path::Path;
 
