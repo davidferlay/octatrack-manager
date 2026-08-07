@@ -627,6 +627,11 @@ pub struct PurgeResult {
     pub slots_cleared: u32,
     pub projects_updated: Vec<String>,
     pub errors: Vec<String>,
+    /// The user cancelled partway through: every count above reflects only
+    /// the units that had already been processed, and the rest were left
+    /// untouched. Nothing is half-done - cancellation is only ever honoured
+    /// between units.
+    pub cancelled: bool,
 }
 
 impl PurgeResult {
@@ -701,6 +706,29 @@ fn ot_sidecar_if_unshared(
     Some(ot_path)
 }
 
+/// Per-unit progress reporting and cooperative cancellation for the two
+/// execution paths below. A purge is a loop over independent units, so both
+/// hooks act strictly between units: `on_unit` fires just before a unit is
+/// touched, and `cancel` is only ever checked at the top of an iteration -
+/// never mid-file, which would risk leaving a half-moved file behind.
+pub struct PurgeProgress<'a> {
+    /// `(path, index, total)` of the unit about to be processed.
+    pub on_unit: &'a dyn Fn(&str, usize, usize),
+    pub cancel: &'a std::sync::atomic::AtomicBool,
+}
+
+impl PurgeProgress<'_> {
+    fn report(progress: Option<&PurgeProgress>, path: &str, index: usize, total: usize) {
+        if let Some(p) = progress {
+            (p.on_unit)(path, index, total);
+        }
+    }
+
+    fn cancelled(progress: Option<&PurgeProgress>) -> bool {
+        progress.is_some_and(|p| p.cancel.load(std::sync::atomic::Ordering::SeqCst))
+    }
+}
+
 /// Sends every unit in `plan` to the OS Trash Bin (files and
 /// directories alike - the `trash` crate moves a directory as a whole,
 /// consistent with the directory-collapse goal of removing whole dirs
@@ -708,9 +736,15 @@ fn ot_sidecar_if_unshared(
 /// their system Trash Bin until they empty it - not a permanent,
 /// unrecoverable delete. A `PurgeUnit::File`'s `.ot` sidecar (if any) is
 /// trashed alongside it; a missing sidecar is not an error.
+///
+/// Trashed one unit at a time rather than in a single `delete_all` batch, so
+/// progress can be reported and a cancel honoured between units. A unit that
+/// fails to trash is recorded in `result.errors` and the rest still run -
+/// same "one clash must not abort the batch" rule `move_purge_units` follows.
 pub fn trash_purge_units(
     plan: &[PurgeUnit],
     origin_roots: &std::collections::HashMap<String, String>,
+    progress: Option<&PurgeProgress>,
 ) -> Result<PurgeResult, String> {
     let purged_paths: std::collections::HashSet<String> = plan
         .iter()
@@ -720,51 +754,58 @@ pub fn trash_purge_units(
         })
         .collect();
 
-    let mut paths: Vec<String> = Vec::new();
+    let mut result = PurgeResult::default();
     let mut queued_ot: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut ot_bytes: u64 = 0;
-    let mut backup_errors: Vec<String> = Vec::new();
-    for unit in plan {
-        paths.push(unit.path().to_string());
+
+    for (index, unit) in plan.iter().enumerate() {
+        if PurgeProgress::cancelled(progress) {
+            result.cancelled = true;
+            break;
+        }
+        PurgeProgress::report(progress, unit.path(), index, plan.len());
+
+        let mut paths: Vec<String> = vec![unit.path().to_string()];
+        let mut ot_bytes: u64 = 0;
         if let PurgeUnit::File { path, origin, .. } = unit {
             if let Some(ot_path) = ot_sidecar_if_unshared(path, &purged_paths) {
                 let ot_str = ot_path.to_string_lossy().to_string();
-                if !queued_ot.insert(ot_str.clone()) {
-                    continue; // already queued by an earlier same-stem sibling
-                }
-                ot_bytes += std::fs::metadata(&ot_path).map(|m| m.len()).unwrap_or(0);
-                if origin != "Audio Pool" {
-                    if let Some(root) = origin_roots.get(origin) {
-                        if let Ok(rel) = ot_path.strip_prefix(std::path::Path::new(root)) {
-                            if let Err(e) = crate::backup_project_files_impl(
-                                root,
-                                &[rel.to_string_lossy().to_string()],
-                                "purge_unused_samples",
-                            ) {
-                                backup_errors.push(format!(
-                                    "Failed to back up {}: {}",
-                                    ot_path.display(),
-                                    e
-                                ));
+                // Skip if an earlier same-stem sibling already swept it.
+                if queued_ot.insert(ot_str.clone()) {
+                    ot_bytes += std::fs::metadata(&ot_path).map(|m| m.len()).unwrap_or(0);
+                    if origin != "Audio Pool" {
+                        if let Some(root) = origin_roots.get(origin) {
+                            if let Ok(rel) = ot_path.strip_prefix(std::path::Path::new(root)) {
+                                if let Err(e) = crate::backup_project_files_impl(
+                                    root,
+                                    &[rel.to_string_lossy().to_string()],
+                                    "purge_unused_samples",
+                                ) {
+                                    result.errors.push(format!(
+                                        "Failed to back up {}: {}",
+                                        ot_path.display(),
+                                        e
+                                    ));
+                                }
                             }
                         }
                     }
+                    paths.push(ot_str);
                 }
-                paths.push(ot_str);
             }
         }
-    }
 
-    let path_refs: Vec<&str> = paths.iter().map(String::as_str).collect();
-    trash::delete_all(&path_refs).map_err(|e| e.to_string())?;
+        let path_refs: Vec<&str> = paths.iter().map(String::as_str).collect();
+        if let Err(e) = trash::delete_all(&path_refs) {
+            result
+                .errors
+                .push(format!("Failed to trash {}: {}", unit.path(), e));
+            continue;
+        }
 
-    let mut result = PurgeResult::default();
-    result.errors.extend(backup_errors);
-    for unit in plan {
-        result.bytes_reclaimed += unit.size();
+        result.bytes_reclaimed += unit.size() + ot_bytes;
         result.tally(unit);
     }
-    result.bytes_reclaimed += ot_bytes;
+
     Ok(result)
 }
 
@@ -780,6 +821,7 @@ pub fn move_purge_units(
     plan: &[PurgeUnit],
     destination_dir: &str,
     origin_roots: &std::collections::HashMap<String, String>,
+    progress: Option<&PurgeProgress>,
 ) -> Result<PurgeResult, String> {
     use std::path::Path;
 
@@ -808,7 +850,13 @@ pub fn move_purge_units(
         })
         .collect();
 
-    for unit in plan {
+    for (index, unit) in plan.iter().enumerate() {
+        if PurgeProgress::cancelled(progress) {
+            result.cancelled = true;
+            break;
+        }
+        PurgeProgress::report(progress, unit.path(), index, plan.len());
+
         let origin = match unit {
             PurgeUnit::File { origin, .. } | PurgeUnit::Directory { origin, .. } => origin,
         };
@@ -1836,7 +1884,7 @@ mod tests {
             sidecar: None,
         }];
 
-        let result = trash_purge_units(&plan, &std::collections::HashMap::new()).unwrap();
+        let result = trash_purge_units(&plan, &std::collections::HashMap::new(), None).unwrap();
 
         assert!(!file_path.exists());
         assert_eq!(
@@ -1869,7 +1917,7 @@ mod tests {
             pool_dir.to_string_lossy().to_string(),
         );
 
-        let result = move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots).unwrap();
+        let result = move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots, None).unwrap();
 
         let expected = dest
             .join("Unused Audio")
@@ -1924,9 +1972,9 @@ mod tests {
             );
 
             let result = if delete {
-                trash_purge_units(&plan, &origin_roots).unwrap()
+                trash_purge_units(&plan, &origin_roots, None).unwrap()
             } else {
-                move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots).unwrap()
+                move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots, None).unwrap()
             };
 
             assert_eq!(result.errors, Vec::<String>::new(), "delete={}", delete);
@@ -1936,6 +1984,154 @@ mod tests {
             assert_eq!(result.audio_files_removed, 51, "delete={}", delete);
             assert_eq!(result.non_audio_files_removed, 3, "delete={}", delete);
         }
+    }
+
+    /// Builds a plan of `n` lone files in `dir`, all named `f{i}.wav`.
+    fn plan_of_files(dir: &std::path::Path, n: usize) -> Vec<PurgeUnit> {
+        (0..n)
+            .map(|i| {
+                let p = dir.join(format!("f{}.wav", i));
+                touch(&p);
+                PurgeUnit::File {
+                    path: p.to_string_lossy().to_string(),
+                    origin: "Audio Pool".to_string(),
+                    size: 1,
+                    slots: vec![],
+                    sidecar: None,
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn progress_reports_every_unit_in_order_with_its_index_and_total() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let pool_dir = temp.path().join("AUDIO");
+        std::fs::create_dir_all(&pool_dir).unwrap();
+        let dest = temp.path().join("dest");
+        std::fs::create_dir(&dest).unwrap();
+        let plan = plan_of_files(&pool_dir, 3);
+        let mut origin_roots = std::collections::HashMap::new();
+        origin_roots.insert(
+            "Audio Pool".to_string(),
+            pool_dir.to_string_lossy().to_string(),
+        );
+
+        let seen = std::sync::Mutex::new(Vec::new());
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        let on_unit = |path: &str, index: usize, total: usize| {
+            seen.lock()
+                .unwrap()
+                .push((path.rsplit('/').next().unwrap().to_string(), index, total));
+        };
+        let progress = PurgeProgress {
+            on_unit: &on_unit,
+            cancel: &cancel,
+        };
+
+        let result = move_purge_units(
+            &plan,
+            &dest.to_string_lossy(),
+            &origin_roots,
+            Some(&progress),
+        )
+        .unwrap();
+
+        assert_eq!(
+            *seen.lock().unwrap(),
+            vec![
+                ("f0.wav".to_string(), 0, 3),
+                ("f1.wav".to_string(), 1, 3),
+                ("f2.wav".to_string(), 2, 3),
+            ]
+        );
+        assert!(!result.cancelled);
+        assert_eq!(result.audio_files_removed, 3);
+    }
+
+    /// Cancellation must be honoured strictly between units: everything up
+    /// to the cancel point is fully done, everything after is untouched.
+    /// Nothing may be left half-moved.
+    #[test]
+    fn cancelling_partway_stops_cleanly_between_units_and_leaves_the_rest_in_place() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let pool_dir = temp.path().join("AUDIO");
+        std::fs::create_dir_all(&pool_dir).unwrap();
+        let dest = temp.path().join("dest");
+        std::fs::create_dir(&dest).unwrap();
+        let plan = plan_of_files(&pool_dir, 4);
+        let mut origin_roots = std::collections::HashMap::new();
+        origin_roots.insert(
+            "Audio Pool".to_string(),
+            pool_dir.to_string_lossy().to_string(),
+        );
+
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        // Trip the flag while unit index 1 is being reported - so units 0 and
+        // 1 complete and the loop breaks before unit 2.
+        let on_unit = |_p: &str, index: usize, _t: usize| {
+            if index == 1 {
+                cancel.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+        };
+        let progress = PurgeProgress {
+            on_unit: &on_unit,
+            cancel: &cancel,
+        };
+
+        let result = move_purge_units(
+            &plan,
+            &dest.to_string_lossy(),
+            &origin_roots,
+            Some(&progress),
+        )
+        .unwrap();
+
+        assert!(result.cancelled);
+        assert_eq!(result.audio_files_removed, 2);
+        assert_eq!(result.errors, Vec::<String>::new());
+        let moved = dest.join("Unused Audio").join("Audio Pool");
+        assert!(moved.join("f0.wav").is_file());
+        assert!(moved.join("f1.wav").is_file());
+        // Untouched: still at their original location, not at the destination.
+        assert!(!moved.join("f2.wav").exists());
+        assert!(pool_dir.join("f2.wav").is_file());
+        assert!(pool_dir.join("f3.wav").is_file());
+    }
+
+    #[test]
+    fn a_cancel_already_set_before_the_first_unit_removes_nothing_at_all() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let pool_dir = temp.path().join("AUDIO");
+        std::fs::create_dir_all(&pool_dir).unwrap();
+        let dest = temp.path().join("dest");
+        std::fs::create_dir(&dest).unwrap();
+        let plan = plan_of_files(&pool_dir, 2);
+        let mut origin_roots = std::collections::HashMap::new();
+        origin_roots.insert(
+            "Audio Pool".to_string(),
+            pool_dir.to_string_lossy().to_string(),
+        );
+
+        let cancel = std::sync::atomic::AtomicBool::new(true);
+        let on_unit = |_p: &str, _i: usize, _t: usize| panic!("must not touch any unit");
+        let progress = PurgeProgress {
+            on_unit: &on_unit,
+            cancel: &cancel,
+        };
+
+        let result = move_purge_units(
+            &plan,
+            &dest.to_string_lossy(),
+            &origin_roots,
+            Some(&progress),
+        )
+        .unwrap();
+
+        assert!(result.cancelled);
+        assert_eq!(result.audio_files_removed, 0);
+        assert!(pool_dir.join("f0.wav").is_file());
+        assert!(pool_dir.join("f1.wav").is_file());
     }
 
     #[test]
@@ -1967,7 +2163,7 @@ mod tests {
             pool_dir.to_string_lossy().to_string(),
         );
 
-        move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots).unwrap();
+        move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots, None).unwrap();
 
         let expected = dest
             .join("Unused Audio")
@@ -2002,7 +2198,7 @@ mod tests {
             pool_dir.to_string_lossy().to_string(),
         );
 
-        let result = move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots).unwrap();
+        let result = move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots, None).unwrap();
 
         assert!(result.errors.is_empty());
         assert!(existing.join("kick (2).wav").is_file());
@@ -2036,7 +2232,8 @@ mod tests {
             "PROJ".to_string(),
             project_dir.to_string_lossy().to_string(),
         );
-        let mut result = move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots).unwrap();
+        let mut result =
+            move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots, None).unwrap();
         assert!(result.errors.is_empty());
         assert!(!project_dir.join("loaded.wav").exists());
         assert!(!project_dir.join("orphan.wav").exists());
@@ -2068,7 +2265,7 @@ mod tests {
         }];
         let origin_roots = std::collections::HashMap::new();
 
-        let result = move_purge_units(&plan, "", &origin_roots);
+        let result = move_purge_units(&plan, "", &origin_roots, None);
         assert!(result.is_err(), "an empty destination must be rejected");
     }
 
@@ -2092,7 +2289,7 @@ mod tests {
             pool_dir.to_string_lossy().to_string(),
         );
 
-        let result = move_purge_units(&plan, "Unused Audio", &origin_roots);
+        let result = move_purge_units(&plan, "Unused Audio", &origin_roots, None);
         assert!(
             result.is_err(),
             "a relative destination must be rejected, not resolved against the process cwd"
@@ -2173,7 +2370,7 @@ mod tests {
             sidecar: None,
         }];
 
-        let result = trash_purge_units(&plan, &std::collections::HashMap::new()).unwrap();
+        let result = trash_purge_units(&plan, &std::collections::HashMap::new(), None).unwrap();
 
         assert!(!wav_path.exists());
         assert!(
@@ -2206,7 +2403,7 @@ mod tests {
             sidecar: None,
         }];
 
-        let result = trash_purge_units(&plan, &std::collections::HashMap::new()).unwrap();
+        let result = trash_purge_units(&plan, &std::collections::HashMap::new(), None).unwrap();
 
         assert!(!wav_path.exists());
         assert!(result.errors.is_empty());
@@ -2236,7 +2433,7 @@ mod tests {
             pool_dir.to_string_lossy().to_string(),
         );
 
-        let result = move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots).unwrap();
+        let result = move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots, None).unwrap();
 
         assert!(result.errors.is_empty());
         let expected_wav = dest
@@ -2275,7 +2472,7 @@ mod tests {
             pool_dir.to_string_lossy().to_string(),
         );
 
-        let result = move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots).unwrap();
+        let result = move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots, None).unwrap();
 
         assert!(result.errors.is_empty());
         assert!(!pool_dir.join("kick.wav").exists());
@@ -2309,7 +2506,7 @@ mod tests {
             project_dir.to_string_lossy().to_string(),
         );
 
-        trash_purge_units(&plan, &origin_roots).unwrap();
+        trash_purge_units(&plan, &origin_roots, None).unwrap();
 
         let backups_dir = project_dir.join("backups");
         assert!(
@@ -2347,7 +2544,7 @@ mod tests {
             pool_dir.to_string_lossy().to_string(),
         );
 
-        trash_purge_units(&plan, &origin_roots).unwrap();
+        trash_purge_units(&plan, &origin_roots, None).unwrap();
 
         assert!(
             !pool_dir.join("backups").exists(),
@@ -2381,7 +2578,7 @@ mod tests {
             },
         ];
 
-        let result = trash_purge_units(&plan, &std::collections::HashMap::new()).unwrap();
+        let result = trash_purge_units(&plan, &std::collections::HashMap::new(), None).unwrap();
 
         assert!(
             result.errors.is_empty(),
@@ -2414,7 +2611,7 @@ mod tests {
             sidecar: None,
         }];
 
-        let result = trash_purge_units(&plan, &std::collections::HashMap::new()).unwrap();
+        let result = trash_purge_units(&plan, &std::collections::HashMap::new(), None).unwrap();
 
         assert!(result.errors.is_empty());
         assert!(!pool_dir.join("kick.wav").exists());
@@ -2452,7 +2649,7 @@ mod tests {
             pool_dir.to_string_lossy().to_string(),
         );
 
-        let result = move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots).unwrap();
+        let result = move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots, None).unwrap();
 
         assert!(result.errors.is_empty());
         assert!(!pool_dir.join("kick.wav").exists());
@@ -2494,7 +2691,7 @@ mod tests {
             project_dir.to_string_lossy().to_string(),
         );
 
-        let result = move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots).unwrap();
+        let result = move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots, None).unwrap();
 
         assert!(result.errors.is_empty());
         let backups_dir = project_dir.join("backups");
@@ -2545,7 +2742,7 @@ mod tests {
             pool_dir.to_string_lossy().to_string(),
         );
 
-        let result = move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots).unwrap();
+        let result = move_purge_units(&plan, &dest.to_string_lossy(), &origin_roots, None).unwrap();
 
         assert!(
             result.errors.is_empty(),
@@ -2582,7 +2779,7 @@ mod tests {
             sidecar: None,
         }];
 
-        let result = trash_purge_units(&plan, &std::collections::HashMap::new()).unwrap();
+        let result = trash_purge_units(&plan, &std::collections::HashMap::new(), None).unwrap();
 
         assert!(result.errors.is_empty());
         assert!(!pool_dir.join("kick.wav").exists());
@@ -2616,7 +2813,7 @@ mod tests {
         // origin_roots deliberately does not contain "PROJ".
         let origin_roots = std::collections::HashMap::new();
 
-        let result = trash_purge_units(&plan, &origin_roots).unwrap();
+        let result = trash_purge_units(&plan, &origin_roots, None).unwrap();
 
         assert!(
             result.errors.is_empty(),

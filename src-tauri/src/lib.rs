@@ -1143,6 +1143,65 @@ async fn scan_pool_unused_files(
     .unwrap()
 }
 
+/// Wires a purge run to the same `copy-progress` event stream and
+/// `cancel_audio_transfer` registry the audio-conversion tools already use,
+/// so the purge modal can show "Moving 3 / 12" plus the current path and
+/// offer a Cancel button. `transfer_id: None` (no frontend listener) runs
+/// exactly as before: no events, no cancellation, no token registered.
+struct PurgeReporter {
+    app: AppHandle,
+    /// `Some` only when the frontend supplied a transfer id. Registered up
+    /// front, in the async command body, so a Cancel that lands before the
+    /// blocking task actually starts still takes effect - re-registering
+    /// inside `with` would silently replace this token and drop that cancel.
+    transfer: Option<(String, std::sync::Arc<std::sync::atomic::AtomicBool>)>,
+}
+
+impl PurgeReporter {
+    fn new(app: AppHandle, transfer_id: Option<String>) -> Self {
+        let transfer =
+            transfer_id.map(|id| (id.clone(), audio_pool::register_cancellation_token(&id)));
+        Self { app, transfer }
+    }
+
+    /// Runs `f` with a `PurgeProgress` bound to this transfer (or `None`
+    /// when there is no transfer id), always releasing the cancellation
+    /// token afterwards - including on the error path.
+    fn with<F>(&self, f: F) -> Result<purge::PurgeResult, String>
+    where
+        F: FnOnce(Option<&purge::PurgeProgress>) -> Result<purge::PurgeResult, String>,
+    {
+        let Some((id, token)) = self.transfer.clone() else {
+            return f(None);
+        };
+        let app = self.app.clone();
+        let event_id = id.clone();
+        let on_unit = move |path: &str, index: usize, total: usize| {
+            let _ = app.emit(
+                "copy-progress",
+                CopyProgressEvent {
+                    file_path: path.to_string(),
+                    transfer_id: event_id.clone(),
+                    stage: "purging".to_string(),
+                    // 0.0..1.0 over the plan, matching the existing event's
+                    // contract even though the modal counts units instead.
+                    progress: if total == 0 {
+                        0.0
+                    } else {
+                        index as f32 / total as f32
+                    },
+                },
+            );
+        };
+        let result = f(Some(&purge::PurgeProgress {
+            on_unit: &on_unit,
+            cancel: &token,
+        }));
+        audio_pool::remove_cancellation_token(&id);
+        result
+    }
+}
+
 /// Purges (deletes to Trash, or moves) the reviewed `plan` for a single
 /// project. `destination_dir: None` means delete; `Some(dir)` means move.
 /// If `clear_unused_slots` is set, loaded-but-untriggered slots are cleared
@@ -1150,11 +1209,14 @@ async fn scan_pool_unused_files(
 /// what actually happens on disk.
 #[tauri::command]
 async fn purge_project_files(
+    app: AppHandle,
     project_path: String,
     plan: Vec<purge::PurgeUnit>,
     clear_unused_slots: bool,
     destination_dir: Option<String>,
+    transfer_id: Option<String>,
 ) -> Result<purge::PurgeResult, String> {
+    let reporter = PurgeReporter::new(app, transfer_id);
     tauri::async_runtime::spawn_blocking(move || {
         let mut origin_roots = std::collections::HashMap::new();
         let project_name = std::path::Path::new(&project_path)
@@ -1163,10 +1225,10 @@ async fn purge_project_files(
             .unwrap_or_default();
         origin_roots.insert(project_name, project_path.clone());
 
-        let mut result = match destination_dir {
-            Some(dest) => purge::move_purge_units(&plan, &dest, &origin_roots)?,
-            None => purge::trash_purge_units(&plan, &origin_roots)?,
-        };
+        let mut result = reporter.with(|progress| match &destination_dir {
+            Some(dest) => purge::move_purge_units(&plan, dest, &origin_roots, progress),
+            None => purge::trash_purge_units(&plan, &origin_roots, progress),
+        })?;
 
         if clear_unused_slots {
             // The delete/move step above already succeeded - a slot-clearing
@@ -1192,12 +1254,15 @@ async fn purge_project_files(
 /// "Clear unused sample slot assignments" are both on).
 #[tauri::command]
 async fn purge_pool_files(
+    app: AppHandle,
     pool_path: String,
     plan: Vec<purge::PurgeUnit>,
     clear_unused_slots: bool,
     included_project_paths: Vec<String>,
     destination_dir: Option<String>,
+    transfer_id: Option<String>,
 ) -> Result<purge::PurgeResult, String> {
+    let reporter = PurgeReporter::new(app, transfer_id);
     tauri::async_runtime::spawn_blocking(move || {
         let mut origin_roots = std::collections::HashMap::new();
         origin_roots.insert("Audio Pool".to_string(), pool_path.clone());
@@ -1209,10 +1274,10 @@ async fn purge_pool_files(
             origin_roots.insert(name, p.clone());
         }
 
-        let mut result = match destination_dir {
-            Some(dest) => purge::move_purge_units(&plan, &dest, &origin_roots)?,
-            None => purge::trash_purge_units(&plan, &origin_roots)?,
-        };
+        let mut result = reporter.with(|progress| match &destination_dir {
+            Some(dest) => purge::move_purge_units(&plan, dest, &origin_roots, progress),
+            None => purge::trash_purge_units(&plan, &origin_roots, progress),
+        })?;
 
         if clear_unused_slots {
             // Same reasoning as purge_project_files: the delete/move step

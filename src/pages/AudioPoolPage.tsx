@@ -1727,7 +1727,7 @@ export function AudioPoolPage() {
               <div className="tools-options-panel">
                 <h3>Options</h3>
                 <div className="tools-field tools-checkbox">
-                  <label title={purgeMode === 'delete' ? 'Required when deleting files' : 'Show the review screen listing planned changes before applying them'}>
+                  <label title={`Show the review screen listing planned changes before applying them${purgeMode === 'delete' ? ' - Required when deleting files' : ''}`}>
                     <input
                       type="checkbox"
                       checked={purgeMode === 'delete' ? true : purgeReviewBeforeApply}
@@ -2100,7 +2100,7 @@ export function AudioPoolPage() {
             loadDestinationFiles(destinationPath);
             invalidatePoolUsage(audioPoolPath);
           }}
-          runPurge={(plan, destinationDir) => invoke('purge_pool_files', {
+          runPurge={(plan, destinationDir, transferId) => invoke('purge_pool_files', {
             poolPath: audioPoolPath,
             plan,
             // purgeIncludedProjectPaths is now always populated in the
@@ -2112,6 +2112,7 @@ export function AudioPoolPage() {
             clearUnusedSlots: purgeIncludeAllProjects && purgeClearUnusedSlots,
             includedProjectPaths: purgeIncludeAllProjects ? purgeIncludedProjectPaths : [],
             destinationDir,
+            transferId,
           })}
         />
       )}

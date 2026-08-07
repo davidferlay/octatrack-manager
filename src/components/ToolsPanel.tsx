@@ -3383,7 +3383,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           <div className="tools-options-panel">
             <h3>Options</h3>
             <div className="tools-field tools-checkbox">
-              <label title={purgeMode === 'delete' ? 'Required when deleting files' : 'Show the review screen listing planned changes before applying them'}>
+              <label title={`Show the review screen listing planned changes before applying them${purgeMode === 'delete' ? ' - Required when deleting files' : ''}`}>
                 <input
                   type="checkbox"
                   checked={purgeMode === 'delete' ? true : purgeReviewBeforeApply}
@@ -3995,11 +3995,12 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             if (audioPoolStatus?.exists && audioPoolStatus.path) invalidatePoolUsage(audioPoolStatus.path);
             if (onProjectRefresh) onProjectRefresh();
           }}
-          runPurge={(plan, destinationDir) => invoke('purge_project_files', {
+          runPurge={(plan, destinationDir, transferId) => invoke('purge_project_files', {
             projectPath,
             plan,
             clearUnusedSlots,
             destinationDir,
+            transferId,
           })}
         />
       )}

@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { ColumnToggle, HeaderActions, useCopyFeedback, useModalResize } from './FixPoolFilesModal';
 
 /** Matches the Rust `PurgeFileEntry` struct exactly. */
@@ -93,15 +94,32 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-type PurgeSortColumn = 'slot' | 'name' | 'location' | 'origin' | 'size';
+type PurgeSortColumn = 'slot' | 'name' | 'format' | 'location' | 'origin' | 'size';
 
 const PURGE_COLUMNS: { id: PurgeSortColumn; label: string }[] = [
   { id: 'slot', label: 'Slot' },
   { id: 'name', label: 'Name' },
+  { id: 'format', label: 'Format' },
   { id: 'location', label: 'Location' },
   { id: 'origin', label: 'Origin' },
   { id: 'size', label: 'Size' },
 ];
+
+const FORMAT_OPTIONS = [
+  { value: 'all', label: 'All' },
+  { value: 'Audio', label: 'Audio' },
+  { value: 'Other', label: 'Other' },
+];
+
+/** Hidden until the user turns it on - the plan is overwhelmingly audio, so
+ * the column earns its width only when hunting for the swept-along files. */
+const PURGE_DEFAULT_HIDDEN_COLS = ['format'];
+
+/** A row's Format value. A collapsed directory is neither - it's a container
+ * whose children carry the real answer. */
+function unitFormat(unit: PurgeUnit): string {
+  return unit.kind === 'File' ? 'Audio' : '';
+}
 
 interface PurgeRow {
   unit: PurgeUnit;
@@ -110,6 +128,7 @@ interface PurgeRow {
   origin: string;
   size: number;
   slots: string[];
+  format: string;
   /** Tree-child rows to render under this one. Same as `unitChildFiles(unit)`
    * normally; narrowed to the matching children when a search only matched
    * inside the unit rather than on the unit's own name/path. */
@@ -118,7 +137,7 @@ interface PurgeRow {
 
 /** Default column widths (px) before the user resizes anything - Name fills the rest. */
 const PURGE_COL_DEFAULTS: Record<PurgeSortColumn, number | undefined> = {
-  slot: 60, name: undefined, location: 185, origin: 140, size: 90,
+  slot: 60, name: undefined, format: 80, location: 185, origin: 140, size: 90,
 };
 
 /**
@@ -135,7 +154,8 @@ export function usePurgeTable(units: PurgeUnit[]) {
   const [sortColumn, setSortColumn] = useState<PurgeSortColumn>('origin');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [originFilter, setOriginFilter] = useState('all');
-  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set(PURGE_DEFAULT_HIDDEN_COLS));
+  const [formatFilter, setFormatFilter] = useState('all');
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
   // Directory rows expanded by default (matches the previous always-shown
@@ -230,10 +250,25 @@ export function usePurgeTable(units: PurgeUnit[]) {
       origin: unit.origin,
       size: unit.size,
       slots: unit.kind === 'File' ? unit.slots : [],
+      format: unitFormat(unit),
       children: unitChildFiles(unit),
     }));
 
     if (originFilter !== 'all') filtered = filtered.filter(r => r.origin === originFilter);
+    if (formatFilter !== 'all') {
+      // Selects which FILES matter, then keeps the rows that still contain
+      // one - same containment rule the search below uses, so a directory
+      // stays listed (narrowed to the matching children) rather than
+      // vanishing just because its own row has no format of its own.
+      const wantAudio = formatFilter === 'Audio';
+      filtered = filtered.flatMap(r => {
+        const children = r.children.filter(f => f.is_audio === wantAudio);
+        // A lone file unit IS an audio file - it survives an Audio filter on
+        // its own merit, with its non-audio sidecar child hidden.
+        if (wantAudio && r.unit.kind === 'File') return [{ ...r, children }];
+        return children.length > 0 ? [{ ...r, children }] : [];
+      });
+    }
     if (searchText.trim()) {
       // A collapsed directory row shows a folder name, not the file names
       // inside it - searching for one of those files has to still find the
@@ -255,11 +290,12 @@ export function usePurgeTable(units: PurgeUnit[]) {
       const dir = sortDirection === 'asc' ? 1 : -1;
       if (sortColumn === 'size') return (a.size - b.size) * dir;
       if (sortColumn === 'slot') return a.slots.join(', ').localeCompare(b.slots.join(', ')) * dir;
+      if (sortColumn === 'format') return a.format.localeCompare(b.format) * dir;
       return a[sortColumn].localeCompare(b[sortColumn]) * dir;
     });
 
     return filtered;
-  }, [units, searchText, originFilter, sortColumn, sortDirection]);
+  }, [units, searchText, originFilter, formatFilter, sortColumn, sortDirection]);
 
   const handleSort = (column: PurgeSortColumn) => {
     if (sortColumn === column) {
@@ -272,8 +308,8 @@ export function usePurgeTable(units: PurgeUnit[]) {
   const sortIndicator = (column: PurgeSortColumn) =>
     sortColumn === column ? (sortDirection === 'asc' ? ' ▲' : ' ▼') : '';
 
-  const hasActiveFilters = originFilter !== 'all';
-  const resetFilters = () => setOriginFilter('all');
+  const hasActiveFilters = originFilter !== 'all' || formatFilter !== 'all';
+  const resetFilters = () => { setOriginFilter('all'); setFormatFilter('all'); };
 
   const renderSortableHeader = (column: PurgeSortColumn, label: string, resizeIndex?: number) => (
     <th key={column} className="sortable" onClick={() => handleSort(column)} style={{ position: 'relative' }}>
@@ -335,6 +371,17 @@ export function usePurgeTable(units: PurgeUnit[]) {
 
   const totalSize = useMemo(() => purgeTotalSize(units), [units]);
   const totalDirs = useMemo(() => units.filter(u => u.kind === 'Directory').length, [units]);
+  // "Showing X of Y items" counts table ROWS - a directory contributes its
+  // own row plus every tree-child row currently expanded under it. Counting
+  // units instead read "2 of 2" while the table showed six lines.
+  const visibleRowCount = useMemo(
+    () => rows.reduce((sum, r) => sum + 1 + (collapsedDirs.has(r.unit.path) ? 0 : r.children.length), 0),
+    [rows, collapsedDirs],
+  );
+  const totalRowCount = useMemo(
+    () => units.reduce((sum, u) => sum + 1 + unitChildFiles(u).length, 0),
+    [units],
+  );
   const totalAudio = useMemo(() => purgeAudioFileCount(units), [units]);
   const totalNonAudio = useMemo(() => purgeNonAudioFileCount(units), [units]);
 
@@ -343,7 +390,9 @@ export function usePurgeTable(units: PurgeUnit[]) {
     searchText, setSearchText,
     sortColumn, sortDirection,
     originFilter, setOriginFilter, origins,
+    formatFilter, setFormatFilter,
     hasActiveFilters, resetFilters,
+    visibleRowCount, totalRowCount,
     collapsedDirs, toggleDirCollapsed,
     renderSortableHeader, renderFilterableHeader,
     colWidths, tableRef,
@@ -352,18 +401,19 @@ export function usePurgeTable(units: PurgeUnit[]) {
 }
 
 export function purgeTableTsv(table: ReturnType<typeof usePurgeTable>): string {
-  const header = ['Slot', 'Name', 'Location', 'Origin', 'Size'].join('\t');
-  const lines = table.rows.map(r => [r.slots.join(', '), r.name, r.location, r.origin, formatSize(r.size)].join('\t'));
+  const header = ['Slot', 'Name', 'Format', 'Location', 'Origin', 'Size'].join('\t');
+  const lines = table.rows.map(r => [r.slots.join(', '), r.name, r.format, r.location, r.origin, formatSize(r.size)].join('\t'));
   return [header, ...lines].join('\n');
 }
 
 /** "Origin: X ✕ Reset" badge, same look/placement as FixPoolFilesModal's FilterBadges. */
 export function PurgeFilterBadges({ table }: { table: ReturnType<typeof usePurgeTable> }) {
-  const { originFilter, hasActiveFilters, resetFilters } = table;
+  const { originFilter, formatFilter, hasActiveFilters, resetFilters } = table;
   if (!hasActiveFilters) return null;
   return (
     <>
-      <span className="filter-badge">Origin: {originFilter}</span>
+      {originFilter !== 'all' && <span className="filter-badge">Origin: {originFilter}</span>}
+      {formatFilter !== 'all' && <span className="filter-badge">Format: {formatFilter}</span>}
       <button className="reset-filters-btn" onClick={resetFilters} title="Reset all filters">✕ Reset</button>
     </>
   );
@@ -388,7 +438,8 @@ function PurgeRowContextMenu({ menu, onClose }: { menu: { x: number; y: number; 
 
 export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTable> }) {
   const {
-    rows, visibleColumns, originFilter, setOriginFilter, origins, renderSortableHeader, renderFilterableHeader,
+    rows, visibleColumns, originFilter, setOriginFilter, origins, formatFilter, setFormatFilter,
+    renderSortableHeader, renderFilterableHeader,
     colWidths, tableRef, collapsedDirs, toggleDirCollapsed,
   } = table;
 
@@ -423,6 +474,9 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
     const resizeIndex = i < visibleColumns.length - 1 ? i : undefined;
     if (id === 'origin') {
       return renderFilterableHeader('origin', label, originFilter !== 'all', originOptions, originFilter, setOriginFilter, resizeIndex);
+    }
+    if (id === 'format') {
+      return renderFilterableHeader('format', label, formatFilter !== 'all', FORMAT_OPTIONS, formatFilter, setFormatFilter, resizeIndex);
     }
     return renderSortableHeader(id, label, resizeIndex);
   };
@@ -477,6 +531,8 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
                             )}
                           </td>
                         );
+                      case 'format':
+                        return <td key="format">{r.format || <span className="usage-none">—</span>}</td>;
                       case 'location':
                         return <td key="location" className="fix-location-cell" title={r.location}>{r.location}</td>;
                       case 'origin':
@@ -503,6 +559,8 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
                               {' '}{relativeToDir(file.path, isDir ? r.unit.path : dirName(r.unit.path))}
                             </td>
                           );
+                        case 'format':
+                          return <td key="format">{file.is_audio ? 'Audio' : 'Other'}</td>;
                         case 'size':
                           return <td key="size">{formatSize(file.size)}</td>;
                         default:
@@ -539,7 +597,7 @@ export function PurgeUnusedListModal({ units, scope, onClose }: {
         <div className="modal-header missing-samples-header">
           <h3><i className="fas fa-list"></i> {title}</h3>
           <div className="missing-samples-header-info">
-            <span className="missing-samples-header-count">Showing {table.rows.length} of {units.length} items</span>
+            <span className="missing-samples-header-count">Showing {table.visibleRowCount} of {table.totalRowCount} items</span>
             <PurgeFilterBadges table={table} />
           </div>
           <HeaderActions
@@ -571,6 +629,9 @@ export interface PurgeResult {
   /** Non-audio files swept along inside removed directories. */
   non_audio_files_removed: number;
   bytes_reclaimed: number;
+  /** The user cancelled partway: the counts cover only what was already
+   * processed, and nothing was left half-done. */
+  cancelled: boolean;
   slots_cleared: number;
   projects_updated: string[];
   errors: string[];
@@ -601,7 +662,7 @@ export interface PurgeFilesModalProps {
   onClose: () => void;
   onPurged?: (result: PurgeResult) => void;
   /** The actual purge call - the only backend-command-shaped detail that differs between project and pool scope. */
-  runPurge: (plan: PurgeUnit[], destinationDir: string | null) => Promise<PurgeResult>;
+  runPurge: (plan: PurgeUnit[], destinationDir: string | null, transferId: string) => Promise<PurgeResult>;
 }
 
 /**
@@ -625,15 +686,33 @@ export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsT
   const [copyFeedback, copy] = useCopyFeedback();
   const { modalRef, style, handles } = useModalResize();
   const startedRef = useRef(false);
+  // Same per-file progress + cancellation plumbing FixSamplesModal uses:
+  // the backend emits one 'copy-progress' event per plan unit tagged with
+  // this id, and `cancel_audio_transfer` trips the matching token.
+  const transferIdRef = useRef(`purge-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const [currentPath, setCurrentPath] = useState('');
+  const [cancelRequested, setCancelRequested] = useState(false);
 
   const isDelete = mode === 'delete';
   const doneLabel = scope === 'project' ? 'Purge Project Samples' : 'Purge Audio Pool Samples';
   const progressingLabel = isDelete ? 'Sending to Trash...' : 'Moving...';
+  const currentIndex = Math.max(0, units.findIndex(u => u.path === currentPath));
+
+  useEffect(() => {
+    if (phase !== 'removing') return;
+    let unlisten: (() => void) | undefined;
+    listen<{ transfer_id: string; file_path: string }>('copy-progress', (event) => {
+      if (event.payload.transfer_id !== transferIdRef.current) return;
+      setCurrentPath(event.payload.file_path);
+    }).then(fn => { unlisten = fn; }).catch(() => {});
+    return () => { unlisten?.(); };
+  }, [phase]);
 
   const start = () => {
     setPhase('removing');
+    setCurrentPath(units[0]?.path ?? '');
     const destinationDir = isDelete ? null : mode.destinationDir;
-    runPurge(units, destinationDir)
+    runPurge(units, destinationDir, transferIdRef.current)
       .then((r) => {
         setResult(r);
         setPhase('done');
@@ -676,7 +755,7 @@ export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsT
           {phase === 'review' && (
             <>
               <div className="missing-samples-header-info">
-                <span className="missing-samples-header-count">Showing {table.rows.length} of {units.length} items</span>
+                <span className="missing-samples-header-count">Showing {table.visibleRowCount} of {table.totalRowCount} items</span>
                 <PurgeFilterBadges table={table} />
               </div>
               <HeaderActions
@@ -740,7 +819,25 @@ export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsT
             <div className="fix-pool-progress">
               <div className="fix-search-step running">
                 <span className="fix-step-icon"><span className="loading-spinner-small"></span></span>
-                <span className="fix-step-label">{progressingLabel}</span>
+                <span className="fix-step-label">
+                  {cancelRequested
+                    ? 'Finishing the current item, then stopping...'
+                    : `${progressingLabel.replace('...', '')} ${currentIndex + 1} / ${units.length}`}
+                </span>
+              </div>
+              <div className="fix-pool-progress-file" title={currentPath}>{baseName(currentPath)}</div>
+              <div className="fix-done-actions">
+                <button
+                  className="fix-cancel-btn"
+                  disabled={cancelRequested}
+                  onClick={() => {
+                    setCancelRequested(true);
+                    invoke('cancel_audio_transfer', { transferId: transferIdRef.current }).catch(() => {});
+                  }}
+                  title="Stop after the item currently being processed - nothing is left half-done"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           )}
@@ -748,7 +845,10 @@ export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsT
           {phase === 'done' && result && (
             <div className="fix-pool-summary">
               <p className="purge-done-summary">
-                <i className="fas fa-check" style={{ color: '#2ecc71', marginRight: '0.5rem' }}></i>
+                {result.cancelled
+                  ? <i className="fas fa-ban" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>
+                  : <i className="fas fa-check" style={{ color: '#2ecc71', marginRight: '0.5rem' }}></i>}
+                {result.cancelled && <>Cancelled - <br /></>}
                 <strong>
                   {result.audio_files_removed} audio file{result.audio_files_removed !== 1 ? 's' : ''}
                   {nonAudioSuffix(result.non_audio_files_removed)}

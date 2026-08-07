@@ -188,6 +188,7 @@ async function setupMocks(page: Page) {
               audio_files_removed: 1,
               non_audio_files_removed: 0,
               bytes_reclaimed: 2048,
+              cancelled: false,
               slots_cleared: 0,
               projects_updated: [],
               errors: [],
@@ -229,6 +230,8 @@ test.describe('Purge Project Samples', () => {
     await summary.click()
     const listModal = page.locator('.missing-samples-list-modal')
     await expect(listModal.getByText('Unused Project Samples')).toBeVisible()
+
+    await expect(listModal.locator('.missing-samples-header-count')).toHaveText('Showing 1 of 1 items')
     await expect(listModal.locator('tbody tr')).toHaveCount(1)
     await expect(listModal.locator('tbody')).toContainText('orphan.wav')
 
@@ -314,6 +317,10 @@ test.describe('Purge Project Samples', () => {
     const listModal = page.locator('.missing-samples-list-modal')
     await expect(listModal.getByText('Unused Project Samples')).toBeVisible()
 
+    // Counts table ROWS, not plan units: 1 directory + its 3 children +
+    // 1 lone file + its .ot sidecar. Counting units read "2 of 2".
+    await expect(listModal.locator('.missing-samples-header-count')).toHaveText('Showing 6 of 6 items')
+
     // Directory row (with its three tree-style child rows) sorts before the lone file.
     const rows = listModal.locator('tbody tr')
     await expect(rows).toHaveCount(6)
@@ -345,6 +352,12 @@ test.describe('Purge Project Samples', () => {
     await expect(listModal.locator('tbody tr').nth(0)).not.toContainText('clap.wav')
     await rows.first().locator('.purge-dir-collapse-btn').click()
     await expect(listModal.locator('tbody tr')).toHaveCount(6)
+
+    // Collapsing a directory takes its hidden children out of the count too.
+    await rows.nth(0).locator('.purge-dir-collapse-btn').click()
+    await expect(listModal.locator('.missing-samples-header-count')).toHaveText('Showing 3 of 6 items')
+    await rows.first().locator('.purge-dir-collapse-btn').click()
+    await expect(listModal.locator('.missing-samples-header-count')).toHaveText('Showing 6 of 6 items')
 
     // Searching matches files inside a collapsed directory, not just the
     // folder name - and narrows the tree to the hits.
@@ -521,6 +534,128 @@ test.describe('Purge Project Samples', () => {
     await expect(banner.locator('.purge-confirm-headline')).toHaveText('2 audio files + 3 related files')
     await expect(banner.locator('.purge-confirm-sub')).toContainText('1 directory')
     await expect(banner.locator('.purge-confirm-target')).toHaveText('will be moved to /home/testuser/Downloads')
+  })
+
+  test('the Format column is hidden by default and filters the tree down to audio or non-audio files', async ({ page }) => {
+    await page.addInitScript(() => {
+      const internals = (window as any).__TAURI_INTERNALS__
+      const orig = internals.invoke
+      internals.invoke = async (cmd: string, args?: any) => {
+        if (cmd === 'scan_project_unused_files') {
+          return [
+            {
+              kind: 'File',
+              path: '/projects/TestProject/orphan.wav',
+              origin: 'TestProject',
+              size: 2048,
+              slots: [],
+              sidecar: { path: '/projects/TestProject/orphan.ot', size: 256, slots: [], is_audio: false },
+            },
+            {
+              kind: 'Directory',
+              path: '/projects/TestProject/AUDIO/oldkit',
+              origin: 'TestProject',
+              file_count: 1,
+              non_audio_count: 1,
+              size: 1536,
+              files: [
+                { path: '/projects/TestProject/AUDIO/oldkit/cover.jpg', size: 512, slots: [], is_audio: false },
+                { path: '/projects/TestProject/AUDIO/oldkit/kick.wav', size: 1024, slots: [], is_audio: true },
+              ],
+            },
+          ]
+        }
+        return orig(cmd, args)
+      }
+    })
+
+    await openPurgeOperation(page)
+    await page.locator('.tools-missing-files-summary').click()
+    const listModal = page.locator('.missing-samples-list-modal')
+    const rows = listModal.locator('tbody tr')
+    await expect(rows).toHaveCount(5)
+
+    // Hidden by default - the plan is overwhelmingly audio.
+    await expect(listModal.locator('thead')).not.toContainText('Format')
+    await listModal.locator('.column-visibility-btn').click()
+    await listModal.getByText('Format', { exact: true }).click()
+    await expect(listModal.locator('thead')).toContainText('Format')
+    await listModal.locator('.column-visibility-btn').click()
+
+    // Filter to non-audio: each parent stays as context, narrowed to its
+    // non-audio children only.
+    await listModal.locator('th.filterable-header', { hasText: 'Format' }).locator('.filter-icon').click()
+    await page.locator('.filter-dropdown').getByText('Other', { exact: true }).click()
+    await expect(rows).toHaveCount(4)
+    await expect(listModal.locator('tbody')).toContainText('cover.jpg')
+    await expect(listModal.locator('tbody')).toContainText('orphan.ot')
+    await expect(listModal.locator('tbody')).not.toContainText('kick.wav')
+    await expect(listModal.locator('.filter-badge')).toHaveText('Format: Other')
+
+    // Filter to audio: the lone file survives on its own merit (it IS audio),
+    // with its non-audio sidecar child hidden.
+    await listModal.locator('th.filterable-header', { hasText: 'Format' }).locator('.filter-icon').click()
+    await page.locator('.filter-dropdown').getByText('Audio', { exact: true }).click()
+    // 3, not 4: orphan.wav keeps its own row but sheds its .ot child.
+    await expect(rows).toHaveCount(3)
+    await expect(listModal.locator('tbody')).toContainText('kick.wav')
+    await expect(listModal.locator('tbody')).toContainText('orphan.wav')
+    await expect(listModal.locator('tbody')).not.toContainText('cover.jpg')
+    await expect(listModal.locator('tbody')).not.toContainText('orphan.ot')
+
+    await listModal.locator('.reset-filters-btn').click()
+    await expect(rows).toHaveCount(5)
+  })
+
+  test('executing shows a progress modal with position, current file and a working Cancel', async ({ page }) => {
+    await page.addInitScript(() => {
+      ;(window as any).__cancelCalls = []
+      const internals = (window as any).__TAURI_INTERNALS__
+      const orig = internals.invoke
+      internals.invoke = async (cmd: string, args?: any) => {
+        if (cmd === 'cancel_audio_transfer') {
+          ;(window as any).__cancelCalls.push(args?.transferId)
+          return true
+        }
+        if (cmd === 'purge_project_files') {
+          // Record args up front: the wrapper hangs before delegating, so
+          // orig's own __purgeCalls push has not happened yet.
+          ;(window as any).__purgeArgs = args
+          await new Promise<void>(resolve => { (window as any).__releasePurge = () => resolve() })
+        }
+        return orig(cmd, args)
+      }
+    })
+
+    await openPurgeOperation(page)
+    await expect(page.locator('.tools-missing-files-summary')).toContainText('1')
+    await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()
+
+    const modal = page.locator('.missing-samples-list-modal')
+    await modal.getByRole('button', { name: 'Apply Changes' }).click()
+
+    // Progress modal: N / M position plus the file currently being handled,
+    // instead of the old bare "Moving..." spinner.
+    const progress = modal.locator('.fix-pool-progress')
+    await expect(progress.locator('.fix-step-label')).toHaveText('Moving 1 / 1')
+    await expect(progress.locator('.fix-pool-progress-file')).toHaveText('orphan.wav')
+
+    // A transfer id is passed through so the backend can tag its events and
+    // register a matching cancellation token.
+    const purgeArgs = await page.evaluate(() => (window as any).__purgeArgs)
+    expect(typeof purgeArgs.transferId).toBe('string')
+    expect(purgeArgs.transferId.length).toBeGreaterThan(0)
+
+    // Cancel targets that same transfer, and disables itself so the request
+    // can't be fired twice while the current item finishes.
+    const cancel = progress.getByRole('button', { name: 'Cancel' })
+    await cancel.click()
+    expect(await page.evaluate(() => (window as any).__cancelCalls)).toEqual([purgeArgs.transferId])
+    await expect(cancel).toBeDisabled()
+    await expect(progress.locator('.fix-step-label')).toContainText('then stopping')
+
+    await page.evaluate(() => (window as any).__releasePurge())
+    await expect(modal.getByText('reclaimed')).toBeVisible()
   })
 
   test('Move mode with review unchecked skips the review screen entirely and calls purge_project_files directly', async ({ page }) => {
