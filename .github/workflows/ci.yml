@@ -83,12 +83,12 @@ jobs:
             libayatana-appindicator3-dev librsvg2-dev
 
       # Check-only pass (no codegen), so it surfaces compile errors well
-      # before the slower test build gets there. Scope deliberately unchanged
-      # (lib and bins, not --all-targets): test code has pre-existing lint
-      # failures, so widening it here would be a separate cleanup.
+      # before the slower test build gets there. --all-targets covers test
+      # code too, which is a large share of this crate and was previously
+      # unlinted.
       - name: Run Clippy lints
         working-directory: src-tauri
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
 
       - name: Run Rust tests
         working-directory: src-tauri

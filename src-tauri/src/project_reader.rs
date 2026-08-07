@@ -8529,6 +8529,14 @@ mod tests {
     use std::path::PathBuf;
     use tempfile::TempDir;
 
+    /// One `[SAMPLE]` block as the raw-project-file fixtures below describe
+    /// it: `(TYPE, SLOT, PATH, BPMx24, TRIGQUANTIZATION, TRIM_BARSx100)`.
+    /// The three optionals are `None` to omit that field entirely, which is
+    /// how these fixtures reproduce projects written by the device itself -
+    /// TRIGQUANTIZATION is signed because -1 is a legal value.
+    pub(super) type SampleFixture<'a> =
+        (&'a str, u16, &'a str, Option<u16>, Option<i16>, Option<u16>);
+
     // Mask bytes below are taken from a real project (bank02.work, pattern 1,
     // track 1) whose on-device trig layout was confirmed by its author; all
     // four pages hold identical trigs, exposing the per-page byte order.
@@ -14902,7 +14910,7 @@ mod tests {
             // Read original source data
             let source_bank_path = Path::new(&source.path).join("bank01.work");
             let source_bank = BankFile::from_data_file(&source_bank_path).unwrap();
-            let original_part = source_bank.parts.unsaved.0[0].clone();
+            let original_part = source_bank.parts.unsaved.0[0];
 
             copy_parts(&source.path, 0, vec![0], &dest.path, 0, vec![2]).unwrap();
 
@@ -15946,14 +15954,7 @@ mod tests {
         /// Creates a minimal project.work file content with custom sample blocks.
         /// Uses raw text to include fields that ot-tools-io doesn't support (TRIM_BARSx100, TRIGQUANTIZATION=-1).
         pub(super) fn create_raw_project_work_with_custom_fields(
-            samples: &[(
-                &str,        // TYPE (FLEX/STATIC)
-                u16,         // SLOT
-                &str,        // PATH
-                Option<u16>, // BPMx24 (None = omit)
-                Option<i16>, // TRIGQUANTIZATION (allows -1)
-                Option<u16>, // TRIM_BARSx100
-            )],
+            samples: &[crate::project_reader::tests::SampleFixture],
         ) -> String {
             let mut content = String::new();
             content.push_str("############################\r\n");
@@ -16428,8 +16429,8 @@ mod tests {
         /// Helper: create source and dest projects with raw content, run copy_sample_slots,
         /// return the raw destination project.work content after copy.
         fn run_surgical_copy(
-            src_samples: &[(&str, u16, &str, Option<u16>, Option<i16>, Option<u16>)],
-            dest_samples: &[(&str, u16, &str, Option<u16>, Option<i16>, Option<u16>)],
+            src_samples: &[crate::project_reader::tests::SampleFixture],
+            dest_samples: &[crate::project_reader::tests::SampleFixture],
             copy_assignments: bool,
             copy_attributes: bool,
             selected_attrs: &[&str],
@@ -17179,8 +17180,8 @@ mod tests {
 
         /// Helper: runs copy_sample_slots with custom markers data and returns (project.work text, dest MarkersFile)
         fn run_copy_with_markers(
-            src_samples: &[(&str, u16, &str, Option<u16>, Option<i16>, Option<u16>)],
-            dest_samples: &[(&str, u16, &str, Option<u16>, Option<i16>, Option<u16>)],
+            src_samples: &[crate::project_reader::tests::SampleFixture],
+            dest_samples: &[crate::project_reader::tests::SampleFixture],
             src_markers_setup: impl FnOnce(&mut MarkersFile),
             dest_markers_setup: impl FnOnce(&mut MarkersFile),
             copy_assignments: bool,
@@ -19831,8 +19832,8 @@ mod tests {
 
         // Re-read and verify
         let reread = read_project_memory_settings(project_path).expect("should re-read .strd");
-        assert_eq!(reread.load_24bit_flex, true);
-        assert_eq!(reread.dynamic_recorders, true);
+        assert!(reread.load_24bit_flex);
+        assert!(reread.dynamic_recorders);
         assert_eq!(reread.reserved_recorder_count, 2);
         assert_eq!(reread.reserved_recorder_length, 50);
     }
@@ -19958,8 +19959,7 @@ mod tests {
                 .reserved_recorder_length = 0;
 
             // Assign wav files to flex slots 1..=count
-            for i in 0..count {
-                let wav_path = &wav_files[i];
+            for (i, wav_path) in wav_files.iter().enumerate().take(count) {
                 // Path must be relative from project dir: ../AUDIO/...
                 let rel = wav_path
                     .strip_prefix(set_base)
@@ -20302,11 +20302,10 @@ mod tests {
             let project_dir = dir.path();
 
             // Build sample tuples for the helper
-            let sample_tuples: Vec<(&str, u16, &str, Option<u16>, Option<i16>, Option<u16>)> =
-                samples
-                    .iter()
-                    .map(|(stype, slot, path)| (*stype, *slot, *path, None, Some(-1), None))
-                    .collect();
+            let sample_tuples: Vec<crate::project_reader::tests::SampleFixture> = samples
+                .iter()
+                .map(|(stype, slot, path)| (*stype, *slot, *path, None, Some(-1), None))
+                .collect();
 
             let content =
                 surgical_write_tests::create_raw_project_work_with_custom_fields(&sample_tuples);
