@@ -6158,10 +6158,10 @@ th.col-usage .header-content .sort-indicator {
   color: #ff6b7a;
 }
 
-/* The non-audio tail is a secondary fact - same line, lighter weight */
+/* The non-audio tail is a secondary fact - same line and size as the
+   headline, set apart by weight and opacity only */
 .purge-confirm-other {
   font-weight: 400;
-  font-size: 0.95rem;
   opacity: 0.85;
 }
 

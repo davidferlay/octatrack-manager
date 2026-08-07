@@ -192,9 +192,9 @@ test.describe('Purge Audio Pool Samples', () => {
     // 1 lone file + the directory's own file_count (2) = 3 unused audio files.
     // The swept-along cover.jpg is reported apart from that headline count.
     await expect(summary).toContainText('3')
-    await expect(summary).toContainText('+ 1 other file')
-    // Real total from the recursive audio listing (the pool holds kick.wav).
-    await expect(summary).toContainText('of 1 scanned')
+    // Real total from the recursive audio listing (the pool holds kick.wav),
+    // with the related-file tail (cover.jpg) after it.
+    await expect(summary).toHaveText(/3 unused audio files - of 1 scanned \+ 1 related file/)
 
     await summary.click()
     const listModal = page.locator('.missing-samples-list-modal')

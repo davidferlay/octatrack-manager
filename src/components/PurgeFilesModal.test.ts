@@ -81,11 +81,16 @@ describe('nonAudioSuffix', () => {
   })
 
   it('singularizes one file', () => {
-    expect(nonAudioSuffix(1)).toBe(' + 1 other file')
+    expect(nonAudioSuffix(1)).toBe(' + 1 related file')
   })
 
   it('pluralizes more than one', () => {
-    expect(nonAudioSuffix(3)).toBe(' + 3 other files')
+    expect(nonAudioSuffix(3)).toBe(' + 3 related files')
+  })
+
+  it('says "other" inside a directory row, where the contrast is with that directory\'s own audio files', () => {
+    expect(nonAudioSuffix(3, 'other')).toBe(' + 3 other files')
+    expect(nonAudioSuffix(0, 'other')).toBe('')
   })
 })
 

@@ -3463,11 +3463,13 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               <button className="tools-missing-files-summary" onClick={() => setShowPurgeListModal(true)} title="Click to view the unused files list">
                 <span className="tools-fix-status-count">{purgeUnusedFileCount}</span>
                 {" "}unused audio file{purgeUnusedFileCount !== 1 ? "s" : ""}
-                {purgeNonAudioCount > 0 && (
-                  <span className="tools-fix-status-other">{" + "}{purgeNonAudioCount} other file{purgeNonAudioCount !== 1 ? "s" : ""}</span>
-                )}
                 {purgeScanTotal !== null && (
                   <span className="tools-fix-status-detail">{" - "}of {purgeScanTotal} scanned</span>
+                )}
+                {/* The non-audio tail trails the scanned total: it is not part of
+                    what was scanned, just what rides along when the findings go. */}
+                {purgeNonAudioCount > 0 && (
+                  <span className="tools-fix-status-other">{" + "}{purgeNonAudioCount} related file{purgeNonAudioCount !== 1 ? "s" : ""}</span>
                 )}
               </button>
             )}

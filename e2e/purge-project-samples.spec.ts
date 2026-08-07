@@ -305,10 +305,10 @@ test.describe('Purge Project Samples', () => {
     // The swept-along cover.jpg is reported separately, never folded into
     // the "unused audio files" headline.
     await expect(summary).toContainText('3')
-    // cover.jpg inside the directory + orphan.wav's own .ot sidecar
-    await expect(summary).toContainText('+ 2 other files')
     // Real total from the recursive audio listing, not the unused count.
-    await expect(summary).toContainText('of 3 scanned')
+    // The related-file tail trails it: cover.jpg inside the directory plus
+    // orphan.wav's own .ot sidecar.
+    await expect(summary).toHaveText(/3 unused audio files - of 3 scanned \+ 2 related files/)
 
     await summary.click()
     const listModal = page.locator('.missing-samples-list-modal')
@@ -518,7 +518,7 @@ test.describe('Purge Project Samples', () => {
     await expect(banner).toBeVisible()
     // Orange (not the delete-mode red variant)
     await expect(banner).not.toHaveClass(/purge-confirm-banner-danger/)
-    await expect(banner.locator('.purge-confirm-headline')).toHaveText('2 audio files + 3 other files')
+    await expect(banner.locator('.purge-confirm-headline')).toHaveText('2 audio files + 3 related files')
     await expect(banner.locator('.purge-confirm-sub')).toContainText('1 directory')
     await expect(banner.locator('.purge-confirm-target')).toHaveText('will be moved to /home/testuser/Downloads')
   })

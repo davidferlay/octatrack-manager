@@ -78,9 +78,13 @@ export function purgeTotalSize(units: PurgeUnit[]): number {
   return units.reduce((sum, u) => sum + u.size + (u.kind === 'File' && u.sidecar ? u.sidecar.size : 0), 0);
 }
 
-/** " + 3 other files" / "" - the shared suffix wording for a non-audio count. */
-export function nonAudioSuffix(count: number): string {
-  return count > 0 ? ` + ${count} other file${count !== 1 ? 's' : ''}` : '';
+/** " + 3 related files" / "" - the shared suffix wording for a non-audio
+ * count. `word` is "related" in summary contexts (status button, review
+ * banner, done message) where the files are related to the findings rather
+ * than findings themselves, and "other" inside a directory row, where the
+ * contrast is with that directory's own audio files. */
+export function nonAudioSuffix(count: number, word: 'related' | 'other' = 'related'): string {
+  return count > 0 ? ` + ${count} ${word} file${count !== 1 ? 's' : ''}` : '';
 }
 
 function formatSize(bytes: number): string {
@@ -468,7 +472,7 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
                             {r.name}
                             {r.unit.kind === 'Directory' && (
                               <span className="pool-dir-file-count">
-                                {' '}({r.unit.file_count} audio{nonAudioSuffix(r.unit.non_audio_count)})
+                                {' '}({r.unit.file_count} audio{nonAudioSuffix(r.unit.non_audio_count, 'other')})
                               </span>
                             )}
                           </td>
