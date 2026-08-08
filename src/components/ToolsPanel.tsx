@@ -3457,9 +3457,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 </button>
               </div>
             </div>
-            {/* Checkbox left, related toggle right - same row shape the Audio
-                Pool tool uses for its scope options. */}
-            <div className="tools-field tools-scope-row">
+            {/* Stacked, unlike the Audio Pool tool: there is no scope checkbox
+                here for "Exclude backups/" to qualify, so pairing them on one
+                row only implied a relationship that does not exist. */}
+            <div className="tools-field tools-checkbox">
               <label title={`Show the review screen listing planned changes before applying them${purgeMode === 'delete' ? ' - Required when deleting files' : ''}`}>
                 <input
                   type="checkbox"
@@ -3469,13 +3470,15 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 />
                 Review before applying changes
               </label>
-              {purgesFiles && (
+            </div>
+            {purgesFiles && (
+              <div className="tools-field tools-checkbox">
                 <label className="exclude-backups-toggle" data-on={excludeBackups} title="Leave this project's backups/ directory out of the unused audio files scan">
                   <input type="checkbox" checked={excludeBackups} onChange={(e) => setExcludeBackups(e.target.checked)} />
                   Exclude backups/ directory
                 </label>
-              )}
-            </div>
+              </div>
+            )}
             {purgesFiles && (
             <div className="tools-field">
               <label>Action</label>

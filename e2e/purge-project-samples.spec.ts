@@ -599,17 +599,16 @@ test.describe('Purge Project Samples', () => {
     await expect(page.locator('.tools-missing-files-summary')).not.toContainText('slot assignment')
     await expect(action).toBeVisible()
     await expect(excludeBackups).toBeVisible()
-    // Checkbox left, toggle right, one row - same shape as the Audio Pool tool.
-    const row = page.locator('.tools-scope-row')
-    await expect(row.getByLabel('Review before applying changes')).toHaveCount(1)
-    await expect(row.locator('.exclude-backups-toggle')).toHaveCount(1)
-    const [reviewBox, toggleBox] = await Promise.all([
-      row.getByLabel('Review before applying changes').boundingBox(),
+    // Stacked below the review checkbox, left-aligned with it - unlike the
+    // Audio Pool tool, where it shares a row with the scope it qualifies.
+    // Compare label to label - getByLabel returns the input, whose box is
+    // inset from its label's by a couple of pixels.
+    const [reviewBox, excludeBox] = await Promise.all([
+      page.locator('.tools-checkbox label', { hasText: 'Review before applying changes' }).boundingBox(),
       excludeBackups.boundingBox(),
     ])
-    const centre = (b: { y: number; height: number } | null) => (b!.y + b!.height / 2)
-    expect(Math.abs(centre(reviewBox) - centre(toggleBox))).toBeLessThan(12)
-    expect(toggleBox!.x).toBeGreaterThan(reviewBox!.x)
+    expect(excludeBox!.y).toBeGreaterThan(reviewBox!.y + reviewBox!.height - 1)
+    expect(Math.abs(excludeBox!.x - reviewBox!.x)).toBeLessThan(2)
 
     // Slots only: the file-side options are irrelevant and go away.
     await page.getByRole('button', { name: 'Unused sample slots' }).click()
