@@ -4042,7 +4042,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           scope="project"
           scopePath={projectPath}
           units={purgePlan}
-          mode={purgesFiles && purgeMode === 'delete' ? 'delete' : { destinationDir: purgeDestination }}
+          // A slots-only run must not carry a move destination: the backend
+          // validates it as an absolute path even for an empty plan.
+          mode={!purgesFiles || purgeMode === 'delete' ? 'delete' : { destinationDir: purgeDestination }}
           skipReview={purgesFiles && purgeMode === 'move' && !purgeReviewBeforeApply}
           slotsToClear={purgeSlotList}
           onClose={() => setShowPurgeModal(false)}

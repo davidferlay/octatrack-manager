@@ -536,7 +536,10 @@ export function AudioPoolPage() {
   // Slot clearing acts on the Set's projects regardless of the file-scan
   // scope - "Include all projects of set" only widens where FILES are looked
   // for, so gating slot clearing on it would make a slots-only run impossible.
-  const purgeSlotList = purgeClearUnusedSlots ? (purgeSlotsToClear ?? []) : [];
+  // Belt and braces: the checkbox handler also resets the scope, but a
+  // slot-clearing scope must never survive into a pool-only run even if some
+  // other path flips the toggle.
+  const purgeSlotList = purgeClearUnusedSlots && purgeIncludeAllProjects ? (purgeSlotsToClear ?? []) : [];
   const purgeSlotClearCount = purgeSlotList.length;
   const purgePlan = purgesFiles ? purgeUnits : [];
   const purgeHasWork = purgePlan.length > 0 || purgeSlotClearCount > 0;
@@ -1752,11 +1755,17 @@ export function AudioPoolPage() {
                     >
                       Unused audio files
                     </button>
+                    {/* Sample slots live in projects, never in the pool itself -
+                        so these two only mean anything once the Set's projects
+                        are in scope. */}
                     <button
                       type="button"
                       className={`tools-toggle-btn ${purgeScope === 'slots' ? 'selected' : ''}`}
                       onClick={() => setPurgeScope('slots')}
-                      title="Only empty sample slots across this Set's projects that have a file loaded but are never triggered. No file is deleted or moved."
+                      disabled={!purgeIncludeAllProjects}
+                      title={purgeIncludeAllProjects
+                        ? "Only empty sample slots across this Set's projects that have a file loaded but are never triggered. No file is deleted or moved."
+                        : 'Turn on "Include all projects of set" first - sample slots live in projects, not in the Audio Pool'}
                     >
                       Unused sample slots
                     </button>
@@ -1764,7 +1773,10 @@ export function AudioPoolPage() {
                       type="button"
                       className={`tools-toggle-btn ${purgeScope === 'both' ? 'selected' : ''}`}
                       onClick={() => setPurgeScope('both')}
-                      title="Clear unused slots and remove the files that leaves unreferenced, in one run"
+                      disabled={!purgeIncludeAllProjects}
+                      title={purgeIncludeAllProjects
+                        ? 'Clear unused slots and remove the files that leaves unreferenced, in one run'
+                        : 'Turn on "Include all projects of set" first - sample slots live in projects, not in the Audio Pool'}
                     >
                       Both
                     </button>
@@ -1781,18 +1793,22 @@ export function AudioPoolPage() {
                     Review before applying changes
                   </label>
                 </div>
-                {purgesFiles && (
                 <div className="tools-field tools-checkbox">
-                  <label title="Also scan every project of this Set for its own unused audio files, not just the Audio Pool">
+                  <label title="Also scan every project of this Set for its own unused audio files, and put its sample slots in scope">
                     <input
                       type="checkbox"
                       checked={purgeIncludeAllProjects}
-                      onChange={(e) => setPurgeIncludeAllProjects(e.target.checked)}
+                      onChange={(e) => {
+                        setPurgeIncludeAllProjects(e.target.checked);
+                        // Turning it off takes the Set's projects out of scope,
+                        // so a slot-clearing selection no longer has anything
+                        // to act on - fall back to the pool-only scope.
+                        if (!e.target.checked) setPurgeScope('files');
+                      }}
                     />
                     Include all projects of set
                   </label>
                 </div>
-                )}
                 {purgesFiles && purgeIncludeAllProjects && (
                   <div className="tools-field tools-checkbox tools-field-nested">
                     <label title="Keep every included project's backups/ directory untouched by the scan">
@@ -2142,7 +2158,9 @@ export function AudioPoolPage() {
           scope="pool"
           scopePath={audioPoolPath}
           units={purgePlan}
-          mode={purgesFiles && purgeMode === 'delete' ? 'delete' : { destinationDir: purgeDestination }}
+          // A slots-only run must not carry a move destination: the backend
+          // validates it as an absolute path even for an empty plan.
+          mode={!purgesFiles || purgeMode === 'delete' ? 'delete' : { destinationDir: purgeDestination }}
           skipReview={purgesFiles && purgeMode === 'move' && !purgeReviewBeforeApply}
           slotsToClear={purgeSlotList}
           onClose={() => setShowPurgeModal(false)}
@@ -2160,8 +2178,10 @@ export function AudioPoolPage() {
             // so a pool-only purge never clears slots outside the pool, even
             // if purgeClearUnusedSlots was left checked before the user
             // turned "Include all projects of set" back off.
-            clearUnusedSlots: purgeClearUnusedSlots,
-            includedProjectPaths: purgeClearUnusedSlots ? purgeIncludedProjectPaths : [],
+            // Gated on the same condition as purgeSlotList above - the Set's
+            // projects are only in scope when "Include all projects of set" is on.
+            clearUnusedSlots: purgeClearUnusedSlots && purgeIncludeAllProjects,
+            includedProjectPaths: purgeClearUnusedSlots && purgeIncludeAllProjects ? purgeIncludedProjectPaths : [],
             destinationDir,
             transferId,
           })}

@@ -798,7 +798,12 @@ export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsT
 
   const isDelete = isDeleteMode;
   const doneLabel = scope === 'project' ? 'Purge Project Samples' : 'Purge Audio Pool Samples';
-  const progressingLabel = isDelete ? 'Sending to Trash...' : 'Moving...';
+  // A slots-only run has no file work at all - "Moving 1 / 0" and a blank
+  // filename is what the file-shaped progress UI produced for it.
+  const slotsOnly = units.length === 0;
+  const progressingLabel = slotsOnly
+    ? 'Clearing sample slots...'
+    : (isDelete ? 'Sending to Trash...' : 'Moving...');
   const currentIndex = Math.max(0, units.findIndex(u => u.path === currentPath));
 
   useEffect(() => {
@@ -938,25 +943,31 @@ export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsT
               <div className="fix-search-step running">
                 <span className="fix-step-icon"><span className="loading-spinner-small"></span></span>
                 <span className="fix-step-label">
-                  {cancelRequested
-                    ? 'Finishing the current item, then stopping...'
-                    : `${progressingLabel.replace('...', '')} ${currentIndex + 1} / ${units.length}`}
+                  {slotsOnly
+                    ? progressingLabel
+                    : cancelRequested
+                      ? 'Finishing the current item, then stopping...'
+                      : `${progressingLabel.replace('...', '')} ${currentIndex + 1} / ${units.length}`}
                 </span>
               </div>
-              <div className="fix-pool-progress-file" title={currentPath}>{baseName(currentPath)}</div>
-              <div className="fix-done-actions">
-                <button
-                  className="fix-cancel-btn"
-                  disabled={cancelRequested}
-                  onClick={() => {
-                    setCancelRequested(true);
-                    invoke('cancel_audio_transfer', { transferId: transferIdRef.current }).catch(() => {});
-                  }}
-                  title="Stop after the item currently being processed - nothing is left half-done"
-                >
-                  Cancel
-                </button>
-              </div>
+              {!slotsOnly && <div className="fix-pool-progress-file" title={currentPath}>{baseName(currentPath)}</div>}
+              {/* Cancellation only ever takes effect between file units, so
+                  there is nothing for it to interrupt in a slots-only run. */}
+              {!slotsOnly && (
+                <div className="fix-done-actions">
+                  <button
+                    className="fix-cancel-btn"
+                    disabled={cancelRequested}
+                    onClick={() => {
+                      setCancelRequested(true);
+                      invoke('cancel_audio_transfer', { transferId: transferIdRef.current }).catch(() => {});
+                    }}
+                    title="Stop after the item currently being processed - nothing is left half-done"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -967,17 +978,33 @@ export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsT
                   ? <i className="fas fa-ban" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>
                   : <i className="fas fa-check" style={{ color: '#2ecc71', marginRight: '0.5rem' }}></i>}
                 {result.cancelled && <>Cancelled - <br /></>}
-                <strong>
-                  {result.audio_files_removed} audio file{result.audio_files_removed !== 1 ? 's' : ''}
-                  {nonAudioSuffix(result.non_audio_files_removed)}
-                  {result.dirs_removed.length > 0 && (
-                    <>, across {result.dirs_removed.length} director{result.dirs_removed.length !== 1 ? 'ies' : 'y'}</>
-                  )},
-                </strong>
-                <br />{isDelete ? 'sent to the Trash Bin' : `moved to ${mode.destinationDir}`}
-                <br />{formatSize(result.bytes_reclaimed)} reclaimed
-                {result.slots_cleared > 0 && (
-                  <><br />{result.slots_cleared} unused sample slot assignment{result.slots_cleared !== 1 ? 's' : ''} cleared</>
+                {slotsOnly ? (
+                  // No file work happened, so the removal/destination/bytes
+                  // lines would all read as zeroes.
+                  <>
+                    <strong>
+                      {result.slots_cleared} unused sample slot assignment{result.slots_cleared !== 1 ? 's' : ''} cleared
+                    </strong>
+                    {result.projects_updated.length > 0 && (
+                      <><br />across {result.projects_updated.length} project{result.projects_updated.length !== 1 ? 's' : ''}</>
+                    )}
+                    <br />no audio file was removed
+                  </>
+                ) : (
+                  <>
+                    <strong>
+                      {result.audio_files_removed} audio file{result.audio_files_removed !== 1 ? 's' : ''}
+                      {nonAudioSuffix(result.non_audio_files_removed)}
+                      {result.dirs_removed.length > 0 && (
+                        <>, across {result.dirs_removed.length} director{result.dirs_removed.length !== 1 ? 'ies' : 'y'}</>
+                      )},
+                    </strong>
+                    <br />{isDelete ? 'sent to the Trash Bin' : `moved to ${mode.destinationDir}`}
+                    <br />{formatSize(result.bytes_reclaimed)} reclaimed
+                    {result.slots_cleared > 0 && (
+                      <><br />{result.slots_cleared} unused sample slot assignment{result.slots_cleared !== 1 ? 's' : ''} cleared</>
+                    )}
+                  </>
                 )}
               </p>
               {result.errors.length > 0 && (

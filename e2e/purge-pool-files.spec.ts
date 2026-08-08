@@ -389,16 +389,14 @@ test.describe('Purge Audio Pool Samples', () => {
     await expect(modal).toHaveCount(0)
   })
 
-  test('slot clearing follows the Purge selector, not Include all projects of set', async ({ page }) => {
-    // list_set_projects returns [] by default in this spec's shared mock -
-    // override it with a real project so there is somewhere for slots to live.
+  test('slot scopes are unavailable until the Set\'s projects are in scope', async ({ page }) => {
     await page.addInitScript(() => {
       const internals = (window as any).__TAURI_INTERNALS__
       const orig = internals.invoke
       internals.invoke = async (cmd: string, args?: any) => {
         if (cmd === 'list_set_projects') return [{ name: 'ProjA', path: '/test/set/ProjA' }]
         if (cmd === 'list_unused_slot_assignments') {
-          return [{ slot: 'S1', path: '/test/set/AUDIO/kick.wav', origin: 'Audio Pool', size: 1024 }]
+          return [{ slot: 'S1', path: '/test/set/ProjA/kick.wav', origin: 'ProjA', size: 1024 }]
         }
         return orig(cmd, args)
       }
@@ -407,24 +405,37 @@ test.describe('Purge Audio Pool Samples', () => {
     await openPurgeOperation(page)
     await expect(page.locator('.tools-missing-files-summary')).toContainText('1')
 
-    // "Include all projects of set" widens where FILES are scanned. Sample
-    // slots only ever live in projects, so a user who asked to clear them
-    // means the Set's projects either way - gating the two together made a
-    // pool-scope slot clear impossible to express.
-    await page.getByRole('button', { name: 'Both' }).click()
-    await expect(page.getByLabel('Include all projects of set')).not.toBeChecked()
+    const slotsOnly = page.getByRole('button', { name: 'Unused sample slots' })
+    const both = page.getByRole('button', { name: 'Both' })
+    const includeAll = page.getByLabel('Include all projects of set')
+
+    // Sample slots live in projects, never in the pool - so with the Set's
+    // projects out of scope these two have nothing to act on.
+    await expect(includeAll).not.toBeChecked()
+    await expect(slotsOnly).toBeDisabled()
+    await expect(both).toBeDisabled()
+    await expect(page.locator('.tools-missing-files-summary')).not.toContainText('slot assignment')
+
+    await includeAll.check()
+    await expect(slotsOnly).toBeEnabled()
+    await expect(both).toBeEnabled()
+
+    await both.click()
+    await expect(page.locator('.tools-missing-files-summary')).toContainText('1 unused sample slot assignment to clear')
+
+    // Turning the projects back out of scope must not leave a slot-clearing
+    // scope selected behind it.
+    await includeAll.uncheck()
+    await expect(page.getByRole('button', { name: 'Unused audio files' })).toHaveClass(/selected/)
+    await expect(both).not.toHaveClass(/selected/)
+    await expect(page.locator('.tools-missing-files-summary')).not.toContainText('slot assignment')
 
     await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()
     await page.locator('.missing-samples-list-modal').getByRole('button', { name: 'Apply Changes' }).click()
-
     await expect.poll(async () => page.evaluate(() => (window as any).__purgeCalls.length)).toBe(1)
     const calls = await page.evaluate(() => (window as any).__purgeCalls)
-    expect(calls[0].clearUnusedSlots).toBe(true)
-    expect(calls[0].includedProjectPaths).toEqual(['/test/set/ProjA'])
-
-    // Files stay pool-scoped: the plan is still just the pool's own finding.
-    expect(calls[0].plan).toHaveLength(1)
-    expect(calls[0].plan[0].path).toBe('/test/set/AUDIO/unused.wav')
+    expect(calls[0].clearUnusedSlots).toBe(false)
+    expect(calls[0].includedProjectPaths).toEqual([])
   })
 
   test('Move mode with review unchecked skips the review screen entirely and calls purge_pool_files directly', async ({ page }) => {

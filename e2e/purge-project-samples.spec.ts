@@ -707,6 +707,49 @@ test.describe('Purge Project Samples', () => {
     await expect(page.locator('.tools-execute-btn', { hasText: 'Execute' })).toHaveCount(0)
   })
 
+  test('a slots-only run shows slot-shaped progress and summary, not file-shaped ones', async ({ page }) => {
+    await page.addInitScript(() => {
+      const internals = (window as any).__TAURI_INTERNALS__
+      const orig = internals.invoke
+      internals.invoke = async (cmd: string, args?: any) => {
+        if (cmd === 'scan_project_unused_files') return []
+        if (cmd === 'list_unused_slot_assignments') {
+          return [{ slot: 'S4', path: '/test/set/AUDIO/pool.wav', origin: 'Audio Pool', size: 1024 }]
+        }
+        if (cmd === 'purge_project_files') {
+          ;(window as any).__purgeCalls.push(args)
+          return {
+            files_removed: [], dirs_removed: [],
+            audio_files_removed: 0, non_audio_files_removed: 0,
+            bytes_reclaimed: 0, slots_cleared: 1,
+            projects_updated: ['/test/project'], errors: [], cancelled: false,
+          }
+        }
+        return orig(cmd, args)
+      }
+    })
+
+    await openPurgeOperation(page)
+    await page.getByRole('button', { name: 'Unused sample slots' }).click()
+    await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()
+
+    const modal = page.locator('.missing-samples-list-modal')
+    await modal.getByRole('button', { name: 'Apply Changes' }).click()
+
+    // Done screen: no file counts, no destination, no reclaimed bytes.
+    const summary = modal.locator('.purge-done-summary')
+    await expect(summary).toContainText('1 unused sample slot assignment cleared')
+    await expect(summary).toContainText('across 1 project')
+    await expect(summary).toContainText('no audio file was removed')
+    await expect(summary).not.toContainText('reclaimed')
+    await expect(summary).not.toContainText('Trash Bin')
+
+    // No move destination is sent, so the backend never rejects it.
+    const calls = await page.evaluate(() => (window as any).__purgeCalls)
+    expect(calls[0].destinationDir).toBeNull()
+    expect(calls[0].plan).toEqual([])
+  })
+
   test('the Slot column sorts by real slot number, not as text, keeping slot-less rows last', async ({ page }) => {
     await page.addInitScript(() => {
       const internals = (window as any).__TAURI_INTERNALS__

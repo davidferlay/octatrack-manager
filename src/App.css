@@ -5614,6 +5614,13 @@ th.col-usage .header-content .sort-indicator {
 
 /* Action column: a clear-only row leaves its file on disk, so it must not
    read like a removal. */
+/* A scope that cannot apply yet (slot clearing before the Set's projects are
+   in scope) reads as unavailable rather than merely unselected. */
+.tools-toggle-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .purge-action-cell {
   font-size: 0.8rem;
 }
