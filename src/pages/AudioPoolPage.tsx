@@ -1843,16 +1843,13 @@ export function AudioPoolPage() {
                     Include all projects of Set
                   </label>
                   {purgesFiles && purgeIncludeAllProjects && (
-                    <label className="toggle-switch" title="Keep every included project's backups/ directory untouched by the scan">
-                      <span className="toggle-label">Exclude backups/ directory</span>
-                      <div className="toggle-slider-container">
-                        <input
-                          type="checkbox"
-                          checked={purgeExcludeBackups}
-                          onChange={(e) => setPurgeExcludeBackups(e.target.checked)}
-                        />
-                        <span className="toggle-slider"></span>
-                      </div>
+                    <label className="exclude-backups-toggle" data-on={purgeExcludeBackups} title="Leave every included project's backups/ directory out of the unused audio files scan">
+                      <input
+                        type="checkbox"
+                        checked={purgeExcludeBackups}
+                        onChange={(e) => setPurgeExcludeBackups(e.target.checked)}
+                      />
+                      Exclude backups/ directory
                     </label>
                   )}
                 </div>

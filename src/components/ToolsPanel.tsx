@@ -3470,12 +3470,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 Review before applying changes
               </label>
               {purgesFiles && (
-                <label className="toggle-switch" title="Keep this project's backups/ directory untouched by the scan">
-                  <span className="toggle-label">Exclude backups/ directory</span>
-                  <div className="toggle-slider-container">
-                    <input type="checkbox" checked={excludeBackups} onChange={(e) => setExcludeBackups(e.target.checked)} />
-                    <span className="toggle-slider"></span>
-                  </div>
+                <label className="exclude-backups-toggle" data-on={excludeBackups} title="Leave this project's backups/ directory out of the unused audio files scan">
+                  <input type="checkbox" checked={excludeBackups} onChange={(e) => setExcludeBackups(e.target.checked)} />
+                  Exclude backups/ directory
                 </label>
               )}
             </div>

@@ -74,7 +74,7 @@ Clearing a slot assignment backs up the affected project's `project.work` first,
 
 ### Exclude backups/ directory
 
-Keeps the `backups/` directory located in Projects out of the scan.
+Keeps each project's `backups/` directory out of the **unused audio files** scan, so the copies stored there are never offered for removal. It sits on the same row as the option it qualifies - "Review before applying changes" on a project, "Include all projects of Set" on the Audio Pool - and only applies when files are in scope, so a slots-only run does not show it.
 
 ### Delete or Move files to folder
 

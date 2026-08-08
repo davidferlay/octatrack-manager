@@ -299,9 +299,9 @@ test.describe('Purge Audio Pool Samples', () => {
 
     await includeAllCheckbox.check()
 
-    // Exclude backups/ is a toggle switch sharing the row with the checkbox
-    // above it - its real input is zero-sized, so drive it by its label.
-    const excludeBackups = page.locator('.toggle-switch', { hasText: 'Exclude backups/ directory' })
+    // Exclude backups/ shares the row with the checkbox above it. Stable
+    // hook across style variants: state lives in data-on on the wrapper.
+    const excludeBackups = page.locator('.exclude-backups-toggle')
     // Slot clearing now lives in the Purge scope selector, not a checkbox.
     await expect(page.getByRole('button', { name: 'Unused sample slots' })).toBeVisible()
     await expect(excludeBackups).toBeVisible()
@@ -309,7 +309,7 @@ test.describe('Purge Audio Pool Samples', () => {
     // sitting on its own line below it.
     const row = page.locator('.tools-scope-row')
     await expect(row.getByLabel('Include all projects of Set')).toHaveCount(1)
-    await expect(row.locator('.toggle-switch')).toHaveCount(1)
+    await expect(row.locator('.exclude-backups-toggle')).toHaveCount(1)
     const [checkboxBox, toggleBox] = await Promise.all([
       row.getByLabel('Include all projects of Set').boundingBox(),
       excludeBackups.boundingBox(),
@@ -318,7 +318,7 @@ test.describe('Purge Audio Pool Samples', () => {
     expect(Math.abs(centre(checkboxBox) - centre(toggleBox))).toBeLessThan(12)
     expect(toggleBox!.x).toBeGreaterThan(checkboxBox!.x)
     // Exclude backups/ defaults to checked (purgeExcludeBackups initial state)
-    await expect(excludeBackups.locator('input')).toBeChecked()
+    await expect(excludeBackups).toHaveAttribute('data-on', 'true')
 
     // Unchecking hides them again
     await includeAllCheckbox.uncheck()
@@ -340,11 +340,11 @@ test.describe('Purge Audio Pool Samples', () => {
     await includeAllCheckbox.uncheck()
     await includeAllCheckbox.check()
 
-    const excludeBackups = page.locator('.toggle-switch', { hasText: 'Exclude backups/ directory' })
+    const excludeBackups = page.locator('.exclude-backups-toggle')
     await excludeBackups.click()
-    await expect(excludeBackups.locator('input')).not.toBeChecked()
+    await expect(excludeBackups).toHaveAttribute('data-on', 'false')
     await excludeBackups.click()
-    await expect(excludeBackups.locator('input')).toBeChecked()
+    await expect(excludeBackups).toHaveAttribute('data-on', 'true')
     await page.getByRole('button', { name: 'Both' }).click()
     await page.getByRole('button', { name: 'Unused audio files' }).click()
 

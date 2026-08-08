@@ -5640,6 +5640,14 @@ th.col-usage .header-content .sort-indicator {
   color: var(--elektron-text-primary);
 }
 
+/* "Exclude backups/ directory" is a plain checkbox matching the one it
+   shares its row with - .tools-scope-row already supplies the label
+   typography and the 18px accent-coloured box, so this only keeps it on one
+   line. The class is also the stable hook the e2e specs locate it by. */
+.exclude-backups-toggle {
+  white-space: nowrap;
+}
+
 .tools-field.tools-scope-row input[type="checkbox"] {
   width: 18px;
   height: 18px;
