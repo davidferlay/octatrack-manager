@@ -161,6 +161,35 @@ test.describe('Patterns tab - step grid indicators', () => {
   const stepCell = (page: Page, step: number) => page.locator('.track-grid .pattern-step').nth(step - 1)
   const recCell = (page: Page, step: number) => page.locator('.rec-grid .pattern-step').nth(step - 1)
 
+  test('each pattern header names the Part it actually uses', async ({ page }) => {
+    // A user reported a slot shown as untriggered because every pattern was
+    // read as Part 1 - the header label is where that first shows up.
+    await page.addInitScript(() => {
+      const internals = (window as any).__TAURI_INTERNALS__
+      const orig = internals.invoke
+      internals.invoke = async (cmd: string, args?: any) => {
+        const bank = await orig(cmd, args)
+        if (cmd !== 'load_single_bank') return bank
+        // Patterns 1..4 sit on Parts 1..4 respectively.
+        // Pattern 1 sits on Part 3, not the default Part 1.
+        bank.parts[0].patterns[0].part_assignment = 2
+        bank.parts = [0, 1, 2, 3].map((i: number) => ({
+          ...bank.parts[0], id: i, name: `PART ${i + 1}`,
+        }))
+        return bank
+      }
+    })
+    await page.reload()
+    const patternsTab = page.locator('.header-tab', { hasText: 'Patterns' })
+    await patternsTab.click()
+    await expect(page.locator('.pattern-step').first()).toBeVisible({ timeout: 10000 })
+
+    const label = page.locator('.pattern-part').first()
+    await expect(label).toHaveText('→ Part 3')
+    // The tooltip names the part too, so a renamed part is identifiable.
+    await expect(label).toHaveAttribute('title', 'This pattern uses Part 3: PART 3')
+  })
+
   test('trigger, one-shot, trigless and trigless lock render as circles', async ({ page }) => {
     await expect(stepCell(page, 1).locator('.indicator-trigger i.fas.fa-circle')).toBeVisible()
 

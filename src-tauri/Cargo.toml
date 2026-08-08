@@ -25,7 +25,7 @@ tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-ot-tools-io = { git = "https://gitlab.com/davidferlay/ot-tools-io.git", branch = "fix/checksum-algorithms-pinned" }
+ot-tools-io = { git = "https://gitlab.com/davidferlay/ot-tools-io.git", branch = "fix/part-assignment-pinned" }
 sysinfo = "0.32"
 trash = "5"
 walkdir = "2"

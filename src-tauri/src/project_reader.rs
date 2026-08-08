@@ -1417,8 +1417,12 @@ fn read_project_banks_internal(
                         }
                         .to_string();
 
-                        // Extract chain mode
-                        let chain_mode = if pattern.chain_behaviour.use_project_setting == 1 {
+                        // Extract chain mode. 255 is the Octatrack's "N/A"
+                        // marker, meaning the Pattern defers to the Project
+                        // level chain setting. This used to read a separate
+                        // `use_project_setting` byte, which was in fact the
+                        // Pattern's Part assignment.
+                        let chain_mode = if pattern.chain_behaviour.use_pattern_setting == 255 {
                             "Project".to_string()
                         } else {
                             "Pattern".to_string()
@@ -8750,6 +8754,148 @@ mod tests {
             assert_eq!(entries[0].track, 3);
         }
 
+        /// Regression: a user reported a Static slot shown as "referenced but
+        /// not triggered" that was audibly playing on the device. Its machine
+        /// lived on Part 4, and `Pattern::part_assignment` was being read from
+        /// the wrong byte (always 0), so the "which part does this pattern
+        /// use" lookup only ever matched Part 1 - no machine outside Part 1
+        /// could be marked audible.
+        #[test]
+        fn machine_on_a_part_other_than_the_first_is_audible_when_its_pattern_trigs() {
+            let project = TestProject::with_modified_bank(0, |bank| {
+                // The slot under test is only reachable via Part 4.
+                let part4 = &mut bank.parts.unsaved.0[3];
+                part4.audio_track_machine_types[1] = 0; // static
+                part4.audio_track_machine_slots[1].static_slot_id = 21; // S22
+                                                                        // Pattern 1 is assigned to Part 4 and trigs that track.
+                bank.patterns.0[0].part_assignment = 3;
+                bank.patterns.0[0].audio_track_trigs.0[1].trig_masks.trigger =
+                    [0, 1, 0, 0, 0, 0, 0, 0];
+            });
+
+            let usage = compute_sample_usage(&project.path).unwrap();
+            let entries = &usage.static_usage[21];
+            assert!(
+                entries
+                    .iter()
+                    .any(|e| e.audible && e.part == Some(3) && e.track == 1),
+                "a trigged machine on Part 4 must count as audible, got {:?}",
+                entries
+            );
+        }
+
+        /// The part assignment must land on the byte the Octatrack actually
+        /// reads. A round trip through our own reader/writer cannot catch a
+        /// wrong offset - it would write and read the same wrong byte and
+        /// agree with itself - so this asserts the raw file layout instead.
+        ///
+        /// Verified against 6400 patterns from real banks: the part byte sits
+        /// 5 bytes before the end of a pattern block, holds only 0-3, and the
+        /// two bytes after it are always 0.
+        #[test]
+        fn pattern_part_assignment_is_written_to_the_byte_the_device_reads() {
+            let project = TestProject::with_modified_bank(0, |bank| {
+                bank.patterns.0[0].part_assignment = 3;
+                bank.patterns.0[1].part_assignment = 2;
+            });
+            let raw = fs::read(Path::new(&project.path).join("bank01.work")).unwrap();
+            let parts = raw_part_bytes(&raw);
+
+            assert_eq!(parts[0], 3, "pattern 1 -> Part 4");
+            assert_eq!(parts[1], 2, "pattern 2 -> Part 3");
+            for (i, p) in parts.iter().enumerate().skip(2) {
+                assert_eq!(*p, 0, "pattern {} stays on Part 1", i + 1);
+            }
+            // The two bytes between the part and the tempo pair are padding.
+            let starts = pattern_block_starts(&raw);
+            let block = starts[1] - starts[0];
+            assert_eq!(raw[starts[0] + block - 4], 0);
+            assert_eq!(raw[starts[0] + block - 3], 0);
+        }
+
+        /// Every Part must be reachable, not just Part 1: the mis-read byte
+        /// pinned the lookup to Part 1, so a machine on Parts 2-4 could never
+        /// be marked audible however hard its pattern trigged.
+        #[test]
+        fn every_part_can_own_an_audible_machine() {
+            for part_idx in 0..4usize {
+                let slot = 30 + part_idx; // a distinct static slot per part
+                let project = TestProject::with_modified_bank(0, |bank| {
+                    let part = &mut bank.parts.unsaved.0[part_idx];
+                    part.audio_track_machine_types[2] = 0; // static
+                    part.audio_track_machine_slots[2].static_slot_id = slot as u8;
+                    bank.patterns.0[0].part_assignment = part_idx as u8;
+                    bank.patterns.0[0].audio_track_trigs.0[2].trig_masks.trigger =
+                        [0, 1, 0, 0, 0, 0, 0, 0];
+                });
+
+                let usage = compute_sample_usage(&project.path).unwrap();
+                assert!(
+                    usage.static_usage[slot]
+                        .iter()
+                        .any(|e| e.audible && e.part == Some(part_idx as u8)),
+                    "Part {} machine should be audible, got {:?}",
+                    part_idx + 1,
+                    usage.static_usage[slot]
+                );
+            }
+        }
+
+        /// `chain_mode` used to be derived from a second chain byte that is
+        /// really the Part assignment, so any pattern on Part 2 reported
+        /// "Project". The Octatrack marks "defer to the project setting" with
+        /// 255 in the single chain byte instead.
+        #[test]
+        fn chain_mode_reads_the_na_marker_not_the_part_assignment() {
+            let project = TestProject::with_modified_bank(0, |bank| {
+                bank.patterns.0[0].chain_behaviour.use_pattern_setting = 255;
+                bank.patterns.0[0].part_assignment = 0;
+                // Pattern 2 defines its own chain length while sitting on
+                // Part 2 - the old logic called this "Project".
+                bank.patterns.0[1].chain_behaviour.use_pattern_setting = 4;
+                bank.patterns.0[1].part_assignment = 1;
+            });
+
+            let banks = read_project_banks(&project.path).unwrap();
+            let patterns: Vec<_> = banks[0]
+                .parts
+                .iter()
+                .flat_map(|p| p.patterns.iter())
+                .collect();
+            let p1 = patterns.iter().find(|p| p.id == 0).expect("pattern 1");
+            let p2 = patterns.iter().find(|p| p.id == 1).expect("pattern 2");
+            assert_eq!(p1.chain_mode, "Project", "255 = N/A = use project");
+            assert_eq!(p2.chain_mode, "Pattern");
+            // And the part still comes through untouched.
+            assert_eq!(p2.part_assignment, 1);
+        }
+
+        /// A sample lock's pool (static vs flex) is decided by the machine type
+        /// on the pattern's OWN part - reading the part from the wrong byte
+        /// sent locks to whatever pool Part 1 happened to use.
+        #[test]
+        fn a_sample_lock_uses_the_machine_pool_of_its_patterns_part() {
+            let project = TestProject::with_modified_bank(0, |bank| {
+                // Part 1 track 4 is static, Part 2 track 4 is flex.
+                bank.parts.unsaved.0[0].audio_track_machine_types[3] = 0;
+                bank.parts.unsaved.0[1].audio_track_machine_types[3] = 1;
+                // The pattern under test uses Part 2, and locks slot 9.
+                bank.patterns.0[0].part_assignment = 1;
+                bank.patterns.0[0].scale.master_len = 16;
+                bank.patterns.0[0].audio_track_trigs.0[3].plocks.0[0].flex_slot_id = 9;
+            });
+
+            let usage = compute_sample_usage(&project.path).unwrap();
+            assert!(
+                usage.flex_usage[9].iter().any(|e| e.kind == "lock"),
+                "Part 2's track is a flex machine, so the lock belongs to the flex pool"
+            );
+            assert!(
+                !usage.static_usage[9].iter().any(|e| e.kind == "lock"),
+                "the lock must not be filed under the static pool"
+            );
+        }
+
         #[test]
         fn machine_assignment_audible_flag_follows_trigs() {
             let project = TestProject::with_modified_bank(0, |bank| {
@@ -8829,6 +8975,29 @@ mod tests {
     struct TestProject {
         _temp_dir: TempDir,
         path: String,
+    }
+
+    const PATTERN_HEADER: [u8; 8] = [0x50, 0x54, 0x52, 0x4e, 0, 0, 0, 0];
+
+    /// Byte offsets of every `[PTRN]` block in a raw bank file.
+    fn pattern_block_starts(raw: &[u8]) -> Vec<usize> {
+        let starts: Vec<usize> = raw
+            .windows(PATTERN_HEADER.len())
+            .enumerate()
+            .filter(|(_, w)| *w == PATTERN_HEADER)
+            .map(|(i, _)| i)
+            .collect();
+        assert_eq!(starts.len(), 16, "a bank holds 16 patterns");
+        starts
+    }
+
+    /// The Part assignment of each pattern, read straight out of the file
+    /// at the offset the Octatrack itself uses - deliberately not via our
+    /// own parser, which would agree with itself even at a wrong offset.
+    fn raw_part_bytes(raw: &[u8]) -> Vec<u8> {
+        let starts = pattern_block_starts(raw);
+        let block = starts[1] - starts[0];
+        starts.iter().map(|s| raw[s + block - 5]).collect()
     }
 
     impl TestProject {
@@ -10198,6 +10367,48 @@ mod tests {
             assert_eq!(dest_bank.patterns.0[0].part_assignment, 3);
             assert_eq!(dest_bank.patterns.0[1].part_assignment, 3);
             assert_eq!(dest_bank.patterns.0[2].part_assignment, 3);
+        }
+
+        /// The existing part-assignment tests all read back through our own
+        /// parser, so they would agree with themselves even if the byte landed
+        /// in the wrong place. This one checks the destination file at the
+        /// offset the device reads, which is what "Copy source part" and
+        /// "Select specific" actually have to get right.
+        #[test]
+        fn test_copy_patterns_writes_the_part_where_the_device_reads_it() {
+            for (mode, dest_part, expected) in [
+                ("select_specific", Some(3), 3u8),
+                ("copy_source_part", None, 2u8),
+            ] {
+                let source = TestProject::with_modified_bank(0, |bank| {
+                    bank.patterns.0[0].part_assignment = 2; // Part 3
+                });
+                let dest = TestProject::new();
+
+                copy_patterns(
+                    &source.path,
+                    0,
+                    vec![0],
+                    &dest.path,
+                    0,
+                    vec![4],
+                    mode,
+                    dest_part,
+                    "all",
+                    None,
+                    "audio",
+                )
+                .unwrap();
+
+                let raw = fs::read(Path::new(&dest.path).join("bank01.work")).unwrap();
+                assert_eq!(
+                    raw_part_bytes(&raw)[4],
+                    expected,
+                    "{} should land Part {} on the device-visible byte",
+                    mode,
+                    expected + 1
+                );
+            }
         }
 
         #[test]
