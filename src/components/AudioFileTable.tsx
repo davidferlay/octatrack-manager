@@ -212,6 +212,15 @@ export function UsagePopoverBox({ anchor, onClose, onClick, children }: {
     setPos({ top, left });
   }, [anchor.left, anchor.top, anchor.bottom]);
   useEffect(() => {
+    // Capture phase: a modal box (and some table rows) stop click propagation
+    // to keep overlay clicks from closing them, so a bubbling listener here
+    // never sees a click landing inside them - which is most of the screen.
+    // Clicks on the popover itself are excluded by target instead, since
+    // stopPropagation in its own onClick cannot hold off a capture listener.
+    const closeOnClick = (e: MouseEvent) => {
+      if ((e.target as HTMLElement | null)?.closest?.('.usage-popover')) return;
+      onClose();
+    };
     const close = () => onClose();
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     // Deferred by a tick: opening the popover focuses its trigger badge, which
@@ -219,7 +228,7 @@ export function UsagePopoverBox({ anchor, onClose, onClick, children }: {
     // fixed-height resizable modal) - attaching immediately would catch that
     // and close the popover before it was ever shown.
     const timer = window.setTimeout(() => {
-      document.addEventListener('click', close);
+      document.addEventListener('click', closeOnClick, true);
       document.addEventListener('keydown', onKey);
       // 'scroll' doesn't bubble, so listen on the capture phase to catch it
       // from any scrollable ancestor (table wrapper, modal body, ...), not
@@ -228,7 +237,7 @@ export function UsagePopoverBox({ anchor, onClose, onClick, children }: {
     }, 0);
     return () => {
       window.clearTimeout(timer);
-      document.removeEventListener('click', close);
+      document.removeEventListener('click', closeOnClick, true);
       document.removeEventListener('keydown', onKey);
       window.removeEventListener('scroll', close, true);
     };

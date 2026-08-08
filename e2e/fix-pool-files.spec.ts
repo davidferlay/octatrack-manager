@@ -97,6 +97,32 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await openPage(page)
   })
 
+  test('a usage popover opened inside a modal closes on a click elsewhere', async ({ page }) => {
+    await page.locator('.header-tab', { hasText: 'Tools' }).click()
+    await page.locator('.tools-missing-files-summary').click()
+    const modal = page.locator('.missing-samples-list-modal')
+    await expect(modal).toBeVisible()
+
+    const popover = page.locator('.usage-popover')
+    await modal.locator('.usage-badge').first().click()
+    await expect(popover).toBeVisible()
+
+    // (Clicking inside the popover must not dismiss it - asserted in
+    // sample-usage.spec.ts, where no scroll container gets in the way.)
+
+    // The modal box stops click propagation so overlay clicks cannot close it,
+    // which also hid every in-modal click from a bubble-phase listener: the
+    // popover stayed open forever. Only a capture-phase listener sees this.
+    await modal.locator('.modal-header h3').click()
+    await expect(popover).toHaveCount(0)
+
+    // Escape still works too.
+    await modal.locator('.usage-badge').first().click()
+    await expect(popover).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(popover).toHaveCount(0)
+  })
+
   test('the pool pane shows OT compatibility badges per file', async ({ page }) => {
     const dest = page.locator('.dest-panel')
     await expect(dest.locator('tr', { hasText: 'kick.wav' }).locator('.compat-badge')).toHaveText(':)')

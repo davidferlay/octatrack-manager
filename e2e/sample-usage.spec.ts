@@ -159,6 +159,23 @@ test.describe('Sample slots - Used column', () => {
     await expect(popover).toHaveCount(0)
   })
 
+  test('clicking elsewhere closes the usage popover, clicking inside it does not', async ({ page }) => {
+    await page.locator('.usage-badge').first().click()
+    const popover = page.locator('.usage-popover')
+    await expect(popover).toBeVisible()
+
+    // Clicking the popover's own content must not dismiss it - you have to be
+    // able to read and select the entries.
+    await popover.locator('.usage-popover-entry').first().click()
+    await expect(popover).toBeVisible()
+
+    // A click anywhere else does close it. This only works with a
+    // capture-phase listener: the table rows and modal boxes around the badge
+    // stop click propagation, so a bubbling listener never sees it.
+    await page.locator('.samples-table thead').click()
+    await expect(popover).toHaveCount(0)
+  })
+
   test('the gray badge opens a popover scoped to never-trigged references', async ({ page }) => {
     const rows = page.locator('.samples-table tbody tr')
     await rows.nth(1).locator('.usage-badge.referenced').click()
