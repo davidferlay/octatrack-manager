@@ -2612,7 +2612,7 @@ dependencies = [
 [[package]]
 name = "ot-tools-io"
 version = "0.7.0"
-source = "git+https://gitlab.com/davidferlay/ot-tools-io.git?branch=fix%2Fpart-assignment-pinned#0e6a0bdaf4ca479fd3d9038889cc341033e31320"
+source = "git+https://gitlab.com/davidferlay/ot-tools-io.git?branch=fix%2Fpart-assignment-pinned#79bfa1b1a4abf3159181a41da270ad1830540b20"
 dependencies = [
  "bincode",
  "encoding_rs",
@@ -2628,7 +2628,7 @@ dependencies = [
 [[package]]
 name = "ot-tools-io-derive"
 version = "0.7.0"
-source = "git+https://gitlab.com/davidferlay/ot-tools-io.git?branch=fix%2Fpart-assignment-pinned#0e6a0bdaf4ca479fd3d9038889cc341033e31320"
+source = "git+https://gitlab.com/davidferlay/ot-tools-io.git?branch=fix%2Fpart-assignment-pinned#79bfa1b1a4abf3159181a41da270ad1830540b20"
 dependencies = [
  "quote",
  "syn 2.0.117",
