@@ -3028,3 +3028,45 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod scratch_repro {
+    #[test]
+    #[ignore]
+    fn repro() {
+        let pool = std::env::var("REPRO_POOL").unwrap();
+        let projects = crate::project_reader::list_set_projects(&pool).unwrap();
+        let names: Vec<String> = projects.iter().map(|p| p.name.clone()).collect();
+        let count = |units: &[super::PurgeUnit]| -> u32 {
+            units
+                .iter()
+                .map(|u| match u {
+                    super::PurgeUnit::Directory { file_count, .. } => *file_count,
+                    _ => 1,
+                })
+                .sum()
+        };
+
+        for simulate in [false, true] {
+            let pool_units = super::compute_pool_unused_files(
+                &pool,
+                if simulate { &names } else { &[] },
+            )
+            .unwrap();
+            let mut total = count(&pool_units);
+            let mut slots = 0usize;
+            for p in &projects {
+                let u = super::compute_project_unused_files(&p.path, true, simulate).unwrap();
+                total += count(&u);
+                slots += super::list_slots_to_clear(&p.path).unwrap().len();
+            }
+            println!(
+                "simulate={:<5} pool_only={:<5} pool+projects={:<5} clearable_slots={}",
+                simulate,
+                count(&pool_units),
+                total,
+                slots
+            );
+        }
+    }
+}

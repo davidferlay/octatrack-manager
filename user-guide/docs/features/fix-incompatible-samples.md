@@ -54,7 +54,7 @@ Every slot reference across all projects of Set is updated to reference the new 
 
 In **Fix Audio Pool Samples:**
 
-- Option "**Include all projects of set**" can be enabled to include incompatible files found in any project's own directory, not just Audio Pool.
+- Option "**Include all projects of Set**" can be enabled to include incompatible files found in any project's own directory, not just Audio Pool.
 
 In **Fix Project Samples:**
 

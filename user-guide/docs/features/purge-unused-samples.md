@@ -22,7 +22,7 @@ An audio file is unused when no sample slot references it in any way:
 - No machine assignment on any track.
 - No p-lock (sample-lock) on any step.
 - No sample slot even has it **loaded**
-    - [Clear unused sample slot assignments](#clear-unused-sample-slot-assignments) option can be enabled to additionaly clear slots assignements which are never actually triggered - along with handling the then un-used audio files.
+    - Set [what to purge](#what-to-purge) to **Unused sample slots** or **Both** to also clear slots that hold a sample nothing ever triggers - along with handling the files that then become unused.
 
 With **Purge Audio Pool Samples**, audio files located in Audio Pool are considered unused when no project of the Set reference them in any way.
 
@@ -31,30 +31,42 @@ With **Purge Audio Pool Samples**, audio files located in Audio Pool are conside
 ## Workflow
 
 1. Select **Purge Project Samples** or **Purge Audio Pool Samples** from the Tools tab's operation dropdown.
-2. The scan runs automatically and the **Status** panel shows the count of unused audio files like:
-    - _"3 unused audio files - of 128 scanned"_
+2. Pick what the run should do with the first option field: **Unused audio files**, **Unused sample slots**, or **Both**.
+3. The scan runs automatically and the **Status** panel shows what was found, for example:
+    - _"3 unused audio files to purge - of 128 scanned in project directory"_
+    - _"9 unused sample slot assignments to clear"_ on a second line, when slots are in scope
     - A green **0** means everything is referenced
-3. Click the status button to open a preview list of said files
-4. Configure the options described below, then click **Execute**.
-5. Review the planned changes (mandatory for **Delete files**) and click **Apply Changes**.
+4. Click the status button to open a preview list of everything that will change.
+5. Configure the remaining options described below, then click **Execute**.
+6. Review the planned changes (mandatory for **Delete files**) and click **Apply Changes**.
 
 ---
 
 ## Configuration Options
 
-### Include all projects of set (Purge Audio Pool Samples only)
+### What to purge
+
+The first option field decides what the run actually does:
+
+| Choice | Effect |
+|--------|--------|
+| **Unused audio files** | Deletes or moves audio files nothing references. Sample slots are left untouched. |
+| **Unused sample slots** | Empties slots that hold a sample nothing ever triggers. No file is deleted or moved. |
+| **Both** | Clears those slots and removes the files that leaves unreferenced, in one run. |
+
+Options that no longer apply are hidden - a slots-only run shows no **Delete/Move** choice, no destination folder and no **Exclude backups/ directory**.
+
+Slots that have a file loaded but are never triggered by any machine assignment or p-lock get their assignment cleared entirely, so the slot is reset and ready for another sample.
+
+Clearing a slot can also free the file it held, when that slot was the file's only reference. A slot pointing at an **Audio Pool** file is cleared without its file being touched - pool files are shared across the Set, so removing those is the job of **Purge Audio Pool Samples**.
+
+On **Purge Audio Pool Samples**, **Unused sample slots** and **Both** are only selectable once **Include all projects of Set** is checked, since slots live in projects rather than in the pool. Turning that checkbox back off resets the choice to **Unused audio files**.
+
+### Include all projects of Set (Purge Audio Pool Samples only)
 
 When enabled, every project of the Set is also scanned - in addition of the shared Set `AUDIO/` pool.
 
-The unused count and preview list combines pool and per-project results together.
-
-### Clear unused sample slot assignments
-
-When enabled, slots that have a file loaded but are never triggered by any machine assignment or p-lock have their assignment cleared as part of the clean up - freeing their file for removal too. The preview count updates live to include files that would become unused once those slots are cleared.
-
-On **Purge Audio Pool Samples**, this option (as well as **Exclude backups/ directory** below) only appears if **Include all projects of set** is checked, since clearing slots happens at projects level.
-
-Clearing a slot in one of the included projects can also free a pool file if that slot was the file's only reference anywhere in the Set.
+The unused count and preview list combines pool and per-project results together, and the status line reads _"of N scanned in Audio Pool and all Projects of Set"_ rather than _"in Audio Pool directory"_.
 
 :::info
 Clearing a slot assignment backs up the affected project's `project.work` first, under that project's `backups/` directory. See [Quick Start](../getting-started/quick-start.md#11-automatic-backups) for details.
@@ -98,6 +110,25 @@ A different directory can be selected freely by user using the **"Browse..."** b
 When every audio file inside a folder (recursively) is unused, the whole folder is removed or moved as a single unit instead of being left empty:
 - **When that happens, all non-audio files inside are swept along with it**
 - All affected files will be listed in preview and review lists
+
+The same applies to an individual file's `.ot` sidecar: it travels with its sample and is listed as a child row, unless another sample sharing that stem survives.
+
+---
+
+## Reading the Preview and Review Tables
+
+Both tables list every change the run will make, one row per file or slot:
+
+| Column | Meaning |
+|--------|---------|
+| **Slot** | Slot(s) holding this file, e.g. `S4` or `S9, S10, S11` when several slots share one sample. A dash means no slot references it. |
+| **Action** | `Delete` / `Move` for a file being removed, `Clear slot` for a slot whose file stays on disk, `Delete + Clear` / `Move + Clear` when both happen. |
+| **Format** | `Audio`, or `Other` for a non-audio file swept along. Hidden by default. |
+| **Origin** | The project the file came from, or `Audio Pool`. |
+
+Every column sorts and filters. Use the **Action** filter to isolate, say, only the slots being cleared. The hamburger menu toggles column visibility.
+
+While the run works, a progress modal shows its position and the file being handled, with a **Cancel** button. Cancelling stops between items - nothing is ever left half-moved, and the summary reports only what actually completed.
 
 ---
 

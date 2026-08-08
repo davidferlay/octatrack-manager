@@ -619,6 +619,15 @@ td.col-size {
   text-shadow: 0 0 6px rgba(255, 102, 0, 0.5);
 }
 
+/* The page is a fixed-height flex column with overflow hidden, so the Tools
+   panel has to own its own scrolling - otherwise long option lists just get
+   cut off at the window edge with no way to reach Execute. Matches how the
+   project page's Tools tab behaves. */
+.pool-tools-panel {
+  overflow-y: auto;
+  min-height: 0;
+}
+
 /* Filter dropdowns use the shared App.css styles (same look as the sample slot
    pages) - the local overrides that used to live here made them inconsistent.
    A filter's value list is unbounded (one entry per distinct origin, project,

@@ -17,7 +17,7 @@ import {
 import { Version } from "../components/Version";
 import { AudioFileTable, audioKind } from "../components/AudioFileTable";
 import { FixPoolFilesModal, PoolIncompatibleListModal, type IncompatibleFile, type PoolFixResult, type CopyProgressEvent } from "../components/FixPoolFilesModal";
-import { PurgeFilesModal, purgeAudioFileCount, purgeNonAudioFileCount, PurgeUnusedListModal, type ClearableSlot, type PurgeUnit } from "../components/PurgeFilesModal";
+import { PathContextMenu, PurgeFilesModal, purgeAudioFileCount, purgeNonAudioFileCount, PurgeUnusedListModal, type ClearableSlot, type PurgeUnit } from "../components/PurgeFilesModal";
 import { isUnderBackupsDir } from "../utils/purgeBackups";
 import { OverwriteModal } from "../components/OverwriteModal";
 import { TransferProgressPanel } from "../components/TransferProgressPanel";
@@ -374,6 +374,26 @@ export function AudioPoolPage() {
   // Same three-way scope as the project Tools tab - see ToolsPanel. Slot
   // clearing always acts on the Set's projects (that is where slots live),
   // independently of the file-scan scope below.
+  // Right-click menu on the Move destination path - the same Copy path /
+  // Open in file explorer pair the purge tables offer on their rows.
+  const [destMenu, setDestMenu] = useState<{ x: number; y: number; path: string } | null>(null);
+  useEffect(() => {
+    if (!destMenu) return;
+    // Capture phase (the panel stops propagation), but clicks landing on the
+    // menu itself must reach its buttons - closing here first would unmount
+    // them before their onClick ever runs.
+    const close = (e: MouseEvent) => {
+      if ((e.target as HTMLElement | null)?.closest?.('.context-menu')) return;
+      setDestMenu(null);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDestMenu(null); };
+    document.addEventListener('click', close, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', close, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [destMenu]);
   const [purgeScope, setPurgeScope] = useState<'files' | 'slots' | 'both'>('files');
   const purgeClearUnusedSlots = purgeScope !== 'files';
   const purgesFiles = purgeScope !== 'slots';
@@ -383,7 +403,7 @@ export function AudioPoolPage() {
   const [purgeDestination, setPurgeDestination] = useState('');
   // All three scan variants are pre-fetched in the background up front
   // (always with excludeBackups: false, the maximal set) so toggling
-  // "Include all projects of set", "Exclude backups/ directory", or "Clear
+  // "Include all projects of Set", "Exclude backups/ directory", or "Clear
   // unused sample slot assignments" is instant instead of re-hitting the
   // backend - see the effect below and isUnderBackupsDir. null means "not
   // fetched yet".
@@ -485,7 +505,7 @@ export function AudioPoolPage() {
       }).finally(markStepDone);
 
       // "of N scanned": how many audio files the scan actually walked, for
-      // both scopes up front so toggling "Include all projects of set" stays
+      // both scopes up front so toggling "Include all projects of Set" stays
       // instant (same no-rescan rule as the unused-file results themselves).
       Promise.all([
         invoke<string[]>('list_audio_files_recursive', { path: audioPoolPath }).catch(() => [] as string[]),
@@ -534,7 +554,7 @@ export function AudioPoolPage() {
   // ToolsPanel: slots can be clearable while nothing is purgeable, and
   // gating Execute on the file count alone made that case unreachable.
   // Slot clearing acts on the Set's projects regardless of the file-scan
-  // scope - "Include all projects of set" only widens where FILES are looked
+  // scope - "Include all projects of Set" only widens where FILES are looked
   // for, so gating slot clearing on it would make a slots-only run impossible.
   // Belt and braces: the checkbox handler also resets the scope, but a
   // slot-clearing scope must never survive into a pool-only run even if some
@@ -1683,7 +1703,7 @@ export function AudioPoolPage() {
                       checked={includeAllProjects}
                       onChange={(e) => setIncludeAllProjects(e.target.checked)}
                     />
-                    Include all projects of set
+                    Include all projects of Set
                   </label>
                 </div>
               </div>
@@ -1738,15 +1758,15 @@ export function AudioPoolPage() {
                 <p>
                   Scans the Audio Pool for audio files not referenced in any
                   project of Set. Moves them into a chosen folder or deletes
-                  them (to the Trash Bin).
+                  them (to the Trash Bin), and/or clears slots nothing ever
+                  triggers across the Set's projects.
                 </p>
               </div>
 
               <div className="tools-options-panel">
                 <h3>Options</h3>
                 <div className="tools-field">
-                  <label>Purge</label>
-                  <div className="tools-toggle-group">
+                      <div className="tools-toggle-group">
                     <button
                       type="button"
                       className={`tools-toggle-btn ${purgeScope === 'files' ? 'selected' : ''}`}
@@ -1765,7 +1785,7 @@ export function AudioPoolPage() {
                       disabled={!purgeIncludeAllProjects}
                       title={purgeIncludeAllProjects
                         ? "Only empty sample slots across this Set's projects that have a file loaded but are never triggered. No file is deleted or moved."
-                        : 'Turn on "Include all projects of set" first - sample slots live in projects, not in the Audio Pool'}
+                        : 'Turn on "Include all projects of Set" first - sample slots live in projects, not in the Audio Pool'}
                     >
                       Unused sample slots
                     </button>
@@ -1776,7 +1796,7 @@ export function AudioPoolPage() {
                       disabled={!purgeIncludeAllProjects}
                       title={purgeIncludeAllProjects
                         ? 'Clear unused slots and remove the files that leaves unreferenced, in one run'
-                        : 'Turn on "Include all projects of set" first - sample slots live in projects, not in the Audio Pool'}
+                        : 'Turn on "Include all projects of Set" first - sample slots live in projects, not in the Audio Pool'}
                     >
                       Both
                     </button>
@@ -1806,7 +1826,7 @@ export function AudioPoolPage() {
                         if (!e.target.checked) setPurgeScope('files');
                       }}
                     />
-                    Include all projects of set
+                    Include all projects of Set
                   </label>
                 </div>
                 {purgesFiles && purgeIncludeAllProjects && (
@@ -1849,6 +1869,12 @@ export function AudioPoolPage() {
                     <button
                       type="button"
                       className="tools-project-selector-btn"
+                      onContextMenu={(e) => {
+                        if (!purgeDestination) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setDestMenu({ x: e.clientX, y: e.clientY, path: purgeDestination });
+                      }}
                       title="Browse..."
                       onClick={async () => {
                         const selected = await open({ directory: true, multiple: false, title: 'Select destination folder' });
@@ -2148,6 +2174,7 @@ export function AudioPoolPage() {
       )}
 
       {/* Unused Audio Pool Samples list (Tools tab status summary) */}
+      {destMenu && <PathContextMenu menu={destMenu} onClose={() => setDestMenu(null)} />}
       {showPurgeListModal && (
         <PurgeUnusedListModal units={purgePlan} scope="pool" slotsToClear={purgeSlotList} actionVerb={purgesFiles ? (purgeMode === "delete" ? "Delete" : "Move") : null} onClose={() => setShowPurgeListModal(false)} />
       )}
@@ -2174,12 +2201,12 @@ export function AudioPoolPage() {
             plan,
             // purgeIncludedProjectPaths is now always populated in the
             // background (pre-fetched regardless of the toggle, so switching
-            // "Include all projects of set" on is instant) - gate both here
+            // "Include all projects of Set" on is instant) - gate both here
             // so a pool-only purge never clears slots outside the pool, even
             // if purgeClearUnusedSlots was left checked before the user
-            // turned "Include all projects of set" back off.
+            // turned "Include all projects of Set" back off.
             // Gated on the same condition as purgeSlotList above - the Set's
-            // projects are only in scope when "Include all projects of set" is on.
+            // projects are only in scope when "Include all projects of Set" is on.
             clearUnusedSlots: purgeClearUnusedSlots && purgeIncludeAllProjects,
             includedProjectPaths: purgeClearUnusedSlots && purgeIncludeAllProjects ? purgeIncludedProjectPaths : [],
             destinationDir,

@@ -750,6 +750,57 @@ test.describe('Purge Project Samples', () => {
     expect(calls[0].plan).toEqual([])
   })
 
+  test('the Action column filters, and the destination path offers a right-click menu', async ({ page }) => {
+    await page.addInitScript(() => {
+      ;(window as any).__revealCalls = []
+      const internals = (window as any).__TAURI_INTERNALS__
+      const orig = internals.invoke
+      internals.invoke = async (cmd: string, args?: any) => {
+        if (cmd === 'reveal_in_file_manager') {
+          ;(window as any).__revealCalls.push(args?.path)
+          return null
+        }
+        if (cmd === 'list_unused_slot_assignments') {
+          return [{ slot: 'S4', path: '/test/set/AUDIO/pool.wav', origin: 'Audio Pool', size: 1024 }]
+        }
+        return orig(cmd, args)
+      }
+    })
+
+    await openPurgeOperation(page)
+    await page.getByRole('button', { name: 'Both' }).click()
+    await page.locator('.tools-missing-files-summary').click()
+
+    const listModal = page.locator('.missing-samples-list-modal')
+    const rows = listModal.locator('tbody tr')
+    await expect(rows).toHaveCount(2)
+
+    // Action filter: options are worded with the selected verb (Move here).
+    await listModal.locator('th.filterable-header', { hasText: 'Action' }).locator('.filter-icon').click()
+    await page.locator('.filter-dropdown').getByText('Clear slot', { exact: true }).click()
+    await expect(rows).toHaveCount(1)
+    await expect(rows.first()).toContainText('pool.wav')
+    await expect(listModal.locator('.filter-badge')).toContainText('Action:')
+
+    await listModal.locator('.reset-filters-btn').click()
+    await expect(rows).toHaveCount(2)
+    await listModal.locator('.modal-close').click()
+
+    // Right-click the Move destination path -> Copy path / Open in explorer.
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+    await page.locator('.tools-destination-path').click({ button: 'right' })
+    let menu = page.locator('.context-menu')
+    await expect(menu.getByText('Open in file explorer')).toBeVisible()
+    await menu.getByText('Open in file explorer').click()
+    await expect.poll(async () => page.evaluate(() => (window as any).__revealCalls)).toEqual(['/home/testuser/Downloads'])
+
+    await page.locator('.tools-destination-path').click({ button: 'right' })
+    menu = page.locator('.context-menu')
+    await menu.getByText('Copy file path').click()
+    await expect(menu).toHaveCount(0)
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('/home/testuser/Downloads')
+  })
+
   test('the Slot column sorts by real slot number, not as text, keeping slot-less rows last', async ({ page }) => {
     await page.addInitScript(() => {
       const internals = (window as any).__TAURI_INTERNALS__

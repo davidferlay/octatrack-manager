@@ -129,6 +129,16 @@ export function purgeActionLabel(action: PurgeAction, verb: 'Delete' | 'Move' | 
   return action === 'remove+clear' ? `${verb} + Clear` : verb;
 }
 
+/** Filter values for the Action column. Keyed by the underlying
+ * `PurgeAction` rather than the rendered label, which changes with the
+ * selected Delete/Move verb. */
+const ACTION_OPTIONS: { value: string; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'remove', label: 'Remove only' },
+  { value: 'remove+clear', label: 'Remove + clear slot' },
+  { value: 'clear-only', label: 'Clear slot only' },
+];
+
 const FORMAT_OPTIONS = [
   { value: 'all', label: 'All' },
   { value: 'Audio', label: 'Audio' },
@@ -185,6 +195,7 @@ export function usePurgeTable(
   const [originFilter, setOriginFilter] = useState('all');
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set(PURGE_DEFAULT_HIDDEN_COLS));
   const [formatFilter, setFormatFilter] = useState('all');
+  const [actionFilter, setActionFilter] = useState('all');
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
   // Directory rows expanded by default (matches the previous always-shown
@@ -348,6 +359,7 @@ export function usePurgeTable(
         return children.length > 0 ? [{ ...r, children }] : [];
       });
     }
+    if (actionFilter !== 'all') filtered = filtered.filter(r => r.action === actionFilter);
     if (searchText.trim()) {
       // A collapsed directory row shows a folder name, not the file names
       // inside it - searching for one of those files has to still find the
@@ -383,7 +395,7 @@ export function usePurgeTable(
     });
 
     return filtered;
-  }, [units, slotsToClear, actionVerb, searchText, originFilter, formatFilter, sortColumn, sortDirection]);
+  }, [units, slotsToClear, actionVerb, searchText, originFilter, formatFilter, actionFilter, sortColumn, sortDirection]);
 
   const handleSort = (column: PurgeSortColumn) => {
     if (sortColumn === column) {
@@ -396,8 +408,8 @@ export function usePurgeTable(
   const sortIndicator = (column: PurgeSortColumn) =>
     sortColumn === column ? (sortDirection === 'asc' ? ' ▲' : ' ▼') : '';
 
-  const hasActiveFilters = originFilter !== 'all' || formatFilter !== 'all';
-  const resetFilters = () => { setOriginFilter('all'); setFormatFilter('all'); };
+  const hasActiveFilters = originFilter !== 'all' || formatFilter !== 'all' || actionFilter !== 'all';
+  const resetFilters = () => { setOriginFilter('all'); setFormatFilter('all'); setActionFilter('all'); };
 
   const renderSortableHeader = (column: PurgeSortColumn, label: string, resizeIndex?: number) => (
     <th key={column} className="sortable" onClick={() => handleSort(column)} style={{ position: 'relative' }}>
@@ -482,6 +494,7 @@ export function usePurgeTable(
     sortColumn, sortDirection,
     originFilter, setOriginFilter, origins,
     formatFilter, setFormatFilter,
+    actionFilter, setActionFilter,
     hasActiveFilters, resetFilters,
     visibleRowCount, totalRowCount, totalSlotClears, actionVerb,
     collapsedDirs, toggleDirCollapsed,
@@ -499,12 +512,15 @@ export function purgeTableTsv(table: ReturnType<typeof usePurgeTable>): string {
 
 /** "Origin: X ✕ Reset" badge, same look/placement as FixPoolFilesModal's FilterBadges. */
 export function PurgeFilterBadges({ table }: { table: ReturnType<typeof usePurgeTable> }) {
-  const { originFilter, formatFilter, hasActiveFilters, resetFilters } = table;
+  const { originFilter, formatFilter, actionFilter, hasActiveFilters, resetFilters } = table;
   if (!hasActiveFilters) return null;
   return (
     <>
       {originFilter !== 'all' && <span className="filter-badge">Origin: {originFilter}</span>}
       {formatFilter !== 'all' && <span className="filter-badge">Format: {formatFilter}</span>}
+      {actionFilter !== 'all' && (
+        <span className="filter-badge">Action: {ACTION_OPTIONS.find(o => o.value === actionFilter)?.label}</span>
+      )}
       <button className="reset-filters-btn" onClick={resetFilters} title="Reset all filters">✕ Reset</button>
     </>
   );
@@ -514,7 +530,7 @@ export function PurgeFilterBadges({ table }: { table: ReturnType<typeof usePurge
  * FixPoolFilesModal's row context menu, generalized to a bare path since a
  * purge row's menu also has to work for a tree-child row (a plain absorbed
  * file path, not a full PurgeUnit). */
-function PurgeRowContextMenu({ menu, onClose }: { menu: { x: number; y: number; path: string }; onClose: () => void }) {
+export function PathContextMenu({ menu, onClose }: { menu: { x: number; y: number; path: string }; onClose: () => void }) {
   return (
     <div className="context-menu" style={{ position: 'fixed', top: menu.y, left: menu.x }} onClick={(e) => e.stopPropagation()}>
       <button className="context-menu-item" onClick={() => { invoke('reveal_in_file_manager', { path: menu.path }); onClose(); }}>
@@ -530,6 +546,7 @@ function PurgeRowContextMenu({ menu, onClose }: { menu: { x: number; y: number; 
 export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTable> }) {
   const {
     rows, visibleColumns, originFilter, setOriginFilter, origins, formatFilter, setFormatFilter,
+    actionFilter, setActionFilter,
     renderSortableHeader, renderFilterableHeader,
     colWidths, tableRef, collapsedDirs, toggleDirCollapsed, actionVerb,
   } = table;
@@ -568,6 +585,14 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
     }
     if (id === 'format') {
       return renderFilterableHeader('format', label, formatFilter !== 'all', FORMAT_OPTIONS, formatFilter, setFormatFilter, resizeIndex);
+    }
+    if (id === 'action') {
+      // Options are worded with the selected verb, so "Remove only" reads as
+      // "Move only"/"Delete only" depending on what the run will do.
+      const options = ACTION_OPTIONS.map(o => (
+        o.value === 'all' ? o : { value: o.value, label: purgeActionLabel(o.value as PurgeAction, actionVerb) }
+      ));
+      return renderFilterableHeader('action', label, actionFilter !== 'all', options, actionFilter, setActionFilter, resizeIndex);
     }
     return renderSortableHeader(id, label, resizeIndex);
   };
@@ -671,7 +696,7 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
           })}
         </tbody>
       </table>
-      {rowMenu && <PurgeRowContextMenu menu={rowMenu} onClose={() => setRowMenu(null)} />}
+      {rowMenu && <PathContextMenu menu={rowMenu} onClose={() => setRowMenu(null)} />}
     </>
   );
 }

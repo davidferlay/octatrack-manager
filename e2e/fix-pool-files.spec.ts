@@ -496,7 +496,7 @@ test.describe('Audio Pool — include all projects of set', () => {
     await expect(summary).toContainText('2')
     await expect(summary).toContainText('of 3 scanned')
 
-    const includeAllCheckbox = page.getByLabel('Include all projects of set')
+    const includeAllCheckbox = page.getByLabel('Include all projects of Set')
     await expect(includeAllCheckbox).not.toBeChecked()
 
     const scansBefore = await page.evaluate(() => (window as any).__inspectCalls.length)
@@ -517,7 +517,7 @@ test.describe('Audio Pool — include all projects of set', () => {
 
   test('executing with the checkbox on fixes both the pool file and the project-local file', async ({ page }) => {
     await page.locator('.header-tab', { hasText: 'Tools' }).click()
-    await page.getByLabel('Include all projects of set').check()
+    await page.getByLabel('Include all projects of Set').check()
     await expect(page.locator('.tools-missing-files-summary')).toContainText('3')
 
     await page.getByLabel('Review before applying changes').uncheck()
@@ -533,7 +533,7 @@ test.describe('Audio Pool — include all projects of set', () => {
 
   test('the Location column renders pool files as AUDIO/... and project-local files as PROJ1/...', async ({ page }) => {
     await page.locator('.header-tab', { hasText: 'Tools' }).click()
-    await page.getByLabel('Include all projects of set').check()
+    await page.getByLabel('Include all projects of Set').check()
     await page.locator('.tools-missing-files-summary').click()
     const listModal = page.locator('.missing-samples-list-modal')
     await expect(listModal).toBeVisible()
@@ -547,7 +547,7 @@ test.describe('Audio Pool — include all projects of set', () => {
 
   test('the list modal\'s row context menu offers Open in file explorer everywhere, and Go to project only on project-local rows', async ({ page }) => {
     await page.locator('.header-tab', { hasText: 'Tools' }).click()
-    await page.getByLabel('Include all projects of set').check()
+    await page.getByLabel('Include all projects of Set').check()
     await page.locator('.tools-missing-files-summary').click()
     const listModal = page.locator('.missing-samples-list-modal')
     await expect(listModal).toBeVisible()
@@ -568,7 +568,7 @@ test.describe('Audio Pool — include all projects of set', () => {
 
   test('the review modal\'s row context menu also offers Go to project on project-local rows', async ({ page }) => {
     await page.locator('.header-tab', { hasText: 'Tools' }).click()
-    await page.getByLabel('Include all projects of set').check()
+    await page.getByLabel('Include all projects of Set').check()
     await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()
     const reviewModal = page.locator('.fix-pool-modal')
     await expect(reviewModal.getByText('Review planned changes')).toBeVisible()

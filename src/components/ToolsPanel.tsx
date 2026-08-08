@@ -12,7 +12,7 @@ import { MissingSamplesListModal } from "./MissingSamplesListModal";
 import { CreateProjectModal } from "./CreateProjectModal";
 import { ProjectIncompatibleListModal, FixProjectFilesModal } from "./FixProjectFilesModal";
 import type { IncompatibleFile, PoolFixResult } from "./FixPoolFilesModal";
-import { PurgeFilesModal, purgeAudioFileCount, purgeNonAudioFileCount, PurgeUnusedListModal, type ClearableSlot, type PurgeUnit } from "./PurgeFilesModal";
+import { PathContextMenu, PurgeFilesModal, purgeAudioFileCount, purgeNonAudioFileCount, PurgeUnusedListModal, type ClearableSlot, type PurgeUnit } from "./PurgeFilesModal";
 import { audioKind, usageKey } from "./AudioFileTable";
 import { normalizePath } from "./SampleSlotsTable";
 import { isUnderBackupsDir } from "../utils/purgeBackups";
@@ -302,6 +302,26 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   // What the purge run should actually do. Replaces the old "Clear unused
   // sample slot assignments" checkbox: the two effects are independent, and
   // a slots-only run was previously impossible to express.
+  // Right-click menu on the Move destination path - the same Copy path /
+  // Open in file explorer pair the purge tables offer on their rows.
+  const [destMenu, setDestMenu] = useState<{ x: number; y: number; path: string } | null>(null);
+  useEffect(() => {
+    if (!destMenu) return;
+    // Capture phase (the panel stops propagation), but clicks landing on the
+    // menu itself must reach its buttons - closing here first would unmount
+    // them before their onClick ever runs.
+    const close = (e: MouseEvent) => {
+      if ((e.target as HTMLElement | null)?.closest?.('.context-menu')) return;
+      setDestMenu(null);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setDestMenu(null); };
+    document.addEventListener('click', close, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', close, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [destMenu]);
   const [purgeScope, setPurgeScope] = useState<'files' | 'slots' | 'both'>('files');
   const clearUnusedSlots = purgeScope !== 'files';
   const purgesFiles = purgeScope !== 'slots';
@@ -3392,14 +3412,13 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               Scans this project's directory for audio files not referenced
               anywhere in Sample Slots (machine assignment, p-lock, or a
               loaded slot). Moves them into a chosen folder or deletes them
-              (to the Trash Bin).
+              (to the Trash Bin), and/or clears slots nothing ever triggers.
             </p>
           </div>
 
           <div className="tools-options-panel">
             <h3>Options</h3>
             <div className="tools-field">
-              <label>Purge</label>
               <div className="tools-toggle-group">
                 <button
                   type="button"
@@ -3474,6 +3493,12 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 <button
                   type="button"
                   className="tools-project-selector-btn"
+                  onContextMenu={(e) => {
+                    if (!purgeDestination) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDestMenu({ x: e.clientX, y: e.clientY, path: purgeDestination });
+                  }}
                   title="Browse..."
                   onClick={async () => {
                     const selected = await open({ directory: true, multiple: false, title: 'Select destination folder' });
@@ -4032,6 +4057,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
       )}
 
       {/* Unused Project Samples List Modal */}
+      {destMenu && <PathContextMenu menu={destMenu} onClose={() => setDestMenu(null)} />}
       {showPurgeListModal && (
         <PurgeUnusedListModal units={purgePlan} scope="project" slotsToClear={purgeSlotList} actionVerb={purgesFiles ? (purgeMode === "delete" ? "Delete" : "Move") : null} onClose={() => setShowPurgeListModal(false)} />
       )}

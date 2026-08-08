@@ -5,7 +5,7 @@ import { test, expect, Page } from '@playwright/test'
  *
  * Covers the "Purge Audio Pool Samples" operation added to the Audio Pool
  * page's Tools tab (Task 13): the Operation dropdown gaining a second
- * option, the "Include all projects of set" checkbox revealing its two
+ * option, the "Include all projects of Set" checkbox revealing its two
  * nested sub-options, and the Execute -> review -> Apply Changes flow that
  * calls `purge_pool_files` and refreshes pool usage/file listings.
  *
@@ -155,6 +155,18 @@ test.describe('Purge Audio Pool Samples', () => {
     await expect(page.locator('.tools-missing-files-summary')).toContainText('1')
   })
 
+  test('the Tools panel scrolls when its options run past the window', async ({ page }) => {
+    await openPurgeOperation(page)
+    const panel = page.locator('.pool-tools-panel')
+    // The page is a fixed-height flex column with overflow hidden, so the
+    // panel has to own its scrolling or Execute becomes unreachable.
+    expect(await panel.evaluate(el => getComputedStyle(el).overflowY)).toBe('auto')
+    await page.setViewportSize({ width: 1280, height: 400 })
+    await expect(page.locator('.tools-execute-btn')).toBeVisible()
+    await page.locator('.tools-execute-btn').scrollIntoViewIfNeeded()
+    await expect(page.locator('.tools-execute-btn')).toBeInViewport()
+  })
+
   test('the Show/Hide Columns menu shows every column without an inner scrollbar', async ({ page }) => {
     await openPurgeOperation(page)
     await page.locator('.tools-missing-files-summary').click()
@@ -273,14 +285,14 @@ test.describe('Purge Audio Pool Samples', () => {
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(orphanPath)
   })
 
-  test('Include all projects of set reveals the two nested sub-options', async ({ page }) => {
+  test('Include all projects of Set reveals the two nested sub-options', async ({ page }) => {
     await openPurgeOperation(page)
 
     // Wait for the scan to settle so the options panel (gated on scan state
     // in the sibling Fix operation) has fully rendered.
     await expect(page.locator('.tools-missing-files-summary')).toContainText('1')
 
-    const includeAllCheckbox = page.getByLabel('Include all projects of set')
+    const includeAllCheckbox = page.getByLabel('Include all projects of Set')
     await expect(includeAllCheckbox).not.toBeChecked()
     await expect(page.getByLabel('Clear unused sample slot assignments')).toHaveCount(0)
     await expect(page.getByLabel('Exclude backups/ directory')).toHaveCount(0)
@@ -300,7 +312,7 @@ test.describe('Purge Audio Pool Samples', () => {
     await expect(page.getByLabel('Exclude backups/ directory')).toHaveCount(0)
   })
 
-  test('toggling Include all projects of set, Exclude backups/ directory and Clear unused sample slot assignments never re-scans the backend', async ({ page }) => {
+  test('toggling Include all projects of Set, Exclude backups/ directory and Clear unused sample slot assignments never re-scans the backend', async ({ page }) => {
     await openPurgeOperation(page)
     await expect(page.locator('.tools-missing-files-summary')).toContainText('1')
 
@@ -309,7 +321,7 @@ test.describe('Purge Audio Pool Samples', () => {
     await expect.poll(async () => page.evaluate(() => (window as any).__scanCalls.length)).toBe(3)
     const scanCallsAfterInitialLoad = await page.evaluate(() => (window as any).__scanCalls.length)
 
-    const includeAllCheckbox = page.getByLabel('Include all projects of set')
+    const includeAllCheckbox = page.getByLabel('Include all projects of Set')
     await includeAllCheckbox.check()
     await includeAllCheckbox.uncheck()
     await includeAllCheckbox.check()
@@ -407,7 +419,7 @@ test.describe('Purge Audio Pool Samples', () => {
 
     const slotsOnly = page.getByRole('button', { name: 'Unused sample slots' })
     const both = page.getByRole('button', { name: 'Both' })
-    const includeAll = page.getByLabel('Include all projects of set')
+    const includeAll = page.getByLabel('Include all projects of Set')
 
     // Sample slots live in projects, never in the pool - so with the Set's
     // projects out of scope these two have nothing to act on.
