@@ -11348,10 +11348,10 @@ mod tests {
         fn test_copy_tracks_part_name_not_copied() {
             // Copy tracks should NOT copy the Part name since only selected tracks are modified
             let source = TestProject::with_modified_bank(0, |bank| {
-                bank.part_names[0] = [b'S', b'R', b'C', b'N', b'A', b'M', b'E'];
+                bank.part_names[0] = *b"SRCNAME";
             });
             let dest = TestProject::with_modified_bank(0, |bank| {
-                bank.part_names[0] = [b'D', b'S', b'T', b'N', b'A', b'M', b'E'];
+                bank.part_names[0] = *b"DSTNAME";
             });
 
             copy_tracks(
