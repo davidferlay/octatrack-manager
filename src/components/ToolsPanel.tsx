@@ -3457,7 +3457,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 </button>
               </div>
             </div>
-            <div className="tools-field tools-checkbox">
+            {/* Checkbox left, related toggle right - same row shape the Audio
+                Pool tool uses for its scope options. */}
+            <div className="tools-field tools-scope-row">
               <label title={`Show the review screen listing planned changes before applying them${purgeMode === 'delete' ? ' - Required when deleting files' : ''}`}>
                 <input
                   type="checkbox"
@@ -3467,15 +3469,16 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 />
                 Review before applying changes
               </label>
-            </div>
-            {purgesFiles && (
-              <div className="tools-field tools-checkbox">
-                <label title="Keep this project's backups/ directory untouched by the scan">
-                  <input type="checkbox" checked={excludeBackups} onChange={(e) => setExcludeBackups(e.target.checked)} />
-                  Exclude backups/ directory
+              {purgesFiles && (
+                <label className="toggle-switch" title="Keep this project's backups/ directory untouched by the scan">
+                  <span className="toggle-label">Exclude backups/ directory</span>
+                  <div className="toggle-slider-container">
+                    <input type="checkbox" checked={excludeBackups} onChange={(e) => setExcludeBackups(e.target.checked)} />
+                    <span className="toggle-slider"></span>
+                  </div>
                 </label>
-              </div>
-            )}
+              )}
+            </div>
             {purgesFiles && (
             <div className="tools-field">
               <label>Action</label>

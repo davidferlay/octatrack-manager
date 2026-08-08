@@ -408,10 +408,12 @@ test.describe('Purge Project Samples', () => {
     // once in the background as soon as the operation is selected.
     await expect.poll(async () => page.evaluate(() => (window as any).__scanCalls.length)).toBe(2)
 
-    const excludeBackupsCheckbox = page.getByLabel('Exclude backups/ directory')
-
-    await excludeBackupsCheckbox.uncheck()
-    await excludeBackupsCheckbox.check()
+    // A toggle switch: its real input is zero-sized, so drive it by its label.
+    const excludeBackups = page.locator('.toggle-switch', { hasText: 'Exclude backups/ directory' })
+    await excludeBackups.click()
+    await expect(excludeBackups.locator('input')).not.toBeChecked()
+    await excludeBackups.click()
+    await expect(excludeBackups.locator('input')).toBeChecked()
     await page.getByRole('button', { name: 'Both' }).click()
     await page.getByRole('button', { name: 'Unused audio files' }).click()
 
@@ -589,13 +591,24 @@ test.describe('Purge Project Samples', () => {
 
     await openPurgeOperation(page)
     const action = page.getByRole('button', { name: 'Delete files' })
-    const excludeBackups = page.getByLabel('Exclude backups/ directory')
+    const excludeBackups = page.locator('.toggle-switch', { hasText: 'Exclude backups/ directory' })
 
     // Files only (the default): no slot line, file options shown.
     await expect(page.locator('.tools-missing-files-summary')).toContainText('1 unused audio file to purge')
     await expect(page.locator('.tools-missing-files-summary')).not.toContainText('slot assignment')
     await expect(action).toBeVisible()
     await expect(excludeBackups).toBeVisible()
+    // Checkbox left, toggle right, one row - same shape as the Audio Pool tool.
+    const row = page.locator('.tools-scope-row')
+    await expect(row.getByLabel('Review before applying changes')).toHaveCount(1)
+    await expect(row.locator('.toggle-switch')).toHaveCount(1)
+    const [reviewBox, toggleBox] = await Promise.all([
+      row.getByLabel('Review before applying changes').boundingBox(),
+      excludeBackups.boundingBox(),
+    ])
+    const centre = (b: { y: number; height: number } | null) => (b!.y + b!.height / 2)
+    expect(Math.abs(centre(reviewBox) - centre(toggleBox))).toBeLessThan(12)
+    expect(toggleBox!.x).toBeGreaterThan(reviewBox!.x)
 
     // Slots only: the file-side options are irrelevant and go away.
     await page.getByRole('button', { name: 'Unused sample slots' }).click()

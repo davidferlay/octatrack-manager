@@ -1824,7 +1824,10 @@ export function AudioPoolPage() {
                     Review before applying changes
                   </label>
                 </div>
-                <div className="tools-field tools-checkbox">
+                {/* Both controls describe the same thing - which projects the
+                    scan walks - so they share a row rather than reading as two
+                    unrelated options. */}
+                <div className="tools-field tools-scope-row">
                   <label title="Also scan every project of this Set for its own unused audio files, and put its sample slots in scope">
                     <input
                       type="checkbox"
@@ -1839,19 +1842,20 @@ export function AudioPoolPage() {
                     />
                     Include all projects of Set
                   </label>
-                </div>
-                {purgesFiles && purgeIncludeAllProjects && (
-                  <div className="tools-field tools-checkbox tools-field-nested">
-                    <label title="Keep every included project's backups/ directory untouched by the scan">
-                      <input
-                        type="checkbox"
-                        checked={purgeExcludeBackups}
-                        onChange={(e) => setPurgeExcludeBackups(e.target.checked)}
-                      />
-                      Exclude backups/ directory
+                  {purgesFiles && purgeIncludeAllProjects && (
+                    <label className="toggle-switch" title="Keep every included project's backups/ directory untouched by the scan">
+                      <span className="toggle-label">Exclude backups/ directory</span>
+                      <div className="toggle-slider-container">
+                        <input
+                          type="checkbox"
+                          checked={purgeExcludeBackups}
+                          onChange={(e) => setPurgeExcludeBackups(e.target.checked)}
+                        />
+                        <span className="toggle-slider"></span>
+                      </div>
                     </label>
-                  </div>
-                )}
+                  )}
+                </div>
                 {purgesFiles && (
                 <div className="tools-field">
                   <label>Action</label>
@@ -1907,7 +1911,7 @@ export function AudioPoolPage() {
                 {purgeScanLoading ? (
                   <div className="tools-fix-status loading">
                     <span className="loading-spinner-small"></span>
-                    <span>Scanning Audio Pool{purgeIncludeAllProjects ? ' and set projects' : ''}... {purgeScanProgress}%</span>
+                    <span>Scanning Audio Pool{purgeIncludeAllProjects ? ' and Projects' : ''}... {purgeScanProgress}%</span>
                   </div>
                 ) : !purgeHasWork ? (
                   <div className="tools-fix-status all-good">
