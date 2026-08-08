@@ -620,8 +620,13 @@ td.col-size {
 }
 
 /* Filter dropdowns use the shared App.css styles (same look as the sample slot
-   pages) - the local overrides that used to live here made them inconsistent. */
-.dropdown-options {
+   pages) - the local overrides that used to live here made them inconsistent.
+   A filter's value list is unbounded (one entry per distinct origin, project,
+   ...), so it gets a scroll cap. Deliberately scoped to .filter-dropdown:
+   unscoped, this leaked out of this page and capped every .dropdown-options in
+   the app - including the Show/Hide Columns menu, whose list is bounded by the
+   table's own column count and should never scroll. */
+.filter-dropdown .dropdown-options {
   max-height: 200px;
   overflow-y: auto;
 }

@@ -155,6 +155,27 @@ test.describe('Purge Audio Pool Samples', () => {
     await expect(page.locator('.tools-missing-files-summary')).toContainText('1')
   })
 
+  test('the Show/Hide Columns menu shows every column without an inner scrollbar', async ({ page }) => {
+    await openPurgeOperation(page)
+    await page.locator('.tools-missing-files-summary').click()
+    const listModal = page.locator('.missing-samples-list-modal')
+    await listModal.locator('.column-visibility-btn').click()
+
+    const menu = page.locator('.column-visibility-dropdown')
+    await expect(menu).toBeVisible()
+    // Every column is reachable: a page-scoped `.dropdown-options` rule used
+    // to leak app-wide and cap this bounded list at 200px, so the last
+    // columns sat behind a scrollbar.
+    const options = menu.locator('.dropdown-option')
+    await expect(options).toHaveCount(7)
+    await expect(options.last()).toBeInViewport()
+
+    const scrolls = await menu.locator('.dropdown-options').evaluate(
+      el => el.scrollHeight > el.clientHeight + 1,
+    )
+    expect(scrolls).toBe(false)
+  })
+
   test('a collapsed directory lists its files tree-style with Slot/Size, is collapsible, and offers a context menu', async ({ page }) => {
     await page.addInitScript(() => {
       ;(window as any).__revealCalls = []
