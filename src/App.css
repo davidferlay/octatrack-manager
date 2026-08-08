@@ -4179,24 +4179,27 @@ th.col-usage .header-content .sort-indicator {
   }
 }
 
+/* Tighter above the title than around the rest of the pane: that top gap
+   bought nothing and, multiplied across four panes, was enough to push the
+   Tools panel into scrolling once every option is visible. */
 .tools-source-panel,
 .tools-options-panel,
 .tools-dest-panel {
   background-color: var(--elektron-darker-gray);
   border: 2px solid var(--elektron-border-gray);
   border-radius: 8px;
-  padding: 1.25rem;
+  padding: 0.7rem 1.25rem 1.25rem;
 }
 
 .tools-source-panel h3,
 .tools-options-panel h3,
 .tools-dest-panel h3 {
-  margin: 0 0 1rem 0;
+  margin: 0 0 0.85rem 0;
   font-size: 1.1rem;
   color: var(--elektron-orange);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  padding-bottom: 0.75rem;
+  padding-bottom: 0.55rem;
   border-bottom: 1px solid var(--elektron-medium-gray);
 }
 
@@ -5555,16 +5558,16 @@ th.col-usage .header-content .sort-indicator {
   background-color: var(--elektron-darker-gray);
   border: 2px solid var(--elektron-dark-gray);
   border-radius: 8px;
-  padding: 1.25rem;
+  padding: 0.7rem 1.25rem 1.25rem;
 }
 
 .tools-fix-status-panel h3 {
-  margin: 0 0 1rem 0;
+  margin: 0 0 0.85rem 0;
   font-size: 1.1rem;
   color: var(--elektron-orange);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  padding-bottom: 0.75rem;
+  padding-bottom: 0.55rem;
   border-bottom: 1px solid var(--elektron-medium-gray);
 }
 
