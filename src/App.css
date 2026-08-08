@@ -5620,7 +5620,6 @@ th.col-usage .header-content .sort-indicator {
 
 .purge-action-clear-only {
   color: var(--elektron-text-secondary);
-  font-style: italic;
 }
 
 /* Slot-clearing is a second, independent effect of a purge - shown next to
@@ -6291,11 +6290,12 @@ th.col-drag-over {
   position: relative;
 }
 
+/* Coordinates come from the button's rect at open time (see ColumnToggle) -
+   the modal's overflow context would otherwise clip and scroll this. */
 .column-visibility-dropdown {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
+  position: fixed;
   min-width: 130px;
+  max-height: calc(100vh - 2rem);
   background-color: var(--elektron-dark-gray);
   border: 1px solid var(--elektron-border-gray);
   border-radius: 4px;

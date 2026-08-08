@@ -311,7 +311,7 @@ test.describe('Purge Project Samples', () => {
     // Real total from the recursive audio listing, not the unused count.
     // The related-file tail trails it: cover.jpg inside the directory plus
     // orphan.wav's own .ot sidecar.
-    await expect(summary).toHaveText(/3 unused audio files - of 3 scanned \+ 2 related files/)
+    await expect(summary).toHaveText(/3 unused audio files to purge - of 3 scanned in project directory \+ 2 related files/)
 
     await summary.click()
     const listModal = page.locator('.missing-samples-list-modal')
@@ -409,12 +409,11 @@ test.describe('Purge Project Samples', () => {
     await expect.poll(async () => page.evaluate(() => (window as any).__scanCalls.length)).toBe(2)
 
     const excludeBackupsCheckbox = page.getByLabel('Exclude backups/ directory')
-    const clearSlotsCheckbox = page.getByLabel('Clear unused sample slot assignments')
 
     await excludeBackupsCheckbox.uncheck()
     await excludeBackupsCheckbox.check()
-    await clearSlotsCheckbox.check()
-    await clearSlotsCheckbox.uncheck()
+    await page.getByRole('button', { name: 'Both' }).click()
+    await page.getByRole('button', { name: 'Unused audio files' }).click()
 
     // No spinner should ever appear for these toggles - status stays visible throughout.
     await expect(summary).toContainText('1')
@@ -536,6 +535,53 @@ test.describe('Purge Project Samples', () => {
     await expect(banner.locator('.purge-confirm-target')).toHaveText('will be moved to /home/testuser/Downloads')
   })
 
+  test('the Purge selector chooses what runs and hides the options that no longer apply', async ({ page }) => {
+    await page.addInitScript(() => {
+      const internals = (window as any).__TAURI_INTERNALS__
+      const orig = internals.invoke
+      internals.invoke = async (cmd: string, args?: any) => {
+        if (cmd === 'list_unused_slot_assignments') {
+          return [{ slot: 'S4', path: '/test/set/AUDIO/pool.wav', origin: 'Audio Pool', size: 1024 }]
+        }
+        return orig(cmd, args)
+      }
+    })
+
+    await openPurgeOperation(page)
+    const action = page.getByRole('button', { name: 'Delete files' })
+    const excludeBackups = page.getByLabel('Exclude backups/ directory')
+
+    // Files only (the default): no slot line, file options shown.
+    await expect(page.locator('.tools-missing-files-summary')).toContainText('1 unused audio file to purge')
+    await expect(page.locator('.tools-missing-files-summary')).not.toContainText('slot assignment')
+    await expect(action).toBeVisible()
+    await expect(excludeBackups).toBeVisible()
+
+    // Slots only: the file-side options are irrelevant and go away.
+    await page.getByRole('button', { name: 'Unused sample slots' }).click()
+    await expect(action).toHaveCount(0)
+    await expect(excludeBackups).toHaveCount(0)
+    await expect(page.locator('.tools-destination-path')).toHaveCount(0)
+    const summary = page.locator('.tools-missing-files-summary')
+    await expect(summary).toContainText('1 unused sample slot assignment to clear')
+    await expect(summary).not.toContainText('unused audio file')
+
+    // Both: everything is in scope again.
+    await page.getByRole('button', { name: 'Both' }).click()
+    await expect(action).toBeVisible()
+    await expect(summary).toContainText('1 unused audio file to purge')
+    await expect(summary).toContainText('1 unused sample slot assignment to clear')
+
+    // A slots-only run must send an empty plan, never the file findings.
+    await page.getByRole('button', { name: 'Unused sample slots' }).click()
+    await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()
+    await page.locator('.missing-samples-list-modal').getByRole('button', { name: 'Apply Changes' }).click()
+    await expect.poll(async () => page.evaluate(() => (window as any).__purgeCalls.length)).toBe(1)
+    const calls = await page.evaluate(() => (window as any).__purgeCalls)
+    expect(calls[0].plan).toEqual([])
+    expect(calls[0].clearUnusedSlots).toBe(true)
+  })
+
   test('slots whose sample lives in the Audio Pool are listed as their own "Clear slot only" rows', async ({ page }) => {
     await page.addInitScript(() => {
       const internals = (window as any).__TAURI_INTERNALS__
@@ -558,7 +604,7 @@ test.describe('Purge Project Samples', () => {
     })
 
     await openPurgeOperation(page)
-    await page.getByLabel('Clear unused sample slot assignments').check()
+    await page.getByRole('button', { name: 'Both' }).click()
     await expect(page.locator('.tools-fix-status-slots')).toContainText('4 unused sample slot assignments to clear')
 
     await page.locator('.tools-missing-files-summary').click()
@@ -569,12 +615,12 @@ test.describe('Purge Project Samples', () => {
 
     const rowFor = (name: string) => rows.filter({ hasText: name })
     await expect(rowFor('orphan.wav')).toContainText('F1')
-    await expect(rowFor('orphan.wav')).toContainText('Remove + clear slot')
+    await expect(rowFor('orphan.wav')).toContainText('Move + Clear')
     await expect(rowFor('hihat4.wav')).toContainText('S4')
-    await expect(rowFor('hihat4.wav')).toContainText('Clear slot only')
+    await expect(rowFor('hihat4.wav')).toContainText('Clear slot')
     await expect(rowFor('hihat4.wav')).toContainText('Audio Pool')
     await expect(rowFor('hihat9.wav')).toContainText('S9, S10')
-    await expect(rowFor('hihat9.wav')).toContainText('Clear slot only')
+    await expect(rowFor('hihat9.wav')).toContainText('Clear slot')
 
     // The pool files are NOT counted as removals - only orphan.wav leaves.
     await expect(page.locator('.tools-missing-files-summary')).toContainText('1 unused audio file')
@@ -602,15 +648,16 @@ test.describe('Purge Project Samples', () => {
 
     await openPurgeOperation(page)
     // Off by default - the slot clearing only happens when it is on.
-    await page.getByLabel('Clear unused sample slot assignments').check()
+    await page.getByRole('button', { name: 'Both' }).click()
 
     // The status must not claim everything is referenced - 9 slots hold a
     // sample nothing triggers.
     const status = page.locator('.tools-fix-status-panel')
     await expect(status.locator('.tools-fix-status.all-good')).toHaveCount(0)
     await expect(status.locator('.tools-fix-status-slots')).toContainText('9 unused sample slot assignments to clear')
-    // No unused files, so no file-list button to open.
-    await expect(status.locator('.tools-missing-files-summary')).toHaveCount(0)
+    // The summary button carries the slot line, so it stays clickable - but
+    // it must not claim any unused audio files.
+    await expect(status.locator('.tools-missing-files-summary')).not.toContainText('unused audio file')
 
     // Execute used to be gated on the unused-FILE count, which made this
     // whole case unreachable.
@@ -650,10 +697,10 @@ test.describe('Purge Project Samples', () => {
     })
 
     await openPurgeOperation(page)
-    await page.getByLabel('Clear unused sample slot assignments').check()
+    await page.getByRole('button', { name: 'Both' }).click()
     await expect(page.locator('.tools-fix-status-slots')).toBeVisible()
 
-    await page.getByLabel('Clear unused sample slot assignments').uncheck()
+    await page.getByRole('button', { name: 'Unused audio files' }).click()
     // Now there really is nothing to do.
     await expect(page.locator('.tools-fix-status-slots')).toHaveCount(0)
     await expect(page.locator('.tools-fix-status.all-good')).toBeVisible()

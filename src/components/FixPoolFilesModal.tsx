@@ -526,6 +526,13 @@ export function ColumnToggle({ columns, hiddenCols, onToggle }: {
   onToggle: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  // Fixed coordinates, not absolute positioning: the modal sets
+  // `overflow-x: hidden`, which makes the browser treat overflow-y as auto -
+  // so an absolutely-positioned menu taller than the remaining header space
+  // got clipped and grew its own scrollbar. Positioning against the viewport
+  // takes it out of that scroll container entirely, so it can be as tall as
+  // it needs to be. Same approach the filter dropdowns already use.
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -538,13 +545,18 @@ export function ColumnToggle({ columns, hiddenCols, onToggle }: {
     <div className="column-menu-wrapper" ref={ref}>
       <button
         className={`column-visibility-btn ${open ? 'active' : ''}`}
-        onClick={(e) => { e.stopPropagation(); setOpen(v => !v); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          const rect = e.currentTarget.getBoundingClientRect();
+          setPos({ top: rect.bottom + 4, right: Math.max(4, window.innerWidth - rect.right) });
+          setOpen(v => !v);
+        }}
         title="Show/Hide Columns"
       >
         ☰
       </button>
-      {open && (
-        <div className="column-visibility-dropdown">
+      {open && pos && (
+        <div className="column-visibility-dropdown" style={{ position: 'fixed', top: pos.top, right: pos.right }}>
           <div className="column-visibility-header">Show/Hide Columns</div>
           <div className="dropdown-options">
             {columns.map(c => (

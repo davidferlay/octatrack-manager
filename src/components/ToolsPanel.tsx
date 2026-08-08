@@ -299,7 +299,12 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   // slot count) that have resolved so far, as a whole percentage - mirrors
   // Fix Project Samples's "Scanning... N%" status label.
   const [purgeScanProgress, setPurgeScanProgress] = useState<number>(0);
-  const [clearUnusedSlots, setClearUnusedSlots] = useState<boolean>(false);
+  // What the purge run should actually do. Replaces the old "Clear unused
+  // sample slot assignments" checkbox: the two effects are independent, and
+  // a slots-only run was previously impossible to express.
+  const [purgeScope, setPurgeScope] = useState<'files' | 'slots' | 'both'>('files');
+  const clearUnusedSlots = purgeScope !== 'files';
+  const purgesFiles = purgeScope !== 'slots';
   const [excludeBackups, setExcludeBackups] = useState<boolean>(true);
   const [purgeReviewBeforeApply, setPurgeReviewBeforeApply] = useState<boolean>(true);
   const [purgeMode, setPurgeMode] = useState<'delete' | 'move'>('move');
@@ -624,7 +629,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   // file count alone made that case unreachable.
   const purgeSlotList = clearUnusedSlots ? (purgeSlotsToClear ?? []) : [];
   const purgeSlotClearCount = purgeSlotList.length;
-  const purgeHasWork = purgeUnits.length > 0 || purgeSlotClearCount > 0;
+  // A files-only run must not send a plan that a slots-only run would, and
+  // vice versa - the scope selector is the single source for both effects.
+  const purgePlan = purgesFiles ? purgeUnits : [];
+  const purgeHasWork = purgePlan.length > 0 || purgeSlotClearCount > 0;
 
   // Purge Project Samples: resolve the default Move-mode destination once,
   // the first time the operation is selected (never overwrites a user edit).
@@ -3390,6 +3398,35 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
 
           <div className="tools-options-panel">
             <h3>Options</h3>
+            <div className="tools-field">
+              <label>Purge</label>
+              <div className="tools-toggle-group">
+                <button
+                  type="button"
+                  className={`tools-toggle-btn ${purgeScope === 'files' ? 'selected' : ''}`}
+                  onClick={() => setPurgeScope('files')}
+                  title="Only remove audio files this project never references. Sample slots are left exactly as they are."
+                >
+                  Unused audio files
+                </button>
+                <button
+                  type="button"
+                  className={`tools-toggle-btn ${purgeScope === 'slots' ? 'selected' : ''}`}
+                  onClick={() => setPurgeScope('slots')}
+                  title="Only empty sample slots that have a file loaded but are never triggered. No file is deleted or moved."
+                >
+                  Unused sample slots
+                </button>
+                <button
+                  type="button"
+                  className={`tools-toggle-btn ${purgeScope === 'both' ? 'selected' : ''}`}
+                  onClick={() => setPurgeScope('both')}
+                  title="Clear unused slots and remove the files that leaves unreferenced, in one run"
+                >
+                  Both
+                </button>
+              </div>
+            </div>
             <div className="tools-field tools-checkbox">
               <label title={`Show the review screen listing planned changes before applying them${purgeMode === 'delete' ? ' - Required when deleting files' : ''}`}>
                 <input
@@ -3401,18 +3438,15 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 Review before applying changes
               </label>
             </div>
-            <div className="tools-field tools-checkbox">
-              <label title="Keep this project's backups/ directory untouched by the scan">
-                <input type="checkbox" checked={excludeBackups} onChange={(e) => setExcludeBackups(e.target.checked)} />
-                Exclude backups/ directory
-              </label>
-            </div>
-            <div className="tools-field tools-checkbox">
-              <label title="Slots that have a file loaded but are never triggered by any machine assignment or p-lock get their assignment cleared too, freeing the file for removal in this same run">
-                <input type="checkbox" checked={clearUnusedSlots} onChange={(e) => setClearUnusedSlots(e.target.checked)} />
-                Clear unused sample slot assignments
-              </label>
-            </div>
+            {purgesFiles && (
+              <div className="tools-field tools-checkbox">
+                <label title="Keep this project's backups/ directory untouched by the scan">
+                  <input type="checkbox" checked={excludeBackups} onChange={(e) => setExcludeBackups(e.target.checked)} />
+                  Exclude backups/ directory
+                </label>
+              </div>
+            )}
+            {purgesFiles && (
             <div className="tools-field">
               <label>Action</label>
               <div className="tools-toggle-group">
@@ -3434,7 +3468,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 </button>
               </div>
             </div>
-            {purgeMode === 'move' && (
+            )}
+            {purgesFiles && purgeMode === 'move' && (
               <div className="tools-field">
                 <button
                   type="button"
@@ -3465,31 +3500,34 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             ) : !purgeHasWork ? (
               <div className="tools-fix-status all-good">
                 <div className="tools-fix-status-count">0</div>
-                <div className="tools-fix-status-label">unused audio files - every sample in this project is referenced</div>
+                <div className="tools-fix-status-label">
+                  {purgesFiles ? "unused audio files - every sample in this project is referenced" : "unused sample slots - every loaded slot is triggered"}
+                </div>
               </div>
             ) : (
-              <>
-                {purgeUnits.length > 0 && (
-                  <button className="tools-missing-files-summary" onClick={() => setShowPurgeListModal(true)} title="Click to view the unused files list">
+              <button className="tools-missing-files-summary" onClick={() => setShowPurgeListModal(true)} title="Click to view the full list">
+                {purgePlan.length > 0 && (
+                  <>
                     <span className="tools-fix-status-count">{purgeUnusedFileCount}</span>
-                    {" "}unused audio file{purgeUnusedFileCount !== 1 ? "s" : ""}
+                    {" "}unused audio file{purgeUnusedFileCount !== 1 ? "s" : ""} to purge
                     {purgeScanTotal !== null && (
-                      <span className="tools-fix-status-detail">{" - "}of {purgeScanTotal} scanned</span>
+                      <span className="tools-fix-status-detail">{" - "}of {purgeScanTotal} scanned in project directory</span>
                     )}
                     {/* The non-audio tail trails the scanned total: it is not part of
                         what was scanned, just what rides along when the findings go. */}
                     {purgeNonAudioCount > 0 && (
                       <span className="tools-fix-status-other">{" + "}{purgeNonAudioCount} related file{purgeNonAudioCount !== 1 ? "s" : ""}</span>
                     )}
-                  </button>
+                  </>
                 )}
+                {purgePlan.length > 0 && purgeSlotClearCount > 0 && <br />}
                 {purgeSlotClearCount > 0 && (
-                  <div className="tools-fix-status-slots" title="Slots with a sample loaded that no machine assignment or p-lock ever triggers. Their sample file is only removed too when it lives in this project - a file in the Audio Pool is left alone.">
+                  <span className="tools-fix-status-slots" title="Slots with a sample loaded that no machine assignment or p-lock ever triggers. Their sample file is only removed too when it lives in this project - a file in the Audio Pool is left alone.">
                     <span className="tools-fix-status-count">{purgeSlotClearCount}</span>
                     {" "}unused sample slot assignment{purgeSlotClearCount !== 1 ? "s" : ""} to clear
-                  </div>
+                  </span>
                 )}
-              </>
+              </button>
             )}
           </div>
 
@@ -3498,8 +3536,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               <button
                 className="tools-execute-btn"
                 onClick={() => setShowPurgeModal(true)}
-                disabled={purgeScanLoading || (purgeMode === 'move' && purgeDestination.trim() === '')}
-                title={purgeMode === 'move' && purgeDestination.trim() === '' ? 'Choose a destination folder first' : undefined}
+                disabled={purgeScanLoading || (purgesFiles && purgeMode === 'move' && purgeDestination.trim() === '')}
+                title={purgesFiles && purgeMode === 'move' && purgeDestination.trim() === '' ? 'Choose a destination folder first' : undefined}
               >
                 <i className="fas fa-trash"></i>
                 Execute
@@ -3995,7 +4033,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
 
       {/* Unused Project Samples List Modal */}
       {showPurgeListModal && (
-        <PurgeUnusedListModal units={purgeUnits} scope="project" slotsToClear={purgeSlotList} onClose={() => setShowPurgeListModal(false)} />
+        <PurgeUnusedListModal units={purgePlan} scope="project" slotsToClear={purgeSlotList} actionVerb={purgesFiles ? (purgeMode === "delete" ? "Delete" : "Move") : null} onClose={() => setShowPurgeListModal(false)} />
       )}
 
       {/* Purge Project Samples Modal */}
@@ -4003,9 +4041,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         <PurgeFilesModal
           scope="project"
           scopePath={projectPath}
-          units={purgeUnits}
-          mode={purgeMode === 'delete' ? 'delete' : { destinationDir: purgeDestination }}
-          skipReview={purgeMode === 'move' && !purgeReviewBeforeApply}
+          units={purgePlan}
+          mode={purgesFiles && purgeMode === 'delete' ? 'delete' : { destinationDir: purgeDestination }}
+          skipReview={purgesFiles && purgeMode === 'move' && !purgeReviewBeforeApply}
           slotsToClear={purgeSlotList}
           onClose={() => setShowPurgeModal(false)}
           onPurged={() => {

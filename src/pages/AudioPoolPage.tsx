@@ -371,7 +371,12 @@ export function AudioPoolPage() {
   // above; "purge_pool_samples" is the unused-files scan/state below.
   const [poolOperation, setPoolOperation] = useState<'fix_audio_pool' | 'purge_pool_samples'>('fix_audio_pool');
   const [purgeIncludeAllProjects, setPurgeIncludeAllProjects] = useState(false);
-  const [purgeClearUnusedSlots, setPurgeClearUnusedSlots] = useState(false);
+  // Same three-way scope as the project Tools tab - see ToolsPanel. Slot
+  // clearing always acts on the Set's projects (that is where slots live),
+  // independently of the file-scan scope below.
+  const [purgeScope, setPurgeScope] = useState<'files' | 'slots' | 'both'>('files');
+  const purgeClearUnusedSlots = purgeScope !== 'files';
+  const purgesFiles = purgeScope !== 'slots';
   const [purgeExcludeBackups, setPurgeExcludeBackups] = useState(true);
   const [purgeReviewBeforeApply, setPurgeReviewBeforeApply] = useState(true);
   const [purgeMode, setPurgeMode] = useState<'delete' | 'move'>('move');
@@ -528,10 +533,13 @@ export function AudioPoolPage() {
   // Independent of the unused-FILE count - see the same derivation in
   // ToolsPanel: slots can be clearable while nothing is purgeable, and
   // gating Execute on the file count alone made that case unreachable.
-  const purgeSlotList =
-    purgeIncludeAllProjects && purgeClearUnusedSlots ? (purgeSlotsToClear ?? []) : [];
+  // Slot clearing acts on the Set's projects regardless of the file-scan
+  // scope - "Include all projects of set" only widens where FILES are looked
+  // for, so gating slot clearing on it would make a slots-only run impossible.
+  const purgeSlotList = purgeClearUnusedSlots ? (purgeSlotsToClear ?? []) : [];
   const purgeSlotClearCount = purgeSlotList.length;
-  const purgeHasWork = purgeUnits.length > 0 || purgeSlotClearCount > 0;
+  const purgePlan = purgesFiles ? purgeUnits : [];
+  const purgeHasWork = purgePlan.length > 0 || purgeSlotClearCount > 0;
 
   // Purge Audio Pool Samples: resolve the default Move-mode destination once,
   // the first time the operation is selected (never overwrites a user edit).
@@ -1733,6 +1741,35 @@ export function AudioPoolPage() {
 
               <div className="tools-options-panel">
                 <h3>Options</h3>
+                <div className="tools-field">
+                  <label>Purge</label>
+                  <div className="tools-toggle-group">
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn ${purgeScope === 'files' ? 'selected' : ''}`}
+                      onClick={() => setPurgeScope('files')}
+                      title="Only remove audio files no project of this Set references. Sample slots are left exactly as they are."
+                    >
+                      Unused audio files
+                    </button>
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn ${purgeScope === 'slots' ? 'selected' : ''}`}
+                      onClick={() => setPurgeScope('slots')}
+                      title="Only empty sample slots across this Set's projects that have a file loaded but are never triggered. No file is deleted or moved."
+                    >
+                      Unused sample slots
+                    </button>
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn ${purgeScope === 'both' ? 'selected' : ''}`}
+                      onClick={() => setPurgeScope('both')}
+                      title="Clear unused slots and remove the files that leaves unreferenced, in one run"
+                    >
+                      Both
+                    </button>
+                  </div>
+                </div>
                 <div className="tools-field tools-checkbox">
                   <label title={`Show the review screen listing planned changes before applying them${purgeMode === 'delete' ? ' - Required when deleting files' : ''}`}>
                     <input
@@ -1744,6 +1781,7 @@ export function AudioPoolPage() {
                     Review before applying changes
                   </label>
                 </div>
+                {purgesFiles && (
                 <div className="tools-field tools-checkbox">
                   <label title="Also scan every project of this Set for its own unused audio files, not just the Audio Pool">
                     <input
@@ -1754,30 +1792,20 @@ export function AudioPoolPage() {
                     Include all projects of set
                   </label>
                 </div>
-                {purgeIncludeAllProjects && (
-                  <>
-                    <div className="tools-field tools-checkbox tools-field-nested">
-                      <label title="Keep every included project's backups/ directory untouched by the scan">
-                        <input
-                          type="checkbox"
-                          checked={purgeExcludeBackups}
-                          onChange={(e) => setPurgeExcludeBackups(e.target.checked)}
-                        />
-                        Exclude backups/ directory
-                      </label>
-                    </div>
-                    <div className="tools-field tools-checkbox tools-field-nested">
-                      <label title="Slots that have a file loaded but are never triggered by any machine assignment or p-lock get their assignment cleared too, freeing the file for removal in this same run">
-                        <input
-                          type="checkbox"
-                          checked={purgeClearUnusedSlots}
-                          onChange={(e) => setPurgeClearUnusedSlots(e.target.checked)}
-                        />
-                        Clear unused sample slot assignments
-                      </label>
-                    </div>
-                  </>
                 )}
+                {purgesFiles && purgeIncludeAllProjects && (
+                  <div className="tools-field tools-checkbox tools-field-nested">
+                    <label title="Keep every included project's backups/ directory untouched by the scan">
+                      <input
+                        type="checkbox"
+                        checked={purgeExcludeBackups}
+                        onChange={(e) => setPurgeExcludeBackups(e.target.checked)}
+                      />
+                      Exclude backups/ directory
+                    </label>
+                  </div>
+                )}
+                {purgesFiles && (
                 <div className="tools-field">
                   <label>Action</label>
                   <div className="tools-toggle-group">
@@ -1799,7 +1827,8 @@ export function AudioPoolPage() {
                     </button>
                   </div>
                 </div>
-                {purgeMode === 'move' && (
+                )}
+                {purgesFiles && purgeMode === 'move' && (
                   <div className="tools-field">
                     <button
                       type="button"
@@ -1830,35 +1859,40 @@ export function AudioPoolPage() {
                 ) : !purgeHasWork ? (
                   <div className="tools-fix-status all-good">
                     <div className="tools-fix-status-count">0</div>
-                    <div className="tools-fix-status-label">unused audio files - everything in scope is referenced</div>
+                    <div className="tools-fix-status-label">
+                      {purgesFiles ? "unused audio files - everything in scope is referenced" : "unused sample slots - every loaded slot is triggered"}
+                    </div>
                   </div>
                 ) : (
-                  <>
-                    {purgeUnits.length > 0 && (
-                      <button
-                        className="tools-missing-files-summary"
-                        onClick={() => setShowPurgeListModal(true)}
-                        title="Click to view the unused files list"
-                      >
+                  <button
+                    className="tools-missing-files-summary"
+                    onClick={() => setShowPurgeListModal(true)}
+                    title="Click to view the full list"
+                  >
+                    {purgePlan.length > 0 && (
+                      <>
                         <span className="tools-fix-status-count">{purgeUnusedFileCount}</span>
-                        {" "}unused audio file{purgeUnusedFileCount !== 1 ? "s" : ""}
+                        {" "}unused audio file{purgeUnusedFileCount !== 1 ? "s" : ""} to purge
                         {purgeScanTotal !== null && (
-                          <span className="tools-fix-status-detail">{" - "}of {purgeScanTotal} scanned</span>
+                          <span className="tools-fix-status-detail">
+                            {" - "}of {purgeScanTotal} scanned in {purgeIncludeAllProjects ? "Audio Pool and all Projects of Set" : "Audio Pool directory"}
+                          </span>
                         )}
                         {/* The non-audio tail trails the scanned total: it is not part of
                             what was scanned, just what rides along when the findings go. */}
                         {purgeNonAudioCount > 0 && (
                           <span className="tools-fix-status-other">{" + "}{purgeNonAudioCount} related file{purgeNonAudioCount !== 1 ? "s" : ""}</span>
                         )}
-                      </button>
+                      </>
                     )}
+                    {purgePlan.length > 0 && purgeSlotClearCount > 0 && <br />}
                     {purgeSlotClearCount > 0 && (
-                      <div className="tools-fix-status-slots" title="Slots with a sample loaded that no machine assignment or p-lock ever triggers. Their sample file is only removed too when it is in scope for this purge.">
+                      <span className="tools-fix-status-slots" title="Slots with a sample loaded that no machine assignment or p-lock ever triggers. Their sample file is only removed too when it is in scope for this purge.">
                         <span className="tools-fix-status-count">{purgeSlotClearCount}</span>
                         {" "}unused sample slot assignment{purgeSlotClearCount !== 1 ? "s" : ""} to clear
-                      </div>
+                      </span>
                     )}
-                  </>
+                  </button>
                 )}
               </div>
 
@@ -1867,8 +1901,8 @@ export function AudioPoolPage() {
                   <button
                     className="tools-execute-btn"
                     onClick={() => setShowPurgeModal(true)}
-                    disabled={purgeScanLoading || (purgeMode === 'move' && purgeDestination.trim() === '')}
-                    title={purgeMode === 'move' && purgeDestination.trim() === '' ? 'Choose a destination folder first' : undefined}
+                    disabled={purgeScanLoading || (purgesFiles && purgeMode === 'move' && purgeDestination.trim() === '')}
+                    title={purgesFiles && purgeMode === 'move' && purgeDestination.trim() === '' ? 'Choose a destination folder first' : undefined}
                   >
                     <i className="fas fa-trash"></i>
                     Execute
@@ -2099,7 +2133,7 @@ export function AudioPoolPage() {
 
       {/* Unused Audio Pool Samples list (Tools tab status summary) */}
       {showPurgeListModal && (
-        <PurgeUnusedListModal units={purgeUnits} scope="pool" slotsToClear={purgeSlotList} onClose={() => setShowPurgeListModal(false)} />
+        <PurgeUnusedListModal units={purgePlan} scope="pool" slotsToClear={purgeSlotList} actionVerb={purgesFiles ? (purgeMode === "delete" ? "Delete" : "Move") : null} onClose={() => setShowPurgeListModal(false)} />
       )}
 
       {/* Purge Audio Pool Samples modal */}
@@ -2107,9 +2141,9 @@ export function AudioPoolPage() {
         <PurgeFilesModal
           scope="pool"
           scopePath={audioPoolPath}
-          units={purgeUnits}
-          mode={purgeMode === 'delete' ? 'delete' : { destinationDir: purgeDestination }}
-          skipReview={purgeMode === 'move' && !purgeReviewBeforeApply}
+          units={purgePlan}
+          mode={purgesFiles && purgeMode === 'delete' ? 'delete' : { destinationDir: purgeDestination }}
+          skipReview={purgesFiles && purgeMode === 'move' && !purgeReviewBeforeApply}
           slotsToClear={purgeSlotList}
           onClose={() => setShowPurgeModal(false)}
           onPurged={() => {
@@ -2126,8 +2160,8 @@ export function AudioPoolPage() {
             // so a pool-only purge never clears slots outside the pool, even
             // if purgeClearUnusedSlots was left checked before the user
             // turned "Include all projects of set" back off.
-            clearUnusedSlots: purgeIncludeAllProjects && purgeClearUnusedSlots,
-            includedProjectPaths: purgeIncludeAllProjects ? purgeIncludedProjectPaths : [],
+            clearUnusedSlots: purgeClearUnusedSlots,
+            includedProjectPaths: purgeClearUnusedSlots ? purgeIncludedProjectPaths : [],
             destinationDir,
             transferId,
           })}

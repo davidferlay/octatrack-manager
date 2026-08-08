@@ -116,15 +116,18 @@ const PURGE_COLUMNS: { id: PurgeSortColumn; label: string }[] = [
   { id: 'format', label: 'Format' },
   { id: 'location', label: 'Location' },
   { id: 'origin', label: 'Origin' },
-  { id: 'size', label: 'Size' },
   { id: 'action', label: 'Action' },
+  { id: 'size', label: 'Size' },
 ];
 
-const ACTION_LABELS: Record<PurgeAction, string> = {
-  'remove': 'Remove',
-  'remove+clear': 'Remove + clear slot',
-  'clear-only': 'Clear slot only',
-};
+/** What the row will do, worded with the action actually selected - "Delete"
+ * and "Move" are what the user picked, so echoing "Remove" would make them
+ * re-derive it. `verb` is null when no file action applies at all (a
+ * slots-only run), where every row is a slot clear. */
+export function purgeActionLabel(action: PurgeAction, verb: 'Delete' | 'Move' | null): string {
+  if (action === 'clear-only' || verb === null) return 'Clear slot';
+  return action === 'remove+clear' ? `${verb} + Clear` : verb;
+}
 
 const FORMAT_OPTIONS = [
   { value: 'all', label: 'All' },
@@ -159,7 +162,7 @@ interface PurgeRow {
 
 /** Default column widths (px) before the user resizes anything - Name fills the rest. */
 const PURGE_COL_DEFAULTS: Record<PurgeSortColumn, number | undefined> = {
-  slot: 60, name: undefined, format: 80, location: 185, origin: 140, size: 90, action: 155,
+  slot: 60, name: undefined, format: 80, location: 185, origin: 140, action: 120, size: 90,
 };
 
 /**
@@ -171,7 +174,11 @@ const PURGE_COL_DEFAULTS: Record<PurgeSortColumn, number | undefined> = {
  * filterable header rendering, column-resize drag math, filter dropdown)
  * so the two tables look and behave identically to the user.
  */
-export function usePurgeTable(units: PurgeUnit[], slotsToClear: ClearableSlot[] = []) {
+export function usePurgeTable(
+  units: PurgeUnit[],
+  slotsToClear: ClearableSlot[] = [],
+  actionVerb: 'Delete' | 'Move' | null = null,
+) {
   const [searchText, setSearchText] = useState('');
   const [sortColumn, setSortColumn] = useState<PurgeSortColumn>('origin');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -369,12 +376,14 @@ export function usePurgeTable(units: PurgeUnit[], slotsToClear: ClearableSlot[] 
         return compareSlotLists(a.slots, b.slots) * dir;
       }
       if (sortColumn === 'format') return a.format.localeCompare(b.format) * dir;
-      if (sortColumn === 'action') return a.action.localeCompare(b.action) * dir;
+      if (sortColumn === 'action') {
+        return purgeActionLabel(a.action, actionVerb).localeCompare(purgeActionLabel(b.action, actionVerb)) * dir;
+      }
       return a[sortColumn].localeCompare(b[sortColumn]) * dir;
     });
 
     return filtered;
-  }, [units, slotsToClear, searchText, originFilter, formatFilter, sortColumn, sortDirection]);
+  }, [units, slotsToClear, actionVerb, searchText, originFilter, formatFilter, sortColumn, sortDirection]);
 
   const handleSort = (column: PurgeSortColumn) => {
     if (sortColumn === column) {
@@ -474,7 +483,7 @@ export function usePurgeTable(units: PurgeUnit[], slotsToClear: ClearableSlot[] 
     originFilter, setOriginFilter, origins,
     formatFilter, setFormatFilter,
     hasActiveFilters, resetFilters,
-    visibleRowCount, totalRowCount, totalSlotClears,
+    visibleRowCount, totalRowCount, totalSlotClears, actionVerb,
     collapsedDirs, toggleDirCollapsed,
     renderSortableHeader, renderFilterableHeader,
     colWidths, tableRef,
@@ -483,8 +492,8 @@ export function usePurgeTable(units: PurgeUnit[], slotsToClear: ClearableSlot[] 
 }
 
 export function purgeTableTsv(table: ReturnType<typeof usePurgeTable>): string {
-  const header = ['Slot', 'Name', 'Format', 'Location', 'Origin', 'Size', 'Action'].join('\t');
-  const lines = table.rows.map(r => [r.slots.join(', '), r.name, r.format, r.location, r.origin, formatSize(r.size), ACTION_LABELS[r.action]].join('\t'));
+  const header = ['Slot', 'Name', 'Format', 'Location', 'Origin', 'Action', 'Size'].join('\t');
+  const lines = table.rows.map(r => [r.slots.join(', '), r.name, r.format, r.location, r.origin, purgeActionLabel(r.action, table.actionVerb), formatSize(r.size)].join('\t'));
   return [header, ...lines].join('\n');
 }
 
@@ -522,7 +531,7 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
   const {
     rows, visibleColumns, originFilter, setOriginFilter, origins, formatFilter, setFormatFilter,
     renderSortableHeader, renderFilterableHeader,
-    colWidths, tableRef, collapsedDirs, toggleDirCollapsed,
+    colWidths, tableRef, collapsedDirs, toggleDirCollapsed, actionVerb,
   } = table;
 
   const [rowMenu, setRowMenu] = useState<{ x: number; y: number; path: string } | null>(null);
@@ -618,7 +627,7 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
                       case 'action':
                         return (
                           <td key="action" className={`purge-action-cell purge-action-${r.action}`}>
-                            {ACTION_LABELS[r.action]}
+                            {purgeActionLabel(r.action, actionVerb)}
                           </td>
                         );
                       case 'location':
@@ -668,15 +677,17 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
 }
 
 /** Read-only preview modal, opened from the status button. */
-export function PurgeUnusedListModal({ units, scope, slotsToClear = [], onClose }: {
+export function PurgeUnusedListModal({ units, scope, slotsToClear = [], actionVerb = null, onClose }: {
   units: PurgeUnit[];
   scope: 'project' | 'pool';
   /** Slots the same run would clear - listed alongside the files so the
    * preview shows every change, not just the removals. */
   slotsToClear?: ClearableSlot[];
+  /** Wording for the Action column - the file action currently selected. */
+  actionVerb?: 'Delete' | 'Move' | null;
   onClose: () => void;
 }) {
-  const table = usePurgeTable(units, slotsToClear);
+  const table = usePurgeTable(units, slotsToClear, actionVerb);
   const [copyFeedback, copy] = useCopyFeedback();
   const { modalRef, style, handles } = useModalResize();
   const title = scope === 'project' ? 'Unused Project Samples' : 'Unused Audio Pool Samples';
@@ -773,7 +784,8 @@ export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsT
   const [phase, setPhase] = useState<Phase>(skipReview ? 'removing' : 'review');
   const [errorMsg, setErrorMsg] = useState('');
   const [result, setResult] = useState<PurgeResult | null>(null);
-  const table = usePurgeTable(units, slotsToClear);
+  const isDeleteMode = mode === 'delete';
+  const table = usePurgeTable(units, slotsToClear, units.length === 0 ? null : (isDeleteMode ? 'Delete' : 'Move'));
   const [copyFeedback, copy] = useCopyFeedback();
   const { modalRef, style, handles } = useModalResize();
   const startedRef = useRef(false);
@@ -784,7 +796,7 @@ export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsT
   const [currentPath, setCurrentPath] = useState('');
   const [cancelRequested, setCancelRequested] = useState(false);
 
-  const isDelete = mode === 'delete';
+  const isDelete = isDeleteMode;
   const doneLabel = scope === 'project' ? 'Purge Project Samples' : 'Purge Audio Pool Samples';
   const progressingLabel = isDelete ? 'Sending to Trash...' : 'Moving...';
   const currentIndex = Math.max(0, units.findIndex(u => u.path === currentPath));
