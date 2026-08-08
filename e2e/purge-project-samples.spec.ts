@@ -535,6 +535,46 @@ test.describe('Purge Project Samples', () => {
     await expect(banner.locator('.purge-confirm-target')).toHaveText('will be moved to /home/testuser/Downloads')
   })
 
+  test('the status line explains why the file count grows when slots are cleared', async ({ page }) => {
+    await page.addInitScript(() => {
+      const internals = (window as any).__TAURI_INTERNALS__
+      const orig = internals.invoke
+      internals.invoke = async (cmd: string, args?: any) => {
+        if (cmd === 'scan_project_unused_files') {
+          const file = (n: string, slots: string[]) => ({
+            kind: 'File', path: `/projects/TestProject/${n}.wav`, origin: 'TestProject',
+            size: 1024, slots, sidecar: null,
+          })
+          // Without slot clearing only orphan.wav is unused. With it, two more
+          // files come free - they are held only by slots that never trigger.
+          return args?.simulateClearedSlots
+            ? [file('orphan', []), file('held1', ['S4']), file('held2', ['S5'])]
+            : [file('orphan', [])]
+        }
+        if (cmd === 'list_unused_slot_assignments') {
+          return [
+            { slot: 'S4', path: '/projects/TestProject/held1.wav', origin: 'TestProject', size: 1024 },
+            { slot: 'S5', path: '/projects/TestProject/held2.wav', origin: 'TestProject', size: 1024 },
+          ]
+        }
+        return orig(cmd, args)
+      }
+    })
+
+    await openPurgeOperation(page)
+    const summary = page.locator('.tools-missing-files-summary')
+
+    // Files only: no slot clearing, so nothing is freed by it.
+    await expect(summary).toContainText('1 unused audio file to purge')
+    await expect(summary).not.toContainText('freed by clearing slots')
+
+    // Both: the jump from 1 to 3 is attributed, not left looking arbitrary.
+    await page.getByRole('button', { name: 'Both' }).click()
+    await expect(summary).toContainText('3 unused audio files to purge')
+    await expect(summary).toContainText('(2 freed by clearing slots)')
+    await expect(summary).toContainText('2 unused sample slot assignments to clear')
+  })
+
   test('the Purge selector chooses what runs and hides the options that no longer apply', async ({ page }) => {
     await page.addInitScript(() => {
       const internals = (window as any).__TAURI_INTERNALS__

@@ -58,7 +58,7 @@ Options that no longer apply are hidden - a slots-only run shows no **Delete/Mov
 
 Slots that have a file loaded but are never triggered by any machine assignment or p-lock get their assignment cleared entirely, so the slot is reset and ready for another sample.
 
-Clearing a slot can also free the file it held, when that slot was the file's only reference. A slot pointing at an **Audio Pool** file is cleared without its file being touched - pool files are shared across the Set, so removing those is the job of **Purge Audio Pool Samples**.
+Clearing a slot can also free the file it held, when that slot was the file's only reference. This is why the unused-file count grows when you switch from **Unused audio files** to **Both**: files held only by a slot that never triggers them are not unused until that slot is cleared. The status line attributes the difference, for example _"534 unused audio files to purge (105 freed by clearing slots)"_. A slot pointing at an **Audio Pool** file is cleared without its file being touched - pool files are shared across the Set, so removing those is the job of **Purge Audio Pool Samples**.
 
 On **Purge Audio Pool Samples**, **Unused sample slots** and **Both** are only selectable once **Include all projects of Set** is checked, since slots live in projects rather than in the pool. Turning that checkbox back off resets the choice to **Unused audio files**.
 

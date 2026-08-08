@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useProjects } from "../context/ProjectsContext";
@@ -632,11 +632,19 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
 
   const purgeUnitsRaw = clearUnusedSlots ? purgeUnitsSimulated : purgeUnitsAsIs;
   const purgeScanLoading = operation === "purge_project_samples" && purgeUnitsRaw === null;
-  const purgeUnits = useMemo(() => {
-    if (!purgeUnitsRaw) return [];
-    if (!excludeBackups) return purgeUnitsRaw;
-    return purgeUnitsRaw.filter((u) => !isUnderBackupsDir(u.path, [projectPath]));
-  }, [purgeUnitsRaw, excludeBackups, projectPath]);
+  const applyBackupsFilter = useCallback((units: PurgeUnit[] | null) => {
+    if (!units) return [];
+    if (!excludeBackups) return units;
+    return units.filter((u) => !isUnderBackupsDir(u.path, [projectPath]));
+  }, [excludeBackups, projectPath]);
+  const purgeUnits = useMemo(() => applyBackupsFilter(purgeUnitsRaw), [applyBackupsFilter, purgeUnitsRaw]);
+  // Same scan with slot clearing switched off, so the status line can say how
+  // many of the findings only became purgeable BECAUSE slots get cleared -
+  // otherwise the count jumping when the scope changes looks arbitrary.
+  const purgeUnitsWithoutSlotClearing = useMemo(
+    () => applyBackupsFilter(purgeUnitsAsIs),
+    [applyBackupsFilter, purgeUnitsAsIs],
+  );
   // Audio-file counts, not row counts - a collapsed directory is one row but
   // may represent many unused files (see purgeAudioFileCount).
   const purgeUnusedFileCount = purgeAudioFileCount(purgeUnits);
@@ -647,6 +655,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   // project purge never touches, so a project can have zero purgeable files
   // and still have slots to clear. Gating the status text and Execute on the
   // file count alone made that case unreachable.
+  const purgeFreedBySlotClearing = clearUnusedSlots
+    ? Math.max(0, purgeUnusedFileCount - purgeAudioFileCount(purgeUnitsWithoutSlotClearing))
+    : 0;
   const purgeSlotList = clearUnusedSlots ? (purgeSlotsToClear ?? []) : [];
   const purgeSlotClearCount = purgeSlotList.length;
   // A files-only run must not send a plan that a slots-only run would, and
@@ -3535,6 +3546,11 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   <>
                     <span className="tools-fix-status-count">{purgeUnusedFileCount}</span>
                     {" "}unused audio file{purgeUnusedFileCount !== 1 ? "s" : ""} to purge
+                    {purgeFreedBySlotClearing > 0 && (
+                      <span className="tools-fix-status-detail" title="These files are still referenced today by a slot that never triggers them. Clearing those slots is what frees them.">
+                        {" "}({purgeFreedBySlotClearing} freed by clearing slots)
+                      </span>
+                    )}
                     {purgeScanTotal !== null && (
                       <span className="tools-fix-status-detail">{" - "}of {purgeScanTotal} scanned in project directory</span>
                     )}

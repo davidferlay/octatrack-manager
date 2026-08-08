@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useLayoutEffect, useCallback, useMemo } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -539,11 +539,19 @@ export function AudioPoolPage() {
     ? purgePoolOnlyUnits
     : (purgeClearUnusedSlots ? purgeIncludeAllSimulated : purgeIncludeAllAsIs);
   const purgeScanLoading = poolOperation === 'purge_pool_samples' && purgeUnitsRaw === null;
-  const purgeUnits = useMemo(() => {
-    if (!purgeUnitsRaw) return [];
-    if (!purgeExcludeBackups) return purgeUnitsRaw;
-    return purgeUnitsRaw.filter((u) => !isUnderBackupsDir(u.path, purgeIncludedProjectPaths));
-  }, [purgeUnitsRaw, purgeExcludeBackups, purgeIncludedProjectPaths]);
+  const applyBackupsFilter = useCallback((units: PurgeUnit[] | null) => {
+    if (!units) return [];
+    if (!purgeExcludeBackups) return units;
+    return units.filter((u) => !isUnderBackupsDir(u.path, purgeIncludedProjectPaths));
+  }, [purgeExcludeBackups, purgeIncludedProjectPaths]);
+  const purgeUnits = useMemo(() => applyBackupsFilter(purgeUnitsRaw), [applyBackupsFilter, purgeUnitsRaw]);
+  // The same scope with slot clearing switched off. A file whose only
+  // reference is a slot that never triggers it is not unused today - clearing
+  // that slot is what frees it, which is why the count grows under "Both".
+  const purgeUnitsWithoutSlotClearing = useMemo(
+    () => applyBackupsFilter(purgeIncludeAllProjects ? purgeIncludeAllAsIs : purgePoolOnlyUnits),
+    [applyBackupsFilter, purgeIncludeAllProjects, purgeIncludeAllAsIs, purgePoolOnlyUnits],
+  );
   const purgeScanTotal = purgeIncludeAllProjects ? purgeScanTotalAll : purgeScanTotalPoolOnly;
   // Audio-file counts, not row counts - a collapsed directory is one row but
   // may represent many unused files (see purgeAudioFileCount).
@@ -559,6 +567,9 @@ export function AudioPoolPage() {
   // Belt and braces: the checkbox handler also resets the scope, but a
   // slot-clearing scope must never survive into a pool-only run even if some
   // other path flips the toggle.
+  const purgeFreedBySlotClearing = purgeClearUnusedSlots && purgeIncludeAllProjects
+    ? Math.max(0, purgeUnusedFileCount - purgeAudioFileCount(purgeUnitsWithoutSlotClearing))
+    : 0;
   const purgeSlotList = purgeClearUnusedSlots && purgeIncludeAllProjects ? (purgeSlotsToClear ?? []) : [];
   const purgeSlotClearCount = purgeSlotList.length;
   const purgePlan = purgesFiles ? purgeUnits : [];
@@ -1915,6 +1926,11 @@ export function AudioPoolPage() {
                       <>
                         <span className="tools-fix-status-count">{purgeUnusedFileCount}</span>
                         {" "}unused audio file{purgeUnusedFileCount !== 1 ? "s" : ""} to purge
+                        {purgeFreedBySlotClearing > 0 && (
+                          <span className="tools-fix-status-detail" title="These files are still referenced today by a slot that never triggers them. Clearing those slots is what frees them.">
+                            {" "}({purgeFreedBySlotClearing} freed by clearing slots)
+                          </span>
+                        )}
                         {purgeScanTotal !== null && (
                           <span className="tools-fix-status-detail">
                             {" - "}of {purgeScanTotal} scanned in {purgeIncludeAllProjects ? "Audio Pool and all Projects of Set" : "Audio Pool directory"}
