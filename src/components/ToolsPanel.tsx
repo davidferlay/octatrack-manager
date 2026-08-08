@@ -12,7 +12,7 @@ import { MissingSamplesListModal } from "./MissingSamplesListModal";
 import { CreateProjectModal } from "./CreateProjectModal";
 import { ProjectIncompatibleListModal, FixProjectFilesModal } from "./FixProjectFilesModal";
 import type { IncompatibleFile, PoolFixResult } from "./FixPoolFilesModal";
-import { PurgeFilesModal, purgeAudioFileCount, purgeNonAudioFileCount, PurgeUnusedListModal, type PurgeUnit } from "./PurgeFilesModal";
+import { PurgeFilesModal, purgeAudioFileCount, purgeNonAudioFileCount, PurgeUnusedListModal, type ClearableSlot, type PurgeUnit } from "./PurgeFilesModal";
 import { audioKind, usageKey } from "./AudioFileTable";
 import { normalizePath } from "./SampleSlotsTable";
 import { isUnderBackupsDir } from "../utils/purgeBackups";
@@ -294,7 +294,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   // run, computed alongside the scan whenever clearUnusedSlots is on - see
   // count_unused_slot_assignments. null when the option is off (or not yet
   // resolved), which PurgeFilesModal treats as "don't show that line".
-  const [purgeSlotsToClear, setPurgeSlotsToClear] = useState<number | null>(null);
+  const [purgeSlotsToClear, setPurgeSlotsToClear] = useState<ClearableSlot[] | null>(null);
   // Fraction of the 3 background scan calls below (as-is, simulated,
   // slot count) that have resolved so far, as a whole percentage - mirrors
   // Fix Project Samples's "Scanning... N%" status label.
@@ -595,11 +595,11 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
       if (!cancelled) setPurgeUnitsSimulated([]);
     }).finally(markCallDone);
 
-    invoke<number>('count_unused_slot_assignments', { projectPath }).then((count) => {
-      if (!cancelled) setPurgeSlotsToClear(count);
+    invoke<ClearableSlot[]>('list_unused_slot_assignments', { projectPath }).then((slots) => {
+      if (!cancelled) setPurgeSlotsToClear(slots ?? []);
     }).catch((err) => {
-      console.error("Error counting unused slot assignments:", err);
-      if (!cancelled) setPurgeSlotsToClear(null);
+      console.error("Error listing unused slot assignments:", err);
+      if (!cancelled) setPurgeSlotsToClear([]);
     }).finally(markCallDone);
 
     return () => { cancelled = true; };
@@ -617,6 +617,14 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const purgeUnusedFileCount = purgeAudioFileCount(purgeUnits);
   // Non-audio files only ever ride along inside a collapsed directory unit.
   const purgeNonAudioCount = purgeNonAudioFileCount(purgeUnits);
+  // Slots holding a sample nothing triggers. These are independent of the
+  // unused-FILE count: a slot can point at an Audio Pool file, which a
+  // project purge never touches, so a project can have zero purgeable files
+  // and still have slots to clear. Gating the status text and Execute on the
+  // file count alone made that case unreachable.
+  const purgeSlotList = clearUnusedSlots ? (purgeSlotsToClear ?? []) : [];
+  const purgeSlotClearCount = purgeSlotList.length;
+  const purgeHasWork = purgeUnits.length > 0 || purgeSlotClearCount > 0;
 
   // Purge Project Samples: resolve the default Move-mode destination once,
   // the first time the operation is selected (never overwrites a user edit).
@@ -3454,28 +3462,38 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 <span className="loading-spinner-small"></span>
                 <span>Scanning project samples... {purgeScanProgress}%</span>
               </div>
-            ) : purgeUnits.length === 0 ? (
+            ) : !purgeHasWork ? (
               <div className="tools-fix-status all-good">
                 <div className="tools-fix-status-count">0</div>
                 <div className="tools-fix-status-label">unused audio files - every sample in this project is referenced</div>
               </div>
             ) : (
-              <button className="tools-missing-files-summary" onClick={() => setShowPurgeListModal(true)} title="Click to view the unused files list">
-                <span className="tools-fix-status-count">{purgeUnusedFileCount}</span>
-                {" "}unused audio file{purgeUnusedFileCount !== 1 ? "s" : ""}
-                {purgeScanTotal !== null && (
-                  <span className="tools-fix-status-detail">{" - "}of {purgeScanTotal} scanned</span>
+              <>
+                {purgeUnits.length > 0 && (
+                  <button className="tools-missing-files-summary" onClick={() => setShowPurgeListModal(true)} title="Click to view the unused files list">
+                    <span className="tools-fix-status-count">{purgeUnusedFileCount}</span>
+                    {" "}unused audio file{purgeUnusedFileCount !== 1 ? "s" : ""}
+                    {purgeScanTotal !== null && (
+                      <span className="tools-fix-status-detail">{" - "}of {purgeScanTotal} scanned</span>
+                    )}
+                    {/* The non-audio tail trails the scanned total: it is not part of
+                        what was scanned, just what rides along when the findings go. */}
+                    {purgeNonAudioCount > 0 && (
+                      <span className="tools-fix-status-other">{" + "}{purgeNonAudioCount} related file{purgeNonAudioCount !== 1 ? "s" : ""}</span>
+                    )}
+                  </button>
                 )}
-                {/* The non-audio tail trails the scanned total: it is not part of
-                    what was scanned, just what rides along when the findings go. */}
-                {purgeNonAudioCount > 0 && (
-                  <span className="tools-fix-status-other">{" + "}{purgeNonAudioCount} related file{purgeNonAudioCount !== 1 ? "s" : ""}</span>
+                {purgeSlotClearCount > 0 && (
+                  <div className="tools-fix-status-slots" title="Slots with a sample loaded that no machine assignment or p-lock ever triggers. Their sample file is only removed too when it lives in this project - a file in the Audio Pool is left alone.">
+                    <span className="tools-fix-status-count">{purgeSlotClearCount}</span>
+                    {" "}unused sample slot assignment{purgeSlotClearCount !== 1 ? "s" : ""} to clear
+                  </div>
                 )}
-              </button>
+              </>
             )}
           </div>
 
-          {purgeUnits.length > 0 && (
+          {purgeHasWork && (
             <div className="tools-actions">
               <button
                 className="tools-execute-btn"
@@ -3977,7 +3995,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
 
       {/* Unused Project Samples List Modal */}
       {showPurgeListModal && (
-        <PurgeUnusedListModal units={purgeUnits} scope="project" onClose={() => setShowPurgeListModal(false)} />
+        <PurgeUnusedListModal units={purgeUnits} scope="project" slotsToClear={purgeSlotList} onClose={() => setShowPurgeListModal(false)} />
       )}
 
       {/* Purge Project Samples Modal */}
@@ -3988,7 +4006,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           units={purgeUnits}
           mode={purgeMode === 'delete' ? 'delete' : { destinationDir: purgeDestination }}
           skipReview={purgeMode === 'move' && !purgeReviewBeforeApply}
-          slotsToClear={clearUnusedSlots ? purgeSlotsToClear : null}
+          slotsToClear={purgeSlotList}
           onClose={() => setShowPurgeModal(false)}
           onPurged={() => {
             setPurgeRescanKey(k => k + 1);

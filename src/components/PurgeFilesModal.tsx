@@ -22,6 +22,20 @@ export type PurgeUnit =
   | { kind: 'File'; path: string; origin: string; size: number; slots: string[]; sidecar: PurgeFileEntry | null }
   | { kind: 'Directory'; path: string; origin: string; file_count: number; non_audio_count: number; size: number; files: PurgeFileEntry[] };
 
+/** Matches the Rust `ClearableSlot` struct exactly. One slot that "Clear
+ * unused sample slot assignments" would empty. */
+export interface ClearableSlot {
+  slot: string;
+  path: string;
+  origin: string;
+  size: number;
+}
+
+/** What a row's row will actually do. A slot whose sample lives in the Audio
+ * Pool is cleared without its file being touched - pool files are shared
+ * across the Set, so only "Purge Audio Pool Samples" removes those. */
+export type PurgeAction = 'remove' | 'remove+clear' | 'clear-only';
+
 /** The non-audio files a unit drags along, as tree-child rows: a directory's
  * absorbed non-audio contents, or a lone file's `.ot` sidecar. */
 export function unitChildFiles(unit: PurgeUnit): PurgeFileEntry[] {
@@ -94,7 +108,7 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-type PurgeSortColumn = 'slot' | 'name' | 'format' | 'location' | 'origin' | 'size';
+type PurgeSortColumn = 'slot' | 'name' | 'format' | 'location' | 'origin' | 'size' | 'action';
 
 const PURGE_COLUMNS: { id: PurgeSortColumn; label: string }[] = [
   { id: 'slot', label: 'Slot' },
@@ -103,7 +117,14 @@ const PURGE_COLUMNS: { id: PurgeSortColumn; label: string }[] = [
   { id: 'location', label: 'Location' },
   { id: 'origin', label: 'Origin' },
   { id: 'size', label: 'Size' },
+  { id: 'action', label: 'Action' },
 ];
+
+const ACTION_LABELS: Record<PurgeAction, string> = {
+  'remove': 'Remove',
+  'remove+clear': 'Remove + clear slot',
+  'clear-only': 'Clear slot only',
+};
 
 const FORMAT_OPTIONS = [
   { value: 'all', label: 'All' },
@@ -129,6 +150,7 @@ interface PurgeRow {
   size: number;
   slots: string[];
   format: string;
+  action: PurgeAction;
   /** Tree-child rows to render under this one. Same as `unitChildFiles(unit)`
    * normally; narrowed to the matching children when a search only matched
    * inside the unit rather than on the unit's own name/path. */
@@ -137,7 +159,7 @@ interface PurgeRow {
 
 /** Default column widths (px) before the user resizes anything - Name fills the rest. */
 const PURGE_COL_DEFAULTS: Record<PurgeSortColumn, number | undefined> = {
-  slot: 60, name: undefined, format: 80, location: 185, origin: 140, size: 90,
+  slot: 60, name: undefined, format: 80, location: 185, origin: 140, size: 90, action: 155,
 };
 
 /**
@@ -149,7 +171,7 @@ const PURGE_COL_DEFAULTS: Record<PurgeSortColumn, number | undefined> = {
  * filterable header rendering, column-resize drag math, filter dropdown)
  * so the two tables look and behave identically to the user.
  */
-export function usePurgeTable(units: PurgeUnit[]) {
+export function usePurgeTable(units: PurgeUnit[], slotsToClear: ClearableSlot[] = []) {
   const [searchText, setSearchText] = useState('');
   const [sortColumn, setSortColumn] = useState<PurgeSortColumn>('origin');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -243,16 +265,66 @@ export function usePurgeTable(units: PurgeUnit[]) {
   const origins = useMemo(() => Array.from(new Set(units.map(u => u.origin))).sort(), [units]);
 
   const rows = useMemo<PurgeRow[]>(() => {
-    let filtered: PurgeRow[] = units.map(unit => ({
-      unit,
-      name: baseName(unit.path),
-      location: dirName(unit.path),
-      origin: unit.origin,
-      size: unit.size,
-      slots: unit.kind === 'File' ? unit.slots : [],
-      format: unitFormat(unit),
-      children: unitChildFiles(unit),
-    }));
+    // Slot clearings whose file is NOT part of the purge plan get their own
+    // rows: without them the table showed one line for a run that clears
+    // nine slots, because it only ever listed files being removed.
+    const plannedPaths = new Set(units.map(u => u.path));
+    const orphanSlots = new Map<string, ClearableSlot[]>();
+    for (const s of slotsToClear) {
+      if (plannedPaths.has(s.path)) continue;
+      const existing = orphanSlots.get(s.path);
+      // Several slots can hold the same file - one row, slots joined, the
+      // same way the Slot column already renders a multi-slot file.
+      if (existing) existing.push(s); else orphanSlots.set(s.path, [s]);
+    }
+
+    // `slotsToClear` is the authority on what gets cleared. A plan unit also
+    // carries its own `slots`, but only for files that became purgeable via
+    // the simulated clear - merging the two keeps the Slot and Action cells
+    // right whichever way the row got here.
+    const clearedByPath = new Map<string, string[]>();
+    for (const s of slotsToClear) {
+      const existing = clearedByPath.get(s.path);
+      if (existing) existing.push(s.slot); else clearedByPath.set(s.path, [s.slot]);
+    }
+
+    let filtered: PurgeRow[] = units.map(unit => {
+      const cleared = clearedByPath.get(unit.path) ?? [];
+      const ownSlots = unit.kind === 'File' ? unit.slots : [];
+      const slots = Array.from(new Set([...ownSlots, ...cleared]));
+      return {
+        unit,
+        name: baseName(unit.path),
+        location: dirName(unit.path),
+        origin: unit.origin,
+        size: unit.size,
+        slots,
+        format: unitFormat(unit),
+        action: (slots.length > 0 ? 'remove+clear' : 'remove') as PurgeAction,
+        children: unitChildFiles(unit),
+      };
+    });
+
+    filtered = filtered.concat(
+      Array.from(orphanSlots.values()).map(group => ({
+        unit: {
+          kind: 'File' as const,
+          path: group[0].path,
+          origin: group[0].origin,
+          size: group[0].size,
+          slots: group.map(g => g.slot),
+          sidecar: null,
+        },
+        name: baseName(group[0].path),
+        location: dirName(group[0].path),
+        origin: group[0].origin,
+        size: group[0].size,
+        slots: group.map(g => g.slot),
+        format: 'Audio',
+        action: 'clear-only' as PurgeAction,
+        children: [],
+      })),
+    );
 
     if (originFilter !== 'all') filtered = filtered.filter(r => r.origin === originFilter);
     if (formatFilter !== 'all') {
@@ -297,11 +369,12 @@ export function usePurgeTable(units: PurgeUnit[]) {
         return compareSlotLists(a.slots, b.slots) * dir;
       }
       if (sortColumn === 'format') return a.format.localeCompare(b.format) * dir;
+      if (sortColumn === 'action') return a.action.localeCompare(b.action) * dir;
       return a[sortColumn].localeCompare(b[sortColumn]) * dir;
     });
 
     return filtered;
-  }, [units, searchText, originFilter, formatFilter, sortColumn, sortDirection]);
+  }, [units, slotsToClear, searchText, originFilter, formatFilter, sortColumn, sortDirection]);
 
   const handleSort = (column: PurgeSortColumn) => {
     if (sortColumn === column) {
@@ -375,7 +448,10 @@ export function usePurgeTable(units: PurgeUnit[]) {
     </th>
   );
 
+  // Totals cover only what actually leaves the disk - a clear-only row's
+  // file stays exactly where it is, so it contributes no reclaimed bytes.
   const totalSize = useMemo(() => purgeTotalSize(units), [units]);
+  const totalSlotClears = slotsToClear.length;
   const totalDirs = useMemo(() => units.filter(u => u.kind === 'Directory').length, [units]);
   // "Showing X of Y items" counts table ROWS - a directory contributes its
   // own row plus every tree-child row currently expanded under it. Counting
@@ -398,7 +474,7 @@ export function usePurgeTable(units: PurgeUnit[]) {
     originFilter, setOriginFilter, origins,
     formatFilter, setFormatFilter,
     hasActiveFilters, resetFilters,
-    visibleRowCount, totalRowCount,
+    visibleRowCount, totalRowCount, totalSlotClears,
     collapsedDirs, toggleDirCollapsed,
     renderSortableHeader, renderFilterableHeader,
     colWidths, tableRef,
@@ -407,8 +483,8 @@ export function usePurgeTable(units: PurgeUnit[]) {
 }
 
 export function purgeTableTsv(table: ReturnType<typeof usePurgeTable>): string {
-  const header = ['Slot', 'Name', 'Format', 'Location', 'Origin', 'Size'].join('\t');
-  const lines = table.rows.map(r => [r.slots.join(', '), r.name, r.format, r.location, r.origin, formatSize(r.size)].join('\t'));
+  const header = ['Slot', 'Name', 'Format', 'Location', 'Origin', 'Size', 'Action'].join('\t');
+  const lines = table.rows.map(r => [r.slots.join(', '), r.name, r.format, r.location, r.origin, formatSize(r.size), ACTION_LABELS[r.action]].join('\t'));
   return [header, ...lines].join('\n');
 }
 
@@ -539,6 +615,12 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
                         );
                       case 'format':
                         return <td key="format">{r.format || <span className="usage-none">—</span>}</td>;
+                      case 'action':
+                        return (
+                          <td key="action" className={`purge-action-cell purge-action-${r.action}`}>
+                            {ACTION_LABELS[r.action]}
+                          </td>
+                        );
                       case 'location':
                         return <td key="location" className="fix-location-cell" title={r.location}>{r.location}</td>;
                       case 'origin':
@@ -586,12 +668,15 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
 }
 
 /** Read-only preview modal, opened from the status button. */
-export function PurgeUnusedListModal({ units, scope, onClose }: {
+export function PurgeUnusedListModal({ units, scope, slotsToClear = [], onClose }: {
   units: PurgeUnit[];
   scope: 'project' | 'pool';
+  /** Slots the same run would clear - listed alongside the files so the
+   * preview shows every change, not just the removals. */
+  slotsToClear?: ClearableSlot[];
   onClose: () => void;
 }) {
-  const table = usePurgeTable(units);
+  const table = usePurgeTable(units, slotsToClear);
   const [copyFeedback, copy] = useCopyFeedback();
   const { modalRef, style, handles } = useModalResize();
   const title = scope === 'project' ? 'Unused Project Samples' : 'Unused Audio Pool Samples';
@@ -662,9 +747,9 @@ export interface PurgeFilesModalProps {
    * shown in the review summary alongside the file/directory counts so this
    * second destructive effect of the "Clear unused sample slot assignments"
    * option is visible before Apply Changes, not just on the done screen.
-   * `undefined`/`null` when that option is off - no extra line is shown.
+   * Empty when that option is off - no extra line is shown.
    */
-  slotsToClear?: number | null;
+  slotsToClear?: ClearableSlot[];
   onClose: () => void;
   onPurged?: (result: PurgeResult) => void;
   /** The actual purge call - the only backend-command-shaped detail that differs between project and pool scope. */
@@ -684,11 +769,11 @@ export interface PurgeFilesModalProps {
  * Fix*Modal family - callers pass it through uniformly even though the
  * review table already shows full origin/size per row without it.
  */
-export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsToClear, onClose, onPurged, runPurge }: PurgeFilesModalProps) {
+export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsToClear = [], onClose, onPurged, runPurge }: PurgeFilesModalProps) {
   const [phase, setPhase] = useState<Phase>(skipReview ? 'removing' : 'review');
   const [errorMsg, setErrorMsg] = useState('');
   const [result, setResult] = useState<PurgeResult | null>(null);
-  const table = usePurgeTable(units);
+  const table = usePurgeTable(units, slotsToClear);
   const [copyFeedback, copy] = useCopyFeedback();
   const { modalRef, style, handles } = useModalResize();
   const startedRef = useRef(false);
@@ -784,27 +869,42 @@ export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsT
               </div>
               <div className="fix-progress-section">
                 <div className={`purge-confirm-banner${isDelete ? ' purge-confirm-banner-danger' : ''}`}>
-                  <div className="purge-confirm-headline">
-                    <i className={`fas ${isDelete ? 'fa-trash' : 'fa-folder-open'}`}></i>
-                    {' '}{table.totalAudio} audio file{table.totalAudio !== 1 ? 's' : ''}
-                    {table.totalNonAudio > 0 && (
-                      <span className="purge-confirm-other">{nonAudioSuffix(table.totalNonAudio)}</span>
-                    )}
-                  </div>
-                  <div className="purge-confirm-sub">
-                    {units.length} item{units.length !== 1 ? 's' : ''}
-                    {' · '}{table.totalDirs} director{table.totalDirs !== 1 ? 'ies' : 'y'}
-                    {' · '}~{formatSize(table.totalSize)}
-                  </div>
-                  <div className="purge-confirm-target">
-                    {isDelete
-                      ? <>will be sent to the <strong>Trash Bin</strong></>
-                      : <>will be moved to <strong>{mode.destinationDir}</strong></>}
-                  </div>
-                  {typeof slotsToClear === 'number' && (
-                    <div className="purge-confirm-slots">
-                      {slotsToClear} unused sample slot assignment{slotsToClear !== 1 ? 's' : ''} will also be cleared
+                  {/* A slots-only run has no files at all - saying "0 audio
+                      files will be moved to <folder>" would be noise, so the
+                      slot clearing becomes the headline instead. */}
+                  {units.length === 0 ? (
+                    <div className="purge-confirm-headline">
+                      <i className="fas fa-eraser"></i>
+                      {' '}{table.totalSlotClears} sample slot{table.totalSlotClears !== 1 ? 's' : ''} to clear
                     </div>
+                  ) : (
+                    <>
+                      <div className="purge-confirm-headline">
+                        <i className={`fas ${isDelete ? 'fa-trash' : 'fa-folder-open'}`}></i>
+                        {' '}{table.totalAudio} audio file{table.totalAudio !== 1 ? 's' : ''}
+                        {table.totalNonAudio > 0 && (
+                          <span className="purge-confirm-other">{nonAudioSuffix(table.totalNonAudio)}</span>
+                        )}
+                      </div>
+                      <div className="purge-confirm-sub">
+                        {units.length} item{units.length !== 1 ? 's' : ''}
+                        {' · '}{table.totalDirs} director{table.totalDirs !== 1 ? 'ies' : 'y'}
+                        {' · '}~{formatSize(table.totalSize)}
+                      </div>
+                      <div className="purge-confirm-target">
+                        {isDelete
+                          ? <>will be sent to the <strong>Trash Bin</strong></>
+                          : <>will be moved to <strong>{mode.destinationDir}</strong></>}
+                      </div>
+                    </>
+                  )}
+                  {table.totalSlotClears > 0 && units.length > 0 && (
+                    <div className="purge-confirm-slots">
+                      {table.totalSlotClears} unused sample slot assignment{table.totalSlotClears !== 1 ? 's' : ''} will also be cleared
+                    </div>
+                  )}
+                  {units.length === 0 && (
+                    <div className="purge-confirm-sub">no audio files to remove</div>
                   )}
                 </div>
                 <div className="fix-done-actions">

@@ -569,16 +569,92 @@ pub fn clear_unused_slot_assignments(project_path: &str) -> Result<u32, String> 
     Ok(total as u32)
 }
 
-/// Non-mutating count of slots `clear_unused_slot_assignments` would clear -
-/// used by the frontend's purge review screen so the "Clear unused sample
-/// slot assignments" option's destructive scope is visible BEFORE the user
-/// executes anything, not just after (previously this only surfaced on the
-/// done screen via `PurgeResult::slots_cleared`). Shares
-/// `slots_eligible_for_clearing` with the real clearing function so preview
-/// and execute can never disagree on the count.
-pub fn count_slots_eligible_for_clearing(project_path: &str) -> Result<u32, String> {
+/// One slot that "Clear unused sample slot assignments" would empty, with
+/// enough detail for the review tables to list it as its own row.
+///
+/// The slot's sample file is only removed as well when it is in scope for
+/// the purge - a slot pointing into the Audio Pool has its assignment
+/// cleared while the file itself stays put, since pool files are shared
+/// across every project of the Set. Listing these makes that split visible
+/// instead of hiding it behind an aggregate count.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ClearableSlot {
+    /// "S4" / "F1" - same label convention as `PurgeFileEntry::slots`.
+    pub slot: String,
+    /// Absolute, lexically normalized path of the sample loaded in the slot.
+    pub path: String,
+    /// "Audio Pool" when the file lives outside the project directory,
+    /// otherwise the project's directory name - matching `PurgeUnit::origin`.
+    pub origin: String,
+    pub size: u64,
+}
+
+/// Every slot `clear_unused_slot_assignments` would clear, resolved to the
+/// file it currently holds. Shares `slots_eligible_for_clearing` with the
+/// mutating path, so what the review table lists and what actually gets
+/// cleared can never diverge.
+pub fn list_slots_to_clear(project_path: &str) -> Result<Vec<ClearableSlot>, String> {
+    use std::path::Path;
+
     let (static_to_clear, flex_to_clear) = slots_eligible_for_clearing(project_path)?;
-    Ok((static_to_clear.len() + flex_to_clear.len()) as u32)
+    if static_to_clear.is_empty() && flex_to_clear.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let project_dir = crate::project_reader::normalize_path_lexically(Path::new(project_path));
+    let project_file = if project_dir.join("project.work").exists() {
+        project_dir.join("project.work")
+    } else {
+        project_dir.join("project.strd")
+    };
+    let project_name = project_dir
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let raw_fields = crate::project_reader::read_raw_sample_fields(&project_file)?;
+
+    let mut out: Vec<ClearableSlot> = Vec::new();
+    for ((slot_type, slot_id), fields) in &raw_fields {
+        let upper = slot_type.to_uppercase();
+        let (prefix, eligible) = match upper.as_str() {
+            "STATIC" => ("S", static_to_clear.contains(slot_id)),
+            "FLEX" => ("F", flex_to_clear.contains(slot_id)),
+            _ => ("", false),
+        };
+        if !eligible {
+            continue;
+        }
+        let Some(path_value) = fields.get("PATH") else {
+            continue;
+        };
+        let resolved = crate::project_reader::normalize_path_lexically(
+            &project_dir.join(path_value.replace('\\', "/")),
+        );
+        let origin = if resolved.starts_with(&project_dir) {
+            project_name.clone()
+        } else {
+            "Audio Pool".to_string()
+        };
+        out.push(ClearableSlot {
+            slot: format!("{}{}", prefix, slot_id),
+            size: std::fs::metadata(&resolved).map(|m| m.len()).unwrap_or(0),
+            path: resolved.to_string_lossy().to_string(),
+            origin,
+        });
+    }
+
+    // Stable, human order: flex before static, then by slot number - the same
+    // ordering the Slot column sorts by.
+    out.sort_by(|a, b| {
+        let key = |s: &str| {
+            (
+                s.chars().next().unwrap_or(' '),
+                s[1..].parse::<u32>().unwrap_or(0),
+            )
+        };
+        key(&a.slot).cmp(&key(&b.slot))
+    });
+    Ok(out)
 }
 
 /// Clears unused slot assignments for each project in `project_paths`,
@@ -1538,6 +1614,74 @@ mod tests {
         assert_eq!(
             plan[0].path(),
             project_dir.join("orphan.wav").to_string_lossy()
+        );
+    }
+
+    /// The reported bug: a project whose unused slots all point into the
+    /// Audio Pool showed one row (its single local file) for a run that
+    /// clears many slots, because the tables only listed files being
+    /// removed. `list_slots_to_clear` is what makes those rows visible.
+    #[test]
+    fn list_slots_to_clear_reports_pool_slots_the_purge_plan_never_mentions() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let set_dir = temp.path();
+        let pool_dir = set_dir.join("AUDIO");
+        std::fs::create_dir_all(&pool_dir).unwrap();
+        std::fs::write(pool_dir.join("hihat.wav"), b"0123456789").unwrap();
+        let project_dir = set_dir.join("PROJ");
+        std::fs::create_dir(&project_dir).unwrap();
+        touch(&project_dir.join("local.wav"));
+        write_minimal_project_with_two_sample_blocks(
+            &project_dir,
+            ("FLEX", 1, "local.wav"),
+            ("STATIC", 4, "../AUDIO/hihat.wav"),
+        );
+
+        let slots = list_slots_to_clear(&project_dir.to_string_lossy()).unwrap();
+        assert_eq!(slots.len(), 2, "both loaded-but-untriggered slots qualify");
+
+        // Flex before static, matching the Slot column's ordering.
+        assert_eq!(slots[0].slot, "F1");
+        assert_eq!(
+            slots[0].origin, "PROJ",
+            "a project-local file keeps the project as its origin"
+        );
+        assert!(slots[0].path.ends_with("local.wav"));
+
+        assert_eq!(slots[1].slot, "S4");
+        assert_eq!(
+            slots[1].origin, "Audio Pool",
+            "resolved outside the project directory"
+        );
+        assert_eq!(
+            slots[1].size, 10,
+            "real on-disk size, for the row's Size cell"
+        );
+        assert!(!slots[1].path.contains(".."), "resolved, not left relative");
+
+        // The purge plan itself only ever contains the project-local file -
+        // the pool file is cleared from its slot but never removed.
+        let plan =
+            compute_project_unused_files(&project_dir.to_string_lossy(), true, true).unwrap();
+        assert_eq!(plan.len(), 1);
+        assert!(plan[0].path().ends_with("local.wav"));
+    }
+
+    #[test]
+    fn list_slots_to_clear_is_empty_when_every_loaded_slot_is_actually_used() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let project_dir = temp.path().join("PROJ");
+        std::fs::create_dir(&project_dir).unwrap();
+        touch(&project_dir.join("used.wav"));
+        write_minimal_project_with_sample_block(&project_dir, "STATIC", 1, "used.wav");
+        // Slot 1 on a default project is triggered by track 1's machine, so
+        // it has real usage and must never be offered for clearing.
+        let slots = list_slots_to_clear(&project_dir.to_string_lossy()).unwrap();
+        let eligible = slots_eligible_for_clearing(&project_dir.to_string_lossy()).unwrap();
+        assert_eq!(
+            slots.len(),
+            eligible.0.len() + eligible.1.len(),
+            "the list and the mutating path must always agree on which slots qualify"
         );
     }
 
@@ -2877,9 +3021,9 @@ mod tests {
             "an out-of-range slot must not be treated as purgeable by the preview path"
         );
 
-        let eligible = count_slots_eligible_for_clearing(&project_dir.to_string_lossy()).unwrap();
-        assert_eq!(
-            eligible, 0,
+        let eligible = list_slots_to_clear(&project_dir.to_string_lossy()).unwrap();
+        assert!(
+            eligible.is_empty(),
             "an out-of-range slot must not be treated as clearable either - the two paths must agree"
         );
     }

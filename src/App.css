@@ -5612,6 +5612,26 @@ th.col-usage .header-content .sort-indicator {
   color: var(--elektron-text-primary);
 }
 
+/* Action column: a clear-only row leaves its file on disk, so it must not
+   read like a removal. */
+.purge-action-cell {
+  font-size: 0.8rem;
+}
+
+.purge-action-clear-only {
+  color: var(--elektron-text-secondary);
+  font-style: italic;
+}
+
+/* Slot-clearing is a second, independent effect of a purge - shown next to
+   the unused-file count so its scope is visible before Execute, not only
+   inside the review modal. */
+.tools-fix-status-slots {
+  margin-top: 0.5rem;
+  font-size: 0.95rem;
+  color: var(--elektron-text-primary);
+}
+
 /* Non-audio files riding along inside a collapsed directory - real, but not
    part of the "unused samples" headline count, so it reads as an aside. */
 .tools-fix-status-other {

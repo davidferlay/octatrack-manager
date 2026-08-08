@@ -17,7 +17,7 @@ import {
 import { Version } from "../components/Version";
 import { AudioFileTable, audioKind } from "../components/AudioFileTable";
 import { FixPoolFilesModal, PoolIncompatibleListModal, type IncompatibleFile, type PoolFixResult, type CopyProgressEvent } from "../components/FixPoolFilesModal";
-import { PurgeFilesModal, purgeAudioFileCount, purgeNonAudioFileCount, PurgeUnusedListModal, type PurgeUnit } from "../components/PurgeFilesModal";
+import { PurgeFilesModal, purgeAudioFileCount, purgeNonAudioFileCount, PurgeUnusedListModal, type ClearableSlot, type PurgeUnit } from "../components/PurgeFilesModal";
 import { isUnderBackupsDir } from "../utils/purgeBackups";
 import { OverwriteModal } from "../components/OverwriteModal";
 import { TransferProgressPanel } from "../components/TransferProgressPanel";
@@ -390,7 +390,7 @@ export function AudioPoolPage() {
   // projects of set" and "Clear unused sample slot assignments" are on
   // (pool-only purges never clear slots). null otherwise, which
   // PurgeFilesModal treats as "don't show that line".
-  const [purgeSlotsToClear, setPurgeSlotsToClear] = useState<number | null>(null);
+  const [purgeSlotsToClear, setPurgeSlotsToClear] = useState<ClearableSlot[] | null>(null);
   // Total audio files each scope's scan walked - the "of N scanned"
   // denominator, kept per-scope so the include-all toggle needs no re-scan.
   const [purgeScanTotalPoolOnly, setPurgeScanTotalPoolOnly] = useState<number | null>(null);
@@ -491,11 +491,11 @@ export function AudioPoolPage() {
         setPurgeScanTotalAll((poolFiles?.length ?? 0) + projectFiles.reduce((sum, f) => sum + (f?.length ?? 0), 0));
       }).finally(markStepDone);
 
-      const perProjectSlotCounts = await Promise.all(poolSetProjects.map(p =>
-        invoke<number>('count_unused_slot_assignments', { projectPath: p.path }).catch(() => 0)
+      const perProjectSlots = await Promise.all(poolSetProjects.map(p =>
+        invoke<ClearableSlot[]>('list_unused_slot_assignments', { projectPath: p.path }).catch(() => [] as ClearableSlot[])
       ));
       markStepDone();
-      if (!cancelled) setPurgeSlotsToClear(perProjectSlotCounts.reduce((a, b) => a + b, 0));
+      if (!cancelled) setPurgeSlotsToClear(perProjectSlots.flat());
     })().catch((err) => {
       console.error('Error scanning pool unused files:', err);
       if (!cancelled) {
@@ -525,6 +525,13 @@ export function AudioPoolPage() {
   const purgeUnusedFileCount = purgeAudioFileCount(purgeUnits);
   // Non-audio files only ever ride along inside a collapsed directory unit.
   const purgeNonAudioCount = purgeNonAudioFileCount(purgeUnits);
+  // Independent of the unused-FILE count - see the same derivation in
+  // ToolsPanel: slots can be clearable while nothing is purgeable, and
+  // gating Execute on the file count alone made that case unreachable.
+  const purgeSlotList =
+    purgeIncludeAllProjects && purgeClearUnusedSlots ? (purgeSlotsToClear ?? []) : [];
+  const purgeSlotClearCount = purgeSlotList.length;
+  const purgeHasWork = purgeUnits.length > 0 || purgeSlotClearCount > 0;
 
   // Purge Audio Pool Samples: resolve the default Move-mode destination once,
   // the first time the operation is selected (never overwrites a user edit).
@@ -1820,32 +1827,42 @@ export function AudioPoolPage() {
                     <span className="loading-spinner-small"></span>
                     <span>Scanning Audio Pool{purgeIncludeAllProjects ? ' and set projects' : ''}... {purgeScanProgress}%</span>
                   </div>
-                ) : purgeUnits.length === 0 ? (
+                ) : !purgeHasWork ? (
                   <div className="tools-fix-status all-good">
                     <div className="tools-fix-status-count">0</div>
                     <div className="tools-fix-status-label">unused audio files - everything in scope is referenced</div>
                   </div>
                 ) : (
-                  <button
-                    className="tools-missing-files-summary"
-                    onClick={() => setShowPurgeListModal(true)}
-                    title="Click to view the unused files list"
-                  >
-                    <span className="tools-fix-status-count">{purgeUnusedFileCount}</span>
-                    {" "}unused audio file{purgeUnusedFileCount !== 1 ? "s" : ""}
-                    {purgeScanTotal !== null && (
-                      <span className="tools-fix-status-detail">{" - "}of {purgeScanTotal} scanned</span>
+                  <>
+                    {purgeUnits.length > 0 && (
+                      <button
+                        className="tools-missing-files-summary"
+                        onClick={() => setShowPurgeListModal(true)}
+                        title="Click to view the unused files list"
+                      >
+                        <span className="tools-fix-status-count">{purgeUnusedFileCount}</span>
+                        {" "}unused audio file{purgeUnusedFileCount !== 1 ? "s" : ""}
+                        {purgeScanTotal !== null && (
+                          <span className="tools-fix-status-detail">{" - "}of {purgeScanTotal} scanned</span>
+                        )}
+                        {/* The non-audio tail trails the scanned total: it is not part of
+                            what was scanned, just what rides along when the findings go. */}
+                        {purgeNonAudioCount > 0 && (
+                          <span className="tools-fix-status-other">{" + "}{purgeNonAudioCount} related file{purgeNonAudioCount !== 1 ? "s" : ""}</span>
+                        )}
+                      </button>
                     )}
-                    {/* The non-audio tail trails the scanned total: it is not part of
-                        what was scanned, just what rides along when the findings go. */}
-                    {purgeNonAudioCount > 0 && (
-                      <span className="tools-fix-status-other">{" + "}{purgeNonAudioCount} related file{purgeNonAudioCount !== 1 ? "s" : ""}</span>
+                    {purgeSlotClearCount > 0 && (
+                      <div className="tools-fix-status-slots" title="Slots with a sample loaded that no machine assignment or p-lock ever triggers. Their sample file is only removed too when it is in scope for this purge.">
+                        <span className="tools-fix-status-count">{purgeSlotClearCount}</span>
+                        {" "}unused sample slot assignment{purgeSlotClearCount !== 1 ? "s" : ""} to clear
+                      </div>
                     )}
-                  </button>
+                  </>
                 )}
               </div>
 
-              {purgeUnits.length > 0 && (
+              {purgeHasWork && (
                 <div className="tools-actions">
                   <button
                     className="tools-execute-btn"
@@ -2082,7 +2099,7 @@ export function AudioPoolPage() {
 
       {/* Unused Audio Pool Samples list (Tools tab status summary) */}
       {showPurgeListModal && (
-        <PurgeUnusedListModal units={purgeUnits} scope="pool" onClose={() => setShowPurgeListModal(false)} />
+        <PurgeUnusedListModal units={purgeUnits} scope="pool" slotsToClear={purgeSlotList} onClose={() => setShowPurgeListModal(false)} />
       )}
 
       {/* Purge Audio Pool Samples modal */}
@@ -2093,7 +2110,7 @@ export function AudioPoolPage() {
           units={purgeUnits}
           mode={purgeMode === 'delete' ? 'delete' : { destinationDir: purgeDestination }}
           skipReview={purgeMode === 'move' && !purgeReviewBeforeApply}
-          slotsToClear={purgeIncludeAllProjects && purgeClearUnusedSlots ? purgeSlotsToClear : null}
+          slotsToClear={purgeSlotList}
           onClose={() => setShowPurgeModal(false)}
           onPurged={() => {
             setPurgeRescanKey(k => k + 1);

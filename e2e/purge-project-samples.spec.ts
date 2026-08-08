@@ -536,6 +536,130 @@ test.describe('Purge Project Samples', () => {
     await expect(banner.locator('.purge-confirm-target')).toHaveText('will be moved to /home/testuser/Downloads')
   })
 
+  test('slots whose sample lives in the Audio Pool are listed as their own "Clear slot only" rows', async ({ page }) => {
+    await page.addInitScript(() => {
+      const internals = (window as any).__TAURI_INTERNALS__
+      const orig = internals.invoke
+      internals.invoke = async (cmd: string, args?: any) => {
+        if (cmd === 'list_unused_slot_assignments') {
+          return [
+            // Same project-local file the plan already removes - annotates
+            // that row rather than adding a second one.
+            { slot: 'F1', path: '/projects/TestProject/orphan.wav', origin: 'TestProject', size: 2048 },
+            // Pool files: cleared but never removed by a PROJECT purge.
+            { slot: 'S4', path: '/test/set/AUDIO/hihat4.wav', origin: 'Audio Pool', size: 1024 },
+            // Two slots holding the same file collapse into one row.
+            { slot: 'S9', path: '/test/set/AUDIO/hihat9.wav', origin: 'Audio Pool', size: 2048 },
+            { slot: 'S10', path: '/test/set/AUDIO/hihat9.wav', origin: 'Audio Pool', size: 2048 },
+          ]
+        }
+        return orig(cmd, args)
+      }
+    })
+
+    await openPurgeOperation(page)
+    await page.getByLabel('Clear unused sample slot assignments').check()
+    await expect(page.locator('.tools-fix-status-slots')).toContainText('4 unused sample slot assignments to clear')
+
+    await page.locator('.tools-missing-files-summary').click()
+    const listModal = page.locator('.missing-samples-list-modal')
+    const rows = listModal.locator('tbody tr')
+    // orphan.wav + hihat4 + hihat9 (S9/S10 merged) = 3 rows for 4 slots.
+    await expect(rows).toHaveCount(3)
+
+    const rowFor = (name: string) => rows.filter({ hasText: name })
+    await expect(rowFor('orphan.wav')).toContainText('F1')
+    await expect(rowFor('orphan.wav')).toContainText('Remove + clear slot')
+    await expect(rowFor('hihat4.wav')).toContainText('S4')
+    await expect(rowFor('hihat4.wav')).toContainText('Clear slot only')
+    await expect(rowFor('hihat4.wav')).toContainText('Audio Pool')
+    await expect(rowFor('hihat9.wav')).toContainText('S9, S10')
+    await expect(rowFor('hihat9.wav')).toContainText('Clear slot only')
+
+    // The pool files are NOT counted as removals - only orphan.wav leaves.
+    await expect(page.locator('.tools-missing-files-summary')).toContainText('1 unused audio file')
+  })
+
+  test('a project with no purgeable files but clearable slots can still be executed', async ({ page }) => {
+    await page.addInitScript(() => {
+      const internals = (window as any).__TAURI_INTERNALS__
+      const orig = internals.invoke
+      internals.invoke = async (cmd: string, args?: any) => {
+        // Nothing to purge: every unused slot points at an Audio Pool file,
+        // which a PROJECT purge never touches.
+        if (cmd === 'scan_project_unused_files') return []
+        if (cmd === 'list_unused_slot_assignments') {
+          return Array.from({ length: 9 }, (_, i) => ({
+            slot: `S${i + 4}`,
+            path: `/test/set/AUDIO/pool${i}.wav`,
+            origin: 'Audio Pool',
+            size: 1024,
+          }))
+        }
+        return orig(cmd, args)
+      }
+    })
+
+    await openPurgeOperation(page)
+    // Off by default - the slot clearing only happens when it is on.
+    await page.getByLabel('Clear unused sample slot assignments').check()
+
+    // The status must not claim everything is referenced - 9 slots hold a
+    // sample nothing triggers.
+    const status = page.locator('.tools-fix-status-panel')
+    await expect(status.locator('.tools-fix-status.all-good')).toHaveCount(0)
+    await expect(status.locator('.tools-fix-status-slots')).toContainText('9 unused sample slot assignments to clear')
+    // No unused files, so no file-list button to open.
+    await expect(status.locator('.tools-missing-files-summary')).toHaveCount(0)
+
+    // Execute used to be gated on the unused-FILE count, which made this
+    // whole case unreachable.
+    await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()
+
+    const modal = page.locator('.missing-samples-list-modal')
+    await expect(modal.getByText('Review planned changes')).toBeVisible()
+    // Slot clearing is the headline, not "0 audio files will be moved to ...".
+    const banner = modal.locator('.purge-confirm-banner')
+    await expect(banner.locator('.purge-confirm-headline')).toHaveText('9 sample slots to clear')
+    await expect(banner).toContainText('no audio files to remove')
+    await expect(banner.locator('.purge-confirm-target')).toHaveCount(0)
+
+    await modal.getByRole('button', { name: 'Apply Changes' }).click()
+    await expect.poll(async () => page.evaluate(() => (window as any).__purgeCalls.length)).toBe(1)
+    const calls = await page.evaluate(() => (window as any).__purgeCalls)
+    expect(calls[0].plan).toEqual([])
+    expect(calls[0].clearUnusedSlots).toBe(true)
+  })
+
+  test('turning off Clear unused sample slot assignments hides the slot line and re-gates Execute', async ({ page }) => {
+    await page.addInitScript(() => {
+      const internals = (window as any).__TAURI_INTERNALS__
+      const orig = internals.invoke
+      internals.invoke = async (cmd: string, args?: any) => {
+        if (cmd === 'scan_project_unused_files') return []
+        if (cmd === 'list_unused_slot_assignments') {
+          return Array.from({ length: 9 }, (_, i) => ({
+            slot: `S${i + 4}`,
+            path: `/test/set/AUDIO/pool${i}.wav`,
+            origin: 'Audio Pool',
+            size: 1024,
+          }))
+        }
+        return orig(cmd, args)
+      }
+    })
+
+    await openPurgeOperation(page)
+    await page.getByLabel('Clear unused sample slot assignments').check()
+    await expect(page.locator('.tools-fix-status-slots')).toBeVisible()
+
+    await page.getByLabel('Clear unused sample slot assignments').uncheck()
+    // Now there really is nothing to do.
+    await expect(page.locator('.tools-fix-status-slots')).toHaveCount(0)
+    await expect(page.locator('.tools-fix-status.all-good')).toBeVisible()
+    await expect(page.locator('.tools-execute-btn', { hasText: 'Execute' })).toHaveCount(0)
+  })
+
   test('the Slot column sorts by real slot number, not as text, keeping slot-less rows last', async ({ page }) => {
     await page.addInitScript(() => {
       const internals = (window as any).__TAURI_INTERNALS__

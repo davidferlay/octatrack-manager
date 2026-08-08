@@ -1294,18 +1294,19 @@ async fn purge_pool_files(
     .unwrap()
 }
 
-/// Non-mutating count of slots `clear_unused_slot_assignments` would clear
-/// for `project_path` - lets the purge review screen show the scope of the
-/// "Clear unused sample slot assignments" option's second, less obvious
-/// destructive effect (clearing loaded-but-untriggered slots) before the
-/// user executes anything.
+/// Non-mutating list of the slots `clear_unused_slot_assignments` would
+/// clear for `project_path`, each resolved to the file it holds. Lets the
+/// purge preview/review tables list every slot clearing as its own row -
+/// including the ones whose sample lives in the Audio Pool and therefore
+/// keeps its file - instead of hiding that second, less obvious destructive
+/// effect behind a single count.
 #[tauri::command]
-async fn count_unused_slot_assignments(project_path: String) -> Result<u32, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        purge::count_slots_eligible_for_clearing(&project_path)
-    })
-    .await
-    .unwrap()
+async fn list_unused_slot_assignments(
+    project_path: String,
+) -> Result<Vec<purge::ClearableSlot>, String> {
+    tauri::async_runtime::spawn_blocking(move || purge::list_slots_to_clear(&project_path))
+        .await
+        .unwrap()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1394,7 +1395,7 @@ pub fn run() {
             scan_pool_unused_files,
             purge_project_files,
             purge_pool_files,
-            count_unused_slot_assignments,
+            list_unused_slot_assignments,
             // Sample slot assignment
             assign_samples_to_slots,
             clear_sample_slots,
