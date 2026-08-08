@@ -21284,6 +21284,84 @@ mod tests {
     /// The fixture contains everything ot-tools-io normalizes away on a full rewrite
     /// (TRIGQUANTIZATION=-1, TRIM_BARSx100, fractional TEMPOx24, MIDI_CLOCK_SEND=2),
     /// so these tests prove the surgical write path preserves device data verbatim.
+    /// A bank taken from a real device, then given patterns that cycle
+    /// through all four Parts with a distinct machine slot per Part. The
+    /// shipped `real_device` fixture has every pattern on Part 1, so it could
+    /// not have caught the part-assignment bug that made every slot outside
+    /// Part 1 look untriggered.
+    mod multipart_fixture_tests {
+        use super::*;
+
+        fn setup_multipart_project() -> TempDir {
+            let dir = TempDir::new().unwrap();
+            let fixture_dir =
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/multipart");
+            fs::copy(
+                fixture_dir.join("project.work"),
+                dir.path().join("project.work"),
+            )
+            .unwrap();
+            fs::copy(
+                fixture_dir.join("bank01.work"),
+                dir.path().join("bank01.work"),
+            )
+            .unwrap();
+            dir
+        }
+
+        #[test]
+        fn every_part_of_the_fixture_reports_its_machine_as_audible() {
+            let project = setup_multipart_project();
+            let usage = compute_sample_usage(&project.path().to_string_lossy()).unwrap();
+
+            // Part N owns static slot 40+N, and every pattern trigs track 3.
+            for part in 0..4usize {
+                let entries = &usage.static_usage[40 + part];
+                assert!(
+                    entries
+                        .iter()
+                        .any(|e| e.audible && e.part == Some(part as u8) && e.track == 2),
+                    "Part {} machine should be audible, got {:?}",
+                    part + 1,
+                    entries
+                );
+            }
+        }
+
+        #[test]
+        fn the_fixture_bank_really_does_span_all_four_parts() {
+            let project = setup_multipart_project();
+            let raw = fs::read(project.path().join("bank01.work")).unwrap();
+            let parts = raw_part_bytes(&raw);
+            assert_eq!(
+                parts,
+                (0..16).map(|i| (i % 4) as u8).collect::<Vec<_>>(),
+                "patterns should cycle Part 1..4 - if this drifts the tests above prove nothing"
+            );
+        }
+
+        #[test]
+        fn reading_the_fixture_banks_surfaces_each_patterns_part() {
+            let project = setup_multipart_project();
+            let banks = read_project_banks(&project.path().to_string_lossy()).unwrap();
+            let patterns: Vec<_> = banks[0]
+                .parts
+                .iter()
+                .flat_map(|p| p.patterns.iter())
+                .collect();
+            for i in 0..16u8 {
+                let pattern = patterns.iter().find(|p| p.id == i).expect("pattern");
+                assert_eq!(
+                    pattern.part_assignment,
+                    i % 4,
+                    "pattern {} should report Part {}",
+                    i + 1,
+                    (i % 4) + 1
+                );
+            }
+        }
+    }
+
     mod real_device_fixture_tests {
         use super::*;
 
