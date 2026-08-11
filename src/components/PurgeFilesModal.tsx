@@ -28,7 +28,10 @@ export interface ClearableSlot {
   slot: string;
   path: string;
   origin: string;
-  size: number;
+  /** `null` when the file is not on disk at that path - a slot outlives its
+   * sample, and a project copied away from its Set leaves every
+   * `../AUDIO/...` slot dangling. */
+  size: number | null;
 }
 
 /** What a row's row will actually do. A slot whose sample lives in the Audio
@@ -161,6 +164,9 @@ interface PurgeRow {
   location: string;
   origin: string;
   size: number;
+  /** `false` when the file is not on disk, so Size shows a dash rather than
+   * "0 B" - which reads as a real zero-byte file. */
+  sizeKnown: boolean;
   slots: string[];
   format: string;
   action: PurgeAction;
@@ -316,6 +322,7 @@ export function usePurgeTable(
         location: dirName(unit.path),
         origin: unit.origin,
         size: unit.size,
+        sizeKnown: true,
         slots,
         format: unitFormat(unit),
         action: (slots.length > 0 ? 'remove+clear' : 'remove') as PurgeAction,
@@ -329,14 +336,15 @@ export function usePurgeTable(
           kind: 'File' as const,
           path: group[0].path,
           origin: group[0].origin,
-          size: group[0].size,
+          size: group[0].size ?? 0,
           slots: group.map(g => g.slot),
           sidecar: null,
         },
         name: baseName(group[0].path),
         location: dirName(group[0].path),
         origin: group[0].origin,
-        size: group[0].size,
+        size: group[0].size ?? 0,
+        sizeKnown: group[0].size !== null,
         slots: group.map(g => g.slot),
         format: 'Audio',
         action: 'clear-only' as PurgeAction,
@@ -481,10 +489,17 @@ export function usePurgeTable(
     () => rows.reduce((sum, r) => sum + 1 + (collapsedDirs.has(r.unit.path) ? 0 : r.children.length), 0),
     [rows, collapsedDirs],
   );
-  const totalRowCount = useMemo(
-    () => units.reduce((sum, u) => sum + 1 + unitChildFiles(u).length, 0),
-    [units],
-  );
+  const totalRowCount = useMemo(() => {
+    // Slot-only rows are rows too: counting just the plan units made a table
+    // showing three lines announce "Showing 3 of 1 items".
+    const plannedPaths = new Set(units.map(u => u.path));
+    const orphanSlotPaths = new Set(
+      slotsToClear.filter(s => !plannedPaths.has(s.path)).map(s => s.path),
+    );
+    return (
+      units.reduce((sum, u) => sum + 1 + unitChildFiles(u).length, 0) + orphanSlotPaths.size
+    );
+  }, [units, slotsToClear]);
   const totalAudio = useMemo(() => purgeAudioFileCount(units), [units]);
   const totalNonAudio = useMemo(() => purgeNonAudioFileCount(units), [units]);
 
@@ -506,7 +521,7 @@ export function usePurgeTable(
 
 export function purgeTableTsv(table: ReturnType<typeof usePurgeTable>): string {
   const header = ['Slot', 'Name', 'Format', 'Location', 'Origin', 'Action', 'Size'].join('\t');
-  const lines = table.rows.map(r => [r.slots.join(', '), r.name, r.format, r.location, r.origin, purgeActionLabel(r.action, table.actionVerb), formatSize(r.size)].join('\t'));
+  const lines = table.rows.map(r => [r.slots.join(', '), r.name, r.format, r.location, r.origin, purgeActionLabel(r.action, table.actionVerb), r.sizeKnown ? formatSize(r.size) : '-'].join('\t'));
   return [header, ...lines].join('\n');
 }
 
@@ -660,7 +675,11 @@ export function PurgeUnitsTable({ table }: { table: ReturnType<typeof usePurgeTa
                       case 'origin':
                         return <td key="origin">{r.origin}</td>;
                       case 'size':
-                        return <td key="size">{formatSize(r.size)}</td>;
+                        return (
+                          <td key="size" title={r.sizeKnown ? undefined : 'File not found on disk'}>
+                            {r.sizeKnown ? formatSize(r.size) : <span className="usage-none">—</span>}
+                          </td>
+                        );
                     }
                   })}
                 </tr>

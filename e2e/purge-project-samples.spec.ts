@@ -638,6 +638,41 @@ test.describe('Purge Project Samples', () => {
     expect(calls[0].clearUnusedSlots).toBe(true)
   })
 
+  test('a slot whose file is missing shows a dash, and slot rows are counted in the header', async ({ page }) => {
+    await page.addInitScript(() => {
+      const internals = (window as any).__TAURI_INTERNALS__
+      const orig = internals.invoke
+      internals.invoke = async (cmd: string, args?: any) => {
+        if (cmd === 'list_unused_slot_assignments') {
+          return [
+            // Copied away from its Set: the ../AUDIO file is not on disk.
+            { slot: 'S58', path: '/test/set/AUDIO/gone.wav', origin: 'Audio Pool', size: null },
+            { slot: 'S110', path: '/test/set/AUDIO/present.wav', origin: 'Audio Pool', size: 4096 },
+          ]
+        }
+        return orig(cmd, args)
+      }
+    })
+
+    await openPurgeOperation(page)
+    await page.getByRole('button', { name: 'Both' }).click()
+    await page.locator('.tools-missing-files-summary').click()
+
+    const listModal = page.locator('.missing-samples-list-modal')
+    const rows = listModal.locator('tbody tr')
+    // 1 plan unit + 2 slot-only rows.
+    await expect(rows).toHaveCount(3)
+    // The header used to count plan units only: "Showing 3 of 1 items".
+    await expect(listModal.locator('.missing-samples-header-count')).toHaveText('Showing 3 of 3 items')
+
+    const rowFor = (name: string) => rows.filter({ hasText: name })
+    // A missing file has no size to report - "0 B" read as a real empty file.
+    await expect(rowFor('gone.wav')).toContainText('—')
+    await expect(rowFor('gone.wav')).not.toContainText('0 B')
+    // Positive control: a slot whose file IS there still shows its size.
+    await expect(rowFor('present.wav')).toContainText('4.0 KB')
+  })
+
   test('slots whose sample lives in the Audio Pool are listed as their own "Clear slot only" rows', async ({ page }) => {
     await page.addInitScript(() => {
       const internals = (window as any).__TAURI_INTERNALS__

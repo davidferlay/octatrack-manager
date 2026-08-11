@@ -595,7 +595,11 @@ pub struct ClearableSlot {
     /// "Audio Pool" when the file lives outside the project directory,
     /// otherwise the project's directory name - matching `PurgeUnit::origin`.
     pub origin: String,
-    pub size: u64,
+    /// `None` when the file is not on disk at that path - a slot can outlive
+    /// its sample, and a project copied away from its Set leaves every
+    /// `../AUDIO/...` slot dangling. Reporting 0 there read as a zero-byte
+    /// file rather than "not found".
+    pub size: Option<u64>,
 }
 
 /// Every slot `clear_unused_slot_assignments` would clear, resolved to the
@@ -646,7 +650,7 @@ pub fn list_slots_to_clear(project_path: &str) -> Result<Vec<ClearableSlot>, Str
         };
         out.push(ClearableSlot {
             slot: format!("{}{}", prefix, slot_id),
-            size: std::fs::metadata(&resolved).map(|m| m.len()).unwrap_or(0),
+            size: std::fs::metadata(&resolved).map(|m| m.len()).ok(),
             path: resolved.to_string_lossy().to_string(),
             origin,
         });
@@ -1663,7 +1667,8 @@ mod tests {
             "resolved outside the project directory"
         );
         assert_eq!(
-            slots[1].size, 10,
+            slots[1].size,
+            Some(10),
             "real on-disk size, for the row's Size cell"
         );
         assert!(!slots[1].path.contains(".."), "resolved, not left relative");
@@ -1799,6 +1804,41 @@ mod tests {
             plan.iter().any(|u| u.path().ends_with("skull.wav")),
             "once the Master-track-only slot is cleared its file is unused, got {:?}",
             plan
+        );
+    }
+
+    /// A slot can point at a file that is not there - most commonly a project
+    /// copied away from its Set, leaving every `../AUDIO/...` slot dangling.
+    /// Reporting 0 made the review table show "0 B", which reads as a
+    /// zero-byte file rather than "not found".
+    #[test]
+    fn a_slot_pointing_at_a_missing_file_reports_an_unknown_size() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let set_dir = temp.path();
+        let pool_dir = set_dir.join("AUDIO");
+        std::fs::create_dir_all(&pool_dir).unwrap();
+        std::fs::write(pool_dir.join("present.wav"), b"0123456789").unwrap();
+        let project_dir = set_dir.join("PROJ");
+        std::fs::create_dir(&project_dir).unwrap();
+        write_minimal_project_with_two_sample_blocks(
+            &project_dir,
+            ("STATIC", 1, "../AUDIO/present.wav"),
+            ("STATIC", 2, "../AUDIO/gone.wav"),
+        );
+
+        let slots = list_slots_to_clear(&project_dir.to_string_lossy()).unwrap();
+        let by_slot = |name: &str| {
+            slots
+                .iter()
+                .find(|s| s.slot == name)
+                .unwrap_or_else(|| panic!("{} missing from {:?}", name, slots))
+        };
+        // Positive control: a file that IS on disk still reports its real size.
+        assert_eq!(by_slot("S1").size, Some(10));
+        assert_eq!(
+            by_slot("S2").size,
+            None,
+            "a slot whose file is gone has no size to report"
         );
     }
 
