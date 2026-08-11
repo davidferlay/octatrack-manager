@@ -1054,6 +1054,9 @@ pub fn compute_sample_usage(project_path: &str) -> Result<SampleSlotUsage, Strin
     let path = Path::new(project_path);
     let mut static_usage: Vec<Vec<SlotUsageEntry>> = vec![Vec::new(); 128];
     let mut flex_usage: Vec<Vec<SlotUsageEntry>> = vec![Vec::new(); 128];
+    // Track 8 plays no sample when it is the Master track, so its leftover
+    // machine bytes must not be reported as usage.
+    let skip_master = master_track_enabled(path);
 
     for bank_idx in 0..16u8 {
         let bank_num = bank_idx + 1;
@@ -1087,6 +1090,9 @@ pub fn compute_sample_usage(project_path: &str) -> Result<SampleSlotUsage, Strin
         // Machine slot assignments (one entry per bank/part/track).
         for (part_id, part) in bank.parts.unsaved.0.iter().enumerate() {
             for t in 0..8 {
+                if skip_master && t == MASTER_TRACK_INDEX {
+                    continue;
+                }
                 let slot = &part.audio_track_machine_slots[t];
                 let machine_type = part.audio_track_machine_types[t];
                 let (pool, slot_id) = match machine_type {
@@ -1120,6 +1126,9 @@ pub fn compute_sample_usage(project_path: &str) -> Result<SampleSlotUsage, Strin
         for (p_idx, pattern) in bank.patterns.0.iter().enumerate() {
             let part = &bank.parts.unsaved.0[(pattern.part_assignment as usize).min(3)];
             for (t, track) in pattern.audio_track_trigs.0.iter().enumerate() {
+                if skip_master && t == MASTER_TRACK_INDEX {
+                    continue;
+                }
                 let pool = match part.audio_track_machine_types[t] {
                     0 => &mut static_usage,
                     1 => &mut flex_usage,
@@ -4180,6 +4189,32 @@ pub fn search_directory(
 /// This bypasses ot-tools-io parsing to preserve original values like TRIGQUANTIZATION=-1.
 pub(crate) type RawSampleFieldsMap =
     std::collections::HashMap<(String, u16), std::collections::HashMap<String, String>>;
+
+/// Index of the Master track. When the project's `MASTER_TRACK` setting is
+/// on, track 8 processes the main output and cannot play a sample slot at all.
+const MASTER_TRACK_INDEX: usize = 7;
+
+/// Whether track 8 is configured as the project's Master track.
+///
+/// A Master track has no sample machine, but the bytes where a machine's slot
+/// would live keep whatever they last held - so reading them reports usage
+/// that does not exist. One reporter saw S10 "referenced by T8 on all parts of
+/// bank G" while the device showed T8 as Master with no assignment at all.
+///
+/// Absent or unreadable setting is treated as "not master", matching the
+/// device default and keeping the slot reported rather than silently dropped.
+fn master_track_enabled(project_path: &Path) -> bool {
+    let project_file = if project_path.join("project.work").exists() {
+        project_path.join("project.work")
+    } else {
+        project_path.join("project.strd")
+    };
+    let Ok(raw) = std::fs::read(&project_file) else {
+        return false;
+    };
+    let (decoded, _, _) = encoding_rs::WINDOWS_1258.decode(&raw);
+    decoded.lines().any(|l| l.trim() == "MASTER_TRACK=1")
+}
 
 pub(crate) fn read_raw_sample_fields(
     project_file_path: &Path,
@@ -8752,6 +8787,189 @@ mod tests {
             assert!(entries[0].audible);
             assert_eq!(entries[0].bank, 0);
             assert_eq!(entries[0].track, 3);
+        }
+
+        /// Writes `MASTER_TRACK=<n>` into a test project, replacing any
+        /// existing line. Returns the project so it can be chained.
+        fn set_master_track(project: &TestProject, value: Option<u8>) {
+            let project_file = Path::new(&project.path).join("project.work");
+            let raw = fs::read(&project_file).unwrap();
+            let (decoded, _, _) = encoding_rs::WINDOWS_1258.decode(&raw);
+            let mut content: String = decoded
+                .lines()
+                .filter(|l| !l.trim().starts_with("MASTER_TRACK="))
+                .map(|l| format!("{}\r\n", l))
+                .collect();
+            if let Some(v) = value {
+                content.push_str(&format!("MASTER_TRACK={}\r\n", v));
+            }
+            let (encoded, _, _) = encoding_rs::WINDOWS_1258.encode(&content);
+            fs::write(&project_file, &*encoded).unwrap();
+        }
+
+        /// A sample lock on the Master track cannot select a sample either -
+        /// the track has no sample machine to play it through.
+        #[test]
+        fn a_sample_lock_on_the_master_track_is_ignored() {
+            let build = || {
+                TestProject::with_modified_bank(0, |bank| {
+                    bank.parts.unsaved.0[0].audio_track_machine_types[7] = 1; // flex
+                    bank.patterns.0[0].part_assignment = 0;
+                    bank.patterns.0[0].scale.master_len = 16;
+                    bank.patterns.0[0].audio_track_trigs.0[7].plocks.0[0].flex_slot_id = 12;
+                })
+            };
+
+            // Positive control: the lock is real usage on a normal track.
+            let normal = build();
+            set_master_track(&normal, Some(0));
+            assert!(
+                compute_sample_usage(&normal.path).unwrap().flex_usage[12]
+                    .iter()
+                    .any(|e| e.kind == "lock" && e.track == 7),
+                "with MASTER_TRACK off a T8 sample lock counts"
+            );
+
+            let master = build();
+            set_master_track(&master, Some(1));
+            assert!(
+                compute_sample_usage(&master.path).unwrap().flex_usage[12]
+                    .iter()
+                    .all(|e| e.track != 7),
+                "a lock on the Master track selects no sample"
+            );
+        }
+
+        /// `compute_pool_usage` delegates to `compute_sample_usage`, so a pool
+        /// file whose only reference is the Master track must not look used
+        /// Set-wide either - otherwise Purge Audio Pool Samples would keep it
+        /// forever.
+        #[test]
+        fn a_pool_file_referenced_only_by_the_master_track_is_not_pool_usage() {
+            let temp = TempDir::new().unwrap();
+            let pool = temp.path().join("AUDIO");
+            fs::create_dir_all(&pool).unwrap();
+            fs::write(pool.join("skull.wav"), b"x").unwrap();
+
+            let build = |master: u8| {
+                let project_dir = temp.path().join(format!("PROJ{}", master));
+                fs::create_dir_all(&project_dir).unwrap();
+                let src = TestProject::with_modified_bank(0, |bank| {
+                    bank.parts.unsaved.0[0].audio_track_machine_types[7] = 0;
+                    bank.parts.unsaved.0[0].audio_track_machine_slots[7].static_slot_id = 9;
+                    bank.patterns.0[0].part_assignment = 0;
+                    bank.patterns.0[0].audio_track_trigs.0[7].trig_masks.trigger =
+                        [0, 1, 0, 0, 0, 0, 0, 0];
+                });
+                for entry in fs::read_dir(&src.path).unwrap().flatten() {
+                    fs::copy(entry.path(), project_dir.join(entry.file_name())).unwrap();
+                }
+                // Slot 10 loads the pool file, and MASTER_TRACK is set.
+                let project_file = project_dir.join("project.work");
+                let raw = fs::read(&project_file).unwrap();
+                let (decoded, _, _) = encoding_rs::WINDOWS_1258.decode(&raw);
+                let mut content: String = decoded
+                    .lines()
+                    .filter(|l| !l.trim().starts_with("MASTER_TRACK="))
+                    .map(|l| format!("{}\r\n", l))
+                    .collect();
+                content.push_str(&format!("MASTER_TRACK={}\r\n", master));
+                content.push_str(
+                    "[SAMPLE]\r\nTYPE=STATIC\r\nSLOT=010\r\nPATH=../AUDIO/skull.wav\r\n[/SAMPLE]\r\n",
+                );
+                let (encoded, _, _) = encoding_rs::WINDOWS_1258.encode(&content);
+                fs::write(&project_file, &*encoded).unwrap();
+                project_dir
+            };
+
+            build(0);
+            let key = pool_usage_key(&normalize_path_lexically(&pool.join("skull.wav")));
+            let usage = compute_pool_usage(&pool.to_string_lossy()).unwrap();
+            assert!(
+                usage.get(&key).is_some_and(|e| e.iter().any(|x| x.audible)),
+                "positive control: an ordinary trigged T8 makes the pool file used"
+            );
+
+            build(1);
+            fs::remove_dir_all(temp.path().join("PROJ0")).unwrap();
+            let usage = compute_pool_usage(&pool.to_string_lossy()).unwrap();
+            assert!(
+                usage.get(&key).is_none_or(|e| e.iter().all(|x| !x.audible)),
+                "the Master track plays no sample, so it is not pool usage: {:?}",
+                usage.get(&key)
+            );
+        }
+
+        /// The setting is absent on older/default projects - that must mean
+        /// "not master", so T8 keeps being reported as an ordinary track.
+        #[test]
+        fn an_absent_master_track_setting_leaves_track_8_as_a_normal_track() {
+            let project = TestProject::with_modified_bank(0, |bank| {
+                bank.parts.unsaved.0[0].audio_track_machine_types[7] = 0;
+                bank.parts.unsaved.0[0].audio_track_machine_slots[7].static_slot_id = 9;
+                bank.patterns.0[0].part_assignment = 0;
+                bank.patterns.0[0].audio_track_trigs.0[7].trig_masks.trigger =
+                    [0, 1, 0, 0, 0, 0, 0, 0];
+            });
+            set_master_track(&project, None);
+
+            assert!(!master_track_enabled(Path::new(&project.path)));
+            assert!(
+                compute_sample_usage(&project.path).unwrap().static_usage[9]
+                    .iter()
+                    .any(|e| e.track == 7 && e.audible),
+                "without the setting, T8 is an ordinary sample track"
+            );
+        }
+
+        /// Regression: a reporter saw S10 listed as "referenced by T8 on all
+        /// parts of bank G" while their device had T8 set as the Master track,
+        /// with no sample assigned to it at all. A Master track cannot play a
+        /// slot, but the bytes where its machine's slot would live keep
+        /// whatever they last held.
+        #[test]
+        fn track_8_is_ignored_when_it_is_the_master_track() {
+            let make = |master: bool| {
+                let project = TestProject::with_modified_bank(0, |bank| {
+                    // T8 carries a leftover assignment and a trigged pattern -
+                    // the strongest case for it being reported as real usage.
+                    let part = &mut bank.parts.unsaved.0[0];
+                    part.audio_track_machine_types[7] = 0; // static
+                    part.audio_track_machine_slots[7].static_slot_id = 9; // S10
+                    bank.patterns.0[0].part_assignment = 0;
+                    bank.patterns.0[0].audio_track_trigs.0[7].trig_masks.trigger =
+                        [0, 1, 0, 0, 0, 0, 0, 0];
+                });
+                let project_file = Path::new(&project.path).join("project.work");
+                let raw = fs::read(&project_file).unwrap();
+                let (decoded, _, _) = encoding_rs::WINDOWS_1258.decode(&raw);
+                let content = decoded.into_owned().replace("MASTER_TRACK=0", "").replace(
+                    "[SETTINGS]\r\n",
+                    &format!("[SETTINGS]\r\nMASTER_TRACK={}\r\n", u8::from(master)),
+                );
+                let (encoded, _, _) = encoding_rs::WINDOWS_1258.encode(&content);
+                fs::write(&project_file, &*encoded).unwrap();
+                project
+            };
+
+            // Positive control first: with the Master track off, T8 is normal
+            // usage - so the assertion below cannot pass just because the
+            // setup never produced an entry.
+            let normal = make(false);
+            assert!(
+                compute_sample_usage(&normal.path).unwrap().static_usage[9]
+                    .iter()
+                    .any(|e| e.track == 7 && e.audible),
+                "with MASTER_TRACK off, a trigged T8 machine is real usage"
+            );
+
+            let master = make(true);
+            assert!(
+                compute_sample_usage(&master.path).unwrap().static_usage[9]
+                    .iter()
+                    .all(|e| e.track != 7),
+                "T8 as Master track plays no sample slot, so it is not usage"
+            );
         }
 
         /// Regression: a user reported a Static slot shown as "referenced but

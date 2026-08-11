@@ -1723,6 +1723,85 @@ mod tests {
         );
     }
 
+    /// Sets `MASTER_TRACK=<n>` on a minimal test project.
+    fn set_master_track(project_dir: &std::path::Path, value: u8) {
+        let project_file = project_dir.join("project.work");
+        let mut content = std::fs::read_to_string(&project_file).unwrap();
+        content.push_str(&format!("MASTER_TRACK={}\r\n", value));
+        std::fs::write(&project_file, content).unwrap();
+    }
+
+    /// Builds a project whose only reference to S10 is a trigged machine on
+    /// track 8 - the track that becomes the Master track.
+    fn project_referencing_slot_10_from_track_8() -> tempfile::TempDir {
+        let temp = tempfile::TempDir::new().unwrap();
+        let project_dir = temp.path().join("PROJ");
+        std::fs::create_dir(&project_dir).unwrap();
+        touch(&project_dir.join("skull.wav"));
+        write_minimal_project_with_sample_block(&project_dir, "STATIC", 10, "skull.wav");
+
+        use ot_tools_io::{BankFile, OctatrackFileIO};
+        let bank_path = project_dir.join("bank01.work");
+        let mut bank = BankFile::from_data_file(&bank_path).unwrap();
+        bank.parts.unsaved.0[0].audio_track_machine_types[7] = 0; // static
+        bank.parts.unsaved.0[0].audio_track_machine_slots[7].static_slot_id = 9; // S10
+        bank.patterns.0[0].part_assignment = 0;
+        bank.patterns.0[0].audio_track_trigs.0[7].trig_masks.trigger = [0, 1, 0, 0, 0, 0, 0, 0];
+        bank.to_data_file(&bank_path).unwrap();
+        temp
+    }
+
+    /// A slot whose only reference is the Master track is not really in use,
+    /// so it must be clearable - and its file purgeable once cleared.
+    #[test]
+    fn a_slot_referenced_only_by_the_master_track_is_clearable() {
+        // Positive control: as an ordinary track, T8 protects the slot.
+        let normal = project_referencing_slot_10_from_track_8();
+        let normal_dir = normal.path().join("PROJ");
+        set_master_track(&normal_dir, 0);
+        let slots = list_slots_to_clear(&normal_dir.to_string_lossy()).unwrap();
+        assert!(
+            !slots.iter().any(|s| s.slot == "S10"),
+            "a trigged ordinary T8 still protects S10, got {:?}",
+            slots
+        );
+
+        let master = project_referencing_slot_10_from_track_8();
+        let master_dir = master.path().join("PROJ");
+        set_master_track(&master_dir, 1);
+        let slots = list_slots_to_clear(&master_dir.to_string_lossy()).unwrap();
+        assert!(
+            slots.iter().any(|s| s.slot == "S10"),
+            "the Master track plays no sample, so S10 is clearable, got {:?}",
+            slots
+        );
+    }
+
+    /// And the file behind it becomes purgeable in the simulated-clear preview.
+    #[test]
+    fn a_file_held_only_by_the_master_track_becomes_purgeable_when_slots_are_cleared() {
+        let master = project_referencing_slot_10_from_track_8();
+        let dir = master.path().join("PROJ");
+        set_master_track(&dir, 1);
+        let path = dir.to_string_lossy().to_string();
+
+        // Without simulating the clear the slot still loads the file, so it
+        // stays put - this is what stops the assertion below being trivial.
+        assert!(
+            compute_project_unused_files(&path, true, false)
+                .unwrap()
+                .is_empty(),
+            "a loaded slot keeps its file until the slot is cleared"
+        );
+
+        let plan = compute_project_unused_files(&path, true, true).unwrap();
+        assert!(
+            plan.iter().any(|u| u.path().ends_with("skull.wav")),
+            "once the Master-track-only slot is cleared its file is unused, got {:?}",
+            plan
+        );
+    }
+
     /// The flip side: a machine that IS trigged protects its slot.
     #[test]
     fn a_slot_whose_machine_is_actually_trigged_is_not_clearable() {
