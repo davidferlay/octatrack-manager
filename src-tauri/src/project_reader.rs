@@ -9632,6 +9632,57 @@ mod tests {
             );
         }
 
+        /// A user asked: with the same project as source and destination,
+        /// copy C -> A, then A -> H. Does H get the original A, or the C
+        /// content that landed in A a moment earlier?
+        ///
+        /// Each copy re-reads the source bank from disk when it runs, so the
+        /// second copy sees the first one's result. H ends up with C.
+        #[test]
+        fn back_to_back_copies_in_one_project_see_the_previous_copys_result() {
+            let project = TestProject::new();
+            let bank_path = |n: u8| Path::new(&project.path).join(format!("bank{:02}.work", n));
+            let stamp = |n: u8, name: &[u8; 7]| {
+                let mut bank = BankFile::from_data_file(&bank_path(n)).unwrap();
+                bank.part_names[0] = *name;
+                bank.checksum = bank.calculate_checksum().unwrap();
+                bank.to_data_file(&bank_path(n)).unwrap();
+            };
+            let name_of = |n: u8| BankFile::from_data_file(&bank_path(n)).unwrap().part_names[0];
+
+            stamp(1, b"BANK_A0"); // A
+            stamp(3, b"BANK_C0"); // C
+
+            let copy = |from: u8, to: u8| {
+                copy_bank(
+                    &project.path,
+                    from,
+                    &project.path,
+                    &[to],
+                    false,
+                    "referenced",
+                    "keep",
+                    "same",
+                    false,
+                    &[],
+                )
+                .unwrap();
+            };
+
+            copy(2, 0); // C -> A
+            assert_eq!(name_of(1), *b"BANK_C0", "A now holds C");
+
+            copy(0, 7); // A -> H
+            assert_eq!(
+                name_of(8),
+                *b"BANK_C0",
+                "H gets what A holds NOW (C), not the original A - each copy \
+                 re-reads the source from disk"
+            );
+            // And the original A content is gone, as the first copy overwrote it.
+            assert_ne!(name_of(8), *b"BANK_A0");
+        }
+
         #[test]
         fn test_copy_bank_to_all_16_banks() {
             // CB-13: Copy one bank to all 16 banks (including source bank)
