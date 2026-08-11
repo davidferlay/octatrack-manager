@@ -56,7 +56,7 @@ The first option field decides what the run actually does:
 
 Options that no longer apply are hidden - a slots-only run shows no **Delete/Move** choice, no destination folder and no **Exclude backups/ directory**.
 
-Slots whose sample is never actually heard get their assignment cleared entirely, so the slot is reset and ready for another sample. That covers both a slot nothing references at all and a slot whose machine sits on a track no pattern ever trigs - the same state the Usage column labels "referenced in N places but not triggered". A slot with a green "played in N places" badge is never touched.
+Slots that have a file loaded but are never triggered by any machine assignment or p-lock get their assignment cleared entirely, so the slot is reset and ready for another sample. A machine assigned on a track that no pattern trigs counts as never triggered - the state the Usage column labels "referenced but not triggered".
 
 Clearing a slot can also free the file it held, when that slot was the file's only reference. This is why the unused-file count grows when you switch from **Unused audio files** to **Both**: files held only by a slot that never triggers them are not unused until that slot is cleared. The status line attributes the difference, for example _"534 unused audio files to purge (105 freed by clearing slots)"_. A slot pointing at an **Audio Pool** file is cleared without its file being touched - pool files are shared across the Set, so removing those is the job of **Purge Audio Pool Samples**.
 

@@ -227,7 +227,9 @@ test.describe('Purge Audio Pool Samples', () => {
     await expect(summary).toContainText('3')
     // Real total from the recursive audio listing (the pool holds kick.wav),
     // with the related-file tail (cover.jpg) after it.
-    await expect(summary).toHaveText(/3 unused audio files to purge - of 1 scanned in Audio Pool directory \+ 1 related file/)
+    await expect(summary).toContainText('3 unused audio files to purge')
+    await expect(summary).toContainText('+ 1 related file')
+    await expect(summary).toContainText('1 file scanned in total in Audio Pool directory')
 
     await summary.click()
     const listModal = page.locator('.missing-samples-list-modal')

@@ -148,3 +148,4 @@
 | **Home Page Scroll Position** | | | | |
 | PM115 | Navigation | Scroll survives a project round trip | On the home page, scroll down far enough that the top of the grid is off-screen, open any project, then click "Back" | The home page reopens scrolled to the same position (not jumped back to the top) |
 | PM116 | Navigation | Scroll survives an Audio Pool round trip | Scroll down on the home page, click a Set's Audio Pool card, then click "Back" on the Audio Pool page | The home page reopens at the same scroll position |
+| PM-BK1 | Project list | Backups are not listed as projects | Use a folder containing projects that have a `backups/` directory created by the app (Fix Missing Samples, Copy Bank, Purge, ...) | The "Individual Projects" section lists only the real projects. No `<timestamp>_<operation>` backup restore point appears, even though each contains a `project.work` |

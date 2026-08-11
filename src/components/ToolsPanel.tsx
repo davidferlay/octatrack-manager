@@ -3554,9 +3554,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                         {" "}({purgeFreedBySlotClearing} freed by clearing slots)
                       </span>
                     )}
-                    {purgeScanTotal !== null && (
-                      <span className="tools-fix-status-detail">{" - "}of {purgeScanTotal} scanned in project directory</span>
-                    )}
                     {/* The non-audio tail trails the scanned total: it is not part of
                         what was scanned, just what rides along when the findings go. */}
                     {purgeNonAudioCount > 0 && (
@@ -3570,6 +3567,17 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     <span className="tools-fix-status-count">{purgeSlotClearCount}</span>
                     {" "}unused sample slot assignment{purgeSlotClearCount !== 1 ? "s" : ""} to clear
                   </span>
+                )}
+                {/* The scanned total is what was looked AT, not part of what will
+                    be purged - it reads as a qualifier of the count above when
+                    tacked onto the same line. */}
+                {purgesFiles && purgeScanTotal !== null && (
+                  <>
+                    <br />
+                    <span className="tools-fix-status-detail">
+                      {purgeScanTotal} file{purgeScanTotal !== 1 ? "s" : ""} scanned in total in project directory
+                    </span>
+                  </>
                 )}
               </button>
             )}

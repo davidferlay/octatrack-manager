@@ -183,6 +183,14 @@ pub(crate) fn scan_for_projects(set_path: &Path) -> Vec<OctatrackProject> {
 }
 
 /// Scans a location for Sets and individual projects
+/// Backups this app writes live in `<project>/backups/<timestamp>_<operation>/`
+/// and hold a copy of `project.work`, so they look exactly like a project to
+/// the scanner. They are restore points, not projects the user works in, and
+/// listing them buries the real projects.
+fn is_backups_dir(path: &Path) -> bool {
+    path.file_name().and_then(|n| n.to_str()) == Some("backups")
+}
+
 fn scan_for_sets(
     location_path: &Path,
     max_depth: usize,
@@ -195,6 +203,7 @@ fn scan_for_sets(
     for entry in WalkDir::new(location_path)
         .max_depth(max_depth)
         .into_iter()
+        .filter_entry(|e| !is_backups_dir(e.path()))
         .filter_map(|e| e.ok())
     {
         let path = entry.path();
@@ -230,6 +239,7 @@ fn scan_for_sets(
     for entry in WalkDir::new(location_path)
         .max_depth(max_depth)
         .into_iter()
+        .filter_entry(|e| !is_backups_dir(e.path()))
         .filter_map(|e| e.ok())
     {
         let path = entry.path();
@@ -471,6 +481,60 @@ mod tests {
     use super::*;
     use std::fs;
     use tempfile::TempDir;
+
+    /// The app writes restore points to `<project>/backups/<stamp>_<op>/`,
+    /// each holding a copy of `project.work`. Those directories look exactly
+    /// like projects to the scanner, and used to be listed as such - 15 of the
+    /// 87 entries in one real Downloads folder were backups.
+    #[test]
+    fn backup_directories_are_not_listed_as_projects() {
+        let temp = TempDir::new().unwrap();
+        let project = temp.path().join("MyProject");
+        fs::create_dir_all(&project).unwrap();
+        fs::write(project.join("project.work"), b"x").unwrap();
+        fs::write(project.join("bank01.work"), b"x").unwrap();
+
+        let backup = project
+            .join("backups")
+            .join("2026-08-09_12-00-00_copy_bank");
+        fs::create_dir_all(&backup).unwrap();
+        fs::write(backup.join("project.work"), b"x").unwrap();
+
+        let result = scan_directory(&temp.path().to_string_lossy());
+
+        // Positive control: the real project IS found, so the assertion below
+        // cannot pass just because the scan returned nothing.
+        assert!(
+            result
+                .standalone_projects
+                .iter()
+                .any(|p| p.name == "MyProject"),
+            "the project itself must still be listed, got {:?}",
+            result.standalone_projects
+        );
+        assert!(
+            !result
+                .standalone_projects
+                .iter()
+                .any(|p| p.path.contains("backups")),
+            "backup restore points must not be listed as projects, got {:?}",
+            result.standalone_projects
+        );
+    }
+
+    /// A directory genuinely named "backups" that the user stores projects in
+    /// is still pruned - that is the deliberate trade-off, and this pins it so
+    /// the behaviour is a decision rather than an accident.
+    #[test]
+    fn a_directory_named_backups_is_pruned_wholesale() {
+        let temp = TempDir::new().unwrap();
+        let inside = temp.path().join("backups").join("SomeProject");
+        fs::create_dir_all(&inside).unwrap();
+        fs::write(inside.join("project.work"), b"x").unwrap();
+
+        let result = scan_directory(&temp.path().to_string_lossy());
+        assert!(result.standalone_projects.is_empty());
+    }
 
     // Helper to create an Octatrack project structure
     fn create_project(path: &Path, name: &str) -> std::path::PathBuf {

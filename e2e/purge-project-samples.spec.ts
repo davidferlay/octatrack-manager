@@ -311,7 +311,10 @@ test.describe('Purge Project Samples', () => {
     // Real total from the recursive audio listing, not the unused count.
     // The related-file tail trails it: cover.jpg inside the directory plus
     // orphan.wav's own .ot sidecar.
-    await expect(summary).toHaveText(/3 unused audio files to purge - of 3 scanned in project directory \+ 2 related files/)
+    await expect(summary).toContainText('3 unused audio files to purge')
+    await expect(summary).toContainText('+ 2 related files')
+    // The scanned total is its own line, not a qualifier of the count above.
+    await expect(summary).toContainText('3 files scanned in total in project directory')
 
     await summary.click()
     const listModal = page.locator('.missing-samples-list-modal')
