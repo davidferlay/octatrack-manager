@@ -308,19 +308,28 @@ fn build_purge_plan(
     units
 }
 
-/// Whether a slot's usage entries represent real usage (a machine
-/// assignment or p-lock actually referencing it) as opposed to being merely
-/// loaded-but-untriggered. Shared by `compute_project_unused_files`
-/// (deciding whether a file is still referenced) and
-/// `slots_eligible_for_clearing` (deciding whether a loaded slot may be
-/// cleared) so the two questions - "is this file still used?" and "is this
-/// slot still used?" - can never disagree, including on the `None` case
-/// (slot id outside 1..=128, or a slot TYPE other than STATIC/FLEX):
-/// treated conservatively as "has real usage", so an unrecognized slot is
-/// never treated as purgeable/clearable by either path.
+/// Whether a slot is actually heard: at least one of its usage entries is
+/// audible. Shared by `compute_project_unused_files` (deciding whether a file
+/// is still referenced) and `slots_eligible_for_clearing` (deciding whether a
+/// loaded slot may be cleared) so the two questions - "is this file still
+/// used?" and "is this slot still used?" - can never disagree.
+///
+/// A machine assignment on a track that no pattern ever trigs is NOT real
+/// usage: the sample can never sound through it. That is exactly the state
+/// the Usage column labels "referenced in N places but not triggered", and
+/// what "Clear unused sample slot assignments" exists to tidy up. Counting
+/// any entry at all - as this used to - made such a slot permanently
+/// unclearable while the UI kept calling it untriggered.
+///
+/// Sample locks are always audible, so this only ever relaxes the
+/// machine-assignment case.
+///
+/// The `None` case (slot id outside 1..=128, or a slot TYPE other than
+/// STATIC/FLEX) stays conservative - treated as real usage, so an
+/// unrecognized slot is never purged or cleared by either path.
 fn slot_has_real_usage(slot_entries: Option<&Vec<crate::project_reader::SlotUsageEntry>>) -> bool {
     match slot_entries {
-        Some(entries) => !entries.is_empty(),
+        Some(entries) => entries.iter().any(|e| e.audible),
         None => true,
     }
 }
@@ -1665,6 +1674,79 @@ mod tests {
             compute_project_unused_files(&project_dir.to_string_lossy(), true, true).unwrap();
         assert_eq!(plan.len(), 1);
         assert!(plan[0].path().ends_with("local.wav"));
+    }
+
+    /// Reported case: S10 `skull.wav` showed "referenced in 4 places but not
+    /// triggered" in the Usage column, yet Purge reported "0 unused sample
+    /// slots - every loaded slot is triggered". A machine assignment on a
+    /// track nothing trigs used to count as real usage, so the two features
+    /// disagreed about the very same slot.
+    #[test]
+    fn a_slot_referenced_only_by_never_trigged_machines_is_clearable() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let project_dir = temp.path().join("PROJ");
+        std::fs::create_dir(&project_dir).unwrap();
+        touch(&project_dir.join("skull.wav"));
+        write_minimal_project_with_sample_block(&project_dir, "STATIC", 10, "skull.wav");
+
+        // Every part points track 8 at the slot, but no pattern trigs track 8.
+        let bank_path = project_dir.join("bank01.work");
+        use ot_tools_io::{BankFile, OctatrackFileIO};
+        let mut bank = BankFile::from_data_file(&bank_path).unwrap();
+        for part in bank.parts.unsaved.0.iter_mut() {
+            part.audio_track_machine_types[7] = 0; // static
+                                                   // The machine's slot byte is 0-based (byte 9 = S10), while the
+                                                   // project file's SLOT= field is 1-based. Getting these mixed up
+                                                   // silently points the two halves of the test at different slots.
+            part.audio_track_machine_slots[7].static_slot_id = 9;
+        }
+        for part in bank.parts.saved.0.iter_mut() {
+            part.audio_track_machine_types[7] = 0;
+            part.audio_track_machine_slots[7].static_slot_id = 9;
+        }
+        bank.to_data_file(&bank_path).unwrap();
+
+        let usage =
+            crate::project_reader::compute_sample_usage(&project_dir.to_string_lossy()).unwrap();
+        let entries = &usage.static_usage[9];
+        assert!(!entries.is_empty(), "the machines do reference the slot");
+        assert!(
+            entries.iter().all(|e| !e.audible),
+            "nothing trigs those tracks, so none of it is audible"
+        );
+
+        let slots = list_slots_to_clear(&project_dir.to_string_lossy()).unwrap();
+        assert!(
+            slots.iter().any(|s| s.slot == "S10"),
+            "a slot only referenced by never-trigged machines must be clearable, got {:?}",
+            slots
+        );
+    }
+
+    /// The flip side: a machine that IS trigged protects its slot.
+    #[test]
+    fn a_slot_whose_machine_is_actually_trigged_is_not_clearable() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let project_dir = temp.path().join("PROJ");
+        std::fs::create_dir(&project_dir).unwrap();
+        touch(&project_dir.join("kick.wav"));
+        write_minimal_project_with_sample_block(&project_dir, "STATIC", 10, "kick.wav");
+
+        let bank_path = project_dir.join("bank01.work");
+        use ot_tools_io::{BankFile, OctatrackFileIO};
+        let mut bank = BankFile::from_data_file(&bank_path).unwrap();
+        bank.parts.unsaved.0[0].audio_track_machine_types[7] = 0;
+        bank.parts.unsaved.0[0].audio_track_machine_slots[7].static_slot_id = 9;
+        bank.patterns.0[0].part_assignment = 0;
+        bank.patterns.0[0].audio_track_trigs.0[7].trig_masks.trigger = [0, 1, 0, 0, 0, 0, 0, 0];
+        bank.to_data_file(&bank_path).unwrap();
+
+        let slots = list_slots_to_clear(&project_dir.to_string_lossy()).unwrap();
+        assert!(
+            !slots.iter().any(|s| s.slot == "S10"),
+            "a trigged machine still protects its slot, got {:?}",
+            slots
+        );
     }
 
     #[test]

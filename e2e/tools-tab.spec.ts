@@ -390,6 +390,10 @@ test.describe('Tools Tab - Operation Selector', () => {
     await trackButtons.locator('.tools-multi-btn.track-btn', { hasText: 'T2' }).click()
     await page.waitForTimeout(100)
 
+    // Positive control: prove the selection actually took, otherwise the
+    // "does not bleed" assertions below hold trivially.
+    await expect(trackButtons.locator('.tools-multi-btn.track-btn.selected')).toHaveCount(2)
+
     // Switch to Copy Tracks
     await operationSelect.selectOption('copy_tracks')
     await page.waitForTimeout(300)
@@ -1314,12 +1318,16 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
     await sourceAllAudio.click()
     await page.waitForTimeout(200)
 
+    // Positive control: without this, the count-0 assertions below would also
+    // pass if the .selected class were renamed and nothing ever matched.
+    const sourceSelected = sourcePanel.locator('.tools-multi-btn.track-btn.selected').filter({ hasText: /^[TM][1-8]$/ })
+    await expect(sourceSelected).toHaveCount(8)
+
     // Deselect by clicking again
     await sourceAllAudio.click()
     await page.waitForTimeout(200)
 
     // No source tracks should be selected
-    const sourceSelected = sourcePanel.locator('.tools-multi-btn.track-btn.selected').filter({ hasText: /^[TM][1-8]$/ })
     await expect(sourceSelected).toHaveCount(0)
 
     // No destination tracks should be selected

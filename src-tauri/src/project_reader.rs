@@ -15081,6 +15081,16 @@ mod tests {
             );
         }
 
+        /// Trigger mask of a source pattern's track 1, for use as a positive
+        /// control that a copy actually happened.
+        fn source_trigs(project: &TestProject, pattern: usize) -> [u8; 8] {
+            let bank =
+                BankFile::from_data_file(&Path::new(&project.path).join("bank01.work")).unwrap();
+            bank.patterns.0[pattern].audio_track_trigs.0[0]
+                .trig_masks
+                .trigger
+        }
+
         #[test]
         fn test_copy_patterns_preserves_part_assignment() {
             // CB-07: Verify Part assignments preserved
@@ -15088,7 +15098,13 @@ mod tests {
                 bank.patterns.0[0].part_assignment = 2;
                 bank.patterns.0[1].part_assignment = 3;
             });
-            let dest = TestProject::new();
+            // The destination's own parts are deliberately non-default: with
+            // everything left at 0 this assertion would pass even if
+            // copy_patterns did nothing at all.
+            let dest = TestProject::with_modified_bank(0, |bank| {
+                bank.patterns.0[5].part_assignment = 1;
+                bank.patterns.0[6].part_assignment = 1;
+            });
 
             copy_patterns(
                 &source.path,
@@ -15107,9 +15123,17 @@ mod tests {
 
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
-            // "keep_original" keeps the destination's original part assignment (0), not the source's
-            assert_eq!(dest_bank.patterns.0[5].part_assignment, 0);
-            assert_eq!(dest_bank.patterns.0[6].part_assignment, 0);
+            // "keep_original" keeps the destination's own part, not the source's
+            assert_eq!(dest_bank.patterns.0[5].part_assignment, 1);
+            assert_eq!(dest_bank.patterns.0[6].part_assignment, 1);
+            // Positive control: the copy really did run.
+            assert_eq!(
+                dest_bank.patterns.0[5].audio_track_trigs.0[0]
+                    .trig_masks
+                    .trigger,
+                source_trigs(&source, 0),
+                "pattern data should have been copied even though the part was kept"
+            );
         }
 
         #[test]
@@ -17916,7 +17940,14 @@ mod tests {
             fs::write(backups.join("kick.wav"), b"audio").unwrap();
 
             let result = search_project_dir(&project.path, vec!["kick.wav".to_string()]).unwrap();
-            assert_eq!(result.len(), 0);
+            assert_eq!(result.len(), 0, "a hit inside backups/ must be ignored");
+
+            // Positive control: the identical file outside backups/ IS found.
+            // Without this the assertion above would also pass if the search
+            // were broken outright, or if the name simply never matched.
+            fs::write(project_path.join("kick.wav"), b"audio").unwrap();
+            let result = search_project_dir(&project.path, vec!["kick.wav".to_string()]).unwrap();
+            assert_eq!(result.len(), 1, "the same name outside backups/ is a hit");
         }
 
         #[test]
