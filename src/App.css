@@ -5643,6 +5643,21 @@ th.col-usage .header-content .sort-indicator {
   color: var(--elektron-text-primary);
 }
 
+/* A hairline joining two controls on a scope row, marking the one on the
+   right as qualifying the one on the left. Only the Audio Pool tool renders
+   it - the project tool's row holds two unrelated options. */
+.tools-scope-link {
+  flex: 1 1 auto;
+  min-width: 1rem;
+  /* Border rather than background: a dotted rule reads as a soft connector,
+     where a solid one looks like a divider separating the two. */
+  height: 0;
+  /* A step lighter than the solid version used: dotted lays down less ink,
+     so the same #333 would have all but vanished on the panel. */
+  border-top: 1px dotted #4a4a4a;
+  align-self: center;
+}
+
 /* "Exclude backups/ directory" is a plain checkbox matching the one it
    shares its row with - .tools-scope-row already supplies the label
    typography and the 18px accent-coloured box, so this only keeps it on one

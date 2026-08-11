@@ -612,6 +612,9 @@ test.describe('Purge Project Samples', () => {
     ])
     expect(excludeBox!.y).toBeGreaterThan(reviewBox!.y + reviewBox!.height - 1)
     expect(Math.abs(excludeBox!.x - reviewBox!.x)).toBeLessThan(2)
+    // The joining hairline is an Audio Pool thing: here the two options are
+    // unrelated, so there is nothing to tie together.
+    await expect(page.locator('.tools-scope-link')).toHaveCount(0)
 
     // Slots only: the file-side options are irrelevant and go away.
     await page.getByRole('button', { name: 'Unused sample slots' }).click()

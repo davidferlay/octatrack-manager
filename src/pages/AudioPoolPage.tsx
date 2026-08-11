@@ -1843,6 +1843,10 @@ export function AudioPoolPage() {
                     Include all projects of Set
                   </label>
                   {purgesFiles && purgeIncludeAllProjects && (
+                    <>
+                    {/* Ties the two together visually: "Exclude backups/" only
+                        qualifies the scope the checkbox on its left opens up. */}
+                    <span className="tools-scope-link" aria-hidden="true" />
                     <label className="exclude-backups-toggle" data-on={purgeExcludeBackups} title="Leave every included project's backups/ directory out of the unused audio files scan">
                       <input
                         type="checkbox"
@@ -1851,6 +1855,7 @@ export function AudioPoolPage() {
                       />
                       Exclude backups/ directory
                     </label>
+                    </>
                   )}
                 </div>
                 {purgesFiles && (

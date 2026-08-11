@@ -167,6 +167,29 @@ test.describe('Purge Audio Pool Samples', () => {
     await expect(page.locator('.tools-execute-btn')).toBeInViewport()
   })
 
+  test('a hairline joins the scope checkbox to the Exclude backups toggle', async ({ page }) => {
+    await openPurgeOperation(page)
+    const link = page.locator('.tools-scope-link')
+
+    // Nothing to join until the toggle it qualifies is on screen.
+    await expect(link).toHaveCount(0)
+
+    await page.getByLabel('Include all projects of Set').check()
+    await expect(link).toHaveCount(1)
+
+    const box = await link.evaluate((el) => {
+      const r = el.getBoundingClientRect()
+      const before = (el.previousElementSibling as HTMLElement).getBoundingClientRect()
+      const after = (el.nextElementSibling as HTMLElement).getBoundingClientRect()
+      return {
+        height: Math.round(r.height),
+        wide: r.width > 10,
+        between: r.x >= before.right - 1 && r.right <= after.x + 1,
+      }
+    })
+    expect(box).toEqual({ height: 1, wide: true, between: true })
+  })
+
   test('the Show/Hide Columns menu shows every column without an inner scrollbar', async ({ page }) => {
     await openPurgeOperation(page)
     await page.locator('.tools-missing-files-summary').click()
