@@ -5741,6 +5741,10 @@ th.col-usage .header-content .sort-indicator {
 
 .tools-missing-files-summary .tools-fix-status-detail {
   font-size: 0.85rem;
+  /* The summary button is 500 and white; the scanned total is context rather
+     than a finding, so it steps back on both weight and colour. */
+  font-weight: 400;
+  color: var(--elektron-text-secondary);
 }
 
 /* Slot validation status for Copy Banks */
