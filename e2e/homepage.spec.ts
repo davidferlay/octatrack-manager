@@ -5,6 +5,49 @@ test.describe('HomePage', () => {
     await page.goto('/')
   })
 
+  test('Individual Projects groups are ordered by how many projects they hold', async ({ page }) => {
+    // Group sizes deliberately out of path order: sorting by full path put a
+    // 5-project folder above a 25-project one, which reads as arbitrary when
+    // the header shows only the leaf name.
+    await page.addInitScript(() => {
+      const mk = (dir: string, n: number) =>
+        Array.from({ length: n }, (_, i) => ({
+          name: `P${i}`, path: `${dir}/P${i}`, has_project_file: true, has_banks: true,
+        }))
+      ;(window as any).__TAURI_INTERNALS__ = {
+        transformCallback: () => {},
+        invoke: async (cmd: string) => {
+          if (cmd === 'scan_devices') {
+            return {
+              locations: [],
+              standalone_projects: [
+                ...mk('/home/u/aaa-small', 2),
+                ...mk('/home/u/zzz-big', 9),
+                ...mk('/home/u/mmm-medium', 5),
+                // Same size as mmm-medium: ties fall back to the shown name.
+                ...mk('/home/u/bbb-medium', 5),
+              ],
+            }
+          }
+          return null
+        },
+      }
+    })
+    await page.reload()
+    await page.getByRole('button', { name: /Scan/i }).first().click()
+
+    const headers = page.locator('.standalone-group .standalone-group-header, .standalone-group > div').filter({ hasText: /- \d+ projects?/ })
+    await expect(headers.first()).toBeVisible({ timeout: 10000 })
+    const texts = (await headers.allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim())
+    // Headers are uppercased by CSS; innerText reflects that.
+    expect(texts).toEqual([
+      'ZZZ-BIG- 9 projects',
+      'BBB-MEDIUM- 5 projects',
+      'MMM-MEDIUM- 5 projects',
+      'AAA-SMALL- 2 projects',
+    ])
+  })
+
   test('has title and subtitle', async ({ page }) => {
     await expect(page.getByRole('heading', { name: 'Octatrack Manager' })).toBeVisible()
     await expect(page.getByText('Discover and manage your Elektron Octatrack projects')).toBeVisible()

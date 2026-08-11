@@ -509,7 +509,14 @@ export function HomePage() {
               if (projects.length > 1) multiGroups.push([dir, projects]);
               else loneProjects.push(projects[0]);
             }
-            multiGroups.sort((a, b) => naturalCompare(a[0], b[0]));
+            // Biggest groups first: the header shows only the leaf directory
+            // name, so ordering by full path looked arbitrary on screen. Ties
+            // fall back to that displayed name so the order stays stable.
+            const groupLabel = (dir: string) => dir.substring(dir.lastIndexOf('/') + 1) || dir;
+            multiGroups.sort(
+              (a, b) =>
+                b[1].length - a[1].length || naturalCompare(groupLabel(a[0]), groupLabel(b[0])),
+            );
             loneProjects.sort((a, b) => naturalCompare(a.name, b.name));
 
             const renderProjectCard = (project: OctatrackProject, key: string) => (
