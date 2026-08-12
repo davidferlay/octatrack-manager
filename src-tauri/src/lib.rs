@@ -1311,6 +1311,17 @@ async fn list_unused_slot_assignments(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // WebKitGTK's Web Audio sink renders silence to Bluetooth (A2DP) outputs: the stream
+    // reaches the right sink uncorked at full volume, the context reports "running" and
+    // currentTime advances, but every sample is zero. Routing Web Audio through WebKit's
+    // audio mixer instead fixes it. Measured on PipeWire 1.4.9 / webkit2gtk 2.50: monitor
+    // peak 0 without this, ~11600 with it. <audio> elements are unaffected either way.
+    // Must be set before the webview initialises. No-op on Windows/macOS (not WebKitGTK).
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("WEBKIT_GST_ENABLE_AUDIO_MIXER").is_none() {
+        std::env::set_var("WEBKIT_GST_ENABLE_AUDIO_MIXER", "1");
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
