@@ -9968,7 +9968,7 @@ mod tests {
                 &[],
                 |bank| {
                     bank.parts.unsaved.0[0].audio_track_machine_types[0] = 0; // Static
-                    bank.parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id = 5;
+                    bank.parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id = 4;
                 },
             );
 
@@ -9999,19 +9999,11 @@ mod tests {
             );
         }
 
-        /// BUG A - currently failing, ignored so the suite stays green until it is fixed.
-        ///
-        /// `copy_bank`'s `referenced_only` branch intersects two sets that do not share an
-        /// index base: `collect_referenced_slots` inserts the raw bank value (1-based, 0 =
-        /// unassigned) while `collect_all_configured_slots` inserts `SLOT - 1` (0-based).
-        /// Measured on this fixture: referenced_flex = [1, 12], configured_flex = [11] ->
-        /// the intersection is empty and nothing is copied.
-        ///
-        /// `referenced_only_scope_copies_the_slot_a_machine_points_at` above passes only by
-        /// coincidence: a default bank already references static slots 1-7, so the 0-based
-        /// configured value happens to fall inside that range. The flex p-lock case has no
-        /// such cover, which is why it shows the bug.
-        #[ignore = "BUG A: referenced_only intersects 1-based with 0-based slot ids"]
+        /// Machine and p-lock slot ids in a bank are 0-BASED, and match
+        /// `collect_all_configured_slots` directly: verified against
+        /// `tests/fixtures/real_device`, whose flex machines carry ids 32/33/35/38/39
+        /// while the project's configured flex slots are 0-based [32..44].
+        /// So `SLOT=012` in project.work is referenced as `flex_slot_id = 11`.
         #[test]
         fn referenced_only_scope_copies_a_p_locked_slot() {
             let pair = build(
@@ -10020,7 +10012,7 @@ mod tests {
                 |bank| {
                     bank.patterns.0[0].part_assignment = 0;
                     bank.parts.unsaved.0[0].audio_track_machine_types[0] = 1; // Flex
-                    bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[3].flex_slot_id = 12;
+                    bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[3].flex_slot_id = 11;
                 },
             );
 
@@ -10180,29 +10172,22 @@ mod tests {
 
         // ─── bank remapping ───
 
-        /// BUG B - currently failing, ignored so the suite stays green until it is fixed.
-        ///
-        /// `remap_bank_slot_references` looks up `static_remap.get(&slot.static_slot_id)`,
-        /// but the bank stores 1-based ids (0 = unassigned) while the remap table is keyed
-        /// 0-based (it is built from `collect_all_configured_slots`). The lookup therefore
-        /// misses, and a bank copied with remapping keeps pointing at the OLD slot number -
-        /// which in the destination holds a different sample, or nothing.
-        ///
-        /// This is the more serious of the two: the copied bank plays the wrong samples.
-        /// `bank_remap_tests::test_remap_bank_slot_references_parts` passes because it
-        /// hand-builds a remap table in the same base as the bank, so it never exercises
-        /// the pairing `copy_bank` actually performs.
-        #[ignore = "BUG B: remap table is 0-based, bank slot ids are 1-based"]
+        /// The remap table and the bank's machine slot ids share the same 0-based space
+        /// (see the note above), so a remapped sample must drag its machine reference
+        /// with it. Uses slot 3 rather than slot 1 deliberately: id 0 is treated as
+        /// "unassigned" by both `collect_referenced_slots` and
+        /// `remap_bank_slot_references`, which is pinned separately below.
         #[test]
         fn bank_machine_references_follow_the_samples_to_their_new_slots() {
             // Destination slot 1 is taken, so the incoming static slot 1 must be remapped -
             // and the machine in the copied bank has to point at wherever it landed.
             let pair = build(
-                &[("STATIC", 1, "incoming.wav", None, None, None)],
-                &[("STATIC", 1, "resident.wav", None, None, None)],
+                &[("STATIC", 3, "incoming.wav", None, None, None)],
+                &[("STATIC", 3, "resident.wav", None, None, None)],
                 |bank| {
                     bank.parts.unsaved.0[0].audio_track_machine_types[0] = 0;
-                    bank.parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id = 1;
+                    // SLOT=003 in project.work is 0-based index 2.
+                    bank.parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id = 2;
                 },
             );
 
@@ -10220,10 +10205,12 @@ mod tests {
             )
             .expect("copy should succeed");
 
+            // `assigned` reports the 1-based SLOT= from project.work; machine slot ids
+            // are 0-based, so convert before comparing.
             let landed_on = assigned(&pair.dest_project_work(), "STATIC")
                 .into_iter()
                 .find(|(_, name)| name == "incoming.wav")
-                .map(|(slot, _)| slot as u8)
+                .map(|(slot, _)| (slot - 1) as u8)
                 .expect("the incoming sample must exist in the destination");
 
             let machine_slot =
@@ -10390,14 +10377,66 @@ mod tests {
             );
         }
 
+        /// Slot index 0 - sample slot 1 on the device - is deliberately treated as
+        /// "unassigned" by `collect_referenced_slots` ("Removes slot ID 0") and skipped by
+        /// `remap_bank_slot_references`. The consequence: a machine pointing at sample
+        /// slot 1 does NOT follow its sample when the copy remaps it.
+        ///
+        /// Pinned rather than filed as a bug because the 0-as-unassigned rule is explicit
+        /// in both functions, and a real device bank (tests/fixtures/real_device, parts 3
+        /// and 4) carries id 0 on untouched default tracks - so reading it as a live
+        /// reference would remap tracks the user never configured. If the copy tools
+        /// change, this test says out loud which trade-off was chosen.
         #[test]
-        fn copying_to_several_banks_writes_the_same_remapped_bank_to_each() {
+        fn a_machine_on_slot_index_zero_is_treated_as_unassigned_and_not_remapped() {
             let pair = build(
                 &[("STATIC", 1, "incoming.wav", None, None, None)],
                 &[("STATIC", 1, "resident.wav", None, None, None)],
                 |bank| {
                     bank.parts.unsaved.0[0].audio_track_machine_types[0] = 0;
-                    bank.parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id = 1;
+                    bank.parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id = 0;
+                },
+            );
+
+            copy_bank(
+                &pair.src,
+                0,
+                &pair.dest,
+                &[0],
+                true,
+                "all_configured",
+                "mirror",
+                "keep_position",
+                false,
+                &[],
+            )
+            .expect("copy should succeed");
+
+            // Positive control: the sample really was remapped away from slot 1, so the
+            // assertion below is about the reference being left behind, not about
+            // nothing having happened.
+            let landed_on = assigned(&pair.dest_project_work(), "STATIC")
+                .into_iter()
+                .find(|(_, name)| name == "incoming.wav")
+                .map(|(slot, _)| slot)
+                .expect("the incoming sample must exist in the destination");
+            assert_ne!(landed_on, 1, "the sample should have been remapped");
+
+            assert_eq!(
+                pair.dest_bank(0).parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id,
+                0,
+                "slot index 0 is read as unassigned, so the reference stays put"
+            );
+        }
+
+        #[test]
+        fn copying_to_several_banks_writes_the_same_remapped_bank_to_each() {
+            let pair = build(
+                &[("STATIC", 3, "incoming.wav", None, None, None)],
+                &[("STATIC", 3, "resident.wav", None, None, None)],
+                |bank| {
+                    bank.parts.unsaved.0[0].audio_track_machine_types[0] = 0;
+                    bank.parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id = 2;
                 },
             );
 
@@ -10415,20 +10454,23 @@ mod tests {
             )
             .expect("copy should succeed");
 
-            let expected =
-                pair.dest_bank(2).parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id;
-            for bank_index in [5u8, 9] {
+            // 0-based index the sample actually landed on. Slot index 0 is a perfectly
+            // good destination here, so this is compared against the real landing slot
+            // rather than against a sentinel.
+            let landed_on = assigned(&pair.dest_project_work(), "STATIC")
+                .into_iter()
+                .find(|(_, name)| name == "incoming.wav")
+                .map(|(slot, _)| (slot - 1) as u8)
+                .expect("the incoming sample must exist in the destination");
+
+            for bank_index in [2u8, 5, 9] {
                 assert_eq!(
                     pair.dest_bank(bank_index).parts.unsaved.0[0].audio_track_machine_slots[0]
                         .static_slot_id,
-                    expected,
+                    landed_on,
                     "bank {bank_index} must carry the same remapped reference"
                 );
             }
-            assert_ne!(
-                expected, 0,
-                "the machine reference must survive the copy at all"
-            );
         }
     }
 
