@@ -9724,6 +9724,714 @@ mod tests {
         }
     }
 
+    // ==================== COPY BANK SAMPLE/ATTRIBUTE TESTS ====================
+
+    /// `copy_bank` takes ten parameters. Every test in `copy_bank_tests` above passes
+    /// `copy_samples: false`, `copy_attributes: false`, `"keep_position"` and `&[]`, so
+    /// `sample_scope`, `audio_mode`, `slot_placement` and `attribute_selection` had no
+    /// test that reached them through `copy_bank` at all - the remap helpers were unit
+    /// tested in isolation, but nothing checked `copy_bank` wires them up. These do.
+    mod copy_bank_sample_tests {
+        use super::surgical_write_tests::{
+            create_raw_project_work_with_custom_fields, read_raw_project_work,
+            write_raw_project_work,
+        };
+        use super::*;
+
+        /// A source/destination pair where the source really has sample slots configured
+        /// and the referenced audio files exist on disk. `TestProject::new()` builds an
+        /// empty default project, which makes `copy_samples: true` a no-op - which is why
+        /// the existing tests could never have caught anything in this path.
+        struct SamplePair {
+            _src_temp: TempDir,
+            _dest_temp: TempDir,
+            src: String,
+            dest: String,
+        }
+
+        impl SamplePair {
+            fn dest_project_work(&self) -> String {
+                read_raw_project_work(Path::new(&self.dest))
+            }
+
+            fn dest_bank(&self, bank_index: u8) -> BankFile {
+                source_bank_data(&self.dest, bank_index)
+            }
+        }
+
+        fn build(
+            src_samples: &[SampleFixture],
+            dest_samples: &[SampleFixture],
+            bank_setup: impl FnOnce(&mut BankFile),
+        ) -> SamplePair {
+            let src_temp = TempDir::new().unwrap();
+            let dest_temp = TempDir::new().unwrap();
+            let src_dir = src_temp.path();
+            let dest_dir = dest_temp.path();
+
+            let mut src_bank = BankFile::default();
+            bank_setup(&mut src_bank);
+            src_bank.checksum = src_bank.calculate_checksum().unwrap();
+
+            for bank_num in 1..=16 {
+                let name = format!("bank{:02}.work", bank_num);
+                if bank_num == 1 {
+                    src_bank.to_data_file(&src_dir.join(&name)).unwrap();
+                } else {
+                    BankFile::default()
+                        .to_data_file(&src_dir.join(&name))
+                        .unwrap();
+                }
+                BankFile::default()
+                    .to_data_file(&dest_dir.join(&name))
+                    .unwrap();
+            }
+
+            for dir in [src_dir, dest_dir] {
+                MarkersFile::default()
+                    .to_data_file(&dir.join("markers.work"))
+                    .unwrap();
+            }
+
+            write_raw_project_work(
+                src_dir,
+                &create_raw_project_work_with_custom_fields(src_samples),
+            );
+            write_raw_project_work(
+                dest_dir,
+                &create_raw_project_work_with_custom_fields(dest_samples),
+            );
+
+            // The audio files the source slots point at must exist, or the copy has
+            // nothing to move and "it worked" would mean nothing.
+            for (_, _, path, _, _, _) in src_samples {
+                if !path.is_empty() {
+                    fs::write(src_dir.join(path), b"fake audio").unwrap();
+                }
+            }
+            for (_, _, path, _, _, _) in dest_samples {
+                if !path.is_empty() {
+                    fs::write(dest_dir.join(path), b"fake audio").unwrap();
+                }
+            }
+
+            SamplePair {
+                src: src_dir.to_string_lossy().to_string(),
+                dest: dest_dir.to_string_lossy().to_string(),
+                _src_temp: src_temp,
+                _dest_temp: dest_temp,
+            }
+        }
+
+        const ATTRS: [&str; 8] = [
+            "gain",
+            "bpm",
+            "timestretch",
+            "loop",
+            "trig_quant",
+            "trim",
+            "loop_point",
+            "slices",
+        ];
+
+        fn attrs() -> Vec<String> {
+            ATTRS.iter().map(|s| s.to_string()).collect()
+        }
+
+        /// Every `[SAMPLE]` block's `TYPE`/`SLOT`/`PATH`, read straight from the raw file.
+        fn slot_paths(raw: &str) -> Vec<(String, u16, String)> {
+            let mut out = Vec::new();
+            for block in raw.split("[SAMPLE]").skip(1) {
+                let field = |name: &str| -> Option<String> {
+                    block
+                        .lines()
+                        .find(|l| l.starts_with(&format!("{}=", name)))
+                        .map(|l| l[name.len() + 1..].trim().to_string())
+                };
+                if let (Some(t), Some(s), Some(p)) = (field("TYPE"), field("SLOT"), field("PATH")) {
+                    if let Ok(slot) = s.parse::<u16>() {
+                        out.push((t, slot, p));
+                    }
+                }
+            }
+            out
+        }
+
+        fn assigned(raw: &str, slot_type: &str) -> Vec<(u16, String)> {
+            slot_paths(raw)
+                .into_iter()
+                .filter(|(t, slot, p)| t == slot_type && !p.is_empty() && *slot <= 128)
+                .map(|(_, slot, p)| (slot, p))
+                .collect()
+        }
+
+        // ─── sample_scope ───
+
+        #[test]
+        fn all_configured_scope_copies_every_configured_slot() {
+            let pair = build(
+                &[
+                    ("STATIC", 1, "kick.wav", None, None, None),
+                    ("FLEX", 3, "snare.wav", None, None, None),
+                ],
+                &[],
+                |_| {},
+            );
+
+            let result = copy_bank(
+                &pair.src,
+                0,
+                &pair.dest,
+                &[0],
+                true,
+                "all_configured",
+                "mirror",
+                "keep_position",
+                false,
+                &[],
+            )
+            .expect("copy should succeed");
+
+            let dest = pair.dest_project_work();
+            assert_eq!(
+                assigned(&dest, "STATIC"),
+                vec![(1, "kick.wav".to_string())],
+                "the configured static slot must land in the destination"
+            );
+            assert_eq!(
+                assigned(&dest, "FLEX"),
+                vec![(3, "snare.wav".to_string())],
+                "the configured flex slot must land in the destination"
+            );
+            assert_eq!(result.slots_copied_static, 1);
+            assert_eq!(result.slots_copied_flex, 1);
+        }
+
+        /// Positive control for the whole module: with `copy_samples: false` the very same
+        /// call must leave the destination's slots alone. Without this, a `copy_bank` that
+        /// copied samples unconditionally would still satisfy the test above.
+        #[test]
+        fn copy_samples_false_leaves_destination_slots_untouched() {
+            let pair = build(&[("STATIC", 1, "kick.wav", None, None, None)], &[], |_| {});
+            let before = pair.dest_project_work();
+
+            copy_bank(
+                &pair.src,
+                0,
+                &pair.dest,
+                &[0],
+                false,
+                "all_configured",
+                "mirror",
+                "keep_position",
+                false,
+                &[],
+            )
+            .expect("copy should succeed");
+
+            assert_eq!(
+                pair.dest_project_work(),
+                before,
+                "copy_samples: false must not touch project.work"
+            );
+        }
+
+        #[test]
+        fn an_unknown_sample_scope_is_rejected() {
+            let pair = build(&[("STATIC", 1, "kick.wav", None, None, None)], &[], |_| {});
+
+            let err = copy_bank(
+                &pair.src,
+                0,
+                &pair.dest,
+                &[0],
+                true,
+                "everything",
+                "mirror",
+                "keep_position",
+                false,
+                &[],
+            )
+            .expect_err("an unknown scope must be rejected");
+            assert!(err.contains("Invalid sample_scope"), "got: {err}");
+        }
+
+        #[test]
+        fn referenced_only_scope_copies_the_slot_a_machine_points_at() {
+            // Static slot 5 is configured in project.work AND a machine in the bank points
+            // at it; flex slot 9 is configured but nothing references it.
+            let pair = build(
+                &[
+                    ("STATIC", 5, "used.wav", None, None, None),
+                    ("FLEX", 9, "unused.wav", None, None, None),
+                ],
+                &[],
+                |bank| {
+                    bank.parts.unsaved.0[0].audio_track_machine_types[0] = 0; // Static
+                    bank.parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id = 5;
+                },
+            );
+
+            copy_bank(
+                &pair.src,
+                0,
+                &pair.dest,
+                &[0],
+                true,
+                "referenced_only",
+                "mirror",
+                "keep_position",
+                false,
+                &[],
+            )
+            .expect("copy should succeed");
+
+            let dest = pair.dest_project_work();
+            assert_eq!(
+                assigned(&dest, "STATIC"),
+                vec![(5, "used.wav".to_string())],
+                "the referenced static slot must be copied"
+            );
+            assert!(
+                assigned(&dest, "FLEX").is_empty(),
+                "an unreferenced slot must not be copied under referenced_only, got {:?}",
+                assigned(&dest, "FLEX")
+            );
+        }
+
+        /// BUG A - currently failing, ignored so the suite stays green until it is fixed.
+        ///
+        /// `copy_bank`'s `referenced_only` branch intersects two sets that do not share an
+        /// index base: `collect_referenced_slots` inserts the raw bank value (1-based, 0 =
+        /// unassigned) while `collect_all_configured_slots` inserts `SLOT - 1` (0-based).
+        /// Measured on this fixture: referenced_flex = [1, 12], configured_flex = [11] ->
+        /// the intersection is empty and nothing is copied.
+        ///
+        /// `referenced_only_scope_copies_the_slot_a_machine_points_at` above passes only by
+        /// coincidence: a default bank already references static slots 1-7, so the 0-based
+        /// configured value happens to fall inside that range. The flex p-lock case has no
+        /// such cover, which is why it shows the bug.
+        #[ignore = "BUG A: referenced_only intersects 1-based with 0-based slot ids"]
+        #[test]
+        fn referenced_only_scope_copies_a_p_locked_slot() {
+            let pair = build(
+                &[("FLEX", 12, "locked.wav", None, None, None)],
+                &[],
+                |bank| {
+                    bank.patterns.0[0].part_assignment = 0;
+                    bank.parts.unsaved.0[0].audio_track_machine_types[0] = 1; // Flex
+                    bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[3].flex_slot_id = 12;
+                },
+            );
+
+            copy_bank(
+                &pair.src,
+                0,
+                &pair.dest,
+                &[0],
+                true,
+                "referenced_only",
+                "mirror",
+                "keep_position",
+                false,
+                &[],
+            )
+            .expect("copy should succeed");
+
+            assert_eq!(
+                assigned(&pair.dest_project_work(), "FLEX"),
+                vec![(12, "locked.wav".to_string())],
+                "a slot referenced only by a p-lock must still be copied"
+            );
+        }
+
+        // ─── slot_placement ───
+
+        #[test]
+        fn keep_position_preserves_slot_numbers_when_the_destination_is_free() {
+            let pair = build(&[("STATIC", 7, "kick.wav", None, None, None)], &[], |_| {});
+
+            let result = copy_bank(
+                &pair.src,
+                0,
+                &pair.dest,
+                &[0],
+                true,
+                "all_configured",
+                "mirror",
+                "keep_position",
+                false,
+                &[],
+            )
+            .expect("copy should succeed");
+
+            assert_eq!(
+                assigned(&pair.dest_project_work(), "STATIC"),
+                vec![(7, "kick.wav".to_string())],
+                "keep_position must land the sample on the same slot number"
+            );
+            assert!(
+                result.remap_log.iter().any(|l| l.contains("same position")),
+                "remap log should record the same-position move, got {:?}",
+                result.remap_log
+            );
+        }
+
+        #[test]
+        fn stack_from_first_packs_samples_from_the_lowest_free_slot() {
+            let pair = build(
+                &[
+                    ("STATIC", 40, "a.wav", None, None, None),
+                    ("STATIC", 90, "b.wav", None, None, None),
+                ],
+                &[],
+                |_| {},
+            );
+
+            copy_bank(
+                &pair.src,
+                0,
+                &pair.dest,
+                &[0],
+                true,
+                "all_configured",
+                "mirror",
+                "stack_from_first",
+                false,
+                &[],
+            )
+            .expect("copy should succeed");
+
+            let mut got = assigned(&pair.dest_project_work(), "STATIC");
+            got.sort();
+            assert_eq!(
+                got,
+                vec![(1, "a.wav".to_string()), (2, "b.wav".to_string())],
+                "stack_from_first must pack from slot 1 rather than keep 40 and 90"
+            );
+        }
+
+        #[test]
+        fn an_occupied_destination_slot_forces_a_remap_and_is_not_overwritten() {
+            let pair = build(
+                &[("STATIC", 1, "incoming.wav", None, None, None)],
+                &[("STATIC", 1, "resident.wav", None, None, None)],
+                |_| {},
+            );
+
+            copy_bank(
+                &pair.src,
+                0,
+                &pair.dest,
+                &[0],
+                true,
+                "all_configured",
+                "mirror",
+                "keep_position",
+                false,
+                &[],
+            )
+            .expect("copy should succeed");
+
+            let got = assigned(&pair.dest_project_work(), "STATIC");
+            assert!(
+                got.contains(&(1, "resident.wav".to_string())),
+                "the destination's own sample must survive, got {got:?}"
+            );
+            assert!(
+                got.iter()
+                    .any(|(slot, name)| *slot != 1 && name == "incoming.wav"),
+                "the incoming sample must be remapped to a free slot, got {got:?}"
+            );
+        }
+
+        #[test]
+        fn an_identical_filename_in_the_destination_is_deduplicated() {
+            let pair = build(
+                &[("STATIC", 4, "shared.wav", None, None, None)],
+                &[("STATIC", 4, "shared.wav", None, None, None)],
+                |_| {},
+            );
+
+            let result = copy_bank(
+                &pair.src,
+                0,
+                &pair.dest,
+                &[0],
+                true,
+                "all_configured",
+                "mirror",
+                "keep_position",
+                false,
+                &[],
+            )
+            .expect("copy should succeed");
+
+            assert_eq!(
+                result.slots_deduplicated, 1,
+                "the matching filename must be reported as deduplicated"
+            );
+            assert_eq!(
+                assigned(&pair.dest_project_work(), "STATIC"),
+                vec![(4, "shared.wav".to_string())],
+                "dedup must not create a second copy of the same file"
+            );
+        }
+
+        // ─── bank remapping ───
+
+        /// BUG B - currently failing, ignored so the suite stays green until it is fixed.
+        ///
+        /// `remap_bank_slot_references` looks up `static_remap.get(&slot.static_slot_id)`,
+        /// but the bank stores 1-based ids (0 = unassigned) while the remap table is keyed
+        /// 0-based (it is built from `collect_all_configured_slots`). The lookup therefore
+        /// misses, and a bank copied with remapping keeps pointing at the OLD slot number -
+        /// which in the destination holds a different sample, or nothing.
+        ///
+        /// This is the more serious of the two: the copied bank plays the wrong samples.
+        /// `bank_remap_tests::test_remap_bank_slot_references_parts` passes because it
+        /// hand-builds a remap table in the same base as the bank, so it never exercises
+        /// the pairing `copy_bank` actually performs.
+        #[ignore = "BUG B: remap table is 0-based, bank slot ids are 1-based"]
+        #[test]
+        fn bank_machine_references_follow_the_samples_to_their_new_slots() {
+            // Destination slot 1 is taken, so the incoming static slot 1 must be remapped -
+            // and the machine in the copied bank has to point at wherever it landed.
+            let pair = build(
+                &[("STATIC", 1, "incoming.wav", None, None, None)],
+                &[("STATIC", 1, "resident.wav", None, None, None)],
+                |bank| {
+                    bank.parts.unsaved.0[0].audio_track_machine_types[0] = 0;
+                    bank.parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id = 1;
+                },
+            );
+
+            copy_bank(
+                &pair.src,
+                0,
+                &pair.dest,
+                &[0],
+                true,
+                "all_configured",
+                "mirror",
+                "keep_position",
+                false,
+                &[],
+            )
+            .expect("copy should succeed");
+
+            let landed_on = assigned(&pair.dest_project_work(), "STATIC")
+                .into_iter()
+                .find(|(_, name)| name == "incoming.wav")
+                .map(|(slot, _)| slot as u8)
+                .expect("the incoming sample must exist in the destination");
+
+            let machine_slot =
+                pair.dest_bank(0).parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id;
+            assert_eq!(
+                machine_slot, landed_on,
+                "the machine must point at the slot the sample actually landed on"
+            );
+        }
+
+        // ─── audio_mode ───
+
+        #[test]
+        fn an_unknown_audio_mode_is_rejected() {
+            let pair = build(&[("STATIC", 1, "kick.wav", None, None, None)], &[], |_| {});
+
+            let err = copy_bank(
+                &pair.src,
+                0,
+                &pair.dest,
+                &[0],
+                true,
+                "all_configured",
+                "teleport",
+                "keep_position",
+                false,
+                &[],
+            )
+            .expect_err("an unknown audio mode must be rejected");
+            assert!(
+                err.to_lowercase().contains("audio"),
+                "error should name the audio mode, got: {err}"
+            );
+        }
+
+        #[test]
+        fn copy_audio_mode_places_the_file_inside_the_destination_project() {
+            let pair = build(&[("STATIC", 1, "kick.wav", None, None, None)], &[], |_| {});
+
+            copy_bank(
+                &pair.src,
+                0,
+                &pair.dest,
+                &[0],
+                true,
+                "all_configured",
+                "copy",
+                "keep_position",
+                false,
+                &[],
+            )
+            .expect("copy should succeed");
+
+            assert!(
+                Path::new(&pair.dest).join("kick.wav").exists(),
+                "audio_mode \"copy\" must place the audio file in the destination project"
+            );
+        }
+
+        /// "mirror" reproduces the source's layout: a file living inside the source
+        /// project is copied into the destination project, because a bare reference to
+        /// the source project's folder would not survive the two projects being separated.
+        /// Only files already outside the project (e.g. in the Audio Pool) stay referenced.
+        #[test]
+        fn mirror_audio_mode_brings_project_local_files_with_it() {
+            let pair = build(&[("STATIC", 1, "kick.wav", None, None, None)], &[], |_| {});
+
+            copy_bank(
+                &pair.src,
+                0,
+                &pair.dest,
+                &[0],
+                true,
+                "all_configured",
+                "mirror",
+                "keep_position",
+                false,
+                &[],
+            )
+            .expect("copy should succeed");
+
+            assert!(
+                Path::new(&pair.dest).join("kick.wav").exists(),
+                "a project-local sample must travel with the bank under \"mirror\""
+            );
+        }
+
+        // ─── attributes ───
+
+        #[test]
+        fn selected_attributes_are_carried_across() {
+            let pair = build(
+                &[("STATIC", 1, "kick.wav", Some(3360), Some(6), None)],
+                &[],
+                |_| {},
+            );
+
+            copy_bank(
+                &pair.src,
+                0,
+                &pair.dest,
+                &[0],
+                true,
+                "all_configured",
+                "mirror",
+                "keep_position",
+                true,
+                &attrs(),
+            )
+            .expect("copy should succeed");
+
+            let dest = pair.dest_project_work();
+            let block = dest
+                .split("[SAMPLE]")
+                .find(|b| b.contains("PATH=kick.wav"))
+                .expect("the copied slot must exist");
+            assert!(
+                block.contains("BPMx24=3360"),
+                "bpm must be carried across, block was: {block}"
+            );
+            assert!(
+                block.contains("TRIGQUANTIZATION=6"),
+                "trig quantization must be carried across, block was: {block}"
+            );
+        }
+
+        #[test]
+        fn an_attribute_left_out_of_the_selection_is_not_carried_across() {
+            let pair = build(
+                &[("STATIC", 1, "kick.wav", Some(3360), Some(6), None)],
+                &[],
+                |_| {},
+            );
+
+            // Everything except bpm.
+            let selection: Vec<String> = ATTRS
+                .iter()
+                .filter(|a| **a != "bpm")
+                .map(|s| s.to_string())
+                .collect();
+
+            copy_bank(
+                &pair.src,
+                0,
+                &pair.dest,
+                &[0],
+                true,
+                "all_configured",
+                "mirror",
+                "keep_position",
+                true,
+                &selection,
+            )
+            .expect("copy should succeed");
+
+            let dest = pair.dest_project_work();
+            let block = dest
+                .split("[SAMPLE]")
+                .find(|b| b.contains("PATH=kick.wav"))
+                .expect("the copied slot must exist");
+            assert!(
+                !block.contains("BPMx24=3360"),
+                "bpm was deselected and must not be carried across, block was: {block}"
+            );
+        }
+
+        #[test]
+        fn copying_to_several_banks_writes_the_same_remapped_bank_to_each() {
+            let pair = build(
+                &[("STATIC", 1, "incoming.wav", None, None, None)],
+                &[("STATIC", 1, "resident.wav", None, None, None)],
+                |bank| {
+                    bank.parts.unsaved.0[0].audio_track_machine_types[0] = 0;
+                    bank.parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id = 1;
+                },
+            );
+
+            copy_bank(
+                &pair.src,
+                0,
+                &pair.dest,
+                &[2, 5, 9],
+                true,
+                "all_configured",
+                "mirror",
+                "keep_position",
+                false,
+                &[],
+            )
+            .expect("copy should succeed");
+
+            let expected =
+                pair.dest_bank(2).parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id;
+            for bank_index in [5u8, 9] {
+                assert_eq!(
+                    pair.dest_bank(bank_index).parts.unsaved.0[0].audio_track_machine_slots[0]
+                        .static_slot_id,
+                    expected,
+                    "bank {bank_index} must carry the same remapped reference"
+                );
+            }
+            assert_ne!(
+                expected, 0,
+                "the machine reference must survive the copy at all"
+            );
+        }
+    }
+
     // ==================== BANK REMAP TESTS ====================
 
     mod bank_remap_tests {

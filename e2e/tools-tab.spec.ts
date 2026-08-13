@@ -266,9 +266,14 @@ async function setupTauriMocks(page: Page, overrides?: { sameSet?: boolean; with
               error_message: null,
             }
 
+          // Capture the payload, not just the fact of the call. Without this the suite
+          // only ever proved which toggle *looks* selected - the panel could display
+          // "Keep Original" and send copy_source_part and every test stayed green.
           case 'copy_parts':
           case 'copy_patterns':
           case 'copy_tracks':
+            (window as any).__lastCopyArgs__ = { cmd, args }
+            ;((window as any).__copyCalls__ ||= []).push({ cmd, args })
             return null
 
           case 'list_missing_samples':
@@ -3674,5 +3679,174 @@ test.describe('Tools Tab - Copy Tracks Multi-Select Destination Banks', () => {
     await page.waitForTimeout(200)
 
     await expect(bankA).not.toHaveClass(/selected/)
+  })
+})
+
+// The suite above verifies which toggle *looks* selected. These verify what the panel
+// actually SENDS - the payload the Rust side receives. Without them the panel could show
+// "Keep Original" while sending copy_source_part, and every other test would still pass.
+// The conditional null fields are the ones worth pinning: they encode "this option only
+// applies in that mode", which is exactly what silently rots during a UI refactor.
+test.describe('Tools Tab - Copy Operation Payloads', () => {
+  async function openTools(page: import('@playwright/test').Page, operation: string) {
+    await setupTauriMocks(page)
+    await page.goto('/')
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    await page.locator('.header-tab', { hasText: 'Tools' }).click()
+    await page.waitForTimeout(500)
+    await page.locator('.tools-section .tools-select').selectOption(operation)
+    await page.waitForTimeout(300)
+  }
+
+  async function execute(page: import('@playwright/test').Page) {
+    await page.evaluate(() => {
+      delete (window as any).__lastCopyArgs__
+      ;(window as any).__copyCalls__ = []
+    })
+    await page.locator('.tools-execute-btn').click()
+    await page.waitForTimeout(800)
+  }
+
+  const lastArgs = (page: import('@playwright/test').Page) =>
+    page.evaluate(() => (window as any).__lastCopyArgs__)
+  const allCalls = (page: import('@playwright/test').Page) =>
+    page.evaluate(() => (window as any).__copyCalls__ ?? [])
+
+  test('Copy Patterns sends its defaults: keep assignment, all tracks, no specific part', async ({ page }) => {
+    await openTools(page, 'copy_patterns')
+    await execute(page)
+
+    const call = await lastArgs(page)
+    expect(call, 'copy_patterns should have been invoked').toBeTruthy()
+    expect(call.cmd).toBe('copy_patterns')
+    expect(call.args.partAssignmentMode).toBe('keep_original')
+    expect(call.args.trackMode).toBe('all')
+    // destPart only travels when the user picked one; trackIndices only when they
+    // narrowed the tracks. Sending a stale value here would silently reassign parts.
+    expect(call.args.destPart).toBeNull()
+    expect(call.args.trackIndices).toBeNull()
+    expect(call.args.modeScope).not.toBeNull()
+  })
+
+  test('Copy Patterns sends destPart only when a specific part is chosen', async ({ page }) => {
+    await openTools(page, 'copy_patterns')
+    const partAssignment = page.locator('.tools-field').filter({ hasText: 'Part Assignment' })
+    await partAssignment.locator('.tools-toggle-btn', { hasText: 'User Selection' }).click()
+    await page.waitForTimeout(200)
+    // Execute stays disabled until a destination part is picked in this mode.
+    const partCross = page.locator('.tools-options-panel .tools-part-cross')
+    await partCross.locator('.tools-toggle-btn.part-btn', { hasText: /^2$/ }).click()
+    await page.waitForTimeout(200)
+    await execute(page)
+
+    const call = await lastArgs(page)
+    expect(call.args.partAssignmentMode).toBe('select_specific')
+    expect(call.args.destPart).not.toBeNull()
+  })
+
+  test('Copy Patterns sends trackIndices and drops modeScope when tracks are narrowed', async ({ page }) => {
+    await openTools(page, 'copy_patterns')
+    const options = page.locator('.tools-options-panel')
+    await page.locator('.tools-toggle-btn', { hasText: 'Specific Tracks' }).click()
+    await page.waitForTimeout(200)
+    // Execute stays disabled until at least one track is picked in this mode.
+    await options.locator('.tools-multi-select.tracks-stacked .tools-multi-btn.track-btn', { hasText: 'T1' }).click()
+    await page.waitForTimeout(200)
+    await execute(page)
+
+    const call = await lastArgs(page)
+    expect(call.args.trackMode).toBe('specific')
+    expect(Array.isArray(call.args.trackIndices)).toBe(true)
+    // modeScope describes "all tracks" copying; carrying it alongside a specific
+    // track list would be contradictory input for the backend.
+    expect(call.args.modeScope).toBeNull()
+  })
+
+  test('Copy Patterns issues one call per destination bank', async ({ page }) => {
+    await openTools(page, 'copy_patterns')
+    const destPanel = page.locator('.tools-dest-panel')
+    await destPanel.locator('.tools-multi-btn.bank-btn', { hasText: /^C$/ }).click()
+    await page.waitForTimeout(200)
+    await execute(page)
+
+    const calls = await allCalls(page)
+    const banks = calls.map((c: any) => c.args.destBankIndex).sort()
+    expect(banks.length).toBeGreaterThan(1)
+    expect(new Set(banks).size).toBe(banks.length)
+  })
+
+  async function pickTracks(page: import('@playwright/test').Page) {
+    // Execute is disabled with the title "Select source and destination tracks"
+    // until both ends have one.
+    await page.locator('.tools-source-panel .tools-multi-btn.track-btn', { hasText: 'T1' }).first().click()
+    await page.locator('.tools-dest-panel .tools-multi-btn.track-btn', { hasText: 'T1' }).first().click()
+    await page.waitForTimeout(200)
+  }
+
+  test('Copy Tracks sends the selected mode and its pattern selection', async ({ page }) => {
+    await openTools(page, 'copy_tracks')
+    await pickTracks(page)
+    await execute(page)
+
+    const call = await lastArgs(page)
+    expect(call, 'copy_tracks should have been invoked').toBeTruthy()
+    expect(call.cmd).toBe('copy_tracks')
+    expect(typeof call.args.mode).toBe('string')
+    expect(Array.isArray(call.args.sourceTrackIndices)).toBe(true)
+    expect(Array.isArray(call.args.destTrackIndices)).toBe(true)
+  })
+
+  test('Copy Tracks omits pattern indices entirely in part-params mode', async ({ page }) => {
+    await openTools(page, 'copy_tracks')
+    const copyMode = page.locator('.tools-field').filter({ hasText: 'Copy Mode' })
+    const partParams = copyMode.locator('.tools-toggle-btn', { hasText: 'Part Parameters' })
+    await partParams.click()
+    await pickTracks(page)
+    await execute(page)
+
+    const call = await lastArgs(page)
+    expect(call.args.mode).toBe('part_params')
+    // Part parameters live outside patterns; sending pattern indices would ask the
+    // backend to write trigs that this mode must not touch.
+    expect(call.args.sourcePatternIndex).toBeNull()
+    expect(call.args.destPatternIndices).toBeNull()
+  })
+
+  test('Copy Parts sends matching source and destination part indices', async ({ page }) => {
+    await openTools(page, 'copy_parts')
+    await execute(page)
+
+    const call = await lastArgs(page)
+    expect(call, 'copy_parts should have been invoked').toBeTruthy()
+    expect(call.cmd).toBe('copy_parts')
+    expect(Array.isArray(call.args.sourcePartIndices)).toBe(true)
+    expect(Array.isArray(call.args.destPartIndices)).toBe(true)
+    expect(call.args.sourcePartIndices.length).toBe(call.args.destPartIndices.length)
+  })
+
+  test('Copy Parts issues one call per destination bank', async ({ page }) => {
+    await openTools(page, 'copy_parts')
+    const destPanel = page.locator('.tools-dest-panel')
+    await destPanel.locator('.tools-multi-btn.bank-btn', { hasText: /^D$/ }).click()
+    await page.waitForTimeout(200)
+    await execute(page)
+
+    const calls = await allCalls(page)
+    const banks = calls.map((c: any) => c.args.destBankIndex)
+    expect(banks.length).toBeGreaterThan(1)
+    expect(new Set(banks).size).toBe(banks.length)
+  })
+
+  test('every copy operation names the source project it was opened on', async ({ page }) => {
+    for (const op of ['copy_parts', 'copy_patterns', 'copy_tracks']) {
+      await openTools(page, op)
+      if (op === 'copy_tracks') await pickTracks(page)
+      await execute(page)
+      const call = await lastArgs(page)
+      expect(call, `${op} should have been invoked`).toBeTruthy()
+      expect(call.args.sourceProject).toBe('/test/project')
+      expect(call.args.destProject).toBeTruthy()
+    }
   })
 })
