@@ -5795,7 +5795,14 @@ type SlotRemapResult = (
 /// Returns (static_slot_ids, flex_slot_ids) as 0-based HashSets.
 /// Only considers tracks with Static (type 0) or Flex (type 1) machines.
 /// Skips Thru (2), Neighbor (3), Pickup (4) machine types.
-/// Removes slot ID 0 (unassigned).
+///
+/// Slot ID 0 is sample slot 1, an ordinary assignment - not an "unassigned"
+/// sentinel. Machines used to be filtered on `!= 0`, which silently dropped every
+/// reference to slot 1; the p-lock scan below never had that filter. Verified across
+/// 161 real projects: 73 machines carry id 0 on a track other than track 0 (so not
+/// the untouched `track i -> id i` default), 68 of them in projects where slot index
+/// 0 holds a sample. A machine on a slot with no sample is harmless here - the caller
+/// intersects this set with the configured slots.
 fn collect_referenced_slots(
     bank: &BankFile,
 ) -> (std::collections::HashSet<u8>, std::collections::HashSet<u8>) {
@@ -5811,15 +5818,11 @@ fn collect_referenced_slots(
             match machine_type {
                 0 => {
                     // Static machine
-                    if slot.static_slot_id != 0 {
-                        static_slots.insert(slot.static_slot_id);
-                    }
+                    static_slots.insert(slot.static_slot_id);
                 }
                 1 => {
                     // Flex machine
-                    if slot.flex_slot_id != 0 {
-                        flex_slots.insert(slot.flex_slot_id);
-                    }
+                    flex_slots.insert(slot.flex_slot_id);
                 }
                 _ => {} // Thru, Neighbor, Pickup — no sample slot reference
             }
@@ -6096,7 +6099,12 @@ fn build_remap_table(
 ///   static or flex remap by the machine type of the part the pattern uses.
 ///
 /// Does NOT touch recorder_slot_id.
-/// Skips 0 (unassigned) for Parts and 255 (no lock) for p-locks.
+///
+/// Skips only 255 (no lock) on p-locks. Slot ID 0 is sample slot 1 and is remapped
+/// like any other: Parts used to be guarded on `!= 0`, which left a track playing
+/// slot 1 pointing at whatever the destination happened to hold there. An id absent
+/// from the remap table is a no-op, and the table only ever contains slots that were
+/// actually copied, so nothing outside the copy is disturbed.
 fn remap_bank_slot_references(
     bank: &mut BankFile,
     static_remap: &std::collections::HashMap<u8, u8>,
@@ -6108,15 +6116,11 @@ fn remap_bank_slot_references(
             let part = &mut parts_state.0[part_idx];
             for track_idx in 0..8 {
                 let slot = &mut part.audio_track_machine_slots[track_idx];
-                if slot.static_slot_id != 0 {
-                    if let Some(&new_id) = static_remap.get(&slot.static_slot_id) {
-                        slot.static_slot_id = new_id;
-                    }
+                if let Some(&new_id) = static_remap.get(&slot.static_slot_id) {
+                    slot.static_slot_id = new_id;
                 }
-                if slot.flex_slot_id != 0 {
-                    if let Some(&new_id) = flex_remap.get(&slot.flex_slot_id) {
-                        slot.flex_slot_id = new_id;
-                    }
+                if let Some(&new_id) = flex_remap.get(&slot.flex_slot_id) {
+                    slot.flex_slot_id = new_id;
                 }
                 // Do NOT touch recorder_slot_id
             }
@@ -10377,11 +10381,11 @@ mod tests {
             );
         }
 
-        /// Currently failing: a machine on sample slot 1 does NOT follow its sample.
+        /// A machine on sample slot 1 must follow its sample through a remap.
         ///
-        /// `collect_referenced_slots` documents "Removes slot ID 0 (unassigned)" and
-        /// `remap_bank_slot_references` guards on `!= 0`. But slot id 0 is sample slot 1,
-        /// a perfectly ordinary assignment - not a sentinel. Measured across 161 real
+        /// Slot id 0 is sample slot 1, an ordinary assignment - not a sentinel. Both
+        /// `collect_referenced_slots` and `remap_bank_slot_references` used to guard on
+        /// `!= 0` and silently skipped it. Measured across 161 real
         /// projects: 73 machines carry id 0 on a track other than track 0 (so not the
         /// untouched `track i -> id i` default), and 68 of those are in projects where
         /// slot index 0 holds a sample.
@@ -10390,11 +10394,10 @@ mod tests {
         /// not get it copied, and after any remap a track that played slot 1 is left
         /// pointing at whatever occupies slot 1 in the destination.
         ///
-        /// Not fixed here because dropping the guard also makes untouched default parts
-        /// (every track pointing at its own index) eligible for remapping. That may well
-        /// be correct - those are real Static machines on real slots - but it changes
-        /// behaviour for every bank, so it is your call rather than a silent test fix.
-        #[ignore = "slot id 0 is sample slot 1, not 'unassigned' - see doc comment"]
+        /// Untouched default parts (every track pointing at its own index) are now
+        /// eligible for remapping too. That is correct: those are real Static machines on
+        /// real slots, and a track pointing at a slot with no sample is simply absent from
+        /// the remap table, so nothing happens to it.
         #[test]
         fn a_machine_on_sample_slot_one_should_follow_its_sample_through_a_remap() {
             let pair = build(
@@ -10551,23 +10554,41 @@ mod tests {
         }
 
         #[test]
-        fn test_collect_referenced_slots_skips_unassigned_and_no_lock() {
+        fn test_collect_referenced_slots_keeps_slot_zero_and_skips_no_lock() {
+            // This test used to assert that slot id 0 was skipped as "unassigned". It is
+            // not: id 0 is sample slot 1, an ordinary assignment. Verified across 161 real
+            // projects - 73 machines carry id 0 on a track other than track 0, 68 of them
+            // where slot index 0 holds a sample. Only 255 (p-lock "no lock") is excluded.
             let project = TestProject::with_modified_bank(0, |bank| {
-                // Slot 0 = unassigned, 255 = no lock — both should be excluded
-                bank.parts.unsaved.0[0].audio_track_machine_types[0] = 0;
+                bank.parts.unsaved.0[0].audio_track_machine_types[0] = 0; // Static
                 bank.parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id = 0;
-                bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[0].static_slot_id = 255;
+
+                bank.patterns.0[0].part_assignment = 0;
+                bank.parts.unsaved.0[0].audio_track_machine_types[1] = 1; // Flex
+                                                                          // One real sample lock, one "no lock".
+                bank.patterns.0[0].audio_track_trigs.0[1].plocks.0[0].flex_slot_id = 20;
+                bank.patterns.0[0].audio_track_trigs.0[1].plocks.0[1].flex_slot_id = 255;
             });
 
             let bank = BankFile::from_data_file(
                 &std::path::PathBuf::from(&project.path).join("bank01.work"),
             )
             .unwrap();
-            let (static_slots, _flex_slots) = collect_referenced_slots(&bank);
+            let (static_slots, flex_slots) = collect_referenced_slots(&bank);
 
             assert!(
-                !static_slots.contains(&0),
-                "Should NOT contain slot 0 (unassigned)"
+                static_slots.contains(&0),
+                "slot id 0 is sample slot 1 and must be collected"
+            );
+            // Positive control: a real lock is collected, so the 255 assertion below
+            // cannot pass just because p-locks were ignored altogether.
+            assert!(
+                flex_slots.contains(&20),
+                "a real p-lock must be collected, got {flex_slots:?}"
+            );
+            assert!(
+                !flex_slots.contains(&255),
+                "255 means no lock and must be excluded"
             );
         }
 
