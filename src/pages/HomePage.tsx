@@ -517,11 +517,17 @@ export function HomePage() {
 
       {/* A filter that matched nothing must never read as "your projects are gone". */}
       {searchActive && visibleLocations.length === 0 && visibleStandaloneProjects.length === 0 && (
-        <div className="no-devices">
-          <p>No projects match "{searchText}".</p>
-          <p className="hint">
-            <a href="#" onClick={(e) => { e.preventDefault(); setSearchText(''); }}>Clear the search</a> to see all projects.
+        <div className="no-devices no-matches">
+          <i className="fas fa-magnifying-glass no-matches-icon"></i>
+          <p className="no-matches-title">
+            No projects match <span className="no-matches-term">{searchText}</span>
           </p>
+          <button
+            className="scan-button browse-button"
+            onClick={() => { setSearchText(''); searchInputRef.current?.focus(); }}
+          >
+            Clear search
+          </button>
         </div>
       )}
 
