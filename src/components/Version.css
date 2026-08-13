@@ -63,6 +63,17 @@
   text-align: right;
 }
 
+/* Update failure — truncated inline, full text in the tooltip so it can be reported */
+.update-error {
+  font-size: 0.8rem;
+  color: #ff6b6b;
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: help;
+}
+
 /* Relaunch link */
 .relaunch-link {
   font-size: 0.875rem;

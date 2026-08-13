@@ -24,6 +24,7 @@ export function Version() {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [readyToRelaunch, setReadyToRelaunch] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [updateError, setUpdateError] = useState('');
 
   useEffect(() => {
     getVersion().then(setVersion).catch(console.error);
@@ -33,6 +34,7 @@ export function Version() {
     if (checking || downloading) return;
 
     setChecking(true);
+    setUpdateError('');
 
     try {
       const update = await check();
@@ -92,9 +94,13 @@ export function Version() {
         setChecking(false);
       }
     } catch (err) {
+      // Surface the failure. Silently swallowing it made a failed install look identical to
+      // a successful one (progress bar reaches 100%, version never changes), which is
+      // unreportable: the message is the only clue why e.g. `dpkg -i` refused.
       console.error('Error checking/downloading update:', err);
       setChecking(false);
-      // Fail silently
+      setDownloading(false);
+      setUpdateError(String(err));
     }
   };
 
@@ -144,6 +150,9 @@ export function Version() {
           </div>
           <div className="update-progress-text">{downloadProgress.toFixed(1)}%</div>
         </div>
+      )}
+      {updateError && (
+        <span className="update-error" title={updateError}>Update failed: {updateError}</span>
       )}
       {readyToRelaunch && (
         <a href="#" className="relaunch-link" onClick={handleRelaunch}>
