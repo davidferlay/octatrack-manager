@@ -10377,24 +10377,35 @@ mod tests {
             );
         }
 
-        /// Slot index 0 - sample slot 1 on the device - is deliberately treated as
-        /// "unassigned" by `collect_referenced_slots` ("Removes slot ID 0") and skipped by
-        /// `remap_bank_slot_references`. The consequence: a machine pointing at sample
-        /// slot 1 does NOT follow its sample when the copy remaps it.
+        /// Currently failing: a machine on sample slot 1 does NOT follow its sample.
         ///
-        /// Pinned rather than filed as a bug because the 0-as-unassigned rule is explicit
-        /// in both functions, and a real device bank (tests/fixtures/real_device, parts 3
-        /// and 4) carries id 0 on untouched default tracks - so reading it as a live
-        /// reference would remap tracks the user never configured. If the copy tools
-        /// change, this test says out loud which trade-off was chosen.
+        /// `collect_referenced_slots` documents "Removes slot ID 0 (unassigned)" and
+        /// `remap_bank_slot_references` guards on `!= 0`. But slot id 0 is sample slot 1,
+        /// a perfectly ordinary assignment - not a sentinel. Measured across 161 real
+        /// projects: 73 machines carry id 0 on a track other than track 0 (so not the
+        /// untouched `track i -> id i` default), and 68 of those are in projects where
+        /// slot index 0 holds a sample.
+        ///
+        /// Consequences: under `referenced_only` a bank whose sample lives in slot 1 does
+        /// not get it copied, and after any remap a track that played slot 1 is left
+        /// pointing at whatever occupies slot 1 in the destination.
+        ///
+        /// Not fixed here because dropping the guard also makes untouched default parts
+        /// (every track pointing at its own index) eligible for remapping. That may well
+        /// be correct - those are real Static machines on real slots - but it changes
+        /// behaviour for every bank, so it is your call rather than a silent test fix.
+        #[ignore = "slot id 0 is sample slot 1, not 'unassigned' - see doc comment"]
         #[test]
-        fn a_machine_on_slot_index_zero_is_treated_as_unassigned_and_not_remapped() {
+        fn a_machine_on_sample_slot_one_should_follow_its_sample_through_a_remap() {
             let pair = build(
                 &[("STATIC", 1, "incoming.wav", None, None, None)],
                 &[("STATIC", 1, "resident.wav", None, None, None)],
                 |bank| {
-                    bank.parts.unsaved.0[0].audio_track_machine_types[0] = 0;
-                    bank.parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id = 0;
+                    // Track 4 rather than track 0: id 0 on track 0 is indistinguishable
+                    // from the untouched `track i -> id i` default, so this mirrors the
+                    // deliberate assignments seen in the real projects.
+                    bank.parts.unsaved.0[0].audio_track_machine_types[4] = 0;
+                    bank.parts.unsaved.0[0].audio_track_machine_slots[4].static_slot_id = 0;
                 },
             );
 
@@ -10423,9 +10434,10 @@ mod tests {
             assert_ne!(landed_on, 1, "the sample should have been remapped");
 
             assert_eq!(
-                pair.dest_bank(0).parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id,
-                0,
-                "slot index 0 is read as unassigned, so the reference stays put"
+                pair.dest_bank(0).parts.unsaved.0[0].audio_track_machine_slots[4].static_slot_id,
+                (landed_on - 1) as u8,
+                "the machine must follow its sample; leaving it on 0 points the track at \
+                 whatever the destination happens to hold in slot 1"
             );
         }
 
