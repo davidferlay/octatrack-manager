@@ -78,14 +78,32 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+// Both scans walk the filesystem, so they run on the blocking pool like
+// `load_project_metadata`. A non-async `#[tauri::command]` is `ExecutionContext::Blocking`:
+// the body runs inline on the thread handling the IPC message, i.e. the main thread, so the
+// window stops repainting for the whole scan.
+//
+// The empty-result fallbacks only fire on a JoinError, i.e. the scan panicked. Both scans
+// swallow every filesystem error already (`if let Ok` / `filter_map`), so there is nothing
+// left to panic on - hence no error channel here. Give them one if that stops being true.
 #[tauri::command]
-fn scan_devices() -> ScanResult {
-    discover_devices()
+async fn scan_devices() -> ScanResult {
+    tauri::async_runtime::spawn_blocking(discover_devices)
+        .await
+        .unwrap_or_else(|_| ScanResult {
+            locations: Vec::new(),
+            standalone_projects: Vec::new(),
+        })
 }
 
 #[tauri::command]
-fn scan_custom_directory(path: String) -> ScanResult {
-    scan_directory(&path)
+async fn scan_custom_directory(path: String) -> ScanResult {
+    tauri::async_runtime::spawn_blocking(move || scan_directory(&path))
+        .await
+        .unwrap_or_else(|_| ScanResult {
+            locations: Vec::new(),
+            standalone_projects: Vec::new(),
+        })
 }
 
 #[tauri::command]

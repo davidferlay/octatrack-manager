@@ -398,6 +398,39 @@ pub fn scan_directory(path: &str) -> ScanResult {
     }
 }
 
+/// Mount points we never walk.
+///
+/// The list was POSIX-only, which is why Windows was slow: nothing matched `C:\`, so the
+/// system drive got walked three levels deep - and `scan_for_sets` does a `read_dir` on
+/// every directory it visits, twice (two passes). `C:\Windows\WinSxS` alone holds tens of
+/// thousands of directories at that depth, so "Scan for projects" took ~30s where macOS and
+/// Linux were near-instant (both skip `/` and `/home`). `system_drive` is `%SystemDrive%`
+/// (`"C:"`), unset off Windows. Skipping it loses nothing: the user's Documents, Music,
+/// Desktop and Downloads are covered by `scan_home_directory` either way, exactly as they
+/// are on the platforms that already skip `/home`.
+fn is_skipped_mount(mount: &str, system_drive: Option<&str>) -> bool {
+    if let Some(drive) = system_drive.filter(|d| !d.is_empty()) {
+        if mount
+            .to_ascii_uppercase()
+            .starts_with(&drive.to_ascii_uppercase())
+        {
+            return true;
+        }
+    }
+
+    mount.starts_with("/sys")
+        || mount.starts_with("/proc")
+        || mount.starts_with("/dev")
+        || mount == "/"
+        || mount.starts_with("/home")
+        || mount.starts_with("/System/")
+        || mount.starts_with("/Library/")
+        || mount.starts_with("/private/")
+        || mount.starts_with("/usr/")
+        || mount.starts_with("/var/")
+        || mount.starts_with("/boot/")
+}
+
 /// Discovers Octatrack locations by scanning removable drives and home directory
 pub fn discover_devices() -> ScanResult {
     use std::collections::HashMap;
@@ -411,23 +444,15 @@ pub fn discover_devices() -> ScanResult {
     let mut all_removable_sets = Vec::new();
     let mut all_removable_projects = Vec::new();
 
+    // Unset off Windows, so this is a no-op on macOS and Linux.
+    let system_drive = std::env::var("SystemDrive").ok();
+
     for disk in disks.list() {
         let mount_point = disk.mount_point();
         let mount_str = mount_point.to_string_lossy();
 
         // Skip system mount points and home directory (home is scanned separately)
-        if mount_str.starts_with("/sys")
-            || mount_str.starts_with("/proc")
-            || mount_str.starts_with("/dev")
-            || mount_str == "/"
-            || mount_str.starts_with("/home")
-            || mount_str.starts_with("/System/")
-            || mount_str.starts_with("/Library/")
-            || mount_str.starts_with("/private/")
-            || mount_str.starts_with("/usr/")
-            || mount_str.starts_with("/var/")
-            || mount_str.starts_with("/boot/")
-        {
+        if is_skipped_mount(&mount_str, system_drive.as_deref()) {
             continue;
         }
 
@@ -751,6 +776,33 @@ mod tests {
         assert!(!is_system_path(Path::new("/Users/john")));
         assert!(!is_system_path(Path::new("/media/usb")));
         assert!(!is_system_path(Path::new("/mnt/drive")));
+    }
+
+    /// The skip list used to be POSIX-only, so on Windows the system drive was walked three
+    /// levels deep and "Scan for projects" took ~30s. Exercised with an explicit
+    /// `system_drive` so it runs on every platform, not just the one that reproduces it.
+    #[test]
+    fn windows_system_drive_is_skipped_but_other_drives_are_not() {
+        assert!(is_skipped_mount("C:\\", Some("C:")));
+        assert!(is_skipped_mount("c:\\", Some("C:")));
+
+        // Positive control: the CF card / USB drive an Octatrack user actually plugs in must
+        // still be scanned, otherwise the fix would "pass" by scanning nothing at all.
+        assert!(!is_skipped_mount("D:\\", Some("C:")));
+        assert!(!is_skipped_mount("E:\\", Some("C:")));
+    }
+
+    /// `SystemDrive` is unset off Windows, so the POSIX behaviour must be untouched.
+    #[test]
+    fn posix_mounts_are_unaffected_when_there_is_no_system_drive() {
+        assert!(is_skipped_mount("/", None));
+        assert!(is_skipped_mount("/home/user", None));
+        assert!(is_skipped_mount("/proc", None));
+        assert!(is_skipped_mount("/boot/efi", None));
+
+        assert!(!is_skipped_mount("/media/user/OCTATRACK", None));
+        assert!(!is_skipped_mount("/Volumes/OCTATRACK", None));
+        assert!(!is_skipped_mount("/mnt/cf", None));
     }
 
     // ==================== HAS VALID AUDIO POOL TESTS ====================
