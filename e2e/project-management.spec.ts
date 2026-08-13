@@ -213,14 +213,14 @@ test.beforeEach(async ({ page }) => {
 
 test('create project via + card', async ({ page }) => {
   await page.getByLabel('New project in SetA').click()
-  await page.getByRole('textbox').fill('NEW_ONE')
+  await page.getByRole('textbox', { name: 'Project name' }).fill('NEW_ONE')
   await page.getByRole('button', { name: /^create$/i }).click()
   await expect(page.getByText('NEW_ONE')).toBeVisible()
 })
 
 test('create project silently filters invalid chars', async ({ page }) => {
   await page.getByLabel('New project in SetA').click()
-  const input = page.getByRole('textbox')
+  const input = page.getByRole('textbox', { name: 'Project name' })
   // Type text with invalid char — € should be silently removed
   await input.pressSequentially('BAD€OK')
   await expect(input).toHaveValue('BADOK')
@@ -314,7 +314,7 @@ test('context menu on set header shows set operations', async ({ page }) => {
 test('rename set via context menu', async ({ page }) => {
   await page.locator('.set-header').first().click({ button: 'right' })
   await page.getByText(/rename set/i).click()
-  const input = page.getByRole('textbox')
+  const input = page.getByRole('textbox', { name: /new project name/i })
   await input.fill('NEWSET')
   await page.getByRole('button', { name: /^rename$/i }).click()
   await expect(page.locator('.set-name', { hasText: 'NEWSET' })).toBeVisible()
@@ -339,7 +339,7 @@ test('delete set cancellation keeps set', async ({ page }) => {
 test('create set via location context menu', async ({ page }) => {
   await page.locator('.location-header').first().click({ button: 'right' })
   await page.getByText(/new set/i).click()
-  const input = page.getByRole('textbox')
+  const input = page.getByRole('textbox', { name: 'Set name' })
   await input.fill('BRAND_NEW')
   await page.getByRole('button', { name: /^create$/i }).click()
   await expect(page.locator('.set-name', { hasText: 'BRAND_NEW' })).toBeVisible()

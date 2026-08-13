@@ -12,6 +12,13 @@ export interface OctatrackSet {
   projects: OctatrackProject[]
 }
 
+export interface OctatrackLocation {
+  name: string
+  path: string
+  device_type: "CompactFlash" | "Usb" | "LocalCopy"
+  sets: OctatrackSet[]
+}
+
 export interface ClipboardState {
   kind: 'project' | 'set'
   path: string

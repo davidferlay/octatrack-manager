@@ -1,25 +1,8 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-
-interface OctatrackProject {
-  name: string;
-  path: string;
-  has_project_file: boolean;
-  has_banks: boolean;
-}
-
-interface OctatrackSet {
-  name: string;
-  path: string;
-  has_audio_pool: boolean;
-  projects: OctatrackProject[];
-}
-
-interface OctatrackLocation {
-  name: string;
-  path: string;
-  device_type: "CompactFlash" | "Usb" | "LocalCopy";
-  sets: OctatrackSet[];
-}
+import type {
+  OctatrackLocation,
+  OctatrackProject,
+} from "../types/projectManagement";
 
 // Project detail types (matching ProjectDetail.tsx)
 interface CurrentState {
@@ -474,6 +457,7 @@ interface ProjectsContextType {
   isIndividualProjectsOpen: boolean;
   isLocationsOpen: boolean;
   closedStandaloneGroups: Set<string>;
+  searchText: string;
   setLocations: (locations: OctatrackLocation[] | ((prev: OctatrackLocation[]) => OctatrackLocation[])) => void;
   setStandaloneProjects: (projects: OctatrackProject[] | ((prev: OctatrackProject[]) => OctatrackProject[])) => void;
   setHasScanned: (scanned: boolean) => void;
@@ -482,6 +466,7 @@ interface ProjectsContextType {
   setIsIndividualProjectsOpen: (open: boolean) => void;
   setIsLocationsOpen: (open: boolean) => void;
   setClosedStandaloneGroups: (groups: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
+  setSearchText: (text: string) => void;
   clearAll: () => void;
 }
 
@@ -599,6 +584,22 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     return new Set();
   });
 
+  // Home page project-list filter. Session-scoped like the collapse state above: it
+  // survives navigating into a project and back, but never an app restart - a filter
+  // restored on launch would look exactly like projects having gone missing.
+  const [searchText, setSearchTextState] = useState<string>(() => {
+    try {
+      const stored = sessionStorage.getItem(SESSION_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return parsed.searchText || "";
+      }
+    } catch (error) {
+      console.error("Error loading from sessionStorage:", error);
+    }
+    return "";
+  });
+
   // Save projects list to sessionStorage whenever state changes
   useEffect(() => {
     try {
@@ -611,12 +612,13 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         isIndividualProjectsOpen,
         isLocationsOpen,
         closedStandaloneGroups: Array.from(closedStandaloneGroups),
+        searchText,
       };
       sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(data));
     } catch (error) {
       console.error("Error saving to sessionStorage:", error);
     }
-  }, [locations, standaloneProjects, hasScanned, openLocations, openSets, isIndividualProjectsOpen, isLocationsOpen, closedStandaloneGroups]);
+  }, [locations, standaloneProjects, hasScanned, openLocations, openSets, isIndividualProjectsOpen, isLocationsOpen, closedStandaloneGroups, searchText]);
 
   const setLocations = (newLocations: OctatrackLocation[] | ((prev: OctatrackLocation[]) => OctatrackLocation[])) => {
     setLocationsState(newLocations);
@@ -650,6 +652,10 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     setClosedStandaloneGroupsState(groups);
   };
 
+  const setSearchText = (text: string) => {
+    setSearchTextState(text);
+  };
+
   const clearAll = () => {
     setLocationsState([]);
     setStandaloneProjectsState([]);
@@ -659,6 +665,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     setIsIndividualProjectsOpenState(true);
     setIsLocationsOpenState(true);
     setClosedStandaloneGroupsState(new Set());
+    setSearchTextState("");
     sessionStorage.removeItem(SESSION_STORAGE_KEY);
   };
 
@@ -671,6 +678,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     isIndividualProjectsOpen,
     isLocationsOpen,
     closedStandaloneGroups,
+    searchText,
     setLocations,
     setStandaloneProjects,
     setHasScanned,
@@ -679,6 +687,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     setIsIndividualProjectsOpen,
     setIsLocationsOpen,
     setClosedStandaloneGroups,
+    setSearchText,
     clearAll,
   };
 

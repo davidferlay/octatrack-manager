@@ -23,6 +23,7 @@ These shortcuts work across the entire application:
 
 | Shortcut | Action |
 |----------|---------|
+| <kbd>Ctrl</kbd>+<kbd>F</kbd> | Focus the project search box. <kbd>Escape</kbd> clears it, then returns focus to the list. |
 | <kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd> | Navigate between project cards. |
 | <kbd>↑</kbd> / <kbd>↓</kbd> / <kbd>←</kbd> / <kbd>→</kbd> | Move focus within a Set's project grid. |
 | <kbd>Enter</kbd> | Open the focused project. |
@@ -49,6 +50,7 @@ These shortcuts work across the entire application:
 
 | Shortcut | Action |
 |----------|---------|
+| <kbd>Ctrl</kbd>+<kbd>F</kbd> | Focus the search box. <kbd>Escape</kbd> clears it, then returns focus to the table. |
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Move through the list of files or sample slots (also previews the selection). |
 | <kbd>←</kbd> / <kbd>→</kbd> | Switch focus between the Audio Pool pane and the sample slots table (when the pane is open). |
 | <kbd>Enter</kbd> | Open a folder (in Audio Pool) or copy a filename (in Sample Slots). |

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useLayoutEffect, useTransition, useMemo, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { useSearchShortcut } from "../hooks/useSearchShortcut";
 import {
   useReactTable,
   getCoreRowModel,
@@ -342,6 +343,8 @@ export function AudioFileTable({
 
   // Pre-filter state (applied before TanStack)
   const [searchText, setSearchText] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  useSearchShortcut(searchInputRef, () => setSearchText(''));
   const [hideDirectories, setHideDirectories] = useState(false);
   const [hideDirectoriesVisual, setHideDirectoriesVisual] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -769,6 +772,7 @@ export function AudioFileTable({
           {countSuffix}
           <div className="header-search-container">
             <input
+              ref={searchInputRef}
               type="text"
               placeholder="Search..."
               value={searchText}

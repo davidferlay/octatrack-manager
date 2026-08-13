@@ -1,4 +1,4 @@
-import { useState, useTransition, useEffect, useLayoutEffect, useRef, useCallback } from "react";
+import { useState, useTransition, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useNavigate } from "react-router-dom";
@@ -15,6 +15,8 @@ import {
   type Modifier,
 } from '@dnd-kit/core';
 import { useProjects } from "../context/ProjectsContext";
+import { filterProjects } from "../utils/filterProjects";
+import { useSearchShortcut } from "../hooks/useSearchShortcut";
 import { invalidatePoolUsage } from "../hooks/usePoolUsage";
 import { Version } from "../components/Version";
 import { ScrollToTop } from "../components/ScrollToTop";
@@ -27,6 +29,7 @@ import { CopyProgressModal } from "../components/CopyProgressModal";
 import type {
   ClipboardState,
   ContextMenuState,
+  OctatrackLocation,
   OctatrackProject,
   OctatrackSet,
 } from "../types/projectManagement";
@@ -45,13 +48,6 @@ function compareLocations(a: { name: string; device_type: string }, b: { name: s
   const bIsLocal = b.device_type === "LocalCopy";
   if (aIsLocal !== bIsLocal) return aIsLocal ? 1 : -1;
   return naturalCompare(a.name, b.name);
-}
-
-interface OctatrackLocation {
-  name: string;
-  path: string;
-  device_type: "CompactFlash" | "Usb" | "LocalCopy";
-  sets: OctatrackSet[];
 }
 
 interface ScanResult {
@@ -119,7 +115,23 @@ export function HomePage() {
     setIsLocationsOpen,
     closedStandaloneGroups,
     setClosedStandaloneGroups,
+    searchText,
+    setSearchText,
   } = useProjects();
+
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchActive = searchText.trim().length > 0;
+  useSearchShortcut(searchInputRef, () => setSearchText(''));
+
+  // Filtered view of the tree. `filterProjects` returns its inputs by reference when the
+  // query is empty, so the unfiltered render path allocates nothing.
+  const filtered = useMemo(
+    () => filterProjects(locations, standaloneProjects, searchText),
+    [locations, standaloneProjects, searchText],
+  );
+  const visibleLocations = filtered.locations;
+  const visibleStandaloneProjects = filtered.standaloneProjects;
+
   const [isScanning, setIsScanning] = useState(false);
   const [isSpinning, setIsSpinning] = useState(false);
   const navigate = useNavigate();
@@ -447,6 +459,24 @@ export function HomePage() {
           <span className="header-path-info">Discover and manage your Elektron Octatrack projects</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div className="header-search-container">
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Search projects..."
+              aria-label="Search projects"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              className="header-search-input"
+            />
+            {searchText && (
+              <button
+                className="header-search-clear"
+                onClick={() => setSearchText('')}
+                title="Clear search"
+              >×</button>
+            )}
+          </div>
           <button
             onClick={handleRefresh}
             className={`toolbar-button ${isSpinning ? 'refreshing' : ''}`}
@@ -476,7 +506,7 @@ export function HomePage() {
         </button>
       </div>
 
-      {hasScanned && locations.length === 0 && standaloneProjects.length === 0 && (
+      {!searchActive && hasScanned && locations.length === 0 && standaloneProjects.length === 0 && (
         <div className="no-devices">
           <p>No Octatrack content found.</p>
           <p className="hint">
@@ -485,7 +515,17 @@ export function HomePage() {
         </div>
       )}
 
-      {(locations.length > 0 || standaloneProjects.length > 0) && (
+      {/* A filter that matched nothing must never read as "your projects are gone". */}
+      {searchActive && visibleLocations.length === 0 && visibleStandaloneProjects.length === 0 && (
+        <div className="no-devices">
+          <p>No projects match "{searchText}".</p>
+          <p className="hint">
+            <a href="#" onClick={(e) => { e.preventDefault(); setSearchText(''); }}>Clear the search</a> to see all projects.
+          </p>
+        </div>
+      )}
+
+      {(visibleLocations.length > 0 || visibleStandaloneProjects.length > 0) && (
         <div className="devices-list">
           <DndContext
             sensors={sensors}
@@ -493,10 +533,10 @@ export function HomePage() {
             onDragEnd={handleDragEnd}
             onDragCancel={() => setActiveItem(null)}
           >
-          {standaloneProjects.length > 0 && (() => {
+          {visibleStandaloneProjects.length > 0 && (() => {
             // Group standalone projects by parent directory
             const byParent = new Map<string, OctatrackProject[]>();
-            for (const project of standaloneProjects) {
+            for (const project of visibleStandaloneProjects) {
               const parentDir = project.path.substring(0, project.path.lastIndexOf('/'));
               const group = byParent.get(parentDir);
               if (group) group.push(project);
@@ -615,13 +655,13 @@ export function HomePage() {
                 onClick={() => setIsIndividualProjectsOpen(!isIndividualProjectsOpen)}
                 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
               >
-                <span>{isIndividualProjectsOpen ? '▼' : '▶'}</span>
-                {standaloneProjects.length} Individual Project{standaloneProjects.length > 1 ? 's' : ''}
+                <span>{searchActive || isIndividualProjectsOpen ? '▼' : '▶'}</span>
+                {visibleStandaloneProjects.length} Individual Project{visibleStandaloneProjects.length > 1 ? 's' : ''}
               </h2>
-              <div className={`sets-section ${isIndividualProjectsOpen ? 'open' : 'closed'}`}>
+              <div className={`sets-section ${searchActive || isIndividualProjectsOpen ? 'open' : 'closed'}`}>
                 <div className="sets-section-content">
                   {multiGroups.map(([dir, projects]) => {
-                    const isOpen = !closedStandaloneGroups.has(dir);
+                    const isOpen = searchActive || !closedStandaloneGroups.has(dir);
                     return (
                     <div key={dir} className="standalone-group"
                       onContextMenu={(e) => {
@@ -666,7 +706,7 @@ export function HomePage() {
                     );
                   })}
                   {loneProjects.length > 0 && (() => {
-                    const isOpen = !closedStandaloneGroups.has('__other__');
+                    const isOpen = searchActive || !closedStandaloneGroups.has('__other__');
                     return (
                     <div className="standalone-group">
                       <div className="standalone-group-label clickable" onClick={() => toggleGroup('__other__')}>
@@ -693,20 +733,20 @@ export function HomePage() {
             );
           })()}
 
-          {locations.length > 0 && (
+          {visibleLocations.length > 0 && (
             <>
               <h2
                 className="clickable"
                 onClick={() => setIsLocationsOpen(!isLocationsOpen)}
                 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
               >
-                <span>{isLocationsOpen ? '▼' : '▶'}</span>
-                {locations.length} Location{locations.length > 1 ? 's' : ''}
+                <span>{searchActive || isLocationsOpen ? '▼' : '▶'}</span>
+                {visibleLocations.length} Location{visibleLocations.length > 1 ? 's' : ''}
               </h2>
-              <div className={`sets-section ${isLocationsOpen ? 'open' : 'closed'}`}>
+              <div className={`sets-section ${searchActive || isLocationsOpen ? 'open' : 'closed'}`}>
                 <div className="sets-section-content">
-                  {locations.map((location, locIdx) => {
-                    const isOpen = openLocations.has(locIdx);
+                  {visibleLocations.map((location, locIdx) => {
+                    const isOpen = searchActive || openLocations.has(locIdx);
                     return (
                       <DroppableLocationCard key={locIdx} locationPath={location.path} deviceType={location.device_type}>
                         <div
@@ -766,7 +806,7 @@ export function HomePage() {
                                 return 0;
                               }).map((set, setIdx) => {
                                 const setKey = `${locIdx}-${set.name}`;
-                                const isSetOpen = openSets.has(setKey);
+                                const isSetOpen = searchActive || openSets.has(setKey);
                                 return (
                                 <DroppableSetCard key={setIdx} setPath={set.path} set={set} locationPath={location.path} disabled={activeItem?.type === 'set'}
                                   onContextMenu={(e) => {

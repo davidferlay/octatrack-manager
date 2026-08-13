@@ -86,6 +86,63 @@ test.describe('HomePage', () => {
     // Since we're in browser-only mode, we just verify the button is clickable
     await expect(scanButton).toBeVisible()
   })
+
+  test('search filters the project list and restores collapse state when cleared', async ({ page }) => {
+    await page.addInitScript(() => {
+      const proj = (name: string, dir: string) => ({
+        name, path: `${dir}/${name}`, has_project_file: true, has_banks: true,
+      })
+      ;(window as any).__TAURI_INTERNALS__ = {
+        transformCallback: () => {},
+        invoke: async (cmd: string) => {
+          if (cmd === 'scan_devices') {
+            return {
+              locations: [{
+                name: 'OCTATRACK', path: '/media', device_type: 'CompactFlash',
+                sets: [
+                  { name: 'DrumSet', path: '/media/OCTATRACK/DrumSet', has_audio_pool: true,
+                    projects: [proj('KICKS_2024', '/media/OCTATRACK/DrumSet'),
+                               proj('bassline-01', '/media/OCTATRACK/DrumSet')] },
+                  { name: 'PadSet', path: '/media/OCTATRACK/PadSet', has_audio_pool: true,
+                    projects: [proj('pads-v3', '/media/OCTATRACK/PadSet')] },
+                ],
+              }],
+              standalone_projects: [],
+            }
+          }
+          return null
+        },
+      }
+    })
+    await page.reload()
+    await page.getByRole('button', { name: /Scan/i }).first().click()
+
+    const search = page.getByLabel('Search projects')
+    await expect(search).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('PadSet')).toBeVisible()
+
+    // A Set with no matching project disappears; the one that matches auto-expands,
+    // so the hit is visible without clicking anything open.
+    await search.fill('kick')
+    await expect(page.getByText('KICKS_2024')).toBeVisible()
+    await expect(page.getByText('bassline-01')).toHaveCount(0)
+    await expect(page.getByText('PadSet')).toHaveCount(0)
+
+    // Clearing restores the full list.
+    await search.fill('')
+    await expect(page.getByText('PadSet')).toBeVisible()
+  })
+
+  test('Ctrl+F focuses the project search box', async ({ page }) => {
+    // Wait for the input to exist: pressing straight after goto() races the mount that
+    // installs the keydown listener, and the press is silently lost.
+    const search = page.getByLabel('Search projects')
+    await expect(search).toBeVisible()
+
+    await page.keyboard.press('Control+f')
+
+    await expect(search).toBeFocused()
+  })
 })
 
 test.describe('Navigation', () => {

@@ -18,6 +18,7 @@ import { AudioPoolSidebar } from "./AudioPoolSidebar";
 import { formatFileSize, UsagePopoverBox, type PopoverAnchor } from "./AudioFileTable";
 import { useAudioPreview, shouldAutoPreview, scrubTarget, volumeStep, isAudioFile } from '../hooks/useAudioPreview';
 import { invalidatePoolUsage } from '../hooks/usePoolUsage';
+import { useSearchShortcut } from '../hooks/useSearchShortcut';
 import { SamplePlayerBar } from './SamplePlayerBar';
 import { formatBankRef } from './BankSelector';
 
@@ -270,6 +271,8 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
 
   // Filter state
   const [searchText, setSearchText] = useState(prefs.searchText);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  useSearchShortcut(searchInputRef, () => setSearchText(''));
   const [compatibilityFilter, setCompatibilityFilter] = useState<string>(prefs.compatibilityFilter);
   const [statusFilter, setStatusFilter] = useState<string>(prefs.statusFilter);
   const [hideEmpty, setHideEmpty] = useState(prefs.hideEmpty);
@@ -1839,6 +1842,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
             })()}
             <div className="header-search-container">
               <input
+                ref={searchInputRef}
                 type="text"
                 placeholder="Search..."
                 value={searchText}

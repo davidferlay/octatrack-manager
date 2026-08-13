@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { DndContext } from '@dnd-kit/core'
 import { AudioFileTable } from './AudioFileTable'
@@ -61,6 +61,18 @@ describe('AudioFileTable', () => {
   it('shows the Show/Hide Columns control', () => {
     renderTable()
     expect(screen.getByTitle(/Show\/Hide Columns/i)).toBeInTheDocument()
+  })
+
+  it('focuses the search input on Ctrl+F', () => {
+    // The realistic regression here is a ref that was never attached, not broken
+    // hook logic - useSearchShortcut has its own unit tests.
+    renderTable()
+    const input = screen.getByPlaceholderText('Search...')
+    expect(document.activeElement).not.toBe(input)
+
+    fireEvent.keyDown(document, { key: 'f', ctrlKey: true })
+
+    expect(document.activeElement).toBe(input)
   })
 
   it('shows the pool-relative path on hover when poolRoot is set', () => {

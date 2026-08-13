@@ -111,6 +111,20 @@ describe('SampleSlotsTable', () => {
     expect(screen.getByPlaceholderText(/search/i)).toBeInTheDocument()
   })
 
+  it('focuses the search input on Ctrl+F', () => {
+    // The realistic regression here is a ref that was never attached, not broken
+    // hook logic - useSearchShortcut has its own unit tests.
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" />
+    )
+    const input = screen.getByPlaceholderText(/search/i)
+    expect(document.activeElement).not.toBe(input)
+
+    fireEvent.keyDown(document, { key: 'f', ctrlKey: true })
+
+    expect(document.activeElement).toBe(input)
+  })
+
   it('has copy button', () => {
     renderWithProvider(
       <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" />
