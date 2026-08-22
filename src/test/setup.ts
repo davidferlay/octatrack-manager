@@ -76,7 +76,19 @@ class FakeAudioContext {
   destination = {}
   createGain() { return new FakeGainNode() }
   createBufferSource() { return new FakeBufferSource() }
-  decodeAudioData() { return Promise.resolve({ duration: 4, numberOfChannels: 2, sampleRate: 44100, length: 176400 }) }
+  decodeAudioData() {
+    // Shaped like a real AudioBuffer: useAudioPreview re-encodes the decoded PCM to a
+    // 16-bit WAV for the <audio> element, so getChannelData has to exist. Kept tiny -
+    // a full 4s of silence would be 176400 frames of pointless work per test.
+    const frames = 512
+    return Promise.resolve({
+      duration: 4,
+      numberOfChannels: 2,
+      sampleRate: 44100,
+      length: frames,
+      getChannelData: () => new Float32Array(frames),
+    })
+  }
   resume() { return Promise.resolve() }
   close() { return Promise.resolve() }
 }

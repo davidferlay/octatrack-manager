@@ -66,6 +66,58 @@ export function toArrayBuffer(data: ArrayBuffer | number[]): ArrayBuffer {
   return data instanceof ArrayBuffer ? data : new Uint8Array(data).buffer
 }
 
+/** Minimal shape of the decoded PCM we re-encode - an AudioBuffer satisfies it. */
+export interface PcmSource {
+  numberOfChannels: number
+  sampleRate: number
+  length: number
+  getChannelData(channel: number): Float32Array
+}
+
+// Re-encode decoded PCM as a 16-bit WAV so playback can go through an <audio> element.
+// The element then only ever demuxes plain 16-bit PCM that we wrote: on older WebKit,
+// seeking a Blob-backed element holding a 24-bit WAV corrupted decoding into white noise,
+// and this sidesteps that pipeline whatever the source file's bit depth was.
+export function encodeWav(buffer: PcmSource): Blob {
+  const channels = Math.max(1, buffer.numberOfChannels)
+  const frames = buffer.length
+  const blockAlign = channels * 2
+  const dataBytes = frames * blockAlign
+  const out = new DataView(new ArrayBuffer(44 + dataBytes))
+
+  const ascii = (offset: number, text: string) => {
+    for (let i = 0; i < text.length; i++) out.setUint8(offset + i, text.charCodeAt(i))
+  }
+  ascii(0, 'RIFF')
+  out.setUint32(4, 36 + dataBytes, true)
+  ascii(8, 'WAVE')
+  ascii(12, 'fmt ')
+  out.setUint32(16, 16, true)                          // PCM chunk size
+  out.setUint16(20, 1, true)                           // format: PCM
+  out.setUint16(22, channels, true)
+  out.setUint32(24, buffer.sampleRate, true)
+  out.setUint32(28, buffer.sampleRate * blockAlign, true)
+  out.setUint16(32, blockAlign, true)
+  out.setUint16(34, 16, true)                          // bits per sample
+  ascii(36, 'data')
+  out.setUint32(40, dataBytes, true)
+
+  const data: Float32Array[] = []
+  for (let c = 0; c < channels; c++) data.push(buffer.getChannelData(c))
+
+  let offset = 44
+  for (let frame = 0; frame < frames; frame++) {
+    for (let c = 0; c < channels; c++) {
+      // Clamp before scaling: decoded float PCM can exceed +-1, and letting it wrap
+      // would turn a loud peak into the opposite-polarity sample - audible as a click.
+      const sample = Math.max(-1, Math.min(1, data[c][frame] ?? 0))
+      out.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true)
+      offset += 2
+    }
+  }
+  return new Blob([out.buffer], { type: 'audio/wav' })
+}
+
 function loadVolume(): number {
   const v = parseFloat(localStorage.getItem(VOL_KEY) ?? '')
   return Number.isFinite(v) && v >= 0 && v <= 1 ? v : 0.8
@@ -100,20 +152,23 @@ export interface AudioPreview {
   setLoop: (b: boolean) => void
 }
 
-// Sample preview via the Web Audio API. We decode the file bytes once into a PCM
-// AudioBuffer and play it through an AudioBufferSourceNode + GainNode. Seeking restarts
-// the source at a new offset instead of seeking a live demuxer — on WebKitGTK, seeking a
-// Blob-backed <audio> element corrupts 24-bit WAV decoding into white noise; decoding
-// up front sidesteps that pipeline entirely.
+// Sample preview. We decode the file bytes once with decodeAudioData, re-encode the
+// result as 16-bit PCM (see encodeWav) and play that through an <audio> element.
+//
+// Why not play the decoded buffer through Web Audio, which is the obvious route: on
+// WebKitGTK its output is silent on Bluetooth (A2DP) sinks, and the documented
+// workaround - forcing WebKit's GStreamer audio mixer - distorts every output on the
+// machine (issues #7 and #9). An <audio> element measures clean on both.
+//
+// Why decode at all instead of handing the element the original file: seeking a
+// Blob-backed element holding a 24-bit WAV used to corrupt decoding into white noise on
+// WebKitGTK. Re-encoding means the element only ever sees plain 16-bit PCM we wrote.
 export function useAudioPreview(): AudioPreview {
-  const ctxRef = useRef<AudioContext | null>(null)
-  const gainRef = useRef<GainNode | null>(null)
-  const bufferRef = useRef<AudioBuffer | null>(null)
-  const sourceRef = useRef<AudioBufferSourceNode | null>(null)
-  const offsetRef = useRef(0)       // buffer position (s) where the current playback started
-  const startedAtRef = useRef(0)    // ctx.currentTime when the current source started
+  const ctxRef = useRef<AudioContext | null>(null)     // decoding only, never output
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const urlRef = useRef<string | null>(null)
+  const durationRef = useRef(0)
   const rafRef = useRef<number | null>(null)
-  const stoppingRef = useRef(false) // true while we deliberately stop a source (suppresses onended)
 
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
@@ -130,12 +185,7 @@ export function useAudioPreview(): AudioPreview {
   const getCtx = useCallback(() => {
     if (!ctxRef.current) {
       const Ctor = getAudioContextCtor()
-      const ctx = new Ctor()
-      const gain = ctx.createGain()
-      gain.gain.value = volumeRef.current
-      gain.connect(ctx.destination)
-      ctxRef.current = ctx
-      gainRef.current = gain
+      ctxRef.current = new Ctor()
     }
     return ctxRef.current
   }, [])
@@ -147,62 +197,68 @@ export function useAudioPreview(): AudioPreview {
 
   const startRaf = useCallback(() => {
     stopRaf()
-    const loop = () => {
-      const ctx = ctxRef.current
-      const buf = bufferRef.current
-      if (ctx && buf) {
-        setCurrentTime(Math.min(buf.duration, offsetRef.current + (ctx.currentTime - startedAtRef.current)))
-      }
-      rafRef.current = requestAnimationFrame(loop)
+    const tick = () => {
+      const el = audioRef.current
+      if (el) setCurrentTime(el.currentTime)
+      rafRef.current = requestAnimationFrame(tick)
     }
-    rafRef.current = requestAnimationFrame(loop)
+    rafRef.current = requestAnimationFrame(tick)
   }, [stopRaf])
 
+  const getAudio = useCallback(() => {
+    if (!audioRef.current) {
+      const el = new Audio()
+      el.volume = volumeRef.current
+      el.loop = loopRef.current
+      // With loop set the element repeats without firing 'ended', so this only runs on a
+      // genuine end-of-clip.
+      el.addEventListener('ended', () => {
+        setIsPlaying(false)
+        setCurrentTime(0)
+        stopRaf()
+      })
+      audioRef.current = el
+    }
+    return audioRef.current
+  }, [stopRaf])
+
+  // currentTime is only writable once the element has metadata; before that, defer.
+  const seekElement = useCallback((el: HTMLAudioElement, seconds: number) => {
+    const apply = () => { try { el.currentTime = seconds } catch { /* not seekable */ } }
+    if (el.readyState >= 1 /* HAVE_METADATA */) apply()
+    else el.addEventListener('loadedmetadata', apply, { once: true })
+  }, [])
+
+  const startPlayback = useCallback((offset: number) => {
+    const el = audioRef.current
+    if (!el || !el.src) return
+    const target = offset >= durationRef.current ? 0 : Math.max(0, offset)
+    seekElement(el, target)
+    setCurrentTime(target)
+    const started = el.play()
+    setIsPlaying(true)
+    startRaf()
+    // play() rejects when the engine refuses (autoplay policy, decode failure). Surface it
+    // instead of leaving a transport that claims to be playing in silence.
+    void Promise.resolve(started).catch((e: unknown) => {
+      console.error('audio playback failed', e)
+      setIsPlaying(false)
+      stopRaf()
+      setError(true)
+      setErrorDetail(String(e))
+    })
+  }, [seekElement, startRaf, stopRaf])
+
   const stopPlayback = useCallback((remember: boolean) => {
-    const ctx = ctxRef.current
-    if (sourceRef.current) {
-      if (remember && ctx) {
-        const t = Math.min(bufferRef.current?.duration ?? 0, offsetRef.current + (ctx.currentTime - startedAtRef.current))
-        offsetRef.current = t
-        setCurrentTime(t)
-      }
-      stoppingRef.current = true
-      try { sourceRef.current.stop() } catch { /* already stopped */ }
-      sourceRef.current.disconnect()
-      sourceRef.current = null
-      stoppingRef.current = false
+    const el = audioRef.current
+    if (el) {
+      el.pause()
+      if (remember) setCurrentTime(el.currentTime)
     }
     stopRaf()
   }, [stopRaf])
 
-  const startPlayback = useCallback((offset: number) => {
-    const buffer = bufferRef.current
-    if (!buffer) return
-    const ctx = getCtx()
-    ctx.resume()
-    stopPlayback(false)
-    const src = ctx.createBufferSource()
-    src.buffer = buffer
-    src.connect(gainRef.current!)
-    src.onended = () => {
-      if (stoppingRef.current) return // our own stop(), not a natural end
-      sourceRef.current = null
-      if (loopRef.current && bufferRef.current) { startPlayback(0); return }
-      offsetRef.current = 0
-      setIsPlaying(false)
-      setCurrentTime(0)
-      stopRaf()
-    }
-    const startOffset = offset >= buffer.duration ? 0 : Math.max(0, offset)
-    offsetRef.current = startOffset
-    startedAtRef.current = ctx.currentTime
-    src.start(0, startOffset)
-    sourceRef.current = src
-    setIsPlaying(true)
-    startRaf()
-  }, [getCtx, stopPlayback, startRaf, stopRaf])
-
-  // Fetch the file bytes via Rust and decode them into a PCM buffer.
+  // Fetch the file bytes via Rust, decode them, and hand the element 16-bit PCM.
   const decode = useCallback(async (path: string, name: string): Promise<boolean> => {
     setError(false)
     setErrorDetail('')
@@ -211,30 +267,30 @@ export function useAudioPreview(): AudioPreview {
       const ctx = getCtx()
       const bytes = await invoke<ArrayBuffer | number[]>('read_audio_file', { path })
       const buffer = await decodeBytes(ctx, toArrayBuffer(bytes))
-      bufferRef.current = buffer
-      offsetRef.current = 0
+      const el = getAudio()
+      el.pause()
+      if (urlRef.current) URL.revokeObjectURL(urlRef.current)
+      urlRef.current = URL.createObjectURL(encodeWav(buffer))
+      el.src = urlRef.current
+      durationRef.current = buffer.duration
       setDuration(buffer.duration)
       setCurrentTime(0)
       return true
     } catch (e) {
       console.error('audio preview failed', path, e)
-      bufferRef.current = null
+      durationRef.current = 0
       setError(true)
       setErrorDetail(String(e))
       setIsPlaying(false)
       return false
     }
-  }, [getCtx])
+  }, [getCtx, getAudio])
 
   const play = useCallback(async (path: string, name: string) => {
-    // Resume while still inside the user-gesture call stack: WebView2 (Chromium autoplay
-    // policy) and WebKit can refuse a resume() issued after an await, which left the
-    // context suspended and playback silent.
-    try { getCtx().resume() } catch { /* surfaces via decode() below */ }
     stopPlayback(false)
     setIsPlaying(false)
     if (await decode(path, name)) startPlayback(0)
-  }, [getCtx, decode, startPlayback, stopPlayback])
+  }, [decode, startPlayback, stopPlayback])
 
   const load = useCallback((path: string, name: string) => {
     stopPlayback(false)
@@ -245,8 +301,10 @@ export function useAudioPreview(): AudioPreview {
   // Return to the idle state (no sample): used when the selection isn't a previewable file.
   const reset = useCallback(() => {
     stopPlayback(false)
-    bufferRef.current = null
-    offsetRef.current = 0
+    const el = audioRef.current
+    if (el) el.removeAttribute('src')
+    if (urlRef.current) { URL.revokeObjectURL(urlRef.current); urlRef.current = null }
+    durationRef.current = 0
     setIsPlaying(false)
     setActiveName('')
     setDuration(0)
@@ -258,32 +316,41 @@ export function useAudioPreview(): AudioPreview {
   const pause = useCallback(() => { stopPlayback(true); setIsPlaying(false) }, [stopPlayback])
 
   const togglePlay = useCallback(() => {
-    if (sourceRef.current) { stopPlayback(true); setIsPlaying(false) }
-    else if (bufferRef.current) startPlayback(offsetRef.current)
-  }, [stopPlayback, startPlayback])
+    const el = audioRef.current
+    if (!el || !el.src) return
+    if (el.paused) startPlayback(el.currentTime)
+    else { stopPlayback(true); setIsPlaying(false) }
+  }, [startPlayback, stopPlayback])
 
-  // Seek by restarting the buffer at the new offset (only audible while playing).
-  // ponytail: a drag fires many seeks → many restarts; fine for a preview, debounce only if it stutters.
   const seek = useCallback((seconds: number) => {
-    const dur = bufferRef.current?.duration ?? 0
-    const t = Math.min(dur, Math.max(0, seconds))
-    offsetRef.current = t
+    const el = audioRef.current
+    const t = Math.min(durationRef.current, Math.max(0, seconds))
     setCurrentTime(t)
-    if (sourceRef.current) startPlayback(t)
-  }, [startPlayback])
+    if (el && el.src) seekElement(el, t)
+  }, [seekElement])
 
   const setVolume = useCallback((v: number) => {
     setVolumeState(v)
     volumeRef.current = v
-    if (gainRef.current) gainRef.current.gain.value = v
+    if (audioRef.current) audioRef.current.volume = v
     localStorage.setItem(VOL_KEY, String(v))
   }, [])
   const setAutoPreview = useCallback((b: boolean) => { setAutoPreviewState(b); localStorage.setItem(AUTO_KEY, String(b)) }, [])
-  const setLoop = useCallback((b: boolean) => { setLoopState(b); loopRef.current = b; localStorage.setItem(LOOP_KEY, String(b)) }, [])
+  const setLoop = useCallback((b: boolean) => {
+    setLoopState(b)
+    loopRef.current = b
+    if (audioRef.current) audioRef.current.loop = b
+    localStorage.setItem(LOOP_KEY, String(b))
+  }, [])
 
   useEffect(() => {
-    return () => { stopPlayback(false); stopRaf(); ctxRef.current?.close() }
-  }, [stopPlayback, stopRaf])
+    return () => {
+      audioRef.current?.pause()
+      if (urlRef.current) URL.revokeObjectURL(urlRef.current)
+      stopRaf()
+      ctxRef.current?.close()
+    }
+  }, [stopRaf])
 
   return { isPlaying, currentTime, duration, activeName, error, errorDetail, volume, autoPreview, loop,
     play, load, reset, pause, togglePlay, seek, setVolume, setAutoPreview, setLoop }
