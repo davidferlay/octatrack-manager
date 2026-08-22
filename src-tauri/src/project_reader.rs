@@ -557,110 +557,6 @@ fn check_audio_compatibility(file_path: &Path) -> AudioInfo {
     }
 }
 
-/// Lines of a project file's `[SETTINGS]` block, as `(key, whole line)` pairs.
-fn settings_entries(text: &str) -> Option<Vec<(String, String)>> {
-    let start = text.find("[SETTINGS]")? + "[SETTINGS]".len();
-    let end = text.find("[/SETTINGS]")?;
-    if end < start {
-        return None;
-    }
-    Some(
-        text[start..end]
-            .lines()
-            .filter_map(|line| {
-                let trimmed = line.trim_end_matches('\r');
-                let key = trimmed.split('=').next()?;
-                if trimmed.contains('=') && !key.is_empty() {
-                    Some((key.to_string(), trimmed.to_string()))
-                } else {
-                    None
-                }
-            })
-            .collect(),
-    )
-}
-
-/// Add any `[SETTINGS]` entries the file is missing, taking the values from a default
-/// project. Returns `None` when nothing is missing or the block cannot be located.
-///
-/// The parser requires ~80 settings keys and supplies a fallback for only 4 of them, so a
-/// project written without one - issue #8 reported `PATTERN_TEMPO_ENABLED`, which the
-/// Octatrack omits in some situations - fails to open at all. Defaults come from
-/// `ProjectFile::default()` rather than a hardcoded list so they cannot drift from what
-/// the parser expects.
-///
-/// Keys are compared by occurrence count, because `TRIG_MODE_MIDI` legitimately appears
-/// eight times (one per MIDI track) and the parser numbers them by position.
-fn fill_missing_settings(text: &str) -> Option<String> {
-    let default_bytes = ProjectFile::default().to_bytes().ok()?;
-    let (default_text, _, _) = encoding_rs::WINDOWS_1258.decode(&default_bytes);
-
-    let expected = settings_entries(&default_text)?;
-    let present = settings_entries(text)?;
-
-    let mut have: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
-    for (key, _) in &present {
-        *have.entry(key.as_str()).or_default() += 1;
-    }
-
-    let mut seen: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
-    let mut additions: Vec<&str> = Vec::new();
-    for (key, line) in &expected {
-        let nth = seen.entry(key.as_str()).or_default();
-        *nth += 1;
-        if have.get(key.as_str()).copied().unwrap_or(0) < *nth {
-            additions.push(line.as_str());
-        }
-    }
-    if additions.is_empty() {
-        return None;
-    }
-
-    let insert_at = text.find("[/SETTINGS]")?;
-    let mut out = String::with_capacity(text.len() + additions.len() * 32);
-    out.push_str(&text[..insert_at]);
-    for line in additions {
-        out.push_str(line);
-        out.push_str("\r\n");
-    }
-    out.push_str(&text[insert_at..]);
-    Some(out)
-}
-
-/// Read a project file, tolerating a `[SETTINGS]` block that is missing keys.
-///
-/// The repair happens on an in-memory copy only - the file on disk is never rewritten.
-/// That matters: project.work is only ever written surgically elsewhere in this module,
-/// precisely so that untouched fields keep their original bytes.
-///
-/// A file that still fails after repair reports its ORIGINAL error, so a genuinely corrupt
-/// or truncated project is not mis-described as a settings problem.
-fn read_project_file(path: &Path) -> Result<ProjectFile, ot_tools_io::OtToolsIoError> {
-    let bytes = match std::fs::read(path) {
-        Ok(b) => b,
-        // Fall back so the caller still gets the library's own io error type.
-        Err(_) => return ProjectFile::from_data_file(path),
-    };
-
-    let first_error = match ProjectFile::from_bytes(&bytes) {
-        Ok(project) => return Ok(project),
-        Err(e) => e,
-    };
-
-    let (text, _, _) = encoding_rs::WINDOWS_1258.decode(&bytes);
-    if let Some(repaired) = fill_missing_settings(&text) {
-        let (encoded, _, _) = encoding_rs::WINDOWS_1258.encode(&repaired);
-        if let Ok(project) = ProjectFile::from_bytes(&encoded) {
-            println!(
-                "[DEBUG] {} was missing [SETTINGS] keys; defaulted them to open the project",
-                path.display()
-            );
-            return Ok(project);
-        }
-    }
-    Err(first_error)
-}
-
 pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, String> {
     let path = Path::new(project_path);
 
@@ -673,7 +569,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
         return Err("No project file found".to_string());
     };
 
-    match read_project_file(&project_file_path) {
+    match ProjectFile::from_data_file(&project_file_path) {
         Ok(project) => {
             // Extract tempo
             let tempo = project.settings.tempo.tempo as f32;
@@ -3816,7 +3712,7 @@ pub fn check_missing_source_files(
         return Err("Project file not found".to_string());
     };
 
-    let project_data = read_project_file(&project_file_path)
+    let project_data = ProjectFile::from_data_file(&project_file_path)
         .map_err(|e| format!("Failed to read project: {:?}", e))?;
 
     let mut missing_count: u32 = 0;
@@ -3878,7 +3774,7 @@ pub fn get_slot_audio_paths(
         return Err("Project file not found".to_string());
     };
 
-    let project_data = read_project_file(&project_file_path)
+    let project_data = ProjectFile::from_data_file(&project_file_path)
         .map_err(|e| format!("Failed to read project: {:?}", e))?;
 
     let mut paths: Vec<String> = Vec::new();
@@ -3992,7 +3888,7 @@ pub fn list_missing_samples(project_path: &str) -> Result<Vec<MissingSample>, St
         return Err("Project file not found".to_string());
     };
 
-    let project_data = read_project_file(&project_file_path)
+    let project_data = ProjectFile::from_data_file(&project_file_path)
         .map_err(|e| format!("Failed to read project: {:?}", e))?;
 
     // Track missing files: filename -> (original_path, flex_slot_ids, static_slot_ids)
@@ -6518,7 +6414,7 @@ fn sum_flex_sample_sizes(project_path: &Path, load_24bit_flex: bool) -> Result<u
         return Ok(0);
     };
 
-    let project_data = read_project_file(&project_file_path)
+    let project_data = ProjectFile::from_data_file(&project_file_path)
         .map_err(|e| format!("Failed to read project for flex RAM check: {:?}", e))?;
 
     let mut total_bytes: u64 = 0;
@@ -6558,7 +6454,7 @@ fn sum_new_flex_sample_sizes(
         return Ok(0);
     };
 
-    let project_data = read_project_file(&project_file_path)
+    let project_data = ProjectFile::from_data_file(&project_file_path)
         .map_err(|e| format!("Failed to read source project for flex RAM check: {:?}", e))?;
 
     let mut total_bytes: u64 = 0;
@@ -6599,7 +6495,7 @@ fn read_project_memory_settings(project_path: &Path) -> Result<MemorySettings, S
         return Err("Project file not found".to_string());
     };
 
-    let project_data = read_project_file(&project_file_path)
+    let project_data = ProjectFile::from_data_file(&project_file_path)
         .map_err(|e| format!("Failed to read project settings: {:?}", e))?;
 
     Ok(MemorySettings {
@@ -7919,7 +7815,7 @@ pub fn copy_sample_slots(
         return Err("Source project file not found".to_string());
     };
 
-    let source_project_data = read_project_file(&source_project_file_path)
+    let source_project_data = ProjectFile::from_data_file(&source_project_file_path)
         .map_err(|e| format!("Failed to read source project: {:?}", e))?;
 
     // Read destination project file
@@ -7934,7 +7830,7 @@ pub fn copy_sample_slots(
         return Err("Destination project file not found".to_string());
     };
 
-    let mut dest_project_data = read_project_file(&dest_project_file_path)
+    let mut dest_project_data = ProjectFile::from_data_file(&dest_project_file_path)
         .map_err(|e| format!("Failed to read destination project: {:?}", e))?;
 
     // Get Audio Pool path for move_to_pool mode (only when copying between different projects)
@@ -16419,10 +16315,14 @@ mod tests {
         use super::*;
 
         /// Issue #8: some real projects have a [SETTINGS] block that is missing keys the
-        /// parser demands, and the whole project then fails to open with
-        /// `MissingField { key: "PATTERN_TEMPO_ENABLED" }`. 80 of the settings keys are
-        /// parsed with no default, so any of them can do this - the reporter just happened
-        /// to hit that one. A project must still open, with the missing value defaulted.
+        /// parser demands, and the whole project then failed to open with
+        /// `MissingField { key: "PATTERN_TEMPO_ENABLED" }`. Most settings keys are parsed
+        /// with no fallback, so any of them could do this - the reporter just happened to
+        /// hit that one.
+        ///
+        /// The defaulting lives in ot-tools-io (`apply_section_defaults`), so these are
+        /// here to pin the behaviour the app depends on: if the pinned revision ever moves
+        /// to one without it, these fail rather than the bug quietly coming back.
         fn project_without_settings_key(key: &str) -> (TempDir, String) {
             let temp = TempDir::new().unwrap();
             let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -16461,9 +16361,9 @@ mod tests {
             );
         }
 
-        /// The same repair has to cover the other 79 no-default keys, not just the one in
-        /// the report. TEMPOx24 is checked separately below because it also feeds a value
-        /// we display.
+        /// The defaulting has to cover the other no-fallback keys, not just the one in the
+        /// report. TEMPOx24 is checked separately below because it also feeds a value we
+        /// display.
         #[test]
         fn a_project_missing_other_settings_keys_still_opens() {
             for key in [
@@ -16481,10 +16381,10 @@ mod tests {
             }
         }
 
-        /// Positive control: the repair must not silently replace values that ARE present.
+        /// Positive control: defaulting must not silently replace values that ARE present.
         /// A project whose tempo is on disk must still report that tempo, not the default.
         #[test]
-        fn repairing_does_not_overwrite_values_that_are_present() {
+        fn defaulting_does_not_overwrite_values_that_are_present() {
             let temp = TempDir::new().unwrap();
             let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("tests/fixtures/real_device/project.work");
@@ -16501,15 +16401,18 @@ mod tests {
             fs::write(temp.path().join("project.work"), &*encoded).unwrap();
 
             let meta = read_project_metadata(&temp.path().to_string_lossy()).unwrap();
-            assert_eq!(meta.tempo, 133.0, "stored tempo must survive the repair");
+            assert_eq!(
+                meta.tempo, 133.0,
+                "the stored tempo must win over any default"
+            );
         }
 
-        /// Reading must never rewrite the user's file. The repair exists only to get a
-        /// parse through; project.work is otherwise written surgically so untouched fields
-        /// keep their original bytes, and a read that silently normalised the file would
-        /// throw that away.
+        /// Reading must never rewrite the user's file. Defaults are applied to the parsed
+        /// value only; project.work is otherwise written surgically so untouched fields keep
+        /// their original bytes, and a read that silently normalised the file would throw
+        /// that away.
         #[test]
-        fn repairing_a_project_does_not_touch_the_file_on_disk() {
+        fn reading_a_project_does_not_touch_the_file_on_disk() {
             let (_temp, path) = project_without_settings_key("PATTERN_TEMPO_ENABLED");
             let file = std::path::Path::new(&path).join("project.work");
             let before = fs::read(&file).unwrap();
@@ -16523,10 +16426,9 @@ mod tests {
             );
         }
 
-        /// A complete file must not be altered by the repair path in any way - same values
-        /// as before the fix existed.
+        /// A complete file must read exactly as it did before defaulting existed.
         #[test]
-        fn a_complete_project_is_unaffected_by_the_repair() {
+        fn a_complete_project_reads_the_same_values() {
             let temp = TempDir::new().unwrap();
             let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("tests/fixtures/real_device/project.work");
@@ -16644,15 +16546,15 @@ mod tests {
 
             assert!(
                 list_missing_samples(&path).is_ok(),
-                "list_missing_samples should work on a repaired project"
+                "list_missing_samples should work on a defaulted project"
             );
             assert!(
                 get_slot_audio_paths(&path, "flex", vec![1], false).is_ok(),
-                "get_slot_audio_paths should work on a repaired project"
+                "get_slot_audio_paths should work on a defaulted project"
             );
             assert!(
                 check_missing_source_files(&path, "flex", vec![1]).is_ok(),
-                "check_missing_source_files should work on a repaired project"
+                "check_missing_source_files should work on a defaulted project"
             );
         }
 
