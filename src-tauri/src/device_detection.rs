@@ -53,6 +53,25 @@ pub struct OctatrackProject {
     pub has_banks: bool,
 }
 
+/// Checks if a path should be excluded from automatic discovery.
+/// Explicitly selected roots are already user-approved and do not use this filter.
+fn is_system_path(path: &Path) -> bool {
+    let path_str = path.to_string_lossy();
+
+    path_str.starts_with("/System/")
+        || path_str.starts_with("/Library/")
+        || path_str.starts_with("/private/")
+        || path_str.contains("/Library/Application Support/")
+        || path_str.contains("/Library/Preferences/")
+        || path_str.contains("/Library/Caches/")
+        || path_str.starts_with("/usr/")
+        || path_str.starts_with("/var/")
+        || path_str.starts_with("/etc/")
+        || path_str.starts_with("/bin/")
+        || path_str.starts_with("/sbin/")
+        || path_str.starts_with("/boot/")
+}
+
 /// Checks if AUDIO directory contains actual audio samples (WAV or AIFF files)
 /// Checks both the immediate directory and one level of subdirectories
 pub(crate) fn has_valid_audio_pool(audio_path: &Path) -> bool {
@@ -184,6 +203,7 @@ fn is_backups_dir(path: &Path) -> bool {
 fn scan_for_sets(
     location_path: &Path,
     max_depth: usize,
+    exclude_system_paths: bool,
 ) -> (Vec<OctatrackSet>, Vec<OctatrackProject>) {
     let mut sets = Vec::new();
     let mut standalone_projects = Vec::new();
@@ -193,7 +213,10 @@ fn scan_for_sets(
     for entry in WalkDir::new(location_path)
         .max_depth(max_depth)
         .into_iter()
-        .filter_entry(|e| !is_backups_dir(e.path()))
+        .filter_entry(|entry| {
+            !is_backups_dir(entry.path())
+                && (!exclude_system_paths || !is_system_path(entry.path()))
+        })
         .filter_map(|e| e.ok())
     {
         let path = entry.path();
@@ -229,7 +252,10 @@ fn scan_for_sets(
     for entry in WalkDir::new(location_path)
         .max_depth(max_depth)
         .into_iter()
-        .filter_entry(|e| !is_backups_dir(e.path()))
+        .filter_entry(|entry| {
+            !is_backups_dir(entry.path())
+                && (!exclude_system_paths || !is_system_path(entry.path()))
+        })
         .filter_map(|e| e.ok())
     {
         let path = entry.path();
@@ -346,7 +372,7 @@ fn scan_home_directory() -> ScanResult {
         }
 
         // Scan for Sets and standalone projects in this path
-        let (sets, standalone_projects) = scan_for_sets(&search_path, 3);
+        let (sets, standalone_projects) = scan_for_sets(&search_path, 3, true);
         all_sets.extend(sets);
         all_standalone_projects.extend(standalone_projects);
     }
@@ -371,7 +397,7 @@ pub fn scan_directory(path: &str) -> ScanResult {
     }
 
     // Scan for Sets and standalone projects in the specified directory
-    let (sets, standalone_projects) = scan_for_sets(path, 3);
+    let (sets, standalone_projects) = scan_for_sets(path, 3, false);
 
     if sets.is_empty() && standalone_projects.is_empty() {
         return ScanResult {
@@ -447,7 +473,7 @@ pub fn discover_devices() -> ScanResult {
         }
 
         // Scan for Octatrack sets and standalone projects
-        let (sets, standalone_projects) = scan_for_sets(mount_point, 3);
+        let (sets, standalone_projects) = scan_for_sets(mount_point, 3, true);
         all_removable_sets.extend(sets);
         all_removable_projects.extend(standalone_projects);
     }
