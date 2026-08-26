@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use ot_domain::{RootId, RootRelativePath};
+use ot_domain::{LibrarySnapshot, RootId, RootRelativePath};
 use std::fmt;
 
 pub trait ProjectStorage {
@@ -9,6 +9,10 @@ pub trait ProjectStorage {
         root_id: &RootId,
         path: &RootRelativePath,
     ) -> Result<Vec<u8>, StorageError>;
+}
+
+pub trait ReadOnlyLibrary {
+    fn list_library(&self, root_id: &RootId) -> Result<LibrarySnapshot, StorageError>;
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

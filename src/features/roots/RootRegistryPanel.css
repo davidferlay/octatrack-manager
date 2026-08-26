@@ -1,0 +1,117 @@
+.root-registry-panel {
+  margin: 1rem 0 1.5rem;
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, var(--elektron-orange) 45%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--elektron-orange) 5%, var(--elektron-black));
+}
+
+.root-registry-heading,
+.root-registry-title-row,
+.root-session-summary > div,
+.root-library-set header,
+.root-library-set li {
+  display: flex;
+  align-items: center;
+}
+
+.root-registry-heading {
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.root-registry-heading h2,
+.root-registry-heading p,
+.root-library-set ul {
+  margin: 0;
+}
+
+.root-registry-heading p {
+  margin-top: 0.3rem;
+  color: var(--elektron-text-secondary);
+}
+
+.root-registry-title-row {
+  gap: 0.6rem;
+}
+
+.root-mode-badge {
+  padding: 0.2rem 0.45rem;
+  border: 1px solid #78c091;
+  border-radius: 999px;
+  color: #78c091;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.root-registry-error {
+  margin: 0.8rem 0 0;
+  color: #ff7777;
+}
+
+.root-registry-content {
+  margin-top: 1rem;
+}
+
+.root-session-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+}
+
+.root-session-summary > div {
+  gap: 0.4rem;
+}
+
+.root-session-summary dt {
+  color: var(--elektron-text-secondary);
+}
+
+.root-session-summary dd {
+  margin: 0;
+}
+
+.root-library-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.root-library-set {
+  padding: 0.75rem;
+  border: 1px solid var(--elektron-border-gray);
+  border-radius: 6px;
+}
+
+.root-library-set header,
+.root-library-set li {
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.root-library-set ul {
+  padding: 0.5rem 0 0 1.25rem;
+}
+
+.root-library-set li + li {
+  margin-top: 0.35rem;
+}
+
+.root-library-set code {
+  color: var(--elektron-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .root-registry-heading,
+  .root-library-set header,
+  .root-library-set li {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .root-session-summary {
+    grid-template-columns: 1fr;
+  }
+}

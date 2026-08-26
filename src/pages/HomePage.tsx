@@ -26,6 +26,7 @@ import { DeleteProjectDialog } from "../components/DeleteProjectDialog";
 import { RenameProjectModal } from "../components/RenameProjectModal";
 import { ProjectContextMenu } from "../components/ProjectContextMenu";
 import { CopyProgressModal } from "../components/CopyProgressModal";
+import { RootRegistryPanel } from "../features/roots/RootRegistryPanel";
 import type {
   ClipboardState,
   ContextMenuState,
@@ -505,6 +506,8 @@ export function HomePage() {
           Browse...
         </button>
       </div>
+
+      <RootRegistryPanel />
 
       {!searchActive && hasScanned && locations.length === 0 && standaloneProjects.length === 0 && (
         <div className="no-devices">
