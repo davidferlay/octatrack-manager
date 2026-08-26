@@ -43,13 +43,21 @@
 ## 2. 正本と現在地
 
 - upstream: `https://github.com/davidferlay/octatrack-manager.git`
+- fork: `https://github.com/kaz4g/octatrack-manager-xx.git`
+- Macローカル: `/Users/kaz4g/sandbox/gitHub/octatrack-manager-xx`
 - upstream基準SHA: `8d32913`
-- 作業ブランチ: `chore/fork-baseline`
-- fork基準コミット: `d2cde25`
+- ベースラインPR: #1マージ済み
+- fork基準コミット: `447950f084e33b61c4b7ddd22209865ce7790605`
+- PR-0作業ブランチ: `security/p0-updater-containment`
 - Node基準: 22 (`.nvmrc`)
 - `ot-tools-io`はコミット
   `cd246d8a595647364eb4cc78211033b2d1302526`へ固定済み
-- 現時点では`origin`未設定。GitHub上の公開フォーク作成後に追加する
+- `origin`はfork、`upstream`は本家を参照する
+
+PR-0では、起動時とversionクリック時のupdate確認、download/install、再起動／終了、
+frontendとRustのupdater/process plugin、Tauri capability、本家endpointと公開鍵、
+updater artifact生成、release workflowのupdater署名経路を無効化した。version番号の
+静的表示は維持している。
 
 基準コミット時点で、TypeScript typecheck、frontend build、frontend tests
 367件は成功済み。Linux環境のRust/TauriフルテストはGTK/WebKit系system
@@ -160,15 +168,8 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 
 ## 6. 次のCodex作業
 
-次は`security/p0-local-safety`ブランチを作り、P0を小さな変更に分割して進める。
-最初の変更は次の範囲に限定する。
-
-1. upstream updaterの起動時チェック／インストールを停止
-2. 設定からupdater endpointと権限を除外
-3. 既存テストとbuildが維持されることを確認
-
-この変更では、パス境界の大規模改修や新機能を同時に入れない。
-
-その後、`docs/NEXT_GENERATION_ARCHITECTURE.md`のPR-1に従い、runtime behaviorを
-変えずに次世代coreのcrate/port境界を追加する。既存の巨大moduleを最初に全面分割
+ベースラインPR #1はマージ済みで、PR-0ではupstream updater経路を無効化した。
+次は`docs/NEXT_GENERATION_ARCHITECTURE.md`のPR-1 `next-core skeleton`に従い、
+runtime behaviorを変えずに次世代coreのcrate/port境界を追加する。既存の巨大moduleを
+最初に全面分割
 しない。PR-2のread-only vertical sliceで新しい境界が成立することを先に証明する。
