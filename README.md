@@ -75,8 +75,8 @@ Feedback from the community is invaluable. Please share your experiences, bug re
 If you'd like to build the project locally:
 
 ```bash
-git clone https://github.com/davidferlay/octatrack-manager.git
-cd octatrack-manager
+git clone https://github.com/kaz4g/octatrack-manager-xx.git
+cd octatrack-manager-xx
 corepack enable
 pnpm install --frozen-lockfile
 pnpm run tauri:dev
