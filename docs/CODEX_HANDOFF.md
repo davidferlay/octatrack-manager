@@ -47,9 +47,12 @@
 - Macローカル: `/Users/kaz4g/sandbox/gitHub/octatrack-manager-xx`
 - upstream基準SHA: `8d32913`
 - ベースラインPR: #1マージ済み
-- fork基準コミット: `447950f084e33b61c4b7ddd22209865ce7790605`
-- PR-0作業ブランチ: `security/p0-updater-containment`
-- Node基準: 22 (`.nvmrc`)
+- PR-0 updater containment: #2マージ済み
+- PR-1 next-core skeleton: #4マージ済み
+- 現在のmain SHA: `b28e6d0007aa0e819ad116cfa51b675ab390d721`
+- pnpm移行ブランチ: `chore/migrate-to-pnpm`
+- Node基準: 22（`>=22.13.0`、`.nvmrc`）
+- package manager: `pnpm@11.24.0`
 - `ot-tools-io`はコミット
   `cd246d8a595647364eb4cc78211033b2d1302526`へ固定済み
 - `origin`はfork、`upstream`は本家を参照する
@@ -65,7 +68,7 @@ library不足で未完了。macOS実機で再確認する。
 
 ## 3. セキュリティ監査の判定
 
-ソース、本家履歴、直接Git依存、npm/Cargo依存、自動更新、Tauri権限、CIを
+ソース、本家履歴、直接Git依存、JavaScript/Cargo依存、自動更新、Tauri権限、CIを
 確認した範囲では、バックドア、認証情報窃取、サンプルの外部送信、隠れた
 コマンド実行、難読化ペイロードなど、明確な悪意の兆候は見つかっていない。
 
@@ -79,7 +82,7 @@ library不足で未完了。macOS実機で再確認する。
 6. 削除に`remove_file`／`remove_dir_all`を使う箇所があり、復元できない
 7. updater依存の`tar 0.4.44`などに既知脆弱性がある
 8. `ot-tools-io`経由の`serde_yml`／`libyml`がunsoundかつ保守終了
-9. GitHub Actionsが可変タグ参照で、releaseが`npm install`を使う
+9. 一部GitHub Actionsが可変タグ参照のまま残っている
 10. `v0.45.0`は署名タグではなく、配布DMGとソースの同一性保証が弱い
 
 結論は「フォークの素体として条件付き採用」。安全化が終わるまでは、原本SD／
@@ -114,7 +117,7 @@ P0の完了条件:
 - symlinkと`..`で境界を越えられない
 - cancel／失敗後も原本がbyte-for-byteで変わらない
 - updaterが本家から自動インストールしない
-- `npm audit`／`cargo audit`の残存リスクが記録されている
+- `pnpm audit`／`cargo audit`の残存リスクが記録されている
 
 ### P1 — ライブラリ閲覧MVP
 
@@ -168,9 +171,10 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 
 ## 6. 次のCodex作業
 
-ベースラインPR #1はマージ済み。PR-0ではupstream updater経路を無効化し、PR-1では
-runtime behaviorを変えずに`ot-domain`、codec/storage ports、`ot-application`、中央IPC
-clientと依存ルールを追加した。
+ベースラインPR #1、PR-0、PR-1はマージ済み。PR-0ではupstream updater経路を無効化し、
+PR-1ではruntime behaviorを変えずに`ot-domain`、codec/storage ports、`ot-application`、
+中央IPC clientと依存ルールを追加した。JavaScript toolingはpnpm 11.24.0へ移行済みで、
+root appとuser-guideは独立したpnpm lockfileを使用する。
 
 次は`docs/NEXT_GENERATION_ARCHITECTURE.md`のPR-2 `RootRegistry read-only vertical slice`
 に進む。既存の巨大moduleを最初に全面分割せず、read-only sliceで新しい境界が成立する

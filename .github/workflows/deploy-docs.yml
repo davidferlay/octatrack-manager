@@ -6,6 +6,9 @@ on:
       - main
     paths:
       - 'user-guide/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
       - '.github/workflows/deploy-docs.yml'
   workflow_dispatch:
 
@@ -30,20 +33,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - name: Install pnpm and Node.js
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
         with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: user-guide/package-lock.json
+          runtime: node@22
+          cache: true
+          install: false
 
       - name: Install dependencies
-        working-directory: user-guide
-        run: npm ci
+        run: pnpm --dir user-guide install --frozen-lockfile
 
       - name: Optimize images
-        working-directory: user-guide
-        run: npm run optimize-images
+        run: pnpm --dir user-guide run optimize-images
 
       - name: Fetch latest release version
         run: |
@@ -53,19 +54,18 @@ jobs:
           echo "Resolved latest release version: $RELEASE_VERSION"
 
       - name: Build user guide
-        working-directory: user-guide
-        run: npm run build
+        run: pnpm --dir user-guide run build
 
       - name: Generate PDF user guide
         working-directory: user-guide
         run: |
-          npx docusaurus serve --port 3030 --no-open &
+          pnpm exec docusaurus serve --port 3030 --no-open &
           SERVER_PID=$!
           for i in $(seq 1 30); do
             curl -s http://localhost:3030/octatrack-manager/docs/intro > /dev/null 2>&1 && break
             sleep 1
           done
-          npx docs-to-pdf docusaurus \
+          pnpm exec docs-to-pdf docusaurus \
             --initialDocURLs "http://localhost:3030/octatrack-manager/docs/intro" \
             --contentSelector "article" \
             --paginationSelector "a.pagination-nav__link--next" \

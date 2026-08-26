@@ -26,11 +26,11 @@
 - [ ] `cargo clippy` clean (no new warnings)
 
 ### Frontend (`src/`)
-- [ ] Vitest component/unit tests added/updated (`npm test`)
-- [ ] TypeScript type check clean (`npx tsc --noEmit`)
+- [ ] Vitest component/unit tests added/updated (`pnpm run test:frontend`)
+- [ ] TypeScript type check clean (`pnpm run typecheck`)
 
 ### E2E (`e2e/`)
-- [ ] Playwright tests added/updated for new UI behavior (`npx playwright test`)
+- [ ] Playwright tests added/updated for new UI behavior (`pnpm run test:e2e`)
 
 ## Documentation
 
@@ -43,6 +43,6 @@
 
 ## Checklist
 
-- [ ] All tests pass (`cargo test`, `npm test`, `npx playwright test`)
-- [ ] No linter or formatter issues (`cargo fmt`, `cargo clippy`, `npx tsc --noEmit`)
+- [ ] All tests pass (`cargo test --workspace`, `pnpm run test`, `pnpm run test:e2e`)
+- [ ] No linter or formatter issues (`cargo fmt`, `cargo clippy`, `pnpm run typecheck`)
 - [ ] Commit messages are clear and descriptive

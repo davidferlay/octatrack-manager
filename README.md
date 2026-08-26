@@ -75,10 +75,11 @@ Feedback from the community is invaluable. Please share your experiences, bug re
 If you'd like to build the project locally:
 
 ```bash
-git clone https://github.com/davidferlay/octatrack-manager.git
-cd octatrack-manager
-npm install
-npm run tauri:dev
+git clone https://github.com/kaz4g/octatrack-manager-xx.git
+cd octatrack-manager-xx
+corepack enable
+pnpm install --frozen-lockfile
+pnpm run tauri:dev
 ```
 
 ## Credits & Tech Stack
@@ -88,4 +89,3 @@ Built with:
 - [Tauri](https://tauri.app/) - Desktop application framework
 - [React](https://react.dev/) - UI framework
 - [Vite](https://vitejs.dev/) - Frontend build tool
-
