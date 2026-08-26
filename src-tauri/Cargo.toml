@@ -1,3 +1,13 @@
+[workspace]
+members = [
+    ".",
+    "crates/ot-domain",
+    "crates/ot-codec-ports",
+    "crates/ot-storage-ports",
+    "crates/ot-application",
+]
+resolver = "2"
+
 [package]
 name = "octatrack-manager"
 version = "0.1.0"

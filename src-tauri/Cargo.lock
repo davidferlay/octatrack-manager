@@ -2522,6 +2522,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "ot-application"
+version = "0.1.0"
+dependencies = [
+ "ot-codec-ports",
+ "ot-domain",
+ "ot-storage-ports",
+]
+
+[[package]]
+name = "ot-codec-ports"
+version = "0.1.0"
+dependencies = [
+ "ot-domain",
+]
+
+[[package]]
+name = "ot-domain"
+version = "0.1.0"
+
+[[package]]
+name = "ot-storage-ports"
+version = "0.1.0"
+dependencies = [
+ "ot-domain",
+]
+
+[[package]]
 name = "ot-tools-io"
 version = "0.7.0"
 source = "git+https://gitlab.com/davidferlay/ot-tools-io.git?rev=cd246d8a595647364eb4cc78211033b2d1302526#cd246d8a595647364eb4cc78211033b2d1302526"
