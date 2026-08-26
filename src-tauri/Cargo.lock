@@ -2612,7 +2612,7 @@ dependencies = [
 [[package]]
 name = "ot-tools-io"
 version = "0.7.0"
-source = "git+https://gitlab.com/davidferlay/ot-tools-io.git?branch=fix%2Fdefault-project-settings#cd246d8a595647364eb4cc78211033b2d1302526"
+source = "git+https://gitlab.com/davidferlay/ot-tools-io.git?rev=cd246d8a595647364eb4cc78211033b2d1302526#cd246d8a595647364eb4cc78211033b2d1302526"
 dependencies = [
  "bincode",
  "encoding_rs",
@@ -2628,7 +2628,7 @@ dependencies = [
 [[package]]
 name = "ot-tools-io-derive"
 version = "0.7.0"
-source = "git+https://gitlab.com/davidferlay/ot-tools-io.git?branch=fix%2Fdefault-project-settings#cd246d8a595647364eb4cc78211033b2d1302526"
+source = "git+https://gitlab.com/davidferlay/ot-tools-io.git?rev=cd246d8a595647364eb4cc78211033b2d1302526#cd246d8a595647364eb4cc78211033b2d1302526"
 dependencies = [
  "quote",
  "syn 2.0.117",
