@@ -28,10 +28,18 @@ const dependencyRules = new Map([
   ["ot-codec-ports", ["ot-domain"]],
   ["ot-storage-ports", ["ot-domain"]],
   [
+    "ot-catalog",
+    ["ot-domain", "ot-storage-ports", "rusqlite"],
+  ],
+  [
     "ot-application",
     ["ot-codec-ports", "ot-domain", "ot-storage-ports"],
   ],
 ]);
+const devDependencyRules = new Map(
+  [...dependencyRules.keys()].map((packageName) => [packageName, []]),
+);
+devDependencyRules.set("ot-catalog", ["tempfile"]);
 const allowedCompositionDependencies = new Set([
   "ot-application",
   "ot-domain",
@@ -50,12 +58,30 @@ for (const [packageName, allowedDependencies] of dependencyRules) {
   }
 
   const actualDependencies = cargoPackage.dependencies
+    .filter((dependency) => dependency.kind !== "dev")
     .map((dependency) => dependency.name)
     .sort();
   const expectedDependencies = [...allowedDependencies].sort();
   if (JSON.stringify(actualDependencies) !== JSON.stringify(expectedDependencies)) {
     failures.push(
       `${packageName} dependencies must be [${expectedDependencies.join(", ")}], ` +
+        `found [${actualDependencies.join(", ")}]`,
+    );
+  }
+}
+
+for (const [packageName, allowedDependencies] of devDependencyRules) {
+  const cargoPackage = packagesByName.get(packageName);
+  if (!cargoPackage) continue;
+
+  const actualDependencies = cargoPackage.dependencies
+    .filter((dependency) => dependency.kind === "dev")
+    .map((dependency) => dependency.name)
+    .sort();
+  const expectedDependencies = [...allowedDependencies].sort();
+  if (JSON.stringify(actualDependencies) !== JSON.stringify(expectedDependencies)) {
+    failures.push(
+      `${packageName} dev dependencies must be [${expectedDependencies.join(", ")}], ` +
         `found [${actualDependencies.join(", ")}]`,
     );
   }

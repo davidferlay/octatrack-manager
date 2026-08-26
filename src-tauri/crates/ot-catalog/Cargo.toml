@@ -1,0 +1,16 @@
+[package]
+name = "ot-catalog"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+ot-domain = { path = "../ot-domain" }
+ot-storage-ports = { path = "../ot-storage-ports" }
+rusqlite = { version = "=0.40.2", default-features = false, features = ["bundled"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lib]
+path = "src/lib.rs"

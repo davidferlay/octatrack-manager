@@ -1,4 +1,5 @@
 use ot_domain::RootId;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -22,11 +23,46 @@ pub struct DeviceObservation {
 
 impl DeviceObservation {
     fn fingerprint(&self) -> String {
-        let mut hasher = DefaultHasher::new();
-        self.stable_key.hash(&mut hasher);
-        self.filesystem_type.hash(&mut hasher);
-        self.total_capacity.hash(&mut hasher);
-        format!("{:016x}", hasher.finish())
+        let mut hasher = Sha256::new();
+        hasher.update(b"rootfp:v1");
+        encode_required_string(&mut hasher, 1, &self.stable_key);
+        encode_optional_string(&mut hasher, 2, self.filesystem_type.as_deref());
+        encode_optional_u64(&mut hasher, 3, self.total_capacity);
+        let digest = hasher.finalize();
+        let lowercase_hex = digest
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        format!("rootfp:v1:{lowercase_hex}")
+    }
+}
+
+fn encode_required_string(hasher: &mut Sha256, field_tag: u8, value: &str) {
+    hasher.update([field_tag]);
+    hasher.update((value.len() as u64).to_be_bytes());
+    hasher.update(value.as_bytes());
+}
+
+fn encode_optional_string(hasher: &mut Sha256, field_tag: u8, value: Option<&str>) {
+    hasher.update([field_tag]);
+    match value {
+        Some(value) => {
+            hasher.update([1]);
+            hasher.update((value.len() as u64).to_be_bytes());
+            hasher.update(value.as_bytes());
+        }
+        None => hasher.update([0]),
+    }
+}
+
+fn encode_optional_u64(hasher: &mut Sha256, field_tag: u8, value: Option<u64>) {
+    hasher.update([field_tag]);
+    match value {
+        Some(value) => {
+            hasher.update([1]);
+            hasher.update(value.to_be_bytes());
+        }
+        None => hasher.update([0]),
     }
 }
 
@@ -62,7 +98,7 @@ impl DeviceIdentityProvider for SystemDeviceIdentityProvider {
                 .map(|duration| duration.as_nanos())
                 .unwrap_or_default();
             (
-                format!("platform-root:{}", root.to_string_lossy()),
+                format!("platform-unstable:{modified}"),
                 format!("{}:{modified}", root.to_string_lossy()),
             )
         };
@@ -449,6 +485,71 @@ mod tests {
                 stable: true,
             })
         }
+    }
+
+    fn fingerprint_fixture() -> DeviceObservation {
+        DeviceObservation {
+            stable_key: "volume-uuid:01234567-89AB-CDEF-0123-456789ABCDEF".into(),
+            filesystem_type: Some("apfs".into()),
+            total_capacity: Some(128_000_000_000),
+            mount_token: "mount-session-1".into(),
+            stable: true,
+        }
+    }
+
+    #[test]
+    fn persistent_fingerprint_has_a_versioned_golden_value() {
+        assert_eq!(
+            fingerprint_fixture().fingerprint(),
+            "rootfp:v1:4342d1c11ddd19d77837ab238289322643d73359cd6f3f4ff5e013c3d48b213d"
+        );
+        assert_eq!(
+            fingerprint_fixture().fingerprint(),
+            fingerprint_fixture().fingerprint()
+        );
+    }
+
+    #[test]
+    fn persistent_fingerprint_detects_each_identity_field_change() {
+        let baseline = fingerprint_fixture();
+        let mut stable_key = baseline.clone();
+        stable_key.stable_key.push_str("-replacement");
+        let mut filesystem_type = baseline.clone();
+        filesystem_type.filesystem_type = Some("exfat".into());
+        let mut total_capacity = baseline.clone();
+        total_capacity.total_capacity = Some(256_000_000_000);
+
+        assert_ne!(baseline.fingerprint(), stable_key.fingerprint());
+        assert_ne!(baseline.fingerprint(), filesystem_type.fingerprint());
+        assert_ne!(baseline.fingerprint(), total_capacity.fingerprint());
+    }
+
+    #[test]
+    fn persistent_fingerprint_distinguishes_missing_and_empty_fields() {
+        let mut missing_filesystem = fingerprint_fixture();
+        missing_filesystem.filesystem_type = None;
+        let mut empty_filesystem = fingerprint_fixture();
+        empty_filesystem.filesystem_type = Some(String::new());
+        let mut missing_capacity = fingerprint_fixture();
+        missing_capacity.total_capacity = None;
+        let mut zero_capacity = fingerprint_fixture();
+        zero_capacity.total_capacity = Some(0);
+
+        assert_ne!(
+            missing_filesystem.fingerprint(),
+            empty_filesystem.fingerprint()
+        );
+        assert_ne!(missing_capacity.fingerprint(), zero_capacity.fingerprint());
+    }
+
+    #[test]
+    fn mount_token_and_absolute_path_are_not_persistent_identity_inputs() {
+        let baseline = fingerprint_fixture();
+        let mut remounted = baseline.clone();
+        remounted.mount_token = "/Volumes/OCTATRACK/private/session-2".into();
+
+        assert_eq!(baseline.fingerprint(), remounted.fingerprint());
+        assert!(!remounted.fingerprint().contains("/Volumes/OCTATRACK"));
     }
 
     #[test]
