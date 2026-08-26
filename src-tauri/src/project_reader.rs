@@ -22687,6 +22687,116 @@ mod tests {
                 );
             }
         }
+
+        /// Every operation that rewrites a bank must leave the Part
+        /// assignment byte of patterns it does not target exactly as it
+        /// found it.
+        ///
+        /// `copy_patterns` already guards this, but `copy_parts`,
+        /// `copy_tracks` and `copy_bank` each deserialize and rewrite a whole
+        /// bank, so all 16 pattern tails pass through them. A layout
+        /// regression - or a writer that rebuilds patterns from defaults -
+        /// would flatten every pattern to Part 1 through those paths without
+        /// failing any test that only covers `copy_patterns`.
+        ///
+        /// Asserted against the raw file at the offset the device reads,
+        /// never through our own parser: a symmetric offset error reads back
+        /// whatever it wrote and agrees with itself.
+        #[test]
+        fn bank_writers_leave_pattern_part_assignments_alone() {
+            fn project() -> TempDir {
+                let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("tests/fixtures/multipart");
+                let d = TempDir::new().unwrap();
+                fs::copy(fixture.join("project.work"), d.path().join("project.work")).unwrap();
+                for n in 1..=2 {
+                    fs::copy(
+                        fixture.join("bank01.work"),
+                        d.path().join(format!("bank{:02}.work", n)),
+                    )
+                    .unwrap();
+                }
+                d
+            }
+            fn parts_of(d: &TempDir, bank: u8) -> Vec<u8> {
+                let raw = fs::read(d.path().join(format!("bank{:02}.work", bank))).unwrap();
+                raw_part_bytes(&raw)
+            }
+
+            // The fixture cycles Parts 1-4, so "flattened to Part 1" and
+            // "left at the default" both fail these assertions.
+            let cycling: Vec<u8> = (0..16).map(|i| (i % 4) as u8).collect();
+
+            let (src, dest) = (project(), project());
+            copy_parts(
+                &src.path().to_string_lossy(),
+                0,
+                vec![0],
+                &dest.path().to_string_lossy(),
+                0,
+                vec![1],
+            )
+            .unwrap();
+            assert_eq!(
+                parts_of(&dest, 1),
+                cycling,
+                "copy_parts touches Parts, not the Pattern -> Part mapping"
+            );
+
+            let (src, dest) = (project(), project());
+            copy_tracks(
+                &src.path().to_string_lossy(),
+                0,
+                0,
+                vec![0],
+                &dest.path().to_string_lossy(),
+                0,
+                1,
+                vec![0],
+                "both",
+                Some(0),
+                Some(0),
+            )
+            .unwrap();
+            assert_eq!(
+                parts_of(&dest, 1),
+                cycling,
+                "copy_tracks moves track data, not the Pattern -> Part mapping"
+            );
+
+            // copy_bank replaces the destination bank wholesale, so here the
+            // destination must end up carrying the *source's* assignments.
+            // A distinct permutation makes "kept the destination's" fail too.
+            let (src, dest) = (project(), project());
+            let permuted: Vec<u8> = (0..16).map(|i| (3 - (i % 4)) as u8).collect();
+            {
+                let path = src.path().join("bank01.work");
+                let mut bank = BankFile::from_data_file(&path).unwrap();
+                for (i, p) in permuted.iter().enumerate() {
+                    bank.patterns.0[i].part_assignment = *p;
+                }
+                bank.to_data_file(&path).unwrap();
+            }
+            assert_eq!(parts_of(&src, 1), permuted, "source set up as intended");
+            copy_bank(
+                &src.path().to_string_lossy(),
+                0,
+                &dest.path().to_string_lossy(),
+                &[1],
+                false,
+                "all",
+                "copy",
+                "keep_position",
+                false,
+                &[],
+            )
+            .unwrap();
+            assert_eq!(
+                parts_of(&dest, 2),
+                permuted,
+                "copy_bank must carry the source's Pattern -> Part mapping across"
+            );
+        }
     }
 
     mod real_device_fixture_tests {
