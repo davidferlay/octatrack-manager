@@ -2,7 +2,10 @@
 
 use ot_codec_ports::{CodecError, ProjectCodec};
 use ot_domain::{LibrarySnapshot, ProjectDocument, RootId, RootRelativePath};
-use ot_storage_ports::{ProjectStorage, ReadOnlyLibrary, StorageError};
+use ot_storage_ports::{
+    CatalogError, CatalogRootIdentity, CatalogRootObservation, CatalogScan, LibraryCatalog,
+    ProjectStorage, ReadOnlyLibrary, StorageError,
+};
 use std::fmt;
 
 pub struct InspectProject<'a, S, C> {
@@ -72,6 +75,47 @@ where
 
     pub fn execute(&self, root_id: &RootId) -> Result<LibrarySnapshot, StorageError> {
         self.storage.list_library(root_id)
+    }
+}
+
+pub struct StoreLibrarySnapshot<'a, C> {
+    catalog: &'a mut C,
+}
+
+impl<'a, C> StoreLibrarySnapshot<'a, C>
+where
+    C: LibraryCatalog,
+{
+    pub fn new(catalog: &'a mut C) -> Self {
+        Self { catalog }
+    }
+
+    pub fn execute(
+        &mut self,
+        observation: &CatalogRootObservation,
+        snapshot: &LibrarySnapshot,
+    ) -> Result<CatalogScan, CatalogError> {
+        self.catalog.store_snapshot(observation, snapshot)
+    }
+}
+
+pub struct LoadLibrarySnapshot<'a, C> {
+    catalog: &'a C,
+}
+
+impl<'a, C> LoadLibrarySnapshot<'a, C>
+where
+    C: LibraryCatalog,
+{
+    pub fn new(catalog: &'a C) -> Self {
+        Self { catalog }
+    }
+
+    pub fn execute(
+        &self,
+        identity: &CatalogRootIdentity,
+    ) -> Result<Option<LibrarySnapshot>, CatalogError> {
+        self.catalog.load_latest_snapshot(identity)
     }
 }
 
@@ -147,5 +191,83 @@ mod tests {
         let snapshot = ListLibrary::new(&FakeLibrary).execute(&root_id).unwrap();
 
         assert_eq!(snapshot, LibrarySnapshot::default());
+    }
+
+    #[derive(Default)]
+    struct FakeCatalog {
+        identity: Option<CatalogRootIdentity>,
+        snapshot: Option<LibrarySnapshot>,
+    }
+
+    impl LibraryCatalog for FakeCatalog {
+        fn observe_root(
+            &mut self,
+            observation: &CatalogRootObservation,
+        ) -> Result<(), CatalogError> {
+            self.identity = Some(observation.identity.clone());
+            Ok(())
+        }
+
+        fn store_snapshot(
+            &mut self,
+            observation: &CatalogRootObservation,
+            snapshot: &LibrarySnapshot,
+        ) -> Result<CatalogScan, CatalogError> {
+            self.observe_root(observation)?;
+            self.snapshot = Some(snapshot.clone());
+            Ok(CatalogScan {
+                id: ot_storage_ports::CatalogScanId::new(1).unwrap(),
+                revision: ot_storage_ports::CatalogScanRevision::new(1).unwrap(),
+                status: ot_storage_ports::CatalogScanStatus::Completed,
+                failure_code: None,
+            })
+        }
+
+        fn load_latest_snapshot(
+            &self,
+            identity: &CatalogRootIdentity,
+        ) -> Result<Option<LibrarySnapshot>, CatalogError> {
+            Ok((self.identity.as_ref() == Some(identity))
+                .then(|| self.snapshot.clone())
+                .flatten())
+        }
+
+        fn latest_scan(
+            &self,
+            _identity: &CatalogRootIdentity,
+        ) -> Result<Option<CatalogScan>, CatalogError> {
+            Ok(None)
+        }
+    }
+
+    fn catalog_identity() -> CatalogRootIdentity {
+        CatalogRootIdentity::new(format!("rootfp:v1:{}", "a".repeat(64))).unwrap()
+    }
+
+    #[test]
+    fn stores_and_loads_snapshots_only_through_the_catalog_port() {
+        let identity = catalog_identity();
+        let observation = CatalogRootObservation {
+            identity: identity.clone(),
+            identity_is_stable: true,
+            display_name: "Fixture root".into(),
+            observed_revision: 7,
+        };
+        let snapshot = LibrarySnapshot::default();
+        let mut catalog = FakeCatalog::default();
+
+        let stored = StoreLibrarySnapshot::new(&mut catalog)
+            .execute(&observation, &snapshot)
+            .unwrap();
+        let loaded = LoadLibrarySnapshot::new(&catalog)
+            .execute(&identity)
+            .unwrap();
+
+        assert_eq!(
+            stored.status,
+            ot_storage_ports::CatalogScanStatus::Completed
+        );
+        assert_eq!(loaded, Some(snapshot));
+        assert_eq!(catalog.identity, Some(identity));
     }
 }

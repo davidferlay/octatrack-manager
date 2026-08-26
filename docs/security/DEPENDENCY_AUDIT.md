@@ -220,6 +220,46 @@ Required follow-up, without combining it with RootRegistry:
    platform, updater/restart behavior, remote WebView, YAML feature, install
    script policy, or network-facing development service changes.
 
+## M3-A SQLite catalog dependency delta
+
+Audit date: 2026-08-27
+
+M3-A adds `rusqlite@0.40.2` with `default-features = false` and `bundled`.
+The bundled feature compiles SQLite 3.53.2 from `libsqlite3-sys@0.38.2`, avoiding
+runtime dependence on the macOS or CI system SQLite version. Disabling rusqlite's
+unneeded default statement-cache and wasm features keeps the new graph limited.
+
+The exact newly locked crates.io packages are:
+
+| Package | Purpose and reachability | Advisory result |
+| --- | --- | --- |
+| `rusqlite@0.40.2` | Direct runtime dependency of the isolated `ot-catalog` adapter. It is not wired into Tauri production state in M3-A. | No OSV finding for this version. The two RustSec package advisories affect versions before `0.26.2` or `0.23.0`. |
+| `libsqlite3-sys@0.38.2` | Bundled SQLite FFI used only through rusqlite. | No OSV finding for this version. `RUSTSEC-2022-0090` is fixed in `>=0.25.1`. |
+| `fallible-iterator@0.3.0` | rusqlite runtime iterator support. | No OSV finding. |
+| `fallible-streaming-iterator@0.1.9` | rusqlite runtime row iteration support. | No OSV finding. |
+| `vcpkg@0.2.15` | `libsqlite3-sys` build helper for Windows targets; not runtime reachable on the supported macOS target. | No OSV finding. |
+
+`sha2@0.10.9` was already present in `Cargo.lock`; M3-A only makes it a direct
+dependency of the Tauri composition crate for the deterministic root
+fingerprint. Existing package versions did not change. `tempfile@3.25.0` was
+also already locked and is test-only for catalog databases and fixtures.
+
+`cargo audit` remains unavailable (`cargo: no such command: audit`) and was not
+installed. This is therefore not a complete Rust audit. The five new crates.io
+package/version pairs were queried against the official OSV API and returned
+no findings; current RustSec package pages were also checked for rusqlite and
+libsqlite3-sys, the two new packages with historical RustSec advisories.
+
+The JavaScript lockfiles did not change. Re-running the required audits produced
+the same classified totals as above:
+
+- root: 31 advisories (`low: 2`, `moderate: 12`, `high: 16`, `critical: 1`);
+- docs/PDF: 88 findings (`low: 5`, `moderate: 33`, `high: 48`, `critical: 2`).
+
+No new runtime-reachable `critical` or `high` advisory was identified in the
+M3-A dependency delta. The existing acceptance boundaries and deadlines remain
+unchanged.
+
 ## Reproduction
 
 Commands used:

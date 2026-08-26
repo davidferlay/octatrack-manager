@@ -52,8 +52,10 @@
 - pnpm移行: #5マージ済み
 - fork Pages URL修正: #6マージ済み
 - 依存advisory分類: #7マージ済み
-- 現在のmain SHA: `6d26b0db2e68650407921404e13e8ab21d2b0705`
-- RootRegistry作業ブランチ: `feat/root-registry-read-only`
+- PR-2 RootRegistry read-only vertical slice: #8マージ済み
+- 現在のmain SHA: `c57a0d0b4c3ef4af797ae731d7323ed3e090e4d0`
+- M2: 完了
+- M3-A catalog foundation作業ブランチ: `feat/m3a-catalog-foundation`
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
 - `ot-tools-io`はコミット
@@ -174,14 +176,16 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 
 ## 6. 次のCodex作業
 
-ベースラインPR #1、PR-0、PR-1、pnpm移行#5、fork Pages修正#6、依存監査#7は
-マージ済み。現在は`docs/NEXT_GENERATION_ARCHITECTURE.md`のPR-2
-`RootRegistry read-only vertical slice`を実装中である。
+ベースラインPR #1、PR-0、PR-1、pnpm移行#5、fork Pages修正#6、依存監査#7、
+PR-2 RootRegistry read-only vertical slice #8はマージ済みで、M2は完了した。
 
-このsliceでは、native pickerからのroot登録だけがraw absolute pathを受け取り、
-backendの`RootRegistry`がabsolute pathを保持する。以後の新APIはopaqueな`RootId`だけを
-受け取り、legacy scannerをadapter越しに呼び、frontendへ表示名と検証済み相対パスだけを
-返す。write capabilityは付与せず、実媒体を使わずに一時fixtureで検証する。
+M3は小さなPRへ分割する。最初のM3-Aは、version付きroot fingerprint、storage port、
+明示的SQLite migration、`LibrarySnapshot`のtransactional保存・再取得を持つcatalog
+foundationである。M3-AではcatalogをTauri stateへproduction wiringせず、Tauri API、
+frontend、現行Library表示、incremental filesystem scanの挙動を変更しない。DB検証は
+MacのApplication Supportではなく一時directoryだけを使用し、実SD／CFカードやOctatrack
+原本データを使用しない。
 
-このPRがマージされるまではM3 catalog indexingや新しいwrite機能へ進まない。マージ後の
-次候補は設計書のM3 catalog/indexing sliceであり、依存監査の受容期限と再確認条件も維持する。
+M3-Aマージ後の次候補はM3-B `catalog-backed indexing/query vertical slice`である。
+それまではfrontend変更やproduction catalog wiringへ進まず、依存監査の受容期限と
+再確認条件を維持する。
