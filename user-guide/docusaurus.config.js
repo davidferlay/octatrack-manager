@@ -3,19 +3,15 @@ import { themes as prismThemes } from 'prism-react-renderer';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  customFields: {
-    releaseVersion: process.env.RELEASE_VERSION || undefined,
-  },
-
   title: 'Octatrack Manager',
   tagline: 'A desktop application for managing Elektron Octatrack projects',
   favicon: 'img/favicon.ico',
 
-  url: 'https://davidferlay.github.io',
-  baseUrl: '/octatrack-manager/',
+  url: 'https://kaz4g.github.io',
+  baseUrl: '/octatrack-manager-xx/',
 
-  organizationName: 'davidferlay',
-  projectName: 'octatrack-manager',
+  organizationName: 'kaz4g',
+  projectName: 'octatrack-manager-xx',
   deploymentBranch: 'gh-pages',
   trailingSlash: false,
 
@@ -41,12 +37,12 @@ const config = {
           {
             tagName: 'link',
             rel: 'icon',
-            href: '/octatrack-manager/img/logo-192.png',
+            href: '/octatrack-manager-xx/img/logo-192.png',
           },
           {
             tagName: 'link',
             rel: 'manifest',
-            href: '/octatrack-manager/manifest.json',
+            href: '/octatrack-manager-xx/manifest.json',
           },
           {
             tagName: 'meta',
@@ -66,7 +62,7 @@ const config = {
           {
             tagName: 'link',
             rel: 'apple-touch-icon',
-            href: '/octatrack-manager/img/logo-192.png',
+            href: '/octatrack-manager-xx/img/logo-192.png',
           },
         ],
       },
@@ -93,7 +89,7 @@ const config = {
         docs: {
           sidebarPath: './sidebars.js',
           editUrl:
-            'https://github.com/davidferlay/octatrack-manager/tree/main/user-guide/',
+            'https://github.com/kaz4g/octatrack-manager-xx/tree/main/user-guide/',
         },
         blog: false,
         theme: {
@@ -121,18 +117,13 @@ const config = {
             label: 'User Guide',
           },
           {
-            href: 'https://davidferlay.github.io/octatrack-manager/octatrack-manager-user-guide.pdf',
+            href: 'https://kaz4g.github.io/octatrack-manager-xx/octatrack-manager-user-guide.pdf',
             label: 'PDF',
             position: 'right',
           },
           {
-            href: 'https://github.com/davidferlay/octatrack-manager',
+            href: 'https://github.com/kaz4g/octatrack-manager-xx',
             label: 'GitHub',
-            position: 'right',
-          },
-          {
-            href: 'https://github.com/davidferlay/octatrack-manager/releases/latest',
-            label: 'App',
             position: 'right',
           },
         ],
@@ -162,7 +153,7 @@ const config = {
               },
               {
                 label: 'GitHub Issues',
-                href: 'https://github.com/davidferlay/octatrack-manager/issues',
+                href: 'https://github.com/kaz4g/octatrack-manager-xx/issues',
               },
             ],
           },
@@ -171,11 +162,7 @@ const config = {
             items: [
               {
                 label: 'GitHub',
-                href: 'https://github.com/davidferlay/octatrack-manager',
-              },
-              {
-                label: 'Releases',
-                href: 'https://github.com/davidferlay/octatrack-manager/releases/latest',
+                href: 'https://github.com/kaz4g/octatrack-manager-xx',
               },
             ],
           },

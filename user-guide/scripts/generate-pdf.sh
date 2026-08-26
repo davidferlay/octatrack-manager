@@ -16,7 +16,7 @@ SERVER_PID=$!
 
 # Wait for server to be ready
 for i in $(seq 1 30); do
-  if curl -s http://localhost:3030/octatrack-manager/docs/intro > /dev/null 2>&1; then
+  if curl -s http://localhost:3030/octatrack-manager-xx/docs/intro > /dev/null 2>&1; then
     break
   fi
   sleep 1
@@ -24,11 +24,11 @@ done
 
 echo "Generating PDF..."
 pnpm exec docs-to-pdf docusaurus \
-  --initialDocURLs "http://localhost:3030/octatrack-manager/docs/intro" \
+  --initialDocURLs "http://localhost:3030/octatrack-manager-xx/docs/intro" \
   --contentSelector "article" \
   --paginationSelector "a.pagination-nav__link--next" \
   --excludeSelectors ".margin-vert--xl a,[class^='tocCollapsible'],.breadcrumbs,.theme-edit-this-page" \
-  --coverImage "http://localhost:3030/octatrack-manager/img/logo-512.png" \
+  --coverImage "http://localhost:3030/octatrack-manager-xx/img/logo-512.png" \
   --coverTitle "Octatrack Manager" \
   --coverSub "User Guide" \
   --paperFormat "A4" \

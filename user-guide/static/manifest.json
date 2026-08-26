@@ -4,8 +4,8 @@
   "theme_color": "#e85d04",
   "background_color": "#1b1b1d",
   "display": "standalone",
-  "scope": "/octatrack-manager/",
-  "start_url": "/octatrack-manager/docs/intro",
+  "scope": "/octatrack-manager-xx/",
+  "start_url": "/octatrack-manager-xx/docs/intro",
   "icons": [
     {
       "src": "img/logo-192.png",
