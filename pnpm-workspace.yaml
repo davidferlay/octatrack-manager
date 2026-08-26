@@ -1,0 +1,5 @@
+packages:
+  - 'user-guide'
+sharedWorkspaceLockfile: false
+allowBuilds:
+  puppeteer: true

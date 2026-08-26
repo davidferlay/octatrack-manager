@@ -3,6 +3,10 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "pnpm@11.24.0",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
@@ -13,11 +17,11 @@
     "tauri:dev": "PATH=\"$HOME/.cargo/bin:$PATH\" tauri dev",
     "tauri:build": "NO_STRIP=1 PATH=\"$HOME/.cargo/bin:$PATH\" tauri build",
     "prepare": "husky",
-    "test": "npm run typecheck && npm run test:frontend && npm run test:rust",
+    "test": "pnpm run typecheck && pnpm run test:frontend && pnpm run test:rust",
     "test:frontend": "vitest run",
     "test:e2e": "playwright test",
     "test:rust": "cd src-tauri && cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace",
-    "docs:watch": "npm --prefix user-guide run start"
+    "docs:watch": "pnpm --dir user-guide run start"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

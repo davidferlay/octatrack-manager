@@ -6,12 +6,12 @@ All commands run from the `user-guide/` directory:
 
 | Command | Description |
 |---------|-------------|
-| `npm start` | Start local dev server with hot reload |
-| `npm run build` | Production build (validates all links, images) |
-| `npm run serve` | Serve the production build locally |
-| `npm run optimize-images` | Optimize screenshot file sizes with sharp |
-| `npm run generate-pdf` | Generate PDF from docs (uses Puppeteer) |
-| `npm run clear` | Clear Docusaurus cache (useful after config changes) |
+| `pnpm run start` | Start local dev server with hot reload |
+| `pnpm run build` | Production build (validates all links, images) |
+| `pnpm run serve` | Serve the production build locally |
+| `pnpm run optimize-images` | Optimize screenshot file sizes with sharp |
+| `pnpm run generate-pdf` | Generate PDF from docs (uses Puppeteer) |
+| `pnpm run clear` | Clear Docusaurus cache (useful after config changes) |
 
 ## Image Sizing in Documentation
 
@@ -73,4 +73,4 @@ Use `44px` height for standard button captures.
 - **Always use `require('@site/static/...')`** — bare paths like `/img/...` break in dev server due to `baseUrl: '/octatrack-manager/'`.
 - Standard markdown `![alt](path)` automatically handles `baseUrl`; raw `<img src="...">` does not.
 - **Side-by-side images** (e.g., One/Range mode): use `style={{width: '40%'}}` without centering so they sit next to each other.
-- Run `npm run build` to verify all images resolve correctly after changes.
+- Run `pnpm run build` to verify all images resolve correctly after changes.

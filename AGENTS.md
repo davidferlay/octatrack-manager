@@ -34,10 +34,11 @@ Intent -> Plan -> Apply write boundary.
   actually needs.
 - Pin Git dependencies to immutable revisions and GitHub Actions to full commit
   SHAs.
-- Use lockfiles and reproducible install commands (`npm ci`, `cargo --locked`).
+- Use lockfiles and reproducible install commands (`pnpm install --frozen-lockfile`,
+  `cargo --locked`).
 - Do not introduce binary blobs, install-time shell downloads, telemetry, or
   new network endpoints without an explicit review.
-- Run `npm audit` and `cargo audit` when dependencies change. Document accepted
+- Run `pnpm audit` and `cargo audit` when dependencies change. Document accepted
   risk instead of silently ignoring advisories.
 
 ## Change discipline
@@ -55,12 +56,12 @@ Run the relevant subset for each change, and run the full available suite before
 handoff:
 
 ```bash
-npm run typecheck
-npm run test:frontend
-npm run build
-cd src-tauri && cargo fmt --check
-cd src-tauri && cargo clippy -- -D warnings
-cd src-tauri && cargo test
+pnpm run typecheck
+pnpm run test:frontend
+pnpm run build
+cd src-tauri && cargo fmt --all -- --check
+cd src-tauri && cargo clippy --workspace --all-targets -- -D warnings
+cd src-tauri && cargo test --workspace
 ```
 
 Rust/Tauri verification may require macOS or Linux GTK/WebKit system packages.

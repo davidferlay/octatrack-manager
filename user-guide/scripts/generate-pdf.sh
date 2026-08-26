@@ -1,7 +1,7 @@
 #!/bin/bash
 # Generate a PDF of the full user guide from the built Docusaurus site.
 # Usage: ./scripts/generate-pdf.sh
-# Requires: the site to be built first (npm run build).
+# Requires: the site to be built first (pnpm run build).
 
 set -e
 
@@ -11,7 +11,7 @@ BUILD_DIR="$WEBSITE_DIR/build"
 PDF_FILENAME="octatrack-manager-user-guide.pdf"
 
 echo "Starting local server..."
-npx docusaurus serve --port 3030 --no-open &
+pnpm exec docusaurus serve --port 3030 --no-open &
 SERVER_PID=$!
 
 # Wait for server to be ready
@@ -23,7 +23,7 @@ for i in $(seq 1 30); do
 done
 
 echo "Generating PDF..."
-npx docs-to-pdf docusaurus \
+pnpm exec docs-to-pdf docusaurus \
   --initialDocURLs "http://localhost:3030/octatrack-manager/docs/intro" \
   --contentSelector "article" \
   --paginationSelector "a.pagination-nav__link--next" \

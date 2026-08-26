@@ -8,7 +8,10 @@ on:
       - 'src-tauri/**'
       - 'e2e/**'
       - 'package.json'
-      - 'package-lock.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'user-guide/package.json'
+      - 'user-guide/pnpm-lock.yaml'
       - 'tsconfig*.json'
       - 'vite.config.*'
       - 'playwright.config.*'
@@ -20,7 +23,10 @@ on:
       - 'src-tauri/**'
       - 'e2e/**'
       - 'package.json'
-      - 'package-lock.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'user-guide/package.json'
+      - 'user-guide/pnpm-lock.yaml'
       - 'tsconfig*.json'
       - 'vite.config.*'
       - 'playwright.config.*'
@@ -105,23 +111,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - name: Install pnpm and Node.js
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
         with:
-          node-version: 22
-          cache: 'npm'
+          runtime: node@22
+          cache: true
+          install: false
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm --filter octatrack-manager install --frozen-lockfile
 
       - name: TypeScript type check
-        run: npm run typecheck
+        run: pnpm run typecheck
 
       - name: Run frontend unit tests
-        run: npm run test:frontend
+        run: pnpm run test:frontend
 
       - name: Build frontend
-        run: npm run build
+        run: pnpm run build
 
   e2e-tests:
     name: E2E Tests
@@ -131,18 +138,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - name: Install pnpm and Node.js
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
         with:
-          node-version: 22
-          cache: 'npm'
+          runtime: node@22
+          cache: true
+          install: false
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm --filter octatrack-manager install --frozen-lockfile
 
       - name: Resolve Playwright version
         id: pw
-        run: echo "version=$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
 
       # Downloading Chromium is ~1 minute of the job; keyed on the exact
       # Playwright version so an upgrade fetches a matching browser.
@@ -155,12 +163,12 @@ jobs:
 
       - name: Install Playwright browsers
         if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: npx playwright install chromium --with-deps
+        run: pnpm exec playwright install chromium --with-deps
 
       # The cached browser still needs its system libraries on a fresh runner.
       - name: Install Playwright system dependencies
         if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
+        run: pnpm exec playwright install-deps chromium
 
       - name: Run E2E tests
-        run: npm run test:e2e
+        run: pnpm run test:e2e
