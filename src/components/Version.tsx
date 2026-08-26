@@ -152,7 +152,14 @@ export function Version() {
         </div>
       )}
       {updateError && (
-        <span className="update-error" title={updateError}>Update failed: {updateError}</span>
+        <span
+          className="update-error"
+          role="img"
+          aria-label={`Update failed: ${updateError}`}
+          title={`Update failed: ${updateError}`}
+        >
+          !
+        </span>
       )}
       {readyToRelaunch && (
         <a href="#" className="relaunch-link" onClick={handleRelaunch}>

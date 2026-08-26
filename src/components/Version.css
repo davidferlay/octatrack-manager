@@ -63,15 +63,28 @@
   text-align: right;
 }
 
-/* Update failure — truncated inline, full text in the tooltip so it can be reported */
+/* Update failure - a compact marker beside the version label. The full message is
+   the only clue why an install failed, so it stays reachable in the tooltip rather
+   than inline, where a long error stretched the header and broke the layout. */
 .update-error {
-  font-size: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 15px;
+  height: 15px;
+  border: 1px solid #ff6b6b;
+  border-radius: 50%;
   color: #ff6b6b;
-  max-width: 340px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: help;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  user-select: none;
+  transition: background-color 0.2s ease;
+}
+
+.update-error:hover {
+  background-color: rgba(255, 107, 107, 0.15);
 }
 
 /* Relaunch link */
