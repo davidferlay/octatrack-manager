@@ -172,4 +172,4 @@ While automatic backups provide a safety net, it’s strongly advised to keep yo
 ## Tips
 
 - **Refresh:** If you insert a CF card, or make any change in Projects while the app is open, click the **Refresh** (↻) button in the header.
-- **Version Check:** The app automatically checks for updates. Click the version number in the header to manually check and download the latest version.
+- **Version:** The header shows the installed version. This fork's automatic updater is intentionally disabled; update a source checkout manually when a reviewed version is available.

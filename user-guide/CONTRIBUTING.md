@@ -70,7 +70,7 @@ Use `44px` height for standard button captures.
 
 ### Important notes
 
-- **Always use `require('@site/static/...')`** — bare paths like `/img/...` break in dev server due to `baseUrl: '/octatrack-manager/'`.
+- **Always use `require('@site/static/...')`** — bare paths like `/img/...` break in dev server due to `baseUrl: '/octatrack-manager-xx/'`.
 - Standard markdown `![alt](path)` automatically handles `baseUrl`; raw `<img src="...">` does not.
 - **Side-by-side images** (e.g., One/Range mode): use `style={{width: '40%'}}` without centering so they sit next to each other.
 - Run `pnpm run build` to verify all images resolve correctly after changes.

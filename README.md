@@ -11,7 +11,7 @@
 </p>
 
 <p align="center" style="display: flex; justify-content: center; align-items: center; gap: 10px;">
-  <a href="https://davidferlay.github.io/octatrack-manager/" target="_blank">
+  <a href="https://kaz4g.github.io/octatrack-manager-xx/" target="_blank">
     <strong>Read the User Guide</strong>
   </a>
   <span> | </span>
@@ -47,13 +47,12 @@ We are constantly working to improve the application and add more power-user fea
 
 For detailed instructions, troubleshooting, and feature explanations, please visit the official documentation:
 
-- **[davidferlay.github.io/octatrack-manager](https://davidferlay.github.io/octatrack-manager/)**
+- **[kaz4g.github.io/octatrack-manager-xx](https://kaz4g.github.io/octatrack-manager-xx/)**
 
 
 ## Installation
 
-1. Download the latest release for your platform (Windows, macOS, or Linux) from the [Releases page](https://github.com/davidferlay/octatrack-manager/releases/latest).
-2. Follow the [Installation Guide](https://davidferlay.github.io/octatrack-manager/docs/getting-started/installation) for platform-specific steps, especially for **macOS Gatekeeper** bypass.
+This fork does not publish signed binary releases yet. Build it from source by following the [Installation Guide](https://kaz4g.github.io/octatrack-manager-xx/docs/getting-started/installation).
 
 
 ## Compatibility
@@ -67,7 +66,7 @@ For detailed instructions, troubleshooting, and feature explanations, please vis
 Feedback from the community is invaluable. Please share your experiences, bug reports, and ideas:
 
 - **Elektronauts:** [Project Manager for Octatrack Thread](https://www.elektronauts.com/t/project-manager-for-octatrack/233672)
-- **GitHub:** [Issues Page](https://github.com/davidferlay/octatrack-manager/issues)
+- **GitHub:** [Issues Page](https://github.com/kaz4g/octatrack-manager-xx/issues)
 
 
 ## Development
@@ -85,6 +84,7 @@ pnpm run tauri:dev
 ## Credits & Tech Stack
 
 Built with:
+- [Upstream Octatrack Manager](https://github.com/davidferlay/octatrack-manager) - Original project and attribution
 - [ot-tools-io](https://gitlab.com/ot-tools/ot-tools-io) - Octatrack file I/O library
 - [Tauri](https://tauri.app/) - Desktop application framework
 - [React](https://react.dev/) - UI framework

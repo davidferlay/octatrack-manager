@@ -23,7 +23,7 @@ You can report issues, feedbacks and ideas directly on the [Elektronauts thread]
 
 ## For macOS Code Signing
 
-On macOS, the app currently requires [extra steps](./getting-started/installation.md#macos) to run because it isn’t code-signed yet. If you have an **Apple Developer account** and are willing to help by sharing a signing certificate for CI/CD use, it would make a huge difference — significantly improving the macOS installation experience for the entire community.
+The fork does not yet publish signed binaries, so the current [installation instructions](./getting-started/installation.md) build the app from source. Help with a reviewable signing and release process would significantly improve the installation experience.
 
 If you’re able to help, please get in touch.
 

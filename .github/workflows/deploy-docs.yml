@@ -46,13 +46,6 @@ jobs:
       - name: Optimize images
         run: pnpm --dir user-guide run optimize-images
 
-      - name: Fetch latest release version
-        run: |
-          RELEASE_VERSION=$(curl -s https://api.github.com/repos/davidferlay/octatrack-manager/releases/latest \
-            | python3 -c "import json,sys; print(json.load(sys.stdin)['tag_name'].lstrip('v'))")
-          echo "RELEASE_VERSION=$RELEASE_VERSION" >> $GITHUB_ENV
-          echo "Resolved latest release version: $RELEASE_VERSION"
-
       - name: Build user guide
         run: pnpm --dir user-guide run build
 
@@ -62,15 +55,15 @@ jobs:
           pnpm exec docusaurus serve --port 3030 --no-open &
           SERVER_PID=$!
           for i in $(seq 1 30); do
-            curl -s http://localhost:3030/octatrack-manager/docs/intro > /dev/null 2>&1 && break
+            curl -s http://localhost:3030/octatrack-manager-xx/docs/intro > /dev/null 2>&1 && break
             sleep 1
           done
           pnpm exec docs-to-pdf docusaurus \
-            --initialDocURLs "http://localhost:3030/octatrack-manager/docs/intro" \
+            --initialDocURLs "http://localhost:3030/octatrack-manager-xx/docs/intro" \
             --contentSelector "article" \
             --paginationSelector "a.pagination-nav__link--next" \
             --excludeSelectors ".margin-vert--xl a,[class^='tocCollapsible'],.breadcrumbs,.theme-edit-this-page" \
-            --coverImage "http://localhost:3030/octatrack-manager/img/logo-512.png" \
+            --coverImage "http://localhost:3030/octatrack-manager-xx/img/logo-512.png" \
             --coverTitle "Octatrack Manager" \
             --coverSub "User Guide" \
             --paperFormat "A4" \
