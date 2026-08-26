@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "check:architecture": "node scripts/check-architecture.mjs",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "tauri": "tauri",
@@ -15,7 +16,7 @@
     "test": "npm run typecheck && npm run test:frontend && npm run test:rust",
     "test:frontend": "vitest run",
     "test:e2e": "playwright test",
-    "test:rust": "cd src-tauri && cargo fmt --check && cargo clippy -- -D warnings && cargo test",
+    "test:rust": "cd src-tauri && cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace",
     "docs:watch": "npm --prefix user-guide run start"
   },
   "dependencies": {

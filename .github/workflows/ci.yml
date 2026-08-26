@@ -59,11 +59,14 @@ jobs:
         with:
           components: clippy, rustfmt
 
+      - name: Check architecture dependencies
+        run: node scripts/check-architecture.mjs
+
       # Needs no build, so a bad format fails in seconds instead of after the
       # compile.
       - name: Check Rust formatting
         working-directory: src-tauri
-        run: cargo fmt --check
+        run: cargo fmt --all -- --check
 
       # Purpose-built for Rust: prunes stale artifacts and registry sources
       # before saving, and keys on the rustc version as well as the lockfile.
@@ -88,11 +91,11 @@ jobs:
       # unlinted.
       - name: Run Clippy lints
         working-directory: src-tauri
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Run Rust tests
         working-directory: src-tauri
-        run: cargo test
+        run: cargo test --workspace
 
   frontend-checks:
     name: Frontend Checks

@@ -168,8 +168,10 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 
 ## 6. 次のCodex作業
 
-ベースラインPR #1はマージ済みで、PR-0ではupstream updater経路を無効化した。
-次は`docs/NEXT_GENERATION_ARCHITECTURE.md`のPR-1 `next-core skeleton`に従い、
-runtime behaviorを変えずに次世代coreのcrate/port境界を追加する。既存の巨大moduleを
-最初に全面分割
-しない。PR-2のread-only vertical sliceで新しい境界が成立することを先に証明する。
+ベースラインPR #1はマージ済み。PR-0ではupstream updater経路を無効化し、PR-1では
+runtime behaviorを変えずに`ot-domain`、codec/storage ports、`ot-application`、中央IPC
+clientと依存ルールを追加した。
+
+次は`docs/NEXT_GENERATION_ARCHITECTURE.md`のPR-2 `RootRegistry read-only vertical slice`
+に進む。既存の巨大moduleを最初に全面分割せず、read-only sliceで新しい境界が成立する
+ことを先に証明する。

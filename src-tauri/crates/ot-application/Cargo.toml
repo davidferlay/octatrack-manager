@@ -1,0 +1,13 @@
+[package]
+name = "ot-application"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+ot-codec-ports = { path = "../ot-codec-ports" }
+ot-domain = { path = "../ot-domain" }
+ot-storage-ports = { path = "../ot-storage-ports" }
+
+[lib]
+path = "src/lib.rs"

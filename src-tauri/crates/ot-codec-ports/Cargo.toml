@@ -1,0 +1,11 @@
+[package]
+name = "ot-codec-ports"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+ot-domain = { path = "../ot-domain" }
+
+[lib]
+path = "src/lib.rs"
