@@ -61,7 +61,11 @@ fn scan_registered_root(canonical_root: &Path) -> Result<LibrarySnapshot, Storag
             });
         }
     }
-    sets.sort_by(|left, right| left.relative_path.as_str().cmp(right.relative_path.as_str()));
+    sets.sort_by(|left, right| {
+        left.relative_path
+            .as_str()
+            .cmp(right.relative_path.as_str())
+    });
 
     let mut seen_projects = HashSet::new();
     let mut standalone_projects = Vec::new();
@@ -71,8 +75,11 @@ fn scan_registered_root(canonical_root: &Path) -> Result<LibrarySnapshot, Storag
             standalone_projects.push(project);
         }
     }
-    standalone_projects
-        .sort_by(|left, right| left.relative_path.as_str().cmp(right.relative_path.as_str()));
+    standalone_projects.sort_by(|left, right| {
+        left.relative_path
+            .as_str()
+            .cmp(right.relative_path.as_str())
+    });
 
     Ok(LibrarySnapshot {
         sets,
@@ -189,8 +196,7 @@ mod tests {
             snapshot.sets[0].projects[0].relative_path.as_str(),
             "LIVE_SET/PROJECT_A"
         );
-        assert!(!snapshot.sets[0]
-            .projects[0]
+        assert!(!snapshot.sets[0].projects[0]
             .relative_path
             .as_str()
             .contains(root.path().to_str().unwrap()));
@@ -231,7 +237,11 @@ mod tests {
         fs::create_dir(outside.path().join("OUTSIDE_SET")).unwrap();
         fs::create_dir(outside.path().join("OUTSIDE_SET/AUDIO")).unwrap();
         create_project(outside.path(), "OUTSIDE_SET/PROJECT");
-        symlink(outside.path().join("OUTSIDE_SET"), root.path().join("ESCAPE")).unwrap();
+        symlink(
+            outside.path().join("OUTSIDE_SET"),
+            root.path().join("ESCAPE"),
+        )
+        .unwrap();
 
         let snapshot = scan_registered_root(root.path()).unwrap();
         assert!(snapshot.sets.is_empty());

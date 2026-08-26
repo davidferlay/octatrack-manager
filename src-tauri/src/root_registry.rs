@@ -324,7 +324,9 @@ impl RootRegistry {
     }
 
     fn lock_state(&self) -> Result<std::sync::MutexGuard<'_, RegistryState>, RootRegistryError> {
-        self.state.lock().map_err(|_| RootRegistryError::Unavailable)
+        self.state
+            .lock()
+            .map_err(|_| RootRegistryError::Unavailable)
     }
 
     fn new_root_id(&self, canonical_path: &Path) -> Result<RootId, RootRegistryError> {
@@ -395,7 +397,10 @@ impl std::fmt::Display for RootRegistryError {
             Self::Removed => formatter.write_str("the registered root is no longer available"),
             Self::Changed => formatter.write_str("the registered root or device identity changed"),
             Self::Io(message) => {
-                write!(formatter, "could not inspect the registered root: {message}")
+                write!(
+                    formatter,
+                    "could not inspect the registered root: {message}"
+                )
             }
             Self::Unavailable => formatter.write_str("the root registry is unavailable"),
         }
@@ -458,17 +463,17 @@ mod tests {
         let second = registry.register(root.path().to_str().unwrap()).unwrap();
 
         assert_eq!(first.root_id, second.root_id);
-        assert!(!first.root_id.as_str().contains(root.path().to_str().unwrap()));
+        assert!(!first
+            .root_id
+            .as_str()
+            .contains(root.path().to_str().unwrap()));
         assert!(!first.capabilities.write);
     }
 
     #[test]
     fn unknown_and_expired_ids_are_rejected() {
         let root = TempDir::new().unwrap();
-        let registry = RootRegistry::new(
-            Arc::new(FakeIdentityProvider::new()),
-            Duration::ZERO,
-        );
+        let registry = RootRegistry::new(Arc::new(FakeIdentityProvider::new()), Duration::ZERO);
         let session = registry.register(root.path().to_str().unwrap()).unwrap();
 
         assert_eq!(

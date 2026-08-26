@@ -99,14 +99,12 @@ pub(crate) fn is_octatrack_set(path: &Path) -> bool {
     // On case-insensitive filesystems (macOS HFS+/APFS), path.join("AUDIO").is_dir() would match
     // "audio" or "Audio", so we also verify the actual directory entry name is exactly "AUDIO".
     if let Ok(entries) = fs::read_dir(path) {
-        entries
-            .flatten()
-            .any(|e| {
-                e.file_name() == "AUDIO"
-                    && e.file_type()
-                        .map(|file_type| file_type.is_dir())
-                        .unwrap_or(false)
-            })
+        entries.flatten().any(|e| {
+            e.file_name() == "AUDIO"
+                && e.file_type()
+                    .map(|file_type| file_type.is_dir())
+                    .unwrap_or(false)
+        })
     } else {
         false
     }
@@ -206,7 +204,8 @@ fn scan_for_sets(
             let projects = scan_for_projects(path);
 
             // Check if AUDIO directory exists and contains valid audio files
-            let has_audio_pool = is_real_directory(&audio_pool) && has_valid_audio_pool(&audio_pool);
+            let has_audio_pool =
+                is_real_directory(&audio_pool) && has_valid_audio_pool(&audio_pool);
 
             // Store the canonical path to avoid duplicate detection
             if let Ok(canonical_path) = path.canonicalize() {

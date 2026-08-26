@@ -173,10 +173,7 @@ fn storage_error(message: &str) -> ApiError {
     ApiError::new(code, message, true)
 }
 
-fn register_root_sync(
-    registry: &RootRegistry,
-    raw_path: &str,
-) -> Result<RootSessionDto, ApiError> {
+fn register_root_sync(registry: &RootRegistry, raw_path: &str) -> Result<RootSessionDto, ApiError> {
     let session = registry.register(raw_path)?;
     let snapshot = match list_library_sync(registry, &session.root_id) {
         Ok(snapshot) => snapshot,
