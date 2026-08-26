@@ -1,6 +1,6 @@
 # Codex引継ぎ — Octatrack Manager fork
 
-更新日: 2026-08-26
+更新日: 2026-08-27
 
 ## 1. 目的
 
@@ -44,13 +44,16 @@
 
 - upstream: `https://github.com/davidferlay/octatrack-manager.git`
 - fork: `https://github.com/kaz4g/octatrack-manager-xx.git`
-- Macローカル: `/Users/kaz4g/sandbox/gitHub/octatrack-manager-xx`
+- Macローカル: `/Users/kaz4g/Documents/ChatGPT/Octatrack-maneger-xx`
 - upstream基準SHA: `8d32913`
 - ベースラインPR: #1マージ済み
 - PR-0 updater containment: #2マージ済み
 - PR-1 next-core skeleton: #4マージ済み
-- 現在のmain SHA: `b28e6d0007aa0e819ad116cfa51b675ab390d721`
-- pnpm移行ブランチ: `chore/migrate-to-pnpm`
+- pnpm移行: #5マージ済み
+- fork Pages URL修正: #6マージ済み
+- 依存advisory分類: #7マージ済み
+- 現在のmain SHA: `6d26b0db2e68650407921404e13e8ab21d2b0705`
+- RootRegistry作業ブランチ: `feat/root-registry-read-only`
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
 - `ot-tools-io`はコミット
@@ -62,9 +65,9 @@ frontendとRustのupdater/process plugin、Tauri capability、本家endpointと�
 updater artifact生成、release workflowのupdater署名経路を無効化した。version番号の
 静的表示は維持している。
 
-基準コミット時点で、TypeScript typecheck、frontend build、frontend tests
-367件は成功済み。Linux環境のRust/TauriフルテストはGTK/WebKit系system
-library不足で未完了。macOS実機で再確認する。
+依存advisory分類では、現在の製品runtimeから到達可能なcritical/highは確認されず、
+RootRegistry read-only vertical sliceへ進む判定となった。受容期限と再確認条件は
+`docs/security/DEPENDENCY_AUDIT.md`を正本とする。
 
 ## 3. セキュリティ監査の判定
 
@@ -171,11 +174,14 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 
 ## 6. 次のCodex作業
 
-ベースラインPR #1、PR-0、PR-1はマージ済み。PR-0ではupstream updater経路を無効化し、
-PR-1ではruntime behaviorを変えずに`ot-domain`、codec/storage ports、`ot-application`、
-中央IPC clientと依存ルールを追加した。JavaScript toolingはpnpm 11.24.0へ移行済みで、
-root appとuser-guideは独立したpnpm lockfileを使用する。
+ベースラインPR #1、PR-0、PR-1、pnpm移行#5、fork Pages修正#6、依存監査#7は
+マージ済み。現在は`docs/NEXT_GENERATION_ARCHITECTURE.md`のPR-2
+`RootRegistry read-only vertical slice`を実装中である。
 
-次は`docs/NEXT_GENERATION_ARCHITECTURE.md`のPR-2 `RootRegistry read-only vertical slice`
-に進む。既存の巨大moduleを最初に全面分割せず、read-only sliceで新しい境界が成立する
-ことを先に証明する。
+このsliceでは、native pickerからのroot登録だけがraw absolute pathを受け取り、
+backendの`RootRegistry`がabsolute pathを保持する。以後の新APIはopaqueな`RootId`だけを
+受け取り、legacy scannerをadapter越しに呼び、frontendへ表示名と検証済み相対パスだけを
+返す。write capabilityは付与せず、実媒体を使わずに一時fixtureで検証する。
+
+このPRがマージされるまではM3 catalog indexingや新しいwrite機能へ進まない。マージ後の
+次候補は設計書のM3 catalog/indexing sliceであり、依存監査の受容期限と再確認条件も維持する。

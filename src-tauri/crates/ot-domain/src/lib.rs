@@ -84,6 +84,27 @@ impl RootRelativePath {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    pub fn from_components<I, S>(components: I) -> Result<Self, InvalidRootRelativePath>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let components = components
+            .into_iter()
+            .map(|component| {
+                RootPathComponent::parse(component)
+                    .map(|component| component.as_str().to_owned())
+                    .map_err(|_| InvalidRootRelativePath::InvalidComponent)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        if components.is_empty() {
+            return Err(InvalidRootRelativePath::Empty);
+        }
+
+        Ok(Self(components.join("/")))
+    }
 }
 
 fn has_windows_drive_prefix(value: &str) -> bool {
@@ -112,6 +133,59 @@ impl fmt::Display for InvalidRootRelativePath {
 }
 
 impl std::error::Error for InvalidRootRelativePath {}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct RootPathComponent(String);
+
+impl RootPathComponent {
+    pub fn parse(value: impl AsRef<str>) -> Result<Self, InvalidRootPathComponent> {
+        let value = value.as_ref();
+        if value.is_empty() || value == "." || value == ".." || value.contains('\0') {
+            return Err(InvalidRootPathComponent);
+        }
+        if value.contains(['/', '\\']) || has_windows_drive_prefix(value) {
+            return Err(InvalidRootPathComponent);
+        }
+        Ok(Self(value.to_owned()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InvalidRootPathComponent;
+
+impl fmt::Display for InvalidRootPathComponent {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("path component must be a non-empty basename without separators")
+    }
+}
+
+impl std::error::Error for InvalidRootPathComponent {}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LibraryProject {
+    pub display_name: String,
+    pub relative_path: RootRelativePath,
+    pub has_project_file: bool,
+    pub has_banks: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LibrarySet {
+    pub display_name: String,
+    pub relative_path: RootRelativePath,
+    pub has_audio_pool: bool,
+    pub projects: Vec<LibraryProject>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct LibrarySnapshot {
+    pub sets: Vec<LibrarySet>,
+    pub standalone_projects: Vec<LibraryProject>,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProjectDocument {
@@ -148,6 +222,25 @@ mod tests {
         assert_eq!(
             RootRelativePath::parse(r"C:\absolute.work"),
             Err(InvalidRootRelativePath::Absolute)
+        );
+    }
+
+    #[test]
+    fn path_components_reject_separators_and_traversal() {
+        assert!(RootPathComponent::parse("SET/PROJECT").is_err());
+        assert!(RootPathComponent::parse(r"SET\PROJECT").is_err());
+        assert!(RootPathComponent::parse("..").is_err());
+        assert!(RootPathComponent::parse(".").is_err());
+    }
+
+    #[test]
+    fn relative_paths_can_be_built_only_from_valid_components() {
+        let path = RootRelativePath::from_components(["SET", "PROJECT"]).unwrap();
+        assert_eq!(path.as_str(), "SET/PROJECT");
+
+        assert_eq!(
+            RootRelativePath::from_components(["SET", "BAD/PROJECT"]),
+            Err(InvalidRootRelativePath::InvalidComponent)
         );
     }
 }

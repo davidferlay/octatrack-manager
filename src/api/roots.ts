@@ -1,0 +1,58 @@
+import { ipcClient, type IpcClient } from "./client";
+
+export interface RootCapabilities {
+  read: boolean;
+  write: boolean;
+  stableDeviceIdentity: boolean;
+}
+
+export interface RootSession {
+  rootId: string;
+  displayName: string;
+  deviceFingerprint: string;
+  mode: "read_only";
+  observedRevision: number;
+  expiresInSeconds: number;
+  capabilities: RootCapabilities;
+}
+
+export interface LibraryProject {
+  displayName: string;
+  relativePath: string;
+  hasProjectFile: boolean;
+  hasBanks: boolean;
+}
+
+export interface LibrarySet {
+  displayName: string;
+  relativePath: string;
+  hasAudioPool: boolean;
+  projects: LibraryProject[];
+}
+
+export interface LibrarySnapshot {
+  sets: LibrarySet[];
+  standaloneProjects: LibraryProject[];
+}
+
+export interface RootApi {
+  registerRoot(rawPath: string): Promise<RootSession>;
+  rootStatus(rootId: string): Promise<RootSession>;
+  closeRoot(rootId: string): Promise<void>;
+  listLibrary(rootId: string): Promise<LibrarySnapshot>;
+}
+
+export function createRootApi(client: IpcClient = ipcClient): RootApi {
+  return {
+    registerRoot: (rawPath) =>
+      client.request<RootSession>("v2_root_register", { rawPath }),
+    rootStatus: (rootId) =>
+      client.request<RootSession>("v2_root_status", { rootId }),
+    closeRoot: (rootId) =>
+      client.request<void>("v2_root_close", { rootId }),
+    listLibrary: (rootId) =>
+      client.request<LibrarySnapshot>("v2_library_list", { rootId }),
+  };
+}
+
+export const rootApi = createRootApi();

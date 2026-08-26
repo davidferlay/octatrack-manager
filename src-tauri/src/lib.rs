@@ -3,9 +3,12 @@
 
 mod audio_pool;
 mod device_detection;
+mod legacy_read_adapter;
 pub mod project_manager;
 mod project_reader;
 mod purge;
+mod root_registry;
+mod v2_api;
 
 use audio_pool::{
     cancel_transfer, collect_audio_files_recursive, copy_audio_files_or_use_existing,
@@ -55,6 +58,7 @@ use project_reader::{
     SlotAssignment,
 };
 use serde::Serialize;
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
 
 #[derive(Clone, Serialize)]
@@ -1340,6 +1344,7 @@ pub fn run() {
     // element: measured clean on A2DP (440.0 Hz, 0.00% THD) with no mixer.
 
     tauri::Builder::default()
+        .manage(Arc::new(root_registry::RootRegistry::default()))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
@@ -1353,6 +1358,11 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            // Next-generation read-only API. Only root registration accepts a raw path.
+            v2_api::v2_root_register,
+            v2_api::v2_root_status,
+            v2_api::v2_root_close,
+            v2_api::v2_library_list,
             greet,
             scan_devices,
             scan_custom_directory,

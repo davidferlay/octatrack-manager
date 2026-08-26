@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 
 use ot_codec_ports::{CodecError, ProjectCodec};
-use ot_domain::{ProjectDocument, RootId, RootRelativePath};
-use ot_storage_ports::{ProjectStorage, StorageError};
+use ot_domain::{LibrarySnapshot, ProjectDocument, RootId, RootRelativePath};
+use ot_storage_ports::{ProjectStorage, ReadOnlyLibrary, StorageError};
 use std::fmt;
 
 pub struct InspectProject<'a, S, C> {
@@ -55,6 +55,23 @@ impl From<StorageError> for InspectProjectError {
 impl From<CodecError> for InspectProjectError {
     fn from(error: CodecError) -> Self {
         Self::Codec(error)
+    }
+}
+
+pub struct ListLibrary<'a, S> {
+    storage: &'a S,
+}
+
+impl<'a, S> ListLibrary<'a, S>
+where
+    S: ReadOnlyLibrary,
+{
+    pub fn new(storage: &'a S) -> Self {
+        Self { storage }
+    }
+
+    pub fn execute(&self, root_id: &RootId) -> Result<LibrarySnapshot, StorageError> {
+        self.storage.list_library(root_id)
     }
 }
 
@@ -111,5 +128,24 @@ mod tests {
             storage.calls.into_inner(),
             vec![("root-1".into(), "projects/demo/project.work".into())]
         );
+    }
+
+    struct FakeLibrary;
+
+    impl ReadOnlyLibrary for FakeLibrary {
+        fn list_library(&self, root_id: &RootId) -> Result<LibrarySnapshot, StorageError> {
+            if root_id.as_str() != "root-1" {
+                return Err(StorageError::new("unexpected root"));
+            }
+            Ok(LibrarySnapshot::default())
+        }
+    }
+
+    #[test]
+    fn lists_a_library_by_opaque_root_id() {
+        let root_id = RootId::new("root-1").unwrap();
+        let snapshot = ListLibrary::new(&FakeLibrary).execute(&root_id).unwrap();
+
+        assert_eq!(snapshot, LibrarySnapshot::default());
     }
 }

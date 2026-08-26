@@ -4,6 +4,18 @@ use std::path::Path;
 use sysinfo::Disks;
 use walkdir::WalkDir;
 
+fn is_real_directory(path: &Path) -> bool {
+    fs::symlink_metadata(path)
+        .map(|metadata| metadata.file_type().is_dir())
+        .unwrap_or(false)
+}
+
+fn is_real_file(path: &Path) -> bool {
+    fs::symlink_metadata(path)
+        .map(|metadata| metadata.file_type().is_file())
+        .unwrap_or(false)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanResult {
     pub locations: Vec<OctatrackLocation>,
@@ -41,39 +53,29 @@ pub struct OctatrackProject {
     pub has_banks: bool,
 }
 
-/// Checks if a path should be excluded from scanning (system directories)
+/// Checks if a path should be excluded from automatic discovery.
+/// Explicitly selected roots are already user-approved and do not use this filter.
 fn is_system_path(path: &Path) -> bool {
     let path_str = path.to_string_lossy();
 
-    // macOS system paths
-    if path_str.starts_with("/System/")
+    path_str.starts_with("/System/")
         || path_str.starts_with("/Library/")
         || path_str.starts_with("/private/")
         || path_str.contains("/Library/Application Support/")
         || path_str.contains("/Library/Preferences/")
         || path_str.contains("/Library/Caches/")
-    {
-        return true;
-    }
-
-    // Linux system paths
-    if path_str.starts_with("/usr/")
+        || path_str.starts_with("/usr/")
         || path_str.starts_with("/var/")
         || path_str.starts_with("/etc/")
         || path_str.starts_with("/bin/")
         || path_str.starts_with("/sbin/")
         || path_str.starts_with("/boot/")
-    {
-        return true;
-    }
-
-    false
 }
 
 /// Checks if AUDIO directory contains actual audio samples (WAV or AIFF files)
 /// Checks both the immediate directory and one level of subdirectories
 pub(crate) fn has_valid_audio_pool(audio_path: &Path) -> bool {
-    if !audio_path.is_dir() {
+    if !is_real_directory(audio_path) {
         return false;
     }
 
@@ -84,6 +86,9 @@ pub(crate) fn has_valid_audio_pool(audio_path: &Path) -> bool {
         .into_iter()
         .filter_map(|e| e.ok())
     {
+        if !entry.file_type().is_file() {
+            continue;
+        }
         if let Some(ext) = entry.path().extension() {
             let ext_str = ext.to_string_lossy().to_lowercase();
             if ext_str == "wav" || ext_str == "aif" || ext_str == "aiff" {
@@ -99,19 +104,13 @@ pub(crate) fn has_valid_audio_pool(audio_path: &Path) -> bool {
 /// Requirements:
 /// - Must have an AUDIO directory (the defining characteristic of a Set)
 /// - Must have at least one project subdirectory
-/// - Must not be a system directory
 ///
 /// Note: A directory without an AUDIO directory is NOT considered a Set,
 /// even if it contains multiple projects - those are individual projects.
 /// Empty Sets (AUDIO dir but no projects yet) are valid — they may have been
 /// freshly created and not yet populated.
 pub(crate) fn is_octatrack_set(path: &Path) -> bool {
-    if !path.is_dir() {
-        return false;
-    }
-
-    // Skip system directories
-    if is_system_path(path) {
+    if !is_real_directory(path) {
         return false;
     }
 
@@ -119,9 +118,12 @@ pub(crate) fn is_octatrack_set(path: &Path) -> bool {
     // On case-insensitive filesystems (macOS HFS+/APFS), path.join("AUDIO").is_dir() would match
     // "audio" or "Audio", so we also verify the actual directory entry name is exactly "AUDIO".
     if let Ok(entries) = fs::read_dir(path) {
-        entries
-            .flatten()
-            .any(|e| e.file_name() == "AUDIO" && e.path().is_dir())
+        entries.flatten().any(|e| {
+            e.file_name() == "AUDIO"
+                && e.file_type()
+                    .map(|file_type| file_type.is_dir())
+                    .unwrap_or(false)
+        })
     } else {
         false
     }
@@ -129,13 +131,20 @@ pub(crate) fn is_octatrack_set(path: &Path) -> bool {
 
 /// Checks if a directory is an Octatrack Project (contains .work files)
 fn is_octatrack_project(path: &Path) -> bool {
-    if !path.is_dir() {
+    if !is_real_directory(path) {
         return false;
     }
 
     // Look for .work files which indicate Octatrack projects
     if let Ok(entries) = fs::read_dir(path) {
         for entry in entries.flatten() {
+            let is_file = entry
+                .file_type()
+                .map(|file_type| file_type.is_file())
+                .unwrap_or(false);
+            if !is_file {
+                continue;
+            }
             if let Some(ext) = entry.path().extension() {
                 if ext == "work" {
                     return true;
@@ -161,9 +170,9 @@ pub(crate) fn scan_for_projects(set_path: &Path) -> Vec<OctatrackProject> {
                 continue;
             }
 
-            if path.is_dir() && is_octatrack_project(&path) {
-                let has_project_file = path.join("project.work").exists();
-                let has_banks = path.join("bank01.work").exists();
+            if is_real_directory(&path) && is_octatrack_project(&path) {
+                let has_project_file = is_real_file(&path.join("project.work"));
+                let has_banks = is_real_file(&path.join("bank01.work"));
 
                 projects.push(OctatrackProject {
                     name: path
@@ -194,6 +203,7 @@ fn is_backups_dir(path: &Path) -> bool {
 fn scan_for_sets(
     location_path: &Path,
     max_depth: usize,
+    exclude_system_paths: bool,
 ) -> (Vec<OctatrackSet>, Vec<OctatrackProject>) {
     let mut sets = Vec::new();
     let mut standalone_projects = Vec::new();
@@ -203,7 +213,10 @@ fn scan_for_sets(
     for entry in WalkDir::new(location_path)
         .max_depth(max_depth)
         .into_iter()
-        .filter_entry(|e| !is_backups_dir(e.path()))
+        .filter_entry(|entry| {
+            !is_backups_dir(entry.path())
+                && (!exclude_system_paths || !is_system_path(entry.path()))
+        })
         .filter_map(|e| e.ok())
     {
         let path = entry.path();
@@ -215,7 +228,7 @@ fn scan_for_sets(
 
             // Check if AUDIO directory exists and contains valid audio files
             let has_audio_pool =
-                audio_pool.exists() && audio_pool.is_dir() && has_valid_audio_pool(&audio_pool);
+                is_real_directory(&audio_pool) && has_valid_audio_pool(&audio_pool);
 
             // Store the canonical path to avoid duplicate detection
             if let Ok(canonical_path) = path.canonicalize() {
@@ -239,7 +252,10 @@ fn scan_for_sets(
     for entry in WalkDir::new(location_path)
         .max_depth(max_depth)
         .into_iter()
-        .filter_entry(|e| !is_backups_dir(e.path()))
+        .filter_entry(|entry| {
+            !is_backups_dir(entry.path())
+                && (!exclude_system_paths || !is_system_path(entry.path()))
+        })
         .filter_map(|e| e.ok())
     {
         let path = entry.path();
@@ -256,8 +272,8 @@ fn scan_for_sets(
 
             // Only add if it's NOT a Set and NOT part of a Set
             if !is_set_or_part_of_set {
-                let has_project_file = path.join("project.work").exists();
-                let has_banks = path.join("bank01.work").exists();
+                let has_project_file = is_real_file(&path.join("project.work"));
+                let has_banks = is_real_file(&path.join("bank01.work"));
 
                 standalone_projects.push(OctatrackProject {
                     name: path
@@ -356,7 +372,7 @@ fn scan_home_directory() -> ScanResult {
         }
 
         // Scan for Sets and standalone projects in this path
-        let (sets, standalone_projects) = scan_for_sets(&search_path, 3);
+        let (sets, standalone_projects) = scan_for_sets(&search_path, 3, true);
         all_sets.extend(sets);
         all_standalone_projects.extend(standalone_projects);
     }
@@ -373,7 +389,7 @@ fn scan_home_directory() -> ScanResult {
 pub fn scan_directory(path: &str) -> ScanResult {
     let path = Path::new(path);
 
-    if !path.exists() || !path.is_dir() {
+    if !is_real_directory(path) {
         return ScanResult {
             locations: Vec::new(),
             standalone_projects: Vec::new(),
@@ -381,7 +397,7 @@ pub fn scan_directory(path: &str) -> ScanResult {
     }
 
     // Scan for Sets and standalone projects in the specified directory
-    let (sets, standalone_projects) = scan_for_sets(path, 3);
+    let (sets, standalone_projects) = scan_for_sets(path, 3, false);
 
     if sets.is_empty() && standalone_projects.is_empty() {
         return ScanResult {
@@ -457,7 +473,7 @@ pub fn discover_devices() -> ScanResult {
         }
 
         // Scan for Octatrack sets and standalone projects
-        let (sets, standalone_projects) = scan_for_sets(mount_point, 3);
+        let (sets, standalone_projects) = scan_for_sets(mount_point, 3, true);
         all_removable_sets.extend(sets);
         all_removable_projects.extend(standalone_projects);
     }
