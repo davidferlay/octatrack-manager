@@ -2386,6 +2386,75 @@ mod tests {
     }
 
     #[test]
+    fn sample_settings_owner_cannot_cross_root_or_scan_scope() {
+        let (_directory, _path, mut catalog) = open_temp_catalog();
+        let first_observation = observation('7', "First settings root");
+        let second_observation = observation('8', "Second settings root");
+        let snapshot = snapshot_with_sample_settings();
+        catalog
+            .store_snapshot(&first_observation, &snapshot)
+            .unwrap();
+        catalog
+            .store_snapshot(&second_observation, &snapshot)
+            .unwrap();
+        let first_root_id: i64 = catalog
+            .connection
+            .query_row(
+                "SELECT id FROM roots WHERE fingerprint = ?1",
+                [first_observation.identity.as_str()],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let second_root_id: i64 = catalog
+            .connection
+            .query_row(
+                "SELECT id FROM roots WHERE fingerprint = ?1",
+                [second_observation.identity.as_str()],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let foreign_slot_assignment_id: i64 = catalog
+            .connection
+            .query_row(
+                "SELECT slot_assignments.id FROM slot_assignments \
+                 JOIN state_documents \
+                   ON state_documents.id = slot_assignments.state_document_id \
+                 WHERE state_documents.root_id = ?1",
+                [second_root_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let foreign_file_instance_id: i64 = catalog
+            .connection
+            .query_row(
+                "SELECT id FROM file_instances WHERE root_id = ?1 LIMIT 1",
+                [second_root_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        let slot_error = catalog.connection.execute(
+            "UPDATE sample_settings SET slot_assignment_id = ?1 \
+             WHERE root_id = ?2 AND owner_kind = 'slot_assignment'",
+            params![foreign_slot_assignment_id, first_root_id],
+        );
+        let file_error = catalog.connection.execute(
+            "UPDATE sample_settings SET file_instance_id = ?1 \
+             WHERE root_id = ?2 AND owner_kind = 'file_instance_sidecar'",
+            params![foreign_file_instance_id, first_root_id],
+        );
+
+        assert!(slot_error.is_err());
+        assert!(file_error.is_err());
+        assert_eq!(
+            catalog
+                .load_latest_snapshot(&first_observation.identity)
+                .unwrap(),
+            Some(snapshot)
+        );
+    }
+
+    #[test]
     fn sample_settings_failure_preserves_previous_successful_projection() {
         let (_directory, _path, mut catalog) = open_temp_catalog();
         let observation = observation('8', "Settings rollback");

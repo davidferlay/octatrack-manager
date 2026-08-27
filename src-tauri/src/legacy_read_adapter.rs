@@ -595,8 +595,7 @@ fn scan_slot_local_settings(
     }) {
         let source_file =
             resolve_relative_for_read(canonical_root, &document.source_relative_path)?;
-        let raw_fields = read_raw_sample_fields(&source_file)
-            .map_err(|error| StorageError::new(format!("UNSUPPORTED_FORMAT: {error}")))?;
+        let raw_fields = read_raw_sample_fields(&source_file);
         let marker_name = match document.role {
             StateDocumentRole::Working => "markers.work",
             StateDocumentRole::SavedCheckpoint => "markers.strd",
@@ -609,15 +608,6 @@ fn scan_slot_local_settings(
         for assignment in snapshot.slot_assignments.iter().filter(|assignment| {
             assignment.project_document_relative_path == document.source_relative_path
         }) {
-            let Some(fields) = raw_fields.get(&(
-                match assignment.slot.kind() {
-                    SampleSlotKind::Static => "STATIC".to_owned(),
-                    SampleSlotKind::Flex => "FLEX".to_owned(),
-                },
-                assignment.slot.number(),
-            )) else {
-                continue;
-            };
             let mut sample_settings = empty_sample_settings(
                 SampleSettingsOwner::SlotAssignment,
                 document.source_relative_path.clone(),
@@ -628,6 +618,22 @@ fn scan_slot_local_settings(
                 Some(document.source_relative_path.clone());
             sample_settings.slot = Some(assignment.slot);
             sample_settings.marker_source_relative_path = marker_source.clone();
+            let Ok(raw_fields) = &raw_fields else {
+                sample_settings.parse_status = SampleSettingsParseStatus::Malformed;
+                output.push(sample_settings);
+                continue;
+            };
+            let Some(fields) = raw_fields.get(&(
+                match assignment.slot.kind() {
+                    SampleSlotKind::Static => "STATIC".to_owned(),
+                    SampleSlotKind::Flex => "FLEX".to_owned(),
+                },
+                assignment.slot.number(),
+            )) else {
+                sample_settings.parse_status = SampleSettingsParseStatus::Malformed;
+                output.push(sample_settings);
+                continue;
+            };
             if let Some(status) = marker_status {
                 sample_settings.parse_status = status;
                 output.push(sample_settings);
@@ -1309,6 +1315,66 @@ mod tests {
 
     fn test_hash(hex_digit: char) -> ContentHash {
         ContentHash::parse(format!("sha256:{}", hex_digit.to_string().repeat(64))).unwrap()
+    }
+
+    fn snapshot_with_static_slot_one() -> LibrarySnapshot {
+        let source = RootRelativePath::parse("SET/PROJECT/project.work").unwrap();
+        LibrarySnapshot {
+            state_documents: vec![StateDocument {
+                project_relative_path: RootRelativePath::parse("SET/PROJECT").unwrap(),
+                source_relative_path: source.clone(),
+                kind: StateDocumentKind::Project,
+                role: StateDocumentRole::Working,
+                bank_index: None,
+                parse_status: StateDocumentParseStatus::Parsed,
+                parser_provenance: parser_provenance(Some("1.40A".into())),
+            }],
+            slot_assignments: vec![SlotAssignment {
+                project_document_relative_path: source,
+                slot: SampleSlotId::new(SampleSlotKind::Static, 1).unwrap(),
+                referenced_file_relative_path: Some(
+                    RootRelativePath::parse("SET/AUDIO/missing.wav").unwrap(),
+                ),
+                reference_status: SampleReferenceStatus::Missing,
+            }],
+            ..LibrarySnapshot::default()
+        }
+    }
+
+    #[test]
+    fn missing_or_malformed_raw_slot_blocks_are_recorded_as_malformed_rows() {
+        for project_contents in [
+            "[SAMPLE]\nTYPE=STATIC\nSLOT=2\n[/SAMPLE]\n",
+            "[SAMPLE]\nTYPE=STATIC\nSLOT=1\nGAIN=48\n",
+        ] {
+            let root = TempDir::new().unwrap();
+            let project_directory = root.path().join("SET/PROJECT");
+            fs::create_dir_all(&project_directory).unwrap();
+            fs::write(
+                project_directory.join("project.work"),
+                project_contents.as_bytes(),
+            )
+            .unwrap();
+            let before = snapshot_files(root.path());
+            let canonical = root.path().canonicalize().unwrap();
+
+            let settings =
+                scan_slot_local_settings(&canonical, &snapshot_with_static_slot_one()).unwrap();
+
+            assert_eq!(settings.len(), 1);
+            assert_eq!(
+                settings[0].slot,
+                SampleSlotId::new(SampleSlotKind::Static, 1).ok()
+            );
+            assert_eq!(
+                settings[0].parse_status,
+                SampleSettingsParseStatus::Malformed
+            );
+            assert!(settings[0].gain.is_none());
+            assert!(settings[0].tempo_x24.is_none());
+            assert!(settings[0].slices.is_empty());
+            assert_eq!(snapshot_files(root.path()), before);
+        }
     }
 
     #[test]

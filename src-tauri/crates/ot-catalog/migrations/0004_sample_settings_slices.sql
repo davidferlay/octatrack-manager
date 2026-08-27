@@ -57,6 +57,61 @@ CREATE UNIQUE INDEX sample_settings_file_owner
     ON sample_settings(file_instance_id)
     WHERE owner_kind = 'file_instance_sidecar';
 
+CREATE TRIGGER sample_settings_owner_scope_insert
+BEFORE INSERT ON sample_settings
+WHEN (
+    NEW.owner_kind = 'slot_assignment'
+    AND NOT EXISTS (
+        SELECT 1
+        FROM slot_assignments
+        JOIN state_documents
+          ON state_documents.id = slot_assignments.state_document_id
+        WHERE slot_assignments.id = NEW.slot_assignment_id
+          AND state_documents.root_id = NEW.root_id
+          AND state_documents.scan_session_id = NEW.scan_session_id
+    )
+) OR (
+    NEW.owner_kind = 'file_instance_sidecar'
+    AND NOT EXISTS (
+        SELECT 1
+        FROM file_instances
+        WHERE file_instances.id = NEW.file_instance_id
+          AND file_instances.root_id = NEW.root_id
+          AND file_instances.scan_session_id = NEW.scan_session_id
+    )
+)
+BEGIN
+    SELECT RAISE(ABORT, 'sample settings owner scope mismatch');
+END;
+
+CREATE TRIGGER sample_settings_owner_scope_update
+BEFORE UPDATE OF root_id, scan_session_id, owner_kind, slot_assignment_id, file_instance_id
+ON sample_settings
+WHEN (
+    NEW.owner_kind = 'slot_assignment'
+    AND NOT EXISTS (
+        SELECT 1
+        FROM slot_assignments
+        JOIN state_documents
+          ON state_documents.id = slot_assignments.state_document_id
+        WHERE slot_assignments.id = NEW.slot_assignment_id
+          AND state_documents.root_id = NEW.root_id
+          AND state_documents.scan_session_id = NEW.scan_session_id
+    )
+) OR (
+    NEW.owner_kind = 'file_instance_sidecar'
+    AND NOT EXISTS (
+        SELECT 1
+        FROM file_instances
+        WHERE file_instances.id = NEW.file_instance_id
+          AND file_instances.root_id = NEW.root_id
+          AND file_instances.scan_session_id = NEW.scan_session_id
+    )
+)
+BEGIN
+    SELECT RAISE(ABORT, 'sample settings owner scope mismatch');
+END;
+
 CREATE TABLE sample_slices (
     sample_settings_id INTEGER NOT NULL
         REFERENCES sample_settings(id) ON DELETE CASCADE,
