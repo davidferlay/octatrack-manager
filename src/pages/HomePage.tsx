@@ -27,6 +27,7 @@ import { RenameProjectModal } from "../components/RenameProjectModal";
 import { ProjectContextMenu } from "../components/ProjectContextMenu";
 import { CopyProgressModal } from "../components/CopyProgressModal";
 import { RootRegistryPanel } from "../features/roots/RootRegistryPanel";
+import { Button } from "../design-system";
 import type {
   ClipboardState,
   ContextMenuState,
@@ -478,33 +479,34 @@ export function HomePage() {
               >×</button>
             )}
           </div>
-          <button
+          <Button
+            variant="toolbar"
             onClick={handleRefresh}
-            className={`toolbar-button ${isSpinning ? 'refreshing' : ''}`}
+            className={isSpinning ? 'refreshing' : undefined}
             disabled={isScanning}
             title="Refresh projects list"
           >
             <i className="fas fa-sync-alt"></i>
-          </button>
+          </Button>
           <Version />
         </div>
       </div>
 
       <div className="scan-section">
-        <button
+        <Button
+          variant="primary"
           onClick={scanDevices}
           disabled={isScanning}
-          className="scan-button"
         >
           {isScanning ? "Scanning..." : "Scan for Projects"}
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="secondary"
           onClick={browseDirectory}
           disabled={isScanning}
-          className="scan-button browse-button"
         >
           Browse...
-        </button>
+        </Button>
       </div>
 
       <RootRegistryPanel />
@@ -525,12 +527,12 @@ export function HomePage() {
           <p className="no-matches-title">
             No projects match <span className="no-matches-term">{searchText}</span>
           </p>
-          <button
-            className="scan-button browse-button"
+          <Button
+            variant="secondary"
             onClick={() => { setSearchText(''); searchInputRef.current?.focus(); }}
           >
             Clear search
-          </button>
+          </Button>
         </div>
       )}
 

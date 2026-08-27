@@ -6,6 +6,7 @@ import { AudioFileTable } from "./AudioFileTable";
 import type { IncompatibleFile, PoolFixResult, CopyProgressEvent } from "./FixPoolFilesModal";
 import type { AudioFile, PoolUsageEntry } from "../types/audioFile";
 import { usePoolUsage, invalidatePoolUsage } from "../hooks/usePoolUsage";
+import { IconButton } from "../design-system";
 import "./AudioPoolSidebar.css";
 
 interface AudioPoolSidebarProps {
@@ -458,14 +459,15 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
               </button>
             )}
             <div className="sidebar-import-dropdown" onClick={(e) => e.stopPropagation()}>
-              <button
-                className={`sidebar-back-btn ${importMenuOpen ? 'active' : ''}`}
+              <IconButton
+                variant="sidebar"
+                className={importMenuOpen ? 'active' : undefined}
                 onClick={() => setImportMenuOpen(o => !o)}
                 title="Import audio into this Audio Pool directory"
               >
                 <i className="fas fa-file-import"></i>
                 <i className="fas fa-caret-down" style={{ marginLeft: '0.2rem', fontSize: '0.6rem' }}></i>
-              </button>
+              </IconButton>
               {importMenuOpen && (
                 <div className="import-dropdown-menu">
                   <button className="import-dropdown-item" onClick={() => { setImportMenuOpen(false); handleImportFiles(); }}>

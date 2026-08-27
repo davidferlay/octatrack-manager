@@ -6,6 +6,7 @@ import { ProjectDetail } from "./pages/ProjectDetail";
 import { AudioPoolPage } from "./pages/AudioPoolPage";
 import { ProjectsProvider } from "./context/ProjectsContext";
 import { TablePreferencesProvider } from "./context/TablePreferencesContext";
+import "./design-system/tokens/index.css";
 import '@fortawesome/fontawesome-free/css/all.min.css';
 
 // The browser's own history-based scroll restoration fights HomePage's manual

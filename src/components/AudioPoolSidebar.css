@@ -5,14 +5,14 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--elektron-dark-gray, #1a1a1a);
+  background: var(--mo-surface-1);
   position: relative;
 }
 
 .sidebar-back-btn {
   background: none;
-  border: 1px solid var(--elektron-border-gray, #555);
-  color: var(--elektron-muted-text, #999);
+  border: 1px solid var(--mo-border);
+  color: var(--mo-text-muted);
   cursor: pointer;
   padding: 0.3rem 0.5rem;
   border-radius: 3px;
@@ -28,9 +28,9 @@
 }
 
 .sidebar-back-btn:hover:not(:disabled) {
-  background: var(--elektron-medium-gray, #333);
-  border-color: var(--elektron-orange);
-  color: var(--elektron-orange);
+  background: var(--mo-surface-2);
+  border-color: var(--mo-accent);
+  color: var(--mo-accent);
 }
 
 .sidebar-back-btn:disabled {
@@ -45,7 +45,7 @@
   height: 2.25rem;
   padding: 0 0.6rem;
   background: rgba(255, 255, 255, 0.02);
-  border-top: 1px solid #333;
+  border-top: 1px solid var(--mo-border);
   flex-shrink: 0;
   overflow: hidden;
   display: flex;
@@ -59,7 +59,7 @@
 
 .sidebar-path {
   font-size: 0.9rem;
-  color: #ddd;
+  color: var(--mo-text-soft);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -70,8 +70,6 @@
   border: 1px solid rgba(255, 255, 255, 0.06);
   flex: 1;
   min-width: 0;
-}
-}
 }
 
 /* Override AudioFileTable styles within sidebar context to match samples-table */
@@ -87,8 +85,8 @@
   font-size: 1rem;
   min-height: 40px;
   box-sizing: border-box;
-  border-bottom: 1px solid #333;
-  background: #222;
+  border-bottom: 1px solid var(--mo-border);
+  background: var(--mo-surface-inset);
   flex-wrap: nowrap;
   align-items: center;
   color: var(--elektron-text-secondary);
@@ -113,13 +111,13 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  background-color: var(--elektron-dark-gray, #1a1a1a);
-  border-bottom: 1px solid var(--elektron-border-gray, #333);
+  background-color: var(--mo-surface-1);
+  border-bottom: 1px solid var(--mo-border);
 }
 
 .audio-pool-sidebar .audio-files-table th {
   padding: 0.75rem 1rem;
-  color: #bbb;
+  color: var(--mo-text-subtle);
   border-bottom: none;
 }
 
@@ -151,7 +149,7 @@
 }
 
 .audio-pool-sidebar .audio-files-table tbody tr {
-  border-bottom: 1px solid var(--elektron-border-gray, #333);
+  border-bottom: 1px solid var(--mo-border);
 }
 
 /* Compact column widths for sidebar */
@@ -166,7 +164,7 @@
   min-width: 60px;
 }
 
-/* Resize handle — matches AudioPool page panel-divider style */
+/* Resize handle — matches Audio Pool page panel-divider style */
 .sidebar-resize-handle {
   position: absolute;
   top: 0;

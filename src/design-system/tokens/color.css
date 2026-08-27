@@ -1,0 +1,46 @@
+/* MasterOCTa semantic color tokens. Values match the pre-migration palette. */
+:root {
+  --mo-canvas: #0a0a0a;
+  --mo-surface-1: #1a1a1a;
+  --mo-surface-2: #2a2a2a;
+  --mo-surface-raised: #121212;
+  --mo-surface-inset: #222222;
+
+  --mo-border: #333333;
+  --mo-border-strong: #555555;
+
+  --mo-text: #ffffff;
+  --mo-text-muted: #999999;
+  --mo-text-dim: #666666;
+  --mo-text-subtle: #bbbbbb;
+  --mo-text-soft: #dddddd;
+
+  --mo-accent: #ff6600;
+  --mo-accent-hover: #ff7722;
+  --mo-accent-pressed: #cc5200;
+
+  --mo-success: #4caf50;
+  --mo-success-strong: #2ecc71;
+  --mo-warning: #f59e0b;
+  --mo-danger: #dc3545;
+  --mo-danger-bright: #f44336;
+  --mo-info: #4a9eff;
+
+  /* Compat aliases — do not use in new code; remove in PR-DS7 when unused. */
+  --elektron-black: var(--mo-canvas);
+  --elektron-dark-gray: var(--mo-surface-1);
+  --elektron-darker-gray: var(--mo-surface-raised);
+  --elektron-medium-gray: var(--mo-surface-2);
+  --elektron-border-gray: var(--mo-border);
+  --elektron-border: var(--mo-border);
+  --elektron-light-gray: var(--mo-text-dim);
+  --elektron-orange: var(--mo-accent);
+  --elektron-orange-hover: var(--mo-accent-hover);
+  --elektron-orange-dark: var(--mo-accent-pressed);
+  --elektron-text-primary: var(--mo-text);
+  --elektron-text: var(--mo-text);
+  --elektron-text-secondary: var(--mo-text-muted);
+  --elektron-muted-text: var(--mo-text-muted);
+  --elektron-text-dim: var(--mo-text-dim);
+  --elektron-white: var(--mo-text);
+}

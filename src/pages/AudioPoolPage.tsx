@@ -26,6 +26,7 @@ import { useAudioPreview, shouldAutoPreview, scrubTarget, volumeStep, isAudioFil
 import { usePoolUsage, invalidatePoolUsage } from "../hooks/usePoolUsage";
 import { SamplePlayerBar } from "../components/SamplePlayerBar";
 import type { AudioFile } from "../types/audioFile";
+import { IconButton } from "../design-system";
 import "./AudioPoolPage.css";
 
 // Droppable wrapper for the Audio Pool (destination) pane. Uses @dnd-kit (pointer-based)
@@ -1574,17 +1575,17 @@ export function AudioPoolPage() {
       <div className="project-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: '1' }}>
           {fromPath ? (
-            <button
+            <IconButton
+              variant="back"
               onClick={() => navigate(`/project?path=${encodeURIComponent(fromPath)}&name=${encodeURIComponent(fromName)}&tab=${encodeURIComponent(fromTab)}`)}
-              className="back-button"
               title="Back to the project's sample slots"
             >
               ← Back to project
-            </button>
+            </IconButton>
           ) : (
-            <button onClick={() => navigate("/")} className="back-button">
+            <IconButton variant="back" onClick={() => navigate("/")}>
               ← Back
-            </button>
+            </IconButton>
           )}
           <h1 title={destinationPath} className="pool-title" style={{ cursor: 'pointer' }}
             onClick={copyPoolPath}

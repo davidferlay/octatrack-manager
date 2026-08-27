@@ -1,0 +1,23 @@
+/* Typography tokens. Base stack matches the pre-migration App.css :root. */
+:root {
+  --mo-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  --mo-font-mono: 'Courier New', Courier, monospace;
+
+  --mo-font-size-xs: 0.7rem;
+  --mo-font-size-sm: 0.8rem;
+  --mo-font-size-md: 0.875rem;
+  --mo-font-size-base: 1rem;
+  --mo-font-size-lg: 1.05rem;
+  --mo-font-size-xl: 1.1rem;
+
+  --mo-font-weight-normal: 400;
+  --mo-font-weight-medium: 500;
+  --mo-font-weight-semibold: 600;
+  --mo-font-weight-bold: 700;
+
+  --mo-line-height-tight: 1.25;
+  --mo-line-height-base: 1.5;
+
+  --mo-letter-spacing-wide: 0.5px;
+}

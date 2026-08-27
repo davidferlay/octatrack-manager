@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react'
+import { Button, Modal, Spinner } from '../design-system'
 
 export interface DeleteProjectDialogProps {
   projectName: string
@@ -22,15 +23,7 @@ export function DeleteProjectDialog({
 
   useEffect(() => {
     cancelRef.current?.focus()
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        onCancel()
-      }
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onCancel])
+  }, [])
 
   async function handleConfirm() {
     if (deleting) return
@@ -43,38 +36,42 @@ export function DeleteProjectDialog({
   }
 
   return (
-    <div className="modal-overlay" onClick={deleting ? undefined : onCancel}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3><i className="fas fa-trash" style={{ color: '#dc3545', marginRight: '0.5rem' }}></i>{title}</h3>
-        </div>
-        <div className="modal-body">
-          {deleting ? (
-            <p style={{ textAlign: 'center' }}>
-              <i className="fas fa-spinner fa-spin" style={{ marginRight: '0.5rem' }}></i>
-              Deleting...
+    <Modal
+      open
+      onClose={onCancel}
+      locked={deleting}
+      closeOnBackdrop={!deleting}
+      closeOnEscape={!deleting}
+    >
+      <Modal.Header>
+        <h3><i className="fas fa-trash" style={{ color: 'var(--mo-danger)', marginRight: '0.5rem' }}></i>{title}</h3>
+      </Modal.Header>
+      <Modal.Body>
+        {deleting ? (
+          <p style={{ textAlign: 'center' }}>
+            <Spinner fa style={{ marginRight: '0.5rem' }} />
+            Deleting...
+          </p>
+        ) : (
+          <>
+            <p>
+              {message ?? <>Are you sure you want to delete <strong>"{projectName}"</strong> from{' '}
+              <strong>{setName}</strong>?</>}
             </p>
-          ) : (
-            <>
-              <p>
-                {message ?? <>Are you sure you want to delete <strong>"{projectName}"</strong> from{' '}
-                <strong>{setName}</strong>?</>}
-              </p>
-              <p style={{ color: '#dc3545', textAlign: 'center' }}>This action cannot be undone.</p>
-            </>
-          )}
+            <p style={{ color: 'var(--mo-danger)', textAlign: 'center' }}>This action cannot be undone.</p>
+          </>
+        )}
+      </Modal.Body>
+      <Modal.Footer>
+        <div className="modal-buttons-row">
+          <Button ref={cancelRef} variant="modal" onClick={onCancel} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={handleConfirm} disabled={deleting}>
+            {deleting ? 'Deleting...' : 'Delete'}
+          </Button>
         </div>
-        <div className="modal-footer">
-          <div className="modal-buttons-row">
-            <button ref={cancelRef} className="modal-button" onClick={onCancel} disabled={deleting}>
-              Cancel
-            </button>
-            <button className="modal-button danger" onClick={handleConfirm} disabled={deleting}>
-              {deleting ? 'Deleting...' : 'Delete'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+      </Modal.Footer>
+    </Modal>
   )
 }

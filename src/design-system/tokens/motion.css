@@ -1,0 +1,8 @@
+/* Motion durations / easings used across toolbar, modal, and panel chrome. */
+:root {
+  --mo-duration-fast: 0.15s;
+  --mo-duration-normal: 0.2s;
+  --mo-duration-slow: 0.3s;
+  --mo-ease-default: ease;
+  --mo-ease-decelerate: cubic-bezier(0, 0.7, 0.3, 1);
+}

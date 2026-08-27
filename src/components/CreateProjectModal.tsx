@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { filterProjectName, isCharAllowed, MAX_PROJECT_NAME_LEN } from '../utils/otCharset'
 import { CharsetInfoIcon } from './CharsetInfoIcon'
+import { Button, Input, Modal, Spinner } from '../design-system'
 
 export interface CreateProjectModalProps {
   setPath: string
@@ -33,11 +34,6 @@ export function CreateProjectModal({
 
   useEffect(() => {
     inputRef.current?.focus()
-    function handleEscape(e: KeyboardEvent) {
-      if (e.key === 'Escape') onCancel()
-    }
-    document.addEventListener('keydown', handleEscape)
-    return () => document.removeEventListener('keydown', handleEscape)
   }, [])
 
   const empty = name.length === 0
@@ -73,6 +69,7 @@ export function CreateProjectModal({
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Escape') {
       e.preventDefault()
+      e.stopPropagation()
       onCancel()
     } else if (e.key === 'Enter' && canSubmit) {
       e.preventDefault()
@@ -81,41 +78,45 @@ export function CreateProjectModal({
   }
 
   return (
-    <div className="modal-overlay" onClick={submitting ? undefined : onCancel}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3><i className="fas fa-plus" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>{title}</h3>
+    <Modal
+      open
+      onClose={onCancel}
+      locked={submitting}
+      closeOnBackdrop={!submitting}
+      closeOnEscape={!submitting}
+    >
+      <Modal.Header>
+        <h3><i className="fas fa-plus" style={{ color: 'var(--mo-accent)', marginRight: '0.5rem' }}></i>{title}</h3>
+      </Modal.Header>
+      <Modal.Body>
+        <p>{promptText ?? <>Create a new project in <strong>{setName}</strong>:</>}</p>
+        <div className="modal-input-wrapper">
+          <Input
+            ref={inputRef}
+            type="text"
+            shaking={shaking}
+            value={name}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            aria-label={placeholder}
+            disabled={submitting}
+          />
+          <CharsetInfoIcon />
         </div>
-        <div className="modal-body">
-          <p>{promptText ?? <>Create a new project in <strong>{setName}</strong>:</>}</p>
-          <div className="modal-input-wrapper">
-            <input
-              ref={inputRef}
-              type="text"
-              className={`modal-input${shaking ? ' shake' : ''}`}
-              value={name}
-              onChange={handleChange}
-              onKeyDown={handleKeyDown}
-              placeholder={placeholder}
-              aria-label={placeholder}
-              disabled={submitting}
-            />
-            <CharsetInfoIcon />
-          </div>
-          <div className={`modal-char-counter${[...name].length >= MAX_PROJECT_NAME_LEN ? ' at-limit' : ''}`}>{[...name].length} / {MAX_PROJECT_NAME_LEN}</div>
-          {error && !empty && <div className="modal-error">{error}</div>}
+        <div className={`modal-char-counter${[...name].length >= MAX_PROJECT_NAME_LEN ? ' at-limit' : ''}`}>{[...name].length} / {MAX_PROJECT_NAME_LEN}</div>
+        {error && !empty && <div className="modal-error">{error}</div>}
+      </Modal.Body>
+      <Modal.Footer>
+        <div className="modal-buttons-row">
+          <Button variant="modal" onClick={onCancel} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button variant="modalPrimary" onClick={handleSubmit} disabled={!canSubmit}>
+            {submitting ? <><Spinner fa style={{ marginRight: '0.4rem' }} />Creating...</> : buttonLabel}
+          </Button>
         </div>
-        <div className="modal-footer">
-          <div className="modal-buttons-row">
-            <button className="modal-button" onClick={onCancel} disabled={submitting}>
-              Cancel
-            </button>
-            <button className="modal-button primary" onClick={handleSubmit} disabled={!canSubmit}>
-              {submitting ? <><i className="fas fa-spinner fa-spin" style={{ marginRight: '0.4rem' }}></i>Creating...</> : buttonLabel}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+      </Modal.Footer>
+    </Modal>
   )
 }
