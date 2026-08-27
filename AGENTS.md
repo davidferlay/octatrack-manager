@@ -67,3 +67,11 @@ cd src-tauri && cargo test --workspace
 Rust/Tauri verification may require macOS or Linux GTK/WebKit system packages.
 If the environment blocks a command, report the exact environmental blocker and
 do not present the unrun check as passing.
+
+## Project skills
+
+Repository-specific Codex skills live under `.agents/skills/`. Read the matching
+skill before work covered by its description. Skills do not expand user
+authorization or override the hard safety boundaries in this file, the
+architecture guard, or CI. Do not modify the user-level skill that prohibits
+mutations against the upstream repository.
