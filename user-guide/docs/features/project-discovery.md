@@ -11,7 +11,7 @@ The Home page is your starting point for browsing and organizing your Octatrack 
 
 ## Finding Your Projects
 
-When you open Octatrack Manager, the first step is to locate your projects. You can do this in two ways:
+When you open MasterOCTa, the first step is to locate your projects. You can do this in two ways:
 
 ### 1. Automatic Scanning
 Click **Scan for Projects** to trigger a comprehensive search across your system. The app searches:

@@ -1,28 +1,22 @@
-# Octatrack Manager
+# MasterOCTa
 
-**Octatrack Manager** is a task-oriented desktop application designed to simplify the management of your Elektron Octatrack projects. It provides a powerful and intuitive interface for browsing, inspecting, and editing your projects away from the hardware.
+**MasterOCTa** is an independent, unofficial GPL-3.0 desktop application based on the upstream Octatrack Manager project. It simplifies management of Elektron Octatrack projects with tools for browsing, inspecting, and editing projects away from the hardware.
 
 <p align="center">
   <img
     src="user-guide/static/img/project-discovery.png"
-    alt="Octatrack Manager - Project discovery"
+    alt="MasterOCTa - Project discovery"
     style="width:80%; height:auto;"
   />
 </p>
 
 <p align="center" style="display: flex; justify-content: center; align-items: center; gap: 10px;">
-  <a href="https://kaz4g.github.io/octatrack-manager-xx/" target="_blank">
+  <a href="https://kaz4g.github.io/masterocta/" target="_blank">
     <strong>Read the User Guide</strong>
   </a>
   <span> | </span>
   <a href="https://www.elektronauts.com/t/project-manager-for-octatrack/233672" target="_blank">
-    <strong>Join the Discussion on Elektronauts</strong>
-  </a>
-</p>
-
-<p align="center">
-  <a href="https://www.buymeacoffee.com/octatrackmanager" target="_blank">
-    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 47px; width: 150px;">
+    <strong>Upstream community discussion on Elektronauts</strong>
   </a>
 </p>
 
@@ -38,7 +32,7 @@
 
 ## Active Development
 
-Octatrack Manager is currently a **work in progress**. New functionalities are being added regularly to expand its capabilities.
+MasterOCTa is currently a **work in progress**. New functionalities are being added regularly to expand its capabilities.
 
 We are constantly working to improve the application and add more power-user features. Your feedback and bug reports are essential to the project's growth.
 
@@ -47,12 +41,12 @@ We are constantly working to improve the application and add more power-user fea
 
 For detailed instructions, troubleshooting, and feature explanations, please visit the official documentation:
 
-- **[kaz4g.github.io/octatrack-manager-xx](https://kaz4g.github.io/octatrack-manager-xx/)**
+- **[kaz4g.github.io/masterocta](https://kaz4g.github.io/masterocta/)**
 
 
 ## Installation
 
-This fork does not publish signed binary releases yet. Build it from source by following the [Installation Guide](https://kaz4g.github.io/octatrack-manager-xx/docs/getting-started/installation).
+MasterOCTa does not publish signed binary releases yet. Build it from source by following the [Installation Guide](https://kaz4g.github.io/masterocta/docs/getting-started/installation). The upstream updater remains disabled.
 
 
 ## Compatibility
@@ -65,8 +59,8 @@ This fork does not publish signed binary releases yet. Build it from source by f
 
 Feedback from the community is invaluable. Please share your experiences, bug reports, and ideas:
 
-- **Elektronauts:** [Project Manager for Octatrack Thread](https://www.elektronauts.com/t/project-manager-for-octatrack/233672)
-- **GitHub:** [Issues Page](https://github.com/kaz4g/octatrack-manager-xx/issues)
+- **Upstream community discussion:** [Project Manager for Octatrack Thread](https://www.elektronauts.com/t/project-manager-for-octatrack/233672)
+- **GitHub:** [Issues Page](https://github.com/kaz4g/masterocta/issues)
 
 
 ## Development
@@ -74,8 +68,8 @@ Feedback from the community is invaluable. Please share your experiences, bug re
 If you'd like to build the project locally:
 
 ```bash
-git clone https://github.com/kaz4g/octatrack-manager-xx.git
-cd octatrack-manager-xx
+git clone https://github.com/kaz4g/masterocta.git
+cd masterocta
 corepack enable
 pnpm install --frozen-lockfile
 pnpm run tauri:dev

@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Installation
 
-This fork does not publish signed binary releases yet. Build Octatrack Manager
+MasterOCTa does not publish signed binary releases yet. Build MasterOCTa
 from source instead of downloading an installer from the upstream project.
 
 ## Prerequisites
@@ -19,8 +19,8 @@ from source instead of downloading an installer from the upstream project.
 Clone this fork and install the locked dependencies:
 
 ```bash
-git clone https://github.com/kaz4g/octatrack-manager-xx.git
-cd octatrack-manager-xx
+git clone https://github.com/kaz4g/masterocta.git
+cd masterocta
 corepack enable
 pnpm install --frozen-lockfile
 ```

@@ -2086,6 +2086,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "masterocta"
+version = "0.1.0"
+dependencies = [
+ "aifc",
+ "chrono",
+ "dirs 5.0.1",
+ "encoding_rs",
+ "fs2",
+ "hound",
+ "once_cell",
+ "open",
+ "ot-application",
+ "ot-catalog",
+ "ot-domain",
+ "ot-storage-ports",
+ "ot-tools-io",
+ "rubato",
+ "serde",
+ "serde_json",
+ "sha2",
+ "symphonia",
+ "sysinfo",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-opener",
+ "tempfile",
+ "trash",
+ "walkdir",
+]
+
+[[package]]
 name = "match_token"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2481,38 +2513,6 @@ dependencies = [
  "objc2-foundation",
  "objc2-javascript-core",
  "objc2-security",
-]
-
-[[package]]
-name = "octatrack-manager"
-version = "0.1.0"
-dependencies = [
- "aifc",
- "chrono",
- "dirs 5.0.1",
- "encoding_rs",
- "fs2",
- "hound",
- "once_cell",
- "open",
- "ot-application",
- "ot-catalog",
- "ot-domain",
- "ot-storage-ports",
- "ot-tools-io",
- "rubato",
- "serde",
- "serde_json",
- "sha2",
- "symphonia",
- "sysinfo",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-opener",
- "tempfile",
- "trash",
- "walkdir",
 ]
 
 [[package]]

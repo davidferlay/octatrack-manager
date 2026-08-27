@@ -456,7 +456,7 @@ export function HomePage() {
     <main className="container" ref={pageRef}>
       <div className="project-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: '1' }}>
-          <h1>Octatrack Manager</h1>
+          <h1>MasterOCTa</h1>
           <span className="header-path-info">Discover and manage your Elektron Octatrack projects</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

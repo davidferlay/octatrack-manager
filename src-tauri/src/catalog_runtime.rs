@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-const CATALOG_DIRECTORY_NAME: &str = "OctatrackWorkbench";
+const CATALOG_DIRECTORY_NAME: &str = "MasterOCTa";
 const CATALOG_DATABASE_NAME: &str = "catalog.sqlite3";
 
 pub type SharedCatalog = Arc<Mutex<SqliteCatalog>>;
@@ -116,6 +116,28 @@ mod tests {
         let second = open_shared_catalog(data_directory.path()).unwrap();
         drop(second);
 
+        assert!(data_directory
+            .path()
+            .join(CATALOG_DIRECTORY_NAME)
+            .join(CATALOG_DATABASE_NAME)
+            .is_file());
+    }
+
+    #[test]
+    fn leaves_the_legacy_catalog_directory_untouched() {
+        let data_directory = TempDir::new().unwrap();
+        let legacy_directory = data_directory.path().join("OctatrackWorkbench");
+        let legacy_catalog = legacy_directory.join(CATALOG_DATABASE_NAME);
+        fs::create_dir(&legacy_directory).unwrap();
+        fs::write(&legacy_catalog, b"legacy catalog sentinel").unwrap();
+
+        let catalog = open_shared_catalog(data_directory.path()).unwrap();
+        drop(catalog);
+
+        assert_eq!(
+            fs::read(&legacy_catalog).unwrap(),
+            b"legacy catalog sentinel"
+        );
         assert!(data_directory
             .path()
             .join(CATALOG_DIRECTORY_NAME)

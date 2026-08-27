@@ -88,9 +88,9 @@ for (const [packageName, allowedDependencies] of devDependencyRules) {
   }
 }
 
-const legacyPackage = packagesByName.get("octatrack-manager");
+const legacyPackage = packagesByName.get("masterocta");
 if (!legacyPackage) {
-  failures.push("missing legacy octatrack-manager package");
+  failures.push("missing MasterOCTa composition package");
 } else {
   const nextCoreNames = new Set(dependencyRules.keys());
   const actualCompositionDependencies = legacyPackage.dependencies

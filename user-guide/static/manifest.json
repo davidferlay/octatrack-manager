@@ -1,11 +1,11 @@
 {
-  "name": "Octatrack Manager - User Guide",
-  "short_name": "OT Manager Docs",
+  "name": "MasterOCTa - User Guide",
+  "short_name": "MasterOCTa Docs",
   "theme_color": "#e85d04",
   "background_color": "#1b1b1d",
   "display": "standalone",
-  "scope": "/octatrack-manager-xx/",
-  "start_url": "/octatrack-manager-xx/docs/intro",
+  "scope": "/masterocta/",
+  "start_url": "/masterocta/docs/intro",
   "icons": [
     {
       "src": "img/logo-192.png",

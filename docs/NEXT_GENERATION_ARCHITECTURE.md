@@ -1,4 +1,4 @@
-# Octatrack Workbench Next — 次世代アーキテクチャ設計
+# MasterOCTa — 次世代アーキテクチャ設計
 
 - Status: Proposed architecture baseline
 - Date: 2026-08-26
@@ -7,8 +7,8 @@
 
 ## 0. 結論
 
-現行Octatrack Managerは捨てない。ただし、新機能を現在の構造へ直接積み増す
-こともしない。
+MasterOCTaの素体である現行upstream Octatrack Managerは捨てない。ただし、新機能を
+現在の構造へ直接積み増すこともしない。
 
 現行版を次の3つとして扱う。
 
@@ -289,7 +289,7 @@ SQLiteをmacOS Application Supportへ置く。初期実装は`rusqlite`と明示
 使う想定。
 
 ```text
-Application Support/OctatrackWorkbench/
+Application Support/MasterOCTa/
 ├── catalog.sqlite3
 ├── backups/
 ├── staging/
@@ -774,7 +774,7 @@ local APIが安定してから追加する。
 現行ファイルを一度に移動しない。移行完了時の目標は次の形。
 
 ```text
-octatrack-manager/
+masterocta/
 ├── src/                              # React desktop UI
 │   ├── app/
 │   ├── api/
@@ -867,7 +867,7 @@ M3はdomain semantics、read model、UIを混ぜない小さな段階へ分割�
 - live `RootId`再検証後のcatalog query
 - persistent fingerprint単位のprojection分離
 
-#### M3-C0 — Octatrack domain semantics contract（今回）
+#### M3-C0 — Octatrack domain semantics contract（完了 / PR #11）
 
 - Project／BankとWorking／SavedCheckpointの独立したstate軸
 - Set Audio Pool／Project-local／Unclassified sample scope
