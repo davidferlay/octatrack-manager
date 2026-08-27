@@ -43,11 +43,9 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 ## 2. 正本と現在地
 
 - upstream: `https://github.com/davidferlay/octatrack-manager.git`
-- 現在のfork: `https://github.com/kaz4g/octatrack-manager-xx.git`
-- rename後のfork: `https://github.com/kaz4g/masterocta.git`
-- 現在のMacローカル: `/Users/kaz4g/Documents/ChatGPT/Octatrack-maneger-xx`
-- rename後のMacローカル: `/Users/kaz4g/Documents/ChatGPT/masterocta`
-- repositoryとMac directoryのrenameは、この改名PRを人間がマージした後に行う
+- fork: `https://github.com/kaz4g/masterocta.git`
+- Macローカル: `/Users/kaz4g/Documents/ChatGPT/masterocta`
+- repository／Mac directoryのMasterOCTa rename: 完了
 - upstream基準SHA: `8d32913`
 - ベースラインPR: #1マージ済み
 - PR-0 updater containment: #2マージ済み
@@ -59,13 +57,15 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - M3-A SQLite catalog foundation: #9マージ済み
 - M3-B catalog indexing/query vertical slice: #10マージ済み
 - M3-C0 domain semantics contract: #11マージ済み
-- 現在のmain SHA: `5f56a7f67ec4caeb6db8576cb0ea5540a5c2d6f5`
+- MasterOCTa rename: #12マージ済み
+- 現在のmain基準SHA: `b0e74235e5a72c97edb3196bbd77261ee8a1e723`
 - M2: 完了
 - M3-A: 完了
 - M3-B: 完了
 - M3-C0: 完了
-- 現在の作業: MasterOCTa branding／identity rename
-- 次の機能実装: M3-C1 incremental file inventory（この改名PRでは未着手）
+- 現在の作業: M3-C1 incremental file inventory
+- SQLite schema: v2（M3-C1で追加）
+- 次の機能実装: M3-C2 Project／Bank state and usage graph
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
 - `ot-tools-io`はコミット
@@ -193,7 +193,7 @@ M3は小さなPRへ分割する。M3-A #9でcatalog foundation、M3-B #10でAppl
 Support上のproduction catalog、root登録時のread-only full scan保存、live `RootId`
 再検証後のcatalog queryまで完了した。catalogはraw／canonical／mount pathとsession
 `RootId`を保存せず、同一persistent fingerprint rootの同時登録とcatalog path symlinkを
-fail-closedで拒否する。schema versionはv1のままである。
+fail-closedで拒否する。M3-C1でschema v2へ移行する。
 
 M3-C0 #11はOctatrack固有のstate、sample scope、sample settings ownershipをpure
 domain typeと設計契約として固定した。参照した`OCTATRACK DIARY R13`は2016年作成・
@@ -201,11 +201,12 @@ Octatrack OS 1.25基準の非公式二次資料であり、MkII OS 1.40+仕様�
 version依存の数値、filename mapping、format制約は現行公式資料とfixtureで確認するまで
 実装定数にしない。M3-C0ではSQLite schema、runtime、frontend、writeを変更していない。
 
-今回の改名PRは製品branding、bundle/package identity、Pages、PDF、Application Support
-directoryだけを変更し、M3-C1には着手しない。次はM3-C1 incremental file inventory
-とし、read-onlyで`AudioAsset`／`FileInstance`、content hash、size、mtime、sample
-storage scopeをcatalogへ追加する。slot／Bank parserは
-M3-C2、sample settings／slice read modelはM3-C3、Library UIはM3-D、waveform／preview／
-manual tags／notesはM3-Eへ分離する。テストDBとOctatrack fixtureは一時directoryだけを
-使用し、実SD／CFカードやOctatrack原本データを使用しない。依存監査の既存受容期限と
-再確認条件は維持する。
+MasterOCTa rename #12はマージ済みで、repository／Mac directoryのrenameも完了した。
+M3-C1はread-onlyで`AudioAsset`／`FileInstance`、streaming SHA-256、size、mtime、
+`SampleStorageScope`、schema v2、metadata baselineによるincremental hash再利用を追加する。
+size／mtime一致による再利用はcatalog検索用の観測projectionに限り、将来のwrite安全証明
+には使わない。write前には実fileを必ず再hashする。frontend DTOとTauri command surfaceは
+変更しない。次はM3-C2 Project／Bank state and usage graphとし、sample settings／slice
+read modelはM3-C3、Library UIはM3-D、waveform／preview／manual tags／notesはM3-Eへ
+分離する。テストDBとOctatrack fixtureは一時directoryだけを使用し、実SD／CFカードや
+Octatrack原本データを使用しない。依存監査の既存受容期限と再確認条件は維持する。

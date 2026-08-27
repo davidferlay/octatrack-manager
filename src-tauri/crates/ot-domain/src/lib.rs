@@ -184,6 +184,63 @@ pub enum SampleStorageScope {
     Unclassified,
 }
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct ContentHash(String);
+
+impl ContentHash {
+    pub fn parse(value: impl Into<String>) -> Result<Self, InvalidContentHash> {
+        let value = value.into();
+        let digest = value.strip_prefix("sha256:").ok_or(InvalidContentHash)?;
+        if digest.len() != 64
+            || !digest
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(InvalidContentHash);
+        }
+        Ok(Self(value))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InvalidContentHash;
+
+impl fmt::Display for InvalidContentHash {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(
+            "content hash must be sha256 followed by 64 lowercase hexadecimal characters",
+        )
+    }
+}
+
+impl std::error::Error for InvalidContentHash {}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum ContentHashFreshness {
+    ComputedThisScan,
+    ReusedUnchangedMetadata,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AudioAsset {
+    pub content_hash: ContentHash,
+    pub byte_size: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FileInstance {
+    pub relative_path: RootRelativePath,
+    pub content_hash: ContentHash,
+    pub byte_size: u64,
+    pub modified_at_unix_ns: Option<i64>,
+    pub storage_scope: SampleStorageScope,
+    pub hash_freshness: ContentHashFreshness,
+}
+
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum SampleSettingsOwner {
     SlotAssignment,
@@ -210,6 +267,8 @@ pub struct LibrarySet {
 pub struct LibrarySnapshot {
     pub sets: Vec<LibrarySet>,
     pub standalone_projects: Vec<LibraryProject>,
+    pub audio_assets: Vec<AudioAsset>,
+    pub file_instances: Vec<FileInstance>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -290,6 +349,46 @@ mod tests {
         assert_ne!(scopes[0], scopes[1]);
         assert_ne!(scopes[0], scopes[2]);
         assert_ne!(scopes[1], scopes[2]);
+    }
+
+    #[test]
+    fn content_hash_accepts_only_canonical_sha256_values() {
+        let valid = format!("sha256:{}", "0123456789abcdef".repeat(4));
+        assert_eq!(ContentHash::parse(&valid).unwrap().as_str(), valid);
+
+        for invalid in [
+            String::new(),
+            "md5:0123456789abcdef0123456789abcdef".into(),
+            format!("sha256:{}", "a".repeat(63)),
+            format!("sha256:{}", "A".repeat(64)),
+            format!("sha256:{}g", "a".repeat(63)),
+        ] {
+            assert!(ContentHash::parse(invalid).is_err());
+        }
+    }
+
+    #[test]
+    fn inventory_separates_content_identity_from_relative_path() {
+        let hash = ContentHash::parse(format!("sha256:{}", "a".repeat(64))).unwrap();
+        let asset = AudioAsset {
+            content_hash: hash.clone(),
+            byte_size: 4,
+        };
+        let instance = FileInstance {
+            relative_path: RootRelativePath::parse("SET/AUDIO/kick.wav").unwrap(),
+            content_hash: hash,
+            byte_size: 4,
+            modified_at_unix_ns: Some(1),
+            storage_scope: SampleStorageScope::SetAudioPool,
+            hash_freshness: ContentHashFreshness::ComputedThisScan,
+        };
+
+        assert_eq!(asset.byte_size, instance.byte_size);
+        assert_eq!(instance.relative_path.as_str(), "SET/AUDIO/kick.wav");
+        assert_ne!(
+            ContentHashFreshness::ComputedThisScan,
+            ContentHashFreshness::ReusedUnchangedMetadata
+        );
     }
 
     #[test]
