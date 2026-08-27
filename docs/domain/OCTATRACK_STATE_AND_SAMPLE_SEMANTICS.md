@@ -127,8 +127,19 @@ write precondition; every future write must rehash the actual file.
   assignments, machine/sample-lock usage edges, missing/invalid/unassigned
   reference states, and parser provenance in schema v3. The entire projection
   participates in the existing root snapshot transaction and rollback path.
-- M3-C3 may add slot-local settings, file-sidecar settings, slice read models,
-  source revision, confidence, and OS-version observations.
+- M3-C3 adds slot-local settings, validated file-sidecar settings, and slice
+  read models in schema v4. Slot-local rows are owned by a typed slot
+  assignment and may reference the sibling `markers.work` or `markers.strd`
+  observation. File-sidecar rows are owned by one `FileInstance`; a sidecar
+  that could belong to multiple same-stem audio files fails closed instead of
+  being attached heuristically.
+- Every settings row records `Parsed`, `UnsupportedVersion`, or `Malformed`,
+  the pinned parser revision, source revision when present, source OS version
+  when the Project supplies it, and a categorical evidence source. Unsupported
+  or malformed rows expose no partially decoded numeric values or slices.
+- Numeric setting values remain their observed raw representations. M3-C3 does
+  not infer friendly enum meanings, sidecar precedence, cross-OS equivalence,
+  or a lossless write contract from field names or the legacy UI.
 
 The catalog must store validated root-relative information and opaque catalog
 identities only. It must not persist raw, canonical, or mount paths, session
@@ -152,8 +163,8 @@ fixtures; original SD/CF media is never a test target.
 
 | Source | Type and date | Use in this contract | Limits |
 |---|---|---|---|
-| Current repository code, tracked `real_device` fixtures, and differential tests | Primary implementation evidence; current checkout | Root/Set/Project boundaries, `.work`/`.strd` filename observations, slot assignments, Bank usage coordinates, and safety invariants | Fixture coverage is finite and does not make undocumented binary layouts a vendor guarantee; parser failures remain explicit. |
-| [Elektron Octatrack MkII manual, OS 1.40A](https://www.elektron.se/wp-content/uploads/2024/09/Octatrack-User-Manual_ENG-OS1.40A_220204.pdf) | Official specification | Project SAVE/RELOAD and per-Bank SAVE/RELOAD semantics; current operational vocabulary | The manual does not document on-media `.work`/`.strd` filename mapping or the binary field layout. |
+| Current repository code, tracked `real_device` fixtures, differential tests, and pinned `ot-tools-io` revision | Primary implementation evidence; current checkout | Root/Set/Project boundaries, `.work`/`.strd` filename observations, slot assignments, Bank usage coordinates, settings parser revision, raw setting values, and safety invariants | Fixture coverage is finite and does not make undocumented binary layouts a vendor guarantee; parser failures remain explicit. |
+| [Elektron Octatrack MkII manual, OS 1.40A](https://www.elektron.se/wp-content/uploads/2024/09/Octatrack-User-Manual_ENG-OS1.40A_220204.pdf) | Official specification | Project SAVE/RELOAD and per-Bank SAVE/RELOAD semantics; SAVE SAMPLE SETTINGS links trim, slice, and attribute settings to the sample; slice marker operational meaning | The manual does not document on-media `.work`/`.strd` filename mapping, the `.ot` filename convention, or the binary field layout. |
 | OCTATRACK DIARY R13 | Unofficial secondary source; 2016; Octatrack OS 1.25 | Supporting domain terminology and operational distinctions among shared/project samples, working/saved state, slot purge, collect, and export | Not authoritative for MkII OS 1.40+. No unverified numeric or format constraint is promoted to an implementation constant. |
 
 The PDF is not copied, converted, quoted at length, or tracked in this
@@ -176,8 +187,9 @@ The following remain `pending verification` and must not be inferred from the
 - whether `.work`/`.strd` filename behavior differs on later OS revisions;
 - slice-count limits and recorder-buffer behavior beyond the indexed slot assignment scope;
 - binary field layout, checksums, and version markers;
-- filename rules beyond the four indexed state-document patterns;
-- sidecar filename, revision, precedence, and lossless round-trip behavior;
+- filename rules beyond the indexed state-document patterns and the observed
+  same-stem `.ot` sidecar convention;
+- sidecar precedence, cross-OS compatibility, and lossless round-trip behavior;
 - whether any scope or settings behavior differs across current MkII OS
   revisions.
 
