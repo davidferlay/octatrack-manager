@@ -9,7 +9,7 @@ use rusqlite::{
     params, Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior,
 };
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 const LATEST_SCHEMA_VERSION: u64 = 1;
 const MIGRATIONS: &[(u64, &str)] =
@@ -20,8 +20,9 @@ pub struct SqliteCatalog {
 }
 
 impl SqliteCatalog {
+    /// Opens a database through a path whose existing parent components have
+    /// already been resolved and validated by the caller.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, CatalogError> {
-        let path = canonical_database_path(path.as_ref())?;
         let flags = OpenFlags::default() | OpenFlags::SQLITE_OPEN_NOFOLLOW;
         let mut connection = Connection::open_with_flags(path, flags).map_err(unavailable)?;
         configure_connection(&connection)?;
@@ -579,22 +580,6 @@ fn unavailable(error: rusqlite::Error) -> CatalogError {
     }
 }
 
-fn canonical_database_path(path: &Path) -> Result<PathBuf, CatalogError> {
-    let file_name = path.file_name().ok_or_else(|| CatalogError::Unavailable {
-        message: "catalog path must name a database file".to_string(),
-    })?;
-    let parent = path.parent().ok_or_else(|| CatalogError::Unavailable {
-        message: "catalog path must have a parent directory".to_string(),
-    })?;
-    let canonical_parent = parent
-        .canonicalize()
-        .map_err(|error| CatalogError::Unavailable {
-            message: error.to_string(),
-        })?;
-
-    Ok(canonical_parent.join(file_name))
-}
-
 fn migration_error(version: u64, error: rusqlite::Error) -> CatalogError {
     CatalogError::Migration {
         version,
@@ -607,7 +592,12 @@ mod tests {
     use super::*;
     use ot_domain::RootId;
     use std::fs;
+    use std::path::PathBuf;
     use tempfile::TempDir;
+
+    fn database_path(directory: &TempDir, name: &str) -> PathBuf {
+        directory.path().canonicalize().unwrap().join(name)
+    }
 
     fn identity(hex_digit: char) -> CatalogRootIdentity {
         CatalogRootIdentity::new(format!("rootfp:v1:{}", hex_digit.to_string().repeat(64))).unwrap()
@@ -645,7 +635,7 @@ mod tests {
 
     fn open_temp_catalog() -> (TempDir, std::path::PathBuf, SqliteCatalog) {
         let directory = TempDir::new().unwrap();
-        let path = directory.path().join("catalog.sqlite3");
+        let path = database_path(&directory, "catalog.sqlite3");
         let catalog = SqliteCatalog::open(&path).unwrap();
         (directory, path, catalog)
     }
@@ -677,7 +667,7 @@ mod tests {
     #[test]
     fn unknown_newer_schema_version_is_rejected() {
         let directory = TempDir::new().unwrap();
-        let path = directory.path().join("future.sqlite3");
+        let path = database_path(&directory, "future.sqlite3");
         let connection = Connection::open(&path).unwrap();
         connection
             .execute_batch(
@@ -703,14 +693,32 @@ mod tests {
         use std::os::unix::fs::symlink;
 
         let directory = TempDir::new().unwrap();
-        let target = directory.path().join("target.sqlite3");
-        let link = directory.path().join("catalog.sqlite3");
+        let target = database_path(&directory, "target.sqlite3");
+        let link = database_path(&directory, "catalog.sqlite3");
         Connection::open(&target).unwrap();
         symlink(&target, &link).unwrap();
 
         let error = SqliteCatalog::open(link).err().unwrap();
 
         assert!(matches!(error, CatalogError::Unavailable { .. }));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn database_parent_symlinks_are_rejected_without_creating_an_outside_file() {
+        use std::os::unix::fs::symlink;
+
+        let container = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        let linked_parent = database_path(&container, "catalog-parent");
+        symlink(outside.path().canonicalize().unwrap(), &linked_parent).unwrap();
+
+        let error = SqliteCatalog::open(linked_parent.join("catalog.sqlite3"))
+            .err()
+            .unwrap();
+
+        assert!(matches!(error, CatalogError::Unavailable { .. }));
+        assert!(!outside.path().join("catalog.sqlite3").exists());
     }
 
     #[test]

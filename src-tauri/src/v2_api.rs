@@ -485,6 +485,28 @@ mod tests {
     }
 
     #[test]
+    fn a_second_root_with_the_same_catalog_identity_cannot_replace_the_first() {
+        let first_root = TempDir::new().unwrap();
+        let second_root = TempDir::new().unwrap();
+        create_set_project(first_root.path(), "FIRST_SET", "FIRST_PROJECT");
+        create_set_project(second_root.path(), "SECOND_SET", "SECOND_PROJECT");
+        let registry = registry();
+        let (_data_directory, catalog) = catalog();
+        let first =
+            register_root_sync(&registry, &catalog, first_root.path().to_str().unwrap()).unwrap();
+        let first_root_id = RootId::new(first.root_id).unwrap();
+
+        let error = register_root_sync(&registry, &catalog, second_root.path().to_str().unwrap())
+            .unwrap_err();
+        let snapshot = list_library_sync(&registry, &catalog, &first_root_id).unwrap();
+
+        assert_eq!(error.code, "ROOT_IDENTITY_AMBIGUOUS");
+        assert_eq!(snapshot.sets.len(), 1);
+        assert_eq!(snapshot.sets[0].display_name, "FIRST_SET");
+        assert_eq!(snapshot.sets[0].projects[0].display_name, "FIRST_PROJECT");
+    }
+
+    #[test]
     fn catalog_query_still_requires_live_root_authority() {
         let root = TempDir::new().unwrap();
         create_set_project(root.path(), "SET_A", "PROJECT_A");

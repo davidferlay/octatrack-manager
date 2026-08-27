@@ -189,8 +189,9 @@ foundationまで完了した。
 `Application Support/OctatrackWorkbench/catalog.sqlite3`を開き、root登録時の既存
 read-only full scanをtransactional snapshotとして保存する。既存`v2_library_list`は
 live `RootId`を再検証した後、filesystemを再scanせず最新成功snapshotをcatalogから返す。
-DB directoryまたはDB fileがsymlinkの場合はfail-closedとし、未知schemaでも起動を
-継続しない。
+同一persistent fingerprintを持つ別rootは、catalog projectionの混線を防ぐため同時登録を
+拒否する。resolved application data directory配下のcatalog path componentまたは
+DB fileがsymlinkの場合はfail-closedとし、未知schemaでも起動を継続しない。
 
 M3-BではTauri command、frontend UI、incremental filesystem scannerを追加しない。
 次はM3-Cとしてincremental indexing/query拡張と新Library UIの境界を再度小さなPRへ

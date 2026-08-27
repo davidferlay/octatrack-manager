@@ -270,6 +270,9 @@ package now depends on the existing workspace `ot-catalog` crate. As a result,
 `ot-catalog -> rusqlite@0.40.2 -> libsqlite3-sys@0.38.2` becomes product-runtime
 reachable when the local application opens its catalog. The catalog remains a
 local-only adapter and adds no network endpoint or install-time download.
+Below the resolved application data directory, catalog database paths are
+opened with SQLite NOFOLLOW before resolving any symlinked parent. Roots with
+the same persistent fingerprint cannot hold separate live catalog projections.
 
 The exact five crates.io package/version pairs recorded for M3-A were queried
 again through the official OSV API. `rusqlite@0.40.2`,
