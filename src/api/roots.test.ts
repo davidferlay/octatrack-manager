@@ -25,7 +25,7 @@ describe("Root API", () => {
         return session as Response;
       }
       if (command === "v2_library_list") {
-        return { sets: [], standaloneProjects: [] } as Response;
+        return { sets: [], standaloneProjects: [], audioFiles: [] } as Response;
       }
       return undefined as Response;
     };
@@ -58,12 +58,21 @@ describe("Root API", () => {
         }],
       }],
       standaloneProjects: [],
+      audioFiles: [{
+        fileInstanceId: "fileinst:v1:opaque",
+        assetId: "asset:v1:opaque",
+        displayName: "kick.wav",
+        relativePath: "SET/AUDIO/kick.wav",
+        byteSize: 1024,
+        storageScope: "set_audio_pool",
+      }],
     };
     const transport: IpcTransport = async <Response>() => snapshot as Response;
 
     const result = await createRootApi(createIpcClient(transport)).listLibrary("root-opaque");
 
     expect(result.sets[0].projects[0].relativePath).toBe("SET/PROJECT");
+    expect(result.audioFiles[0].fileInstanceId).toBe("fileinst:v1:opaque");
     expect(JSON.stringify(result)).not.toContain("/private/");
   });
 });

@@ -30,9 +30,24 @@ export interface LibrarySet {
   projects: LibraryProject[];
 }
 
+export type SampleStorageScope =
+  | "set_audio_pool"
+  | "project_local"
+  | "unclassified";
+
+export interface LibraryAudioFile {
+  fileInstanceId: string;
+  assetId: string;
+  displayName: string;
+  relativePath: string;
+  byteSize: number;
+  storageScope: SampleStorageScope;
+}
+
 export interface LibrarySnapshot {
   sets: LibrarySet[];
   standaloneProjects: LibraryProject[];
+  audioFiles: LibraryAudioFile[];
 }
 
 export interface RootApi {
