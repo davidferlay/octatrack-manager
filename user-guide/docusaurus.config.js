@@ -3,15 +3,15 @@ import { themes as prismThemes } from 'prism-react-renderer';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: 'Octatrack Manager',
-  tagline: 'A desktop application for managing Elektron Octatrack projects',
+  title: 'MasterOCTa',
+  tagline: 'An independent, unofficial desktop application for managing Elektron Octatrack projects',
   favicon: 'img/favicon.ico',
 
   url: 'https://kaz4g.github.io',
-  baseUrl: '/octatrack-manager-xx/',
+  baseUrl: '/masterocta/',
 
   organizationName: 'kaz4g',
-  projectName: 'octatrack-manager-xx',
+  projectName: 'masterocta',
   deploymentBranch: 'gh-pages',
   trailingSlash: false,
 
@@ -37,12 +37,12 @@ const config = {
           {
             tagName: 'link',
             rel: 'icon',
-            href: '/octatrack-manager-xx/img/logo-192.png',
+            href: '/masterocta/img/logo-192.png',
           },
           {
             tagName: 'link',
             rel: 'manifest',
-            href: '/octatrack-manager-xx/manifest.json',
+            href: '/masterocta/manifest.json',
           },
           {
             tagName: 'meta',
@@ -62,7 +62,7 @@ const config = {
           {
             tagName: 'link',
             rel: 'apple-touch-icon',
-            href: '/octatrack-manager-xx/img/logo-192.png',
+            href: '/masterocta/img/logo-192.png',
           },
         ],
       },
@@ -89,7 +89,7 @@ const config = {
         docs: {
           sidebarPath: './sidebars.js',
           editUrl:
-            'https://github.com/kaz4g/octatrack-manager-xx/tree/main/user-guide/',
+            'https://github.com/kaz4g/masterocta/tree/main/user-guide/',
         },
         blog: false,
         theme: {
@@ -102,11 +102,11 @@ const config = {
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
-      image: 'img/octatrack-manager-social-card.jpg',
+      image: 'img/masterocta-social-card.jpg',
       navbar: {
-        title: 'Octatrack Manager',
+        title: 'MasterOCTa',
         logo: {
-          alt: 'Octatrack Manager Logo',
+          alt: 'MasterOCTa Logo',
           src: 'img/logo.svg',
         },
         items: [
@@ -117,12 +117,12 @@ const config = {
             label: 'User Guide',
           },
           {
-            href: 'https://kaz4g.github.io/octatrack-manager-xx/octatrack-manager-user-guide.pdf',
+            href: 'https://kaz4g.github.io/masterocta/masterocta-user-guide.pdf',
             label: 'PDF',
             position: 'right',
           },
           {
-            href: 'https://github.com/kaz4g/octatrack-manager-xx',
+            href: 'https://github.com/kaz4g/masterocta',
             label: 'GitHub',
             position: 'right',
           },
@@ -148,12 +148,12 @@ const config = {
             title: 'Community',
             items: [
               {
-                label: 'Elektronauts Forum',
+                label: 'Upstream community discussion',
                 href: 'https://www.elektronauts.com/t/project-manager-for-octatrack/233672',
               },
               {
                 label: 'GitHub Issues',
-                href: 'https://github.com/kaz4g/octatrack-manager-xx/issues',
+                href: 'https://github.com/kaz4g/masterocta/issues',
               },
             ],
           },
@@ -162,7 +162,7 @@ const config = {
             items: [
               {
                 label: 'GitHub',
-                href: 'https://github.com/kaz4g/octatrack-manager-xx',
+                href: 'https://github.com/kaz4g/masterocta',
               },
             ],
           },

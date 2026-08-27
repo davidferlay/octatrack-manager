@@ -109,7 +109,7 @@ function App() {
 
   return (
     <main className="container">
-      <h1>Octatrack Manager</h1>
+      <h1>MasterOCTa</h1>
       <p className="subtitle">Discover and manage your Elektron Octatrack projects</p>
 
       <div className="scan-section">

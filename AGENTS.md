@@ -2,10 +2,10 @@
 
 ## Product direction
 
-This is a public, non-commercial GPL-3.0 fork of Octatrack Manager. The goal is
-to build a safe macOS-first Octatrack MkII library and project manager. Preserve
-compatibility with upstream Octatrack project files and keep upstream changes
-easy to review and merge.
+MasterOCTa is a public, non-commercial GPL-3.0 fork of the upstream Octatrack
+Manager project. The goal is to build a safe macOS-first Octatrack MkII library
+and project manager. Preserve compatibility with upstream Octatrack project
+files and keep upstream changes easy to review and merge.
 
 Read `docs/CODEX_HANDOFF.md` before planning or implementing work.
 For new architecture, API boundaries, data ownership, and migration order, also

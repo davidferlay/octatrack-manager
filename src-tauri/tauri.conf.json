@@ -1,8 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "octatrack-manager",
+  "productName": "MasterOCTa",
   "version": "0.1.0",
-  "identifier": "com.dferlay.octatrack-manager",
+  "identifier": "jp.d3nousan.masterocta",
+  "mainBinaryName": "masterocta",
   "build": {
     "beforeDevCommand": "pnpm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +13,7 @@
   "app": {
     "windows": [
       {
-        "title": "Octatrack Manager",
+        "title": "MasterOCTa",
         "width": 1300,
         "height": 830,
         "dragDropEnabled": true,

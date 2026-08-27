@@ -1,10 +1,10 @@
-# Codex引継ぎ — Octatrack Manager fork
+# Codex引継ぎ — MasterOCTa
 
 更新日: 2026-08-27
 
 ## 1. 目的
 
-既存OSSのOctatrack Managerを素体に、macOSでマウントしたOctatrack MkIIの
+MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントしたOctatrack MkIIの
 ストレージを安全に管理する公開・非商用フォークを開発する。
 
 最終的に狙う機能は次のとおり。
@@ -43,8 +43,11 @@
 ## 2. 正本と現在地
 
 - upstream: `https://github.com/davidferlay/octatrack-manager.git`
-- fork: `https://github.com/kaz4g/octatrack-manager-xx.git`
-- Macローカル: `/Users/kaz4g/Documents/ChatGPT/Octatrack-maneger-xx`
+- 現在のfork: `https://github.com/kaz4g/octatrack-manager-xx.git`
+- rename後のfork: `https://github.com/kaz4g/masterocta.git`
+- 現在のMacローカル: `/Users/kaz4g/Documents/ChatGPT/Octatrack-maneger-xx`
+- rename後のMacローカル: `/Users/kaz4g/Documents/ChatGPT/masterocta`
+- repositoryとMac directoryのrenameは、この改名PRを人間がマージした後に行う
 - upstream基準SHA: `8d32913`
 - ベースラインPR: #1マージ済み
 - PR-0 updater containment: #2マージ済み
@@ -55,11 +58,14 @@
 - PR-2 RootRegistry read-only vertical slice: #8マージ済み
 - M3-A SQLite catalog foundation: #9マージ済み
 - M3-B catalog indexing/query vertical slice: #10マージ済み
-- 現在のmain SHA: `c451eb38ea494fbcc2d60b26ceedc6c9cec441de`
+- M3-C0 domain semantics contract: #11マージ済み
+- 現在のmain SHA: `5f56a7f67ec4caeb6db8576cb0ea5540a5c2d6f5`
 - M2: 完了
 - M3-A: 完了
 - M3-B: 完了
-- M3-C0 domain semantics contract作業ブランチ: `feat/m3c0-domain-semantics`
+- M3-C0: 完了
+- 現在の作業: MasterOCTa branding／identity rename
+- 次の機能実装: M3-C1 incremental file inventory（この改名PRでは未着手）
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
 - `ot-tools-io`はコミット
@@ -189,14 +195,16 @@ Support上のproduction catalog、root登録時のread-only full scan保存、li
 `RootId`を保存せず、同一persistent fingerprint rootの同時登録とcatalog path symlinkを
 fail-closedで拒否する。schema versionはv1のままである。
 
-現在のM3-C0はOctatrack固有のstate、sample scope、sample settings ownershipをpure
-domain typeと設計契約として固定する。参照した`OCTATRACK DIARY R13`は2016年作成・
+M3-C0 #11はOctatrack固有のstate、sample scope、sample settings ownershipをpure
+domain typeと設計契約として固定した。参照した`OCTATRACK DIARY R13`は2016年作成・
 Octatrack OS 1.25基準の非公式二次資料であり、MkII OS 1.40+仕様の正本ではない。
 version依存の数値、filename mapping、format制約は現行公式資料とfixtureで確認するまで
-実装定数にしない。M3-C0ではSQLite schema、runtime、frontend、writeを変更しない。
+実装定数にしない。M3-C0ではSQLite schema、runtime、frontend、writeを変更していない。
 
-次はM3-C1 incremental file inventoryとし、read-onlyで`AudioAsset`／`FileInstance`、
-content hash、size、mtime、sample storage scopeをcatalogへ追加する。slot／Bank parserは
+今回の改名PRは製品branding、bundle/package identity、Pages、PDF、Application Support
+directoryだけを変更し、M3-C1には着手しない。次はM3-C1 incremental file inventory
+とし、read-onlyで`AudioAsset`／`FileInstance`、content hash、size、mtime、sample
+storage scopeをcatalogへ追加する。slot／Bank parserは
 M3-C2、sample settings／slice read modelはM3-C3、Library UIはM3-D、waveform／preview／
 manual tags／notesはM3-Eへ分離する。テストDBとOctatrack fixtureは一時directoryだけを
 使用し、実SD／CFカードやOctatrack原本データを使用しない。依存監査の既存受容期限と

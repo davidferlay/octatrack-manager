@@ -119,7 +119,7 @@ jobs:
           install: false
 
       - name: Install dependencies
-        run: pnpm --filter octatrack-manager install --frozen-lockfile
+        run: pnpm --filter masterocta install --frozen-lockfile
 
       - name: TypeScript type check
         run: pnpm run typecheck
@@ -146,7 +146,7 @@ jobs:
           install: false
 
       - name: Install dependencies
-        run: pnpm --filter octatrack-manager install --frozen-lockfile
+        run: pnpm --filter masterocta install --frozen-lockfile
 
       - name: Resolve Playwright version
         id: pw

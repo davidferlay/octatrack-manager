@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Keyboard Shortcuts
 
-Octatrack Manager is designed for intuitivity. While you can use your mouse for everything, many tasks can also be performed with keyboard shortcuts.
+MasterOCTa is designed for intuitivity. While you can use your mouse for everything, many tasks can also be performed with keyboard shortcuts.
 
 ## Universal Navigation
 

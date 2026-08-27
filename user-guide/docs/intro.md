@@ -4,15 +4,15 @@ sidebar_position: 1
 
 # Introduction
 
-**Octatrack Manager** is a task-oriented desktop application designed to simplify the management of your Elektron Octatrack projects.
+**MasterOCTa** is an independent, unofficial GPL-3.0 desktop application based on the upstream Octatrack Manager project. It is designed to simplify the management of your Elektron Octatrack projects.
 
-Whether you are preparing for a live set, organizing years of studio work, or deep-diving into sound design, Octatrack Manager provides a clear, high-level view of your data and powerful tools that are not available directly on the hardware.
+Whether you are preparing for a live set, organizing years of studio work, or deep-diving into sound design, MasterOCTa provides a clear, high-level view of your data and powerful tools that are not available directly on the hardware.
 
-![Octatrack Manager - Project discovery](/img/project-discovery.png)
+![MasterOCTa - Project discovery](/img/project-discovery.png)
 
-## Why use Octatrack Manager?
+## Why use MasterOCTa?
 
-The Octatrack is a deep and powerful machine, but its small screen can make certain tasks tedious. Octatrack Manager bridges this gap by bringing your projects to your computer, allowing you to:
+The Octatrack is a deep and powerful machine, but its small screen can make certain tasks tedious. MasterOCTa bridges this gap by bringing your projects to your computer, allowing you to:
 
 - **Save Time:** Perform bulk operations like copying banks, parts, patterns, tracks, and sample slots between projects.
 - **Visualize Your Projects:** See your patterns, triggers, and parameter locks clearly on a large screen.
@@ -47,7 +47,7 @@ If you are new to the Octatrack or just need a refresher, here is how the Octatr
 ## Compatibility
 
 :::important
-**OS Requirement:** Octatrack Manager requires projects saved on **Octatrack OS 1.40 or later**. Projects from older versions must be opened and re-saved on the hardware first.
+**OS Requirement:** MasterOCTa requires projects saved on **Octatrack OS 1.40 or later**. Projects from older versions must be opened and re-saved on the hardware first.
 :::
 
 ## Ready to start?

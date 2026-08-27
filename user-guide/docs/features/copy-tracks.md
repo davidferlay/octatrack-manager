@@ -4,7 +4,7 @@ sidebar_position: 11
 
 # Copy Tracks
 
-**Copy Tracks** is the most granular copy operation in Octatrack Manager. It copies individual track data (sound design and/or pattern triggers) between parts and patterns, within or across projects.
+**Copy Tracks** is the most granular copy operation in MasterOCTa. It copies individual track data (sound design and/or pattern triggers) between parts and patterns, within or across projects.
 
 ![Tools - Copy Tracks](/img/screenshots/tools-copy-tracks.png)
 
@@ -58,4 +58,3 @@ When using **Both** or **Pattern Triggers** mode, you can select which patterns 
 - **Part Names Not Copied:** Since Copy Tracks only modifies selected tracks, the destination Part name is preserved: Overwriting it with the source Part name would be misleading for a hybrid Part.
 - **Automatic Backup:** The app automatically backs up the destination bank file before executing. See [Quick Start](../getting-started/quick-start.md#11-automatic-backups) for details.
 - **Sample Slot References:** This tool only copies the **reference to a sample slot id** (which Slot is assigned to track), not the Sample Slot metadata, nor audio file itself. Use [Copy Sample Slots](./copy-sample-slots.md) to transfer audio files.
-

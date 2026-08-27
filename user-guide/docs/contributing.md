@@ -18,7 +18,7 @@ If you’re using the app, your experience matters a lot: Whether everything wor
 
 At this stage, **functional feedback is what matters the most**: correctness, reliability, data integrity, edge cases, and real-world behavior. UI/UX and visual design will be refined later; the current priority is building a solid, reliable foundation of functionalities.
 
-You can report issues, feedbacks and ideas directly on the [Elektronauts thread](https://www.elektronauts.com/t/project-manager-for-octatrack/).
+The [Elektronauts thread](https://www.elektronauts.com/t/project-manager-for-octatrack/) is the upstream project's community discussion. Report MasterOCTa issues and feedback through the fork's [GitHub Issues](https://github.com/kaz4g/masterocta/issues).
 
 
 ## For macOS Code Signing
@@ -31,14 +31,3 @@ Helpful resources:
 
 * [Creating a signing certificate](https://tauri.app/distribute/sign/macos/#creating-a-signing-certificate)
 * [Signing in CI/CD platforms](https://tauri.app/distribute/sign/macos/#signing-in-cicd-platforms)
-
-
-## For supporting the project
-
-Octatrack Manager is a free, open-source project developed in my spare time. If you find the app useful and would like to support its ongoing development, you can do so by buying me a coffee.
-
-<p align="center">
-  <a href="https://www.buymeacoffee.com/octatrackmanager" target="_blank">
-    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style={{height: '50px', width: '190px'}} />
-  </a>
-</p>

@@ -55,20 +55,20 @@ jobs:
           pnpm exec docusaurus serve --port 3030 --no-open &
           SERVER_PID=$!
           for i in $(seq 1 30); do
-            curl -s http://localhost:3030/octatrack-manager-xx/docs/intro > /dev/null 2>&1 && break
+            curl -s http://localhost:3030/masterocta/docs/intro > /dev/null 2>&1 && break
             sleep 1
           done
           pnpm exec docs-to-pdf docusaurus \
-            --initialDocURLs "http://localhost:3030/octatrack-manager-xx/docs/intro" \
+            --initialDocURLs "http://localhost:3030/masterocta/docs/intro" \
             --contentSelector "article" \
             --paginationSelector "a.pagination-nav__link--next" \
             --excludeSelectors ".margin-vert--xl a,[class^='tocCollapsible'],.breadcrumbs,.theme-edit-this-page" \
-            --coverImage "http://localhost:3030/octatrack-manager-xx/img/logo-512.png" \
-            --coverTitle "Octatrack Manager" \
+            --coverImage "http://localhost:3030/masterocta/img/logo-512.png" \
+            --coverTitle "MasterOCTa" \
             --coverSub "User Guide" \
             --paperFormat "A4" \
             --pdfMargin "60,50,60,50" \
-            --outputPDFFilename "build/octatrack-manager-user-guide.pdf" \
+            --outputPDFFilename "build/masterocta-user-guide.pdf" \
             --puppeteerArgs "--no-sandbox" \
             --disableTOC
           kill $SERVER_PID 2>/dev/null || true
