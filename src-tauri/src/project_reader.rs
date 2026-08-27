@@ -1166,6 +1166,108 @@ pub fn compute_sample_usage(project_path: &str) -> Result<SampleSlotUsage, Strin
         flex_usage,
     })
 }
+pub(crate) fn compute_sample_usage_for_documents(
+    project_file_path: &Path,
+    bank_file_path: &Path,
+    bank_index: u8,
+) -> Result<SampleSlotUsage, String> {
+    if bank_index >= 16 {
+        return Err(format!("invalid bank index {bank_index}"));
+    }
+    let raw_project = std::fs::read(project_file_path)
+        .map_err(|error| format!("failed to read project state: {error}"))?;
+    let (decoded, _, _) = encoding_rs::WINDOWS_1258.decode(&raw_project);
+    let skip_master = decoded.lines().any(|line| line.trim() == "MASTER_TRACK=1");
+    let bank = BankFile::from_data_file(bank_file_path)
+        .map_err(|error| format!("failed to parse bank state: {error:?}"))?;
+    let mut static_usage: Vec<Vec<SlotUsageEntry>> = vec![Vec::new(); 128];
+    let mut flex_usage: Vec<Vec<SlotUsageEntry>> = vec![Vec::new(); 128];
+
+    let mut audible = std::collections::HashSet::<(usize, usize)>::new();
+    for pattern in bank.patterns.0.iter() {
+        let part_id = (pattern.part_assignment as usize).min(3);
+        for (track_index, track) in pattern.audio_track_trigs.0.iter().enumerate() {
+            let has_trig = track.trig_masks.trigger.iter().any(|&mask| mask != 0)
+                || track.trig_masks.oneshot.iter().any(|&mask| mask != 0);
+            if has_trig {
+                audible.insert((part_id, track_index));
+            }
+        }
+    }
+
+    for (part_index, part) in bank.parts.unsaved.0.iter().enumerate() {
+        for track_index in 0..8 {
+            if skip_master && track_index == MASTER_TRACK_INDEX {
+                continue;
+            }
+            let machine_slot = &part.audio_track_machine_slots[track_index];
+            let machine_type = part.audio_track_machine_types[track_index];
+            let (pool, slot_id) = match machine_type {
+                0 => (&mut static_usage, machine_slot.static_slot_id),
+                1 => (&mut flex_usage, machine_slot.flex_slot_id),
+                _ => continue,
+            };
+            let is_audible = audible.contains(&(part_index, track_index));
+            if !is_audible && machine_type == 0 && slot_id as usize == track_index {
+                continue;
+            }
+            if let Some(entries) = pool.get_mut(slot_id as usize) {
+                entries.push(SlotUsageEntry {
+                    bank: bank_index,
+                    kind: "machine".into(),
+                    track: track_index as u8,
+                    part: Some(part_index as u8),
+                    pattern: None,
+                    step: None,
+                    audible: is_audible,
+                });
+            }
+        }
+    }
+
+    for (pattern_index, pattern) in bank.patterns.0.iter().enumerate() {
+        let part = &bank.parts.unsaved.0[(pattern.part_assignment as usize).min(3)];
+        for (track_index, track) in pattern.audio_track_trigs.0.iter().enumerate() {
+            if skip_master && track_index == MASTER_TRACK_INDEX {
+                continue;
+            }
+            let pool = match part.audio_track_machine_types[track_index] {
+                0 => &mut static_usage,
+                1 => &mut flex_usage,
+                _ => continue,
+            };
+            let track_length = if pattern.scale.scale_mode == 1 {
+                track.scale_per_track_mode.per_track_len
+            } else {
+                pattern.scale.master_len
+            }
+            .min(64) as usize;
+            for (step_index, parameter_lock) in track.plocks.0.iter().enumerate().take(track_length)
+            {
+                let slot_id = parameter_lock.flex_slot_id;
+                if slot_id == 255 {
+                    continue;
+                }
+                if let Some(entries) = pool.get_mut(slot_id as usize) {
+                    entries.push(SlotUsageEntry {
+                        bank: bank_index,
+                        kind: "lock".into(),
+                        track: track_index as u8,
+                        part: None,
+                        pattern: Some(pattern_index as u8),
+                        step: Some(step_index as u8),
+                        audible: true,
+                    });
+                }
+            }
+        }
+    }
+
+    Ok(SampleSlotUsage {
+        static_usage,
+        flex_usage,
+    })
+}
 
 /// One place an Audio Pool file is referenced from, tagged with the project it
 /// was found in (unlike a sample slot's usage, a pool file can be referenced by

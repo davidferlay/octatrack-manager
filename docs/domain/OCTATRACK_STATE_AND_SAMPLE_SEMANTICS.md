@@ -1,8 +1,9 @@
 # Octatrack state and sample semantics
 
-- Status: M3-C0 domain contract
+- Status: M3-C2 read-only state inventory contract
 - Target: Octatrack MkII / Octatrack OS 1.40+
-- Scope: read-only domain meaning; no file-name mapping, parser, catalog schema, or write behavior
+- Scope: read-only domain meaning, state filename mapping, parser provenance, and catalog projection;
+  no frontend API or write behavior
 
 ## 1. Purpose and boundary
 
@@ -11,11 +12,11 @@ catalog grows beyond Set and Project projections. It distinguishes Octatrack
 state documents, sample locations, and settings ownership without claiming
 unverified file-format details.
 
-The contract is intentionally independent of SQLite, Tauri, the filesystem,
-and serialization. The current implementation consists only of pure types in
-`ot-domain`. Concrete filename mappings, parsers, and persistence belong to
-later M3 slices after repository fixtures and current official OS 1.40+
-documentation agree.
+The domain contract remains independent of SQLite, Tauri, the filesystem, and
+serialization. M3-C2 connects those pure types to the legacy read adapter and
+SQLite catalog without exposing them through a Tauri command or frontend DTO.
+Filename evidence and official operation semantics are recorded separately so
+repository behavior is not presented as an undocumented vendor guarantee.
 
 ## 2. Domain hierarchy
 
@@ -59,9 +60,22 @@ logical restore point targeted by Octatrack SAVE/RELOAD behavior. A saved
 checkpoint is not a Mac-side safety backup, an exported copy, or proof that a
 file can be overwritten safely.
 
-M3-C0 does not map these roles to `.work`, `.strd`, or any other filename.
-That mapping remains pending until current repository behavior, fixtures, and
-official MkII OS 1.40+ documentation have been reconciled.
+M3-C2 maps the repository's observed files as follows for read-only indexing:
+
+| Kind | Working | SavedCheckpoint |
+|---|---|---|
+| Project | `project.work` | `project.strd` |
+| Bank | `bankXX.work` | `bankXX.strd` |
+
+The official OS 1.40A manual defines Project SAVE/RELOAD and per-Bank
+SAVE/RELOAD semantics, which support the Working/SavedCheckpoint distinction.
+It does not document these on-media filenames. The filename mapping therefore
+comes from tracked repository fixtures, existing reader behavior, and the
+pinned `ot-tools-io` revision. Each indexed document records parser name,
+parser revision, source version when available, and an explicit `Parsed`,
+`UnsupportedVersion`, or `Malformed` status. Unsupported or malformed documents
+remain visible as read-only observations and do not produce partial slot or
+usage projections.
 
 ## 4. Sample settings ownership
 
@@ -109,8 +123,10 @@ holds one validated root-relative path, byte size, optional mtime,
 reused from unchanged metadata. The reuse is a catalog optimization, not a
 write precondition; every future write must rehash the actual file.
 
-- M3-C2 may add Project/Bank working and saved-checkpoint projections, slot
-  assignments, usage edges, missing references, and parser provenance.
+- M3-C2 adds Project/Bank working and saved-checkpoint projections, typed slot
+  assignments, machine/sample-lock usage edges, missing/invalid/unassigned
+  reference states, and parser provenance in schema v3. The entire projection
+  participates in the existing root snapshot transaction and rollback path.
 - M3-C3 may add slot-local settings, file-sidecar settings, slice read models,
   source revision, confidence, and OS-version observations.
 
@@ -136,8 +152,8 @@ fixtures; original SD/CF media is never a test target.
 
 | Source | Type and date | Use in this contract | Limits |
 |---|---|---|---|
-| Current repository code, fixtures, and differential tests | Primary implementation evidence; current checkout | Root/Set/Project boundaries, opaque identifiers, Asset/FileInstance inventory, and safety invariants | The catalog does not yet parse Project/Bank state, slot usage, audio headers, or sidecars; later parsers still require fixture evidence. |
-| Elektron Octatrack MkII manual and OS 1.40+ documentation | Official current specification | Required authority for version-sensitive behavior before parser constants or filename mappings are implemented | Detailed reconciliation is pending; this PR makes no version-sensitive implementation claim. |
+| Current repository code, tracked `real_device` fixtures, and differential tests | Primary implementation evidence; current checkout | Root/Set/Project boundaries, `.work`/`.strd` filename observations, slot assignments, Bank usage coordinates, and safety invariants | Fixture coverage is finite and does not make undocumented binary layouts a vendor guarantee; parser failures remain explicit. |
+| [Elektron Octatrack MkII manual, OS 1.40A](https://www.elektron.se/wp-content/uploads/2024/09/Octatrack-User-Manual_ENG-OS1.40A_220204.pdf) | Official specification | Project SAVE/RELOAD and per-Bank SAVE/RELOAD semantics; current operational vocabulary | The manual does not document on-media `.work`/`.strd` filename mapping or the binary field layout. |
 | OCTATRACK DIARY R13 | Unofficial secondary source; 2016; Octatrack OS 1.25 | Supporting domain terminology and operational distinctions among shared/project samples, working/saved state, slot purge, collect, and export | Not authoritative for MkII OS 1.40+. No unverified numeric or format constraint is promoted to an implementation constant. |
 
 The PDF is not copied, converted, quoted at length, or tracked in this
@@ -152,16 +168,15 @@ repository. Its metadata for this decision is:
 制約: MkII OS 1.40+で未確認の数値・format制約は実装定数にしない
 ```
 
-## 9. Pending verification for MkII OS 1.40+
+## 9. Remaining verification for MkII OS 1.40+
 
 The following remain `pending verification` and must not be inferred from the
 2016 secondary source alone:
 
-- the exact mapping between working/saved roles and filenames or save actions;
-- sample-slot and slice-count limits;
-- Bank, Pattern, Part, Track, and other entity limits;
+- whether `.work`/`.strd` filename behavior differs on later OS revisions;
+- slice-count limits and recorder-buffer behavior beyond the indexed slot assignment scope;
 - binary field layout, checksums, and version markers;
-- filename rules and the exact relationship between names and SAVE behavior;
+- filename rules beyond the four indexed state-document patterns;
 - sidecar filename, revision, precedence, and lossless round-trip behavior;
 - whether any scope or settings behavior differs across current MkII OS
   revisions.

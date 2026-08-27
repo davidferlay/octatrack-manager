@@ -1,9 +1,14 @@
 use crate::device_detection::{scan_directory, OctatrackProject};
+use crate::project_reader::{compute_sample_usage_for_documents, read_raw_sample_fields};
 use ot_domain::{
     AudioAsset, ContentHash, ContentHashFreshness, FileInstance, LibraryProject, LibrarySet,
-    LibrarySnapshot, RootId, RootRelativePath, SampleStorageScope,
+    LibrarySnapshot, ParserProvenance, RootId, RootRelativePath, SampleReferenceStatus,
+    SampleSlotId, SampleSlotKind, SampleStorageScope, SampleUsageEdge, SampleUsageKind,
+    SlotAssignment, StateDocument, StateDocumentKind, StateDocumentParseStatus, StateDocumentRole,
 };
 use ot_storage_ports::{ReadOnlyLibrary, StorageError};
+use ot_tools_io::banks::BANK_FILE_VERSION;
+use ot_tools_io::{BankFile, OctatrackFileIO, ProjectFile};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
@@ -94,12 +99,16 @@ fn scan_registered_root(
     let mut snapshot = LibrarySnapshot {
         sets,
         standalone_projects,
-        audio_assets: Vec::new(),
-        file_instances: Vec::new(),
+        ..LibrarySnapshot::default()
     };
     let (audio_assets, file_instances) = scan_audio_inventory(canonical_root, &snapshot, baseline)?;
     snapshot.audio_assets = audio_assets;
     snapshot.file_instances = file_instances;
+    let (state_documents, slot_assignments, usage_edges) =
+        scan_state_inventory(canonical_root, &snapshot)?;
+    snapshot.state_documents = state_documents;
+    snapshot.slot_assignments = slot_assignments;
+    snapshot.usage_edges = usage_edges;
     Ok(snapshot)
 }
 
@@ -376,6 +385,412 @@ fn classify_storage_scope(
     }
     SampleStorageScope::Unclassified
 }
+
+const STATE_PARSER_NAME: &str = "masterocta/ot-tools-io";
+const STATE_PARSER_REVISION: &str = "cd246d8a595647364eb4cc78211033b2d1302526";
+
+type StateInventory = (
+    Vec<StateDocument>,
+    Vec<SlotAssignment>,
+    Vec<SampleUsageEdge>,
+);
+
+fn scan_state_inventory(
+    canonical_root: &Path,
+    topology: &LibrarySnapshot,
+) -> Result<StateInventory, StorageError> {
+    let inventory_paths = topology
+        .file_instances
+        .iter()
+        .map(|instance| instance.relative_path.as_str().to_owned())
+        .collect::<HashSet<_>>();
+    let mut projects = topology
+        .sets
+        .iter()
+        .flat_map(|set| set.projects.iter())
+        .chain(topology.standalone_projects.iter())
+        .collect::<Vec<_>>();
+    projects.sort_by(|left, right| {
+        left.relative_path
+            .as_str()
+            .cmp(right.relative_path.as_str())
+    });
+
+    let mut state_documents = Vec::new();
+    let mut slot_assignments = Vec::new();
+    let mut usage_edges = Vec::new();
+    let mut assignment_lookup = HashMap::<(String, SampleSlotKind, u16), SlotAssignment>::new();
+
+    for project in projects {
+        let project_directory = resolve_relative_for_read(canonical_root, &project.relative_path)?;
+        for (role, extension) in [
+            (StateDocumentRole::Working, "work"),
+            (StateDocumentRole::SavedCheckpoint, "strd"),
+        ] {
+            let project_file_name = format!("project.{extension}");
+            let project_source = join_relative(&project.relative_path, &project_file_name)?;
+            let project_file = project_directory.join(&project_file_name);
+            let mut parsed_project_source = None;
+
+            if is_regular_source_file(canonical_root, &project_file)? {
+                let (parse_status, provenance, assignments) = parse_project_state(
+                    &project.relative_path,
+                    &project_source,
+                    &project_file,
+                    &inventory_paths,
+                );
+                if parse_status == StateDocumentParseStatus::Parsed {
+                    parsed_project_source = Some(project_source.clone());
+                    for assignment in assignments {
+                        assignment_lookup.insert(
+                            (
+                                project_source.as_str().to_owned(),
+                                assignment.slot.kind(),
+                                assignment.slot.number(),
+                            ),
+                            assignment.clone(),
+                        );
+                        slot_assignments.push(assignment);
+                    }
+                }
+                state_documents.push(StateDocument {
+                    project_relative_path: project.relative_path.clone(),
+                    source_relative_path: project_source.clone(),
+                    kind: StateDocumentKind::Project,
+                    role,
+                    bank_index: None,
+                    parse_status,
+                    parser_provenance: provenance,
+                });
+            }
+
+            for bank_index in 0..16_u8 {
+                let bank_file_name = format!("bank{:02}.{extension}", bank_index + 1);
+                let bank_source = join_relative(&project.relative_path, &bank_file_name)?;
+                let bank_file = project_directory.join(&bank_file_name);
+                if !is_regular_source_file(canonical_root, &bank_file)? {
+                    continue;
+                }
+
+                let (mut parse_status, provenance) = parse_bank_state(&bank_file);
+                if parse_status == StateDocumentParseStatus::Parsed {
+                    if let Some(project_source) = &parsed_project_source {
+                        match compute_sample_usage_for_documents(
+                            &project_file,
+                            &bank_file,
+                            bank_index,
+                        ) {
+                            Ok(usage) => {
+                                append_usage_edges(
+                                    &bank_source,
+                                    project_source,
+                                    &usage.static_usage,
+                                    SampleSlotKind::Static,
+                                    &assignment_lookup,
+                                    &mut usage_edges,
+                                );
+                                append_usage_edges(
+                                    &bank_source,
+                                    project_source,
+                                    &usage.flex_usage,
+                                    SampleSlotKind::Flex,
+                                    &assignment_lookup,
+                                    &mut usage_edges,
+                                );
+                            }
+                            Err(_) => parse_status = StateDocumentParseStatus::Malformed,
+                        }
+                    }
+                }
+                state_documents.push(StateDocument {
+                    project_relative_path: project.relative_path.clone(),
+                    source_relative_path: bank_source,
+                    kind: StateDocumentKind::Bank,
+                    role,
+                    bank_index: Some(bank_index),
+                    parse_status,
+                    parser_provenance: provenance,
+                });
+            }
+        }
+    }
+
+    state_documents.sort_by(|left, right| {
+        left.source_relative_path
+            .as_str()
+            .cmp(right.source_relative_path.as_str())
+    });
+    slot_assignments.sort_by(|left, right| {
+        (
+            left.project_document_relative_path.as_str(),
+            slot_kind_order(left.slot.kind()),
+            left.slot.number(),
+        )
+            .cmp(&(
+                right.project_document_relative_path.as_str(),
+                slot_kind_order(right.slot.kind()),
+                right.slot.number(),
+            ))
+    });
+    usage_edges.sort_by(|left, right| {
+        (
+            left.bank_document_relative_path.as_str(),
+            slot_kind_order(left.slot.kind()),
+            left.slot.number(),
+            left.track_index,
+            left.part_index,
+            left.pattern_index,
+            left.step_index,
+        )
+            .cmp(&(
+                right.bank_document_relative_path.as_str(),
+                slot_kind_order(right.slot.kind()),
+                right.slot.number(),
+                right.track_index,
+                right.part_index,
+                right.pattern_index,
+                right.step_index,
+            ))
+    });
+    Ok((state_documents, slot_assignments, usage_edges))
+}
+
+fn parse_project_state(
+    project_relative_path: &RootRelativePath,
+    source_relative_path: &RootRelativePath,
+    source_file: &Path,
+    inventory_paths: &HashSet<String>,
+) -> (
+    StateDocumentParseStatus,
+    ParserProvenance,
+    Vec<SlotAssignment>,
+) {
+    let parsed = match ProjectFile::from_data_file(source_file) {
+        Ok(parsed) => parsed,
+        Err(_) => {
+            return (
+                StateDocumentParseStatus::Malformed,
+                parser_provenance(None),
+                Vec::new(),
+            )
+        }
+    };
+    let source_version = Some(parsed.metadata.os_version.clone());
+    match parsed.check_compatible_os_version() {
+        Ok(true) => {}
+        Ok(false) => {
+            return (
+                StateDocumentParseStatus::UnsupportedVersion,
+                parser_provenance(source_version),
+                Vec::new(),
+            )
+        }
+        Err(_) => {
+            return (
+                StateDocumentParseStatus::Malformed,
+                parser_provenance(source_version),
+                Vec::new(),
+            )
+        }
+    }
+    let raw_fields = match read_raw_sample_fields(source_file) {
+        Ok(fields) => fields,
+        Err(_) => {
+            return (
+                StateDocumentParseStatus::Malformed,
+                parser_provenance(source_version),
+                Vec::new(),
+            )
+        }
+    };
+    let mut fields = raw_fields.into_iter().collect::<Vec<_>>();
+    fields.sort_by(|left, right| left.0.cmp(&right.0));
+    let mut assignments = Vec::new();
+    for ((slot_type, slot_number), fields) in fields {
+        let Some(path) = fields.get("PATH").filter(|path| !path.is_empty()) else {
+            continue;
+        };
+        let Some(slot_kind) = parse_slot_kind(&slot_type) else {
+            return (
+                StateDocumentParseStatus::Malformed,
+                parser_provenance(source_version),
+                Vec::new(),
+            );
+        };
+        let slot = match SampleSlotId::new(slot_kind, slot_number) {
+            Ok(slot) => slot,
+            Err(_) => {
+                return (
+                    StateDocumentParseStatus::Malformed,
+                    parser_provenance(source_version),
+                    Vec::new(),
+                )
+            }
+        };
+        let (referenced_file_relative_path, reference_status) =
+            match resolve_project_reference(project_relative_path, path) {
+                Ok(target) if inventory_paths.contains(target.as_str()) => {
+                    (Some(target), SampleReferenceStatus::Resolved)
+                }
+                Ok(target) => (Some(target), SampleReferenceStatus::Missing),
+                Err(()) => (None, SampleReferenceStatus::InvalidPath),
+            };
+        assignments.push(SlotAssignment {
+            project_document_relative_path: source_relative_path.clone(),
+            slot,
+            referenced_file_relative_path,
+            reference_status,
+        });
+    }
+    (
+        StateDocumentParseStatus::Parsed,
+        parser_provenance(source_version),
+        assignments,
+    )
+}
+
+fn parse_bank_state(source_file: &Path) -> (StateDocumentParseStatus, ParserProvenance) {
+    match BankFile::from_data_file(source_file) {
+        Ok(bank) => {
+            let source_version = Some(format!("bank:{}", bank.datatype_version));
+            let status = if bank.datatype_version == BANK_FILE_VERSION {
+                StateDocumentParseStatus::Parsed
+            } else {
+                StateDocumentParseStatus::UnsupportedVersion
+            };
+            (status, parser_provenance(source_version))
+        }
+        Err(_) => (StateDocumentParseStatus::Malformed, parser_provenance(None)),
+    }
+}
+
+fn parser_provenance(source_version: Option<String>) -> ParserProvenance {
+    ParserProvenance {
+        parser_name: STATE_PARSER_NAME.into(),
+        parser_revision: STATE_PARSER_REVISION.into(),
+        source_version,
+    }
+}
+
+fn parse_slot_kind(value: &str) -> Option<SampleSlotKind> {
+    match value.to_ascii_uppercase().as_str() {
+        "STATIC" => Some(SampleSlotKind::Static),
+        "FLEX" => Some(SampleSlotKind::Flex),
+        _ => None,
+    }
+}
+
+fn append_usage_edges(
+    bank_source: &RootRelativePath,
+    project_source: &RootRelativePath,
+    usage_by_slot: &[Vec<crate::project_reader::SlotUsageEntry>],
+    slot_kind: SampleSlotKind,
+    assignments: &HashMap<(String, SampleSlotKind, u16), SlotAssignment>,
+    output: &mut Vec<SampleUsageEdge>,
+) {
+    for (slot_index, entries) in usage_by_slot.iter().enumerate() {
+        let Ok(slot_number) = u16::try_from(slot_index + 1) else {
+            continue;
+        };
+        let Ok(slot) = SampleSlotId::new(slot_kind, slot_number) else {
+            continue;
+        };
+        let assignment =
+            assignments.get(&(project_source.as_str().to_owned(), slot_kind, slot_number));
+        for entry in entries {
+            let (referenced_file_relative_path, reference_status) = assignment
+                .map(|assignment| {
+                    (
+                        assignment.referenced_file_relative_path.clone(),
+                        assignment.reference_status,
+                    )
+                })
+                .unwrap_or((None, SampleReferenceStatus::UnassignedSlot));
+            let usage_kind = match entry.kind.as_str() {
+                "machine" => SampleUsageKind::Machine,
+                "lock" => SampleUsageKind::SampleLock,
+                _ => continue,
+            };
+            output.push(SampleUsageEdge {
+                bank_document_relative_path: bank_source.clone(),
+                project_document_relative_path: project_source.clone(),
+                slot,
+                usage_kind,
+                track_index: entry.track,
+                part_index: entry.part,
+                pattern_index: entry.pattern,
+                step_index: entry.step,
+                audible: entry.audible,
+                referenced_file_relative_path,
+                reference_status,
+            });
+        }
+    }
+}
+
+fn resolve_project_reference(
+    project_relative_path: &RootRelativePath,
+    raw_reference: &str,
+) -> Result<RootRelativePath, ()> {
+    let bytes = raw_reference.as_bytes();
+    if raw_reference.starts_with(['/', '\\'])
+        || (bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':')
+        || raw_reference.contains('\0')
+    {
+        return Err(());
+    }
+    let mut components = project_relative_path
+        .as_str()
+        .split('/')
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    for component in raw_reference.split(['/', '\\']) {
+        match component {
+            "" => return Err(()),
+            "." => {}
+            ".." => {
+                if components.pop().is_none() {
+                    return Err(());
+                }
+            }
+            component => components.push(component.to_owned()),
+        }
+    }
+    RootRelativePath::from_components(components).map_err(|_| ())
+}
+
+fn join_relative(parent: &RootRelativePath, child: &str) -> Result<RootRelativePath, StorageError> {
+    RootRelativePath::from_components(parent.as_str().split('/').chain([child]))
+        .map_err(|error| StorageError::new(format!("PATH_ESCAPE: {error}")))
+}
+
+fn is_regular_source_file(canonical_root: &Path, path: &Path) -> Result<bool, StorageError> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(StorageError::new(format!("LIBRARY_SCAN_FAILED: {error}"))),
+    };
+    if metadata.file_type().is_symlink() || !metadata.file_type().is_file() {
+        return Ok(false);
+    }
+    let canonical = path
+        .canonicalize()
+        .map_err(|error| StorageError::new(format!("ROOT_REMOVED: {error}")))?;
+    if !canonical.starts_with(canonical_root) {
+        return Err(StorageError::new(
+            "PATH_ESCAPE: state document left its registered root",
+        ));
+    }
+    Ok(true)
+}
+
+fn slot_kind_order(kind: SampleSlotKind) -> u8 {
+    match kind {
+        SampleSlotKind::Static => 0,
+        SampleSlotKind::Flex => 1,
+    }
+}
+
 fn map_project(
     canonical_root: &Path,
     project: OctatrackProject,
@@ -415,7 +830,6 @@ fn relative_path_from_path(path: &Path) -> Result<RootRelativePath, StorageError
         .map_err(|error| StorageError::new(format!("PATH_ESCAPE: {error}")))
 }
 
-#[cfg(test)]
 pub(crate) fn resolve_relative_for_read(
     root: &Path,
     relative: &RootRelativePath,
@@ -567,6 +981,120 @@ mod tests {
 
     fn test_hash(hex_digit: char) -> ContentHash {
         ContentHash::parse(format!("sha256:{}", hex_digit.to_string().repeat(64))).unwrap()
+    }
+
+    #[test]
+    fn state_inventory_indexes_working_and_saved_documents_with_usage_and_provenance() {
+        let root = TempDir::new().unwrap();
+        let project_directory = root.path().join("SET/PROJECT");
+        fs::create_dir_all(&project_directory).unwrap();
+        let fixture_directory =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/real_device");
+        for name in ["project.work", "bank01.work", "bank01.strd"] {
+            fs::copy(fixture_directory.join(name), project_directory.join(name)).unwrap();
+        }
+        fs::copy(
+            fixture_directory.join("project.work"),
+            project_directory.join("project.strd"),
+        )
+        .unwrap();
+        let before = snapshot_files(root.path());
+        let canonical = root.path().canonicalize().unwrap();
+        let mut topology = inventory_topology();
+        topology.standalone_projects.clear();
+        topology.file_instances.push(FileInstance {
+            relative_path: RootRelativePath::parse("SET/AUDIO/Elektron/Acdrum.wav").unwrap(),
+            content_hash: test_hash('a'),
+            byte_size: 1,
+            modified_at_unix_ns: Some(1),
+            storage_scope: SampleStorageScope::SetAudioPool,
+            hash_freshness: ContentHashFreshness::ComputedThisScan,
+        });
+
+        let (documents, assignments, usage_edges) =
+            scan_state_inventory(&canonical, &topology).unwrap();
+
+        assert_eq!(documents.len(), 4);
+        assert!(documents.iter().all(|document| {
+            document.parse_status == StateDocumentParseStatus::Parsed
+                && document.parser_provenance.parser_revision == STATE_PARSER_REVISION
+        }));
+        assert!(documents.iter().any(|document| {
+            document.kind == StateDocumentKind::Project
+                && document.role == StateDocumentRole::Working
+        }));
+        assert!(documents.iter().any(|document| {
+            document.kind == StateDocumentKind::Bank
+                && document.role == StateDocumentRole::SavedCheckpoint
+        }));
+        assert!(assignments.iter().any(|assignment| {
+            assignment.slot == SampleSlotId::new(SampleSlotKind::Static, 5).unwrap()
+                && assignment.reference_status == SampleReferenceStatus::Resolved
+        }));
+        assert!(assignments
+            .iter()
+            .any(|assignment| assignment.reference_status == SampleReferenceStatus::Missing));
+        assert!(!usage_edges.is_empty());
+        assert!(usage_edges.iter().all(|edge| !edge
+            .project_document_relative_path
+            .as_str()
+            .starts_with('/')));
+        assert_eq!(snapshot_files(root.path()), before);
+        assert!(!format!("{documents:?}{assignments:?}{usage_edges:?}")
+            .contains(root.path().to_str().unwrap()));
+    }
+
+    #[test]
+    fn state_inventory_records_malformed_project_without_partial_usage() {
+        let root = TempDir::new().unwrap();
+        let project_directory = root.path().join("SET/PROJECT");
+        fs::create_dir_all(&project_directory).unwrap();
+        fs::write(project_directory.join("project.work"), b"not a project").unwrap();
+        let fixture_directory =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/real_device");
+        fs::copy(
+            fixture_directory.join("bank01.work"),
+            project_directory.join("bank01.work"),
+        )
+        .unwrap();
+        let canonical = root.path().canonicalize().unwrap();
+        let mut topology = inventory_topology();
+        topology.standalone_projects.clear();
+
+        let (documents, assignments, usage_edges) =
+            scan_state_inventory(&canonical, &topology).unwrap();
+
+        assert_eq!(documents.len(), 2);
+        assert!(documents.iter().any(|document| {
+            document.kind == StateDocumentKind::Project
+                && document.parse_status == StateDocumentParseStatus::Malformed
+        }));
+        assert!(documents.iter().any(|document| {
+            document.kind == StateDocumentKind::Bank
+                && document.parse_status == StateDocumentParseStatus::Parsed
+        }));
+        assert!(assignments.is_empty());
+        assert!(usage_edges.is_empty());
+    }
+
+    #[test]
+    fn project_reference_resolution_rejects_absolute_and_root_escape_paths() {
+        let project = RootRelativePath::parse("SET/PROJECT").unwrap();
+        assert_eq!(
+            resolve_project_reference(&project, "../AUDIO/kick.wav")
+                .unwrap()
+                .as_str(),
+            "SET/AUDIO/kick.wav"
+        );
+        for invalid in [
+            "../../../outside.wav",
+            "/tmp/outside.wav",
+            r"C:\\outside.wav",
+            r"..\\..\\..\\outside.wav",
+            "nested//sample.wav",
+        ] {
+            assert!(resolve_project_reference(&project, invalid).is_err());
+        }
     }
 
     #[test]

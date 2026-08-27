@@ -877,7 +877,7 @@ M3はdomain semantics、read model、UIを混ぜない小さな段階へ分割�
 
 SQLite schema、runtime parser、Tauri API、frontend、writeは変更しない。
 
-#### M3-C1 — incremental file inventory
+#### M3-C1 — incremental file inventory（完了 / PR #13）
 
 - `.wav`／`.aif`／`.aiff`のread-only incremental filesystem inventory
 - SHA-256 content identityの`AudioAsset`とroot-relative path identityの`FileInstance`を分離
@@ -891,12 +891,20 @@ SQLite schema、runtime parser、Tauri API、frontend、writeは変更しない�
 
 #### M3-C2 — project/bank state and usage graph
 
-- Project／BankのWorkingとSavedCheckpointをread-only index
-- slot assignment
-- Projectからsampleへのusage graph
-- missing reference検出
-- parser provenance
-- writeなし
+- `project.work`／`project.strd`と`bankXX.work`／`bankXX.strd`をWorking／
+  SavedCheckpointの独立projectionとしてread-only index
+- parse結果を`parsed`／`unsupported_version`／`malformed`として明示し、固定reader revisionと
+  source versionをparser provenanceとして保存
+- Static／Flexそれぞれ1〜128をtyped slot IDとして扱い、slot assignmentをProject stateごとに保持
+- Bankのmachine assignmentとsample lockをtrack／part／pattern／step座標付きusage edgeへ変換
+- sample参照を`resolved`／`missing`／`invalid_path`／`unassigned_slot`として区別
+- schema v3でstate document、slot assignment、usage edgeをsnapshot transactionへ含め、
+  失敗時は直前の成功projectionを保持
+- raw／canonical／mount pathとsession `RootId`を保存せず、frontend DTO、Tauri command、writeは変更しない
+
+Octatrack OS 1.40A公式manualはProject／BankのSAVE／RELOAD意味論を確認する一次資料とする。
+媒体上の`.work`／`.strd` filename mapping自体はmanualに記載がないため、追跡済みfixture、
+既存reader、固定`ot-tools-io` revisionを実装provenanceとして明示し、公式仕様と同一視しない。
 
 #### M3-C3 — sample settings/slice read model
 
