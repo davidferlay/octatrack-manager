@@ -3,12 +3,17 @@ use crate::project_reader::{compute_sample_usage_for_documents, read_raw_sample_
 use ot_domain::{
     AudioAsset, ContentHash, ContentHashFreshness, FileInstance, LibraryProject, LibrarySet,
     LibrarySnapshot, ParserProvenance, RootId, RootRelativePath, SampleReferenceStatus,
-    SampleSlotId, SampleSlotKind, SampleStorageScope, SampleUsageEdge, SampleUsageKind,
-    SlotAssignment, StateDocument, StateDocumentKind, StateDocumentParseStatus, StateDocumentRole,
+    SampleSettings, SampleSettingsEvidence, SampleSettingsOwner, SampleSettingsParseStatus,
+    SampleSlice, SampleSlotId, SampleSlotKind, SampleStorageScope, SampleUsageEdge,
+    SampleUsageKind, SlotAssignment, StateDocument, StateDocumentKind, StateDocumentParseStatus,
+    StateDocumentRole,
 };
 use ot_storage_ports::{ReadOnlyLibrary, StorageError};
 use ot_tools_io::banks::BANK_FILE_VERSION;
-use ot_tools_io::{BankFile, OctatrackFileIO, ProjectFile};
+use ot_tools_io::{
+    BankFile, HasChecksumField, HasFileVersionField, HasHeaderField, MarkersFile, OctatrackFileIO,
+    ProjectFile, SampleSettingsFile,
+};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
@@ -109,6 +114,7 @@ fn scan_registered_root(
     snapshot.state_documents = state_documents;
     snapshot.slot_assignments = slot_assignments;
     snapshot.usage_edges = usage_edges;
+    snapshot.sample_settings = scan_sample_settings(canonical_root, &snapshot)?;
     Ok(snapshot)
 }
 
@@ -555,6 +561,334 @@ fn scan_state_inventory(
     Ok((state_documents, slot_assignments, usage_edges))
 }
 
+fn scan_sample_settings(
+    canonical_root: &Path,
+    snapshot: &LibrarySnapshot,
+) -> Result<Vec<SampleSettings>, StorageError> {
+    let mut settings = scan_slot_local_settings(canonical_root, snapshot)?;
+    settings.extend(scan_file_sidecar_settings(canonical_root, snapshot)?);
+    settings.sort_by(|left, right| {
+        (
+            settings_owner_order(left.owner),
+            left.source_relative_path.as_str(),
+            left.slot.map(|slot| slot_kind_order(slot.kind())),
+            left.slot.map(SampleSlotId::number),
+        )
+            .cmp(&(
+                settings_owner_order(right.owner),
+                right.source_relative_path.as_str(),
+                right.slot.map(|slot| slot_kind_order(slot.kind())),
+                right.slot.map(SampleSlotId::number),
+            ))
+    });
+    Ok(settings)
+}
+
+fn scan_slot_local_settings(
+    canonical_root: &Path,
+    snapshot: &LibrarySnapshot,
+) -> Result<Vec<SampleSettings>, StorageError> {
+    let mut output = Vec::new();
+    for document in snapshot.state_documents.iter().filter(|document| {
+        document.kind == StateDocumentKind::Project
+            && document.parse_status == StateDocumentParseStatus::Parsed
+    }) {
+        let source_file =
+            resolve_relative_for_read(canonical_root, &document.source_relative_path)?;
+        let raw_fields = read_raw_sample_fields(&source_file);
+        let marker_name = match document.role {
+            StateDocumentRole::Working => "markers.work",
+            StateDocumentRole::SavedCheckpoint => "markers.strd",
+        };
+        let marker_relative = join_relative(&document.project_relative_path, marker_name)?;
+        let marker_file = source_file.with_file_name(marker_name);
+        let (markers, marker_status, marker_source) =
+            read_markers_source(canonical_root, &marker_file, marker_relative)?;
+
+        for assignment in snapshot.slot_assignments.iter().filter(|assignment| {
+            assignment.project_document_relative_path == document.source_relative_path
+        }) {
+            let mut sample_settings = empty_sample_settings(
+                SampleSettingsOwner::SlotAssignment,
+                document.source_relative_path.clone(),
+                document.parser_provenance.clone(),
+                document.parser_provenance.source_version.clone(),
+            );
+            sample_settings.project_document_relative_path =
+                Some(document.source_relative_path.clone());
+            sample_settings.slot = Some(assignment.slot);
+            sample_settings.marker_source_relative_path = marker_source.clone();
+            let Ok(raw_fields) = &raw_fields else {
+                sample_settings.parse_status = SampleSettingsParseStatus::Malformed;
+                output.push(sample_settings);
+                continue;
+            };
+            let Some(fields) = raw_fields.get(&(
+                match assignment.slot.kind() {
+                    SampleSlotKind::Static => "STATIC".to_owned(),
+                    SampleSlotKind::Flex => "FLEX".to_owned(),
+                },
+                assignment.slot.number(),
+            )) else {
+                sample_settings.parse_status = SampleSettingsParseStatus::Malformed;
+                output.push(sample_settings);
+                continue;
+            };
+            if let Some(status) = marker_status {
+                sample_settings.parse_status = status;
+                output.push(sample_settings);
+                continue;
+            }
+            if apply_raw_slot_fields(&mut sample_settings, fields).is_err() {
+                sample_settings.parse_status = SampleSettingsParseStatus::Malformed;
+                clear_decoded_settings(&mut sample_settings);
+                output.push(sample_settings);
+                continue;
+            }
+            if let Some(markers) = &markers {
+                let slot_index = usize::from(assignment.slot.number() - 1);
+                let slot_markers = match assignment.slot.kind() {
+                    SampleSlotKind::Static => &markers.static_slots[slot_index],
+                    SampleSlotKind::Flex => &markers.flex_slots[slot_index],
+                };
+                sample_settings.trim_start = Some(slot_markers.trim_offset);
+                sample_settings.trim_end = Some(slot_markers.trim_end);
+                sample_settings.loop_start = Some(slot_markers.loop_point);
+                sample_settings.slices = slot_markers
+                    .slices
+                    .iter()
+                    .take(slot_markers.slice_count as usize)
+                    .enumerate()
+                    .map(|(index, slice)| SampleSlice {
+                        index: index as u8,
+                        trim_start: slice.trim_start,
+                        trim_end: slice.trim_end,
+                        loop_start: slice.loop_start,
+                    })
+                    .collect();
+            }
+            output.push(sample_settings);
+        }
+    }
+    Ok(output)
+}
+
+type MarkersSourceRead = (
+    Option<MarkersFile>,
+    Option<SampleSettingsParseStatus>,
+    Option<RootRelativePath>,
+);
+
+fn read_markers_source(
+    canonical_root: &Path,
+    marker_file: &Path,
+    marker_relative: RootRelativePath,
+) -> Result<MarkersSourceRead, StorageError> {
+    if !is_regular_source_file(canonical_root, marker_file)? {
+        return Ok((None, None, None));
+    }
+    let markers = match MarkersFile::from_data_file(marker_file) {
+        Ok(markers) => markers,
+        Err(_) => {
+            return Ok((
+                None,
+                Some(SampleSettingsParseStatus::Malformed),
+                Some(marker_relative),
+            ))
+        }
+    };
+    if !markers.check_file_version().unwrap_or(false) {
+        return Ok((
+            None,
+            Some(SampleSettingsParseStatus::UnsupportedVersion),
+            Some(marker_relative),
+        ));
+    }
+    if !markers.check_header().unwrap_or(false)
+        || !markers.check_checksum().unwrap_or(false)
+        || markers.validate().is_err()
+    {
+        return Ok((
+            None,
+            Some(SampleSettingsParseStatus::Malformed),
+            Some(marker_relative),
+        ));
+    }
+    Ok((Some(markers), None, Some(marker_relative)))
+}
+
+fn scan_file_sidecar_settings(
+    canonical_root: &Path,
+    snapshot: &LibrarySnapshot,
+) -> Result<Vec<SampleSettings>, StorageError> {
+    let mut by_sidecar = BTreeMap::<String, Vec<&FileInstance>>::new();
+    for instance in &snapshot.file_instances {
+        let Some((stem, _extension)) = instance.relative_path.as_str().rsplit_once('.') else {
+            continue;
+        };
+        by_sidecar
+            .entry(format!("{stem}.ot"))
+            .or_default()
+            .push(instance);
+    }
+    let mut output = Vec::new();
+    for (sidecar_path, owners) in by_sidecar {
+        let sidecar_relative = RootRelativePath::parse(&sidecar_path)
+            .map_err(|error| StorageError::new(format!("PATH_ESCAPE: {error}")))?;
+        let audio_file = resolve_relative_for_read(canonical_root, &owners[0].relative_path)?;
+        let sidecar_file = audio_file.with_extension("ot");
+        if !is_regular_source_file(canonical_root, &sidecar_file)? {
+            continue;
+        }
+        if owners.len() != 1 {
+            return Err(StorageError::new(
+                "UNSUPPORTED_FORMAT: one .ot sidecar matched multiple audio files",
+            ));
+        }
+        output.push(parse_sidecar_settings(
+            &sidecar_file,
+            sidecar_relative,
+            owners[0].relative_path.clone(),
+        ));
+    }
+    Ok(output)
+}
+
+fn parse_sidecar_settings(
+    sidecar_file: &Path,
+    sidecar_relative: RootRelativePath,
+    file_instance_relative: RootRelativePath,
+) -> SampleSettings {
+    let parsed = match SampleSettingsFile::from_data_file(sidecar_file) {
+        Ok(parsed) => parsed,
+        Err(_) => {
+            let mut settings = empty_sample_settings(
+                SampleSettingsOwner::FileInstanceSidecar,
+                sidecar_relative,
+                parser_provenance(None),
+                None,
+            );
+            settings.file_instance_relative_path = Some(file_instance_relative);
+            settings.parse_status = SampleSettingsParseStatus::Malformed;
+            return settings;
+        }
+    };
+    let source_version = Some(format!("sample-settings:{}", parsed.datatype_version));
+    let mut settings = empty_sample_settings(
+        SampleSettingsOwner::FileInstanceSidecar,
+        sidecar_relative,
+        parser_provenance(source_version),
+        None,
+    );
+    settings.file_instance_relative_path = Some(file_instance_relative);
+    if !parsed.check_file_version().unwrap_or(false) {
+        settings.parse_status = SampleSettingsParseStatus::UnsupportedVersion;
+        return settings;
+    }
+    if parsed.validate().is_err() {
+        settings.parse_status = SampleSettingsParseStatus::Malformed;
+        return settings;
+    }
+    settings.gain = Some(parsed.gain);
+    settings.tempo_x24 = Some(parsed.tempo);
+    settings.trim_bars_x100 = Some(parsed.trim_bar_len);
+    settings.loop_bars_x100 = Some(parsed.loop_bar_len);
+    settings.stretch_mode = Some(parsed.stretch);
+    settings.loop_mode = Some(parsed.loop_mode);
+    settings.trig_quantization = Some(i32::from(parsed.quantization));
+    settings.trim_start = Some(parsed.trim_start);
+    settings.trim_end = Some(parsed.trim_end);
+    settings.loop_start = Some(parsed.loop_start);
+    settings.slices = parsed
+        .slices
+        .iter()
+        .take(parsed.slices_len as usize)
+        .enumerate()
+        .map(|(index, slice)| SampleSlice {
+            index: index as u8,
+            trim_start: slice.trim_start,
+            trim_end: slice.trim_end,
+            loop_start: slice.loop_start,
+        })
+        .collect();
+    settings
+}
+
+fn empty_sample_settings(
+    owner: SampleSettingsOwner,
+    source_relative_path: RootRelativePath,
+    parser_provenance: ParserProvenance,
+    source_os_version: Option<String>,
+) -> SampleSettings {
+    SampleSettings {
+        owner,
+        source_relative_path,
+        marker_source_relative_path: None,
+        project_document_relative_path: None,
+        slot: None,
+        file_instance_relative_path: None,
+        parse_status: SampleSettingsParseStatus::Parsed,
+        parser_provenance,
+        source_os_version,
+        evidence: SampleSettingsEvidence::LegacyImplementationObservation,
+        gain: None,
+        tempo_x24: None,
+        trim_bars_x100: None,
+        loop_bars_x100: None,
+        stretch_mode: None,
+        loop_mode: None,
+        trig_quantization: None,
+        trim_start: None,
+        trim_end: None,
+        loop_start: None,
+        slices: Vec::new(),
+    }
+}
+
+fn apply_raw_slot_fields(
+    settings: &mut SampleSettings,
+    fields: &HashMap<String, String>,
+) -> Result<(), ()> {
+    settings.gain = parse_optional(fields, "GAIN")?;
+    settings.tempo_x24 = parse_optional(fields, "BPMX24")?;
+    settings.trim_bars_x100 = parse_optional(fields, "TRIM_BARSX100")?;
+    settings.stretch_mode = parse_optional(fields, "TSMODE")?;
+    settings.loop_mode = parse_optional(fields, "LOOPMODE")?;
+    settings.trig_quantization = parse_optional(fields, "TRIGQUANTIZATION")?;
+    Ok(())
+}
+
+fn parse_optional<T>(fields: &HashMap<String, String>, key: &str) -> Result<Option<T>, ()>
+where
+    T: std::str::FromStr,
+{
+    fields
+        .get(key)
+        .map(|value| value.parse::<T>().map_err(|_| ()))
+        .transpose()
+}
+
+fn clear_decoded_settings(settings: &mut SampleSettings) {
+    settings.gain = None;
+    settings.tempo_x24 = None;
+    settings.trim_bars_x100 = None;
+    settings.loop_bars_x100 = None;
+    settings.stretch_mode = None;
+    settings.loop_mode = None;
+    settings.trig_quantization = None;
+    settings.trim_start = None;
+    settings.trim_end = None;
+    settings.loop_start = None;
+    settings.slices.clear();
+}
+
+fn settings_owner_order(owner: SampleSettingsOwner) -> u8 {
+    match owner {
+        SampleSettingsOwner::SlotAssignment => 0,
+        SampleSettingsOwner::FileInstanceSidecar => 1,
+    }
+}
+
 fn parse_project_state(
     project_relative_path: &RootRelativePath,
     source_relative_path: &RootRelativePath,
@@ -983,6 +1317,66 @@ mod tests {
         ContentHash::parse(format!("sha256:{}", hex_digit.to_string().repeat(64))).unwrap()
     }
 
+    fn snapshot_with_static_slot_one() -> LibrarySnapshot {
+        let source = RootRelativePath::parse("SET/PROJECT/project.work").unwrap();
+        LibrarySnapshot {
+            state_documents: vec![StateDocument {
+                project_relative_path: RootRelativePath::parse("SET/PROJECT").unwrap(),
+                source_relative_path: source.clone(),
+                kind: StateDocumentKind::Project,
+                role: StateDocumentRole::Working,
+                bank_index: None,
+                parse_status: StateDocumentParseStatus::Parsed,
+                parser_provenance: parser_provenance(Some("1.40A".into())),
+            }],
+            slot_assignments: vec![SlotAssignment {
+                project_document_relative_path: source,
+                slot: SampleSlotId::new(SampleSlotKind::Static, 1).unwrap(),
+                referenced_file_relative_path: Some(
+                    RootRelativePath::parse("SET/AUDIO/missing.wav").unwrap(),
+                ),
+                reference_status: SampleReferenceStatus::Missing,
+            }],
+            ..LibrarySnapshot::default()
+        }
+    }
+
+    #[test]
+    fn missing_or_malformed_raw_slot_blocks_are_recorded_as_malformed_rows() {
+        for project_contents in [
+            "[SAMPLE]\nTYPE=STATIC\nSLOT=2\n[/SAMPLE]\n",
+            "[SAMPLE]\nTYPE=STATIC\nSLOT=1\nGAIN=48\n",
+        ] {
+            let root = TempDir::new().unwrap();
+            let project_directory = root.path().join("SET/PROJECT");
+            fs::create_dir_all(&project_directory).unwrap();
+            fs::write(
+                project_directory.join("project.work"),
+                project_contents.as_bytes(),
+            )
+            .unwrap();
+            let before = snapshot_files(root.path());
+            let canonical = root.path().canonicalize().unwrap();
+
+            let settings =
+                scan_slot_local_settings(&canonical, &snapshot_with_static_slot_one()).unwrap();
+
+            assert_eq!(settings.len(), 1);
+            assert_eq!(
+                settings[0].slot,
+                SampleSlotId::new(SampleSlotKind::Static, 1).ok()
+            );
+            assert_eq!(
+                settings[0].parse_status,
+                SampleSettingsParseStatus::Malformed
+            );
+            assert!(settings[0].gain.is_none());
+            assert!(settings[0].tempo_x24.is_none());
+            assert!(settings[0].slices.is_empty());
+            assert_eq!(snapshot_files(root.path()), before);
+        }
+    }
+
     #[test]
     fn state_inventory_indexes_working_and_saved_documents_with_usage_and_provenance() {
         let root = TempDir::new().unwrap();
@@ -990,7 +1384,7 @@ mod tests {
         fs::create_dir_all(&project_directory).unwrap();
         let fixture_directory =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/real_device");
-        for name in ["project.work", "bank01.work", "bank01.strd"] {
+        for name in ["project.work", "markers.work", "bank01.work", "bank01.strd"] {
             fs::copy(fixture_directory.join(name), project_directory.join(name)).unwrap();
         }
         fs::copy(
@@ -998,6 +1392,9 @@ mod tests {
             project_directory.join("project.strd"),
         )
         .unwrap();
+        let copied_audio = root.path().join("SET/AUDIO/Elektron/Acdrum.wav");
+        fs::create_dir_all(copied_audio.parent().unwrap()).unwrap();
+        fs::write(copied_audio, [0_u8]).unwrap();
         let before = snapshot_files(root.path());
         let canonical = root.path().canonicalize().unwrap();
         let mut topology = inventory_topology();
@@ -1013,6 +1410,10 @@ mod tests {
 
         let (documents, assignments, usage_edges) =
             scan_state_inventory(&canonical, &topology).unwrap();
+        topology.state_documents = documents.clone();
+        topology.slot_assignments = assignments.clone();
+        topology.usage_edges = usage_edges.clone();
+        let sample_settings = scan_sample_settings(&canonical, &topology).unwrap();
 
         assert_eq!(documents.len(), 4);
         assert!(documents.iter().all(|document| {
@@ -1035,13 +1436,35 @@ mod tests {
             .iter()
             .any(|assignment| assignment.reference_status == SampleReferenceStatus::Missing));
         assert!(!usage_edges.is_empty());
+        assert!(!sample_settings.is_empty());
+        assert!(sample_settings.iter().all(|settings| {
+            settings.owner == SampleSettingsOwner::SlotAssignment
+                && settings.parse_status == SampleSettingsParseStatus::Parsed
+        }));
+        assert!(sample_settings.iter().any(|settings| {
+            settings.source_relative_path.as_str() == "SET/PROJECT/project.work"
+                && settings
+                    .marker_source_relative_path
+                    .as_ref()
+                    .is_some_and(|path| path.as_str() == "SET/PROJECT/markers.work")
+        }));
+        assert!(sample_settings.iter().any(|settings| {
+            settings.source_relative_path.as_str() == "SET/PROJECT/project.strd"
+                && settings.marker_source_relative_path.is_none()
+        }));
+        assert!(sample_settings.iter().any(|settings| {
+            settings.slot == SampleSlotId::new(SampleSlotKind::Static, 5).ok()
+                && settings.gain == Some(48)
+        }));
         assert!(usage_edges.iter().all(|edge| !edge
             .project_document_relative_path
             .as_str()
             .starts_with('/')));
         assert_eq!(snapshot_files(root.path()), before);
-        assert!(!format!("{documents:?}{assignments:?}{usage_edges:?}")
-            .contains(root.path().to_str().unwrap()));
+        assert!(
+            !format!("{documents:?}{assignments:?}{usage_edges:?}{sample_settings:?}")
+                .contains(root.path().to_str().unwrap())
+        );
     }
 
     #[test]
@@ -1075,6 +1498,108 @@ mod tests {
         }));
         assert!(assignments.is_empty());
         assert!(usage_edges.is_empty());
+    }
+
+    #[test]
+    fn validated_sample_sidecar_exposes_settings_and_slices_without_writing_fixture() {
+        use ot_tools_io::types::{Slice, SlotMarkers};
+
+        let root = TempDir::new().unwrap();
+        let audio = root.path().join("SET/PROJECT/kick.wav");
+        fs::create_dir_all(audio.parent().unwrap()).unwrap();
+        fs::write(&audio, b"copied audio fixture").unwrap();
+        let mut markers = SlotMarkers {
+            trim_end: 1000,
+            slice_count: 1,
+            ..Default::default()
+        };
+        markers.slices[0] = Slice {
+            trim_start: 0,
+            trim_end: 1000,
+            loop_start: u32::MAX,
+        };
+        SampleSettingsFile::new(
+            markers,
+            Some(48),
+            Some(2880),
+            Some(400),
+            Some(400),
+            None,
+            None,
+            None,
+        )
+        .unwrap()
+        .to_data_file(&audio.with_extension("ot"))
+        .unwrap();
+        let before = snapshot_files(root.path());
+        let canonical = root.path().canonicalize().unwrap();
+        let snapshot = LibrarySnapshot {
+            file_instances: vec![FileInstance {
+                relative_path: RootRelativePath::parse("SET/PROJECT/kick.wav").unwrap(),
+                content_hash: test_hash('b'),
+                byte_size: 20,
+                modified_at_unix_ns: Some(1),
+                storage_scope: SampleStorageScope::ProjectLocal,
+                hash_freshness: ContentHashFreshness::ComputedThisScan,
+            }],
+            ..LibrarySnapshot::default()
+        };
+
+        let settings = scan_file_sidecar_settings(&canonical, &snapshot).unwrap();
+
+        assert_eq!(settings.len(), 1);
+        assert_eq!(settings[0].parse_status, SampleSettingsParseStatus::Parsed);
+        assert_eq!(
+            settings[0].source_relative_path.as_str(),
+            "SET/PROJECT/kick.ot"
+        );
+        assert_eq!(settings[0].gain, Some(48));
+        assert_eq!(settings[0].tempo_x24, Some(2880));
+        assert_eq!(settings[0].slices.len(), 1);
+        assert_eq!(settings[0].slices[0].trim_end, 1000);
+        assert_eq!(snapshot_files(root.path()), before);
+        assert!(!format!("{settings:?}").contains(root.path().to_str().unwrap()));
+    }
+
+    #[test]
+    fn ambiguous_sample_sidecar_owner_fails_closed() {
+        use ot_tools_io::types::SlotMarkers;
+
+        let root = TempDir::new().unwrap();
+        let project = root.path().join("SET/PROJECT");
+        fs::create_dir_all(&project).unwrap();
+        for name in ["kick.wav", "kick.aif"] {
+            fs::write(project.join(name), b"copied audio fixture").unwrap();
+        }
+        let audio = project.join("kick.wav");
+        let markers = SlotMarkers {
+            trim_end: 1000,
+            ..Default::default()
+        };
+        SampleSettingsFile::new(markers, None, None, None, None, None, None, None)
+            .unwrap()
+            .to_data_file(&audio.with_extension("ot"))
+            .unwrap();
+        let canonical = root.path().canonicalize().unwrap();
+        let snapshot = LibrarySnapshot {
+            file_instances: ["SET/PROJECT/kick.wav", "SET/PROJECT/kick.aif"]
+                .into_iter()
+                .enumerate()
+                .map(|(index, path)| FileInstance {
+                    relative_path: RootRelativePath::parse(path).unwrap(),
+                    content_hash: test_hash(if index == 0 { 'c' } else { 'd' }),
+                    byte_size: 20,
+                    modified_at_unix_ns: Some(1),
+                    storage_scope: SampleStorageScope::ProjectLocal,
+                    hash_freshness: ContentHashFreshness::ComputedThisScan,
+                })
+                .collect(),
+            ..LibrarySnapshot::default()
+        };
+
+        let error = scan_file_sidecar_settings(&canonical, &snapshot).unwrap_err();
+
+        assert!(error.message().starts_with("UNSUPPORTED_FORMAT:"));
     }
 
     #[test]

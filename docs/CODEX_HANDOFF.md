@@ -59,15 +59,18 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - M3-C0 domain semantics contract: #11マージ済み
 - MasterOCTa rename: #12マージ済み
 - M3-C1 incremental file inventory: #13マージ済み
-- 現在のmain基準SHA: `58c215ca3ff1d72644c70cb829daf6f8a0b7dbaf`
+- M3-C2 Project／Bank state and usage graph: #14マージ済み
+- repository固有development skills: #15マージ済み
+- 現在のmain基準SHA: `5b54eaea43889cc4680dd5f907c4ae8a5ec8ebbb`
 - M2: 完了
 - M3-A: 完了
 - M3-B: 完了
 - M3-C0: 完了
 - M3-C1: 完了
-- 現在の作業: M3-C2 Project／Bank state and usage graph
-- SQLite schema: v3（M3-C2で追加）
-- 次の機能実装: M3-C3 sample settings／slice read model
+- M3-C2: 完了
+- 現在の作業: M3-C3 sample settings／slice read model
+- SQLite schema: v4（M3-C3で追加）
+- 次の機能実装: M3-D catalog-backed Library UI
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
 - `ot-tools-io`はコミット
@@ -210,7 +213,7 @@ size／mtime一致による再利用はcatalog検索用の観測projectionに限
 には使わない。write前には実fileを必ず再hashする。frontend DTOとTauri command surfaceは
 変更していない。
 
-M3-C2はProject／BankのWorking（`.work`）とSavedCheckpoint（`.strd`）をread-onlyで
+M3-C2 #14はProject／BankのWorking（`.work`）とSavedCheckpoint（`.strd`）をread-onlyで
 indexし、parser revisionとsource version、typed sample slot assignment、machine／sample
 lock usage、resolved／missing／invalid／unassignedの参照状態をschema v3へtransactionalに
 保存する。公式OS 1.40A manualはProject／BankのSAVE／RELOAD意味論を裏付けるが、媒体上の
@@ -219,7 +222,11 @@ filename mappingは記載していないため、`.work`／`.strd`対応のprove
 除外せず状態として保存し、partial usageを最新結果にしない。raw／canonical／mount pathと
 session `RootId`はcatalogへ保存しない。frontend DTO、Tauri command、write処理は変更しない。
 
-次はM3-C3 sample settings／slice read modelとし、Library UIはM3-D、waveform／preview／
-manual tags／notesはM3-Eへ分離する。テストDBとOctatrack fixtureは一時directoryだけを使用し、
-実SD／CFカードやOctatrack原本データを使用しない。依存監査の既存受容期限と再確認条件は
-維持する。
+M3-C3はslot assignment所有のraw settings、検証済み`.ot` file-sidecar settings、slice
+markerをschema v4へtransactionalに保存する。各rowはparser revision、source revision、
+source OS version（取得可能な場合）、categorical evidence、Parsed／UnsupportedVersion／
+Malformedを保持する。曖昧なsame-stem sidecar ownerはfail-closedとし、unsupported／malformed
+sourceからpartial値を公開しない。frontend DTO、Tauri command、write／round-trip behaviorは
+変更しない。次はM3-D catalog-backed Library UIとし、waveform／preview／manual tags／notesは
+M3-Eへ分離する。テストDBとOctatrack fixtureは一時directoryだけを使用し、実SD／CFカードや
+Octatrack原本データを使用しない。依存監査の既存受容期限と再確認条件は維持する。

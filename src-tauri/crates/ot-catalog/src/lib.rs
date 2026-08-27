@@ -2,9 +2,10 @@
 
 use ot_domain::{
     AudioAsset, ContentHash, ContentHashFreshness, FileInstance, LibraryProject, LibrarySet,
-    LibrarySnapshot, ParserProvenance, RootRelativePath, SampleReferenceStatus, SampleSlotId,
-    SampleSlotKind, SampleStorageScope, SampleUsageEdge, SampleUsageKind, SlotAssignment,
-    StateDocument, StateDocumentKind, StateDocumentParseStatus, StateDocumentRole,
+    LibrarySnapshot, ParserProvenance, RootRelativePath, SampleReferenceStatus, SampleSettings,
+    SampleSettingsEvidence, SampleSettingsOwner, SampleSettingsParseStatus, SampleSlice,
+    SampleSlotId, SampleSlotKind, SampleStorageScope, SampleUsageEdge, SampleUsageKind,
+    SlotAssignment, StateDocument, StateDocumentKind, StateDocumentParseStatus, StateDocumentRole,
 };
 use ot_storage_ports::{
     CatalogError, CatalogFailureCode, CatalogRootIdentity, CatalogRootObservation, CatalogScan,
@@ -16,13 +17,17 @@ use rusqlite::{
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 
-const LATEST_SCHEMA_VERSION: u64 = 3;
+const LATEST_SCHEMA_VERSION: u64 = 4;
 const MIGRATIONS: &[(u64, &str)] = &[
     (1, include_str!("../migrations/0001_catalog_foundation.sql")),
     (2, include_str!("../migrations/0002_file_inventory.sql")),
     (
         3,
         include_str!("../migrations/0003_project_usage_graph.sql"),
+    ),
+    (
+        4,
+        include_str!("../migrations/0004_sample_settings_slices.sql"),
     ),
 ];
 
@@ -216,6 +221,7 @@ impl SqliteCatalog {
         )?;
 
         insert_state_projection(&transaction, root_row_id, scan_id, snapshot)?;
+        insert_sample_settings(&transaction, root_row_id, scan_id, snapshot)?;
 
         transaction.execute(
             "UPDATE scan_sessions \
@@ -319,6 +325,7 @@ impl LibraryCatalog for SqliteCatalog {
         let (audio_assets, file_instances) = self.load_file_inventory(root_row_id, scan_id)?;
         let (state_documents, slot_assignments, usage_edges) =
             self.load_state_inventory(root_row_id, scan_id)?;
+        let sample_settings = self.load_sample_settings(root_row_id, scan_id)?;
         let snapshot = LibrarySnapshot {
             sets,
             standalone_projects,
@@ -327,6 +334,7 @@ impl LibraryCatalog for SqliteCatalog {
             state_documents,
             slot_assignments,
             usage_edges,
+            sample_settings,
         };
         validate_snapshot(&snapshot)?;
         Ok(Some(snapshot))
@@ -699,6 +707,174 @@ impl SqliteCatalog {
         }
         Ok((state_documents, slot_assignments, usage_edges))
     }
+
+    fn load_sample_settings(
+        &self,
+        root_row_id: i64,
+        scan_id: i64,
+    ) -> Result<Vec<SampleSettings>, CatalogError> {
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT sample_settings.id, sample_settings.owner_kind, \
+                        sample_settings.source_relative_path, \
+                        sample_settings.marker_source_relative_path, \
+                        state_documents.source_relative_path, slot_assignments.slot_kind, \
+                        slot_assignments.slot_number, file_instances.relative_path, \
+                        sample_settings.parse_status, sample_settings.parser_name, \
+                        sample_settings.parser_revision, sample_settings.source_version, \
+                        sample_settings.source_os_version, sample_settings.evidence, \
+                        sample_settings.gain, sample_settings.tempo_x24, \
+                        sample_settings.trim_bars_x100, sample_settings.loop_bars_x100, \
+                        sample_settings.stretch_mode, sample_settings.loop_mode, \
+                        sample_settings.trig_quantization, sample_settings.trim_start, \
+                        sample_settings.trim_end, sample_settings.loop_start \
+                 FROM sample_settings \
+                 LEFT JOIN slot_assignments \
+                   ON slot_assignments.id = sample_settings.slot_assignment_id \
+                 LEFT JOIN state_documents \
+                   ON state_documents.id = slot_assignments.state_document_id \
+                 LEFT JOIN file_instances \
+                   ON file_instances.id = sample_settings.file_instance_id \
+                 WHERE sample_settings.root_id = ?1 \
+                   AND sample_settings.scan_session_id = ?2 \
+                 ORDER BY CASE sample_settings.owner_kind \
+                              WHEN 'slot_assignment' THEN 0 ELSE 1 END, \
+                          sample_settings.source_relative_path, \
+                          slot_assignments.slot_kind, slot_assignments.slot_number",
+            )
+            .map_err(unavailable)?;
+        let rows = statement
+            .query_map(params![root_row_id, scan_id], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, Option<i64>>(6)?,
+                    row.get::<_, Option<String>>(7)?,
+                    row.get::<_, String>(8)?,
+                    row.get::<_, String>(9)?,
+                    row.get::<_, String>(10)?,
+                    row.get::<_, Option<String>>(11)?,
+                    row.get::<_, Option<String>>(12)?,
+                    row.get::<_, String>(13)?,
+                    row.get::<_, Option<i64>>(14)?,
+                    row.get::<_, Option<i64>>(15)?,
+                    row.get::<_, Option<i64>>(16)?,
+                    row.get::<_, Option<i64>>(17)?,
+                    row.get::<_, Option<i64>>(18)?,
+                    row.get::<_, Option<i64>>(19)?,
+                    row.get::<_, Option<i64>>(20)?,
+                    row.get::<_, Option<i64>>(21)?,
+                    row.get::<_, Option<i64>>(22)?,
+                    row.get::<_, Option<i64>>(23)?,
+                ))
+            })
+            .map_err(unavailable)?;
+        let mut settings = Vec::new();
+        for row in rows {
+            let (
+                settings_id,
+                owner,
+                source,
+                marker_source,
+                project_document,
+                slot_kind,
+                slot_number,
+                file_instance,
+                parse_status,
+                parser_name,
+                parser_revision,
+                source_version,
+                source_os_version,
+                evidence,
+                gain,
+                tempo_x24,
+                trim_bars_x100,
+                loop_bars_x100,
+                stretch_mode,
+                loop_mode,
+                trig_quantization,
+                trim_start,
+                trim_end,
+                loop_start,
+            ) = row.map_err(unavailable)?;
+            let owner = settings_owner_from_database(&owner)?;
+            let slot = match (slot_kind, slot_number) {
+                (Some(kind), Some(number)) => Some(slot_id_from_database(&kind, number)?),
+                (None, None) => None,
+                _ => {
+                    return Err(CatalogError::InvalidStoredData {
+                        field: "settings_owner",
+                    })
+                }
+            };
+            let mut slice_statement = self
+                .connection
+                .prepare(
+                    "SELECT slice_index, trim_start, trim_end, loop_start \
+                     FROM sample_slices WHERE sample_settings_id = ?1 ORDER BY slice_index",
+                )
+                .map_err(unavailable)?;
+            let slice_rows = slice_statement
+                .query_map([settings_id], |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, i64>(2)?,
+                        row.get::<_, i64>(3)?,
+                    ))
+                })
+                .map_err(unavailable)?;
+            let mut slices = Vec::new();
+            for slice in slice_rows {
+                let (index, start, end, loop_start) = slice.map_err(unavailable)?;
+                slices.push(SampleSlice {
+                    index: u8_from_database(index, "slice_index")?,
+                    trim_start: u32_from_database(start, "slice_trim_start")?,
+                    trim_end: u32_from_database(end, "slice_trim_end")?,
+                    loop_start: u32_from_database(loop_start, "slice_loop_start")?,
+                });
+            }
+            settings.push(SampleSettings {
+                owner,
+                source_relative_path: stored_path(source)?,
+                marker_source_relative_path: marker_source.map(stored_path).transpose()?,
+                project_document_relative_path: project_document.map(stored_path).transpose()?,
+                slot,
+                file_instance_relative_path: file_instance.map(stored_path).transpose()?,
+                parse_status: settings_parse_status_from_database(&parse_status)?,
+                parser_provenance: ParserProvenance {
+                    parser_name,
+                    parser_revision,
+                    source_version,
+                },
+                source_os_version,
+                evidence: settings_evidence_from_database(&evidence)?,
+                gain: option_u16_from_database(gain, "settings_gain")?,
+                tempo_x24: option_u32_from_database(tempo_x24, "settings_tempo")?,
+                trim_bars_x100: option_u32_from_database(trim_bars_x100, "settings_trim_bars")?,
+                loop_bars_x100: option_u32_from_database(loop_bars_x100, "settings_loop_bars")?,
+                stretch_mode: option_u32_from_database(stretch_mode, "settings_stretch")?,
+                loop_mode: option_u32_from_database(loop_mode, "settings_loop_mode")?,
+                trig_quantization: trig_quantization
+                    .map(|value| {
+                        i32::try_from(value).map_err(|_| CatalogError::InvalidStoredData {
+                            field: "settings_quantization",
+                        })
+                    })
+                    .transpose()?,
+                trim_start: option_u32_from_database(trim_start, "settings_trim_start")?,
+                trim_end: option_u32_from_database(trim_end, "settings_trim_end")?,
+                loop_start: option_u32_from_database(loop_start, "settings_loop_start")?,
+                slices,
+            });
+        }
+        Ok(settings)
+    }
 }
 
 fn insert_project(
@@ -847,6 +1023,115 @@ fn sql_integrity_error(message: &'static str) -> rusqlite::Error {
         std::io::ErrorKind::InvalidData,
         message,
     )))
+}
+
+fn insert_sample_settings(
+    transaction: &Transaction<'_>,
+    root_row_id: i64,
+    scan_id: i64,
+    snapshot: &LibrarySnapshot,
+) -> Result<(), rusqlite::Error> {
+    for settings in &snapshot.sample_settings {
+        let (slot_assignment_id, file_instance_id) = match settings.owner {
+            SampleSettingsOwner::SlotAssignment => {
+                let project_document = settings
+                    .project_document_relative_path
+                    .as_ref()
+                    .ok_or_else(|| {
+                        sql_integrity_error("sample settings project document is missing")
+                    })?;
+                let slot = settings
+                    .slot
+                    .ok_or_else(|| sql_integrity_error("sample settings slot is missing"))?;
+                let assignment_id = transaction.query_row(
+                    "SELECT slot_assignments.id FROM slot_assignments \
+                         JOIN state_documents \
+                           ON state_documents.id = slot_assignments.state_document_id \
+                         WHERE state_documents.root_id = ?1 \
+                           AND state_documents.source_relative_path = ?2 \
+                           AND slot_assignments.slot_kind = ?3 \
+                           AND slot_assignments.slot_number = ?4",
+                    params![
+                        root_row_id,
+                        project_document.as_str(),
+                        slot_kind_to_database(slot.kind()),
+                        i64::from(slot.number()),
+                    ],
+                    |row| row.get::<_, i64>(0),
+                )?;
+                (Some(assignment_id), None)
+            }
+            SampleSettingsOwner::FileInstanceSidecar => {
+                let file_instance =
+                    settings
+                        .file_instance_relative_path
+                        .as_ref()
+                        .ok_or_else(|| {
+                            sql_integrity_error("sample settings file instance is missing")
+                        })?;
+                let file_instance_id = transaction.query_row(
+                    "SELECT id FROM file_instances WHERE root_id = ?1 AND relative_path = ?2",
+                    params![root_row_id, file_instance.as_str()],
+                    |row| row.get::<_, i64>(0),
+                )?;
+                (None, Some(file_instance_id))
+            }
+        };
+        transaction.execute(
+            "INSERT INTO sample_settings \
+             (root_id, scan_session_id, owner_kind, source_relative_path, \
+              marker_source_relative_path, slot_assignment_id, file_instance_id, parse_status, \
+              parser_name, parser_revision, source_version, source_os_version, evidence, gain, \
+              tempo_x24, trim_bars_x100, loop_bars_x100, stretch_mode, loop_mode, \
+              trig_quantization, trim_start, trim_end, loop_start) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, \
+                     ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23)",
+            params![
+                root_row_id,
+                scan_id,
+                settings_owner_to_database(settings.owner),
+                settings.source_relative_path.as_str(),
+                settings
+                    .marker_source_relative_path
+                    .as_ref()
+                    .map(RootRelativePath::as_str),
+                slot_assignment_id,
+                file_instance_id,
+                settings_parse_status_to_database(settings.parse_status),
+                settings.parser_provenance.parser_name,
+                settings.parser_provenance.parser_revision,
+                settings.parser_provenance.source_version,
+                settings.source_os_version,
+                settings_evidence_to_database(settings.evidence),
+                settings.gain.map(i64::from),
+                settings.tempo_x24.map(i64::from),
+                settings.trim_bars_x100.map(i64::from),
+                settings.loop_bars_x100.map(i64::from),
+                settings.stretch_mode.map(i64::from),
+                settings.loop_mode.map(i64::from),
+                settings.trig_quantization.map(i64::from),
+                settings.trim_start.map(i64::from),
+                settings.trim_end.map(i64::from),
+                settings.loop_start.map(i64::from),
+            ],
+        )?;
+        let settings_id = transaction.last_insert_rowid();
+        for slice in &settings.slices {
+            transaction.execute(
+                "INSERT INTO sample_slices \
+                 (sample_settings_id, slice_index, trim_start, trim_end, loop_start) \
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![
+                    settings_id,
+                    i64::from(slice.index),
+                    i64::from(slice.trim_start),
+                    i64::from(slice.trim_end),
+                    i64::from(slice.loop_start),
+                ],
+            )?;
+        }
+    }
+    Ok(())
 }
 
 fn validate_snapshot(snapshot: &LibrarySnapshot) -> Result<(), CatalogError> {
@@ -1080,7 +1365,119 @@ fn validate_snapshot(snapshot: &LibrarySnapshot) -> Result<(), CatalogError> {
             });
         }
     }
+
+    let mut settings_owners = HashSet::new();
+    for settings in &snapshot.sample_settings {
+        if settings.parser_provenance.parser_name.trim().is_empty()
+            || settings.parser_provenance.parser_revision.trim().is_empty()
+        {
+            return Err(CatalogError::Integrity {
+                message: "sample settings parser provenance is invalid".into(),
+            });
+        }
+        let owner_key = match settings.owner {
+            SampleSettingsOwner::SlotAssignment => {
+                let (Some(document_path), Some(slot), None) = (
+                    settings.project_document_relative_path.as_ref(),
+                    settings.slot,
+                    settings.file_instance_relative_path.as_ref(),
+                ) else {
+                    return Err(CatalogError::Integrity {
+                        message: "slot-local sample settings owner is invalid".into(),
+                    });
+                };
+                if !assignments.contains_key(&(
+                    document_path.as_str().to_owned(),
+                    slot.kind(),
+                    slot.number(),
+                )) || settings.source_relative_path != *document_path
+                {
+                    return Err(CatalogError::Integrity {
+                        message: "slot-local sample settings references an unknown assignment"
+                            .into(),
+                    });
+                }
+                if settings
+                    .marker_source_relative_path
+                    .as_ref()
+                    .is_some_and(|marker| {
+                        documents
+                            .get(document_path.as_str())
+                            .is_none_or(|document| {
+                                !is_direct_child(&document.project_relative_path, marker)
+                            })
+                    })
+                {
+                    return Err(CatalogError::Integrity {
+                        message: "sample marker source is outside its project directory".into(),
+                    });
+                }
+                format!(
+                    "slot:{}:{:?}:{}",
+                    document_path.as_str(),
+                    slot.kind(),
+                    slot.number()
+                )
+            }
+            SampleSettingsOwner::FileInstanceSidecar => {
+                let (None, None, Some(file_path)) = (
+                    settings.project_document_relative_path.as_ref(),
+                    settings.slot,
+                    settings.file_instance_relative_path.as_ref(),
+                ) else {
+                    return Err(CatalogError::Integrity {
+                        message: "file-sidecar sample settings owner is invalid".into(),
+                    });
+                };
+                if settings.marker_source_relative_path.is_some()
+                    || !file_paths.contains(file_path.as_str())
+                    || !is_matching_sidecar(file_path, &settings.source_relative_path)
+                {
+                    return Err(CatalogError::Integrity {
+                        message: "file-sidecar sample settings source is invalid".into(),
+                    });
+                }
+                format!("file:{}", file_path.as_str())
+            }
+        };
+        if !settings_owners.insert(owner_key) {
+            return Err(CatalogError::Integrity {
+                message: "duplicate sample settings owner".into(),
+            });
+        }
+        let has_values = settings.gain.is_some()
+            || settings.tempo_x24.is_some()
+            || settings.trim_bars_x100.is_some()
+            || settings.loop_bars_x100.is_some()
+            || settings.stretch_mode.is_some()
+            || settings.loop_mode.is_some()
+            || settings.trig_quantization.is_some()
+            || settings.trim_start.is_some()
+            || settings.trim_end.is_some()
+            || settings.loop_start.is_some()
+            || !settings.slices.is_empty();
+        if settings.parse_status != SampleSettingsParseStatus::Parsed && has_values {
+            return Err(CatalogError::Integrity {
+                message: "unparsed sample settings must not expose decoded values".into(),
+            });
+        }
+        let mut slice_indices = HashSet::new();
+        for slice in &settings.slices {
+            if slice.index >= 64 || !slice_indices.insert(slice.index) {
+                return Err(CatalogError::Integrity {
+                    message: "sample slice index is invalid or duplicated".into(),
+                });
+            }
+        }
+    }
     Ok(())
+}
+
+fn is_matching_sidecar(audio: &RootRelativePath, sidecar: &RootRelativePath) -> bool {
+    let Some((audio_stem, _)) = audio.as_str().rsplit_once('.') else {
+        return false;
+    };
+    sidecar.as_str() == format!("{audio_stem}.ot")
 }
 
 fn is_direct_child(parent: &RootRelativePath, child: &RootRelativePath) -> bool {
@@ -1156,6 +1553,95 @@ fn freshness_from_database(value: &str) -> Result<ContentHashFreshness, CatalogE
             field: "hash_freshness",
         }),
     }
+}
+
+fn settings_owner_to_database(owner: SampleSettingsOwner) -> &'static str {
+    match owner {
+        SampleSettingsOwner::SlotAssignment => "slot_assignment",
+        SampleSettingsOwner::FileInstanceSidecar => "file_instance_sidecar",
+    }
+}
+
+fn settings_owner_from_database(value: &str) -> Result<SampleSettingsOwner, CatalogError> {
+    match value {
+        "slot_assignment" => Ok(SampleSettingsOwner::SlotAssignment),
+        "file_instance_sidecar" => Ok(SampleSettingsOwner::FileInstanceSidecar),
+        _ => Err(CatalogError::InvalidStoredData {
+            field: "sample_settings_owner",
+        }),
+    }
+}
+
+fn settings_parse_status_to_database(status: SampleSettingsParseStatus) -> &'static str {
+    match status {
+        SampleSettingsParseStatus::Parsed => "parsed",
+        SampleSettingsParseStatus::UnsupportedVersion => "unsupported_version",
+        SampleSettingsParseStatus::Malformed => "malformed",
+    }
+}
+
+fn settings_parse_status_from_database(
+    value: &str,
+) -> Result<SampleSettingsParseStatus, CatalogError> {
+    match value {
+        "parsed" => Ok(SampleSettingsParseStatus::Parsed),
+        "unsupported_version" => Ok(SampleSettingsParseStatus::UnsupportedVersion),
+        "malformed" => Ok(SampleSettingsParseStatus::Malformed),
+        _ => Err(CatalogError::InvalidStoredData {
+            field: "sample_settings_parse_status",
+        }),
+    }
+}
+
+fn settings_evidence_to_database(evidence: SampleSettingsEvidence) -> &'static str {
+    match evidence {
+        SampleSettingsEvidence::OfficialDocumentation => "official_documentation",
+        SampleSettingsEvidence::ReproducedFixtureObservation => "reproduced_fixture_observation",
+        SampleSettingsEvidence::LegacyImplementationObservation => {
+            "legacy_implementation_observation"
+        }
+    }
+}
+
+fn settings_evidence_from_database(value: &str) -> Result<SampleSettingsEvidence, CatalogError> {
+    match value {
+        "official_documentation" => Ok(SampleSettingsEvidence::OfficialDocumentation),
+        "reproduced_fixture_observation" => {
+            Ok(SampleSettingsEvidence::ReproducedFixtureObservation)
+        }
+        "legacy_implementation_observation" => {
+            Ok(SampleSettingsEvidence::LegacyImplementationObservation)
+        }
+        _ => Err(CatalogError::InvalidStoredData {
+            field: "sample_settings_evidence",
+        }),
+    }
+}
+
+fn u8_from_database(value: i64, field: &'static str) -> Result<u8, CatalogError> {
+    u8::try_from(value).map_err(|_| CatalogError::InvalidStoredData { field })
+}
+
+fn u32_from_database(value: i64, field: &'static str) -> Result<u32, CatalogError> {
+    u32::try_from(value).map_err(|_| CatalogError::InvalidStoredData { field })
+}
+
+fn option_u16_from_database(
+    value: Option<i64>,
+    field: &'static str,
+) -> Result<Option<u16>, CatalogError> {
+    value
+        .map(|value| u16::try_from(value).map_err(|_| CatalogError::InvalidStoredData { field }))
+        .transpose()
+}
+
+fn option_u32_from_database(
+    value: Option<i64>,
+    field: &'static str,
+) -> Result<Option<u32>, CatalogError> {
+    value
+        .map(|value| u32_from_database(value, field))
+        .transpose()
 }
 
 fn document_kind_to_database(kind: StateDocumentKind) -> &'static str {
@@ -1590,6 +2076,76 @@ mod tests {
         snapshot
     }
 
+    fn snapshot_with_sample_settings() -> LibrarySnapshot {
+        let mut snapshot = snapshot_with_usage_graph();
+        let project_document = RootRelativePath::parse("SET/PROJECT/project.work").unwrap();
+        let audio_file = RootRelativePath::parse("SET/AUDIO/kick.wav").unwrap();
+        let provenance = ParserProvenance {
+            parser_name: "masterocta/ot-tools-io".into(),
+            parser_revision: "fixture-revision".into(),
+            source_version: Some("1.40A".into()),
+        };
+        snapshot.sample_settings = vec![
+            SampleSettings {
+                owner: SampleSettingsOwner::SlotAssignment,
+                source_relative_path: project_document.clone(),
+                marker_source_relative_path: Some(
+                    RootRelativePath::parse("SET/PROJECT/markers.work").unwrap(),
+                ),
+                project_document_relative_path: Some(project_document.clone()),
+                slot: Some(SampleSlotId::new(SampleSlotKind::Static, 1).unwrap()),
+                file_instance_relative_path: None,
+                parse_status: SampleSettingsParseStatus::Parsed,
+                parser_provenance: provenance.clone(),
+                source_os_version: Some("1.40A".into()),
+                evidence: SampleSettingsEvidence::ReproducedFixtureObservation,
+                gain: Some(48),
+                tempo_x24: Some(2880),
+                trim_bars_x100: Some(400),
+                loop_bars_x100: None,
+                stretch_mode: Some(2),
+                loop_mode: Some(0),
+                trig_quantization: Some(-1),
+                trim_start: Some(0),
+                trim_end: Some(1000),
+                loop_start: Some(0),
+                slices: vec![SampleSlice {
+                    index: 0,
+                    trim_start: 0,
+                    trim_end: 1000,
+                    loop_start: u32::MAX,
+                }],
+            },
+            SampleSettings {
+                owner: SampleSettingsOwner::FileInstanceSidecar,
+                source_relative_path: RootRelativePath::parse("SET/AUDIO/kick.ot").unwrap(),
+                marker_source_relative_path: None,
+                project_document_relative_path: None,
+                slot: None,
+                file_instance_relative_path: Some(audio_file),
+                parse_status: SampleSettingsParseStatus::Parsed,
+                parser_provenance: ParserProvenance {
+                    source_version: Some("sample-settings:2".into()),
+                    ..provenance
+                },
+                source_os_version: None,
+                evidence: SampleSettingsEvidence::LegacyImplementationObservation,
+                gain: Some(48),
+                tempo_x24: Some(2880),
+                trim_bars_x100: Some(400),
+                loop_bars_x100: Some(400),
+                stretch_mode: Some(2),
+                loop_mode: Some(0),
+                trig_quantization: Some(255),
+                trim_start: Some(0),
+                trim_end: Some(1000),
+                loop_start: Some(0),
+                slices: vec![],
+            },
+        ];
+        snapshot
+    }
+
     fn open_temp_catalog() -> (TempDir, std::path::PathBuf, SqliteCatalog) {
         let directory = TempDir::new().unwrap();
         let path = database_path(&directory, "catalog.sqlite3");
@@ -1606,7 +2162,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(count, 3);
+        assert_eq!(count, 4);
         drop(catalog);
 
         let reopened = SqliteCatalog::open(&path).unwrap();
@@ -1616,13 +2172,13 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(count, 3);
+        assert_eq!(count, 4);
         drop(reopened);
         drop(directory);
     }
 
     #[test]
-    fn schema_v1_database_migrates_to_v3_without_losing_existing_projection() {
+    fn schema_v1_database_migrates_to_v4_without_losing_existing_projection() {
         let directory = TempDir::new().unwrap();
         let path = database_path(&directory, "v1.sqlite3");
         let mut connection = Connection::open(&path).unwrap();
@@ -1661,7 +2217,7 @@ mod tests {
             })
             .unwrap();
 
-        assert_eq!(versions, 3);
+        assert_eq!(versions, 4);
         assert_eq!(snapshot.sets[0].display_name, "Existing Set");
         assert_eq!(
             snapshot.sets[0].projects[0].display_name,
@@ -1677,7 +2233,7 @@ mod tests {
         connection
             .execute_batch(
                 "CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL); \
-                 INSERT INTO schema_migrations VALUES (4, 'future');",
+                 INSERT INTO schema_migrations VALUES (5, 'future');",
             )
             .unwrap();
         drop(connection);
@@ -1686,8 +2242,8 @@ mod tests {
         assert_eq!(
             error,
             CatalogError::UnsupportedSchema {
-                found: 4,
-                supported: 3,
+                found: 5,
+                supported: 4,
             }
         );
     }
@@ -1760,7 +2316,7 @@ mod tests {
             .connection
             .prepare("PRAGMA foreign_key_check")
             .unwrap();
-        assert!(!foreign_keys.query([]).unwrap().next().unwrap().is_some());
+        assert!(foreign_keys.query([]).unwrap().next().unwrap().is_none());
         let integrity: String = catalog
             .connection
             .query_row("PRAGMA integrity_check", [], |row| row.get(0))
@@ -1797,6 +2353,133 @@ mod tests {
             )
             .unwrap();
         assert_eq!(counts, (2, 1, 1));
+    }
+
+    #[test]
+    fn slot_local_and_sidecar_settings_with_slices_round_trip_after_reopen() {
+        let directory = TempDir::new().unwrap();
+        let path = database_path(&directory, "sample-settings.sqlite3");
+        let observation = observation('7', "Sample settings");
+        let snapshot = snapshot_with_sample_settings();
+        let mut catalog = SqliteCatalog::open(&path).unwrap();
+
+        catalog.store_snapshot(&observation, &snapshot).unwrap();
+        drop(catalog);
+
+        let reopened = SqliteCatalog::open(&path).unwrap();
+        assert_eq!(
+            reopened
+                .load_latest_snapshot(&observation.identity)
+                .unwrap(),
+            Some(snapshot)
+        );
+        let counts: (i64, i64) = reopened
+            .connection
+            .query_row(
+                "SELECT (SELECT COUNT(*) FROM sample_settings), \
+                        (SELECT COUNT(*) FROM sample_slices)",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(counts, (2, 1));
+    }
+
+    #[test]
+    fn sample_settings_owner_cannot_cross_root_or_scan_scope() {
+        let (_directory, _path, mut catalog) = open_temp_catalog();
+        let first_observation = observation('7', "First settings root");
+        let second_observation = observation('8', "Second settings root");
+        let snapshot = snapshot_with_sample_settings();
+        catalog
+            .store_snapshot(&first_observation, &snapshot)
+            .unwrap();
+        catalog
+            .store_snapshot(&second_observation, &snapshot)
+            .unwrap();
+        let first_root_id: i64 = catalog
+            .connection
+            .query_row(
+                "SELECT id FROM roots WHERE fingerprint = ?1",
+                [first_observation.identity.as_str()],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let second_root_id: i64 = catalog
+            .connection
+            .query_row(
+                "SELECT id FROM roots WHERE fingerprint = ?1",
+                [second_observation.identity.as_str()],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let foreign_slot_assignment_id: i64 = catalog
+            .connection
+            .query_row(
+                "SELECT slot_assignments.id FROM slot_assignments \
+                 JOIN state_documents \
+                   ON state_documents.id = slot_assignments.state_document_id \
+                 WHERE state_documents.root_id = ?1",
+                [second_root_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let foreign_file_instance_id: i64 = catalog
+            .connection
+            .query_row(
+                "SELECT id FROM file_instances WHERE root_id = ?1 LIMIT 1",
+                [second_root_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        let slot_error = catalog.connection.execute(
+            "UPDATE sample_settings SET slot_assignment_id = ?1 \
+             WHERE root_id = ?2 AND owner_kind = 'slot_assignment'",
+            params![foreign_slot_assignment_id, first_root_id],
+        );
+        let file_error = catalog.connection.execute(
+            "UPDATE sample_settings SET file_instance_id = ?1 \
+             WHERE root_id = ?2 AND owner_kind = 'file_instance_sidecar'",
+            params![foreign_file_instance_id, first_root_id],
+        );
+
+        assert!(slot_error.is_err());
+        assert!(file_error.is_err());
+        assert_eq!(
+            catalog
+                .load_latest_snapshot(&first_observation.identity)
+                .unwrap(),
+            Some(snapshot)
+        );
+    }
+
+    #[test]
+    fn sample_settings_failure_preserves_previous_successful_projection() {
+        let (_directory, _path, mut catalog) = open_temp_catalog();
+        let observation = observation('8', "Settings rollback");
+        let previous = snapshot_with_sample_settings();
+        catalog.store_snapshot(&observation, &previous).unwrap();
+        catalog
+            .connection
+            .execute_batch(
+                "CREATE TRIGGER reject_sample_slice BEFORE INSERT ON sample_slices \
+                 BEGIN SELECT RAISE(ABORT, 'sample slice fault'); END;",
+            )
+            .unwrap();
+
+        let error = catalog
+            .store_snapshot(&observation, &snapshot_with_sample_settings())
+            .unwrap_err();
+
+        assert!(matches!(error, CatalogError::Unavailable { .. }));
+        assert_eq!(
+            catalog.load_latest_snapshot(&observation.identity).unwrap(),
+            Some(previous)
+        );
+        let latest = catalog.latest_scan(&observation.identity).unwrap().unwrap();
+        assert_eq!(latest.status, CatalogScanStatus::Failed);
+        assert_eq!(latest.failure_code, Some(CatalogFailureCode::Persistence));
     }
 
     #[test]

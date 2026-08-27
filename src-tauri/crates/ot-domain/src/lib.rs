@@ -360,6 +360,53 @@ pub enum SampleSettingsOwner {
     FileInstanceSidecar,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum SampleSettingsParseStatus {
+    Parsed,
+    UnsupportedVersion,
+    Malformed,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum SampleSettingsEvidence {
+    OfficialDocumentation,
+    ReproducedFixtureObservation,
+    LegacyImplementationObservation,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SampleSlice {
+    pub index: u8,
+    pub trim_start: u32,
+    pub trim_end: u32,
+    pub loop_start: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SampleSettings {
+    pub owner: SampleSettingsOwner,
+    pub source_relative_path: RootRelativePath,
+    pub marker_source_relative_path: Option<RootRelativePath>,
+    pub project_document_relative_path: Option<RootRelativePath>,
+    pub slot: Option<SampleSlotId>,
+    pub file_instance_relative_path: Option<RootRelativePath>,
+    pub parse_status: SampleSettingsParseStatus,
+    pub parser_provenance: ParserProvenance,
+    pub source_os_version: Option<String>,
+    pub evidence: SampleSettingsEvidence,
+    pub gain: Option<u16>,
+    pub tempo_x24: Option<u32>,
+    pub trim_bars_x100: Option<u32>,
+    pub loop_bars_x100: Option<u32>,
+    pub stretch_mode: Option<u32>,
+    pub loop_mode: Option<u32>,
+    pub trig_quantization: Option<i32>,
+    pub trim_start: Option<u32>,
+    pub trim_end: Option<u32>,
+    pub loop_start: Option<u32>,
+    pub slices: Vec<SampleSlice>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LibraryProject {
     pub display_name: String,
@@ -385,6 +432,7 @@ pub struct LibrarySnapshot {
     pub state_documents: Vec<StateDocument>,
     pub slot_assignments: Vec<SlotAssignment>,
     pub usage_edges: Vec<SampleUsageEdge>,
+    pub sample_settings: Vec<SampleSettings>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
