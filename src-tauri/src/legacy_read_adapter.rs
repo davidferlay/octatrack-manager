@@ -1442,9 +1442,11 @@ mod tests {
         let audio = root.path().join("SET/PROJECT/kick.wav");
         fs::create_dir_all(audio.parent().unwrap()).unwrap();
         fs::write(&audio, b"copied audio fixture").unwrap();
-        let mut markers = SlotMarkers::default();
-        markers.trim_end = 1000;
-        markers.slice_count = 1;
+        let mut markers = SlotMarkers {
+            trim_end: 1000,
+            slice_count: 1,
+            ..Default::default()
+        };
         markers.slices[0] = Slice {
             trim_start: 0,
             trim_end: 1000,
@@ -1504,8 +1506,10 @@ mod tests {
             fs::write(project.join(name), b"copied audio fixture").unwrap();
         }
         let audio = project.join("kick.wav");
-        let mut markers = SlotMarkers::default();
-        markers.trim_end = 1000;
+        let markers = SlotMarkers {
+            trim_end: 1000,
+            ..Default::default()
+        };
         SampleSettingsFile::new(markers, None, None, None, None, None, None, None)
             .unwrap()
             .to_data_file(&audio.with_extension("ot"))
