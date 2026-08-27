@@ -6,6 +6,7 @@ import {
   type RootApi,
   type RootSession,
 } from "../../api";
+import { StatusBadge } from "../../design-system";
 import "./RootRegistryPanel.css";
 
 export type RootDirectoryPicker = () => Promise<string | null>;
@@ -85,7 +86,7 @@ export function RootRegistryPanel({
         <div>
           <div className="root-registry-title-row">
             <h2 id="root-registry-title">Read-only source</h2>
-            <span className="root-mode-badge">READ ONLY</span>
+            <StatusBadge tone="readonly">READ ONLY</StatusBadge>
           </div>
           <p>Next-generation root session. Only the native picker may submit an absolute path.</p>
         </div>
