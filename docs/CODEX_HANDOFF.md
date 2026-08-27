@@ -54,10 +54,12 @@
 - 依存advisory分類: #7マージ済み
 - PR-2 RootRegistry read-only vertical slice: #8マージ済み
 - M3-A SQLite catalog foundation: #9マージ済み
-- 現在のmain SHA: `2da484007e189f7de79faf49a62b8d5798a76607`
+- M3-B catalog indexing/query vertical slice: #10マージ済み
+- 現在のmain SHA: `c451eb38ea494fbcc2d60b26ceedc6c9cec441de`
 - M2: 完了
 - M3-A: 完了
-- M3-B catalog indexing/query作業ブランチ: `feat/m3b-catalog-index-query`
+- M3-B: 完了
+- M3-C0 domain semantics contract作業ブランチ: `feat/m3c0-domain-semantics`
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
 - `ot-tools-io`はコミット
@@ -181,19 +183,21 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 ベースラインPR #1、PR-0、PR-1、pnpm移行#5、fork Pages修正#6、依存監査#7、
 PR-2 RootRegistry read-only vertical slice #8はマージ済みで、M2は完了した。
 
-M3は小さなPRへ分割する。M3-A #9で、version付きroot fingerprint、storage port、
-明示的SQLite migration、`LibrarySnapshot`のtransactional保存・再取得を持つcatalog
-foundationまで完了した。
+M3は小さなPRへ分割する。M3-A #9でcatalog foundation、M3-B #10でApplication
+Support上のproduction catalog、root登録時のread-only full scan保存、live `RootId`
+再検証後のcatalog queryまで完了した。catalogはraw／canonical／mount pathとsession
+`RootId`を保存せず、同一persistent fingerprint rootの同時登録とcatalog path symlinkを
+fail-closedで拒否する。schema versionはv1のままである。
 
-現在のM3-Bは`catalog-backed indexing/query vertical slice`に限定する。Tauri起動時に
-`Application Support/OctatrackWorkbench/catalog.sqlite3`を開き、root登録時の既存
-read-only full scanをtransactional snapshotとして保存する。既存`v2_library_list`は
-live `RootId`を再検証した後、filesystemを再scanせず最新成功snapshotをcatalogから返す。
-同一persistent fingerprintを持つ別rootは、catalog projectionの混線を防ぐため同時登録を
-拒否する。resolved application data directory配下のcatalog path componentまたは
-DB fileがsymlinkの場合はfail-closedとし、未知schemaでも起動を継続しない。
+現在のM3-C0はOctatrack固有のstate、sample scope、sample settings ownershipをpure
+domain typeと設計契約として固定する。参照した`OCTATRACK DIARY R13`は2016年作成・
+Octatrack OS 1.25基準の非公式二次資料であり、MkII OS 1.40+仕様の正本ではない。
+version依存の数値、filename mapping、format制約は現行公式資料とfixtureで確認するまで
+実装定数にしない。M3-C0ではSQLite schema、runtime、frontend、writeを変更しない。
 
-M3-BではTauri command、frontend UI、incremental filesystem scannerを追加しない。
-次はM3-Cとしてincremental indexing/query拡張と新Library UIの境界を再度小さなPRへ
-分割する。テストDBとOctatrack fixtureは一時directoryだけを使用し、実SD／CFカードや
-Octatrack原本データを使用しない。依存監査の既存受容期限と再確認条件は維持する。
+次はM3-C1 incremental file inventoryとし、read-onlyで`AudioAsset`／`FileInstance`、
+content hash、size、mtime、sample storage scopeをcatalogへ追加する。slot／Bank parserは
+M3-C2、sample settings／slice read modelはM3-C3、Library UIはM3-D、waveform／preview／
+manual tags／notesはM3-Eへ分離する。テストDBとOctatrack fixtureは一時directoryだけを
+使用し、実SD／CFカードやOctatrack原本データを使用しない。依存監査の既存受容期限と
+再確認条件は維持する。
