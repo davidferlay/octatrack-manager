@@ -260,6 +260,35 @@ No new runtime-reachable `critical` or `high` advisory was identified in the
 M3-A dependency delta. The existing acceptance boundaries and deadlines remain
 unchanged.
 
+## M3-B catalog production-reachability delta
+
+Audit date: 2026-08-27
+
+M3-B adds no crates.io or JavaScript package and changes no resolved package
+version. `Cargo.lock` changes by one dependency edge only: the Tauri composition
+package now depends on the existing workspace `ot-catalog` crate. As a result,
+`ot-catalog -> rusqlite@0.40.2 -> libsqlite3-sys@0.38.2` becomes product-runtime
+reachable when the local application opens its catalog. The catalog remains a
+local-only adapter and adds no network endpoint or install-time download.
+
+The exact five crates.io package/version pairs recorded for M3-A were queried
+again through the official OSV API. `rusqlite@0.40.2`,
+`libsqlite3-sys@0.38.2`, `fallible-iterator@0.3.0`,
+`fallible-streaming-iterator@0.1.9`, and `vcpkg@0.2.15` each returned no
+finding. `vcpkg` remains a Windows build helper and is not runtime reachable on
+the supported macOS target. `cargo audit` is still unavailable and was not
+installed, so this is not a complete Rust audit.
+
+The two JavaScript lockfiles are unchanged. The repeated audits produced the
+same classified totals:
+
+- root: 31 advisories (`low: 2`, `moderate: 12`, `high: 16`, `critical: 1`);
+- docs/PDF: 88 findings (`low: 5`, `moderate: 33`, `high: 48`, `critical: 2`).
+
+Those JavaScript findings retain their existing reachability classifications
+and acceptance deadlines. No new runtime-reachable `critical` or `high`
+advisory was identified by the M3-B dependency/reachability delta.
+
 ## Reproduction
 
 Commands used:

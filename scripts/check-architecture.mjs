@@ -42,6 +42,7 @@ const devDependencyRules = new Map(
 devDependencyRules.set("ot-catalog", ["tempfile"]);
 const allowedCompositionDependencies = new Set([
   "ot-application",
+  "ot-catalog",
   "ot-domain",
   "ot-storage-ports",
 ]);
@@ -92,6 +93,21 @@ if (!legacyPackage) {
   failures.push("missing legacy octatrack-manager package");
 } else {
   const nextCoreNames = new Set(dependencyRules.keys());
+  const actualCompositionDependencies = legacyPackage.dependencies
+    .filter((dependency) => allowedCompositionDependencies.has(dependency.name))
+    .map((dependency) => dependency.name)
+    .sort();
+  const expectedCompositionDependencies = [...allowedCompositionDependencies].sort();
+  if (
+    JSON.stringify(actualCompositionDependencies) !==
+    JSON.stringify(expectedCompositionDependencies)
+  ) {
+    failures.push(
+      "Tauri composition root dependencies must be [" +
+        expectedCompositionDependencies.join(", ") +
+        `], found [${actualCompositionDependencies.join(", ")}]`,
+    );
+  }
   const unauthorizedDependencies = legacyPackage.dependencies
     .map((dependency) => dependency.name)
     .filter(

@@ -5,9 +5,11 @@ use ot_storage_ports::{
     CatalogError, CatalogFailureCode, CatalogRootIdentity, CatalogRootObservation, CatalogScan,
     CatalogScanId, CatalogScanRevision, CatalogScanStatus, LibraryCatalog,
 };
-use rusqlite::{params, Connection, OptionalExtension, Transaction, TransactionBehavior};
+use rusqlite::{
+    params, Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior,
+};
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 const LATEST_SCHEMA_VERSION: u64 = 1;
 const MIGRATIONS: &[(u64, &str)] =
@@ -19,7 +21,9 @@ pub struct SqliteCatalog {
 
 impl SqliteCatalog {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, CatalogError> {
-        let mut connection = Connection::open(path).map_err(unavailable)?;
+        let path = canonical_database_path(path.as_ref())?;
+        let flags = OpenFlags::default() | OpenFlags::SQLITE_OPEN_NOFOLLOW;
+        let mut connection = Connection::open_with_flags(path, flags).map_err(unavailable)?;
         configure_connection(&connection)?;
         migrate(&mut connection)?;
         Ok(Self { connection })
@@ -575,6 +579,22 @@ fn unavailable(error: rusqlite::Error) -> CatalogError {
     }
 }
 
+fn canonical_database_path(path: &Path) -> Result<PathBuf, CatalogError> {
+    let file_name = path.file_name().ok_or_else(|| CatalogError::Unavailable {
+        message: "catalog path must name a database file".to_string(),
+    })?;
+    let parent = path.parent().ok_or_else(|| CatalogError::Unavailable {
+        message: "catalog path must have a parent directory".to_string(),
+    })?;
+    let canonical_parent = parent
+        .canonicalize()
+        .map_err(|error| CatalogError::Unavailable {
+            message: error.to_string(),
+        })?;
+
+    Ok(canonical_parent.join(file_name))
+}
+
 fn migration_error(version: u64, error: rusqlite::Error) -> CatalogError {
     CatalogError::Migration {
         version,
@@ -675,6 +695,22 @@ mod tests {
                 supported: 1,
             }
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn database_symlinks_are_rejected_by_sqlite_open_flags() {
+        use std::os::unix::fs::symlink;
+
+        let directory = TempDir::new().unwrap();
+        let target = directory.path().join("target.sqlite3");
+        let link = directory.path().join("catalog.sqlite3");
+        Connection::open(&target).unwrap();
+        symlink(&target, &link).unwrap();
+
+        let error = SqliteCatalog::open(link).err().unwrap();
+
+        assert!(matches!(error, CatalogError::Unavailable { .. }));
     }
 
     #[test]

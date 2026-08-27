@@ -53,9 +53,11 @@
 - fork Pages URL修正: #6マージ済み
 - 依存advisory分類: #7マージ済み
 - PR-2 RootRegistry read-only vertical slice: #8マージ済み
-- 現在のmain SHA: `c57a0d0b4c3ef4af797ae731d7323ed3e090e4d0`
+- M3-A SQLite catalog foundation: #9マージ済み
+- 現在のmain SHA: `2da484007e189f7de79faf49a62b8d5798a76607`
 - M2: 完了
-- M3-A catalog foundation作業ブランチ: `feat/m3a-catalog-foundation`
+- M3-A: 完了
+- M3-B catalog indexing/query作業ブランチ: `feat/m3b-catalog-index-query`
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
 - `ot-tools-io`はコミット
@@ -179,13 +181,18 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 ベースラインPR #1、PR-0、PR-1、pnpm移行#5、fork Pages修正#6、依存監査#7、
 PR-2 RootRegistry read-only vertical slice #8はマージ済みで、M2は完了した。
 
-M3は小さなPRへ分割する。最初のM3-Aは、version付きroot fingerprint、storage port、
+M3は小さなPRへ分割する。M3-A #9で、version付きroot fingerprint、storage port、
 明示的SQLite migration、`LibrarySnapshot`のtransactional保存・再取得を持つcatalog
-foundationである。M3-AではcatalogをTauri stateへproduction wiringせず、Tauri API、
-frontend、現行Library表示、incremental filesystem scanの挙動を変更しない。DB検証は
-MacのApplication Supportではなく一時directoryだけを使用し、実SD／CFカードやOctatrack
-原本データを使用しない。
+foundationまで完了した。
 
-M3-Aマージ後の次候補はM3-B `catalog-backed indexing/query vertical slice`である。
-それまではfrontend変更やproduction catalog wiringへ進まず、依存監査の受容期限と
-再確認条件を維持する。
+現在のM3-Bは`catalog-backed indexing/query vertical slice`に限定する。Tauri起動時に
+`Application Support/OctatrackWorkbench/catalog.sqlite3`を開き、root登録時の既存
+read-only full scanをtransactional snapshotとして保存する。既存`v2_library_list`は
+live `RootId`を再検証した後、filesystemを再scanせず最新成功snapshotをcatalogから返す。
+DB directoryまたはDB fileがsymlinkの場合はfail-closedとし、未知schemaでも起動を
+継続しない。
+
+M3-BではTauri command、frontend UI、incremental filesystem scannerを追加しない。
+次はM3-Cとしてincremental indexing/query拡張と新Library UIの境界を再度小さなPRへ
+分割する。テストDBとOctatrack fixtureは一時directoryだけを使用し、実SD／CFカードや
+Octatrack原本データを使用しない。依存監査の既存受容期限と再確認条件は維持する。
