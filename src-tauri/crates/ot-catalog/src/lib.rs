@@ -635,7 +635,7 @@ impl SqliteCatalog {
                  FROM usage_edges \
                  JOIN state_documents AS bank_document \
                    ON bank_document.id = usage_edges.state_document_id \
-                 LEFT JOIN state_documents AS project_document \
+                 JOIN state_documents AS project_document \
                    ON project_document.id = usage_edges.project_document_id \
                  WHERE bank_document.root_id = ?1 AND bank_document.scan_session_id = ?2 \
                  ORDER BY bank_document.source_relative_path, usage_edges.slot_kind, \
@@ -647,7 +647,7 @@ impl SqliteCatalog {
             .query_map(params![root_row_id, scan_id], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
-                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?,
                     row.get::<_, i64>(3)?,
                     row.get::<_, String>(4)?,
@@ -679,7 +679,7 @@ impl SqliteCatalog {
             ) = row.map_err(unavailable)?;
             usage_edges.push(SampleUsageEdge {
                 bank_document_relative_path: stored_path(bank_document)?,
-                project_document_relative_path: project_document.map(stored_path).transpose()?,
+                project_document_relative_path: stored_path(project_document)?,
                 slot: slot_id_from_database(&slot_kind, slot_number)?,
                 usage_kind: usage_kind_from_database(&usage_kind)?,
                 track_index: index_from_database(track_index, "track_index")?,
@@ -803,26 +803,16 @@ fn insert_state_projection(
             .get(edge.bank_document_relative_path.as_str())
             .copied()
             .ok_or_else(|| sql_integrity_error("usage bank document is missing"))?;
-        let project_document_id = edge
-            .project_document_relative_path
-            .as_ref()
-            .map(|path| {
-                document_ids
-                    .get(path.as_str())
-                    .copied()
-                    .ok_or_else(|| sql_integrity_error("usage project document is missing"))
-            })
-            .transpose()?;
-        let slot_assignment_id = edge
-            .project_document_relative_path
-            .as_ref()
-            .and_then(|path| {
-                assignment_ids.get(&(
-                    path.as_str().to_owned(),
-                    edge.slot.kind(),
-                    edge.slot.number(),
-                ))
-            })
+        let project_document_id = document_ids
+            .get(edge.project_document_relative_path.as_str())
+            .copied()
+            .ok_or_else(|| sql_integrity_error("usage project document is missing"))?;
+        let slot_assignment_id = assignment_ids
+            .get(&(
+                edge.project_document_relative_path.as_str().to_owned(),
+                edge.slot.kind(),
+                edge.slot.number(),
+            ))
             .copied();
         transaction.execute(
             "INSERT INTO usage_edges \
@@ -908,6 +898,7 @@ fn validate_snapshot(snapshot: &LibrarySnapshot) -> Result<(), CatalogError> {
     }
 
     let mut documents = HashMap::new();
+    let mut document_identities = HashSet::new();
     for document in &snapshot.state_documents {
         if !project_paths.contains(document.project_relative_path.as_str()) {
             return Err(CatalogError::Integrity {
@@ -932,6 +923,17 @@ fn validate_snapshot(snapshot: &LibrarySnapshot) -> Result<(), CatalogError> {
         {
             return Err(CatalogError::Integrity {
                 message: "state document metadata is invalid".into(),
+            });
+        }
+        let identity = (
+            document.project_relative_path.as_str().to_owned(),
+            document.kind,
+            document.role,
+            document.bank_index,
+        );
+        if !document_identities.insert(identity) {
+            return Err(CatalogError::Integrity {
+                message: "duplicate state document identity".into(),
             });
         }
         if documents
@@ -994,6 +996,7 @@ fn validate_snapshot(snapshot: &LibrarySnapshot) -> Result<(), CatalogError> {
         }
     }
 
+    let mut usage_coordinates = HashSet::new();
     for edge in &snapshot.usage_edges {
         let bank_document = documents
             .get(edge.bank_document_relative_path.as_str())
@@ -1028,32 +1031,37 @@ fn validate_snapshot(snapshot: &LibrarySnapshot) -> Result<(), CatalogError> {
                 message: "usage edge coordinates do not match its kind".into(),
             });
         }
-        let assignment = edge
-            .project_document_relative_path
-            .as_ref()
-            .and_then(|path| {
-                assignments.get(&(
-                    path.as_str().to_owned(),
-                    edge.slot.kind(),
-                    edge.slot.number(),
-                ))
+        let coordinate = (
+            edge.bank_document_relative_path.as_str().to_owned(),
+            edge.usage_kind,
+            edge.track_index,
+            edge.part_index,
+            edge.pattern_index,
+            edge.step_index,
+        );
+        if !usage_coordinates.insert(coordinate) {
+            return Err(CatalogError::Integrity {
+                message: "duplicate usage edge coordinate".into(),
             });
-        if let Some(project_path) = &edge.project_document_relative_path {
-            let project_document =
-                documents
-                    .get(project_path.as_str())
-                    .ok_or_else(|| CatalogError::Integrity {
-                        message: "usage edge references a missing project document".into(),
-                    })?;
-            if project_document.kind != StateDocumentKind::Project
-                || project_document.parse_status != StateDocumentParseStatus::Parsed
-                || project_document.project_relative_path != bank_document.project_relative_path
-                || project_document.role != bank_document.role
-            {
-                return Err(CatalogError::Integrity {
-                    message: "usage edge crosses project or state-role boundaries".into(),
-                });
-            }
+        }
+        let assignment = assignments.get(&(
+            edge.project_document_relative_path.as_str().to_owned(),
+            edge.slot.kind(),
+            edge.slot.number(),
+        ));
+        let project_document = documents
+            .get(edge.project_document_relative_path.as_str())
+            .ok_or_else(|| CatalogError::Integrity {
+                message: "usage edge references a missing project document".into(),
+            })?;
+        if project_document.kind != StateDocumentKind::Project
+            || project_document.parse_status != StateDocumentParseStatus::Parsed
+            || project_document.project_relative_path != bank_document.project_relative_path
+            || project_document.role != bank_document.role
+        {
+            return Err(CatalogError::Integrity {
+                message: "usage edge crosses project or state-role boundaries".into(),
+            });
         }
         let target_matches = match (edge.reference_status, assignment) {
             (SampleReferenceStatus::UnassignedSlot, None) => {
@@ -1568,7 +1576,7 @@ mod tests {
         snapshot.slot_assignments = vec![assignment.clone()];
         snapshot.usage_edges = vec![SampleUsageEdge {
             bank_document_relative_path: bank_document,
-            project_document_relative_path: Some(project_document),
+            project_document_relative_path: project_document,
             slot: assignment.slot,
             usage_kind: SampleUsageKind::Machine,
             track_index: 0,
@@ -1789,6 +1797,73 @@ mod tests {
             )
             .unwrap();
         assert_eq!(counts, (2, 1, 1));
+    }
+
+    #[test]
+    fn duplicate_state_document_identity_is_rejected() {
+        let (_directory, _path, mut catalog) = open_temp_catalog();
+        let observation = observation('d', "Duplicate state document");
+        let mut snapshot = snapshot_with_usage_graph();
+        let mut duplicate = snapshot
+            .state_documents
+            .iter()
+            .find(|document| document.kind == StateDocumentKind::Project)
+            .unwrap()
+            .clone();
+        duplicate.source_relative_path =
+            RootRelativePath::parse("SET/PROJECT/project-copy.work").unwrap();
+        snapshot.state_documents.push(duplicate);
+
+        let error = catalog.store_snapshot(&observation, &snapshot).unwrap_err();
+
+        assert!(matches!(error, CatalogError::Integrity { .. }));
+        assert_eq!(
+            catalog
+                .latest_scan(&observation.identity)
+                .unwrap()
+                .unwrap()
+                .status,
+            CatalogScanStatus::Failed
+        );
+    }
+
+    #[test]
+    fn duplicate_usage_coordinate_is_rejected() {
+        let (_directory, _path, mut catalog) = open_temp_catalog();
+        let observation = observation('e', "Duplicate usage coordinate");
+        let mut snapshot = snapshot_with_usage_graph();
+        snapshot.usage_edges.push(snapshot.usage_edges[0].clone());
+
+        let error = catalog.store_snapshot(&observation, &snapshot).unwrap_err();
+
+        assert!(matches!(error, CatalogError::Integrity { .. }));
+        assert_eq!(
+            catalog
+                .latest_scan(&observation.identity)
+                .unwrap()
+                .unwrap()
+                .status,
+            CatalogScanStatus::Failed
+        );
+    }
+
+    #[test]
+    fn usage_edge_project_document_cannot_be_removed() {
+        let (_directory, _path, mut catalog) = open_temp_catalog();
+        let observation = observation('f', "Required project document");
+        catalog
+            .store_snapshot(&observation, &snapshot_with_usage_graph())
+            .unwrap();
+
+        let result = catalog
+            .connection
+            .execute("UPDATE usage_edges SET project_document_id = NULL", []);
+
+        assert!(result.is_err());
+        assert!(catalog
+            .load_latest_snapshot(&observation.identity)
+            .unwrap()
+            .is_some());
     }
 
     #[test]

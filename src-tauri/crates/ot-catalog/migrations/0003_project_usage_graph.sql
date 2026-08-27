@@ -48,7 +48,7 @@ CREATE TABLE usage_edges (
     id INTEGER PRIMARY KEY,
     state_document_id INTEGER NOT NULL
         REFERENCES state_documents(id) ON DELETE CASCADE,
-    project_document_id INTEGER
+    project_document_id INTEGER NOT NULL
         REFERENCES state_documents(id) ON DELETE CASCADE,
     slot_assignment_id INTEGER
         REFERENCES slot_assignments(id) ON DELETE CASCADE,
@@ -89,6 +89,14 @@ CREATE TABLE usage_edges (
 CREATE INDEX state_documents_root_project_role
     ON state_documents(root_id, project_relative_path, document_role, document_kind);
 
+CREATE UNIQUE INDEX state_documents_project_role
+    ON state_documents(root_id, project_relative_path, document_role)
+    WHERE document_kind = 'project';
+
+CREATE UNIQUE INDEX state_documents_bank_role
+    ON state_documents(root_id, project_relative_path, document_role, bank_index)
+    WHERE document_kind = 'bank';
+
 CREATE INDEX slot_assignments_reference
     ON slot_assignments(reference_status, referenced_relative_path);
 
@@ -97,3 +105,11 @@ CREATE INDEX usage_edges_reference
 
 CREATE INDEX usage_edges_project_slot
     ON usage_edges(project_document_id, slot_kind, slot_number);
+
+CREATE UNIQUE INDEX usage_edges_machine_coordinate
+    ON usage_edges(state_document_id, track_index, part_index)
+    WHERE usage_kind = 'machine';
+
+CREATE UNIQUE INDEX usage_edges_sample_lock_coordinate
+    ON usage_edges(state_document_id, track_index, pattern_index, step_index)
+    WHERE usage_kind = 'sample_lock';

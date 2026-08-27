@@ -285,7 +285,7 @@ pub enum SampleUsageKind {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SampleUsageEdge {
     pub bank_document_relative_path: RootRelativePath,
-    pub project_document_relative_path: Option<RootRelativePath>,
+    pub project_document_relative_path: RootRelativePath,
     pub slot: SampleSlotId,
     pub usage_kind: SampleUsageKind,
     pub track_index: u8,

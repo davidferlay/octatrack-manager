@@ -713,7 +713,7 @@ fn append_usage_edges(
             };
             output.push(SampleUsageEdge {
                 bank_document_relative_path: bank_source.clone(),
-                project_document_relative_path: Some(project_source.clone()),
+                project_document_relative_path: project_source.clone(),
                 slot,
                 usage_kind,
                 track_index: entry.track,
@@ -1035,11 +1035,10 @@ mod tests {
             .iter()
             .any(|assignment| assignment.reference_status == SampleReferenceStatus::Missing));
         assert!(!usage_edges.is_empty());
-        assert!(usage_edges.iter().all(|edge| {
-            edge.project_document_relative_path
-                .as_ref()
-                .is_some_and(|path| !path.as_str().starts_with('/'))
-        }));
+        assert!(usage_edges.iter().all(|edge| !edge
+            .project_document_relative_path
+            .as_str()
+            .starts_with('/')));
         assert_eq!(snapshot_files(root.path()), before);
         assert!(!format!("{documents:?}{assignments:?}{usage_edges:?}")
             .contains(root.path().to_str().unwrap()));
