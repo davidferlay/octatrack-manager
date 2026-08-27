@@ -1,21 +1,28 @@
 use crate::device_detection::{scan_directory, OctatrackProject};
-use ot_domain::{LibraryProject, LibrarySet, LibrarySnapshot, RootId, RootRelativePath};
+use ot_domain::{
+    AudioAsset, ContentHash, ContentHashFreshness, FileInstance, LibraryProject, LibrarySet,
+    LibrarySnapshot, RootId, RootRelativePath, SampleStorageScope,
+};
 use ot_storage_ports::{ReadOnlyLibrary, StorageError};
-use std::collections::HashSet;
-#[cfg(test)]
+use sha2::{Digest, Sha256};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
+use std::io::{BufReader, Read};
 use std::path::{Component, Path, PathBuf};
+use std::time::UNIX_EPOCH;
 
 pub struct RegisteredLegacyLibrary {
     root_id: RootId,
     canonical_root: PathBuf,
+    baseline: Vec<FileInstance>,
 }
 
 impl RegisteredLegacyLibrary {
-    pub fn new(root_id: RootId, canonical_root: PathBuf) -> Self {
+    pub fn new(root_id: RootId, canonical_root: PathBuf, baseline: Vec<FileInstance>) -> Self {
         Self {
             root_id,
             canonical_root,
+            baseline,
         }
     }
 }
@@ -25,11 +32,14 @@ impl ReadOnlyLibrary for RegisteredLegacyLibrary {
         if root_id != &self.root_id {
             return Err(StorageError::new("ROOT_NOT_APPROVED: root id mismatch"));
         }
-        scan_registered_root(&self.canonical_root)
+        scan_registered_root(&self.canonical_root, &self.baseline)
     }
 }
 
-fn scan_registered_root(canonical_root: &Path) -> Result<LibrarySnapshot, StorageError> {
+fn scan_registered_root(
+    canonical_root: &Path,
+    baseline: &[FileInstance],
+) -> Result<LibrarySnapshot, StorageError> {
     let root = canonical_root
         .to_str()
         .ok_or_else(|| StorageError::new("UNSUPPORTED_FORMAT: root path is not valid UTF-8"))?;
@@ -81,12 +91,291 @@ fn scan_registered_root(canonical_root: &Path) -> Result<LibrarySnapshot, Storag
             .cmp(right.relative_path.as_str())
     });
 
-    Ok(LibrarySnapshot {
+    let mut snapshot = LibrarySnapshot {
         sets,
         standalone_projects,
+        audio_assets: Vec::new(),
+        file_instances: Vec::new(),
+    };
+    let (audio_assets, file_instances) = scan_audio_inventory(canonical_root, &snapshot, baseline)?;
+    snapshot.audio_assets = audio_assets;
+    snapshot.file_instances = file_instances;
+    Ok(snapshot)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct FileMetadataObservation {
+    byte_size: u64,
+    modified_at_unix_ns: Option<i64>,
+}
+
+fn scan_audio_inventory(
+    canonical_root: &Path,
+    topology: &LibrarySnapshot,
+    baseline: &[FileInstance],
+) -> Result<(Vec<AudioAsset>, Vec<FileInstance>), StorageError> {
+    scan_audio_inventory_with(canonical_root, topology, baseline, &mut |path, expected| {
+        hash_regular_file(path, expected)
     })
 }
 
+fn scan_audio_inventory_with<F>(
+    canonical_root: &Path,
+    topology: &LibrarySnapshot,
+    baseline: &[FileInstance],
+    hasher: &mut F,
+) -> Result<(Vec<AudioAsset>, Vec<FileInstance>), StorageError>
+where
+    F: FnMut(&Path, FileMetadataObservation) -> Result<ContentHash, StorageError>,
+{
+    let baseline_by_path = baseline
+        .iter()
+        .map(|instance| (instance.relative_path.as_str(), instance))
+        .collect::<HashMap<_, _>>();
+    let mut candidates = Vec::new();
+    collect_audio_candidates(
+        canonical_root,
+        canonical_root,
+        &mut Vec::new(),
+        &mut candidates,
+    )?;
+    candidates.sort_by(|left, right| left.0.as_str().cmp(right.0.as_str()));
+
+    let mut file_instances = Vec::with_capacity(candidates.len());
+    let mut assets = BTreeMap::<String, AudioAsset>::new();
+    for (relative_path, absolute_path, observed) in candidates {
+        let (content_hash, hash_freshness) =
+            match baseline_by_path.get(relative_path.as_str()).copied() {
+                Some(previous) if can_reuse_hash(observed, previous) => {
+                    verify_unchanged_regular_file(&absolute_path, observed)?;
+                    (
+                        previous.content_hash.clone(),
+                        ContentHashFreshness::ReusedUnchangedMetadata,
+                    )
+                }
+                _ => (
+                    hasher(&absolute_path, observed)?,
+                    ContentHashFreshness::ComputedThisScan,
+                ),
+            };
+        let storage_scope = classify_storage_scope(&relative_path, topology);
+        assets
+            .entry(content_hash.as_str().to_owned())
+            .or_insert_with(|| AudioAsset {
+                content_hash: content_hash.clone(),
+                byte_size: observed.byte_size,
+            });
+        file_instances.push(FileInstance {
+            relative_path,
+            content_hash,
+            byte_size: observed.byte_size,
+            modified_at_unix_ns: observed.modified_at_unix_ns,
+            storage_scope,
+            hash_freshness,
+        });
+    }
+
+    Ok((assets.into_values().collect(), file_instances))
+}
+
+fn collect_audio_candidates(
+    canonical_root: &Path,
+    directory: &Path,
+    components: &mut Vec<String>,
+    candidates: &mut Vec<(RootRelativePath, PathBuf, FileMetadataObservation)>,
+) -> Result<(), StorageError> {
+    let mut entries = fs::read_dir(directory)
+        .map_err(|error| StorageError::new(format!("LIBRARY_SCAN_FAILED: {error}")))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| StorageError::new(format!("LIBRARY_SCAN_FAILED: {error}")))?;
+    entries.sort_by_key(|entry| entry.file_name());
+
+    for entry in entries {
+        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+            continue;
+        };
+        if name.starts_with('.') {
+            continue;
+        }
+        let path = entry.path();
+        let metadata = fs::symlink_metadata(&path)
+            .map_err(|error| StorageError::new(format!("LIBRARY_SCAN_FAILED: {error}")))?;
+        if metadata.file_type().is_symlink() {
+            continue;
+        }
+        components.push(name.clone());
+        if metadata.file_type().is_dir() {
+            collect_audio_candidates(canonical_root, &path, components, candidates)?;
+        } else if metadata.file_type().is_file() && is_inventory_audio_file(&name) {
+            let canonical = path
+                .canonicalize()
+                .map_err(|error| StorageError::new(format!("ROOT_REMOVED: {error}")))?;
+            if !canonical.starts_with(canonical_root) {
+                return Err(StorageError::new(
+                    "PATH_ESCAPE: audio candidate left its registered root",
+                ));
+            }
+            let relative_path = RootRelativePath::from_components(components.iter())
+                .map_err(|error| StorageError::new(format!("PATH_ESCAPE: {error}")))?;
+            candidates.push((
+                relative_path,
+                path,
+                FileMetadataObservation {
+                    byte_size: metadata.len(),
+                    modified_at_unix_ns: modified_at_unix_ns(&metadata),
+                },
+            ));
+        }
+        components.pop();
+    }
+    Ok(())
+}
+
+fn is_inventory_audio_file(name: &str) -> bool {
+    Path::new(name)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            extension.eq_ignore_ascii_case("wav")
+                || extension.eq_ignore_ascii_case("aif")
+                || extension.eq_ignore_ascii_case("aiff")
+        })
+}
+
+fn modified_at_unix_ns(metadata: &fs::Metadata) -> Option<i64> {
+    let modified = metadata.modified().ok()?;
+    match modified.duration_since(UNIX_EPOCH) {
+        Ok(duration) => i64::try_from(duration.as_nanos()).ok(),
+        Err(error) => i64::try_from(error.duration().as_nanos())
+            .ok()
+            .and_then(|value| value.checked_neg()),
+    }
+}
+
+fn can_reuse_hash(current: FileMetadataObservation, previous: &FileInstance) -> bool {
+    current.modified_at_unix_ns.is_some()
+        && current.byte_size == previous.byte_size
+        && current.modified_at_unix_ns == previous.modified_at_unix_ns
+}
+
+fn verify_unchanged_regular_file(
+    path: &Path,
+    expected: FileMetadataObservation,
+) -> Result<(), StorageError> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|error| StorageError::new(format!("LIBRARY_SCAN_FAILED: {error}")))?;
+    if metadata.file_type().is_symlink()
+        || !metadata.file_type().is_file()
+        || metadata_observation(&metadata) != expected
+    {
+        return Err(StorageError::new(
+            "LIBRARY_SCAN_FAILED: audio file changed during incremental scan",
+        ));
+    }
+    Ok(())
+}
+fn hash_regular_file(
+    path: &Path,
+    expected: FileMetadataObservation,
+) -> Result<ContentHash, StorageError> {
+    hash_regular_file_with_hook(path, expected, |_| {})
+}
+
+fn hash_regular_file_with_hook<F>(
+    path: &Path,
+    expected: FileMetadataObservation,
+    after_read: F,
+) -> Result<ContentHash, StorageError>
+where
+    F: FnOnce(&Path),
+{
+    let before = fs::symlink_metadata(path)
+        .map_err(|error| StorageError::new(format!("LIBRARY_SCAN_FAILED: {error}")))?;
+    if !before.file_type().is_file() || before.file_type().is_symlink() {
+        return Err(StorageError::new(
+            "SYMLINK_ESCAPE: audio candidate is no longer a regular file",
+        ));
+    }
+    if metadata_observation(&before) != expected {
+        return Err(StorageError::new(
+            "LIBRARY_SCAN_FAILED: audio file changed before hashing",
+        ));
+    }
+
+    let file = fs::File::open(path)
+        .map_err(|error| StorageError::new(format!("LIBRARY_SCAN_FAILED: {error}")))?;
+    let mut reader = BufReader::new(file);
+    let mut digest = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = reader
+            .read(&mut buffer)
+            .map_err(|error| StorageError::new(format!("LIBRARY_SCAN_FAILED: {error}")))?;
+        if read == 0 {
+            break;
+        }
+        digest.update(&buffer[..read]);
+    }
+
+    after_read(path);
+    let after = fs::symlink_metadata(path)
+        .map_err(|error| StorageError::new(format!("LIBRARY_SCAN_FAILED: {error}")))?;
+    if !after.file_type().is_file()
+        || after.file_type().is_symlink()
+        || metadata_observation(&after) != expected
+    {
+        return Err(StorageError::new(
+            "LIBRARY_SCAN_FAILED: audio file changed while hashing",
+        ));
+    }
+    let lowercase_hex = digest
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    ContentHash::parse(format!("sha256:{lowercase_hex}"))
+        .map_err(|error| StorageError::new(format!("LIBRARY_SCAN_FAILED: {error}")))
+}
+
+fn metadata_observation(metadata: &fs::Metadata) -> FileMetadataObservation {
+    FileMetadataObservation {
+        byte_size: metadata.len(),
+        modified_at_unix_ns: modified_at_unix_ns(metadata),
+    }
+}
+
+fn classify_storage_scope(
+    relative_path: &RootRelativePath,
+    topology: &LibrarySnapshot,
+) -> SampleStorageScope {
+    let candidate = relative_path.as_str().split('/').collect::<Vec<_>>();
+    for set in &topology.sets {
+        let set_components = set.relative_path.as_str().split('/').collect::<Vec<_>>();
+        if candidate.len() > set_components.len() + 1
+            && candidate.starts_with(&set_components)
+            && candidate[set_components.len()] == "AUDIO"
+        {
+            return SampleStorageScope::SetAudioPool;
+        }
+    }
+    let project_paths = topology
+        .sets
+        .iter()
+        .flat_map(|set| set.projects.iter())
+        .chain(topology.standalone_projects.iter());
+    for project in project_paths {
+        let project_components = project
+            .relative_path
+            .as_str()
+            .split('/')
+            .collect::<Vec<_>>();
+        if candidate.len() > project_components.len() && candidate.starts_with(&project_components)
+        {
+            return SampleStorageScope::ProjectLocal;
+        }
+    }
+    SampleStorageScope::Unclassified
+}
 fn map_project(
     canonical_root: &Path,
     project: OctatrackProject,
@@ -189,7 +478,7 @@ mod tests {
         create_project(root.path(), "LIVE_SET/PROJECT_A");
         let canonical_root = root.path().canonicalize().unwrap();
 
-        let snapshot = scan_registered_root(&canonical_root).unwrap();
+        let snapshot = scan_registered_root(&canonical_root, &[]).unwrap();
 
         assert_eq!(snapshot.sets.len(), 1);
         assert_eq!(snapshot.sets[0].relative_path.as_str(), "LIVE_SET");
@@ -212,7 +501,7 @@ mod tests {
         let before = snapshot_files(root.path());
         let canonical_root = root.path().canonicalize().unwrap();
 
-        let _snapshot = scan_registered_root(&canonical_root).unwrap();
+        let _snapshot = scan_registered_root(&canonical_root, &[]).unwrap();
 
         assert_eq!(snapshot_files(root.path()), before);
     }
@@ -245,11 +534,270 @@ mod tests {
         )
         .unwrap();
 
-        let snapshot = scan_registered_root(root.path()).unwrap();
+        let snapshot = scan_registered_root(root.path(), &[]).unwrap();
         assert!(snapshot.sets.is_empty());
 
         let relative = RootRelativePath::parse("ESCAPE/PROJECT/project.work").unwrap();
         let error = resolve_relative_for_read(root.path(), &relative).unwrap_err();
         assert!(error.message().starts_with("SYMLINK_ESCAPE:"));
+    }
+
+    fn inventory_topology() -> LibrarySnapshot {
+        LibrarySnapshot {
+            sets: vec![LibrarySet {
+                display_name: "SET".into(),
+                relative_path: RootRelativePath::parse("SET").unwrap(),
+                has_audio_pool: true,
+                projects: vec![LibraryProject {
+                    display_name: "PROJECT".into(),
+                    relative_path: RootRelativePath::parse("SET/PROJECT").unwrap(),
+                    has_project_file: true,
+                    has_banks: true,
+                }],
+            }],
+            standalone_projects: vec![LibraryProject {
+                display_name: "STANDALONE".into(),
+                relative_path: RootRelativePath::parse("STANDALONE").unwrap(),
+                has_project_file: true,
+                has_banks: true,
+            }],
+            ..LibrarySnapshot::default()
+        }
+    }
+
+    fn test_hash(hex_digit: char) -> ContentHash {
+        ContentHash::parse(format!("sha256:{}", hex_digit.to_string().repeat(64))).unwrap()
+    }
+
+    #[test]
+    fn inventory_detects_only_octatrack_candidates_and_is_deterministically_sorted() {
+        let root = TempDir::new().unwrap();
+        for (path, bytes) in [
+            ("z.WAV", b"z".as_slice()),
+            ("a.aif", b"a".as_slice()),
+            ("m.AIFF", b"m".as_slice()),
+            ("skip.mp3", b"mp3".as_slice()),
+            ("skip.flac", b"flac".as_slice()),
+            ("skip.ogg", b"ogg".as_slice()),
+            ("skip.m4a", b"m4a".as_slice()),
+            ("._fork.wav", b"fork".as_slice()),
+            (".hidden.wav", b"hidden".as_slice()),
+        ] {
+            fs::write(root.path().join(path), bytes).unwrap();
+        }
+        fs::create_dir(root.path().join(".hidden-directory")).unwrap();
+        fs::write(root.path().join(".hidden-directory/inside.wav"), b"hidden").unwrap();
+        let before = snapshot_files(root.path());
+        let canonical = root.path().canonicalize().unwrap();
+
+        let (_assets, files) =
+            scan_audio_inventory(&canonical, &LibrarySnapshot::default(), &[]).unwrap();
+
+        assert_eq!(
+            files
+                .iter()
+                .map(|file| file.relative_path.as_str())
+                .collect::<Vec<_>>(),
+            vec!["a.aif", "m.AIFF", "z.WAV"]
+        );
+        assert!(files
+            .iter()
+            .all(|file| file.storage_scope == SampleStorageScope::Unclassified));
+        assert_eq!(snapshot_files(root.path()), before);
+        assert!(!format!("{files:?}").contains(root.path().to_str().unwrap()));
+    }
+
+    #[test]
+    fn scope_classification_uses_path_components_and_documented_precedence() {
+        let topology = inventory_topology();
+        let cases = [
+            ("SET/AUDIO/Kicks/kick.wav", SampleStorageScope::SetAudioPool),
+            ("SET/PROJECT/local.wav", SampleStorageScope::ProjectLocal),
+            (
+                "SET/PROJECT/AUDIO/local.wav",
+                SampleStorageScope::ProjectLocal,
+            ),
+            ("STANDALONE/local.wav", SampleStorageScope::ProjectLocal),
+            ("SET/AUDIO2/not-pool.wav", SampleStorageScope::Unclassified),
+            (
+                "SET/MY_AUDIO/not-pool.wav",
+                SampleStorageScope::Unclassified,
+            ),
+            ("loose.wav", SampleStorageScope::Unclassified),
+        ];
+
+        for (path, expected) in cases {
+            assert_eq!(
+                classify_storage_scope(&RootRelativePath::parse(path).unwrap(), &topology),
+                expected,
+                "unexpected scope for {path}"
+            );
+        }
+    }
+
+    #[test]
+    fn streaming_sha256_matches_a_known_fixture_hash() {
+        let root = TempDir::new().unwrap();
+        let file = root.path().join("known.wav");
+        fs::write(&file, b"abc").unwrap();
+        let expected = metadata_observation(&fs::symlink_metadata(&file).unwrap());
+
+        let hash = hash_regular_file(&file, expected).unwrap();
+
+        assert_eq!(
+            hash.as_str(),
+            "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
+    #[test]
+    fn unchanged_metadata_reuses_hash_while_size_new_path_and_unknown_mtime_require_hashing() {
+        let root = TempDir::new().unwrap();
+        fs::write(root.path().join("first.wav"), b"first").unwrap();
+        let canonical = root.path().canonicalize().unwrap();
+        let topology = LibrarySnapshot::default();
+        let mut first_calls = 0;
+        let (_assets, first) =
+            scan_audio_inventory_with(&canonical, &topology, &[], &mut |_path, _metadata| {
+                first_calls += 1;
+                Ok(test_hash('a'))
+            })
+            .unwrap();
+        assert_eq!(first_calls, 1);
+
+        let mut unchanged_calls = 0;
+        let (_assets, unchanged) =
+            scan_audio_inventory_with(&canonical, &topology, &first, &mut |_path, _metadata| {
+                unchanged_calls += 1;
+                Ok(test_hash('b'))
+            })
+            .unwrap();
+        assert_eq!(unchanged_calls, 0);
+        assert_eq!(
+            unchanged[0].hash_freshness,
+            ContentHashFreshness::ReusedUnchangedMetadata
+        );
+
+        let mut mtime_baseline = unchanged.clone();
+        mtime_baseline[0].modified_at_unix_ns =
+            mtime_baseline[0].modified_at_unix_ns.map(|value| value + 1);
+        let mut mtime_changed_calls = 0;
+        let (_assets, mtime_changed) = scan_audio_inventory_with(
+            &canonical,
+            &topology,
+            &mtime_baseline,
+            &mut |_path, _metadata| {
+                mtime_changed_calls += 1;
+                Ok(test_hash('c'))
+            },
+        )
+        .unwrap();
+        assert_eq!(mtime_changed_calls, 1);
+        assert_eq!(
+            mtime_changed[0].hash_freshness,
+            ContentHashFreshness::ComputedThisScan
+        );
+
+        fs::write(root.path().join("first.wav"), b"first changed").unwrap();
+        fs::write(root.path().join("new.aiff"), b"new").unwrap();
+        let mut changed_calls = 0;
+        let (_assets, changed) = scan_audio_inventory_with(
+            &canonical,
+            &topology,
+            &unchanged,
+            &mut |_path, _metadata| {
+                changed_calls += 1;
+                Ok(if changed_calls == 1 {
+                    test_hash('c')
+                } else {
+                    test_hash('d')
+                })
+            },
+        )
+        .unwrap();
+        assert_eq!(changed_calls, 2);
+        assert!(changed
+            .iter()
+            .all(|file| { file.hash_freshness == ContentHashFreshness::ComputedThisScan }));
+
+        let mut previous = changed[0].clone();
+        let current = FileMetadataObservation {
+            byte_size: previous.byte_size,
+            modified_at_unix_ns: previous.modified_at_unix_ns,
+        };
+        let unknown_mtime = FileMetadataObservation {
+            byte_size: previous.byte_size,
+            modified_at_unix_ns: None,
+        };
+        assert!(!can_reuse_hash(unknown_mtime, &previous));
+
+        previous.modified_at_unix_ns = current.modified_at_unix_ns.map(|value| value + 1);
+        assert!(!can_reuse_hash(current, &previous));
+        previous.modified_at_unix_ns = None;
+        assert!(!can_reuse_hash(current, &previous));
+    }
+
+    #[test]
+    fn duplicate_bytes_create_one_asset_and_multiple_file_instances() {
+        let root = TempDir::new().unwrap();
+        fs::write(root.path().join("first.wav"), b"same bytes").unwrap();
+        fs::write(root.path().join("second.aif"), b"same bytes").unwrap();
+        let canonical = root.path().canonicalize().unwrap();
+
+        let (assets, files) =
+            scan_audio_inventory(&canonical, &LibrarySnapshot::default(), &[]).unwrap();
+
+        assert_eq!(assets.len(), 1);
+        assert_eq!(files.len(), 2);
+        assert_eq!(files[0].content_hash, files[1].content_hash);
+    }
+
+    #[test]
+    fn metadata_change_during_hash_fails_the_scan() {
+        let root = TempDir::new().unwrap();
+        let file = root.path().join("changing.wav");
+        fs::write(&file, b"before").unwrap();
+        let expected = metadata_observation(&fs::symlink_metadata(&file).unwrap());
+
+        let error = hash_regular_file_with_hook(&file, expected, |path| {
+            fs::write(path, b"changed while hashing").unwrap();
+        })
+        .unwrap_err();
+
+        assert!(error.message().contains("changed while hashing"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn inventory_never_follows_symlink_files_or_directories() {
+        use std::os::unix::fs::symlink;
+
+        let root = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        fs::write(outside.path().join("outside.wav"), b"outside").unwrap();
+        fs::create_dir(outside.path().join("directory")).unwrap();
+        fs::write(outside.path().join("directory/inside.wav"), b"outside").unwrap();
+        symlink(
+            outside.path().join("outside.wav"),
+            root.path().join("linked.wav"),
+        )
+        .unwrap();
+        symlink(
+            outside.path().join("directory"),
+            root.path().join("linked-directory"),
+        )
+        .unwrap();
+        fs::write(root.path().join("inside.wav"), b"inside").unwrap();
+        let canonical = root.path().canonicalize().unwrap();
+
+        let (_assets, files) =
+            scan_audio_inventory(&canonical, &LibrarySnapshot::default(), &[]).unwrap();
+
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].relative_path.as_str(), "inside.wav");
+        assert_eq!(
+            fs::read(outside.path().join("outside.wav")).unwrap(),
+            b"outside"
+        );
     }
 }

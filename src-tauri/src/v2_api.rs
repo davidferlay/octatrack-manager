@@ -168,10 +168,20 @@ fn list_library_sync(
 
 fn scan_library_sync(
     registry: &RootRegistry,
+    catalog: &SharedCatalog,
     root_id: &RootId,
 ) -> Result<(RootSession, LibrarySnapshot), ApiError> {
     let resolved = registry.resolve(root_id)?;
-    let storage = RegisteredLegacyLibrary::new(root_id.clone(), resolved.canonical_path);
+    let identity = catalog_identity(&resolved.session)?;
+    let baseline = {
+        let catalog = catalog.lock().map_err(|_| catalog_lock_error())?;
+        LoadLibrarySnapshot::new(&*catalog)
+            .execute(&identity)
+            .map_err(catalog_error)?
+            .map(|snapshot| snapshot.file_instances)
+            .unwrap_or_default()
+    };
+    let storage = RegisteredLegacyLibrary::new(root_id.clone(), resolved.canonical_path, baseline);
     ListLibrary::new(&storage)
         .execute(root_id)
         .map(|snapshot| (resolved.session, snapshot))
@@ -273,7 +283,8 @@ fn register_root_sync(
     raw_path: &str,
 ) -> Result<RootSessionDto, ApiError> {
     let session = registry.register(raw_path)?;
-    let (resolved_session, snapshot) = match scan_library_sync(registry, &session.root_id) {
+    let (resolved_session, snapshot) = match scan_library_sync(registry, catalog, &session.root_id)
+    {
         Ok(result) => result,
         Err(error) => {
             let _ = registry.close(&session.root_id);
@@ -520,5 +531,55 @@ mod tests {
         let error = list_library_sync(&registry, &catalog, &root_id).unwrap_err();
 
         assert_eq!(error.code, "ROOT_NOT_APPROVED");
+    }
+
+    #[test]
+    fn registration_stores_inventory_and_reregistration_uses_incremental_baseline() {
+        let root = TempDir::new().unwrap();
+        create_set_project(root.path(), "SET_A", "PROJECT_A");
+        let audio = root.path().join("SET_A/AUDIO/kick.wav");
+        fs::write(&audio, b"audio fixture").unwrap();
+        let before = fs::read(&audio).unwrap();
+        let registry = registry();
+        let (_data_directory, catalog) = catalog();
+
+        let first = register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(first.root_id.clone()).unwrap();
+        let first_snapshot = list_library_sync(&registry, &catalog, &root_id).unwrap();
+        assert_eq!(first_snapshot.audio_assets.len(), 1);
+        assert_eq!(first_snapshot.file_instances.len(), 1);
+        assert_eq!(
+            first_snapshot.file_instances[0].hash_freshness,
+            ot_domain::ContentHashFreshness::ComputedThisScan
+        );
+
+        let second =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let second_snapshot =
+            list_library_sync(&registry, &catalog, &RootId::new(second.root_id).unwrap()).unwrap();
+
+        assert_eq!(
+            second_snapshot.file_instances[0].hash_freshness,
+            ot_domain::ContentHashFreshness::ReusedUnchangedMetadata
+        );
+        assert_eq!(fs::read(audio).unwrap(), before);
+    }
+
+    #[test]
+    fn frontend_snapshot_dto_does_not_expose_file_inventory() {
+        let root = TempDir::new().unwrap();
+        create_set_project(root.path(), "SET_A", "PROJECT_A");
+        fs::write(root.path().join("SET_A/AUDIO/kick.wav"), b"audio fixture").unwrap();
+        let registry = registry();
+        let (_data_directory, catalog) = catalog();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let snapshot =
+            list_library_sync(&registry, &catalog, &RootId::new(session.root_id).unwrap()).unwrap();
+
+        let json = serde_json::to_string(&LibrarySnapshotDto::from(snapshot)).unwrap();
+        assert!(!json.contains("audioAssets"));
+        assert!(!json.contains("fileInstances"));
+        assert!(!json.contains("contentHash"));
     }
 }

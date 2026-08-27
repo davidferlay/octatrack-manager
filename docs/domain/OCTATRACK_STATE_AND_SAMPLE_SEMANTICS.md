@@ -100,13 +100,15 @@ Purging or unassigning a slot is never evidence that the referenced physical
 file is unused by every Project, Bank, or slot. Physical deletion remains a
 separate safety-critical operation.
 
-## 6. Future catalog boundary
+## 6. Catalog implementation boundary
 
-Future migrations may persist these semantics only after their read-only
-sources are validated:
+M3-C1 implements the first read-only sample inventory projection. `AudioAsset`
+holds SHA-256 content identity and byte size without a path. `FileInstance`
+holds one validated root-relative path, byte size, optional mtime,
+`SampleStorageScope`, and whether the hash was computed in the current scan or
+reused from unchanged metadata. The reuse is a catalog optimization, not a
+write precondition; every future write must rehash the actual file.
 
-- M3-C1 may add `AudioAsset`, `FileInstance`, content hash, size, mtime, and
-  `SampleStorageScope`.
 - M3-C2 may add Project/Bank working and saved-checkpoint projections, slot
   assignments, usage edges, missing references, and parser provenance.
 - M3-C3 may add slot-local settings, file-sidecar settings, slice read models,
@@ -134,7 +136,7 @@ fixtures; original SD/CF media is never a test target.
 
 | Source | Type and date | Use in this contract | Limits |
 |---|---|---|---|
-| Current repository code, fixtures, and differential tests | Primary implementation evidence; current checkout | Existing Root/Set/Project boundaries, opaque identifiers, Asset/FileInstance architecture, and safety invariants | Current catalog projects only Sets and Projects; later parsers still require fixture evidence. |
+| Current repository code, fixtures, and differential tests | Primary implementation evidence; current checkout | Root/Set/Project boundaries, opaque identifiers, Asset/FileInstance inventory, and safety invariants | The catalog does not yet parse Project/Bank state, slot usage, audio headers, or sidecars; later parsers still require fixture evidence. |
 | Elektron Octatrack MkII manual and OS 1.40+ documentation | Official current specification | Required authority for version-sensitive behavior before parser constants or filename mappings are implemented | Detailed reconciliation is pending; this PR makes no version-sensitive implementation claim. |
 | OCTATRACK DIARY R13 | Unofficial secondary source; 2016; Octatrack OS 1.25 | Supporting domain terminology and operational distinctions among shared/project samples, working/saved state, slot purge, collect, and export | Not authoritative for MkII OS 1.40+. No unverified numeric or format constraint is promoted to an implementation constant. |
 

@@ -879,12 +879,15 @@ SQLite schema、runtime parser、Tauri API、frontend、writeは変更しない�
 
 #### M3-C1 — incremental file inventory
 
-- incremental filesystem indexing
-- `AudioAsset`／`FileInstance`分離
-- content hash、size、mtime
-- `SampleStorageScope`
-- schema migration
-- read-only。slot／Bank parserはまだ実装しない
+- `.wav`／`.aif`／`.aiff`のread-only incremental filesystem inventory
+- SHA-256 content identityの`AudioAsset`とroot-relative path identityの`FileInstance`を分離
+- file size、mtime、`SampleStorageScope`、hash freshness provenanceをschema v2へ保存
+- 同一pathのsize／mtimeが一致し、前回hashが有効な場合だけcatalog検索用hashを再利用
+- `ComputedThisScan`と`ReusedUnchangedMetadata`を区別する
+- size／mtime一致は同一contentの証明ではなく、write前には実fileを必ず再hashする
+- symlink、hidden entry、root外path、対象外formatをinventoryへ含めない
+- renameは旧FileInstance削除＋新FileInstance追加として観測し、lineageを自動推定しない
+- frontendへinventoryを公開せず、slot／Bank parserとwriteはまだ実装しない
 
 #### M3-C2 — project/bank state and usage graph
 
