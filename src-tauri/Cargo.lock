@@ -2496,6 +2496,7 @@ dependencies = [
  "once_cell",
  "open",
  "ot-application",
+ "ot-catalog",
  "ot-domain",
  "ot-storage-ports",
  "ot-tools-io",

@@ -187,8 +187,9 @@ mod tests {
         fs::create_dir(root.path().join("LIVE_SET")).unwrap();
         fs::create_dir(root.path().join("LIVE_SET/AUDIO")).unwrap();
         create_project(root.path(), "LIVE_SET/PROJECT_A");
+        let canonical_root = root.path().canonicalize().unwrap();
 
-        let snapshot = scan_registered_root(root.path()).unwrap();
+        let snapshot = scan_registered_root(&canonical_root).unwrap();
 
         assert_eq!(snapshot.sets.len(), 1);
         assert_eq!(snapshot.sets[0].relative_path.as_str(), "LIVE_SET");
@@ -209,8 +210,9 @@ mod tests {
         fs::create_dir(root.path().join("SET/AUDIO")).unwrap();
         create_project(root.path(), "SET/PROJECT");
         let before = snapshot_files(root.path());
+        let canonical_root = root.path().canonicalize().unwrap();
 
-        let _snapshot = scan_registered_root(root.path()).unwrap();
+        let _snapshot = scan_registered_root(&canonical_root).unwrap();
 
         assert_eq!(snapshot_files(root.path()), before);
     }

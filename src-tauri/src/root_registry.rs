@@ -266,6 +266,13 @@ impl RootRegistry {
             state.roots.remove(&root_id);
         }
 
+        if state.roots.values().any(|entry| {
+            entry.canonical_path != canonical_path
+                && entry.session.device_fingerprint == fingerprint
+        }) {
+            return Err(RootRegistryError::AmbiguousIdentity);
+        }
+
         let existing_root_id = state
             .roots
             .iter()
@@ -399,6 +406,7 @@ pub enum RootRegistryError {
     Expired,
     Removed,
     Changed,
+    AmbiguousIdentity,
     Io(String),
     Unavailable,
 }
@@ -413,6 +421,7 @@ impl RootRegistryError {
             | Self::Expired => "ROOT_NOT_APPROVED",
             Self::Removed => "ROOT_REMOVED",
             Self::Changed => "ROOT_CHANGED",
+            Self::AmbiguousIdentity => "ROOT_IDENTITY_AMBIGUOUS",
             Self::Io(_) | Self::Unavailable => "ROOT_UNAVAILABLE",
         }
     }
@@ -432,6 +441,8 @@ impl std::fmt::Display for RootRegistryError {
             Self::Expired => formatter.write_str("the root session has expired"),
             Self::Removed => formatter.write_str("the registered root is no longer available"),
             Self::Changed => formatter.write_str("the registered root or device identity changed"),
+            Self::AmbiguousIdentity => formatter
+                .write_str("another registered root has the same persistent device identity"),
             Self::Io(message) => {
                 write!(
                     formatter,
@@ -569,6 +580,26 @@ mod tests {
             .as_str()
             .contains(root.path().to_str().unwrap()));
         assert!(!first.capabilities.write);
+    }
+
+    #[test]
+    fn different_roots_with_the_same_persistent_identity_are_rejected() {
+        let first_root = TempDir::new().unwrap();
+        let second_root = TempDir::new().unwrap();
+        let registry = RootRegistry::new(
+            Arc::new(FakeIdentityProvider::new()),
+            Duration::from_secs(60),
+        );
+        let first = registry
+            .register(first_root.path().to_str().unwrap())
+            .unwrap();
+
+        let error = registry
+            .register(second_root.path().to_str().unwrap())
+            .unwrap_err();
+
+        assert_eq!(error, RootRegistryError::AmbiguousIdentity);
+        assert!(registry.resolve(&first.root_id).is_ok());
     }
 
     #[test]

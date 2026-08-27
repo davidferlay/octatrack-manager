@@ -1,7 +1,9 @@
+use crate::catalog_runtime::SharedCatalog;
 use crate::legacy_read_adapter::RegisteredLegacyLibrary;
 use crate::root_registry::{RootRegistry, RootRegistryError, RootSession};
-use ot_application::ListLibrary;
+use ot_application::{ListLibrary, LoadLibrarySnapshot, StoreLibrarySnapshot};
 use ot_domain::{LibraryProject, LibrarySet, LibrarySnapshot, RootId};
+use ot_storage_ports::{CatalogError, CatalogRootIdentity, CatalogRootObservation};
 use serde::Serialize;
 use std::sync::Arc;
 use tauri::State;
@@ -146,12 +148,33 @@ fn parse_root_id(root_id: String) -> Result<RootId, ApiError> {
 
 fn list_library_sync(
     registry: &RootRegistry,
+    catalog: &SharedCatalog,
     root_id: &RootId,
 ) -> Result<LibrarySnapshot, ApiError> {
+    let resolved = registry.resolve(root_id)?;
+    let identity = catalog_identity(&resolved.session)?;
+    let catalog = catalog.lock().map_err(|_| catalog_lock_error())?;
+    LoadLibrarySnapshot::new(&*catalog)
+        .execute(&identity)
+        .map_err(catalog_error)?
+        .ok_or_else(|| {
+            ApiError::new(
+                "CATALOG_NOT_INDEXED",
+                "no successful catalog snapshot is available for this root",
+                true,
+            )
+        })
+}
+
+fn scan_library_sync(
+    registry: &RootRegistry,
+    root_id: &RootId,
+) -> Result<(RootSession, LibrarySnapshot), ApiError> {
     let resolved = registry.resolve(root_id)?;
     let storage = RegisteredLegacyLibrary::new(root_id.clone(), resolved.canonical_path);
     ListLibrary::new(&storage)
         .execute(root_id)
+        .map(|snapshot| (resolved.session, snapshot))
         .map_err(|error| storage_error(error.message()))
 }
 
@@ -173,10 +196,85 @@ fn storage_error(message: &str) -> ApiError {
     ApiError::new(code, message, true)
 }
 
-fn register_root_sync(registry: &RootRegistry, raw_path: &str) -> Result<RootSessionDto, ApiError> {
+fn catalog_identity(session: &RootSession) -> Result<CatalogRootIdentity, ApiError> {
+    CatalogRootIdentity::new(session.device_fingerprint.clone()).map_err(catalog_error)
+}
+
+fn catalog_observation(session: &RootSession) -> Result<CatalogRootObservation, ApiError> {
+    Ok(CatalogRootObservation {
+        identity: catalog_identity(session)?,
+        identity_is_stable: session.capabilities.stable_device_identity,
+        display_name: session.display_name.clone(),
+        observed_revision: session.observed_revision,
+    })
+}
+
+fn store_library_snapshot(
+    catalog: &SharedCatalog,
+    session: &RootSession,
+    snapshot: &LibrarySnapshot,
+) -> Result<(), ApiError> {
+    let observation = catalog_observation(session)?;
+    let mut catalog = catalog.lock().map_err(|_| catalog_lock_error())?;
+    StoreLibrarySnapshot::new(&mut *catalog)
+        .execute(&observation, snapshot)
+        .map(|_| ())
+        .map_err(catalog_error)
+}
+
+fn catalog_lock_error() -> ApiError {
+    ApiError::new(
+        "CATALOG_UNAVAILABLE",
+        "the local catalog is temporarily unavailable",
+        true,
+    )
+}
+
+fn catalog_error(error: CatalogError) -> ApiError {
+    let (code, message, recoverable) = match &error {
+        CatalogError::DuplicateRelativePath(_) => (
+            "CATALOG_INDEX_INVALID",
+            "the library scan contains duplicate relative paths",
+            true,
+        ),
+        CatalogError::UnsupportedSchema { .. } => (
+            "CATALOG_SCHEMA_UNSUPPORTED",
+            "the catalog was created by a newer application version",
+            false,
+        ),
+        CatalogError::Migration { .. } => (
+            "CATALOG_MIGRATION_FAILED",
+            "the local catalog schema could not be prepared",
+            false,
+        ),
+        CatalogError::Unavailable { .. } => (
+            "CATALOG_UNAVAILABLE",
+            "the local catalog is temporarily unavailable",
+            true,
+        ),
+        CatalogError::InvalidRootIdentity
+        | CatalogError::InvalidScanId
+        | CatalogError::InvalidScanRevision
+        | CatalogError::InvalidStoredData { .. }
+        | CatalogError::Integrity { .. } => (
+            "CATALOG_INTEGRITY_ERROR",
+            "the local catalog failed an integrity check",
+            false,
+        ),
+    };
+    let mut api_error = ApiError::new(code, message, recoverable);
+    api_error.details = Some(error.to_string());
+    api_error
+}
+
+fn register_root_sync(
+    registry: &RootRegistry,
+    catalog: &SharedCatalog,
+    raw_path: &str,
+) -> Result<RootSessionDto, ApiError> {
     let session = registry.register(raw_path)?;
-    let snapshot = match list_library_sync(registry, &session.root_id) {
-        Ok(snapshot) => snapshot,
+    let (resolved_session, snapshot) = match scan_library_sync(registry, &session.root_id) {
+        Ok(result) => result,
         Err(error) => {
             let _ = registry.close(&session.root_id);
             return Err(error);
@@ -190,16 +288,22 @@ fn register_root_sync(registry: &RootRegistry, raw_path: &str) -> Result<RootSes
             true,
         ));
     }
-    Ok(session.into())
+    if let Err(error) = store_library_snapshot(catalog, &resolved_session, &snapshot) {
+        let _ = registry.close(&session.root_id);
+        return Err(error);
+    }
+    Ok(resolved_session.into())
 }
 
 #[tauri::command]
 pub async fn v2_root_register(
     raw_path: String,
     registry: State<'_, Arc<RootRegistry>>,
+    catalog: State<'_, SharedCatalog>,
 ) -> Result<RootSessionDto, ApiError> {
     let registry = Arc::clone(registry.inner());
-    tauri::async_runtime::spawn_blocking(move || register_root_sync(&registry, &raw_path))
+    let catalog = Arc::clone(catalog.inner());
+    tauri::async_runtime::spawn_blocking(move || register_root_sync(&registry, &catalog, &raw_path))
         .await
         .map_err(ApiError::task_failed)?
 }
@@ -233,10 +337,12 @@ pub async fn v2_root_close(
 pub async fn v2_library_list(
     root_id: String,
     registry: State<'_, Arc<RootRegistry>>,
+    catalog: State<'_, SharedCatalog>,
 ) -> Result<LibrarySnapshotDto, ApiError> {
     let root_id = parse_root_id(root_id)?;
     let registry = Arc::clone(registry.inner());
-    tauri::async_runtime::spawn_blocking(move || list_library_sync(&registry, &root_id))
+    let catalog = Arc::clone(catalog.inner());
+    tauri::async_runtime::spawn_blocking(move || list_library_sync(&registry, &catalog, &root_id))
         .await
         .map_err(ApiError::task_failed)?
         .map(Into::into)
@@ -245,6 +351,7 @@ pub async fn v2_library_list(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::catalog_runtime::open_shared_catalog;
     use crate::root_registry::{DeviceIdentityProvider, DeviceObservation};
     use std::fs;
     use std::path::Path;
@@ -269,32 +376,149 @@ mod tests {
         RootRegistry::new(Arc::new(StableTestIdentity), Duration::from_secs(60))
     }
 
+    fn catalog() -> (TempDir, SharedCatalog) {
+        let data_directory = TempDir::new().unwrap();
+        let catalog = open_shared_catalog(data_directory.path()).unwrap();
+        (data_directory, catalog)
+    }
+
+    fn create_set_project(root: &Path, set_name: &str, project_name: &str) {
+        let set = root.join(set_name);
+        fs::create_dir_all(set.join("AUDIO")).unwrap();
+        fs::create_dir_all(set.join(project_name)).unwrap();
+        fs::write(set.join(project_name).join("project.work"), b"fixture").unwrap();
+    }
+
     #[test]
     fn registration_rejects_folders_without_octatrack_content() {
         let root = TempDir::new().unwrap();
+        let (_data_directory, catalog) = catalog();
 
-        let error = register_root_sync(&registry(), root.path().to_str().unwrap()).unwrap_err();
+        let error =
+            register_root_sync(&registry(), &catalog, root.path().to_str().unwrap()).unwrap_err();
 
         assert_eq!(error.code, "UNSUPPORTED_FORMAT");
     }
 
     #[test]
-    fn root_id_lists_only_relative_set_and_project_paths() {
+    fn registration_indexes_and_query_returns_only_catalog_relative_paths() {
         let root = TempDir::new().unwrap();
-        fs::create_dir(root.path().join("SET_A")).unwrap();
-        fs::create_dir(root.path().join("SET_A/AUDIO")).unwrap();
-        fs::create_dir(root.path().join("SET_A/PROJECT_A")).unwrap();
-        fs::write(root.path().join("SET_A/PROJECT_A/project.work"), b"fixture").unwrap();
+        create_set_project(root.path(), "SET_A", "PROJECT_A");
+        let fixture_file = root.path().join("SET_A/PROJECT_A/project.work");
+        let fixture_before = fs::read(&fixture_file).unwrap();
         let registry = registry();
-        let session = register_root_sync(&registry, root.path().to_str().unwrap()).unwrap();
+        let (_data_directory, catalog) = catalog();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
 
-        let snapshot = list_library_sync(&registry, &root_id).unwrap();
+        let snapshot = list_library_sync(&registry, &catalog, &root_id).unwrap();
 
         assert_eq!(snapshot.sets[0].relative_path.as_str(), "SET_A");
         assert_eq!(
             snapshot.sets[0].projects[0].relative_path.as_str(),
             "SET_A/PROJECT_A"
         );
+        assert_eq!(fs::read(fixture_file).unwrap(), fixture_before);
+        assert!(!format!("{snapshot:?}").contains(root.path().to_str().unwrap()));
+    }
+
+    #[test]
+    fn catalog_query_does_not_rescan_the_registered_filesystem() {
+        let root = TempDir::new().unwrap();
+        create_set_project(root.path(), "SET_A", "PROJECT_A");
+        let registry = registry();
+        let (_data_directory, catalog) = catalog();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        fs::remove_dir_all(root.path().join("SET_A")).unwrap();
+
+        let snapshot = list_library_sync(&registry, &catalog, &root_id).unwrap();
+
+        assert_eq!(snapshot.sets[0].display_name, "SET_A");
+        assert_eq!(snapshot.sets[0].projects[0].display_name, "PROJECT_A");
+    }
+
+    #[test]
+    fn catalog_query_survives_catalog_reopen() {
+        let root = TempDir::new().unwrap();
+        create_set_project(root.path(), "SET_A", "PROJECT_A");
+        let registry = registry();
+        let data_directory = TempDir::new().unwrap();
+        let catalog = open_shared_catalog(data_directory.path()).unwrap();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        drop(catalog);
+
+        let reopened_catalog = open_shared_catalog(data_directory.path()).unwrap();
+        let snapshot = list_library_sync(&registry, &reopened_catalog, &root_id).unwrap();
+
+        assert_eq!(snapshot.sets[0].display_name, "SET_A");
+        assert_eq!(snapshot.sets[0].projects[0].display_name, "PROJECT_A");
+    }
+
+    #[test]
+    fn reregistering_the_root_replaces_the_catalog_projection() {
+        let root = TempDir::new().unwrap();
+        create_set_project(root.path(), "OLD_SET", "OLD_PROJECT");
+        let registry = registry();
+        let (_data_directory, catalog) = catalog();
+        let first = register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        fs::remove_dir_all(root.path().join("OLD_SET")).unwrap();
+        create_set_project(root.path(), "NEW_SET", "NEW_PROJECT");
+
+        let refreshed =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let snapshot = list_library_sync(
+            &registry,
+            &catalog,
+            &RootId::new(refreshed.root_id.clone()).unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(refreshed.root_id, first.root_id);
+        assert_eq!(snapshot.sets.len(), 1);
+        assert_eq!(snapshot.sets[0].display_name, "NEW_SET");
+        assert_eq!(snapshot.sets[0].projects[0].display_name, "NEW_PROJECT");
+    }
+
+    #[test]
+    fn a_second_root_with_the_same_catalog_identity_cannot_replace_the_first() {
+        let first_root = TempDir::new().unwrap();
+        let second_root = TempDir::new().unwrap();
+        create_set_project(first_root.path(), "FIRST_SET", "FIRST_PROJECT");
+        create_set_project(second_root.path(), "SECOND_SET", "SECOND_PROJECT");
+        let registry = registry();
+        let (_data_directory, catalog) = catalog();
+        let first =
+            register_root_sync(&registry, &catalog, first_root.path().to_str().unwrap()).unwrap();
+        let first_root_id = RootId::new(first.root_id).unwrap();
+
+        let error = register_root_sync(&registry, &catalog, second_root.path().to_str().unwrap())
+            .unwrap_err();
+        let snapshot = list_library_sync(&registry, &catalog, &first_root_id).unwrap();
+
+        assert_eq!(error.code, "ROOT_IDENTITY_AMBIGUOUS");
+        assert_eq!(snapshot.sets.len(), 1);
+        assert_eq!(snapshot.sets[0].display_name, "FIRST_SET");
+        assert_eq!(snapshot.sets[0].projects[0].display_name, "FIRST_PROJECT");
+    }
+
+    #[test]
+    fn catalog_query_still_requires_live_root_authority() {
+        let root = TempDir::new().unwrap();
+        create_set_project(root.path(), "SET_A", "PROJECT_A");
+        let registry = registry();
+        let (_data_directory, catalog) = catalog();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        registry.close(&root_id).unwrap();
+
+        let error = list_library_sync(&registry, &catalog, &root_id).unwrap_err();
+
+        assert_eq!(error.code, "ROOT_NOT_APPROVED");
     }
 }

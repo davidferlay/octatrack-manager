@@ -2,6 +2,7 @@
 #![allow(clippy::too_many_arguments)]
 
 mod audio_pool;
+mod catalog_runtime;
 mod device_detection;
 mod legacy_read_adapter;
 pub mod project_manager;
@@ -1348,6 +1349,10 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            let data_directory = app.path().data_dir()?;
+            let catalog = catalog_runtime::open_shared_catalog(&data_directory)?;
+            app.manage(catalog);
+
             // Clear WebView session storage in the background on app startup
             let window = app.get_webview_window("main").unwrap();
             std::thread::spawn(move || {
