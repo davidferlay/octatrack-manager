@@ -165,6 +165,31 @@ impl fmt::Display for InvalidRootPathComponent {
 
 impl std::error::Error for InvalidRootPathComponent {}
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum StateDocumentKind {
+    Project,
+    Bank,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum StateDocumentRole {
+    Working,
+    SavedCheckpoint,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum SampleStorageScope {
+    SetAudioPool,
+    ProjectLocal,
+    Unclassified,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum SampleSettingsOwner {
+    SlotAssignment,
+    FileInstanceSidecar,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LibraryProject {
     pub display_name: String,
@@ -241,6 +266,37 @@ mod tests {
         assert_eq!(
             RootRelativePath::from_components(["SET", "BAD/PROJECT"]),
             Err(InvalidRootRelativePath::InvalidComponent)
+        );
+    }
+
+    #[test]
+    fn state_document_axes_remain_independent() {
+        assert_ne!(StateDocumentKind::Project, StateDocumentKind::Bank);
+        assert_ne!(
+            StateDocumentRole::Working,
+            StateDocumentRole::SavedCheckpoint
+        );
+    }
+
+    #[test]
+    fn sample_storage_scopes_remain_distinct() {
+        let scopes = [
+            SampleStorageScope::SetAudioPool,
+            SampleStorageScope::ProjectLocal,
+            SampleStorageScope::Unclassified,
+        ];
+
+        assert_eq!(scopes.len(), 3);
+        assert_ne!(scopes[0], scopes[1]);
+        assert_ne!(scopes[0], scopes[2]);
+        assert_ne!(scopes[1], scopes[2]);
+    }
+
+    #[test]
+    fn sample_settings_owners_remain_distinct() {
+        assert_ne!(
+            SampleSettingsOwner::SlotAssignment,
+            SampleSettingsOwner::FileInstanceSidecar
         );
     }
 }

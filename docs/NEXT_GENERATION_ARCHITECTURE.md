@@ -223,6 +223,12 @@ tauri-app (composition root)
 ここにはraw absolute pathを置かない。必要なpathは検証済みの相対path value object
 として表現する。
 
+Project／Bank state、sample storage scope、sample settings ownershipの意味論は
+`docs/domain/OCTATRACK_STATE_AND_SAMPLE_SEMANTICS.md`を正本とする。ProjectとBank、
+WorkingとSavedCheckpoint、Set Audio PoolとProject-local sample、SlotAssignmentと
+FileInstanceSidecarをそれぞれ独立した軸として扱う。OS 1.40+で未確認のfilename mappingや
+上限値をdomain constantへ先行して固定しない。
+
 ### 5.2 `ot-codec`
 
 Octatrack形式のdecode/encodeを担当する。
@@ -340,6 +346,16 @@ created_at
 - `UpdateSliceSet`
 - `QuarantineUnusedFiles`
 - `RestoreBackup`
+
+Octatrack固有のsample整理では、次のIntentを同一操作へ畳み込まない。
+
+- `UnassignUnusedSlots`: slot assignmentだけを解除し、物理fileを削除しない
+- `CollectProjectSamples`: Project参照sampleをProject directoryへcopyし、参照更新を計画する
+- `ExportProjectToSet`: Projectと参照sampleを別Setへportableにcopyする
+- `DeleteUnreferencedFile`: usage graphで未参照を証明した物理fileを削除する
+
+`DeleteUnreferencedFile`はverified backup、完全なusage graph、`ChangePlan`、journalが
+完成するまで実装しない。slot purgeを物理削除の根拠にしてはならない。
 
 planには次を必須とする。
 
@@ -835,15 +851,73 @@ big-bang rewriteは禁止する。Strangler方式で新コアへ切り替える�
 
 ### M3 — catalogと新Library UI
 
-- SQLite migration
-- incremental index
-- Asset/FileInstance分離
-- column browser
-- waveform peak/preview
-- manual tags/notes
-- usage graph
+M3はdomain semantics、read model、UIを混ぜない小さな段階へ分割する。
 
-完了条件: cardへ一切書き込まず、実際のライブ用libraryを検索・閲覧できる。
+#### M3-A — SQLite catalog foundation（完了 / PR #9）
+
+- version付きroot fingerprint
+- 明示的SQLite migration
+- Set／Project snapshotのtransactional保存と再取得
+- catalog portとapplication use case
+
+#### M3-B — catalog-backed indexing/query vertical slice（完了 / PR #10）
+
+- Application Support上のproduction catalog
+- root登録時のread-only full scan保存
+- live `RootId`再検証後のcatalog query
+- persistent fingerprint単位のprojection分離
+
+#### M3-C0 — Octatrack domain semantics contract（今回）
+
+- Project／BankとWorking／SavedCheckpointの独立したstate軸
+- Set Audio Pool／Project-local／Unclassified sample scope
+- SlotAssignment／FileInstanceSidecar settings ownership
+- purge／collect／export／physical deleteの操作意味論
+- OS 1.25二次資料のprovenanceとOS 1.40+確認待ち事項
+
+SQLite schema、runtime parser、Tauri API、frontend、writeは変更しない。
+
+#### M3-C1 — incremental file inventory
+
+- incremental filesystem indexing
+- `AudioAsset`／`FileInstance`分離
+- content hash、size、mtime
+- `SampleStorageScope`
+- schema migration
+- read-only。slot／Bank parserはまだ実装しない
+
+#### M3-C2 — project/bank state and usage graph
+
+- Project／BankのWorkingとSavedCheckpointをread-only index
+- slot assignment
+- Projectからsampleへのusage graph
+- missing reference検出
+- parser provenance
+- writeなし
+
+#### M3-C3 — sample settings/slice read model
+
+- slot-local sample settings
+- saved file-sidecar settings
+- slice read model
+- source revision／confidenceとOS version差異
+- lossless writeはまだ実装しない
+
+#### M3-D — new Library UI
+
+- catalog-backed column browser
+- Set／Project／Audio Pool／Project-local sample表示
+- frontendへはopaque IDと検証済み相対情報だけを返す
+- raw absolute pathを返さない
+
+#### M3-E — waveform/preview/manual tags and notes
+
+- waveform peaksとpreview
+- manual tags／notes
+- Mac側SQLiteだけを使い、Octatrack媒体へmetadataを書かない
+
+M3完了条件: cardへ一切書き込まず、実際のライブ用libraryを検索・閲覧できる。
+M4以降のIntent → Plan → Apply、backup、journal、rollback方針は変更しない。
 
 ### M4 — backup/executor pilot
 
@@ -1005,6 +1079,7 @@ Gate B完了前に原本カードへのwrite対応を宣言しない。Gate Eは
 | ADR-008 | AIはread/proposalまで | AI誤判断を不可逆writeへ直結させない |
 | ADR-009 | Cloudは一方向backupから | conflict、削除伝播、OAuth負担を避ける |
 | ADR-010 | Additive operationを最初のwrite pilotにする | 破壊的処理より安全にexecutorを検証できる |
+| ADR-011 | Slot stateとfile-sidecar stateを分離する | 同じAudioAssetでもslotごとにtrim／slice等が異なり、saved settingsは特定のFileInstance／revisionと結び付くため |
 
 ---
 
