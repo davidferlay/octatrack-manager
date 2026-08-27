@@ -2,7 +2,9 @@
 
 use ot_domain::{
     AudioAsset, ContentHash, ContentHashFreshness, FileInstance, LibraryProject, LibrarySet,
-    LibrarySnapshot, RootRelativePath, SampleStorageScope,
+    LibrarySnapshot, ParserProvenance, RootRelativePath, SampleReferenceStatus, SampleSlotId,
+    SampleSlotKind, SampleStorageScope, SampleUsageEdge, SampleUsageKind, SlotAssignment,
+    StateDocument, StateDocumentKind, StateDocumentParseStatus, StateDocumentRole,
 };
 use ot_storage_ports::{
     CatalogError, CatalogFailureCode, CatalogRootIdentity, CatalogRootObservation, CatalogScan,
@@ -14,11 +16,21 @@ use rusqlite::{
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 
-const LATEST_SCHEMA_VERSION: u64 = 2;
+const LATEST_SCHEMA_VERSION: u64 = 3;
 const MIGRATIONS: &[(u64, &str)] = &[
     (1, include_str!("../migrations/0001_catalog_foundation.sql")),
     (2, include_str!("../migrations/0002_file_inventory.sql")),
+    (
+        3,
+        include_str!("../migrations/0003_project_usage_graph.sql"),
+    ),
 ];
+
+type StateProjection = (
+    Vec<StateDocument>,
+    Vec<SlotAssignment>,
+    Vec<SampleUsageEdge>,
+);
 
 pub struct SqliteCatalog {
     connection: Connection,
@@ -203,6 +215,8 @@ impl SqliteCatalog {
             [],
         )?;
 
+        insert_state_projection(&transaction, root_row_id, scan_id, snapshot)?;
+
         transaction.execute(
             "UPDATE scan_sessions \
              SET status = 'completed', \
@@ -303,12 +317,19 @@ impl LibraryCatalog for SqliteCatalog {
         let sets = self.load_sets(root_row_id, scan_id)?;
         let standalone_projects = self.load_projects(root_row_id, scan_id, None)?;
         let (audio_assets, file_instances) = self.load_file_inventory(root_row_id, scan_id)?;
-        Ok(Some(LibrarySnapshot {
+        let (state_documents, slot_assignments, usage_edges) =
+            self.load_state_inventory(root_row_id, scan_id)?;
+        let snapshot = LibrarySnapshot {
             sets,
             standalone_projects,
             audio_assets,
             file_instances,
-        }))
+            state_documents,
+            slot_assignments,
+            usage_edges,
+        };
+        validate_snapshot(&snapshot)?;
+        Ok(Some(snapshot))
     }
 
     fn latest_scan(
@@ -498,6 +519,186 @@ impl SqliteCatalog {
         }
         Ok((assets.into_values().collect(), instances))
     }
+
+    fn load_state_inventory(
+        &self,
+        root_row_id: i64,
+        scan_id: i64,
+    ) -> Result<StateProjection, CatalogError> {
+        let mut document_statement = self
+            .connection
+            .prepare(
+                "SELECT id, project_relative_path, source_relative_path, document_kind, \
+                        document_role, bank_index, parse_status, parser_name, parser_revision, \
+                        source_version \
+                 FROM state_documents \
+                 WHERE root_id = ?1 AND scan_session_id = ?2 \
+                 ORDER BY source_relative_path",
+            )
+            .map_err(unavailable)?;
+        let document_rows = document_statement
+            .query_map(params![root_row_id, scan_id], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, Option<i64>>(5)?,
+                    row.get::<_, String>(6)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, String>(8)?,
+                    row.get::<_, Option<String>>(9)?,
+                ))
+            })
+            .map_err(unavailable)?;
+        let mut state_documents = Vec::new();
+        for row in document_rows {
+            let (
+                _id,
+                project_path,
+                source_path,
+                kind,
+                role,
+                bank_index,
+                parse_status,
+                parser_name,
+                parser_revision,
+                source_version,
+            ) = row.map_err(unavailable)?;
+            state_documents.push(StateDocument {
+                project_relative_path: stored_path(project_path)?,
+                source_relative_path: stored_path(source_path)?,
+                kind: document_kind_from_database(&kind)?,
+                role: document_role_from_database(&role)?,
+                bank_index: bank_index
+                    .map(|value| {
+                        u8::try_from(value).map_err(|_| CatalogError::InvalidStoredData {
+                            field: "bank_index",
+                        })
+                    })
+                    .transpose()?,
+                parse_status: parse_status_from_database(&parse_status)?,
+                parser_provenance: ParserProvenance {
+                    parser_name,
+                    parser_revision,
+                    source_version,
+                },
+            });
+        }
+
+        let mut assignment_statement = self
+            .connection
+            .prepare(
+                "SELECT state_documents.source_relative_path, slot_assignments.slot_kind, \
+                        slot_assignments.slot_number, slot_assignments.referenced_relative_path, \
+                        slot_assignments.reference_status \
+                 FROM slot_assignments \
+                 JOIN state_documents ON state_documents.id = slot_assignments.state_document_id \
+                 WHERE state_documents.root_id = ?1 AND state_documents.scan_session_id = ?2 \
+                 ORDER BY state_documents.source_relative_path, slot_assignments.slot_kind, \
+                          slot_assignments.slot_number",
+            )
+            .map_err(unavailable)?;
+        let assignment_rows = assignment_statement
+            .query_map(params![root_row_id, scan_id], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, String>(4)?,
+                ))
+            })
+            .map_err(unavailable)?;
+        let mut slot_assignments = Vec::new();
+        for row in assignment_rows {
+            let (document_path, slot_kind, slot_number, target, status) =
+                row.map_err(unavailable)?;
+            slot_assignments.push(SlotAssignment {
+                project_document_relative_path: stored_path(document_path)?,
+                slot: slot_id_from_database(&slot_kind, slot_number)?,
+                referenced_file_relative_path: target.map(stored_path).transpose()?,
+                reference_status: reference_status_from_database(&status)?,
+            });
+        }
+
+        let mut usage_statement = self
+            .connection
+            .prepare(
+                "SELECT bank_document.source_relative_path, \
+                        project_document.source_relative_path, usage_edges.slot_kind, \
+                        usage_edges.slot_number, usage_edges.usage_kind, usage_edges.track_index, \
+                        usage_edges.part_index, usage_edges.pattern_index, usage_edges.step_index, \
+                        usage_edges.audible, usage_edges.referenced_relative_path, \
+                        usage_edges.reference_status \
+                 FROM usage_edges \
+                 JOIN state_documents AS bank_document \
+                   ON bank_document.id = usage_edges.state_document_id \
+                 LEFT JOIN state_documents AS project_document \
+                   ON project_document.id = usage_edges.project_document_id \
+                 WHERE bank_document.root_id = ?1 AND bank_document.scan_session_id = ?2 \
+                 ORDER BY bank_document.source_relative_path, usage_edges.slot_kind, \
+                          usage_edges.slot_number, usage_edges.track_index, usage_edges.part_index, \
+                          usage_edges.pattern_index, usage_edges.step_index",
+            )
+            .map_err(unavailable)?;
+        let usage_rows = usage_statement
+            .query_map(params![root_row_id, scan_id], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, i64>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, i64>(5)?,
+                    row.get::<_, Option<i64>>(6)?,
+                    row.get::<_, Option<i64>>(7)?,
+                    row.get::<_, Option<i64>>(8)?,
+                    row.get::<_, bool>(9)?,
+                    row.get::<_, Option<String>>(10)?,
+                    row.get::<_, String>(11)?,
+                ))
+            })
+            .map_err(unavailable)?;
+        let mut usage_edges = Vec::new();
+        for row in usage_rows {
+            let (
+                bank_document,
+                project_document,
+                slot_kind,
+                slot_number,
+                usage_kind,
+                track_index,
+                part_index,
+                pattern_index,
+                step_index,
+                audible,
+                target,
+                status,
+            ) = row.map_err(unavailable)?;
+            usage_edges.push(SampleUsageEdge {
+                bank_document_relative_path: stored_path(bank_document)?,
+                project_document_relative_path: project_document.map(stored_path).transpose()?,
+                slot: slot_id_from_database(&slot_kind, slot_number)?,
+                usage_kind: usage_kind_from_database(&usage_kind)?,
+                track_index: index_from_database(track_index, "track_index")?,
+                part_index: part_index
+                    .map(|value| index_from_database(value, "part_index"))
+                    .transpose()?,
+                pattern_index: pattern_index
+                    .map(|value| index_from_database(value, "pattern_index"))
+                    .transpose()?,
+                step_index: step_index
+                    .map(|value| index_from_database(value, "step_index"))
+                    .transpose()?,
+                audible,
+                referenced_file_relative_path: target.map(stored_path).transpose()?,
+                reference_status: reference_status_from_database(&status)?,
+            });
+        }
+        Ok((state_documents, slot_assignments, usage_edges))
+    }
 }
 
 fn insert_project(
@@ -528,6 +729,136 @@ fn insert_project(
     Ok(())
 }
 
+fn insert_state_projection(
+    transaction: &Transaction<'_>,
+    root_row_id: i64,
+    scan_id: i64,
+    snapshot: &LibrarySnapshot,
+) -> Result<(), rusqlite::Error> {
+    let mut document_ids = HashMap::<String, i64>::new();
+    for document in &snapshot.state_documents {
+        transaction.execute(
+            "INSERT INTO state_documents \
+             (root_id, scan_session_id, project_relative_path, source_relative_path, \
+              document_kind, document_role, bank_index, parse_status, parser_name, \
+              parser_revision, source_version) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            params![
+                root_row_id,
+                scan_id,
+                document.project_relative_path.as_str(),
+                document.source_relative_path.as_str(),
+                document_kind_to_database(document.kind),
+                document_role_to_database(document.role),
+                document.bank_index.map(i64::from),
+                parse_status_to_database(document.parse_status),
+                document.parser_provenance.parser_name,
+                document.parser_provenance.parser_revision,
+                document.parser_provenance.source_version,
+            ],
+        )?;
+        document_ids.insert(
+            document.source_relative_path.as_str().to_owned(),
+            transaction.last_insert_rowid(),
+        );
+    }
+
+    let mut assignment_ids = HashMap::<(String, SampleSlotKind, u16), i64>::new();
+    for assignment in &snapshot.slot_assignments {
+        let document_id = document_ids
+            .get(assignment.project_document_relative_path.as_str())
+            .copied()
+            .ok_or_else(|| sql_integrity_error("slot assignment document is missing"))?;
+        transaction.execute(
+            "INSERT INTO slot_assignments \
+             (state_document_id, slot_kind, slot_number, referenced_relative_path, \
+              reference_status) \
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                document_id,
+                slot_kind_to_database(assignment.slot.kind()),
+                i64::from(assignment.slot.number()),
+                assignment
+                    .referenced_file_relative_path
+                    .as_ref()
+                    .map(RootRelativePath::as_str),
+                reference_status_to_database(assignment.reference_status),
+            ],
+        )?;
+        assignment_ids.insert(
+            (
+                assignment
+                    .project_document_relative_path
+                    .as_str()
+                    .to_owned(),
+                assignment.slot.kind(),
+                assignment.slot.number(),
+            ),
+            transaction.last_insert_rowid(),
+        );
+    }
+
+    for edge in &snapshot.usage_edges {
+        let bank_document_id = document_ids
+            .get(edge.bank_document_relative_path.as_str())
+            .copied()
+            .ok_or_else(|| sql_integrity_error("usage bank document is missing"))?;
+        let project_document_id = edge
+            .project_document_relative_path
+            .as_ref()
+            .map(|path| {
+                document_ids
+                    .get(path.as_str())
+                    .copied()
+                    .ok_or_else(|| sql_integrity_error("usage project document is missing"))
+            })
+            .transpose()?;
+        let slot_assignment_id = edge
+            .project_document_relative_path
+            .as_ref()
+            .and_then(|path| {
+                assignment_ids.get(&(
+                    path.as_str().to_owned(),
+                    edge.slot.kind(),
+                    edge.slot.number(),
+                ))
+            })
+            .copied();
+        transaction.execute(
+            "INSERT INTO usage_edges \
+             (state_document_id, project_document_id, slot_assignment_id, slot_kind, \
+              slot_number, usage_kind, track_index, part_index, pattern_index, step_index, \
+              audible, referenced_relative_path, reference_status) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            params![
+                bank_document_id,
+                project_document_id,
+                slot_assignment_id,
+                slot_kind_to_database(edge.slot.kind()),
+                i64::from(edge.slot.number()),
+                usage_kind_to_database(edge.usage_kind),
+                i64::from(edge.track_index),
+                edge.part_index.map(i64::from),
+                edge.pattern_index.map(i64::from),
+                edge.step_index.map(i64::from),
+                edge.audible,
+                edge.referenced_file_relative_path
+                    .as_ref()
+                    .map(RootRelativePath::as_str),
+                reference_status_to_database(edge.reference_status),
+            ],
+        )?;
+    }
+    Ok(())
+}
+
+fn sql_integrity_error(message: &'static str) -> rusqlite::Error {
+    rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
+        std::io::ErrorKind::InvalidData,
+        message,
+    )))
+}
+
 fn validate_snapshot(snapshot: &LibrarySnapshot) -> Result<(), CatalogError> {
     let mut topology_paths = HashSet::new();
     for set in &snapshot.sets {
@@ -539,6 +870,13 @@ fn validate_snapshot(snapshot: &LibrarySnapshot) -> Result<(), CatalogError> {
     for project in &snapshot.standalone_projects {
         validate_unique_path(&mut topology_paths, &project.relative_path)?;
     }
+    let project_paths = snapshot
+        .sets
+        .iter()
+        .flat_map(|set| set.projects.iter())
+        .chain(snapshot.standalone_projects.iter())
+        .map(|project| project.relative_path.as_str().to_owned())
+        .collect::<HashSet<_>>();
 
     let mut assets = HashMap::new();
     for asset in &snapshot.audio_assets {
@@ -568,7 +906,181 @@ fn validate_snapshot(snapshot: &LibrarySnapshot) -> Result<(), CatalogError> {
             }
         }
     }
+
+    let mut documents = HashMap::new();
+    for document in &snapshot.state_documents {
+        if !project_paths.contains(document.project_relative_path.as_str()) {
+            return Err(CatalogError::Integrity {
+                message: "state document references an unknown project".into(),
+            });
+        }
+        if !is_direct_child(
+            &document.project_relative_path,
+            &document.source_relative_path,
+        ) {
+            return Err(CatalogError::Integrity {
+                message: "state document is outside its project directory".into(),
+            });
+        }
+        let bank_shape_valid = match document.kind {
+            StateDocumentKind::Project => document.bank_index.is_none(),
+            StateDocumentKind::Bank => document.bank_index.is_some_and(|index| index < 16),
+        };
+        if !bank_shape_valid
+            || document.parser_provenance.parser_name.trim().is_empty()
+            || document.parser_provenance.parser_revision.trim().is_empty()
+        {
+            return Err(CatalogError::Integrity {
+                message: "state document metadata is invalid".into(),
+            });
+        }
+        if documents
+            .insert(document.source_relative_path.as_str().to_owned(), document)
+            .is_some()
+        {
+            return Err(CatalogError::DuplicateRelativePath(
+                document.source_relative_path.clone(),
+            ));
+        }
+    }
+
+    let mut assignments = HashMap::new();
+    for assignment in &snapshot.slot_assignments {
+        let document = documents
+            .get(assignment.project_document_relative_path.as_str())
+            .ok_or_else(|| CatalogError::Integrity {
+                message: "slot assignment references a missing state document".into(),
+            })?;
+        if document.kind != StateDocumentKind::Project
+            || document.parse_status != StateDocumentParseStatus::Parsed
+        {
+            return Err(CatalogError::Integrity {
+                message: "slot assignment requires a parsed project document".into(),
+            });
+        }
+        let target_exists = assignment
+            .referenced_file_relative_path
+            .as_ref()
+            .is_some_and(|path| file_paths.contains(path.as_str()));
+        let reference_valid = match assignment.reference_status {
+            SampleReferenceStatus::Resolved => {
+                assignment.referenced_file_relative_path.is_some() && target_exists
+            }
+            SampleReferenceStatus::Missing => {
+                assignment.referenced_file_relative_path.is_some() && !target_exists
+            }
+            SampleReferenceStatus::InvalidPath => {
+                assignment.referenced_file_relative_path.is_none()
+            }
+            SampleReferenceStatus::UnassignedSlot => false,
+        };
+        if !reference_valid {
+            return Err(CatalogError::Integrity {
+                message: "slot assignment reference status is inconsistent".into(),
+            });
+        }
+        let key = (
+            assignment
+                .project_document_relative_path
+                .as_str()
+                .to_owned(),
+            assignment.slot.kind(),
+            assignment.slot.number(),
+        );
+        if assignments.insert(key, assignment).is_some() {
+            return Err(CatalogError::Integrity {
+                message: "duplicate slot assignment".into(),
+            });
+        }
+    }
+
+    for edge in &snapshot.usage_edges {
+        let bank_document = documents
+            .get(edge.bank_document_relative_path.as_str())
+            .ok_or_else(|| CatalogError::Integrity {
+                message: "usage edge references a missing bank document".into(),
+            })?;
+        if bank_document.kind != StateDocumentKind::Bank
+            || bank_document.parse_status != StateDocumentParseStatus::Parsed
+            || edge.track_index >= 8
+            || edge.part_index.is_some_and(|index| index >= 4)
+            || edge.pattern_index.is_some_and(|index| index >= 16)
+            || edge.step_index.is_some_and(|index| index >= 64)
+        {
+            return Err(CatalogError::Integrity {
+                message: "usage edge metadata is invalid".into(),
+            });
+        }
+        let usage_shape_valid = match edge.usage_kind {
+            SampleUsageKind::Machine => {
+                edge.part_index.is_some()
+                    && edge.pattern_index.is_none()
+                    && edge.step_index.is_none()
+            }
+            SampleUsageKind::SampleLock => {
+                edge.part_index.is_none()
+                    && edge.pattern_index.is_some()
+                    && edge.step_index.is_some()
+            }
+        };
+        if !usage_shape_valid {
+            return Err(CatalogError::Integrity {
+                message: "usage edge coordinates do not match its kind".into(),
+            });
+        }
+        let assignment = edge
+            .project_document_relative_path
+            .as_ref()
+            .and_then(|path| {
+                assignments.get(&(
+                    path.as_str().to_owned(),
+                    edge.slot.kind(),
+                    edge.slot.number(),
+                ))
+            });
+        if let Some(project_path) = &edge.project_document_relative_path {
+            let project_document =
+                documents
+                    .get(project_path.as_str())
+                    .ok_or_else(|| CatalogError::Integrity {
+                        message: "usage edge references a missing project document".into(),
+                    })?;
+            if project_document.kind != StateDocumentKind::Project
+                || project_document.parse_status != StateDocumentParseStatus::Parsed
+                || project_document.project_relative_path != bank_document.project_relative_path
+                || project_document.role != bank_document.role
+            {
+                return Err(CatalogError::Integrity {
+                    message: "usage edge crosses project or state-role boundaries".into(),
+                });
+            }
+        }
+        let target_matches = match (edge.reference_status, assignment) {
+            (SampleReferenceStatus::UnassignedSlot, None) => {
+                edge.referenced_file_relative_path.is_none()
+            }
+            (status, Some(assignment)) if status != SampleReferenceStatus::UnassignedSlot => {
+                status == assignment.reference_status
+                    && edge.referenced_file_relative_path
+                        == assignment.referenced_file_relative_path
+            }
+            _ => false,
+        };
+        if !target_matches {
+            return Err(CatalogError::Integrity {
+                message: "usage edge target does not match its slot assignment".into(),
+            });
+        }
+    }
     Ok(())
+}
+
+fn is_direct_child(parent: &RootRelativePath, child: &RootRelativePath) -> bool {
+    child
+        .as_str()
+        .strip_prefix(parent.as_str())
+        .and_then(|suffix| suffix.strip_prefix('/'))
+        .is_some_and(|file_name| !file_name.is_empty() && !file_name.contains('/'))
 }
 
 fn validate_unique_path(
@@ -636,6 +1148,126 @@ fn freshness_from_database(value: &str) -> Result<ContentHashFreshness, CatalogE
             field: "hash_freshness",
         }),
     }
+}
+
+fn document_kind_to_database(kind: StateDocumentKind) -> &'static str {
+    match kind {
+        StateDocumentKind::Project => "project",
+        StateDocumentKind::Bank => "bank",
+    }
+}
+
+fn document_kind_from_database(value: &str) -> Result<StateDocumentKind, CatalogError> {
+    match value {
+        "project" => Ok(StateDocumentKind::Project),
+        "bank" => Ok(StateDocumentKind::Bank),
+        _ => Err(CatalogError::InvalidStoredData {
+            field: "document_kind",
+        }),
+    }
+}
+
+fn document_role_to_database(role: StateDocumentRole) -> &'static str {
+    match role {
+        StateDocumentRole::Working => "working",
+        StateDocumentRole::SavedCheckpoint => "saved_checkpoint",
+    }
+}
+
+fn document_role_from_database(value: &str) -> Result<StateDocumentRole, CatalogError> {
+    match value {
+        "working" => Ok(StateDocumentRole::Working),
+        "saved_checkpoint" => Ok(StateDocumentRole::SavedCheckpoint),
+        _ => Err(CatalogError::InvalidStoredData {
+            field: "document_role",
+        }),
+    }
+}
+
+fn parse_status_to_database(status: StateDocumentParseStatus) -> &'static str {
+    match status {
+        StateDocumentParseStatus::Parsed => "parsed",
+        StateDocumentParseStatus::UnsupportedVersion => "unsupported_version",
+        StateDocumentParseStatus::Malformed => "malformed",
+    }
+}
+
+fn parse_status_from_database(value: &str) -> Result<StateDocumentParseStatus, CatalogError> {
+    match value {
+        "parsed" => Ok(StateDocumentParseStatus::Parsed),
+        "unsupported_version" => Ok(StateDocumentParseStatus::UnsupportedVersion),
+        "malformed" => Ok(StateDocumentParseStatus::Malformed),
+        _ => Err(CatalogError::InvalidStoredData {
+            field: "parse_status",
+        }),
+    }
+}
+
+fn slot_kind_to_database(kind: SampleSlotKind) -> &'static str {
+    match kind {
+        SampleSlotKind::Static => "static",
+        SampleSlotKind::Flex => "flex",
+    }
+}
+
+fn slot_kind_from_database(value: &str) -> Result<SampleSlotKind, CatalogError> {
+    match value {
+        "static" => Ok(SampleSlotKind::Static),
+        "flex" => Ok(SampleSlotKind::Flex),
+        _ => Err(CatalogError::InvalidStoredData { field: "slot_kind" }),
+    }
+}
+
+fn slot_id_from_database(kind: &str, number: i64) -> Result<SampleSlotId, CatalogError> {
+    let kind = slot_kind_from_database(kind)?;
+    let number = u16::try_from(number).map_err(|_| CatalogError::InvalidStoredData {
+        field: "slot_number",
+    })?;
+    SampleSlotId::new(kind, number).map_err(|_| CatalogError::InvalidStoredData {
+        field: "slot_number",
+    })
+}
+
+fn reference_status_to_database(status: SampleReferenceStatus) -> &'static str {
+    match status {
+        SampleReferenceStatus::Resolved => "resolved",
+        SampleReferenceStatus::Missing => "missing",
+        SampleReferenceStatus::InvalidPath => "invalid_path",
+        SampleReferenceStatus::UnassignedSlot => "unassigned_slot",
+    }
+}
+
+fn reference_status_from_database(value: &str) -> Result<SampleReferenceStatus, CatalogError> {
+    match value {
+        "resolved" => Ok(SampleReferenceStatus::Resolved),
+        "missing" => Ok(SampleReferenceStatus::Missing),
+        "invalid_path" => Ok(SampleReferenceStatus::InvalidPath),
+        "unassigned_slot" => Ok(SampleReferenceStatus::UnassignedSlot),
+        _ => Err(CatalogError::InvalidStoredData {
+            field: "reference_status",
+        }),
+    }
+}
+
+fn usage_kind_to_database(kind: SampleUsageKind) -> &'static str {
+    match kind {
+        SampleUsageKind::Machine => "machine",
+        SampleUsageKind::SampleLock => "sample_lock",
+    }
+}
+
+fn usage_kind_from_database(value: &str) -> Result<SampleUsageKind, CatalogError> {
+    match value {
+        "machine" => Ok(SampleUsageKind::Machine),
+        "sample_lock" => Ok(SampleUsageKind::SampleLock),
+        _ => Err(CatalogError::InvalidStoredData {
+            field: "usage_kind",
+        }),
+    }
+}
+
+fn index_from_database(value: i64, field: &'static str) -> Result<u8, CatalogError> {
+    u8::try_from(value).map_err(|_| CatalogError::InvalidStoredData { field })
 }
 
 fn configure_connection(connection: &Connection) -> Result<(), CatalogError> {
@@ -884,8 +1516,72 @@ mod tests {
             standalone_projects: vec![],
             audio_assets: assets.into_values().collect(),
             file_instances: files,
+            ..LibrarySnapshot::default()
         }
     }
+
+    fn snapshot_with_usage_graph() -> LibrarySnapshot {
+        let target = file_instance(
+            "SET/AUDIO/kick.wav",
+            'a',
+            4,
+            Some(1),
+            SampleStorageScope::SetAudioPool,
+        );
+        let mut snapshot = snapshot_with_files(vec![target.clone()]);
+        let project_document = RootRelativePath::parse("SET/PROJECT/project.work").unwrap();
+        let bank_document = RootRelativePath::parse("SET/PROJECT/bank01.work").unwrap();
+        let provenance = ParserProvenance {
+            parser_name: "masterocta/ot-tools-io".into(),
+            parser_revision: "fixture-revision".into(),
+            source_version: Some("1.40A".into()),
+        };
+        snapshot.state_documents = vec![
+            StateDocument {
+                project_relative_path: RootRelativePath::parse("SET/PROJECT").unwrap(),
+                source_relative_path: bank_document.clone(),
+                kind: StateDocumentKind::Bank,
+                role: StateDocumentRole::Working,
+                bank_index: Some(0),
+                parse_status: StateDocumentParseStatus::Parsed,
+                parser_provenance: ParserProvenance {
+                    source_version: Some("bank:23".into()),
+                    ..provenance.clone()
+                },
+            },
+            StateDocument {
+                project_relative_path: RootRelativePath::parse("SET/PROJECT").unwrap(),
+                source_relative_path: project_document.clone(),
+                kind: StateDocumentKind::Project,
+                role: StateDocumentRole::Working,
+                bank_index: None,
+                parse_status: StateDocumentParseStatus::Parsed,
+                parser_provenance: provenance,
+            },
+        ];
+        let assignment = SlotAssignment {
+            project_document_relative_path: project_document.clone(),
+            slot: SampleSlotId::new(SampleSlotKind::Static, 1).unwrap(),
+            referenced_file_relative_path: Some(target.relative_path.clone()),
+            reference_status: SampleReferenceStatus::Resolved,
+        };
+        snapshot.slot_assignments = vec![assignment.clone()];
+        snapshot.usage_edges = vec![SampleUsageEdge {
+            bank_document_relative_path: bank_document,
+            project_document_relative_path: Some(project_document),
+            slot: assignment.slot,
+            usage_kind: SampleUsageKind::Machine,
+            track_index: 0,
+            part_index: Some(0),
+            pattern_index: None,
+            step_index: None,
+            audible: true,
+            referenced_file_relative_path: assignment.referenced_file_relative_path,
+            reference_status: assignment.reference_status,
+        }];
+        snapshot
+    }
+
     fn open_temp_catalog() -> (TempDir, std::path::PathBuf, SqliteCatalog) {
         let directory = TempDir::new().unwrap();
         let path = database_path(&directory, "catalog.sqlite3");
@@ -902,7 +1598,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(count, 2);
+        assert_eq!(count, 3);
         drop(catalog);
 
         let reopened = SqliteCatalog::open(&path).unwrap();
@@ -912,13 +1608,13 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(count, 2);
+        assert_eq!(count, 3);
         drop(reopened);
         drop(directory);
     }
 
     #[test]
-    fn schema_v1_database_migrates_to_v2_without_losing_existing_projection() {
+    fn schema_v1_database_migrates_to_v3_without_losing_existing_projection() {
         let directory = TempDir::new().unwrap();
         let path = database_path(&directory, "v1.sqlite3");
         let mut connection = Connection::open(&path).unwrap();
@@ -957,7 +1653,7 @@ mod tests {
             })
             .unwrap();
 
-        assert_eq!(versions, 2);
+        assert_eq!(versions, 3);
         assert_eq!(snapshot.sets[0].display_name, "Existing Set");
         assert_eq!(
             snapshot.sets[0].projects[0].display_name,
@@ -973,7 +1669,7 @@ mod tests {
         connection
             .execute_batch(
                 "CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL); \
-                 INSERT INTO schema_migrations VALUES (3, 'future');",
+                 INSERT INTO schema_migrations VALUES (4, 'future');",
             )
             .unwrap();
         drop(connection);
@@ -982,8 +1678,8 @@ mod tests {
         assert_eq!(
             error,
             CatalogError::UnsupportedSchema {
-                found: 3,
-                supported: 2,
+                found: 4,
+                supported: 3,
             }
         );
     }
@@ -1062,6 +1758,86 @@ mod tests {
             .query_row("PRAGMA integrity_check", [], |row| row.get(0))
             .unwrap();
         assert_eq!(integrity, "ok");
+    }
+
+    #[test]
+    fn state_documents_slots_and_usage_graph_round_trip_after_reopen() {
+        let directory = TempDir::new().unwrap();
+        let path = database_path(&directory, "state-graph.sqlite3");
+        let observation = observation('a', "State graph");
+        let snapshot = snapshot_with_usage_graph();
+        let mut catalog = SqliteCatalog::open(&path).unwrap();
+
+        catalog.store_snapshot(&observation, &snapshot).unwrap();
+        drop(catalog);
+
+        let reopened = SqliteCatalog::open(&path).unwrap();
+        assert_eq!(
+            reopened
+                .load_latest_snapshot(&observation.identity)
+                .unwrap(),
+            Some(snapshot)
+        );
+        let counts: (i64, i64, i64) = reopened
+            .connection
+            .query_row(
+                "SELECT (SELECT COUNT(*) FROM state_documents), \
+                        (SELECT COUNT(*) FROM slot_assignments), \
+                        (SELECT COUNT(*) FROM usage_edges)",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(counts, (2, 1, 1));
+    }
+
+    #[test]
+    fn corrupted_state_document_location_fails_closed_on_load() {
+        let (_directory, _path, mut catalog) = open_temp_catalog();
+        let observation = observation('c', "Corrupted state path");
+        catalog
+            .store_snapshot(&observation, &snapshot_with_usage_graph())
+            .unwrap();
+        catalog
+            .connection
+            .execute(
+                "UPDATE state_documents SET source_relative_path = 'SET/OTHER/bank01.work' \
+                 WHERE document_kind = 'bank'",
+                [],
+            )
+            .unwrap();
+
+        let error = catalog
+            .load_latest_snapshot(&observation.identity)
+            .unwrap_err();
+
+        assert!(matches!(error, CatalogError::Integrity { .. }));
+    }
+
+    #[test]
+    fn usage_graph_failure_rolls_back_to_previous_successful_projection() {
+        let (_directory, _path, mut catalog) = open_temp_catalog();
+        let observation = observation('b', "State rollback");
+        let previous = snapshot_with_usage_graph();
+        catalog.store_snapshot(&observation, &previous).unwrap();
+        catalog
+            .connection
+            .execute_batch(
+                "CREATE TRIGGER reject_usage_graph BEFORE INSERT ON usage_edges \
+                 BEGIN SELECT RAISE(ABORT, 'usage graph fault'); END;",
+            )
+            .unwrap();
+
+        let error = catalog.store_snapshot(&observation, &previous).unwrap_err();
+
+        assert!(matches!(error, CatalogError::Unavailable { .. }));
+        assert_eq!(
+            catalog.load_latest_snapshot(&observation.identity).unwrap(),
+            Some(previous)
+        );
+        let latest = catalog.latest_scan(&observation.identity).unwrap().unwrap();
+        assert_eq!(latest.status, CatalogScanStatus::Failed);
+        assert_eq!(latest.failure_code, Some(CatalogFailureCode::Persistence));
     }
 
     #[test]

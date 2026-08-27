@@ -178,10 +178,123 @@ pub enum StateDocumentRole {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum StateDocumentParseStatus {
+    Parsed,
+    UnsupportedVersion,
+    Malformed,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ParserProvenance {
+    pub parser_name: String,
+    pub parser_revision: String,
+    pub source_version: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StateDocument {
+    pub project_relative_path: RootRelativePath,
+    pub source_relative_path: RootRelativePath,
+    pub kind: StateDocumentKind,
+    pub role: StateDocumentRole,
+    pub bank_index: Option<u8>,
+    pub parse_status: StateDocumentParseStatus,
+    pub parser_provenance: ParserProvenance,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum SampleStorageScope {
     SetAudioPool,
     ProjectLocal,
     Unclassified,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum SampleSlotKind {
+    Static,
+    Flex,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct SampleSlotId {
+    kind: SampleSlotKind,
+    number: u16,
+}
+
+impl SampleSlotId {
+    pub fn new(kind: SampleSlotKind, number: u16) -> Result<Self, InvalidSampleSlotId> {
+        let valid = match kind {
+            SampleSlotKind::Static => (1..=128).contains(&number),
+            SampleSlotKind::Flex => (1..=128).contains(&number),
+        };
+        if !valid {
+            return Err(InvalidSampleSlotId { kind, number });
+        }
+        Ok(Self { kind, number })
+    }
+
+    pub fn kind(self) -> SampleSlotKind {
+        self.kind
+    }
+
+    pub fn number(self) -> u16 {
+        self.number
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InvalidSampleSlotId {
+    kind: SampleSlotKind,
+    number: u16,
+}
+
+impl fmt::Display for InvalidSampleSlotId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "invalid {:?} sample slot {}",
+            self.kind, self.number
+        )
+    }
+}
+
+impl std::error::Error for InvalidSampleSlotId {}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum SampleReferenceStatus {
+    Resolved,
+    Missing,
+    InvalidPath,
+    UnassignedSlot,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SlotAssignment {
+    pub project_document_relative_path: RootRelativePath,
+    pub slot: SampleSlotId,
+    pub referenced_file_relative_path: Option<RootRelativePath>,
+    pub reference_status: SampleReferenceStatus,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum SampleUsageKind {
+    Machine,
+    SampleLock,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SampleUsageEdge {
+    pub bank_document_relative_path: RootRelativePath,
+    pub project_document_relative_path: Option<RootRelativePath>,
+    pub slot: SampleSlotId,
+    pub usage_kind: SampleUsageKind,
+    pub track_index: u8,
+    pub part_index: Option<u8>,
+    pub pattern_index: Option<u8>,
+    pub step_index: Option<u8>,
+    pub audible: bool,
+    pub referenced_file_relative_path: Option<RootRelativePath>,
+    pub reference_status: SampleReferenceStatus,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -269,6 +382,9 @@ pub struct LibrarySnapshot {
     pub standalone_projects: Vec<LibraryProject>,
     pub audio_assets: Vec<AudioAsset>,
     pub file_instances: Vec<FileInstance>,
+    pub state_documents: Vec<StateDocument>,
+    pub slot_assignments: Vec<SlotAssignment>,
+    pub usage_edges: Vec<SampleUsageEdge>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -397,5 +513,45 @@ mod tests {
             SampleSettingsOwner::SlotAssignment,
             SampleSettingsOwner::FileInstanceSidecar
         );
+    }
+
+    #[test]
+    fn sample_slot_ids_enforce_octatrack_pool_ranges() {
+        assert!(SampleSlotId::new(SampleSlotKind::Static, 1).is_ok());
+        assert!(SampleSlotId::new(SampleSlotKind::Static, 128).is_ok());
+        assert!(SampleSlotId::new(SampleSlotKind::Static, 129).is_err());
+        assert!(SampleSlotId::new(SampleSlotKind::Flex, 128).is_ok());
+        assert!(SampleSlotId::new(SampleSlotKind::Flex, 129).is_err());
+        assert!(SampleSlotId::new(SampleSlotKind::Flex, 0).is_err());
+    }
+
+    #[test]
+    fn state_projection_keeps_source_and_target_paths_root_relative() {
+        let project = RootRelativePath::parse("SET/PROJECT").unwrap();
+        let project_document = RootRelativePath::parse("SET/PROJECT/project.work").unwrap();
+        let target = RootRelativePath::parse("SET/AUDIO/kick.wav").unwrap();
+        let document = StateDocument {
+            project_relative_path: project,
+            source_relative_path: project_document.clone(),
+            kind: StateDocumentKind::Project,
+            role: StateDocumentRole::Working,
+            bank_index: None,
+            parse_status: StateDocumentParseStatus::Parsed,
+            parser_provenance: ParserProvenance {
+                parser_name: "ot-tools-io".into(),
+                parser_revision: "fixture".into(),
+                source_version: Some("1.40A".into()),
+            },
+        };
+        let assignment = SlotAssignment {
+            project_document_relative_path: project_document,
+            slot: SampleSlotId::new(SampleSlotKind::Static, 1).unwrap(),
+            referenced_file_relative_path: Some(target),
+            reference_status: SampleReferenceStatus::Resolved,
+        };
+
+        assert_eq!(document.kind, StateDocumentKind::Project);
+        assert_eq!(assignment.slot.number(), 1);
+        assert_eq!(assignment.reference_status, SampleReferenceStatus::Resolved);
     }
 }
