@@ -1,0 +1,8 @@
+/* Radius scale from existing button / modal / badge corners. */
+:root {
+  --mo-radius-sm: 3px;
+  --mo-radius-md: 4px;
+  --mo-radius-lg: 8px;
+  --mo-radius-pill: 10px;
+  --mo-radius-full: 999px;
+}

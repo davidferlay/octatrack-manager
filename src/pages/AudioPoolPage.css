@@ -103,12 +103,12 @@
 }
 
 .toolbar-button .badge.badge-success {
-  background-color: #4caf50;
+  background-color: var(--mo-success);
   color: white;
 }
 
 .toolbar-button .badge.badge-error {
-  background-color: #f44336;
+  background-color: var(--mo-danger-bright);
   color: white;
 }
 
@@ -192,8 +192,8 @@
 .audio-panel {
   display: flex;
   flex-direction: column;
-  /* Match the Sample Slots pane background (#121212) rather than pure black. */
-  background-color: #121212;
+  /* Match the Sample Slots pane background rather than pure black. */
+  background-color: var(--mo-surface-raised);
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -295,7 +295,7 @@
 
 .pool-health-glyph.ok {
   font-size: 1.1rem;
-  color: #4caf50;
+  color: var(--mo-success);
 }
 
 .panel-path-controls {
@@ -446,7 +446,7 @@
   text-align: left;
   padding: 0.75rem 1rem;
   font-weight: 600;
-  color: #bbb;
+  color: var(--mo-text-subtle);
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;

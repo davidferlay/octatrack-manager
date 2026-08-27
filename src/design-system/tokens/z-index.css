@@ -1,0 +1,9 @@
+/* Stacking contexts. Audio Pool modal overlay historically used 2000. */
+:root {
+  --mo-z-base: 1;
+  --mo-z-sticky: 10;
+  --mo-z-dropdown: 1000;
+  --mo-z-modal: 1000;
+  --mo-z-modal-elevated: 2000;
+  --mo-z-toast: 3000;
+}

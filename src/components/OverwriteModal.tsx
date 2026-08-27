@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Button, Modal } from "../design-system";
 
 export interface OverwriteModalProps {
   isOpen: boolean;
@@ -95,75 +96,76 @@ export function OverwriteModal({ isOpen, fileName, remainingFiles, onOverwrite, 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, selectedIndex, hasMultipleRemaining, onOverwrite, onOverwriteAll, onSkip, onSkipAll, onCancel]);
 
-  if (!isOpen) return null;
-
   return (
-    <div className="modal-overlay">
-      <div className="modal-content">
-        <div className="modal-header">
-          <h3><i className="fas fa-exclamation-triangle" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>File{hasMultipleRemaining ? 's' : ''} Already Exist{hasMultipleRemaining ? '' : 's'}</h3>
-        </div>
-        <div className="modal-body">
-          {hasMultipleRemaining ? (
-            <>
-              <p>The following <strong>{remainingFiles.length} files</strong> already exist in the destination folder:</p>
-              <ul style={{ maxHeight: '150px', overflowY: 'auto', margin: '0.5rem 0', paddingLeft: '1.5rem', fontSize: '0.85rem', color: 'var(--elektron-text-secondary)' }}>
-                {remainingFiles.slice(0, 15).map((path, idx) => {
-                  const name = path.split('/').pop() || path.split('\\').pop() || path;
-                  return <li key={idx}>{name}</li>;
-                })}
-                {remainingFiles.length > 15 && <li style={{ fontStyle: 'italic' }}>...and {remainingFiles.length - 15} more</li>}
-              </ul>
-            </>
-          ) : (
-            <p>The file <strong>"{fileName}"</strong> already exists in the destination folder.</p>
-          )}
-          <p>What would you like to do?</p>
-        </div>
-        <div className="modal-footer">
-          {hasMultipleRemaining ? (
-            <>
-              <div className="modal-buttons-row">
-                <button className={`modal-button primary ${selectedIndex === 0 ? 'focused' : ''}`} onClick={onOverwrite}>
-                  Overwrite
-                </button>
-                <button className={`modal-button ${selectedIndex === 1 ? 'focused' : ''}`} onClick={onOverwriteAll}>
-                  Overwrite All ({remainingFiles.length})
-                </button>
-              </div>
-              <div className="modal-buttons-row">
-                <button className={`modal-button ${selectedIndex === 2 ? 'focused' : ''}`} onClick={onSkip}>
-                  Skip
-                </button>
-                <button className={`modal-button ${selectedIndex === 3 ? 'focused' : ''}`} onClick={onSkipAll}>
-                  Skip All ({remainingFiles.length})
-                </button>
-              </div>
-              <div className="modal-buttons-row">
-                <button className={`modal-button danger ${selectedIndex === 4 ? 'focused' : ''}`} onClick={onCancel}>
-                  Cancel Import
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="modal-buttons-row">
-                <button className={`modal-button primary ${selectedIndex === 0 ? 'focused' : ''}`} onClick={onOverwrite}>
-                  Overwrite
-                </button>
-                <button className={`modal-button ${selectedIndex === 1 ? 'focused' : ''}`} onClick={onSkip}>
-                  Skip
-                </button>
-              </div>
-              <div className="modal-buttons-row">
-                <button className={`modal-button danger ${selectedIndex === 2 ? 'focused' : ''}`} onClick={onCancel}>
-                  Cancel Import
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+    <Modal
+      open={isOpen}
+      onClose={onCancel}
+      closeOnBackdrop={false}
+      manageEscape={false}
+    >
+      <Modal.Header>
+        <h3><i className="fas fa-exclamation-triangle" style={{ color: 'var(--mo-accent)', marginRight: '0.5rem' }}></i>File{hasMultipleRemaining ? 's' : ''} Already Exist{hasMultipleRemaining ? '' : 's'}</h3>
+      </Modal.Header>
+      <Modal.Body>
+        {hasMultipleRemaining ? (
+          <>
+            <p>The following <strong>{remainingFiles.length} files</strong> already exist in the destination folder:</p>
+            <ul style={{ maxHeight: '150px', overflowY: 'auto', margin: '0.5rem 0', paddingLeft: '1.5rem', fontSize: '0.85rem', color: 'var(--mo-text-muted)' }}>
+              {remainingFiles.slice(0, 15).map((path, idx) => {
+                const name = path.split('/').pop() || path.split('\\').pop() || path;
+                return <li key={idx}>{name}</li>;
+              })}
+              {remainingFiles.length > 15 && <li style={{ fontStyle: 'italic' }}>...and {remainingFiles.length - 15} more</li>}
+            </ul>
+          </>
+        ) : (
+          <p>The file <strong>"{fileName}"</strong> already exists in the destination folder.</p>
+        )}
+        <p>What would you like to do?</p>
+      </Modal.Body>
+      <Modal.Footer>
+        {hasMultipleRemaining ? (
+          <>
+            <div className="modal-buttons-row">
+              <Button variant="modalPrimary" className={selectedIndex === 0 ? 'focused' : ''} onClick={onOverwrite}>
+                Overwrite
+              </Button>
+              <Button variant="modal" className={selectedIndex === 1 ? 'focused' : ''} onClick={onOverwriteAll}>
+                Overwrite All ({remainingFiles.length})
+              </Button>
+            </div>
+            <div className="modal-buttons-row">
+              <Button variant="modal" className={selectedIndex === 2 ? 'focused' : ''} onClick={onSkip}>
+                Skip
+              </Button>
+              <Button variant="modal" className={selectedIndex === 3 ? 'focused' : ''} onClick={onSkipAll}>
+                Skip All ({remainingFiles.length})
+              </Button>
+            </div>
+            <div className="modal-buttons-row">
+              <Button variant="danger" className={selectedIndex === 4 ? 'focused' : ''} onClick={onCancel}>
+                Cancel Import
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="modal-buttons-row">
+              <Button variant="modalPrimary" className={selectedIndex === 0 ? 'focused' : ''} onClick={onOverwrite}>
+                Overwrite
+              </Button>
+              <Button variant="modal" className={selectedIndex === 1 ? 'focused' : ''} onClick={onSkip}>
+                Skip
+              </Button>
+            </div>
+            <div className="modal-buttons-row">
+              <Button variant="danger" className={selectedIndex === 2 ? 'focused' : ''} onClick={onCancel}>
+                Cancel Import
+              </Button>
+            </div>
+          </>
+        )}
+      </Modal.Footer>
+    </Modal>
   );
 }

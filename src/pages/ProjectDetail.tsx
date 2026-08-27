@@ -17,6 +17,7 @@ import { TrackBadge } from "../components/TrackBadge";
 import { ScrollToTop } from "../components/ScrollToTop";
 import { Version } from "../components/Version";
 import { formatMixerLevel, formatMetronomePitch } from "../utils/format";
+import { Button, IconButton } from "../design-system";
 import "../App.css";
 
 // Most type definitions are now imported from ProjectsContext via Bank and ProjectMetadata types
@@ -896,9 +897,9 @@ export function ProjectDetail() {
     <main className="container">
       <div className="project-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: '1' }}>
-          <button onClick={leaveToProjectList} className="back-button" title="Back to projects (Esc)">
+          <IconButton variant="back" onClick={leaveToProjectList} title="Back to projects (Esc)">
             ← Back
-          </button>
+          </IconButton>
           <h1 ref={titleRef} className={isTitleTruncated ? 'truncated' : ''} title={projectPath || ''} style={{ cursor: 'pointer' }}
             onClick={() => {
               if (projectPath) {
@@ -1002,14 +1003,15 @@ export function ProjectDetail() {
               </button>
             </div>
           )}
-          <button
+          <Button
+            variant="toolbar"
             onClick={handleRefresh}
-            className={`toolbar-button ${isSpinning ? 'refreshing' : ''}`}
+            className={isSpinning ? 'refreshing' : undefined}
             disabled={isLoading}
             title="Refresh project"
           >
             <i className="fas fa-sync-alt"></i>
-          </button>
+          </Button>
           <Version />
         </div>
       </div>

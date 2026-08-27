@@ -1,27 +1,13 @@
-/* Elektron-inspired Design System */
+/* Legacy stylesheet. Color tokens live in src/design-system/tokens (imported first). */
 :root {
-  /* Elektron Color Palette */
-  --elektron-black: #0A0A0A;
-  --elektron-dark-gray: #1A1A1A;
-  --elektron-medium-gray: #2A2A2A;
-  --elektron-border-gray: #333333;
-  --elektron-light-gray: #666666;
-  --elektron-orange: #FF6600;
-  --elektron-orange-hover: #FF7722;
-  --elektron-orange-dark: #CC5200;
-  --elektron-text-primary: #ffffff;
-  --elektron-text-secondary: #999999;
-  --elektron-text-dim: #666666;
-
   /* Typography */
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  font-family: var(--mo-font-sans);
   font-size: 14px;
-  line-height: 1.5;
-  font-weight: 400;
+  line-height: var(--mo-line-height-base);
+  font-weight: var(--mo-font-weight-normal);
 
-  color: var(--elektron-text-primary);
-  background-color: var(--elektron-black);
+  color: var(--mo-text);
+  background-color: var(--mo-canvas);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -37,7 +23,7 @@
 body {
   margin: 0;
   padding: 0;
-  background-color: var(--elektron-black);
+  background-color: var(--mo-canvas);
   overflow-y: auto;
 }
 
@@ -1094,7 +1080,7 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--mo-z-modal);
 }
 
 .modal-content {
