@@ -1368,6 +1368,8 @@ pub fn run() {
             v2_api::v2_root_status,
             v2_api::v2_root_close,
             v2_api::v2_library_list,
+            v2_api::v2_asset_metadata_get,
+            v2_api::v2_asset_metadata_replace,
             greet,
             scan_devices,
             scan_custom_directory,

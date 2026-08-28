@@ -1,0 +1,73 @@
+.manual-asset-metadata {
+  display: grid;
+  gap: var(--mo-space-3);
+}
+
+.manual-asset-metadata-heading p,
+.manual-asset-metadata-heading h4,
+.manual-asset-metadata-status,
+.manual-asset-metadata-error,
+.manual-asset-metadata-boundary {
+  margin: 0;
+}
+
+.manual-asset-metadata-heading p,
+.manual-asset-metadata label > span {
+  color: var(--mo-text-muted);
+  font-size: var(--mo-font-size-xs);
+  font-weight: var(--mo-font-weight-bold);
+  letter-spacing: var(--mo-letter-spacing-wide);
+  text-transform: uppercase;
+}
+
+.manual-asset-metadata-heading h4 {
+  margin-top: var(--mo-space-1);
+  color: var(--mo-text);
+  overflow-wrap: anywhere;
+}
+
+.manual-asset-metadata label {
+  display: grid;
+  gap: var(--mo-space-1);
+}
+
+.manual-asset-metadata textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  padding: var(--mo-space-2);
+  border: 1px solid var(--mo-border);
+  border-radius: var(--mo-radius-md);
+  color: var(--mo-text);
+  background: var(--mo-surface-2);
+  font: inherit;
+  font-size: var(--mo-font-size-sm);
+}
+
+.manual-asset-metadata textarea:focus-visible {
+  outline: 2px solid var(--mo-accent);
+  outline-offset: 1px;
+}
+
+.manual-asset-metadata textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.manual-asset-metadata-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--mo-space-2);
+}
+
+.manual-asset-metadata-saved,
+.manual-asset-metadata-status,
+.manual-asset-metadata-boundary {
+  color: var(--mo-text-muted);
+  font-size: var(--mo-font-size-xs);
+}
+
+.manual-asset-metadata-error {
+  color: var(--mo-danger);
+  font-size: var(--mo-font-size-sm);
+}

@@ -66,7 +66,8 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - Design System DS4 StatusBadge／Toolbar: #18マージ済み
 - M3-D catalog-backed Library UI: #20マージ済み
 - Design System DS5 DataTable foundation: #21マージ済み
-- 現在のmain基準SHA: `9b6879c0681a2a74134c9d9bfab4e061390581e2`
+- M3-E1 manual tags／notes catalog foundation: #23マージ済み
+- 現在のmain基準SHA: `e58678d8d83f6f276ab0aafab7470d9567d68d58`
 - M2: 完了
 - M3-A: 完了
 - M3-B: 完了
@@ -75,9 +76,10 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - M3-C2: 完了
 - M3-C3: 完了
 - M3-D: 完了
-- 現在の作業: M3-E1 manual tags／notes catalog foundation
+- M3-E1: 完了
+- 現在の作業: M3-E2 manual metadata API／UI
 - SQLite schema: v5（M3-E1で追加）
-- 次の機能実装: M3-E2 manual metadata API／UI、その後M3-E3 waveform／preview
+- 次の機能実装: M3-E2のマージ後、M3-E3 waveform／preview
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
 - `ot-tools-io`はコミット
@@ -244,12 +246,14 @@ instance identityを維持しつつ、別rootの同一relative pathとは衝突�
 content hash、mtimeは公開しない。新command、filesystem再scan、
 SQLite migration、write処理は追加していない。
 
-M3-Eはさらに分割する。M3-E1ではcontent hash単位の`AudioAsset`へmanual tag／noteを
+M3-Eはさらに分割する。M3-E1 #23ではcontent hash単位の`AudioAsset`へmanual tag／noteを
 関連付けるdomain value、catalog port、application use case、schema v5 migration、
-transactional replacementを追加する。同じcontentを持つFileInstance間でmetadataを共有し、
-rename、一時的なcatalog非観測、別root上のduplicate後も保持する。M3-E1ではTauri command、
-frontend、waveform／preview、Octatrack媒体writeを追加しない。次はM3-E2でopaque `AssetId`を
-live `RootId`のcatalog snapshotに照合するmetadata API／UIを追加し、その後M3-E3で
-waveform peak cacheと期限付きpreview tokenへ進む。テストDBとOctatrack fixtureは
-一時directoryだけを使用し、実SD／CFカードやOctatrack原本データを使用しない。
-依存監査の既存受容期限と再確認条件は維持する。
+transactional replacementを追加した。同じcontentを持つFileInstance間でmetadataを共有し、
+rename、一時的なcatalog非観測、別root上のduplicate後も保持する。
+
+M3-E2ではopaque `AssetId`をlive `RootId`のcatalog snapshotに照合してからMac側SQLiteの
+manual metadataだけを取得・更新するTauri APIとLibrary Inspector UIを追加する。raw content
+hash、absolute path、session `RootId`をcatalogへ保存せず、Octatrack媒体やaudio fileへwrite
+しない。次はM3-E3でwaveform peak cacheと期限付きpreview tokenへ進む。テストDBと
+Octatrack fixtureは一時directoryだけを使用し、実SD／CFカードやOctatrack原本データを
+使用しない。依存監査の既存受容期限と再確認条件は維持する。

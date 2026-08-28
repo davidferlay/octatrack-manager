@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
+  metadataApi,
   rootApi,
   type LibrarySnapshot,
+  type MetadataApi,
   type RootApi,
   type RootSession,
 } from "../../api";
@@ -31,11 +33,13 @@ function errorMessage(error: unknown): string {
 
 interface RootRegistryPanelProps {
   api?: RootApi;
+  metadataClient?: MetadataApi;
   selectDirectory?: RootDirectoryPicker;
 }
 
 export function RootRegistryPanel({
   api = rootApi,
+  metadataClient = metadataApi,
   selectDirectory = pickRootDirectory,
 }: RootRegistryPanelProps) {
   const [session, setSession] = useState<RootSession | null>(null);
@@ -125,7 +129,11 @@ export function RootRegistryPanel({
             </div>
           </dl>
 
-          <CatalogLibraryBrowser snapshot={library} />
+          <CatalogLibraryBrowser
+            rootId={session.rootId}
+            snapshot={library}
+            metadataClient={metadataClient}
+          />
         </div>
       )}
     </section>

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import type { LibrarySnapshot } from "../../api";
+import { describe, expect, it, vi } from "vitest";
+import type { LibrarySnapshot, MetadataApi } from "../../api";
 import { CatalogLibraryBrowser } from "./CatalogLibraryBrowser";
 
 const snapshot: LibrarySnapshot = {
@@ -51,7 +51,7 @@ const snapshot: LibrarySnapshot = {
 
 describe("CatalogLibraryBrowser", () => {
   it("browses Set Audio Pool and Project-local files without absolute paths", () => {
-    render(<CatalogLibraryBrowser snapshot={snapshot} />);
+    render(<CatalogLibraryBrowser rootId="root-opaque" snapshot={snapshot} />);
 
     const files = screen.getByLabelText("Audio files");
     expect(within(files).getByText("POOL.wav")).toBeInTheDocument();
@@ -64,7 +64,7 @@ describe("CatalogLibraryBrowser", () => {
   });
 
   it("keeps standalone Projects in a separate source", () => {
-    render(<CatalogLibraryBrowser snapshot={snapshot} />);
+    render(<CatalogLibraryBrowser rootId="root-opaque" snapshot={snapshot} />);
 
     fireEvent.click(
       within(screen.getByLabelText("Sources")).getByRole("button", { name: /Standalone/ }),
@@ -79,6 +79,7 @@ describe("CatalogLibraryBrowser", () => {
   it("orders root-relative paths deterministically without locale collation", () => {
     const { container } = render(
       <CatalogLibraryBrowser
+        rootId="root-opaque"
         snapshot={{
           ...snapshot,
           audioFiles: [
@@ -108,10 +109,37 @@ describe("CatalogLibraryBrowser", () => {
   it("reports an empty catalog explicitly", () => {
     render(
       <CatalogLibraryBrowser
+        rootId="root-opaque"
         snapshot={{ sets: [], standaloneProjects: [], audioFiles: [] }}
       />,
     );
 
     expect(screen.getByText("No catalog entries are available.")).toBeInTheDocument();
+  });
+
+  it("opens manual metadata for the selected opaque AssetId", async () => {
+    const metadataClient: MetadataApi = {
+      loadManualAssetMetadata: vi.fn().mockResolvedValue({
+        tags: ["kick"],
+        note: "Live set",
+      }),
+      replaceManualAssetMetadata: vi.fn(),
+    };
+    render(
+      <CatalogLibraryBrowser
+        rootId="root-opaque"
+        snapshot={snapshot}
+        metadataClient={metadataClient}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /POOL\.wav/ }));
+
+    expect(await screen.findByDisplayValue("kick")).toBeInTheDocument();
+    expect(metadataClient.loadManualAssetMetadata).toHaveBeenCalledWith(
+      "root-opaque",
+      "asset:v1:pool",
+    );
+    expect(screen.getByLabelText("Asset inspector")).not.toHaveTextContent("sha256:");
   });
 });
