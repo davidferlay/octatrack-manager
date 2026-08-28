@@ -34,7 +34,7 @@ original Octatrack media.
 | 6 | Unrecoverable `remove_file` / `remove_dir_all` deletes | **Partial** — user-facing `delete_files`, `delete_project`, and `delete_set` now use `trash`. Copy/move rollback and internal temp cleanup still use hard removes. |
 | 7 | Updater-related `tar` advisories | **Fixed** via updater removal. |
 | 8 | `ot-tools-io` → `serde_yml` / `libyml` | **Open / accepted** — documented in `DEPENDENCY_AUDIT.md` as not runtime-reachable for current YAML use. |
-| 9 | GitHub Actions mutable tags | **Fixed in this branch** — workflows pin full commit SHAs with version comments. |
+| 9 | GitHub Actions mutable tags | **Fixed in this branch** — workflows pin full commit SHAs with version comments. When pinning `dtolnay/rust-toolchain`, set `toolchain: stable` explicitly because the action no longer infers the channel from the `@stable` ref. |
 | 10 | Weak DMG↔source binding for historical `v0.45.0` | **Open** — release-process risk; not a runtime code defect. |
 
 ## Next-gen surface notes
