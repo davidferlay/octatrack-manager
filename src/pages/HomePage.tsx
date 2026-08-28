@@ -27,7 +27,7 @@ import { RenameProjectModal } from "../components/RenameProjectModal";
 import { ProjectContextMenu } from "../components/ProjectContextMenu";
 import { CopyProgressModal } from "../components/CopyProgressModal";
 import { RootRegistryPanel } from "../features/roots/RootRegistryPanel";
-import { Button } from "../design-system";
+import { Button, Toolbar } from "../design-system";
 import type {
   ClipboardState,
   ContextMenuState,
@@ -479,15 +479,17 @@ export function HomePage() {
               >×</button>
             )}
           </div>
-          <Button
-            variant="toolbar"
-            onClick={handleRefresh}
-            className={isSpinning ? 'refreshing' : undefined}
-            disabled={isScanning}
-            title="Refresh projects list"
-          >
-            <i className="fas fa-sync-alt"></i>
-          </Button>
+          <Toolbar aria-label="Home actions">
+            <Button
+              variant="toolbar"
+              onClick={handleRefresh}
+              className={isSpinning ? 'refreshing' : undefined}
+              disabled={isScanning}
+              title="Refresh projects list"
+            >
+              <i className="fas fa-sync-alt"></i>
+            </Button>
+          </Toolbar>
           <Version />
         </div>
       </div>

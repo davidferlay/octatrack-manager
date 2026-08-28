@@ -6,7 +6,7 @@ import {
   type RootApi,
   type RootSession,
 } from "../../api";
-import { Badge, Button } from "../../design-system";
+import { Button, StatusBadge } from "../../design-system";
 import { CatalogLibraryBrowser } from "../library/CatalogLibraryBrowser";
 import "./RootRegistryPanel.css";
 
@@ -87,7 +87,7 @@ export function RootRegistryPanel({
         <div>
           <div className="root-registry-title-row">
             <h2 id="root-registry-title">Read-only source</h2>
-            <Badge tone="success">READ ONLY</Badge>
+            <StatusBadge tone="readonly">READ ONLY</StatusBadge>
           </div>
           <p>Next-generation root session. Only the native picker may submit an absolute path.</p>
         </div>

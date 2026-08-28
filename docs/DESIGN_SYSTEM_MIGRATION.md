@@ -1,6 +1,6 @@
 # Design System Migration
 
-Status: Milestone A in progress (DS1 → DS2 → DS3)  
+Status: DS1–DS3 done on main; **DS4 implemented**  
 Updated: 2026-08-27
 
 ## Purpose
@@ -37,7 +37,7 @@ role as:
 src/design-system/
 ├── tokens/
 ├── primitives/
-├── patterns/          # DS4+
+├── patterns/          # StatusBadge, Toolbar (DS4+); DataTable/SplitPane later
 └── index.ts
 ```
 
@@ -79,7 +79,7 @@ Phase C  UI4 Notes/Inspector → UI5 Usage Graph
 Phase D  UI6 Branding → DS7 Legacy CSS removal
 ```
 
-### PR-DS1 — Design Token Foundation
+### PR-DS1 — Design Token Foundation (done)
 
 - Add `src/design-system/tokens/*`.
 - Map current colors to `--mo-*`; keep `--elektron-*` aliases.
@@ -87,7 +87,7 @@ Phase D  UI6 Branding → DS7 Legacy CSS removal
 - Classify hardcoded Audio Pool hex into tokens (no selector/layout changes).
 - **Done when:** no intentional visual change; new code documents `--mo-*`.
 
-### PR-DS2 — Primitive Components
+### PR-DS2 — Primitive Components (done)
 
 - Add Button, IconButton, Badge, Input, Spinner, Divider, Tooltip.
 - Visual parity via existing CSS classes internally.
@@ -95,7 +95,7 @@ Phase D  UI6 Branding → DS7 Legacy CSS removal
   footers, back buttons).
 - **STOP if** disabled, focus, keyboard, or DnD-adjacent behavior changes.
 
-### PR-DS3 — Modal / Overlay System
+### PR-DS3 — Modal / Overlay System (done)
 
 - Formal `<Modal>` compound API using existing `.modal-*` classes.
 - Unify ESC, backdrop click, submitting lock; preserve `main.tsx` global
@@ -104,11 +104,21 @@ Phase D  UI6 Branding → DS7 Legacy CSS removal
 - First consumers: Create / Rename / Delete / Overwrite modals.
 - Do not delete Audio Pool modal CSS duplicates until usage is zero (DS7).
 
+### PR-DS4 — StatusBadge + Toolbar (done)
+
+- Add `patterns/StatusBadge` (`readonly` reuses `.root-mode-badge`; other tones
+  use `.mo-status-badge--*`).
+- Add `patterns/Toolbar` + `Toolbar.Separator` (canonical `.toolbar-separator`
+  in Toolbar.css; AudioPoolPage.css duplicate kept until DS7).
+- Consumers: RootRegistry READ ONLY; Home / ProjectDetail refresh; Audio Pool
+  Browse / Import / Refresh (transfers `copy-table-btn` left unchanged).
+- **Out of scope:** filter-results-info, usage/compat badges, DnD, preview,
+  View/Edit mode toggle, CSS deletion.
+
 ### Later (documented only until started)
 
 | PR | Focus |
 |----|--------|
-| DS4 | StatusBadge tones + Toolbar |
 | DS5 | DataTable foundation; AudioFileTable as first consumer |
 | DS6 | SplitPane from Audio Pool resize |
 | UI1–UI3 | Sources / Project Workspace / Audio Library on AppShell |
@@ -116,12 +126,15 @@ Phase D  UI6 Branding → DS7 Legacy CSS removal
 | UI6 | Branding rename artifacts only |
 | DS7 | Remove unused `--elektron-*` and legacy classes; shrink App.css |
 
-## Success criteria (Milestone A)
+## Success criteria
 
-- Color and spacing have a single semantic source of truth.
-- Button / Input / Modal dismiss policy can be changed in one place.
-- Product look, DnD, preview, and keyboard behavior remain unchanged.
-- App.css is not “deleted”; it remains the legacy stylesheet until DS7.
+**Milestone A (DS1–DS3):** color/spacing source of truth; Button/Input/Modal
+dismiss policy in one place; look and DnD/preview/keyboard unchanged.
+
+**After DS4:** StatusBadge and Toolbar are the single swap points for status
+pills and header action clusters on migrated surfaces.
+
+App.css is not “deleted”; it remains the legacy stylesheet until DS7.
 
 ## Verification (each DS PR)
 
@@ -130,5 +143,6 @@ pnpm run typecheck
 pnpm run test:frontend
 ```
 
-Manual smoke: Home scan, Project open/back, Audio Pool split/select, Escape and
-backdrop on Create/Rename/Delete/Overwrite. Skip cargo unless Rust changes.
+Manual smoke: Home scan/refresh, Project refresh, Audio Pool Browse/Import/Refresh,
+RootRegistry READ ONLY, Escape/backdrop on Create/Rename/Delete/Overwrite.
+Skip cargo unless Rust changes.

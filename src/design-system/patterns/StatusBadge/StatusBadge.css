@@ -1,0 +1,33 @@
+/* Status tones other than readonly (which reuses .root-mode-badge). */
+.mo-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  border: 1px solid var(--mo-border);
+  color: var(--mo-text-muted);
+  white-space: nowrap;
+}
+
+.mo-status-badge--safe {
+  border-color: var(--mo-success);
+  color: var(--mo-success);
+}
+
+.mo-status-badge--warning {
+  border-color: var(--mo-warning);
+  color: var(--mo-warning);
+}
+
+.mo-status-badge--danger {
+  border-color: var(--mo-danger);
+  color: var(--mo-danger);
+}
+
+.mo-status-badge--neutral {
+  border-color: var(--mo-border);
+  color: var(--mo-text-muted);
+}

@@ -26,7 +26,7 @@ import { useAudioPreview, shouldAutoPreview, scrubTarget, volumeStep, isAudioFil
 import { usePoolUsage, invalidatePoolUsage } from "../hooks/usePoolUsage";
 import { SamplePlayerBar } from "../components/SamplePlayerBar";
 import type { AudioFile } from "../types/audioFile";
-import { IconButton } from "../design-system";
+import { Button, IconButton, Toolbar } from "../design-system";
 import "./AudioPoolPage.css";
 
 // Droppable wrapper for the Audio Pool (destination) pane. Uses @dnd-kit (pointer-based)
@@ -65,14 +65,15 @@ function ImportDropdown({ onImportFiles, onImportFolder, disabled }: ImportDropd
 
   return (
     <div className="import-dropdown-container" ref={dropdownRef}>
-      <button
+      <Button
+        variant="toolbar"
         onClick={() => setIsOpen(!isOpen)}
-        className={`toolbar-button ${isOpen ? 'active' : ''}`}
+        className={isOpen ? 'active' : undefined}
         title={disabled ? 'Only available on the Files tab' : 'Import files or folder to Audio Pool'}
         disabled={disabled}
       >
         <i className="fas fa-file-import"></i> Import <i className="fas fa-caret-down" style={{ marginLeft: '0.25rem', fontSize: '0.7rem' }}></i>
-      </button>
+      </Button>
       {isOpen && (
         <div className="import-dropdown-menu">
           <button
@@ -1624,49 +1625,53 @@ export function AudioPoolPage() {
               Tools
             </button>
           </div>
-          <button
-            onClick={() => setIsSourcePanelOpen(!isSourcePanelOpen)}
-            className={`toolbar-button ${isSourcePanelOpen ? 'active' : ''}`}
-            title={activeTab !== 'files' ? 'Only available on the Files tab' : isSourcePanelOpen ? 'Hide source browser (B)' : 'Show source browser (B)'}
-            disabled={activeTab !== 'files'}
-          >
-            <i className="fas fa-columns"></i> Browse
-          </button>
-          <ImportDropdown
-            onImportFiles={directImportFiles}
-            onImportFolder={directImportFolder}
-            disabled={activeTab !== 'files'}
-          />
-          <div className="toolbar-separator"></div>
-          <button
-            onClick={() => setIsTransferQueueOpen(!isTransferQueueOpen)}
-            className={`copy-table-btn ${isTransferQueueOpen ? 'active' : ''} ${activeTransfersCount > 0 ? 'has-activity' : ''}`}
-            title={activeTab !== 'files' ? 'Only available on the Files tab' : isTransferQueueOpen ? 'Hide transfers' : 'Show transfers'}
-            disabled={activeTab !== 'files'}
-          >
-            <i className="fas fa-exchange-alt"></i>
-            {hasTransfers && (
-              <span className={`badge ${allTransfersSucceeded ? 'badge-success' : ''} ${hasFailedTransfers ? 'badge-error' : ''}`}>
-                {transfers.length}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => {
-              setIsSpinning(true);
-              setTimeout(() => setIsSpinning(false), 600);
-              loadSourceFiles(sourcePath);
-              loadDestinationFiles(destinationPath);
-              // Also rescan the pool so the health glyph / Tools status stay current
-              setPoolScanKey(k => k + 1);
-              invalidatePoolUsage(audioPoolPath);
-            }}
-            className={`toolbar-button ${isSpinning ? 'refreshing' : ''}`}
-            disabled={isLoadingSource || isLoadingDest}
-            title="Refresh file lists"
-          >
-            <i className="fas fa-sync-alt"></i>
-          </button>
+          <Toolbar aria-label="Audio Pool actions">
+            <Button
+              variant="toolbar"
+              onClick={() => setIsSourcePanelOpen(!isSourcePanelOpen)}
+              className={isSourcePanelOpen ? 'active' : undefined}
+              title={activeTab !== 'files' ? 'Only available on the Files tab' : isSourcePanelOpen ? 'Hide source browser (B)' : 'Show source browser (B)'}
+              disabled={activeTab !== 'files'}
+            >
+              <i className="fas fa-columns"></i> Browse
+            </Button>
+            <ImportDropdown
+              onImportFiles={directImportFiles}
+              onImportFolder={directImportFolder}
+              disabled={activeTab !== 'files'}
+            />
+            <Toolbar.Separator />
+            <button
+              onClick={() => setIsTransferQueueOpen(!isTransferQueueOpen)}
+              className={`copy-table-btn ${isTransferQueueOpen ? 'active' : ''} ${activeTransfersCount > 0 ? 'has-activity' : ''}`}
+              title={activeTab !== 'files' ? 'Only available on the Files tab' : isTransferQueueOpen ? 'Hide transfers' : 'Show transfers'}
+              disabled={activeTab !== 'files'}
+            >
+              <i className="fas fa-exchange-alt"></i>
+              {hasTransfers && (
+                <span className={`badge ${allTransfersSucceeded ? 'badge-success' : ''} ${hasFailedTransfers ? 'badge-error' : ''}`}>
+                  {transfers.length}
+                </span>
+              )}
+            </button>
+            <Button
+              variant="toolbar"
+              onClick={() => {
+                setIsSpinning(true);
+                setTimeout(() => setIsSpinning(false), 600);
+                loadSourceFiles(sourcePath);
+                loadDestinationFiles(destinationPath);
+                // Also rescan the pool so the health glyph / Tools status stay current
+                setPoolScanKey(k => k + 1);
+                invalidatePoolUsage(audioPoolPath);
+              }}
+              className={isSpinning ? 'refreshing' : undefined}
+              disabled={isLoadingSource || isLoadingDest}
+              title="Refresh file lists"
+            >
+              <i className="fas fa-sync-alt"></i>
+            </Button>
+          </Toolbar>
           <Version />
         </div>
       </div>

@@ -17,7 +17,7 @@ import { TrackBadge } from "../components/TrackBadge";
 import { ScrollToTop } from "../components/ScrollToTop";
 import { Version } from "../components/Version";
 import { formatMixerLevel, formatMetronomePitch } from "../utils/format";
-import { Button, IconButton } from "../design-system";
+import { Button, IconButton, Toolbar } from "../design-system";
 import "../App.css";
 
 // Most type definitions are now imported from ProjectsContext via Bank and ProjectMetadata types
@@ -1003,15 +1003,17 @@ export function ProjectDetail() {
               </button>
             </div>
           )}
-          <Button
-            variant="toolbar"
-            onClick={handleRefresh}
-            className={isSpinning ? 'refreshing' : undefined}
-            disabled={isLoading}
-            title="Refresh project"
-          >
-            <i className="fas fa-sync-alt"></i>
-          </Button>
+          <Toolbar aria-label="Project actions">
+            <Button
+              variant="toolbar"
+              onClick={handleRefresh}
+              className={isSpinning ? 'refreshing' : undefined}
+              disabled={isLoading}
+              title="Refresh project"
+            >
+              <i className="fas fa-sync-alt"></i>
+            </Button>
+          </Toolbar>
           <Version />
         </div>
       </div>

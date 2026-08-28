@@ -23,3 +23,13 @@ export {
   type ModalFooterProps,
   type UseModalDismissOptions,
 } from './primitives/Modal'
+export {
+  StatusBadge,
+  type StatusBadgeProps,
+  type StatusBadgeTone,
+} from './patterns/StatusBadge'
+export {
+  Toolbar,
+  type ToolbarProps,
+  type ToolbarSeparatorProps,
+} from './patterns/Toolbar'

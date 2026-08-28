@@ -81,6 +81,8 @@ describe("RootRegistryPanel", () => {
       />,
     );
 
+    expect(screen.getByText("READ ONLY")).toHaveClass("root-mode-badge");
+
     fireEvent.click(screen.getByRole("button", { name: "Choose root..." }));
 
     expect(await screen.findByText("PROJECT_A")).toBeInTheDocument();
