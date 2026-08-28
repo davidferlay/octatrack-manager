@@ -26,7 +26,7 @@ import { useAudioPreview, shouldAutoPreview, scrubTarget, volumeStep, isAudioFil
 import { usePoolUsage, invalidatePoolUsage } from "../hooks/usePoolUsage";
 import { SamplePlayerBar } from "../components/SamplePlayerBar";
 import type { AudioFile } from "../types/audioFile";
-import { Button, IconButton, Toolbar } from "../design-system";
+import { Button, IconButton, Toolbar, SplitPane } from "../design-system";
 import "./AudioPoolPage.css";
 
 // Droppable wrapper for the Audio Pool (destination) pane. Uses @dnd-kit (pointer-based)
@@ -665,10 +665,8 @@ export function AudioPoolPage() {
     setIsResizingTransfer(true);
   };
 
-  // Panel divider resize state
+  // Panel divider resize state (owned by SplitPane; page keeps controlled %)
   const [sourcePanelWidth, setSourcePanelWidth] = useState(50); // percentage
-  const [isResizingPanels, setIsResizingPanels] = useState(false);
-  const panelContainerRef = useRef<HTMLDivElement>(null);
 
   // Audio transfer hook (copy to audio pool with progress, overwrite modal, etc.)
   const {
@@ -688,35 +686,6 @@ export function AudioPoolPage() {
   } = useAudioPoolTransfer({
     onComplete: (path) => (path === sourcePath ? loadSourceFiles(path) : loadDestinationFiles(path)),
   });
-
-  // Handle panel divider resize
-  useEffect(() => {
-    if (!isResizingPanels) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!panelContainerRef.current) return;
-      const containerRect = panelContainerRef.current.getBoundingClientRect();
-      const newWidthPercent = ((e.clientX - containerRect.left) / containerRect.width) * 100;
-      setSourcePanelWidth(Math.max(20, Math.min(80, newWidthPercent)));
-    };
-
-    const handleMouseUp = () => {
-      setIsResizingPanels(false);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizingPanels]);
-
-  const handlePanelResizeStart = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizingPanels(true);
-  };
 
   // Initialize source path to home directory on mount
   useEffect(() => {
@@ -1991,9 +1960,11 @@ export function AudioPoolPage() {
       )}
 
       {activeTab === 'files' && (
-      <div
-        ref={panelContainerRef}
+      <SplitPane
         className="audio-pool-container"
+        primarySize={sourcePanelWidth}
+        onPrimarySizeChange={setSourcePanelWidth}
+        primaryVisible={isSourcePanelOpen}
       >
         <DndContext
           sensors={dndSensors}
@@ -2002,8 +1973,7 @@ export function AudioPoolPage() {
           onDragCancel={() => setDndDragFiles([])}
         >
         {/* Left Panel - Source (My Computer) */}
-        {isSourcePanelOpen && (
-          <div className="audio-panel source-panel" style={{ width: `${sourcePanelWidth}%` }}>
+        <SplitPane.Primary className="audio-panel source-panel">
             <div className="panel-header-bar">
               <span className="panel-title">Source</span>
               <div className="panel-path-controls">
@@ -2050,18 +2020,12 @@ export function AudioPoolPage() {
               rowRefs={sourceRowRefs}
               scrollStorageKey={sourcePath ? `pool-src-scroll:${sourcePath}` : undefined}
             />
-          </div>
-        )}
+        </SplitPane.Primary>
 
-        {/* Panel Divider */}
-        {isSourcePanelOpen && (
-          <div
-            className="panel-divider"
-            onMouseDown={handlePanelResizeStart}
-          />
-        )}
+        <SplitPane.Divider />
 
         {/* Right Panel - Destination (Audio Pool) */}
+        <SplitPane.Secondary>
         <PoolDropZone osOver={isOverDropZone}>
           <div className="panel-header-bar">
             <span className="panel-title">Audio Pool</span>
@@ -2132,6 +2096,7 @@ export function AudioPoolPage() {
             ) : undefined}
           />
         </PoolDropZone>
+        </SplitPane.Secondary>
 
         <DragOverlay dropAnimation={null}>
           {dndDragFiles.length > 0 ? (
@@ -2152,7 +2117,7 @@ export function AudioPoolPage() {
           ) : null}
         </DragOverlay>
         </DndContext>
-      </div>
+      </SplitPane>
       )}
 
       {/* Transfer Queue Panel */}

@@ -1,7 +1,7 @@
 # Design System Migration
 
-Status: DS1–DS4 done; **DS5 implemented** (stacked on DS4 branch until merge)  
-Updated: 2026-08-27
+Status: DS1–DS5 done; **DS6 implemented**  
+Updated: 2026-08-28
 
 ## Purpose
 
@@ -37,7 +37,7 @@ role as:
 src/design-system/
 ├── tokens/
 ├── primitives/
-├── patterns/          # StatusBadge, Toolbar, DataTable (DS4–DS5); SplitPane later
+├── patterns/          # StatusBadge, Toolbar, DataTable, SplitPane (DS4–DS6)
 └── index.ts
 ```
 
@@ -123,11 +123,19 @@ Phase D  UI6 Branding → DS7 Legacy CSS removal
   selection/cursor stay inside `AudioFileTable`.
 - **Out of scope:** `SampleSlotsTable`, Fix/Purge modal tables, CSS deletion (DS7).
 
+### PR-DS6 — SplitPane (done)
+
+- Add `patterns/SplitPane` (`Primary`, `Divider`, `Secondary`) with controlled
+  primary size % and drag clamp (20–80).
+- First consumer: Audio Pool Files-tab horizontal split only.
+- Divider keeps `.panel-divider` class for visual parity (CSS duplicate until DS7).
+- **Out of scope:** AudioPoolSidebar resize, TransferProgressPanel height,
+  vertical orientation, DnD/preview rewrites.
+
 ### Later (documented only until started)
 
 | PR | Focus |
 |----|--------|
-| DS6 | SplitPane from Audio Pool resize |
 | UI1–UI3 | Sources / Project Workspace / Audio Library on AppShell |
 | UI4–UI5 | Notes inspector + Usage Graph UI |
 | UI6 | Branding rename artifacts only |
@@ -143,6 +151,9 @@ pills and header action clusters on migrated surfaces.
 
 **After DS5:** DataTable is the shell for file-list tables; `AudioFileTable` is
 the first consumer. Domain sorting/filtering/DnD remain feature-owned.
+
+**After DS6:** SplitPane owns horizontal panel resize for Audio Pool Files tab.
+Sidebar / transfer pane resizers remain page-local until a later pass.
 
 App.css is not “deleted”; it remains the legacy stylesheet until DS7.
 

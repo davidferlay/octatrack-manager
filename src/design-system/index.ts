@@ -41,3 +41,10 @@ export {
   type DataTableLoadingProps,
   type DataTableEmptyProps,
 } from './patterns/DataTable'
+export {
+  SplitPane,
+  type SplitPaneProps,
+  type SplitPanePrimaryProps,
+  type SplitPaneDividerProps,
+  type SplitPaneSecondaryProps,
+} from './patterns/SplitPane'

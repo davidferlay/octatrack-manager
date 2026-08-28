@@ -1,0 +1,34 @@
+/* Horizontal split shell. Divider visuals may also use .panel-divider until DS7. */
+.mo-split-pane {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/*
+ * Pane shells must participate in the flex row themselves.
+ * Domain classes like .audio-panel.dest-panel often live on nested children
+ * (e.g. drop zones), so secondary growth cannot rely on those alone.
+ */
+.mo-split-pane__primary,
+.mo-split-pane__secondary {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mo-split-pane__primary {
+  flex: 0 0 auto;
+}
+
+.mo-split-pane__secondary {
+  flex: 1 1 auto;
+}
+
+.mo-split-pane__divider {
+  flex-shrink: 0;
+}
