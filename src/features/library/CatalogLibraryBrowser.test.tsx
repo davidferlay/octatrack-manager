@@ -76,6 +76,35 @@ describe("CatalogLibraryBrowser", () => {
     expect(screen.getByLabelText("Audio files")).toHaveTextContent("STANDALONE.wav");
   });
 
+  it("orders root-relative paths deterministically without locale collation", () => {
+    const { container } = render(
+      <CatalogLibraryBrowser
+        snapshot={{
+          ...snapshot,
+          audioFiles: [
+            {
+              ...snapshot.audioFiles[0],
+              fileInstanceId: "fileinst:v1:lower",
+              displayName: "a.wav",
+              relativePath: "LIVE_SET/AUDIO/a.wav",
+            },
+            {
+              ...snapshot.audioFiles[0],
+              fileInstanceId: "fileinst:v1:upper",
+              displayName: "Z.wav",
+              relativePath: "LIVE_SET/AUDIO/Z.wav",
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(
+      Array.from(container.querySelectorAll(".catalog-library-file strong"))
+        .map((element) => element.textContent),
+    ).toEqual(["Z.wav", "a.wav"]);
+  });
+
   it("reports an empty catalog explicitly", () => {
     render(
       <CatalogLibraryBrowser

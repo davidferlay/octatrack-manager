@@ -235,7 +235,9 @@ sourceからpartial値を公開しない。frontend DTO、Tauri command、write�
 M3-Dでは既存`v2_library_list`のcatalog snapshotを安全なfrontend DTOへ投影し、Set、
 Standalone Project、Set Audio Pool、Project-local sample、Unclassified sampleをread-onlyの
 カラム表示で閲覧する。frontendへ返すfile identityはDTO専用opaque IDと検証済みrelative pathに
-限定し、raw absolute path、content hash、mtimeは公開しない。新command、filesystem再scan、
+限定する。FileInstance IDは永続root identityとrelative pathから生成し、content変更後も同じ
+instance identityを維持しつつ、別rootの同一relative pathとは衝突しない。raw absolute path、
+content hash、mtimeは公開しない。新command、filesystem再scan、
 SQLite migration、write処理は追加しない。次はM3-E waveform／preview／manual tags／notesとし、
 テストDBとOctatrack fixtureは一時directoryだけを使用する。実SD／CFカードやOctatrack原本
 データを使用しない。依存監査の既存受容期限と再確認条件は維持する。

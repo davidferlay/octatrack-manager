@@ -94,7 +94,11 @@ function filesFor(
     }
     return location?.kind === "unclassified" && file.storageScope === "unclassified";
   });
-  return files.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
+  return files.sort((left, right) => {
+    if (left.relativePath < right.relativePath) return -1;
+    if (left.relativePath > right.relativePath) return 1;
+    return 0;
+  });
 }
 
 function formatBytes(byteSize: number): string {
