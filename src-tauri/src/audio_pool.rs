@@ -1100,13 +1100,15 @@ pub fn get_parent_directory(path: &str) -> Result<String, String> {
     }
 }
 
-/// Create a new directory
+/// Create a new directory under `path` using a single validated basename.
 pub fn create_directory(path: &str, name: &str) -> Result<String, String> {
+    let safe_name = validate_fs_entry_name(name)?;
     let parent = Path::new(path);
-    let new_dir = parent.join(name);
+    let new_dir = parent.join(&safe_name);
+    ensure_joined_name_is_basename(&new_dir, &safe_name)?;
 
     if new_dir.exists() {
-        return Err(format!("Directory already exists: {}", name));
+        return Err(format!("Directory already exists: {}", safe_name));
     }
 
     fs::create_dir(&new_dir).map_err(|e| format!("Failed to create directory: {}", e))?;
@@ -1323,6 +1325,8 @@ pub fn move_files(source_paths: Vec<String>, destination_dir: &str) -> Result<Ve
 }
 
 /// Delete files
+/// Move paths to the OS trash / recoverable recycle bin.
+/// Hard `remove_file` / `remove_dir_all` is intentionally avoided for user deletes.
 pub fn delete_files(file_paths: Vec<String>) -> Result<usize, String> {
     let mut deleted_count = 0;
 
@@ -1333,20 +1337,14 @@ pub fn delete_files(file_paths: Vec<String>) -> Result<usize, String> {
             return Err(format!("File does not exist: {}", path));
         }
 
-        if file_path.is_dir() {
-            fs::remove_dir_all(file_path)
-                .map_err(|e| format!("Failed to delete directory: {}", e))?;
-        } else {
-            fs::remove_file(file_path).map_err(|e| format!("Failed to delete file: {}", e))?;
-        }
-
+        trash::delete(file_path).map_err(|e| format!("Failed to move to trash: {}", e))?;
         deleted_count += 1;
     }
 
     Ok(deleted_count)
 }
 
-/// Rename a file or directory
+/// Rename a file or directory using a single validated basename in the same parent.
 pub fn rename_file(old_path: &str, new_name: &str) -> Result<String, String> {
     let old_path = Path::new(old_path);
 
@@ -1354,22 +1352,51 @@ pub fn rename_file(old_path: &str, new_name: &str) -> Result<String, String> {
         return Err(format!("File does not exist: {}", old_path.display()));
     }
 
+    let safe_name = validate_fs_entry_name(new_name)?;
     let parent = old_path
         .parent()
         .ok_or_else(|| "Cannot determine parent directory".to_string())?;
 
-    let new_path = parent.join(new_name);
+    let new_path = parent.join(&safe_name);
+    ensure_joined_name_is_basename(&new_path, &safe_name)?;
 
     if new_path.exists() {
         return Err(format!(
             "A file or folder with the name '{}' already exists",
-            new_name
+            safe_name
         ));
     }
 
     fs::rename(old_path, &new_path).map_err(|e| format!("Failed to rename: {}", e))?;
 
     Ok(new_path.to_string_lossy().to_string())
+}
+
+/// Reject empty names, `.` / `..`, separators, NUL, and absolute paths.
+pub(crate) fn validate_fs_entry_name(name: &str) -> Result<String, String> {
+    if name.is_empty() {
+        return Err("Name cannot be empty".to_string());
+    }
+    if name.contains('\0') {
+        return Err("Name contains an invalid character".to_string());
+    }
+    if name == "." || name == ".." {
+        return Err("Name is not allowed".to_string());
+    }
+    if name.contains('/') || name.contains('\\') {
+        return Err("Name must not contain path separators".to_string());
+    }
+    if Path::new(name).is_absolute() {
+        return Err("Name must be a single path segment".to_string());
+    }
+    Ok(name.to_string())
+}
+
+fn ensure_joined_name_is_basename(joined: &Path, expected_name: &str) -> Result<(), String> {
+    match joined.file_name().and_then(|name| name.to_str()) {
+        Some(name) if name == expected_name => Ok(()),
+        _ => Err("Name must be a single path segment".to_string()),
+    }
 }
 
 #[cfg(test)]
@@ -2081,6 +2108,36 @@ mod tests {
         let result = rename_file(&old_path.to_string_lossy(), "existing.txt");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("already exists"));
+    }
+
+    #[test]
+    fn rejects_path_traversal_in_rename_and_create_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let old_path = temp_dir.path().join("old.txt");
+        fs::write(&old_path, "old").unwrap();
+
+        for bad_name in ["../escape.txt", "..\\escape.txt", "/", ".", "..", ""] {
+            let rename_err = rename_file(&old_path.to_string_lossy(), bad_name).unwrap_err();
+            assert!(
+                rename_err.contains("path separators")
+                    || rename_err.contains("not allowed")
+                    || rename_err.contains("empty")
+                    || rename_err.contains("single path segment"),
+                "unexpected rename error for {bad_name}: {rename_err}"
+            );
+            let create_err =
+                create_directory(&temp_dir.path().to_string_lossy(), bad_name).unwrap_err();
+            assert!(
+                create_err.contains("path separators")
+                    || create_err.contains("not allowed")
+                    || create_err.contains("empty")
+                    || create_err.contains("single path segment"),
+                "unexpected create error for {bad_name}: {create_err}"
+            );
+        }
+
+        assert!(old_path.exists());
+        assert!(!temp_dir.path().join("escape.txt").exists());
     }
 
     // ==================== CANCELLATION TOKEN TESTS ====================

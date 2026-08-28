@@ -1197,7 +1197,7 @@ pub(crate) fn delete_project_sync(p: &Path) -> Result<(), String> {
             p.display()
         ));
     }
-    fs::remove_dir_all(p).map_err(|e| format!("Delete failed: {}", e))
+    trash::delete(p).map_err(|e| format!("Delete failed: {}", e))
 }
 
 /// Recursively deletes a project directory.
@@ -1344,7 +1344,7 @@ pub(crate) fn delete_set_sync(p: &Path) -> Result<(), String> {
             p.display()
         ));
     }
-    fs::remove_dir_all(p).map_err(|e| format!("Delete failed: {}", e))
+    trash::delete(p).map_err(|e| format!("Delete failed: {}", e))
 }
 
 #[tauri::command]

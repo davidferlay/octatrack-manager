@@ -46,25 +46,16 @@ pub struct AudioRuntime {
 
 impl AudioRuntime {
     fn open(data_directory: &Path, preview_ttl: Duration) -> Result<Self, AudioRuntimeError> {
+        fs::create_dir_all(data_directory)
+            .map_err(|error| runtime_io("create data directory", error))?;
         let canonical_data_directory = data_directory
             .canonicalize()
             .map_err(|error| runtime_io("resolve data directory", error))?;
         let product_directory = canonical_data_directory.join(PRODUCT_DIRECTORY);
-        let product_metadata = fs::symlink_metadata(&product_directory)
-            .map_err(|error| runtime_io("inspect product data directory", error))?;
-        if product_metadata.file_type().is_symlink() || !product_metadata.is_dir() {
-            return Err(AudioRuntimeError::UnsafePath(
-                "product data directory must be a real directory",
-            ));
-        }
+        ensure_product_directory(&canonical_data_directory, &product_directory)?;
         let canonical_product_directory = product_directory
             .canonicalize()
             .map_err(|error| runtime_io("resolve product data directory", error))?;
-        if !canonical_product_directory.starts_with(&canonical_data_directory) {
-            return Err(AudioRuntimeError::UnsafePath(
-                "product data directory escaped the application data directory",
-            ));
-        }
         let waveform_directory = canonical_product_directory.join(WAVEFORM_CACHE_DIRECTORY);
         let waveform_cache =
             WaveformCache::open(waveform_directory).map_err(AudioRuntimeError::Audio)?;
@@ -197,6 +188,36 @@ pub fn open_shared_audio_runtime(
     )?))
 }
 
+fn ensure_product_directory(
+    canonical_data_directory: &Path,
+    product_directory: &Path,
+) -> Result<(), AudioRuntimeError> {
+    match fs::symlink_metadata(product_directory) {
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                return Err(AudioRuntimeError::UnsafePath(
+                    "product data directory must be a real directory",
+                ));
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            fs::create_dir(product_directory)
+                .map_err(|error| runtime_io("create product data directory", error))?;
+        }
+        Err(error) => return Err(runtime_io("inspect product data directory", error)),
+    }
+
+    let canonical_product_directory = product_directory
+        .canonicalize()
+        .map_err(|error| runtime_io("resolve product data directory", error))?;
+    if !canonical_product_directory.starts_with(canonical_data_directory) {
+        return Err(AudioRuntimeError::UnsafePath(
+            "product data directory escaped the application data directory",
+        ));
+    }
+    Ok(())
+}
+
 fn validate_preview_token(token: &str) -> Result<(), AudioRuntimeError> {
     let digest = token
         .strip_prefix("preview:v1:")
@@ -282,9 +303,17 @@ mod tests {
 
     fn runtime(ttl: Duration) -> (TempDir, AudioRuntime) {
         let data = TempDir::new().unwrap();
-        fs::create_dir(data.path().join(PRODUCT_DIRECTORY)).unwrap();
         let runtime = AudioRuntime::open(data.path(), ttl).unwrap();
         (data, runtime)
+    }
+
+    #[test]
+    fn creates_product_directory_when_missing() {
+        let data = TempDir::new().unwrap();
+        let product = data.path().join(PRODUCT_DIRECTORY);
+        assert!(!product.exists());
+        AudioRuntime::open(data.path(), Duration::from_secs(60)).unwrap();
+        assert!(product.is_dir());
     }
 
     #[test]
