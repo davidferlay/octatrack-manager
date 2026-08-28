@@ -63,7 +63,10 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - repository固有development skills: #15マージ済み
 - M3-C3 sample settings／slice read model: #16マージ済み
 - Design System DS1〜DS3 foundation: #17マージ済み
-- 現在のmain基準SHA: `6de074d3223a5932e3fce2af171bd9eaaf7506cd`
+- Design System DS4 StatusBadge／Toolbar: #18マージ済み
+- M3-D catalog-backed Library UI: #20マージ済み
+- Design System DS5 DataTable foundation: #21マージ済み
+- 現在のmain基準SHA: `9b6879c0681a2a74134c9d9bfab4e061390581e2`
 - M2: 完了
 - M3-A: 完了
 - M3-B: 完了
@@ -71,9 +74,10 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - M3-C1: 完了
 - M3-C2: 完了
 - M3-C3: 完了
-- 現在の作業: M3-D catalog-backed Library UI
-- SQLite schema: v4（M3-C3で追加）
-- 次の機能実装: M3-E waveform／preview／manual tags／notes
+- M3-D: 完了
+- 現在の作業: M3-E1 manual tags／notes catalog foundation
+- SQLite schema: v5（M3-E1で追加）
+- 次の機能実装: M3-E2 manual metadata API／UI、その後M3-E3 waveform／preview
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
 - `ot-tools-io`はコミット
@@ -232,12 +236,20 @@ Malformedを保持する。曖昧なsame-stem sidecar ownerはfail-closedとし�
 sourceからpartial値を公開しない。frontend DTO、Tauri command、write／round-trip behaviorは
 変更していない。
 
-M3-Dでは既存`v2_library_list`のcatalog snapshotを安全なfrontend DTOへ投影し、Set、
+M3-D #20では既存`v2_library_list`のcatalog snapshotを安全なfrontend DTOへ投影し、Set、
 Standalone Project、Set Audio Pool、Project-local sample、Unclassified sampleをread-onlyの
 カラム表示で閲覧する。frontendへ返すfile identityはDTO専用opaque IDと検証済みrelative pathに
 限定する。FileInstance IDは永続root identityとrelative pathから生成し、content変更後も同じ
 instance identityを維持しつつ、別rootの同一relative pathとは衝突しない。raw absolute path、
 content hash、mtimeは公開しない。新command、filesystem再scan、
-SQLite migration、write処理は追加しない。次はM3-E waveform／preview／manual tags／notesとし、
-テストDBとOctatrack fixtureは一時directoryだけを使用する。実SD／CFカードやOctatrack原本
-データを使用しない。依存監査の既存受容期限と再確認条件は維持する。
+SQLite migration、write処理は追加していない。
+
+M3-Eはさらに分割する。M3-E1ではcontent hash単位の`AudioAsset`へmanual tag／noteを
+関連付けるdomain value、catalog port、application use case、schema v5 migration、
+transactional replacementを追加する。同じcontentを持つFileInstance間でmetadataを共有し、
+rename、一時的なcatalog非観測、別root上のduplicate後も保持する。M3-E1ではTauri command、
+frontend、waveform／preview、Octatrack媒体writeを追加しない。次はM3-E2でopaque `AssetId`を
+live `RootId`のcatalog snapshotに照合するmetadata API／UIを追加し、その後M3-E3で
+waveform peak cacheと期限付きpreview tokenへ進む。テストDBとOctatrack fixtureは
+一時directoryだけを使用し、実SD／CFカードやOctatrack原本データを使用しない。
+依存監査の既存受容期限と再確認条件は維持する。

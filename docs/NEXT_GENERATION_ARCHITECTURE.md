@@ -914,7 +914,7 @@ Octatrack OS 1.40A公式manualはProject／BankのSAVE／RELOAD意味論を確�
 - source revision／confidenceとOS version差異
 - lossless writeはまだ実装しない
 
-#### M3-D — new Library UI
+#### M3-D — new Library UI（完了 / PR #20）
 
 - catalog-backed column browser
 - Set／Project／Audio Pool／Project-local sample表示
@@ -923,8 +923,9 @@ Octatrack OS 1.40A公式manualはProject／BankのSAVE／RELOAD意味論を確�
 
 #### M3-E — waveform/preview/manual tags and notes
 
-- waveform peaksとpreview
-- manual tags／notes
+- M3-E1: Asset単位のmanual tags／notes catalog foundation
+- M3-E2: opaque AssetIdを使うmanual metadata API／UI
+- M3-E3: waveform peaksと期限付きtokenによるpreview
 - Mac側SQLiteだけを使い、Octatrack媒体へmetadataを書かない
 
 M3完了条件: cardへ一切書き込まず、実際のライブ用libraryを検索・閲覧できる。

@@ -2,14 +2,16 @@
 
 use ot_domain::{
     AudioAsset, ContentHash, ContentHashFreshness, FileInstance, LibraryProject, LibrarySet,
-    LibrarySnapshot, ParserProvenance, RootRelativePath, SampleReferenceStatus, SampleSettings,
-    SampleSettingsEvidence, SampleSettingsOwner, SampleSettingsParseStatus, SampleSlice,
-    SampleSlotId, SampleSlotKind, SampleStorageScope, SampleUsageEdge, SampleUsageKind,
-    SlotAssignment, StateDocument, StateDocumentKind, StateDocumentParseStatus, StateDocumentRole,
+    LibrarySnapshot, ManualAssetMetadata, ManualNote, ManualTag, ParserProvenance,
+    RootRelativePath, SampleReferenceStatus, SampleSettings, SampleSettingsEvidence,
+    SampleSettingsOwner, SampleSettingsParseStatus, SampleSlice, SampleSlotId, SampleSlotKind,
+    SampleStorageScope, SampleUsageEdge, SampleUsageKind, SlotAssignment, StateDocument,
+    StateDocumentKind, StateDocumentParseStatus, StateDocumentRole,
 };
 use ot_storage_ports::{
-    CatalogError, CatalogFailureCode, CatalogRootIdentity, CatalogRootObservation, CatalogScan,
-    CatalogScanId, CatalogScanRevision, CatalogScanStatus, LibraryCatalog,
+    AssetMetadataCatalog, CatalogError, CatalogFailureCode, CatalogRootIdentity,
+    CatalogRootObservation, CatalogScan, CatalogScanId, CatalogScanRevision, CatalogScanStatus,
+    LibraryCatalog,
 };
 use rusqlite::{
     params, Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior,
@@ -17,7 +19,7 @@ use rusqlite::{
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 
-const LATEST_SCHEMA_VERSION: u64 = 4;
+const LATEST_SCHEMA_VERSION: u64 = 5;
 const MIGRATIONS: &[(u64, &str)] = &[
     (1, include_str!("../migrations/0001_catalog_foundation.sql")),
     (2, include_str!("../migrations/0002_file_inventory.sql")),
@@ -28,6 +30,10 @@ const MIGRATIONS: &[(u64, &str)] = &[
     (
         4,
         include_str!("../migrations/0004_sample_settings_slices.sql"),
+    ),
+    (
+        5,
+        include_str!("../migrations/0005_manual_asset_metadata.sql"),
     ),
 ];
 
@@ -216,6 +222,10 @@ impl SqliteCatalog {
         transaction.execute(
             "DELETE FROM audio_assets WHERE NOT EXISTS (\
                  SELECT 1 FROM file_instances WHERE file_instances.audio_asset_id = audio_assets.id\
+             ) AND NOT EXISTS (\
+                 SELECT 1 FROM tag_assignments WHERE tag_assignments.audio_asset_id = audio_assets.id\
+             ) AND NOT EXISTS (\
+                 SELECT 1 FROM notes WHERE notes.audio_asset_id = audio_assets.id\
              )",
             [],
         )?;
@@ -367,6 +377,160 @@ impl LibraryCatalog for SqliteCatalog {
                 scan_from_database(id, revision, &status, failure_code.as_deref())
             })
             .transpose()
+    }
+}
+
+impl AssetMetadataCatalog for SqliteCatalog {
+    fn load_manual_asset_metadata(
+        &self,
+        asset: &ContentHash,
+    ) -> Result<ManualAssetMetadata, CatalogError> {
+        let asset_row_id = self
+            .connection
+            .query_row(
+                "SELECT id FROM audio_assets WHERE content_hash = ?1",
+                params![asset.as_str()],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()
+            .map_err(unavailable)?
+            .ok_or(CatalogError::AssetNotFound)?;
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT tags.name FROM tags \
+                 JOIN tag_assignments ON tag_assignments.tag_id = tags.id \
+                 WHERE tag_assignments.audio_asset_id = ?1 \
+                   AND tag_assignments.source = 'user' \
+                 ORDER BY tags.name COLLATE BINARY",
+            )
+            .map_err(unavailable)?;
+        let rows = statement
+            .query_map([asset_row_id], |row| row.get::<_, String>(0))
+            .map_err(unavailable)?;
+        let mut tags = Vec::new();
+        for row in rows {
+            let value = row.map_err(unavailable)?;
+            let tag = ManualTag::parse(&value).map_err(|_| CatalogError::InvalidStoredData {
+                field: "manual_tag",
+            })?;
+            if tag.as_str() != value {
+                return Err(CatalogError::InvalidStoredData {
+                    field: "manual_tag",
+                });
+            }
+            tags.push(tag);
+        }
+        let note = self
+            .connection
+            .query_row(
+                "SELECT body FROM notes WHERE audio_asset_id = ?1 AND source = 'user'",
+                [asset_row_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(unavailable)?
+            .map(ManualNote::parse)
+            .transpose()
+            .map_err(|_| CatalogError::InvalidStoredData {
+                field: "manual_note",
+            })?;
+        ManualAssetMetadata::new(tags, note).map_err(|_| CatalogError::InvalidStoredData {
+            field: "manual_asset_metadata",
+        })
+    }
+
+    fn replace_manual_asset_metadata(
+        &mut self,
+        asset: &ContentHash,
+        metadata: &ManualAssetMetadata,
+    ) -> Result<(), CatalogError> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(unavailable)?;
+        let asset_row_id = transaction
+            .query_row(
+                "SELECT id FROM audio_assets WHERE content_hash = ?1",
+                params![asset.as_str()],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()
+            .map_err(unavailable)?
+            .ok_or(CatalogError::AssetNotFound)?;
+
+        transaction
+            .execute(
+                "DELETE FROM tag_assignments WHERE audio_asset_id = ?1 AND source = 'user'",
+                [asset_row_id],
+            )
+            .map_err(unavailable)?;
+        for tag in metadata.tags() {
+            transaction
+                .execute(
+                    "INSERT INTO tags (name, created_at) \
+                     VALUES (?1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) \
+                     ON CONFLICT(name) DO NOTHING",
+                    params![tag.as_str()],
+                )
+                .map_err(unavailable)?;
+            transaction
+                .execute(
+                    "INSERT INTO tag_assignments \
+                     (audio_asset_id, tag_id, source, assigned_at) \
+                     SELECT ?1, id, 'user', strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
+                     FROM tags WHERE name = ?2",
+                    params![asset_row_id, tag.as_str()],
+                )
+                .map_err(unavailable)?;
+        }
+
+        match metadata.note() {
+            Some(note) => {
+                transaction
+                    .execute(
+                        "INSERT INTO notes \
+                         (audio_asset_id, body, source, created_at, updated_at) \
+                         VALUES (?1, ?2, 'user', \
+                                 strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), \
+                                 strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) \
+                         ON CONFLICT(audio_asset_id, source) DO UPDATE SET \
+                           body = excluded.body, source = 'user', \
+                           updated_at = excluded.updated_at",
+                        params![asset_row_id, note.as_str()],
+                    )
+                    .map_err(unavailable)?;
+            }
+            None => {
+                transaction
+                    .execute(
+                        "DELETE FROM notes WHERE audio_asset_id = ?1 AND source = 'user'",
+                        [asset_row_id],
+                    )
+                    .map_err(unavailable)?;
+            }
+        }
+        transaction
+            .execute(
+                "DELETE FROM tags WHERE NOT EXISTS (\
+                     SELECT 1 FROM tag_assignments WHERE tag_assignments.tag_id = tags.id\
+                 )",
+                [],
+            )
+            .map_err(unavailable)?;
+        transaction
+            .execute(
+                "DELETE FROM audio_assets WHERE id = ?1 AND NOT EXISTS (\
+                     SELECT 1 FROM file_instances WHERE file_instances.audio_asset_id = audio_assets.id\
+                 ) AND NOT EXISTS (\
+                     SELECT 1 FROM tag_assignments WHERE tag_assignments.audio_asset_id = audio_assets.id\
+                 ) AND NOT EXISTS (\
+                     SELECT 1 FROM notes WHERE notes.audio_asset_id = audio_assets.id\
+                 )",
+                [asset_row_id],
+            )
+            .map_err(unavailable)?;
+        transaction.commit().map_err(unavailable)
     }
 }
 
@@ -2162,7 +2326,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(count, 4);
+        assert_eq!(count, 5);
         drop(catalog);
 
         let reopened = SqliteCatalog::open(&path).unwrap();
@@ -2172,13 +2336,13 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(count, 4);
+        assert_eq!(count, 5);
         drop(reopened);
         drop(directory);
     }
 
     #[test]
-    fn schema_v1_database_migrates_to_v4_without_losing_existing_projection() {
+    fn schema_v1_database_migrates_to_v5_without_losing_existing_projection() {
         let directory = TempDir::new().unwrap();
         let path = database_path(&directory, "v1.sqlite3");
         let mut connection = Connection::open(&path).unwrap();
@@ -2217,7 +2381,7 @@ mod tests {
             })
             .unwrap();
 
-        assert_eq!(versions, 4);
+        assert_eq!(versions, 5);
         assert_eq!(snapshot.sets[0].display_name, "Existing Set");
         assert_eq!(
             snapshot.sets[0].projects[0].display_name,
@@ -2233,7 +2397,7 @@ mod tests {
         connection
             .execute_batch(
                 "CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL); \
-                 INSERT INTO schema_migrations VALUES (5, 'future');",
+                 INSERT INTO schema_migrations VALUES (6, 'future');",
             )
             .unwrap();
         drop(connection);
@@ -2242,8 +2406,8 @@ mod tests {
         assert_eq!(
             error,
             CatalogError::UnsupportedSchema {
-                found: 5,
-                supported: 4,
+                found: 6,
+                supported: 5,
             }
         );
     }
@@ -3088,6 +3252,252 @@ mod tests {
             "SET/AUDIO/second.wav"
         );
     }
+
+    #[test]
+    fn manual_asset_metadata_round_trips_after_reopen() {
+        let directory = TempDir::new().unwrap();
+        let path = database_path(&directory, "manual-metadata.sqlite3");
+        let observation = observation('a', "Manual metadata");
+        let snapshot = snapshot_with_files(vec![file_instance(
+            "SET/AUDIO/kick.wav",
+            'a',
+            16,
+            Some(1),
+            SampleStorageScope::SetAudioPool,
+        )]);
+        let metadata = ManualAssetMetadata::new(
+            vec![
+                ManualTag::parse("808").unwrap(),
+                ManualTag::parse("キック").unwrap(),
+            ],
+            Some(ManualNote::parse("ライブ用\n低域を残す").unwrap()),
+        )
+        .unwrap();
+        let mut catalog = SqliteCatalog::open(&path).unwrap();
+        catalog.store_snapshot(&observation, &snapshot).unwrap();
+
+        catalog
+            .replace_manual_asset_metadata(&content_hash('a'), &metadata)
+            .unwrap();
+        assert_eq!(
+            catalog
+                .load_manual_asset_metadata(&content_hash('a'))
+                .unwrap(),
+            metadata
+        );
+        drop(catalog);
+
+        let reopened = SqliteCatalog::open(path).unwrap();
+        assert_eq!(
+            reopened
+                .load_manual_asset_metadata(&content_hash('a'))
+                .unwrap(),
+            metadata
+        );
+    }
+
+    #[test]
+    fn manual_metadata_uses_only_the_user_source_until_provenance_is_modeled() {
+        let (_directory, _path, mut catalog) = open_temp_catalog();
+        let observation = observation('f', "Metadata source");
+        let snapshot = snapshot_with_files(vec![file_instance(
+            "SET/AUDIO/source.wav",
+            'f',
+            16,
+            Some(1),
+            SampleStorageScope::SetAudioPool,
+        )]);
+        let metadata = ManualAssetMetadata::new(
+            vec![ManualTag::parse("source-check").unwrap()],
+            Some(ManualNote::parse("User-authored note").unwrap()),
+        )
+        .unwrap();
+        catalog.store_snapshot(&observation, &snapshot).unwrap();
+        catalog
+            .replace_manual_asset_metadata(&content_hash('f'), &metadata)
+            .unwrap();
+
+        let sources: (String, String) = catalog
+            .connection
+            .query_row(
+                "SELECT tag_assignments.source, notes.source \
+                 FROM tag_assignments CROSS JOIN notes",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(sources, ("user".into(), "user".into()));
+
+        let unsupported_tag_source = catalog.connection.execute(
+            "INSERT INTO tag_assignments (audio_asset_id, tag_id, source, assigned_at) \
+             SELECT audio_asset_id, tag_id, 'ai', assigned_at FROM tag_assignments",
+            [],
+        );
+        assert!(unsupported_tag_source.is_err());
+        let unsupported_note_source = catalog.connection.execute(
+            "INSERT INTO notes (audio_asset_id, body, source, created_at, updated_at) \
+             SELECT audio_asset_id, body, 'analyzer', created_at, updated_at FROM notes",
+            [],
+        );
+        assert!(unsupported_note_source.is_err());
+    }
+
+    #[test]
+    fn manual_metadata_follows_content_across_rename_and_distinct_roots() {
+        let (_directory, _path, mut catalog) = open_temp_catalog();
+        let first = observation('a', "First root");
+        let second = observation('b', "Second root");
+        let original = snapshot_with_files(vec![file_instance(
+            "SET/AUDIO/original.wav",
+            'c',
+            16,
+            Some(1),
+            SampleStorageScope::SetAudioPool,
+        )]);
+        let renamed = snapshot_with_files(vec![file_instance(
+            "SET/AUDIO/renamed.wav",
+            'c',
+            16,
+            Some(2),
+            SampleStorageScope::SetAudioPool,
+        )]);
+        let duplicate_on_second_root = snapshot_with_files(vec![file_instance(
+            "OTHER/AUDIO/copy.wav",
+            'c',
+            16,
+            Some(3),
+            SampleStorageScope::SetAudioPool,
+        )]);
+        let metadata =
+            ManualAssetMetadata::new(vec![ManualTag::parse("shared-content").unwrap()], None)
+                .unwrap();
+
+        catalog.store_snapshot(&first, &original).unwrap();
+        catalog
+            .replace_manual_asset_metadata(&content_hash('c'), &metadata)
+            .unwrap();
+        catalog
+            .store_snapshot(&first, &LibrarySnapshot::default())
+            .unwrap();
+        assert_eq!(
+            catalog
+                .load_manual_asset_metadata(&content_hash('c'))
+                .unwrap(),
+            metadata
+        );
+        catalog.store_snapshot(&first, &renamed).unwrap();
+        catalog
+            .store_snapshot(&second, &duplicate_on_second_root)
+            .unwrap();
+
+        assert_eq!(
+            catalog
+                .load_manual_asset_metadata(&content_hash('c'))
+                .unwrap(),
+            metadata
+        );
+        assert_eq!(
+            catalog.load_latest_snapshot(&first.identity).unwrap(),
+            Some(renamed)
+        );
+        assert_eq!(
+            catalog.load_latest_snapshot(&second.identity).unwrap(),
+            Some(duplicate_on_second_root)
+        );
+    }
+
+    #[test]
+    fn failed_manual_metadata_replacement_rolls_back() {
+        let (_directory, _path, mut catalog) = open_temp_catalog();
+        let observation = observation('d', "Metadata rollback");
+        let snapshot = snapshot_with_files(vec![file_instance(
+            "SET/AUDIO/snare.wav",
+            'd',
+            8,
+            Some(1),
+            SampleStorageScope::SetAudioPool,
+        )]);
+        let previous = ManualAssetMetadata::new(
+            vec![ManualTag::parse("snare").unwrap()],
+            Some(ManualNote::parse("Keep this").unwrap()),
+        )
+        .unwrap();
+        catalog.store_snapshot(&observation, &snapshot).unwrap();
+        catalog
+            .replace_manual_asset_metadata(&content_hash('d'), &previous)
+            .unwrap();
+        catalog
+            .connection
+            .execute_batch(
+                "CREATE TRIGGER reject_manual_tag_assignment \
+                 BEFORE INSERT ON tag_assignments \
+                 WHEN NEW.source = 'user' \
+                 BEGIN SELECT RAISE(ABORT, 'manual metadata fault'); END;",
+            )
+            .unwrap();
+        let replacement =
+            ManualAssetMetadata::new(vec![ManualTag::parse("replacement").unwrap()], None).unwrap();
+
+        assert!(matches!(
+            catalog.replace_manual_asset_metadata(&content_hash('d'), &replacement),
+            Err(CatalogError::Unavailable { .. })
+        ));
+        assert_eq!(
+            catalog
+                .load_manual_asset_metadata(&content_hash('d'))
+                .unwrap(),
+            previous
+        );
+    }
+
+    #[test]
+    fn manual_metadata_rejects_unknown_assets_and_clears_orphans() {
+        let (_directory, _path, mut catalog) = open_temp_catalog();
+        assert_eq!(
+            catalog.load_manual_asset_metadata(&content_hash('e')),
+            Err(CatalogError::AssetNotFound)
+        );
+
+        let observation = observation('e', "Metadata cleanup");
+        let snapshot = snapshot_with_files(vec![file_instance(
+            "SET/AUDIO/hat.wav",
+            'e',
+            4,
+            Some(1),
+            SampleStorageScope::SetAudioPool,
+        )]);
+        catalog.store_snapshot(&observation, &snapshot).unwrap();
+        catalog
+            .replace_manual_asset_metadata(
+                &content_hash('e'),
+                &ManualAssetMetadata::new(
+                    vec![ManualTag::parse("hat").unwrap()],
+                    Some(ManualNote::parse("Short").unwrap()),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        catalog
+            .replace_manual_asset_metadata(&content_hash('e'), &ManualAssetMetadata::default())
+            .unwrap();
+
+        let counts: (i64, i64) = catalog
+            .connection
+            .query_row(
+                "SELECT (SELECT COUNT(*) FROM tags), (SELECT COUNT(*) FROM notes)",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(counts, (0, 0));
+        assert_eq!(
+            catalog
+                .load_manual_asset_metadata(&content_hash('e'))
+                .unwrap(),
+            ManualAssetMetadata::default()
+        );
+    }
+
     fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
         !needle.is_empty()
             && haystack

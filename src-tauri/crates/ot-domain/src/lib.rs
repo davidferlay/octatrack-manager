@@ -344,6 +344,118 @@ pub struct AudioAsset {
     pub byte_size: u64,
 }
 
+pub const MAX_MANUAL_TAGS_PER_ASSET: usize = 32;
+pub const MAX_MANUAL_TAG_LENGTH: usize = 64;
+pub const MAX_MANUAL_NOTE_LENGTH: usize = 4096;
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct ManualTag(String);
+
+impl ManualTag {
+    pub fn parse(value: impl AsRef<str>) -> Result<Self, InvalidManualMetadata> {
+        let value = value.as_ref().trim();
+        if value.is_empty() {
+            return Err(InvalidManualMetadata::EmptyTag);
+        }
+        if value.chars().count() > MAX_MANUAL_TAG_LENGTH {
+            return Err(InvalidManualMetadata::TagTooLong);
+        }
+        if value.chars().any(char::is_control) {
+            return Err(InvalidManualMetadata::InvalidTagCharacter);
+        }
+        Ok(Self(value.to_owned()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ManualNote(String);
+
+impl ManualNote {
+    pub fn parse(value: impl Into<String>) -> Result<Self, InvalidManualMetadata> {
+        let value = value.into();
+        if value.trim().is_empty() {
+            return Err(InvalidManualMetadata::EmptyNote);
+        }
+        if value.chars().count() > MAX_MANUAL_NOTE_LENGTH {
+            return Err(InvalidManualMetadata::NoteTooLong);
+        }
+        if value
+            .chars()
+            .any(|character| character.is_control() && character != '\n' && character != '\t')
+        {
+            return Err(InvalidManualMetadata::InvalidNoteCharacter);
+        }
+        Ok(Self(value))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ManualAssetMetadata {
+    tags: Vec<ManualTag>,
+    note: Option<ManualNote>,
+}
+
+impl ManualAssetMetadata {
+    pub fn new(
+        mut tags: Vec<ManualTag>,
+        note: Option<ManualNote>,
+    ) -> Result<Self, InvalidManualMetadata> {
+        if tags.len() > MAX_MANUAL_TAGS_PER_ASSET {
+            return Err(InvalidManualMetadata::TooManyTags);
+        }
+        tags.sort();
+        if tags.windows(2).any(|pair| pair[0] == pair[1]) {
+            return Err(InvalidManualMetadata::DuplicateTag);
+        }
+        Ok(Self { tags, note })
+    }
+
+    pub fn tags(&self) -> &[ManualTag] {
+        &self.tags
+    }
+
+    pub fn note(&self) -> Option<&ManualNote> {
+        self.note.as_ref()
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum InvalidManualMetadata {
+    EmptyTag,
+    TagTooLong,
+    InvalidTagCharacter,
+    TooManyTags,
+    DuplicateTag,
+    EmptyNote,
+    NoteTooLong,
+    InvalidNoteCharacter,
+}
+
+impl fmt::Display for InvalidManualMetadata {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::EmptyTag => "manual tag must not be empty",
+            Self::TagTooLong => "manual tag exceeds the maximum length",
+            Self::InvalidTagCharacter => "manual tag contains a control character",
+            Self::TooManyTags => "manual metadata contains too many tags",
+            Self::DuplicateTag => "manual metadata contains a duplicate tag",
+            Self::EmptyNote => "manual note must not be empty",
+            Self::NoteTooLong => "manual note exceeds the maximum length",
+            Self::InvalidNoteCharacter => "manual note contains an unsupported control character",
+        })
+    }
+}
+
+impl std::error::Error for InvalidManualMetadata {}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FileInstance {
     pub relative_path: RootRelativePath,
@@ -552,6 +664,46 @@ mod tests {
         assert_ne!(
             ContentHashFreshness::ComputedThisScan,
             ContentHashFreshness::ReusedUnchangedMetadata
+        );
+    }
+
+    #[test]
+    fn manual_metadata_is_bounded_normalized_and_deterministic() {
+        let metadata = ManualAssetMetadata::new(
+            vec![
+                ManualTag::parse(" snare ").unwrap(),
+                ManualTag::parse("808").unwrap(),
+            ],
+            Some(ManualNote::parse("Verse layer\nKeep dry").unwrap()),
+        )
+        .unwrap();
+
+        assert_eq!(
+            metadata
+                .tags()
+                .iter()
+                .map(ManualTag::as_str)
+                .collect::<Vec<_>>(),
+            vec!["808", "snare"]
+        );
+        assert_eq!(metadata.note().unwrap().as_str(), "Verse layer\nKeep dry");
+        assert_eq!(
+            ManualAssetMetadata::new(
+                vec![
+                    ManualTag::parse("kick").unwrap(),
+                    ManualTag::parse("kick").unwrap(),
+                ],
+                None,
+            ),
+            Err(InvalidManualMetadata::DuplicateTag)
+        );
+        assert_eq!(
+            ManualTag::parse("bad\ntag"),
+            Err(InvalidManualMetadata::InvalidTagCharacter)
+        );
+        assert_eq!(
+            ManualNote::parse("bad\rnote"),
+            Err(InvalidManualMetadata::InvalidNoteCharacter)
         );
     }
 

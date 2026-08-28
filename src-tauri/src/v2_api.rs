@@ -367,6 +367,11 @@ fn catalog_error(error: CatalogError) -> ApiError {
             "the local catalog failed an integrity check",
             false,
         ),
+        CatalogError::AssetNotFound => (
+            "CATALOG_ASSET_NOT_FOUND",
+            "the requested audio asset is not present in the catalog",
+            true,
+        ),
     };
     let mut api_error = ApiError::new(code, message, recoverable);
     api_error.details = Some(error.to_string());
