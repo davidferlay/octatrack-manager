@@ -401,7 +401,7 @@ impl AssetMetadataCatalog for SqliteCatalog {
                 "SELECT tags.name FROM tags \
                  JOIN tag_assignments ON tag_assignments.tag_id = tags.id \
                  WHERE tag_assignments.audio_asset_id = ?1 \
-                   AND tag_assignments.source = 'manual' \
+                   AND tag_assignments.source = 'user' \
                  ORDER BY tags.name COLLATE BINARY",
             )
             .map_err(unavailable)?;
@@ -424,7 +424,7 @@ impl AssetMetadataCatalog for SqliteCatalog {
         let note = self
             .connection
             .query_row(
-                "SELECT body FROM notes WHERE audio_asset_id = ?1 AND source = 'manual'",
+                "SELECT body FROM notes WHERE audio_asset_id = ?1 AND source = 'user'",
                 [asset_row_id],
                 |row| row.get::<_, String>(0),
             )
@@ -461,7 +461,7 @@ impl AssetMetadataCatalog for SqliteCatalog {
 
         transaction
             .execute(
-                "DELETE FROM tag_assignments WHERE audio_asset_id = ?1 AND source = 'manual'",
+                "DELETE FROM tag_assignments WHERE audio_asset_id = ?1 AND source = 'user'",
                 [asset_row_id],
             )
             .map_err(unavailable)?;
@@ -478,7 +478,7 @@ impl AssetMetadataCatalog for SqliteCatalog {
                 .execute(
                     "INSERT INTO tag_assignments \
                      (audio_asset_id, tag_id, source, assigned_at) \
-                     SELECT ?1, id, 'manual', strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
+                     SELECT ?1, id, 'user', strftime('%Y-%m-%dT%H:%M:%fZ', 'now') \
                      FROM tags WHERE name = ?2",
                     params![asset_row_id, tag.as_str()],
                 )
@@ -491,11 +491,11 @@ impl AssetMetadataCatalog for SqliteCatalog {
                     .execute(
                         "INSERT INTO notes \
                          (audio_asset_id, body, source, created_at, updated_at) \
-                         VALUES (?1, ?2, 'manual', \
+                         VALUES (?1, ?2, 'user', \
                                  strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), \
                                  strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) \
                          ON CONFLICT(audio_asset_id, source) DO UPDATE SET \
-                           body = excluded.body, source = 'manual', \
+                           body = excluded.body, source = 'user', \
                            updated_at = excluded.updated_at",
                         params![asset_row_id, note.as_str()],
                     )
@@ -504,7 +504,7 @@ impl AssetMetadataCatalog for SqliteCatalog {
             None => {
                 transaction
                     .execute(
-                        "DELETE FROM notes WHERE audio_asset_id = ?1 AND source = 'manual'",
+                        "DELETE FROM notes WHERE audio_asset_id = ?1 AND source = 'user'",
                         [asset_row_id],
                     )
                     .map_err(unavailable)?;
@@ -3297,6 +3297,52 @@ mod tests {
     }
 
     #[test]
+    fn manual_metadata_uses_only_the_user_source_until_provenance_is_modeled() {
+        let (_directory, _path, mut catalog) = open_temp_catalog();
+        let observation = observation('f', "Metadata source");
+        let snapshot = snapshot_with_files(vec![file_instance(
+            "SET/AUDIO/source.wav",
+            'f',
+            16,
+            Some(1),
+            SampleStorageScope::SetAudioPool,
+        )]);
+        let metadata = ManualAssetMetadata::new(
+            vec![ManualTag::parse("source-check").unwrap()],
+            Some(ManualNote::parse("User-authored note").unwrap()),
+        )
+        .unwrap();
+        catalog.store_snapshot(&observation, &snapshot).unwrap();
+        catalog
+            .replace_manual_asset_metadata(&content_hash('f'), &metadata)
+            .unwrap();
+
+        let sources: (String, String) = catalog
+            .connection
+            .query_row(
+                "SELECT tag_assignments.source, notes.source \
+                 FROM tag_assignments CROSS JOIN notes",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(sources, ("user".into(), "user".into()));
+
+        let unsupported_tag_source = catalog.connection.execute(
+            "INSERT INTO tag_assignments (audio_asset_id, tag_id, source, assigned_at) \
+             SELECT audio_asset_id, tag_id, 'ai', assigned_at FROM tag_assignments",
+            [],
+        );
+        assert!(unsupported_tag_source.is_err());
+        let unsupported_note_source = catalog.connection.execute(
+            "INSERT INTO notes (audio_asset_id, body, source, created_at, updated_at) \
+             SELECT audio_asset_id, body, 'analyzer', created_at, updated_at FROM notes",
+            [],
+        );
+        assert!(unsupported_note_source.is_err());
+    }
+
+    #[test]
     fn manual_metadata_follows_content_across_rename_and_distinct_roots() {
         let (_directory, _path, mut catalog) = open_temp_catalog();
         let first = observation('a', "First root");
@@ -3385,7 +3431,7 @@ mod tests {
             .execute_batch(
                 "CREATE TRIGGER reject_manual_tag_assignment \
                  BEFORE INSERT ON tag_assignments \
-                 WHEN NEW.source = 'manual' \
+                 WHEN NEW.source = 'user' \
                  BEGIN SELECT RAISE(ABORT, 'manual metadata fault'); END;",
             )
             .unwrap();
