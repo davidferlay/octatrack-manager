@@ -1,0 +1,13 @@
+/* Layout-only DataTable shell. Visual classes stay on consumers (audio-files-table, etc.). */
+.mo-data-table {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mo-data-table__wrapper {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}

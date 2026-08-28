@@ -16,6 +16,7 @@ import {
 import { useDraggable } from "@dnd-kit/core";
 import type { AudioFile, PoolUsageEntry } from "../types/audioFile";
 import { formatBankRef } from './BankSelector';
+import { DataTable } from '../design-system';
 
 export type SortColumn = 'name' | 'size' | 'format' | 'bitrate' | 'samplerate';
 export type SortDirection = 'asc' | 'desc';
@@ -749,7 +750,7 @@ export function AudioFileTable({
   }
 
   return (
-    <div
+    <DataTable
       className="audio-file-table-container"
       onClick={onPanelClick}
       onContextMenu={(e) => {
@@ -758,7 +759,7 @@ export function AudioFileTable({
       }}
     >
       {/* Toolbar row */}
-      <div className="filter-results-info">
+      <DataTable.Toolbar className="filter-results-info">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           {headerPrefix}
           <span>{table.getRowModel().rows.length}/{baseFiles.length} files</span>
@@ -825,10 +826,10 @@ export function AudioFileTable({
             )}
           </div>
         </div>
-      </div>
+      </DataTable.Toolbar>
 
       {/* Table */}
-      <div className="table-wrapper" ref={tableWrapperRef}>
+      <DataTable.Wrapper className="table-wrapper" ref={tableWrapperRef}>
         <table
           className="audio-files-table"
           style={{ width: '100%' }}
@@ -915,16 +916,16 @@ export function AudioFileTable({
           </thead>
           <tbody>
             {isLoading && (
-              <tr><td colSpan={visibleColumns.length} style={{ textAlign: 'center', opacity: 0.5 }}>Loading...</td></tr>
+              <DataTable.Loading colSpan={visibleColumns.length} />
             )}
             {!isLoading && table.getRowModel().rows.length === 0 && (
-              <tr>
-                <td colSpan={visibleColumns.length}
-                  style={{ textAlign: 'center', opacity: 0.5, cursor: onEmptyClick ? 'pointer' : 'default' }}
-                  onClick={onEmptyClick}>
-                  {emptyMessage}
-                </td>
-              </tr>
+              <DataTable.Empty
+                colSpan={visibleColumns.length}
+                style={{ cursor: onEmptyClick ? 'pointer' : 'default' }}
+                onClick={onEmptyClick}
+              >
+                {emptyMessage}
+              </DataTable.Empty>
             )}
             {!isLoading && table.getRowModel().rows.map((row) => {
               const file = row.original;
@@ -971,7 +972,7 @@ export function AudioFileTable({
             })}
           </tbody>
         </table>
-      </div>
+      </DataTable.Wrapper>
 
       {usagePopover && (
         <UsagePopoverBox anchor={usagePopover} onClose={() => setUsagePopover(null)} onClick={(e) => e.stopPropagation()}>
@@ -1006,6 +1007,6 @@ export function AudioFileTable({
           })()}
         </UsagePopoverBox>
       )}
-    </div>
+    </DataTable>
   );
 }
