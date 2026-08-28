@@ -1,18 +1,21 @@
 import { useMemo, useState } from "react";
 import type {
+  AudioApi,
   LibraryAudioFile,
   LibraryProject,
   LibrarySet,
   LibrarySnapshot,
   MetadataApi,
 } from "../../api";
-import { metadataApi } from "../../api";
+import { audioApi, metadataApi } from "../../api";
 import { ManualAssetMetadataEditor } from "../metadata/ManualAssetMetadataEditor";
+import { WaveformPreview } from "../waveform/WaveformPreview";
 import "./CatalogLibraryBrowser.css";
 
 interface CatalogLibraryBrowserProps {
   rootId: string;
   snapshot: LibrarySnapshot;
+  audioClient?: AudioApi;
   metadataClient?: MetadataApi;
 }
 
@@ -115,6 +118,7 @@ function formatBytes(byteSize: number): string {
 export function CatalogLibraryBrowser({
   rootId,
   snapshot,
+  audioClient = audioApi,
   metadataClient = metadataApi,
 }: CatalogLibraryBrowserProps) {
   const sources = useMemo(() => sourceOptions(snapshot), [snapshot]);
@@ -222,13 +226,20 @@ export function CatalogLibraryBrowser({
           {selectedFile === undefined ? (
             <p className="catalog-library-empty">Select an audio file to edit local metadata.</p>
           ) : (
-            <ManualAssetMetadataEditor
-              key={selectedFile.assetId}
-              api={metadataClient}
-              rootId={rootId}
-              assetId={selectedFile.assetId}
-              displayName={selectedFile.displayName}
-            />
+            <div className="catalog-library-inspector-content" key={`${rootId}:${selectedFile.assetId}`}>
+              <WaveformPreview
+                api={audioClient}
+                rootId={rootId}
+                assetId={selectedFile.assetId}
+                displayName={selectedFile.displayName}
+              />
+              <ManualAssetMetadataEditor
+                api={metadataClient}
+                rootId={rootId}
+                assetId={selectedFile.assetId}
+                displayName={selectedFile.displayName}
+              />
+            </div>
           )}
         </div>
       </div>

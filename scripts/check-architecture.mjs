@@ -32,6 +32,10 @@ const dependencyRules = new Map([
     ["ot-domain", "ot-storage-ports", "rusqlite"],
   ],
   [
+    "ot-audio",
+    ["ot-domain", "serde", "serde_json", "sha2", "symphonia"],
+  ],
+  [
     "ot-application",
     ["ot-codec-ports", "ot-domain", "ot-storage-ports"],
   ],
@@ -40,8 +44,10 @@ const devDependencyRules = new Map(
   [...dependencyRules.keys()].map((packageName) => [packageName, []]),
 );
 devDependencyRules.set("ot-catalog", ["tempfile"]);
+devDependencyRules.set("ot-audio", ["tempfile"]);
 const allowedCompositionDependencies = new Set([
   "ot-application",
+  "ot-audio",
   "ot-catalog",
   "ot-domain",
   "ot-storage-ports",
@@ -133,6 +139,9 @@ const v2Commands = [
 const expectedV2Commands = [
   "v2_asset_metadata_get",
   "v2_asset_metadata_replace",
+  "v2_audio_preview_create",
+  "v2_audio_preview_read",
+  "v2_audio_waveform_get",
   "v2_library_list",
   "v2_root_close",
   "v2_root_register",

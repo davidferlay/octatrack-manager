@@ -292,6 +292,34 @@ Those JavaScript findings retain their existing reachability classifications
 and acceptance deadlines. No new runtime-reachable `critical` or `high`
 advisory was identified by the M3-B dependency/reachability delta.
 
+## M3-E3 waveform and preview dependency delta
+
+Audit date: 2026-08-29
+
+M3-E3 adds the workspace crate `ot-audio` and one composition dependency edge.
+It adds no crates.io or JavaScript package and changes no resolved package
+version or checksum. Its direct third-party dependencies are the already locked
+`serde@1.0.228`, `serde_json@1.0.149`, `sha2@0.10.9`, and
+`symphonia@0.5.5`; `tempfile@3.25.0` remains test-only. Symphonia was already
+product-runtime reachable through the existing audio inspection and conversion
+paths. The new crate disables Symphonia default features and requests only WAV,
+AIFF, and their PCM decoder; the composition package's pre-existing broader
+feature set remains unchanged. M3-E3 does not add a network, install-script, or
+removable-media write path.
+
+The JavaScript lockfiles are unchanged. Re-running the required audits produced
+the same classified totals:
+
+- root: 31 advisories (`low: 2`, `moderate: 12`, `high: 16`, `critical: 1`);
+- docs/PDF: 88 findings (`low: 5`, `moderate: 33`, `high: 48`, `critical: 2`).
+
+`cargo audit` remains unavailable (`cargo: no such command: audit`) and was not
+installed, so this is not a complete Rust audit. Since this delta introduces no
+new third-party package/version pair, no new Rust package query was required.
+The existing Rust classifications, acceptance deadlines, and recheck triggers
+remain in force. No new runtime-reachable `critical` or `high` advisory was
+identified by the M3-E3 dependency delta.
+
 ## Reproduction
 
 Commands used:

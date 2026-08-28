@@ -1,6 +1,6 @@
 # Codex引継ぎ — MasterOCTa
 
-更新日: 2026-08-28
+更新日: 2026-08-29
 
 ## 1. 目的
 
@@ -67,7 +67,8 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - M3-D catalog-backed Library UI: #20マージ済み
 - Design System DS5 DataTable foundation: #21マージ済み
 - M3-E1 manual tags／notes catalog foundation: #23マージ済み
-- 現在のmain基準SHA: `e58678d8d83f6f276ab0aafab7470d9567d68d58`
+- M3-E2 manual metadata API／UI: #24マージ済み
+- 現在のmain基準SHA: `ebe275ab2cadc3bdcb3165bf4881830097b558c0`
 - M2: 完了
 - M3-A: 完了
 - M3-B: 完了
@@ -77,9 +78,10 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - M3-C3: 完了
 - M3-D: 完了
 - M3-E1: 完了
-- 現在の作業: M3-E2 manual metadata API／UI
+- M3-E2: 完了
+- 現在の作業: M3-E3 waveform peak cache／期限付きpreview token
 - SQLite schema: v5（M3-E1で追加）
-- 次の機能実装: M3-E2のマージ後、M3-E3 waveform／preview
+- 次の機能実装: M3-E3のマージ後、M4 backup／executor pilot
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
 - `ot-tools-io`はコミット
@@ -251,9 +253,16 @@ M3-Eはさらに分割する。M3-E1 #23ではcontent hash単位の`AudioAsset`�
 transactional replacementを追加した。同じcontentを持つFileInstance間でmetadataを共有し、
 rename、一時的なcatalog非観測、別root上のduplicate後も保持する。
 
-M3-E2ではopaque `AssetId`をlive `RootId`のcatalog snapshotに照合してからMac側SQLiteの
+M3-E2 #24ではopaque `AssetId`をlive `RootId`のcatalog snapshotに照合してからMac側SQLiteの
 manual metadataだけを取得・更新するTauri APIとLibrary Inspector UIを追加する。raw content
 hash、absolute path、session `RootId`をcatalogへ保存せず、Octatrack媒体やaudio fileへwrite
-しない。次はM3-E3でwaveform peak cacheと期限付きpreview tokenへ進む。テストDBと
-Octatrack fixtureは一時directoryだけを使用し、実SD／CFカードやOctatrack原本データを
-使用しない。依存監査の既存受容期限と再確認条件は維持する。
+しない。
+
+M3-E3ではcontent hashと一致するlive audio sourceを再検証してから、Mac側Application
+Supportへversion付きmulti-resolution waveform peak cacheを生成する。previewはbackendで
+最大60秒・32 MiBのPCM WAVへ変換し、live `RootId`に束縛した2分間・one-shotのopaque
+tokenで即時取得する。frontendへraw content hashやabsolute pathを返さず、cacheやpreviewを
+Octatrack媒体へ保存しない。SQLite schemaはv5のまま変更しない。次はM4 backup／executor
+pilotへ進む。
+テストDBとaudio fixtureは一時directoryだけを使用し、実SD／CFカードやOctatrack原本
+データを使用しない。依存監査の既存受容期限と再確認条件は維持する。

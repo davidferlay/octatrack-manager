@@ -1,4 +1,4 @@
-use ot_domain::RootId;
+use ot_domain::{RootId, RootRelativePath};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
@@ -397,6 +397,44 @@ pub struct ResolvedRoot {
     pub canonical_path: PathBuf,
 }
 
+impl ResolvedRoot {
+    pub fn resolve_regular_file(
+        &self,
+        relative_path: &RootRelativePath,
+    ) -> Result<PathBuf, RootRegistryError> {
+        let mut candidate = self.canonical_path.clone();
+        let components = relative_path.as_str().split('/').collect::<Vec<_>>();
+        for (index, component) in components.iter().enumerate() {
+            if component.is_empty() || *component == "." || *component == ".." {
+                return Err(RootRegistryError::PathEscape);
+            }
+            candidate.push(component);
+            let metadata = fs::symlink_metadata(&candidate).map_err(map_resolve_file_error)?;
+            if metadata.file_type().is_symlink() {
+                return Err(RootRegistryError::SymlinkEscape);
+            }
+            let is_last = index + 1 == components.len();
+            if (!is_last && !metadata.is_dir()) || (is_last && !metadata.is_file()) {
+                return Err(RootRegistryError::NotRegularFile);
+            }
+        }
+
+        let canonical = candidate.canonicalize().map_err(map_resolve_file_error)?;
+        if !canonical.starts_with(&self.canonical_path) {
+            return Err(RootRegistryError::PathEscape);
+        }
+        Ok(canonical)
+    }
+}
+
+fn map_resolve_file_error(error: std::io::Error) -> RootRegistryError {
+    match error.kind() {
+        std::io::ErrorKind::NotFound => RootRegistryError::NotRegularFile,
+        std::io::ErrorKind::PermissionDenied => RootRegistryError::PermissionDenied,
+        _ => RootRegistryError::Io(error.to_string()),
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RootRegistryError {
     InvalidPath,
@@ -407,6 +445,9 @@ pub enum RootRegistryError {
     Removed,
     Changed,
     AmbiguousIdentity,
+    PathEscape,
+    SymlinkEscape,
+    NotRegularFile,
     Io(String),
     Unavailable,
 }
@@ -422,6 +463,9 @@ impl RootRegistryError {
             Self::Removed => "ROOT_REMOVED",
             Self::Changed => "ROOT_CHANGED",
             Self::AmbiguousIdentity => "ROOT_IDENTITY_AMBIGUOUS",
+            Self::PathEscape => "PATH_ESCAPE",
+            Self::SymlinkEscape => "SYMLINK_ESCAPE",
+            Self::NotRegularFile => "AUDIO_SOURCE_UNAVAILABLE",
             Self::Io(_) | Self::Unavailable => "ROOT_UNAVAILABLE",
         }
     }
@@ -443,6 +487,13 @@ impl std::fmt::Display for RootRegistryError {
             Self::Changed => formatter.write_str("the registered root or device identity changed"),
             Self::AmbiguousIdentity => formatter
                 .write_str("another registered root has the same persistent device identity"),
+            Self::PathEscape => {
+                formatter.write_str("the requested file escaped the registered root")
+            }
+            Self::SymlinkEscape => {
+                formatter.write_str("the requested file traverses a symbolic link")
+            }
+            Self::NotRegularFile => formatter.write_str("the requested path is not a regular file"),
             Self::Io(message) => {
                 write!(
                     formatter,
@@ -685,5 +736,49 @@ mod tests {
             RootRegistryError::NotApproved
         );
         assert!(registry.resolve(&second.root_id).is_ok());
+    }
+
+    #[test]
+    fn resolved_root_opens_only_validated_regular_files() {
+        let root = TempDir::new().unwrap();
+        fs::create_dir(root.path().join("AUDIO")).unwrap();
+        fs::write(root.path().join("AUDIO/kick.wav"), b"fixture").unwrap();
+        let registry = RootRegistry::new(
+            Arc::new(FakeIdentityProvider::new()),
+            Duration::from_secs(60),
+        );
+        let session = registry.register(root.path().to_str().unwrap()).unwrap();
+        let resolved = registry.resolve(&session.root_id).unwrap();
+        let relative = RootRelativePath::parse("AUDIO/kick.wav").unwrap();
+
+        let path = resolved.resolve_regular_file(&relative).unwrap();
+
+        assert_eq!(fs::read(path).unwrap(), b"fixture");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resolved_root_rejects_symlinked_components() {
+        use std::os::unix::fs::symlink;
+
+        let root = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        fs::write(outside.path().join("outside.wav"), b"private fixture").unwrap();
+        symlink(outside.path(), root.path().join("AUDIO")).unwrap();
+        let registry = RootRegistry::new(
+            Arc::new(FakeIdentityProvider::new()),
+            Duration::from_secs(60),
+        );
+        let session = registry.register(root.path().to_str().unwrap()).unwrap();
+        let resolved = registry.resolve(&session.root_id).unwrap();
+        let relative = RootRelativePath::parse("AUDIO/outside.wav").unwrap();
+
+        let error = resolved.resolve_regular_file(&relative).unwrap_err();
+
+        assert_eq!(error, RootRegistryError::SymlinkEscape);
+        assert_eq!(
+            fs::read(outside.path().join("outside.wav")).unwrap(),
+            b"private fixture"
+        );
     }
 }

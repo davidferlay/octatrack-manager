@@ -1,3 +1,4 @@
+use crate::audio_runtime::{AudioRuntimeError, SharedAudioRuntime};
 use crate::catalog_runtime::SharedCatalog;
 use crate::legacy_read_adapter::RegisteredLegacyLibrary;
 use crate::root_registry::{RootRegistry, RootRegistryError, RootSession};
@@ -12,6 +13,7 @@ use ot_domain::{
 use ot_storage_ports::{CatalogError, CatalogRootIdentity, CatalogRootObservation};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::State;
 
@@ -46,6 +48,12 @@ impl ApiError {
 
 impl From<RootRegistryError> for ApiError {
     fn from(error: RootRegistryError) -> Self {
+        Self::new(error.code(), error.to_string(), error.recoverable())
+    }
+}
+
+impl From<AudioRuntimeError> for ApiError {
+    fn from(error: AudioRuntimeError) -> Self {
         Self::new(error.code(), error.to_string(), error.recoverable())
     }
 }
@@ -323,6 +331,50 @@ fn content_hash_for_asset_id(
     })
 }
 
+#[derive(Clone, Debug)]
+struct LiveAudioSource {
+    content_hash: ContentHash,
+    absolute_path: PathBuf,
+}
+
+fn file_for_asset_id(snapshot: &LibrarySnapshot, asset_id: &str) -> Result<FileInstance, ApiError> {
+    let content_hash = content_hash_for_asset_id(snapshot, asset_id)?;
+    snapshot
+        .file_instances
+        .iter()
+        .filter(|file| file.content_hash == content_hash)
+        .min_by(|left, right| {
+            left.relative_path
+                .as_str()
+                .cmp(right.relative_path.as_str())
+        })
+        .cloned()
+        .ok_or_else(|| {
+            ApiError::new(
+                "CATALOG_INTEGRITY_ERROR",
+                "the catalog asset has no readable file instance",
+                false,
+            )
+        })
+}
+
+fn resolve_live_audio_source(
+    registry: &RootRegistry,
+    catalog: &SharedCatalog,
+    root_id: &RootId,
+    asset_id: &str,
+) -> Result<LiveAudioSource, ApiError> {
+    let resolved = registry.resolve(root_id)?;
+    let identity = catalog_identity(&resolved.session)?;
+    let snapshot = load_library_snapshot(catalog, &identity)?;
+    let file = file_for_asset_id(&snapshot, asset_id)?;
+    let absolute_path = resolved.resolve_regular_file(&file.relative_path)?;
+    Ok(LiveAudioSource {
+        content_hash: file.content_hash,
+        absolute_path,
+    })
+}
+
 fn resolve_live_asset(
     registry: &RootRegistry,
     catalog: &SharedCatalog,
@@ -363,6 +415,105 @@ fn replace_manual_asset_metadata_sync(
         .execute(&content_hash, &metadata)
         .map_err(catalog_error)?;
     Ok(metadata.into())
+}
+
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WaveformPeakDto {
+    min: f32,
+    max: f32,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioWaveformDto {
+    analyzer_version: String,
+    sample_rate: u32,
+    channels: u16,
+    frame_count: u64,
+    duration_seconds: f64,
+    samples_per_peak: u64,
+    peaks: Vec<WaveformPeakDto>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioPreviewTokenDto {
+    preview_token: String,
+    expires_in_seconds: u64,
+    mime_type: &'static str,
+    byte_length: usize,
+    duration_millis: u64,
+    truncated: bool,
+}
+
+fn get_audio_waveform_sync(
+    registry: &RootRegistry,
+    catalog: &SharedCatalog,
+    audio: &SharedAudioRuntime,
+    root_id: &RootId,
+    asset_id: &str,
+    target_points: usize,
+) -> Result<AudioWaveformDto, ApiError> {
+    let source = resolve_live_audio_source(registry, catalog, root_id, asset_id)?;
+    let waveform = audio.waveform(
+        asset_id,
+        &source.content_hash,
+        &source.absolute_path,
+        target_points,
+    )?;
+    Ok(AudioWaveformDto {
+        analyzer_version: waveform.analyzer_version.into(),
+        sample_rate: waveform.sample_rate,
+        channels: waveform.channels,
+        frame_count: waveform.frame_count,
+        duration_seconds: waveform.duration_seconds(),
+        samples_per_peak: waveform.samples_per_peak,
+        peaks: waveform
+            .peaks
+            .into_iter()
+            .map(|peak| WaveformPeakDto {
+                min: peak.min,
+                max: peak.max,
+            })
+            .collect(),
+    })
+}
+
+fn create_audio_preview_sync(
+    registry: &RootRegistry,
+    catalog: &SharedCatalog,
+    audio: &SharedAudioRuntime,
+    root_id: &RootId,
+    asset_id: &str,
+) -> Result<AudioPreviewTokenDto, ApiError> {
+    let source = resolve_live_audio_source(registry, catalog, root_id, asset_id)?;
+    let ticket = audio.create_preview_token(
+        root_id,
+        asset_id,
+        &source.content_hash,
+        &source.absolute_path,
+    )?;
+    Ok(AudioPreviewTokenDto {
+        preview_token: ticket.token,
+        expires_in_seconds: ticket.expires_in_seconds,
+        mime_type: "audio/wav",
+        byte_length: ticket.byte_length,
+        duration_millis: ticket.duration_millis,
+        truncated: ticket.truncated,
+    })
+}
+
+fn read_audio_preview_sync(
+    registry: &RootRegistry,
+    audio: &SharedAudioRuntime,
+    root_id: &RootId,
+    preview_token: &str,
+) -> Result<Vec<u8>, ApiError> {
+    registry.resolve(root_id)?;
+    audio
+        .read_preview(root_id, preview_token)
+        .map_err(Into::into)
 }
 
 fn parse_root_id(root_id: String) -> Result<RootId, ApiError> {
@@ -643,9 +794,81 @@ pub async fn v2_asset_metadata_replace(
     .map_err(ApiError::task_failed)?
 }
 
+#[tauri::command]
+pub async fn v2_audio_waveform_get(
+    root_id: String,
+    asset_id: String,
+    target_points: u32,
+    registry: State<'_, Arc<RootRegistry>>,
+    catalog: State<'_, SharedCatalog>,
+    audio: State<'_, SharedAudioRuntime>,
+) -> Result<AudioWaveformDto, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let target_points = usize::try_from(target_points).map_err(|_| {
+        ApiError::new(
+            "INVALID_AUDIO_REQUEST",
+            "target points are outside the supported range",
+            true,
+        )
+    })?;
+    let registry = Arc::clone(registry.inner());
+    let catalog = Arc::clone(catalog.inner());
+    let audio = Arc::clone(audio.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        get_audio_waveform_sync(
+            &registry,
+            &catalog,
+            &audio,
+            &root_id,
+            &asset_id,
+            target_points,
+        )
+    })
+    .await
+    .map_err(ApiError::task_failed)?
+}
+
+#[tauri::command]
+pub async fn v2_audio_preview_create(
+    root_id: String,
+    asset_id: String,
+    registry: State<'_, Arc<RootRegistry>>,
+    catalog: State<'_, SharedCatalog>,
+    audio: State<'_, SharedAudioRuntime>,
+) -> Result<AudioPreviewTokenDto, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let catalog = Arc::clone(catalog.inner());
+    let audio = Arc::clone(audio.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        create_audio_preview_sync(&registry, &catalog, &audio, &root_id, &asset_id)
+    })
+    .await
+    .map_err(ApiError::task_failed)?
+}
+
+#[tauri::command]
+pub async fn v2_audio_preview_read(
+    root_id: String,
+    preview_token: String,
+    registry: State<'_, Arc<RootRegistry>>,
+    audio: State<'_, SharedAudioRuntime>,
+) -> Result<tauri::ipc::Response, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let audio = Arc::clone(audio.inner());
+    let bytes = tauri::async_runtime::spawn_blocking(move || {
+        read_audio_preview_sync(&registry, &audio, &root_id, &preview_token)
+    })
+    .await
+    .map_err(ApiError::task_failed)??;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::audio_runtime::open_shared_audio_runtime;
     use crate::catalog_runtime::open_shared_catalog;
     use crate::root_registry::{DeviceIdentityProvider, DeviceObservation};
     use std::fs;
@@ -682,6 +905,39 @@ mod tests {
         fs::create_dir_all(set.join("AUDIO")).unwrap();
         fs::create_dir_all(set.join(project_name)).unwrap();
         fs::write(set.join(project_name).join("project.work"), b"fixture").unwrap();
+    }
+
+    fn write_test_wav(path: &Path) {
+        let sample_rate = 8_000_u32;
+        let channels = 1_u16;
+        let samples = (0..4_000)
+            .flat_map(|index| {
+                let sample = if index % 200 < 100 {
+                    i16::MAX / 2
+                } else {
+                    i16::MIN / 2
+                };
+                sample.to_le_bytes()
+            })
+            .collect::<Vec<_>>();
+        let data_size = u32::try_from(samples.len()).unwrap();
+        let byte_rate = sample_rate * u32::from(channels) * 2;
+        let block_align = channels * 2;
+        let mut wav = Vec::with_capacity(44 + samples.len());
+        wav.extend_from_slice(b"RIFF");
+        wav.extend_from_slice(&(36 + data_size).to_le_bytes());
+        wav.extend_from_slice(b"WAVEfmt ");
+        wav.extend_from_slice(&16_u32.to_le_bytes());
+        wav.extend_from_slice(&1_u16.to_le_bytes());
+        wav.extend_from_slice(&channels.to_le_bytes());
+        wav.extend_from_slice(&sample_rate.to_le_bytes());
+        wav.extend_from_slice(&byte_rate.to_le_bytes());
+        wav.extend_from_slice(&block_align.to_le_bytes());
+        wav.extend_from_slice(&16_u16.to_le_bytes());
+        wav.extend_from_slice(b"data");
+        wav.extend_from_slice(&data_size.to_le_bytes());
+        wav.extend_from_slice(&samples);
+        fs::write(path, wav).unwrap();
     }
 
     #[test]
@@ -1046,5 +1302,86 @@ mod tests {
 
         assert_eq!(error.code, "INVALID_MANUAL_METADATA");
         assert_eq!(loaded, original);
+    }
+
+    #[test]
+    fn waveform_and_preview_api_round_trip_without_exposing_paths_or_hashes() {
+        let root = TempDir::new().unwrap();
+        create_set_project(root.path(), "SET_A", "PROJECT_A");
+        let audio_path = root.path().join("SET_A/AUDIO/kick.wav");
+        write_test_wav(&audio_path);
+        let before = fs::read(&audio_path).unwrap();
+        let registry = registry();
+        let data_directory = TempDir::new().unwrap();
+        let catalog = open_shared_catalog(data_directory.path()).unwrap();
+        let audio = open_shared_audio_runtime(data_directory.path()).unwrap();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        let snapshot = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
+        let asset_id = snapshot.audio_files[0].asset_id.clone();
+
+        let waveform =
+            get_audio_waveform_sync(&registry, &catalog, &audio, &root_id, &asset_id, 128).unwrap();
+        let ticket =
+            create_audio_preview_sync(&registry, &catalog, &audio, &root_id, &asset_id).unwrap();
+        let preview =
+            read_audio_preview_sync(&registry, &audio, &root_id, &ticket.preview_token).unwrap();
+
+        assert_eq!(waveform.analyzer_version, "waveform:v1");
+        assert_eq!(waveform.sample_rate, 8_000);
+        assert_eq!(waveform.channels, 1);
+        assert!(!waveform.peaks.is_empty());
+        assert_eq!(ticket.mime_type, "audio/wav");
+        assert_eq!(&preview[0..4], b"RIFF");
+        assert_eq!(&preview[8..12], b"WAVE");
+        assert_eq!(preview.len(), ticket.byte_length);
+        assert_eq!(fs::read(&audio_path).unwrap(), before);
+
+        let response_json = format!(
+            "{}{}",
+            serde_json::to_string(&waveform).unwrap(),
+            serde_json::to_string(&ticket).unwrap()
+        );
+        assert!(!response_json.contains("sha256:"));
+        assert!(!response_json.contains(&asset_id));
+        assert!(!response_json.contains(root.path().to_str().unwrap()));
+        assert!(!ticket.preview_token.contains("kick"));
+    }
+
+    #[test]
+    fn audio_api_rehashes_the_source_and_requires_live_root_authority() {
+        let root = TempDir::new().unwrap();
+        create_set_project(root.path(), "SET_A", "PROJECT_A");
+        let audio_path = root.path().join("SET_A/AUDIO/kick.wav");
+        write_test_wav(&audio_path);
+        let registry = registry();
+        let data_directory = TempDir::new().unwrap();
+        let catalog = open_shared_catalog(data_directory.path()).unwrap();
+        let audio = open_shared_audio_runtime(data_directory.path()).unwrap();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        let snapshot = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
+        let asset_id = snapshot.audio_files[0].asset_id.clone();
+        let ticket =
+            create_audio_preview_sync(&registry, &catalog, &audio, &root_id, &asset_id).unwrap();
+
+        fs::write(&audio_path, b"changed after the catalog snapshot").unwrap();
+        let changed =
+            get_audio_waveform_sync(&registry, &catalog, &audio, &root_id, &asset_id, 128)
+                .unwrap_err();
+        assert_eq!(changed.code, "AUDIO_SOURCE_CHANGED");
+
+        fs::remove_file(&audio_path).unwrap();
+        let missing =
+            get_audio_waveform_sync(&registry, &catalog, &audio, &root_id, &asset_id, 128)
+                .unwrap_err();
+        assert_eq!(missing.code, "AUDIO_SOURCE_UNAVAILABLE");
+
+        registry.close(&root_id).unwrap();
+        let closed = read_audio_preview_sync(&registry, &audio, &root_id, &ticket.preview_token)
+            .unwrap_err();
+        assert_eq!(closed.code, "ROOT_NOT_APPROVED");
     }
 }
