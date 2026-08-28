@@ -2,9 +2,12 @@ use crate::catalog_runtime::SharedCatalog;
 use crate::legacy_read_adapter::RegisteredLegacyLibrary;
 use crate::root_registry::{RootRegistry, RootRegistryError, RootSession};
 use ot_application::{ListLibrary, LoadLibrarySnapshot, StoreLibrarySnapshot};
-use ot_domain::{LibraryProject, LibrarySet, LibrarySnapshot, RootId};
+use ot_domain::{
+    FileInstance, LibraryProject, LibrarySet, LibrarySnapshot, RootId, SampleStorageScope,
+};
 use ot_storage_ports::{CatalogError, CatalogRootIdentity, CatalogRootObservation};
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use tauri::State;
 
@@ -126,10 +129,49 @@ impl From<LibrarySet> for LibrarySetDto {
 pub struct LibrarySnapshotDto {
     sets: Vec<LibrarySetDto>,
     standalone_projects: Vec<LibraryProjectDto>,
+    audio_files: Vec<LibraryAudioFileDto>,
 }
 
-impl From<LibrarySnapshot> for LibrarySnapshotDto {
-    fn from(snapshot: LibrarySnapshot) -> Self {
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryAudioFileDto {
+    file_instance_id: String,
+    asset_id: String,
+    display_name: String,
+    relative_path: String,
+    byte_size: u64,
+    storage_scope: &'static str,
+}
+
+impl LibraryAudioFileDto {
+    fn from_catalog_file(root_identity: &CatalogRootIdentity, file: &FileInstance) -> Self {
+        Self {
+            file_instance_id: opaque_file_instance_id(root_identity, file),
+            asset_id: opaque_asset_id(file),
+            display_name: file
+                .relative_path
+                .as_str()
+                .rsplit('/')
+                .next()
+                .expect("validated relative paths are non-empty")
+                .to_owned(),
+            relative_path: file.relative_path.as_str().to_owned(),
+            byte_size: file.byte_size,
+            storage_scope: storage_scope_name(file.storage_scope),
+        }
+    }
+}
+
+impl LibrarySnapshotDto {
+    fn from_catalog_snapshot(
+        root_identity: &CatalogRootIdentity,
+        snapshot: LibrarySnapshot,
+    ) -> Self {
+        let audio_files = snapshot
+            .file_instances
+            .iter()
+            .map(|file| LibraryAudioFileDto::from_catalog_file(root_identity, file))
+            .collect();
         Self {
             sets: snapshot.sets.into_iter().map(Into::into).collect(),
             standalone_projects: snapshot
@@ -137,7 +179,42 @@ impl From<LibrarySnapshot> for LibrarySnapshotDto {
                 .into_iter()
                 .map(Into::into)
                 .collect(),
+            audio_files,
         }
+    }
+}
+
+fn opaque_file_instance_id(root_identity: &CatalogRootIdentity, file: &FileInstance) -> String {
+    opaque_catalog_id(
+        "fileinst:v1",
+        &[root_identity.as_str(), file.relative_path.as_str()],
+    )
+}
+
+fn opaque_asset_id(file: &FileInstance) -> String {
+    opaque_catalog_id("asset:v1", &[file.content_hash.as_str()])
+}
+
+fn opaque_catalog_id(prefix: &str, values: &[&str]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(prefix.as_bytes());
+    for value in values {
+        hasher.update((value.len() as u64).to_be_bytes());
+        hasher.update(value.as_bytes());
+    }
+    let digest = hasher.finalize();
+    let lowercase_hex = digest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    format!("{prefix}:{lowercase_hex}")
+}
+
+fn storage_scope_name(scope: SampleStorageScope) -> &'static str {
+    match scope {
+        SampleStorageScope::SetAudioPool => "set_audio_pool",
+        SampleStorageScope::ProjectLocal => "project_local",
+        SampleStorageScope::Unclassified => "unclassified",
     }
 }
 
@@ -146,6 +223,7 @@ fn parse_root_id(root_id: String) -> Result<RootId, ApiError> {
         .map_err(|error| ApiError::new("ROOT_NOT_APPROVED", error.to_string(), true))
 }
 
+#[cfg(test)]
 fn list_library_sync(
     registry: &RootRegistry,
     catalog: &SharedCatalog,
@@ -153,9 +231,27 @@ fn list_library_sync(
 ) -> Result<LibrarySnapshot, ApiError> {
     let resolved = registry.resolve(root_id)?;
     let identity = catalog_identity(&resolved.session)?;
+    load_library_snapshot(catalog, &identity)
+}
+
+fn list_library_dto_sync(
+    registry: &RootRegistry,
+    catalog: &SharedCatalog,
+    root_id: &RootId,
+) -> Result<LibrarySnapshotDto, ApiError> {
+    let resolved = registry.resolve(root_id)?;
+    let identity = catalog_identity(&resolved.session)?;
+    load_library_snapshot(catalog, &identity)
+        .map(|snapshot| LibrarySnapshotDto::from_catalog_snapshot(&identity, snapshot))
+}
+
+fn load_library_snapshot(
+    catalog: &SharedCatalog,
+    identity: &CatalogRootIdentity,
+) -> Result<LibrarySnapshot, ApiError> {
     let catalog = catalog.lock().map_err(|_| catalog_lock_error())?;
     LoadLibrarySnapshot::new(&*catalog)
-        .execute(&identity)
+        .execute(identity)
         .map_err(catalog_error)?
         .ok_or_else(|| {
             ApiError::new(
@@ -353,10 +449,11 @@ pub async fn v2_library_list(
     let root_id = parse_root_id(root_id)?;
     let registry = Arc::clone(registry.inner());
     let catalog = Arc::clone(catalog.inner());
-    tauri::async_runtime::spawn_blocking(move || list_library_sync(&registry, &catalog, &root_id))
-        .await
-        .map_err(ApiError::task_failed)?
-        .map(Into::into)
+    tauri::async_runtime::spawn_blocking(move || {
+        list_library_dto_sync(&registry, &catalog, &root_id)
+    })
+    .await
+    .map_err(ApiError::task_failed)?
 }
 
 #[cfg(test)]
@@ -566,7 +663,7 @@ mod tests {
     }
 
     #[test]
-    fn frontend_snapshot_dto_does_not_expose_file_inventory() {
+    fn frontend_snapshot_dto_exposes_only_safe_file_inventory() {
         let root = TempDir::new().unwrap();
         create_set_project(root.path(), "SET_A", "PROJECT_A");
         fs::write(root.path().join("SET_A/AUDIO/kick.wav"), b"audio fixture").unwrap();
@@ -576,10 +673,62 @@ mod tests {
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let snapshot =
             list_library_sync(&registry, &catalog, &RootId::new(session.root_id).unwrap()).unwrap();
+        let content_hash = snapshot.file_instances[0].content_hash.as_str().to_owned();
 
-        let json = serde_json::to_string(&LibrarySnapshotDto::from(snapshot)).unwrap();
-        assert!(!json.contains("audioAssets"));
-        assert!(!json.contains("fileInstances"));
+        let identity = CatalogRootIdentity::new(session.device_fingerprint).unwrap();
+        let dto = LibrarySnapshotDto::from_catalog_snapshot(&identity, snapshot);
+        assert_eq!(dto.audio_files.len(), 1);
+        assert_eq!(dto.audio_files[0].display_name, "kick.wav");
+        assert_eq!(dto.audio_files[0].relative_path, "SET_A/AUDIO/kick.wav");
+        assert_eq!(dto.audio_files[0].storage_scope, "set_audio_pool");
+        assert!(dto.audio_files[0]
+            .file_instance_id
+            .starts_with("fileinst:v1:"));
+        assert!(dto.audio_files[0].asset_id.starts_with("asset:v1:"));
+
+        let json = serde_json::to_string(&dto).unwrap();
+        assert!(json.contains("audioFiles"));
         assert!(!json.contains("contentHash"));
+        assert!(!json.contains(&content_hash));
+        assert!(!json.contains("modifiedAt"));
+        assert!(!json.contains(identity.as_str()));
+        assert!(!json.contains(root.path().to_str().unwrap()));
+    }
+
+    #[test]
+    fn file_instance_ids_are_root_scoped_and_stable_across_content_changes() {
+        let root_identity =
+            CatalogRootIdentity::new(format!("rootfp:v1:{}", "a".repeat(64))).unwrap();
+        let other_root_identity =
+            CatalogRootIdentity::new(format!("rootfp:v1:{}", "b".repeat(64))).unwrap();
+        let original = FileInstance {
+            relative_path: ot_domain::RootRelativePath::parse("SET/AUDIO/kick.wav").unwrap(),
+            content_hash: ot_domain::ContentHash::parse(format!("sha256:{}", "c".repeat(64)))
+                .unwrap(),
+            byte_size: 1024,
+            modified_at_unix_ns: Some(1),
+            storage_scope: SampleStorageScope::SetAudioPool,
+            hash_freshness: ot_domain::ContentHashFreshness::ComputedThisScan,
+        };
+        let changed_content = FileInstance {
+            content_hash: ot_domain::ContentHash::parse(format!("sha256:{}", "d".repeat(64)))
+                .unwrap(),
+            byte_size: 2048,
+            modified_at_unix_ns: Some(2),
+            ..original.clone()
+        };
+
+        assert_eq!(
+            opaque_file_instance_id(&root_identity, &original),
+            opaque_file_instance_id(&root_identity, &changed_content)
+        );
+        assert_ne!(
+            opaque_file_instance_id(&root_identity, &original),
+            opaque_file_instance_id(&other_root_identity, &original)
+        );
+        assert_ne!(
+            opaque_asset_id(&original),
+            opaque_asset_id(&changed_content)
+        );
     }
 }

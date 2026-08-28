@@ -35,6 +35,14 @@ function fakeApi(): RootApi {
         }],
       }],
       standaloneProjects: [],
+      audioFiles: [{
+        fileInstanceId: "fileinst:v1:opaque",
+        assetId: "asset:v1:opaque",
+        displayName: "KICK.wav",
+        relativePath: "LIVE_SET/AUDIO/KICK.wav",
+        byteSize: 2048,
+        storageScope: "set_audio_pool",
+      }],
     }),
   };
 }
@@ -78,7 +86,8 @@ describe("RootRegistryPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Choose root..." }));
 
     expect(await screen.findByText("PROJECT_A")).toBeInTheDocument();
-    expect(screen.getByText("LIVE_SET/PROJECT_A")).toBeInTheDocument();
+    expect(screen.getByText("KICK.wav")).toBeInTheDocument();
+    expect(screen.getByText("LIVE_SET/AUDIO/KICK.wav")).toBeInTheDocument();
     expect(screen.queryByText(rawPath)).not.toBeInTheDocument();
     expect(api.registerRoot).toHaveBeenCalledWith(rawPath);
     expect(api.listLibrary).toHaveBeenCalledWith("root-opaque");

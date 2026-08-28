@@ -6,7 +6,8 @@ import {
   type RootApi,
   type RootSession,
 } from "../../api";
-import { StatusBadge } from "../../design-system";
+import { Button, StatusBadge } from "../../design-system";
+import { CatalogLibraryBrowser } from "../library/CatalogLibraryBrowser";
 import "./RootRegistryPanel.css";
 
 export type RootDirectoryPicker = () => Promise<string | null>;
@@ -91,13 +92,13 @@ export function RootRegistryPanel({
           <p>Next-generation root session. Only the native picker may submit an absolute path.</p>
         </div>
         {session === null ? (
-          <button className="scan-button browse-button" disabled={busy} onClick={registerRoot}>
+          <Button variant="secondary" disabled={busy} onClick={registerRoot}>
             {busy ? "Registering..." : "Choose root..."}
-          </button>
+          </Button>
         ) : (
-          <button className="scan-button browse-button" disabled={busy} onClick={closeRoot}>
+          <Button variant="secondary" disabled={busy} onClick={closeRoot}>
             {busy ? "Closing..." : "Close root"}
-          </button>
+          </Button>
         )}
       </div>
 
@@ -124,40 +125,7 @@ export function RootRegistryPanel({
             </div>
           </dl>
 
-          <div className="root-library-list">
-            {library.sets.map((set) => (
-              <article className="root-library-set" key={set.relativePath}>
-                <header>
-                  <strong>{set.displayName}</strong>
-                  <code>{set.relativePath}</code>
-                </header>
-                <ul>
-                  {set.projects.map((project) => (
-                    <li key={project.relativePath}>
-                      <span>{project.displayName}</span>
-                      <code>{project.relativePath}</code>
-                    </li>
-                  ))}
-                </ul>
-              </article>
-            ))}
-
-            {library.standaloneProjects.length > 0 && (
-              <article className="root-library-set">
-                <header>
-                  <strong>Standalone projects</strong>
-                </header>
-                <ul>
-                  {library.standaloneProjects.map((project) => (
-                    <li key={project.relativePath}>
-                      <span>{project.displayName}</span>
-                      <code>{project.relativePath}</code>
-                    </li>
-                  ))}
-                </ul>
-              </article>
-            )}
-          </div>
+          <CatalogLibraryBrowser snapshot={library} />
         </div>
       )}
     </section>

@@ -1,6 +1,6 @@
 # Codex引継ぎ — MasterOCTa
 
-更新日: 2026-08-27
+更新日: 2026-08-28
 
 ## 1. 目的
 
@@ -61,16 +61,19 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - M3-C1 incremental file inventory: #13マージ済み
 - M3-C2 Project／Bank state and usage graph: #14マージ済み
 - repository固有development skills: #15マージ済み
-- 現在のmain基準SHA: `5b54eaea43889cc4680dd5f907c4ae8a5ec8ebbb`
+- M3-C3 sample settings／slice read model: #16マージ済み
+- Design System DS1〜DS3 foundation: #17マージ済み
+- 現在のmain基準SHA: `6de074d3223a5932e3fce2af171bd9eaaf7506cd`
 - M2: 完了
 - M3-A: 完了
 - M3-B: 完了
 - M3-C0: 完了
 - M3-C1: 完了
 - M3-C2: 完了
-- 現在の作業: M3-C3 sample settings／slice read model
+- M3-C3: 完了
+- 現在の作業: M3-D catalog-backed Library UI
 - SQLite schema: v4（M3-C3で追加）
-- 次の機能実装: M3-D catalog-backed Library UI
+- 次の機能実装: M3-E waveform／preview／manual tags／notes
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
 - `ot-tools-io`はコミット
@@ -198,7 +201,7 @@ M3は小さなPRへ分割する。M3-A #9でcatalog foundation、M3-B #10でAppl
 Support上のproduction catalog、root登録時のread-only full scan保存、live `RootId`
 再検証後のcatalog queryまで完了した。catalogはraw／canonical／mount pathとsession
 `RootId`を保存せず、同一persistent fingerprint rootの同時登録とcatalog path symlinkを
-fail-closedで拒否する。M3-C1でschema v2へ移行する。
+fail-closedで拒否する。schemaはM3-C3までにv4へ移行済みである。
 
 M3-C0 #11はOctatrack固有のstate、sample scope、sample settings ownershipをpure
 domain typeと設計契約として固定した。参照した`OCTATRACK DIARY R13`は2016年作成・
@@ -222,11 +225,19 @@ filename mappingは記載していないため、`.work`／`.strd`対応のprove
 除外せず状態として保存し、partial usageを最新結果にしない。raw／canonical／mount pathと
 session `RootId`はcatalogへ保存しない。frontend DTO、Tauri command、write処理は変更しない。
 
-M3-C3はslot assignment所有のraw settings、検証済み`.ot` file-sidecar settings、slice
+M3-C3 #16はslot assignment所有のraw settings、検証済み`.ot` file-sidecar settings、slice
 markerをschema v4へtransactionalに保存する。各rowはparser revision、source revision、
 source OS version（取得可能な場合）、categorical evidence、Parsed／UnsupportedVersion／
 Malformedを保持する。曖昧なsame-stem sidecar ownerはfail-closedとし、unsupported／malformed
 sourceからpartial値を公開しない。frontend DTO、Tauri command、write／round-trip behaviorは
-変更しない。次はM3-D catalog-backed Library UIとし、waveform／preview／manual tags／notesは
-M3-Eへ分離する。テストDBとOctatrack fixtureは一時directoryだけを使用し、実SD／CFカードや
-Octatrack原本データを使用しない。依存監査の既存受容期限と再確認条件は維持する。
+変更していない。
+
+M3-Dでは既存`v2_library_list`のcatalog snapshotを安全なfrontend DTOへ投影し、Set、
+Standalone Project、Set Audio Pool、Project-local sample、Unclassified sampleをread-onlyの
+カラム表示で閲覧する。frontendへ返すfile identityはDTO専用opaque IDと検証済みrelative pathに
+限定する。FileInstance IDは永続root identityとrelative pathから生成し、content変更後も同じ
+instance identityを維持しつつ、別rootの同一relative pathとは衝突しない。raw absolute path、
+content hash、mtimeは公開しない。新command、filesystem再scan、
+SQLite migration、write処理は追加しない。次はM3-E waveform／preview／manual tags／notesとし、
+テストDBとOctatrack fixtureは一時directoryだけを使用する。実SD／CFカードやOctatrack原本
+データを使用しない。依存監査の既存受容期限と再確認条件は維持する。
