@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { LibrarySnapshot, MetadataApi } from "../../api";
+import type { AudioApi, LibrarySnapshot, MetadataApi } from "../../api";
 import { CatalogLibraryBrowser } from "./CatalogLibraryBrowser";
 
 const snapshot: LibrarySnapshot = {
@@ -118,6 +118,19 @@ describe("CatalogLibraryBrowser", () => {
   });
 
   it("opens manual metadata for the selected opaque AssetId", async () => {
+    const audioClient: AudioApi = {
+      getWaveform: vi.fn().mockResolvedValue({
+        analyzerVersion: "waveform:v1",
+        sampleRate: 44100,
+        channels: 2,
+        frameCount: 44100,
+        durationSeconds: 1,
+        samplesPerPeak: 256,
+        peaks: [{ min: -0.5, max: 0.5 }],
+      }),
+      createPreviewToken: vi.fn(),
+      readPreview: vi.fn(),
+    };
     const metadataClient: MetadataApi = {
       loadManualAssetMetadata: vi.fn().mockResolvedValue({
         tags: ["kick"],
@@ -129,6 +142,7 @@ describe("CatalogLibraryBrowser", () => {
       <CatalogLibraryBrowser
         rootId="root-opaque"
         snapshot={snapshot}
+        audioClient={audioClient}
         metadataClient={metadataClient}
       />,
     );
@@ -139,6 +153,11 @@ describe("CatalogLibraryBrowser", () => {
     expect(metadataClient.loadManualAssetMetadata).toHaveBeenCalledWith(
       "root-opaque",
       "asset:v1:pool",
+    );
+    expect(audioClient.getWaveform).toHaveBeenCalledWith(
+      "root-opaque",
+      "asset:v1:pool",
+      640,
     );
     expect(screen.getByLabelText("Asset inspector")).not.toHaveTextContent("sha256:");
   });

@@ -1,0 +1,65 @@
+.waveform-preview {
+  display: grid;
+  gap: 0.75rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--color-border-subtle, #353b45);
+}
+
+.waveform-preview-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.waveform-preview-heading p {
+  margin: 0;
+  color: var(--color-text-muted, #a7adb8);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.waveform-preview-heading span,
+.waveform-preview-status,
+.waveform-preview-notice,
+.waveform-preview-boundary {
+  margin: 0;
+  color: var(--color-text-muted, #a7adb8);
+  font-size: 0.78rem;
+}
+
+.waveform-preview-plot {
+  width: 100%;
+  min-height: 7rem;
+  border: 1px solid var(--color-border-subtle, #353b45);
+  border-radius: 0.4rem;
+  background: #11151b;
+}
+
+.waveform-preview-plot line {
+  stroke: #343b46;
+  stroke-width: 1;
+}
+
+.waveform-preview-plot path {
+  fill: none;
+  stroke: #f2a33c;
+  stroke-width: 1.4;
+}
+
+.waveform-preview-actions {
+  display: flex;
+}
+
+.waveform-preview audio {
+  width: 100%;
+  min-height: 2rem;
+}
+
+.waveform-preview-error {
+  margin: 0;
+  color: var(--color-status-danger, #ff7a7a);
+  font-size: 0.8rem;
+}

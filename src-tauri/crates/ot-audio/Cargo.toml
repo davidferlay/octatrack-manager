@@ -1,0 +1,18 @@
+[package]
+name = "ot-audio"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+ot-domain = { path = "../ot-domain" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "=0.10.9"
+symphonia = { version = "0.5", default-features = false, features = ["wav", "aiff", "pcm"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lib]
+path = "src/lib.rs"

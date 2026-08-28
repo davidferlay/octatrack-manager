@@ -2,6 +2,7 @@
 #![allow(clippy::too_many_arguments)]
 
 mod audio_pool;
+mod audio_runtime;
 mod catalog_runtime;
 mod device_detection;
 mod legacy_read_adapter;
@@ -1352,6 +1353,8 @@ pub fn run() {
             let data_directory = app.path().data_dir()?;
             let catalog = catalog_runtime::open_shared_catalog(&data_directory)?;
             app.manage(catalog);
+            let audio_runtime = audio_runtime::open_shared_audio_runtime(&data_directory)?;
+            app.manage(audio_runtime);
 
             // Clear WebView session storage in the background on app startup
             let window = app.get_webview_window("main").unwrap();
@@ -1370,6 +1373,9 @@ pub fn run() {
             v2_api::v2_library_list,
             v2_api::v2_asset_metadata_get,
             v2_api::v2_asset_metadata_replace,
+            v2_api::v2_audio_waveform_get,
+            v2_api::v2_audio_preview_create,
+            v2_api::v2_audio_preview_read,
             greet,
             scan_devices,
             scan_custom_directory,

@@ -2094,10 +2094,12 @@ dependencies = [
  "dirs 5.0.1",
  "encoding_rs",
  "fs2",
+ "getrandom 0.3.4",
  "hound",
  "once_cell",
  "open",
  "ot-application",
+ "ot-audio",
  "ot-catalog",
  "ot-domain",
  "ot-storage-ports",
@@ -2556,6 +2558,18 @@ dependencies = [
  "ot-codec-ports",
  "ot-domain",
  "ot-storage-ports",
+]
+
+[[package]]
+name = "ot-audio"
+version = "0.1.0"
+dependencies = [
+ "ot-domain",
+ "serde",
+ "serde_json",
+ "sha2",
+ "symphonia",
+ "tempfile",
 ]
 
 [[package]]

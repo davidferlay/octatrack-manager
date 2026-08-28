@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
+  audioApi,
   metadataApi,
   rootApi,
+  type AudioApi,
   type LibrarySnapshot,
   type MetadataApi,
   type RootApi,
@@ -33,12 +35,14 @@ function errorMessage(error: unknown): string {
 
 interface RootRegistryPanelProps {
   api?: RootApi;
+  audioClient?: AudioApi;
   metadataClient?: MetadataApi;
   selectDirectory?: RootDirectoryPicker;
 }
 
 export function RootRegistryPanel({
   api = rootApi,
+  audioClient = audioApi,
   metadataClient = metadataApi,
   selectDirectory = pickRootDirectory,
 }: RootRegistryPanelProps) {
@@ -132,6 +136,7 @@ export function RootRegistryPanel({
           <CatalogLibraryBrowser
             rootId={session.rootId}
             snapshot={library}
+            audioClient={audioClient}
             metadataClient={metadataClient}
           />
         </div>

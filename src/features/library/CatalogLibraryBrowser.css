@@ -145,6 +145,11 @@
   background: color-mix(in srgb, var(--mo-surface-2) 55%, var(--mo-surface-1));
 }
 
+.catalog-library-inspector-content {
+  display: grid;
+  gap: 1rem;
+}
+
 @media (max-width: 840px) {
   .catalog-library-columns {
     grid-template-columns: 1fr;
