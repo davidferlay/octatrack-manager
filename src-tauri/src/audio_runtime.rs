@@ -6,7 +6,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 const PRODUCT_DIRECTORY: &str = "MasterOCTa";
 const WAVEFORM_CACHE_DIRECTORY: &str = "waveform-cache";
@@ -40,7 +40,7 @@ pub struct AudioRuntime {
     previews: Mutex<PreviewState>,
     preview_generation: Mutex<()>,
     preview_ttl: Duration,
-    nonce: u128,
+    nonce: [u8; 32],
     next_token: AtomicU64,
 }
 
@@ -68,11 +68,9 @@ impl AudioRuntime {
         let waveform_directory = canonical_product_directory.join(WAVEFORM_CACHE_DIRECTORY);
         let waveform_cache =
             WaveformCache::open(waveform_directory).map_err(AudioRuntimeError::Audio)?;
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|duration| duration.as_nanos())
-            .unwrap_or_default()
-            ^ u128::from(std::process::id());
+        let mut nonce = [0_u8; 32];
+        getrandom::fill(&mut nonce)
+            .map_err(|error| AudioRuntimeError::Entropy(error.to_string()))?;
         Ok(Self {
             waveform_cache,
             previews: Mutex::new(PreviewState::default()),
@@ -174,7 +172,7 @@ impl AudioRuntime {
         let sequence = self.next_token.fetch_add(1, Ordering::Relaxed);
         let mut hasher = Sha256::new();
         hasher.update(b"preview:v1");
-        hasher.update(self.nonce.to_be_bytes());
+        hasher.update(self.nonce);
         hasher.update(sequence.to_be_bytes());
         hasher.update((root_id.as_str().len() as u64).to_be_bytes());
         hasher.update(root_id.as_str().as_bytes());
@@ -220,6 +218,7 @@ pub enum AudioRuntimeError {
         message: String,
     },
     UnsafePath(&'static str),
+    Entropy(String),
     Audio(AudioError),
     InvalidPreviewToken,
     ExpiredPreviewToken,
@@ -229,7 +228,7 @@ pub enum AudioRuntimeError {
 impl AudioRuntimeError {
     pub fn code(&self) -> &'static str {
         match self {
-            Self::Io { .. } | Self::Unavailable => "AUDIO_RUNTIME_UNAVAILABLE",
+            Self::Io { .. } | Self::Entropy(_) | Self::Unavailable => "AUDIO_RUNTIME_UNAVAILABLE",
             Self::UnsafePath(_) => "AUDIO_CACHE_UNSAFE",
             Self::Audio(error) => error.code(),
             Self::InvalidPreviewToken => "PREVIEW_TOKEN_INVALID",
@@ -239,7 +238,7 @@ impl AudioRuntimeError {
 
     pub fn recoverable(&self) -> bool {
         match self {
-            Self::UnsafePath(_) | Self::Unavailable => false,
+            Self::UnsafePath(_) | Self::Entropy(_) | Self::Unavailable => false,
             Self::Audio(error) => error.recoverable(),
             Self::Io { .. } | Self::InvalidPreviewToken | Self::ExpiredPreviewToken => true,
         }
@@ -253,6 +252,12 @@ impl std::fmt::Display for AudioRuntimeError {
                 write!(formatter, "could not {operation}: {message}")
             }
             Self::UnsafePath(message) => formatter.write_str(message),
+            Self::Entropy(message) => {
+                write!(
+                    formatter,
+                    "could not initialize preview token entropy: {message}"
+                )
+            }
             Self::Audio(error) => std::fmt::Display::fmt(error, formatter),
             Self::InvalidPreviewToken => formatter.write_str("preview token is invalid or expired"),
             Self::ExpiredPreviewToken => formatter.write_str("preview token has expired"),

@@ -133,6 +133,30 @@ describe("WaveformPreview", () => {
     expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
 
+  it("does not create a Blob URL when an in-flight preview outlives the component", async () => {
+    const client = api();
+    let resolvePreview: ((bytes: ArrayBuffer) => void) | undefined;
+    vi.mocked(client.readPreview).mockReturnValue(new Promise((resolve) => {
+      resolvePreview = resolve;
+    }));
+    const view = render(
+      <WaveformPreview
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Load preview" }));
+    await waitFor(() => expect(client.readPreview).toHaveBeenCalled());
+
+    view.unmount();
+    resolvePreview?.(new Uint8Array([82, 73, 70, 70]).buffer);
+    await Promise.resolve();
+
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+  });
+
   it("clamps untrusted peak values when building the SVG path", () => {
     const path = waveformPath({
       ...waveform,

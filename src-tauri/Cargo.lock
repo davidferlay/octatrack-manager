@@ -2094,6 +2094,7 @@ dependencies = [
  "dirs 5.0.1",
  "encoding_rs",
  "fs2",
+ "getrandom 0.3.4",
  "hound",
  "once_cell",
  "open",

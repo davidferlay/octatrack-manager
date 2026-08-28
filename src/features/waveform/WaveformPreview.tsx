@@ -87,6 +87,10 @@ export function WaveformPreview({
     if (previewUrl !== null) URL.revokeObjectURL(previewUrl);
   }, [previewUrl]);
 
+  useEffect(() => () => {
+    previewRequest.current += 1;
+  }, []);
+
   useEffect(() => {
     previewRequest.current += 1;
     setPreviewUrl(null);

@@ -515,14 +515,17 @@ fn validate_cached_waveform(cached: &CachedWaveform) -> Result<(), AudioError> {
             "waveform metadata is invalid".into(),
         ));
     }
-    let mut previous_scale = 0;
-    for level in &cached.levels {
-        if level.samples_per_peak <= previous_scale || level.peaks.is_empty() {
+    let mut expected_scale = BASE_SAMPLES_PER_PEAK;
+    for (index, level) in cached.levels.iter().enumerate() {
+        let expected_peak_count = cached.frame_count.div_ceil(expected_scale);
+        if level.samples_per_peak != expected_scale
+            || level.peaks.is_empty()
+            || u64::try_from(level.peaks.len()).ok() != Some(expected_peak_count)
+        {
             return Err(AudioError::CacheUnavailable(
-                "waveform level ordering is invalid".into(),
+                "waveform level shape is invalid".into(),
             ));
         }
-        previous_scale = level.samples_per_peak;
         if level.peaks.iter().any(|peak| {
             !peak.min.is_finite()
                 || !peak.max.is_finite()
@@ -533,6 +536,13 @@ fn validate_cached_waveform(cached: &CachedWaveform) -> Result<(), AudioError> {
             return Err(AudioError::CacheUnavailable(
                 "waveform peak data is invalid".into(),
             ));
+        }
+        if index + 1 < cached.levels.len() {
+            expected_scale = expected_scale
+                .checked_mul(LEVEL_SCALE as u64)
+                .ok_or_else(|| {
+                    AudioError::CacheUnavailable("waveform level scale overflowed".into())
+                })?;
         }
     }
     Ok(())
@@ -885,5 +895,40 @@ mod tests {
             cache.waveform(&mismatched, &hash, &audio_path, 128),
             Err(AudioError::InvalidRequest(_))
         ));
+    }
+
+    #[test]
+    fn regenerates_a_cache_with_inconsistent_frame_and_peak_counts() {
+        let fixture = TempDir::new().unwrap();
+        let cache_directory = TempDir::new().unwrap();
+        let audio_path = fixture.path().join("tone.wav");
+        write_wav(&audio_path, 4096);
+        let hash = content_hash(&audio_path);
+        let id = asset_id(&hash);
+        let digest = id.strip_prefix("asset:v1:").unwrap();
+        let cache_path = cache_directory
+            .path()
+            .join(format!("waveform-v1-{digest}.json"));
+        let poisoned = CachedWaveform {
+            analyzer_version: WAVEFORM_ANALYZER_VERSION.into(),
+            asset_id: id.clone(),
+            sample_rate: 44_100,
+            channels: 2,
+            frame_count: 4096,
+            levels: vec![CachedWaveformLevel {
+                samples_per_peak: BASE_SAMPLES_PER_PEAK,
+                peaks: vec![WaveformPeak {
+                    min: -0.1,
+                    max: 0.1,
+                }],
+            }],
+        };
+        fs::write(&cache_path, serde_json::to_vec(&poisoned).unwrap()).unwrap();
+        let cache = WaveformCache::open(cache_directory.path()).unwrap();
+
+        let waveform = cache.waveform(&id, &hash, &audio_path, 128).unwrap();
+
+        assert!(!waveform.cache_hit);
+        assert_eq!(waveform.peaks.len(), 16);
     }
 }

@@ -6,6 +6,7 @@ use ot_application::{
     ListLibrary, LoadLibrarySnapshot, LoadManualAssetMetadata, ReplaceManualAssetMetadata,
     StoreLibrarySnapshot,
 };
+use ot_audio::AudioError;
 use ot_domain::{
     ContentHash, FileInstance, InvalidManualMetadata, LibraryProject, LibrarySet, LibrarySnapshot,
     ManualAssetMetadata, ManualNote, ManualTag, RootId, SampleStorageScope,
@@ -337,42 +338,85 @@ struct LiveAudioSource {
     absolute_path: PathBuf,
 }
 
-fn file_for_asset_id(snapshot: &LibrarySnapshot, asset_id: &str) -> Result<FileInstance, ApiError> {
+fn files_for_asset_id(
+    snapshot: &LibrarySnapshot,
+    asset_id: &str,
+) -> Result<Vec<FileInstance>, ApiError> {
     let content_hash = content_hash_for_asset_id(snapshot, asset_id)?;
-    snapshot
+    let mut files = snapshot
         .file_instances
         .iter()
         .filter(|file| file.content_hash == content_hash)
-        .min_by(|left, right| {
-            left.relative_path
-                .as_str()
-                .cmp(right.relative_path.as_str())
-        })
         .cloned()
-        .ok_or_else(|| {
-            ApiError::new(
-                "CATALOG_INTEGRITY_ERROR",
-                "the catalog asset has no readable file instance",
-                false,
-            )
-        })
+        .collect::<Vec<_>>();
+    files.sort_by(|left, right| {
+        left.relative_path
+            .as_str()
+            .cmp(right.relative_path.as_str())
+    });
+    if files.is_empty() {
+        return Err(ApiError::new(
+            "CATALOG_INTEGRITY_ERROR",
+            "the catalog asset has no file instance",
+            false,
+        ));
+    }
+    Ok(files)
 }
 
-fn resolve_live_audio_source(
+fn resolve_live_audio_sources(
     registry: &RootRegistry,
     catalog: &SharedCatalog,
     root_id: &RootId,
     asset_id: &str,
-) -> Result<LiveAudioSource, ApiError> {
+) -> Result<Vec<LiveAudioSource>, ApiError> {
     let resolved = registry.resolve(root_id)?;
     let identity = catalog_identity(&resolved.session)?;
     let snapshot = load_library_snapshot(catalog, &identity)?;
-    let file = file_for_asset_id(&snapshot, asset_id)?;
-    let absolute_path = resolved.resolve_regular_file(&file.relative_path)?;
-    Ok(LiveAudioSource {
-        content_hash: file.content_hash,
-        absolute_path,
-    })
+    let files = files_for_asset_id(&snapshot, asset_id)?;
+    let mut sources = Vec::with_capacity(files.len());
+    for file in files {
+        match resolved.resolve_regular_file(&file.relative_path) {
+            Ok(absolute_path) => sources.push(LiveAudioSource {
+                content_hash: file.content_hash,
+                absolute_path,
+            }),
+            Err(RootRegistryError::NotRegularFile) => continue,
+            Err(error) => return Err(error.into()),
+        }
+    }
+    if sources.is_empty() {
+        return Err(RootRegistryError::NotRegularFile.into());
+    }
+    Ok(sources)
+}
+
+fn with_live_audio_source<T>(
+    registry: &RootRegistry,
+    catalog: &SharedCatalog,
+    root_id: &RootId,
+    asset_id: &str,
+    mut operation: impl FnMut(&LiveAudioSource) -> Result<T, AudioRuntimeError>,
+) -> Result<T, ApiError> {
+    let sources = resolve_live_audio_sources(registry, catalog, root_id, asset_id)?;
+    let mut source_changed = None;
+    let mut source_unavailable = None;
+    for source in &sources {
+        match operation(source) {
+            Ok(result) => return Ok(result),
+            Err(error @ AudioRuntimeError::Audio(AudioError::SourceChanged)) => {
+                source_changed = Some(error);
+            }
+            Err(error @ AudioRuntimeError::Audio(AudioError::SourceUnavailable(_))) => {
+                source_unavailable = Some(error);
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Err(source_changed
+        .or(source_unavailable)
+        .map(ApiError::from)
+        .unwrap_or_else(|| RootRegistryError::NotRegularFile.into()))
 }
 
 fn resolve_live_asset(
@@ -455,13 +499,14 @@ fn get_audio_waveform_sync(
     asset_id: &str,
     target_points: usize,
 ) -> Result<AudioWaveformDto, ApiError> {
-    let source = resolve_live_audio_source(registry, catalog, root_id, asset_id)?;
-    let waveform = audio.waveform(
-        asset_id,
-        &source.content_hash,
-        &source.absolute_path,
-        target_points,
-    )?;
+    let waveform = with_live_audio_source(registry, catalog, root_id, asset_id, |source| {
+        audio.waveform(
+            asset_id,
+            &source.content_hash,
+            &source.absolute_path,
+            target_points,
+        )
+    })?;
     Ok(AudioWaveformDto {
         analyzer_version: waveform.analyzer_version.into(),
         sample_rate: waveform.sample_rate,
@@ -487,13 +532,14 @@ fn create_audio_preview_sync(
     root_id: &RootId,
     asset_id: &str,
 ) -> Result<AudioPreviewTokenDto, ApiError> {
-    let source = resolve_live_audio_source(registry, catalog, root_id, asset_id)?;
-    let ticket = audio.create_preview_token(
-        root_id,
-        asset_id,
-        &source.content_hash,
-        &source.absolute_path,
-    )?;
+    let ticket = with_live_audio_source(registry, catalog, root_id, asset_id, |source| {
+        audio.create_preview_token(
+            root_id,
+            asset_id,
+            &source.content_hash,
+            &source.absolute_path,
+        )
+    })?;
     Ok(AudioPreviewTokenDto {
         preview_token: ticket.token,
         expires_in_seconds: ticket.expires_in_seconds,
@@ -1347,6 +1393,52 @@ mod tests {
         assert!(!response_json.contains(&asset_id));
         assert!(!response_json.contains(root.path().to_str().unwrap()));
         assert!(!ticket.preview_token.contains("kick"));
+    }
+
+    #[test]
+    fn audio_api_uses_another_live_file_instance_for_the_same_asset() {
+        let root = TempDir::new().unwrap();
+        create_set_project(root.path(), "SET_A", "PROJECT_A");
+        let missing_path = root.path().join("SET_A/AUDIO/a-missing.wav");
+        let live_path = root.path().join("SET_A/AUDIO/b-live.wav");
+        write_test_wav(&missing_path);
+        fs::copy(&missing_path, &live_path).unwrap();
+        let live_before = fs::read(&live_path).unwrap();
+        let registry = registry();
+        let data_directory = TempDir::new().unwrap();
+        let catalog = open_shared_catalog(data_directory.path()).unwrap();
+        let audio = open_shared_audio_runtime(data_directory.path()).unwrap();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        let snapshot = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
+        let asset_id = snapshot
+            .audio_files
+            .iter()
+            .find(|file| file.relative_path.ends_with("a-missing.wav"))
+            .unwrap()
+            .asset_id
+            .clone();
+        assert_eq!(
+            snapshot
+                .audio_files
+                .iter()
+                .filter(|file| file.asset_id == asset_id)
+                .count(),
+            2
+        );
+        fs::remove_file(&missing_path).unwrap();
+
+        let waveform =
+            get_audio_waveform_sync(&registry, &catalog, &audio, &root_id, &asset_id, 128).unwrap();
+        let ticket =
+            create_audio_preview_sync(&registry, &catalog, &audio, &root_id, &asset_id).unwrap();
+        let preview =
+            read_audio_preview_sync(&registry, &audio, &root_id, &ticket.preview_token).unwrap();
+
+        assert!(!waveform.peaks.is_empty());
+        assert_eq!(&preview[0..4], b"RIFF");
+        assert_eq!(fs::read(&live_path).unwrap(), live_before);
     }
 
     #[test]

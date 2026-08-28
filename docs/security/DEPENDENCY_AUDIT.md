@@ -307,6 +307,13 @@ AIFF, and their PCM decoder; the composition package's pre-existing broader
 feature set remains unchanged. M3-E3 does not add a network, install-script, or
 removable-media write path.
 
+The post-implementation bug review also makes the already locked
+`getrandom@0.3.4` a direct composition dependency so preview capability tokens
+are seeded from the operating system CSPRNG rather than time and process data.
+This adds only a dependency edge: no package version or checksum changed, and
+`getrandom@0.3.4` was already product-runtime reachable through the existing
+Tauri dependency graph.
+
 The JavaScript lockfiles are unchanged. Re-running the required audits produced
 the same classified totals:
 
