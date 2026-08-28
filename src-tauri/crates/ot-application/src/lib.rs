@@ -1,10 +1,12 @@
 #![forbid(unsafe_code)]
 
 use ot_codec_ports::{CodecError, ProjectCodec};
-use ot_domain::{LibrarySnapshot, ProjectDocument, RootId, RootRelativePath};
+use ot_domain::{
+    ContentHash, LibrarySnapshot, ManualAssetMetadata, ProjectDocument, RootId, RootRelativePath,
+};
 use ot_storage_ports::{
-    CatalogError, CatalogRootIdentity, CatalogRootObservation, CatalogScan, LibraryCatalog,
-    ProjectStorage, ReadOnlyLibrary, StorageError,
+    AssetMetadataCatalog, CatalogError, CatalogRootIdentity, CatalogRootObservation, CatalogScan,
+    LibraryCatalog, ProjectStorage, ReadOnlyLibrary, StorageError,
 };
 use std::fmt;
 
@@ -116,6 +118,44 @@ where
         identity: &CatalogRootIdentity,
     ) -> Result<Option<LibrarySnapshot>, CatalogError> {
         self.catalog.load_latest_snapshot(identity)
+    }
+}
+
+pub struct LoadManualAssetMetadata<'a, C> {
+    catalog: &'a C,
+}
+
+impl<'a, C> LoadManualAssetMetadata<'a, C>
+where
+    C: AssetMetadataCatalog,
+{
+    pub fn new(catalog: &'a C) -> Self {
+        Self { catalog }
+    }
+
+    pub fn execute(&self, asset: &ContentHash) -> Result<ManualAssetMetadata, CatalogError> {
+        self.catalog.load_manual_asset_metadata(asset)
+    }
+}
+
+pub struct ReplaceManualAssetMetadata<'a, C> {
+    catalog: &'a mut C,
+}
+
+impl<'a, C> ReplaceManualAssetMetadata<'a, C>
+where
+    C: AssetMetadataCatalog,
+{
+    pub fn new(catalog: &'a mut C) -> Self {
+        Self { catalog }
+    }
+
+    pub fn execute(
+        &mut self,
+        asset: &ContentHash,
+        metadata: &ManualAssetMetadata,
+    ) -> Result<(), CatalogError> {
+        self.catalog.replace_manual_asset_metadata(asset, metadata)
     }
 }
 
@@ -269,5 +309,57 @@ mod tests {
         );
         assert_eq!(loaded, Some(snapshot));
         assert_eq!(catalog.identity, Some(identity));
+    }
+
+    struct FakeMetadataCatalog {
+        expected_asset: ContentHash,
+        metadata: ManualAssetMetadata,
+    }
+
+    impl AssetMetadataCatalog for FakeMetadataCatalog {
+        fn load_manual_asset_metadata(
+            &self,
+            asset: &ContentHash,
+        ) -> Result<ManualAssetMetadata, CatalogError> {
+            if asset != &self.expected_asset {
+                return Err(CatalogError::AssetNotFound);
+            }
+            Ok(self.metadata.clone())
+        }
+
+        fn replace_manual_asset_metadata(
+            &mut self,
+            asset: &ContentHash,
+            metadata: &ManualAssetMetadata,
+        ) -> Result<(), CatalogError> {
+            if asset != &self.expected_asset {
+                return Err(CatalogError::AssetNotFound);
+            }
+            self.metadata = metadata.clone();
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn manual_asset_metadata_use_cases_depend_only_on_the_catalog_port() {
+        let asset = ContentHash::parse(format!("sha256:{}", "a".repeat(64))).unwrap();
+        let replacement = ManualAssetMetadata::new(
+            vec![ot_domain::ManualTag::parse("kick").unwrap()],
+            Some(ot_domain::ManualNote::parse("Main kick").unwrap()),
+        )
+        .unwrap();
+        let mut catalog = FakeMetadataCatalog {
+            expected_asset: asset.clone(),
+            metadata: ManualAssetMetadata::default(),
+        };
+
+        ReplaceManualAssetMetadata::new(&mut catalog)
+            .execute(&asset, &replacement)
+            .unwrap();
+        let loaded = LoadManualAssetMetadata::new(&catalog)
+            .execute(&asset)
+            .unwrap();
+
+        assert_eq!(loaded, replacement);
     }
 }

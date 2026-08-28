@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use ot_domain::{LibrarySnapshot, RootId, RootRelativePath};
+use ot_domain::{ContentHash, LibrarySnapshot, ManualAssetMetadata, RootId, RootRelativePath};
 use std::fmt;
 
 pub trait ProjectStorage {
@@ -120,11 +120,25 @@ pub trait LibraryCatalog {
     ) -> Result<Option<CatalogScan>, CatalogError>;
 }
 
+pub trait AssetMetadataCatalog {
+    fn load_manual_asset_metadata(
+        &self,
+        asset: &ContentHash,
+    ) -> Result<ManualAssetMetadata, CatalogError>;
+
+    fn replace_manual_asset_metadata(
+        &mut self,
+        asset: &ContentHash,
+        metadata: &ManualAssetMetadata,
+    ) -> Result<(), CatalogError>;
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CatalogError {
     InvalidRootIdentity,
     InvalidScanId,
     InvalidScanRevision,
+    AssetNotFound,
     DuplicateRelativePath(RootRelativePath),
     InvalidStoredData { field: &'static str },
     UnsupportedSchema { found: u64, supported: u64 },
@@ -139,6 +153,7 @@ impl fmt::Display for CatalogError {
             Self::InvalidRootIdentity => formatter.write_str("invalid catalog root identity"),
             Self::InvalidScanId => formatter.write_str("invalid catalog scan id"),
             Self::InvalidScanRevision => formatter.write_str("invalid catalog scan revision"),
+            Self::AssetNotFound => formatter.write_str("audio asset is not present in the catalog"),
             Self::DuplicateRelativePath(path) => {
                 write!(
                     formatter,
