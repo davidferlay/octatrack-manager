@@ -1,6 +1,6 @@
 # Design System Migration
 
-Status: DS1–DS3 done on main; **DS4 implemented**  
+Status: DS1–DS4 done; **DS5 implemented** (stacked on DS4 branch until merge)  
 Updated: 2026-08-27
 
 ## Purpose
@@ -37,7 +37,7 @@ role as:
 src/design-system/
 ├── tokens/
 ├── primitives/
-├── patterns/          # StatusBadge, Toolbar (DS4+); DataTable/SplitPane later
+├── patterns/          # StatusBadge, Toolbar, DataTable (DS4–DS5); SplitPane later
 └── index.ts
 ```
 
@@ -115,11 +115,18 @@ Phase D  UI6 Branding → DS7 Legacy CSS removal
 - **Out of scope:** filter-results-info, usage/compat badges, DnD, preview,
   View/Edit mode toggle, CSS deletion.
 
+### PR-DS5 — DataTable Foundation (done)
+
+- Add `patterns/DataTable` compound shell: Root, Toolbar, Wrapper, Loading, Empty.
+- First consumer: `AudioFileTable` outer markup only (wrap, do not rewrite).
+- TanStack wiring, filters, recursive search, DnD rows, usage/compat cells, and
+  selection/cursor stay inside `AudioFileTable`.
+- **Out of scope:** `SampleSlotsTable`, Fix/Purge modal tables, CSS deletion (DS7).
+
 ### Later (documented only until started)
 
 | PR | Focus |
 |----|--------|
-| DS5 | DataTable foundation; AudioFileTable as first consumer |
 | DS6 | SplitPane from Audio Pool resize |
 | UI1–UI3 | Sources / Project Workspace / Audio Library on AppShell |
 | UI4–UI5 | Notes inspector + Usage Graph UI |
@@ -133,6 +140,9 @@ dismiss policy in one place; look and DnD/preview/keyboard unchanged.
 
 **After DS4:** StatusBadge and Toolbar are the single swap points for status
 pills and header action clusters on migrated surfaces.
+
+**After DS5:** DataTable is the shell for file-list tables; `AudioFileTable` is
+the first consumer. Domain sorting/filtering/DnD remain feature-owned.
 
 App.css is not “deleted”; it remains the legacy stylesheet until DS7.
 
