@@ -4,11 +4,16 @@ import type {
   LibraryProject,
   LibrarySet,
   LibrarySnapshot,
+  MetadataApi,
 } from "../../api";
+import { metadataApi } from "../../api";
+import { ManualAssetMetadataEditor } from "../metadata/ManualAssetMetadataEditor";
 import "./CatalogLibraryBrowser.css";
 
 interface CatalogLibraryBrowserProps {
+  rootId: string;
   snapshot: LibrarySnapshot;
+  metadataClient?: MetadataApi;
 }
 
 type SourceOption =
@@ -107,7 +112,11 @@ function formatBytes(byteSize: number): string {
   return `${(byteSize / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function CatalogLibraryBrowser({ snapshot }: CatalogLibraryBrowserProps) {
+export function CatalogLibraryBrowser({
+  rootId,
+  snapshot,
+  metadataClient = metadataApi,
+}: CatalogLibraryBrowserProps) {
   const sources = useMemo(() => sourceOptions(snapshot), [snapshot]);
   const [sourceKey, setSourceKey] = useState<string | null>(sources[0]?.key ?? null);
   const selectedSource = sources.find((source) => source.key === sourceKey) ?? sources[0];
@@ -121,6 +130,10 @@ export function CatalogLibraryBrowser({ snapshot }: CatalogLibraryBrowserProps) 
   const audioFiles = useMemo(
     () => filesFor(selectedLocation, snapshot.audioFiles),
     [selectedLocation, snapshot.audioFiles],
+  );
+  const [selectedFileInstanceId, setSelectedFileInstanceId] = useState<string | null>(null);
+  const selectedFile = audioFiles.find(
+    (file) => file.fileInstanceId === selectedFileInstanceId,
   );
 
   if (sources.length === 0) {
@@ -184,18 +197,39 @@ export function CatalogLibraryBrowser({ snapshot }: CatalogLibraryBrowserProps) 
           <h4>Audio files</h4>
           <div className="catalog-library-options">
             {audioFiles.map((file) => (
-              <article className="catalog-library-file" key={file.fileInstanceId}>
+              <button
+                type="button"
+                className="catalog-library-file"
+                aria-pressed={file.fileInstanceId === selectedFile?.fileInstanceId}
+                key={file.fileInstanceId}
+                onClick={() => setSelectedFileInstanceId(file.fileInstanceId)}
+              >
                 <div>
                   <strong>{file.displayName}</strong>
                   <code>{file.relativePath}</code>
                 </div>
                 <span>{formatBytes(file.byteSize)}</span>
-              </article>
+              </button>
             ))}
             {audioFiles.length === 0 && (
               <p className="catalog-library-empty">No audio files indexed here.</p>
             )}
           </div>
+        </div>
+
+        <div className="catalog-library-column catalog-library-inspector" aria-label="Asset inspector">
+          <h4>Inspector</h4>
+          {selectedFile === undefined ? (
+            <p className="catalog-library-empty">Select an audio file to edit local metadata.</p>
+          ) : (
+            <ManualAssetMetadataEditor
+              key={selectedFile.assetId}
+              api={metadataClient}
+              rootId={rootId}
+              assetId={selectedFile.assetId}
+              displayName={selectedFile.displayName}
+            />
+          )}
         </div>
       </div>
     </section>

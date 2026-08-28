@@ -34,7 +34,11 @@
 
 .catalog-library-columns {
   display: grid;
-  grid-template-columns: minmax(10rem, 0.8fr) minmax(12rem, 1fr) minmax(18rem, 1.6fr);
+  grid-template-columns:
+    minmax(9rem, 0.7fr)
+    minmax(10rem, 0.8fr)
+    minmax(16rem, 1.35fr)
+    minmax(15rem, 1.1fr);
   min-height: 15rem;
 }
 
@@ -89,9 +93,30 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  width: 100%;
   gap: var(--mo-space-3);
   padding: var(--mo-space-2) var(--mo-space-3);
+  border: 1px solid transparent;
   border-bottom: 1px solid var(--mo-border);
+  color: var(--mo-text);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.catalog-library-file:hover {
+  background: var(--mo-surface-2);
+}
+
+.catalog-library-file:focus-visible {
+  outline: 2px solid var(--mo-accent);
+  outline-offset: -2px;
+}
+
+.catalog-library-file[aria-pressed="true"] {
+  border-color: var(--mo-accent);
+  background: color-mix(in srgb, var(--mo-accent) 12%, var(--mo-surface-2));
 }
 
 .catalog-library-file > div {
@@ -114,6 +139,10 @@
 
 .catalog-library-empty {
   padding: var(--mo-space-2);
+}
+
+.catalog-library-inspector {
+  background: color-mix(in srgb, var(--mo-surface-2) 55%, var(--mo-surface-1));
 }
 
 @media (max-width: 840px) {

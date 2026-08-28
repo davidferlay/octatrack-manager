@@ -131,6 +131,8 @@ const v2Commands = [
   ),
 ];
 const expectedV2Commands = [
+  "v2_asset_metadata_get",
+  "v2_asset_metadata_replace",
   "v2_library_list",
   "v2_root_close",
   "v2_root_register",

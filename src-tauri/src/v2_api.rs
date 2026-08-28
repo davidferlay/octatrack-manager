@@ -1,12 +1,16 @@
 use crate::catalog_runtime::SharedCatalog;
 use crate::legacy_read_adapter::RegisteredLegacyLibrary;
 use crate::root_registry::{RootRegistry, RootRegistryError, RootSession};
-use ot_application::{ListLibrary, LoadLibrarySnapshot, StoreLibrarySnapshot};
+use ot_application::{
+    ListLibrary, LoadLibrarySnapshot, LoadManualAssetMetadata, ReplaceManualAssetMetadata,
+    StoreLibrarySnapshot,
+};
 use ot_domain::{
-    FileInstance, LibraryProject, LibrarySet, LibrarySnapshot, RootId, SampleStorageScope,
+    ContentHash, FileInstance, InvalidManualMetadata, LibraryProject, LibrarySet, LibrarySnapshot,
+    ManualAssetMetadata, ManualNote, ManualTag, RootId, SampleStorageScope,
 };
 use ot_storage_ports::{CatalogError, CatalogRootIdentity, CatalogRootObservation};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use tauri::State;
@@ -147,7 +151,7 @@ impl LibraryAudioFileDto {
     fn from_catalog_file(root_identity: &CatalogRootIdentity, file: &FileInstance) -> Self {
         Self {
             file_instance_id: opaque_file_instance_id(root_identity, file),
-            asset_id: opaque_asset_id(file),
+            asset_id: opaque_asset_id(&file.content_hash),
             display_name: file
                 .relative_path
                 .as_str()
@@ -191,8 +195,8 @@ fn opaque_file_instance_id(root_identity: &CatalogRootIdentity, file: &FileInsta
     )
 }
 
-fn opaque_asset_id(file: &FileInstance) -> String {
-    opaque_catalog_id("asset:v1", &[file.content_hash.as_str()])
+fn opaque_asset_id(content_hash: &ContentHash) -> String {
+    opaque_catalog_id("asset:v1", &[content_hash.as_str()])
 }
 
 fn opaque_catalog_id(prefix: &str, values: &[&str]) -> String {
@@ -216,6 +220,149 @@ fn storage_scope_name(scope: SampleStorageScope) -> &'static str {
         SampleStorageScope::ProjectLocal => "project_local",
         SampleStorageScope::Unclassified => "unclassified",
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManualAssetMetadataDto {
+    tags: Vec<String>,
+    note: Option<String>,
+}
+
+impl From<ManualAssetMetadata> for ManualAssetMetadataDto {
+    fn from(metadata: ManualAssetMetadata) -> Self {
+        Self {
+            tags: metadata
+                .tags()
+                .iter()
+                .map(|tag| tag.as_str().to_owned())
+                .collect(),
+            note: metadata.note().map(|note| note.as_str().to_owned()),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplaceManualAssetMetadataDto {
+    tags: Vec<String>,
+    note: Option<String>,
+}
+
+fn parse_manual_asset_metadata(
+    input: ReplaceManualAssetMetadataDto,
+) -> Result<ManualAssetMetadata, ApiError> {
+    let tags = input
+        .tags
+        .into_iter()
+        .map(ManualTag::parse)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(manual_metadata_error)?;
+    let note = input
+        .note
+        .map(ManualNote::parse)
+        .transpose()
+        .map_err(manual_metadata_error)?;
+    ManualAssetMetadata::new(tags, note).map_err(manual_metadata_error)
+}
+
+fn manual_metadata_error(error: InvalidManualMetadata) -> ApiError {
+    ApiError::new("INVALID_MANUAL_METADATA", error.to_string(), true)
+}
+
+fn validate_asset_id(asset_id: &str) -> Result<(), ApiError> {
+    let digest = asset_id
+        .strip_prefix("asset:v1:")
+        .ok_or_else(invalid_asset_id)?;
+    if digest.len() != 64
+        || !digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(invalid_asset_id());
+    }
+    Ok(())
+}
+
+fn invalid_asset_id() -> ApiError {
+    ApiError::new(
+        "INVALID_ASSET_ID",
+        "asset ID must be an opaque asset:v1 identifier",
+        false,
+    )
+}
+
+fn content_hash_for_asset_id(
+    snapshot: &LibrarySnapshot,
+    asset_id: &str,
+) -> Result<ContentHash, ApiError> {
+    validate_asset_id(asset_id)?;
+    let mut matched: Option<ContentHash> = None;
+    for file in &snapshot.file_instances {
+        if opaque_asset_id(&file.content_hash) != asset_id {
+            continue;
+        }
+        if let Some(existing) = &matched {
+            if existing != &file.content_hash {
+                return Err(ApiError::new(
+                    "CATALOG_INTEGRITY_ERROR",
+                    "the catalog contains an ambiguous asset identity",
+                    false,
+                ));
+            }
+        } else {
+            matched = Some(file.content_hash.clone());
+        }
+    }
+    matched.ok_or_else(|| {
+        ApiError::new(
+            "CATALOG_ASSET_NOT_FOUND",
+            "the requested audio asset is not present in this root snapshot",
+            true,
+        )
+    })
+}
+
+fn resolve_live_asset(
+    registry: &RootRegistry,
+    catalog: &SharedCatalog,
+    root_id: &RootId,
+    asset_id: &str,
+) -> Result<ContentHash, ApiError> {
+    let resolved = registry.resolve(root_id)?;
+    let identity = catalog_identity(&resolved.session)?;
+    let snapshot = load_library_snapshot(catalog, &identity)?;
+    content_hash_for_asset_id(&snapshot, asset_id)
+}
+
+fn load_manual_asset_metadata_sync(
+    registry: &RootRegistry,
+    catalog: &SharedCatalog,
+    root_id: &RootId,
+    asset_id: &str,
+) -> Result<ManualAssetMetadataDto, ApiError> {
+    let content_hash = resolve_live_asset(registry, catalog, root_id, asset_id)?;
+    let catalog = catalog.lock().map_err(|_| catalog_lock_error())?;
+    LoadManualAssetMetadata::new(&*catalog)
+        .execute(&content_hash)
+        .map(Into::into)
+        .map_err(catalog_error)
+}
+
+fn replace_manual_asset_metadata_sync(
+    registry: &RootRegistry,
+    catalog: &SharedCatalog,
+    root_id: &RootId,
+    asset_id: &str,
+    input: ReplaceManualAssetMetadataDto,
+) -> Result<ManualAssetMetadataDto, ApiError> {
+    let content_hash = resolve_live_asset(registry, catalog, root_id, asset_id)?;
+    let metadata = parse_manual_asset_metadata(input)?;
+    let mut catalog = catalog.lock().map_err(|_| catalog_lock_error())?;
+    ReplaceManualAssetMetadata::new(&mut *catalog)
+        .execute(&content_hash, &metadata)
+        .map_err(catalog_error)?;
+    Ok(metadata.into())
 }
 
 fn parse_root_id(root_id: String) -> Result<RootId, ApiError> {
@@ -456,6 +603,41 @@ pub async fn v2_library_list(
     let catalog = Arc::clone(catalog.inner());
     tauri::async_runtime::spawn_blocking(move || {
         list_library_dto_sync(&registry, &catalog, &root_id)
+    })
+    .await
+    .map_err(ApiError::task_failed)?
+}
+
+#[tauri::command]
+pub async fn v2_asset_metadata_get(
+    root_id: String,
+    asset_id: String,
+    registry: State<'_, Arc<RootRegistry>>,
+    catalog: State<'_, SharedCatalog>,
+) -> Result<ManualAssetMetadataDto, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let catalog = Arc::clone(catalog.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        load_manual_asset_metadata_sync(&registry, &catalog, &root_id, &asset_id)
+    })
+    .await
+    .map_err(ApiError::task_failed)?
+}
+
+#[tauri::command]
+pub async fn v2_asset_metadata_replace(
+    root_id: String,
+    asset_id: String,
+    metadata: ReplaceManualAssetMetadataDto,
+    registry: State<'_, Arc<RootRegistry>>,
+    catalog: State<'_, SharedCatalog>,
+) -> Result<ManualAssetMetadataDto, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let catalog = Arc::clone(catalog.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        replace_manual_asset_metadata_sync(&registry, &catalog, &root_id, &asset_id, metadata)
     })
     .await
     .map_err(ApiError::task_failed)?
@@ -732,8 +914,137 @@ mod tests {
             opaque_file_instance_id(&other_root_identity, &original)
         );
         assert_ne!(
-            opaque_asset_id(&original),
-            opaque_asset_id(&changed_content)
+            opaque_asset_id(&original.content_hash),
+            opaque_asset_id(&changed_content.content_hash)
         );
+    }
+
+    #[test]
+    fn manual_metadata_api_round_trips_without_touching_the_audio_fixture() {
+        let root = TempDir::new().unwrap();
+        create_set_project(root.path(), "SET_A", "PROJECT_A");
+        let audio = root.path().join("SET_A/AUDIO/kick.wav");
+        fs::write(&audio, b"read-only audio fixture").unwrap();
+        let before = fs::read(&audio).unwrap();
+        let registry = registry();
+        let (_data_directory, catalog) = catalog();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        let snapshot = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
+        let asset_id = snapshot.audio_files[0].asset_id.clone();
+
+        let saved = replace_manual_asset_metadata_sync(
+            &registry,
+            &catalog,
+            &root_id,
+            &asset_id,
+            ReplaceManualAssetMetadataDto {
+                tags: vec!["warm".into(), "kick".into()],
+                note: Some("Main live kick".into()),
+            },
+        )
+        .unwrap();
+        let loaded =
+            load_manual_asset_metadata_sync(&registry, &catalog, &root_id, &asset_id).unwrap();
+
+        assert_eq!(saved.tags, vec!["kick", "warm"]);
+        assert_eq!(saved.note.as_deref(), Some("Main live kick"));
+        assert_eq!(loaded, saved);
+        assert_eq!(fs::read(&audio).unwrap(), before);
+
+        let json = serde_json::to_string(&loaded).unwrap();
+        assert!(!json.contains("sha256:"));
+        assert!(!json.contains(root.path().to_str().unwrap()));
+    }
+
+    #[test]
+    fn manual_metadata_api_rejects_invalid_or_unlisted_asset_ids() {
+        let root = TempDir::new().unwrap();
+        create_set_project(root.path(), "SET_A", "PROJECT_A");
+        fs::write(root.path().join("SET_A/AUDIO/kick.wav"), b"audio fixture").unwrap();
+        let registry = registry();
+        let (_data_directory, catalog) = catalog();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        let snapshot = list_library_sync(&registry, &catalog, &root_id).unwrap();
+        let raw_content_hash = snapshot.file_instances[0].content_hash.as_str();
+
+        let raw_hash_error =
+            load_manual_asset_metadata_sync(&registry, &catalog, &root_id, raw_content_hash)
+                .unwrap_err();
+        let missing_error = load_manual_asset_metadata_sync(
+            &registry,
+            &catalog,
+            &root_id,
+            &format!("asset:v1:{}", "a".repeat(64)),
+        )
+        .unwrap_err();
+
+        assert_eq!(raw_hash_error.code, "INVALID_ASSET_ID");
+        assert_eq!(missing_error.code, "CATALOG_ASSET_NOT_FOUND");
+    }
+
+    #[test]
+    fn manual_metadata_api_requires_live_root_authority() {
+        let root = TempDir::new().unwrap();
+        create_set_project(root.path(), "SET_A", "PROJECT_A");
+        fs::write(root.path().join("SET_A/AUDIO/kick.wav"), b"audio fixture").unwrap();
+        let registry = registry();
+        let (_data_directory, catalog) = catalog();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        let snapshot = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
+        let asset_id = snapshot.audio_files[0].asset_id.clone();
+        registry.close(&root_id).unwrap();
+
+        let error =
+            load_manual_asset_metadata_sync(&registry, &catalog, &root_id, &asset_id).unwrap_err();
+
+        assert_eq!(error.code, "ROOT_NOT_APPROVED");
+    }
+
+    #[test]
+    fn invalid_manual_metadata_is_rejected_before_replacing_existing_values() {
+        let root = TempDir::new().unwrap();
+        create_set_project(root.path(), "SET_A", "PROJECT_A");
+        fs::write(root.path().join("SET_A/AUDIO/kick.wav"), b"audio fixture").unwrap();
+        let registry = registry();
+        let (_data_directory, catalog) = catalog();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        let snapshot = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
+        let asset_id = snapshot.audio_files[0].asset_id.clone();
+        let original = replace_manual_asset_metadata_sync(
+            &registry,
+            &catalog,
+            &root_id,
+            &asset_id,
+            ReplaceManualAssetMetadataDto {
+                tags: vec!["kick".into()],
+                note: Some("Keep this".into()),
+            },
+        )
+        .unwrap();
+
+        let error = replace_manual_asset_metadata_sync(
+            &registry,
+            &catalog,
+            &root_id,
+            &asset_id,
+            ReplaceManualAssetMetadataDto {
+                tags: vec!["duplicate".into(), "duplicate".into()],
+                note: None,
+            },
+        )
+        .unwrap_err();
+        let loaded =
+            load_manual_asset_metadata_sync(&registry, &catalog, &root_id, &asset_id).unwrap();
+
+        assert_eq!(error.code, "INVALID_MANUAL_METADATA");
+        assert_eq!(loaded, original);
     }
 }
