@@ -54,6 +54,7 @@ chrono = "0.4"
 encoding_rs = "0.8"
 sha2 = "=0.10.9"
 getrandom = "=0.3.4"
+libc = "=0.2.182"
 ot-application = { path = "crates/ot-application" }
 ot-audio = { path = "crates/ot-audio" }
 ot-catalog = { path = "crates/ot-catalog" }

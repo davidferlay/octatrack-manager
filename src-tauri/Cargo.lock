@@ -2096,6 +2096,7 @@ dependencies = [
  "fs2",
  "getrandom 0.3.4",
  "hound",
+ "libc",
  "once_cell",
  "open",
  "ot-application",
