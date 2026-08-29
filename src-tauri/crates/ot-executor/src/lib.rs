@@ -313,8 +313,7 @@ impl AdditiveCopyExecutor {
             | JournalStatus::Verifying => {}
         }
 
-        let authorization_directory =
-            prepare_recovery_authorization_directory(&journal_directory)?;
+        let authorization_directory = prepare_recovery_authorization_directory(&journal_directory)?;
         let authorization = read_recovery_authorization(
             &recovery_authorization_path(&authorization_directory, &operation_id),
             &operation_id,
@@ -386,8 +385,7 @@ impl AdditiveCopyExecutor {
             | JournalStatus::Verifying => {}
         }
 
-        let authorization_directory =
-            prepare_recovery_authorization_directory(&journal_directory)?;
+        let authorization_directory = prepare_recovery_authorization_directory(&journal_directory)?;
         let authorization = read_recovery_authorization(
             &recovery_authorization_path(&authorization_directory, operation_id),
             operation_id,
@@ -407,12 +405,8 @@ impl AdditiveCopyExecutor {
         let backup = BackupStore::new(backup_directory)
             .verify(&snapshot_id)
             .map_err(ExecutorError::Backup)?;
-        let (expected_size, expected_hash) = validate_recovery_backup(
-            &backup,
-            &journal,
-            &authorization,
-            operation_id,
-        )?;
+        let (expected_size, expected_hash) =
+            validate_recovery_backup(&backup, &journal, &authorization, operation_id)?;
         let current_root = revalidate_recovery_authority(root_id, &locked_root, authority)?;
         let destination = RootRelativePath::parse(&journal.destination_relative_path)
             .map_err(|_| ExecutorError::InvalidJournal)?;
@@ -553,8 +547,7 @@ impl AdditiveCopyExecutor {
             &initial_root.canonical_path,
         )?;
         let _lock = acquire_root_lock(&journal_directory, &plan.device_fingerprint)?;
-        let authorization_directory =
-            prepare_recovery_authorization_directory(&journal_directory)?;
+        let authorization_directory = prepare_recovery_authorization_directory(&journal_directory)?;
         let journal_path = journal_path(&journal_directory, &operation_id);
         if journal_path.exists() {
             let journal = read_journal(&journal_path)?;
@@ -593,17 +586,14 @@ impl AdditiveCopyExecutor {
         }
         sync_directory(&staging_directory)?;
 
-        let authorization = match ensure_recovery_authorization(
-            &authorization_directory,
-            plan,
-            &operation_id,
-        ) {
-            Ok(authorization) => authorization,
-            Err(error) => {
-                let _ = fs::remove_dir_all(&staging_directory);
-                return Err(error);
-            }
-        };
+        let authorization =
+            match ensure_recovery_authorization(&authorization_directory, plan, &operation_id) {
+                Ok(authorization) => authorization,
+                Err(error) => {
+                    let _ = fs::remove_dir_all(&staging_directory);
+                    return Err(error);
+                }
+            };
 
         let backup_store = BackupStore::new(backup_directory);
         let backup = match backup_store.create_verified(&initial_root.canonical_path, plan) {
@@ -1858,11 +1848,7 @@ fn recovery_authorization_for_plan(
         root_fingerprint: plan.device_fingerprint.clone(),
         base_observed_revision: plan.base_observed_revision,
         source_relative_path: plan.operation.source.relative_path.as_str().to_owned(),
-        destination_relative_path: plan
-            .operation
-            .destination_relative_path
-            .as_str()
-            .to_owned(),
+        destination_relative_path: plan.operation.destination_relative_path.as_str().to_owned(),
         backup_snapshot_id: SnapshotId::for_plan(plan).as_str().to_owned(),
         recovery_binding: recovery_binding_for_plan(plan)
             .map_err(|_| ExecutorError::InvalidPlan)?,
@@ -1991,8 +1977,8 @@ fn read_recovery_authorization(
     if !metadata.is_file() || metadata.mode() & 0o222 != 0 {
         return Err(ExecutorError::UnsafePath);
     }
-    let authorization: RecoveryAuthorization = serde_json::from_reader(file)
-        .map_err(|error| ExecutorError::Journal(error.to_string()))?;
+    let authorization: RecoveryAuthorization =
+        serde_json::from_reader(file).map_err(|error| ExecutorError::Journal(error.to_string()))?;
     validate_recovery_authorization(&authorization, operation_id, path)?;
     Ok(authorization)
 }
@@ -3487,7 +3473,11 @@ mod tests {
             &operation_id,
         );
         assert_eq!(
-            fs::metadata(&authorization_path).unwrap().permissions().mode() & 0o222,
+            fs::metadata(&authorization_path)
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o222,
             0
         );
         assert!(matches!(
@@ -3499,7 +3489,10 @@ mod tests {
             Err(ExecutorError::InvalidJournal)
         ));
         assert_eq!(fs::read(&victim).unwrap(), fixture.source_bytes);
-        assert_eq!(fs::read(&fixture.destination).unwrap(), fixture.source_bytes);
+        assert_eq!(
+            fs::read(&fixture.destination).unwrap(),
+            fixture.source_bytes
+        );
         assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
     }
 
