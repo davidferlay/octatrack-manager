@@ -1,6 +1,6 @@
 # Design System Migration
 
-Status: Phase A on main; UI1 on main; **UI2 landing on main; UI3 next**  
+Status: Phase A–UI2 on main; **UI3 Audio Library landing on main**  
 Updated: 2026-08-29
 
 ## Purpose
@@ -152,17 +152,19 @@ Phase D  UI6 Branding → DS7 Legacy CSS removal
 - **Out of scope:** rewriting legacy `ProjectDetail`, Pattern/Slot editors, writes,
   Inspector AppShell slot (UI4).
 
-### PR-UI3 — Audio Library region (next)
+### PR-UI3 — Audio Library region (done)
 
-- Formalize Audio Pool / set-library browsing chrome on AppShell Main (parallel to
-  ProjectWorkspace), without rewriting Audio Pool page DnD.
-- **Out of scope:** legacy AudioPoolPage rewrite, transfers, CSS deletion (DS7).
+- Add `features/library/AudioLibrary` chrome for Set Audio Pool / unclassified
+  browsing on AppShell Main (parallel to ProjectWorkspace).
+- First consumer: wrap `CatalogLibraryBrowser` detail panes (files + inspector)
+  when location is `audio_pool` or `unclassified`. Browse/Locations stay outside
+  region chrome. Relative paths only; selection clears on source/location change.
+- **Out of scope:** legacy `AudioPoolPage` DnD rewrite, transfers, CSS deletion (DS7).
 
 ### Later (documented only until started)
 
 | PR | Focus |
 |----|--------|
-| UI3 | Audio Library region formalization on AppShell |
 | UI4–UI5 | Notes inspector + Usage Graph UI |
 | UI6 | Branding rename artifacts only |
 | DS7 | Remove unused `--elektron-*` and legacy classes; shrink App.css |
@@ -181,8 +183,10 @@ the first consumer. Domain sorting/filtering/DnD remain feature-owned.
 **After DS6:** SplitPane owns horizontal panel resize for Audio Pool Files tab.
 Sidebar / transfer pane resizers remain page-local until a later pass.
 
-**After UI1:** AppShell hosts Sources + Main for the next-gen root session on
-HomePage; legacy discovery UI remains below it until UI2/UI3.
+**After UI2:** selecting a catalog Project shows ProjectWorkspace chrome in Main.
+
+**After UI3:** Audio Pool / unclassified browsing shows AudioLibrary chrome;
+Project vs Library regions are distinct on AppShell Main.
 
 App.css is not “deleted”; it remains the legacy stylesheet until DS7.
 

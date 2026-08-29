@@ -11,6 +11,7 @@ import { audioApi, metadataApi } from "../../api";
 import { ManualAssetMetadataEditor } from "../metadata/ManualAssetMetadataEditor";
 import { ProjectWorkspace } from "../project-workspace";
 import { WaveformPreview } from "../waveform/WaveformPreview";
+import { AudioLibrary } from "./AudioLibrary";
 import "./CatalogLibraryBrowser.css";
 
 interface CatalogLibraryBrowserProps {
@@ -141,54 +142,23 @@ export function CatalogLibraryBrowser({
     (file) => file.fileInstanceId === selectedFileInstanceId,
   );
 
+  function selectSource(nextKey: string) {
+    setSourceKey(nextKey);
+    setLocationKey(null);
+    setSelectedFileInstanceId(null);
+  }
+
+  function selectLocation(nextKey: string) {
+    setLocationKey(nextKey);
+    setSelectedFileInstanceId(null);
+  }
+
   if (sources.length === 0) {
     return <p className="catalog-library-empty">No catalog entries are available.</p>;
   }
 
-  const columns = (
-    <div className="catalog-library-columns">
-      <div className="catalog-library-column" aria-label="Sources">
-        <h4>Browse</h4>
-        <div className="catalog-library-options">
-          {sources.map((source) => (
-            <button
-              type="button"
-              className="catalog-library-option"
-              aria-pressed={source.key === selectedSource?.key}
-              key={source.key}
-              onClick={() => {
-                setSourceKey(source.key);
-                setLocationKey(null);
-              }}
-            >
-              <span>{source.label}</span>
-              <span aria-hidden="true">›</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="catalog-library-column" aria-label="Locations">
-        <h4>Locations</h4>
-        <div className="catalog-library-options">
-          {locations.map((location) => (
-            <button
-              type="button"
-              className="catalog-library-option"
-              aria-pressed={location.key === selectedLocation?.key}
-              key={location.key}
-              onClick={() => setLocationKey(location.key)}
-            >
-              <span>{location.label}</span>
-              <span aria-hidden="true">›</span>
-            </button>
-          ))}
-          {locations.length === 0 && (
-            <p className="catalog-library-empty">No locations indexed.</p>
-          )}
-        </div>
-      </div>
-
+  const detail = (
+    <div className="catalog-library-detail">
       <div className="catalog-library-column catalog-library-files" aria-label="Audio files">
         <h4>Audio files</h4>
         <div className="catalog-library-options">
@@ -237,6 +207,34 @@ export function CatalogLibraryBrowser({
     </div>
   );
 
+  let region = detail;
+  if (selectedLocation?.kind === "project") {
+    region = (
+      <ProjectWorkspace
+        project={selectedLocation.project}
+        localSampleCount={audioFiles.length}
+      >
+        {detail}
+      </ProjectWorkspace>
+    );
+  } else if (selectedLocation?.kind === "audio_pool") {
+    region = (
+      <AudioLibrary
+        scope="audio_pool"
+        parentPath={selectedLocation.parentPath}
+        fileCount={audioFiles.length}
+      >
+        {detail}
+      </AudioLibrary>
+    );
+  } else if (selectedLocation?.kind === "unclassified") {
+    region = (
+      <AudioLibrary scope="unclassified" fileCount={audioFiles.length}>
+        {detail}
+      </AudioLibrary>
+    );
+  }
+
   return (
     <section className="catalog-library" aria-labelledby="catalog-library-title">
       <div className="catalog-library-title-row">
@@ -247,16 +245,48 @@ export function CatalogLibraryBrowser({
         <span className="catalog-library-count">{snapshot.audioFiles.length} files</span>
       </div>
 
-      {selectedLocation?.kind === "project" ? (
-        <ProjectWorkspace
-          project={selectedLocation.project}
-          localSampleCount={audioFiles.length}
-        >
-          {columns}
-        </ProjectWorkspace>
-      ) : (
-        columns
-      )}
+      <div className="catalog-library-layout">
+        <div className="catalog-library-column" aria-label="Sources">
+          <h4>Browse</h4>
+          <div className="catalog-library-options">
+            {sources.map((source) => (
+              <button
+                type="button"
+                className="catalog-library-option"
+                aria-pressed={source.key === selectedSource?.key}
+                key={source.key}
+                onClick={() => selectSource(source.key)}
+              >
+                <span>{source.label}</span>
+                <span aria-hidden="true">›</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="catalog-library-column" aria-label="Locations">
+          <h4>Locations</h4>
+          <div className="catalog-library-options">
+            {locations.map((location) => (
+              <button
+                type="button"
+                className="catalog-library-option"
+                aria-pressed={location.key === selectedLocation?.key}
+                key={location.key}
+                onClick={() => selectLocation(location.key)}
+              >
+                <span>{location.label}</span>
+                <span aria-hidden="true">›</span>
+              </button>
+            ))}
+            {locations.length === 0 && (
+              <p className="catalog-library-empty">No locations indexed.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="catalog-library-region">{region}</div>
+      </div>
     </section>
   );
 }
