@@ -49,25 +49,43 @@ impl ApiError {
         }
     }
 
-    fn task_failed(task: impl std::fmt::Display) -> Self {
+    fn task_failed(_task: impl std::fmt::Display) -> Self {
         Self {
             code: "INTERNAL_ERROR".into(),
             message: "the operation could not complete".into(),
             recoverable: true,
-            details: Some(task.to_string()),
+            details: None,
         }
     }
 }
 
 impl From<RootRegistryError> for ApiError {
     fn from(error: RootRegistryError) -> Self {
-        Self::new(error.code(), error.to_string(), error.recoverable())
+        let message = match &error {
+            RootRegistryError::Io(_) => "the registered root could not be inspected".to_string(),
+            other => other.to_string(),
+        };
+        Self::new(error.code(), message, error.recoverable())
     }
 }
 
 impl From<AudioRuntimeError> for ApiError {
     fn from(error: AudioRuntimeError) -> Self {
-        Self::new(error.code(), error.to_string(), error.recoverable())
+        let message = match &error {
+            AudioRuntimeError::Io { .. } | AudioRuntimeError::Entropy(_) => {
+                "the audio runtime is temporarily unavailable".to_string()
+            }
+            AudioRuntimeError::Audio(audio_error) => match audio_error {
+                AudioError::SourceUnavailable(_) => "the source sample is unavailable".to_string(),
+                AudioError::CacheUnavailable(_) => {
+                    "the waveform cache is temporarily unavailable".to_string()
+                }
+                AudioError::DecodeFailed(_) => "the source sample could not be decoded".to_string(),
+                other => other.to_string(),
+            },
+            other => other.to_string(),
+        };
+        Self::new(error.code(), message, error.recoverable())
     }
 }
 
@@ -928,7 +946,11 @@ fn ensure_destination_absent(
 }
 
 fn hash_live_source(path: &Path) -> Result<(u64, ContentHash), ApiError> {
-    let mut file = File::open(path).map_err(|_| RootRegistryError::NotRegularFile)?;
+    let metadata = fs::symlink_metadata(path).map_err(|_| RootRegistryError::NotRegularFile)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(RootRegistryError::NotRegularFile.into());
+    }
+    let mut file = open_regular_file_nofollow(path)?;
     let before = file
         .metadata()
         .map_err(|_| RootRegistryError::NotRegularFile)?;
@@ -970,6 +992,26 @@ fn hash_live_source(path: &Path) -> Result<(u64, ContentHash), ApiError> {
     ContentHash::parse(format!("sha256:{:x}", hasher.finalize()))
         .map(|hash| (bytes, hash))
         .map_err(|_| ApiError::new("INTERNAL_ERROR", "could not hash the source sample", false))
+}
+
+fn open_regular_file_nofollow(path: &Path) -> Result<File, ApiError> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(path)
+            .map_err(|_| RootRegistryError::NotRegularFile.into())
+    }
+    #[cfg(not(unix))]
+    {
+        let metadata = fs::symlink_metadata(path).map_err(|_| RootRegistryError::NotRegularFile)?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(RootRegistryError::NotRegularFile.into());
+        }
+        File::open(path).map_err(|_| RootRegistryError::NotRegularFile.into())
+    }
 }
 
 fn enable_write_sync(
@@ -1083,7 +1125,28 @@ fn write_runtime_error(error: WriteRuntimeError) -> ApiError {
             | WriteRuntimeError::InvalidPlan
             | WriteRuntimeError::InvalidTransition
     );
-    ApiError::new(error.code(), error.to_string(), recoverable)
+    let message = match &error {
+        WriteRuntimeError::Io(_) => {
+            "the write runtime could not access local application data".to_string()
+        }
+        WriteRuntimeError::Executor(executor_error) => match executor_error {
+            ot_executor::ExecutorError::Io(_) => {
+                "the write operation failed due to a filesystem error".to_string()
+            }
+            ot_executor::ExecutorError::Journal(_) => {
+                "the operation journal could not be updated".to_string()
+            }
+            ot_executor::ExecutorError::Backup(_) => {
+                "the verified backup could not be prepared".to_string()
+            }
+            ot_executor::ExecutorError::Authority(_) => {
+                "write authority was rejected for this root".to_string()
+            }
+            other => other.to_string(),
+        },
+        other => other.to_string(),
+    };
+    ApiError::new(error.code(), message, recoverable)
 }
 
 fn parse_root_id(root_id: String) -> Result<RootId, ApiError> {
@@ -1167,7 +1230,15 @@ fn storage_error(message: &str) -> ApiError {
             )
         })
         .unwrap_or("LIBRARY_SCAN_FAILED");
-    ApiError::new(code, message, true)
+    let public_message = match code {
+        "ROOT_NOT_APPROVED" => "the root is not registered",
+        "ROOT_REMOVED" => "the registered root is no longer available",
+        "PATH_ESCAPE" => "the library scan escaped the registered root",
+        "SYMLINK_ESCAPE" => "the library scan traversed a symbolic link",
+        "UNSUPPORTED_FORMAT" => "the selected folder uses an unsupported layout",
+        _ => "the library could not be scanned",
+    };
+    ApiError::new(code, public_message, true)
 }
 
 fn catalog_identity(session: &RootSession) -> Result<CatalogRootIdentity, ApiError> {
@@ -1241,9 +1312,7 @@ fn catalog_error(error: CatalogError) -> ApiError {
             true,
         ),
     };
-    let mut api_error = ApiError::new(code, message, recoverable);
-    api_error.details = Some(error.to_string());
-    api_error
+    ApiError::new(code, message, recoverable)
 }
 
 fn register_root_sync(
@@ -2630,5 +2699,62 @@ mod tests {
         let closed = read_audio_preview_sync(&registry, &audio, &root_id, &ticket.preview_token)
             .unwrap_err();
         assert_eq!(closed.code, "ROOT_NOT_APPROVED");
+    }
+
+    #[test]
+    fn api_errors_do_not_expose_absolute_paths_from_io_failures() {
+        let leaked = "/private/var/folders/secret-octatrack-root/AUDIO/kick.wav";
+        let registry_error = ApiError::from(RootRegistryError::Io(format!(
+            "No such file or directory (os error 2): {leaked}"
+        )));
+        let write_error = write_runtime_error(WriteRuntimeError::Io(format!(
+            "Permission denied: {leaked}"
+        )));
+        let executor_error = write_runtime_error(WriteRuntimeError::Executor(
+            ot_executor::ExecutorError::Io(format!("failed to copy {leaked}")),
+        ));
+        let catalog = catalog_error(CatalogError::Unavailable {
+            message: format!("sqlite open failed for {leaked}"),
+        });
+
+        for error in [&registry_error, &write_error, &executor_error, &catalog] {
+            let json = serde_json::to_string(error).unwrap();
+            assert!(!json.contains(leaked), "leaked path in {json}");
+            assert!(
+                !json.contains("/private/"),
+                "absolute path fragment in {json}"
+            );
+            assert!(error.details.is_none(), "details must stay empty");
+        }
+
+        let audio_error = ApiError::from(AudioRuntimeError::Audio(AudioError::SourceUnavailable(
+            format!("Permission denied: {leaked}"),
+        )));
+        let scan_error = storage_error(&format!("LIBRARY_SCAN_FAILED: No such file: {leaked}"));
+        for error in [&audio_error, &scan_error] {
+            let json = serde_json::to_string(error).unwrap();
+            assert!(!json.contains(leaked), "leaked path in {json}");
+            assert!(error.details.is_none(), "details must stay empty");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn plan_hash_rejects_a_symlinked_source_file() {
+        use std::os::unix::fs::symlink;
+
+        let root = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        let target = outside.path().join("outside.wav");
+        write_test_wav(&target);
+        create_set_project(root.path(), "SET_A", "PROJECT_A");
+        let linked = root.path().join("SET_A/AUDIO/kick.wav");
+        symlink(&target, &linked).unwrap();
+
+        let error = hash_live_source(&linked).unwrap_err();
+        assert_eq!(error.code, "AUDIO_SOURCE_UNAVAILABLE");
+        assert!(!serde_json::to_string(&error)
+            .unwrap()
+            .contains(outside.path().to_str().unwrap()));
     }
 }

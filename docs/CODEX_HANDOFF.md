@@ -78,10 +78,11 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - UI4 Notes Inspector: #36マージ済み
 - M4-A transaction boundary hardening: #37マージ済み
 - UI5 Usage Graph: #38マージ済み
-- M4-B production authority／approved apply: #39マージ済み
-- UI6 MasterOCTa branding artifacts: #40マージ済み
+- M4-B approved additive copy／live write grant: #39マージ済み
+- UI6 MasterOCTa branding rename artifacts: #40マージ済み
 - Design System DS7 legacy token removal: #41マージ済み
-- 現在のmain基準SHA: `3ac2afadd6b5462ac678dcba28f271c21853bae1`
+- Security recheck R2／v2 error sanitization: #42マージ済み
+- 現在のmain基準SHA: `e7745acb68489b7fd8065abf1fbe79fd067a8d8a`
 - M2: 完了
 - M3-A: 完了
 - M3-B: 完了
