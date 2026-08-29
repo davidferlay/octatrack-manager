@@ -4,14 +4,16 @@ use fs2::FileExt;
 use ot_backup::{BackupError, BackupStore, SnapshotId, VerifiedBackup};
 use ot_domain::{ContentHash, RootId, RootRelativePath};
 use ot_plan::ChangePlan;
+use rustix::fs::{self as descriptor_fs, AtFlags, Mode, OFlags, RenameFlags};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fmt;
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
-const JOURNAL_SCHEMA: &str = "masterocta-operation-journal:v1";
+const JOURNAL_SCHEMA: &str = "masterocta-operation-journal:v2";
 const OPERATION_ID_PREFIX: &str = "operation:v1:";
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -90,6 +92,19 @@ pub struct ExecutorLocalPaths {
     pub journal_directory: PathBuf,
 }
 
+struct DestinationTarget {
+    parent: File,
+    file_name: String,
+    temporary_name: String,
+}
+
+struct MediaDestination {
+    target: DestinationTarget,
+    file: File,
+    identity: JournalFileIdentity,
+    published: bool,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum JournalStatus {
@@ -102,6 +117,17 @@ pub enum JournalStatus {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct JournalFileIdentity {
+    pub device: u64,
+    pub inode: u64,
+    pub byte_size: u64,
+    pub modified_seconds: i64,
+    pub modified_nanoseconds: i64,
+    pub changed_seconds: i64,
+    pub changed_nanoseconds: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct OperationJournal {
     pub schema: String,
     pub operation_id: String,
@@ -111,6 +137,7 @@ pub struct OperationJournal {
     pub source_relative_path: String,
     pub destination_relative_path: String,
     pub backup_snapshot_id: String,
+    pub destination_file_identity: Option<JournalFileIdentity>,
     pub status: JournalStatus,
     pub failure_code: Option<String>,
 }
@@ -145,6 +172,7 @@ impl AdditiveCopyExecutor {
         plan: &ChangePlan,
         authority: &A,
     ) -> Result<OperationJournal, ExecutorError> {
+        validate_plan_shape(plan)?;
         let operation_id = OperationId::for_plan(plan);
         let root = validate_authority(plan, authority.resolve_for_write(&plan.root_id)?)?;
         let journal_directory =
@@ -163,21 +191,16 @@ impl AdditiveCopyExecutor {
             | JournalStatus::Verifying => {}
         }
 
-        let destination = resolve_destination(
+        let target = open_destination_target(
             &root.canonical_path,
             &plan.operation.destination_relative_path,
+            &operation_id,
         )?;
-        if destination.exists() {
-            let (size, hash) = hash_regular_file(&destination)?;
-            if size != plan.operation.source.byte_size || hash != plan.operation.source.content_hash
-            {
-                journal.status = JournalStatus::RecoveryRequired;
-                journal.failure_code = Some("DESTINATION_CHANGED".into());
-                write_journal(&journal_path, &journal)?;
-                return Err(ExecutorError::RecoveryRequired);
-            }
-            fs::remove_file(&destination).map_err(ExecutorError::io)?;
-            sync_directory(destination.parent().ok_or(ExecutorError::UnsafePath)?)?;
+        if let Err(error) = recover_media_destination(&target, &journal, plan) {
+            journal.status = JournalStatus::RecoveryRequired;
+            journal.failure_code = Some("DESTINATION_CHANGED".into());
+            write_journal(&journal_path, &journal)?;
+            return Err(error);
         }
         cleanup_staging(&self.local_paths.staging_directory, &operation_id)?;
         journal.status = JournalStatus::RolledBack;
@@ -193,6 +216,7 @@ impl AdditiveCopyExecutor {
         fault: Option<FaultPoint>,
         simulate_crash: bool,
     ) -> Result<ExecutionResult, ExecutorError> {
+        validate_plan_shape(plan)?;
         if !plan.operation.destination_must_be_absent {
             return Err(ExecutorError::OverwriteForbidden);
         }
@@ -220,21 +244,28 @@ impl AdditiveCopyExecutor {
             });
         }
 
-        let source = resolve_regular_file(
+        verify_source_in_root(
             &initial_root.canonical_path,
             &plan.operation.source.relative_path,
+            plan,
         )?;
-        verify_source(&source, plan)?;
-        let destination = resolve_destination(
+        let initial_destination = open_destination_target(
             &initial_root.canonical_path,
             &plan.operation.destination_relative_path,
+            &operation_id,
         )?;
-        ensure_destination_absent(&destination)?;
+        ensure_destination_target_absent(&initial_destination)?;
+        drop(initial_destination);
 
         let staging_directory = staging_base.join(operation_id.file_stem());
         fs::create_dir(&staging_directory).map_err(ExecutorError::io)?;
         let staged_payload = staging_directory.join("payload");
-        if let Err(error) = copy_new_and_verify(&source, &staged_payload, plan) {
+        if let Err(error) = copy_source_to_staging(
+            &initial_root.canonical_path,
+            &plan.operation.source.relative_path,
+            &staged_payload,
+            plan,
+        ) {
             let _ = fs::remove_dir_all(&staging_directory);
             return Err(error);
         }
@@ -244,7 +275,7 @@ impl AdditiveCopyExecutor {
         let backup = match backup_store.create_verified(&initial_root.canonical_path, plan) {
             Ok(backup) => backup,
             Err(BackupError::SnapshotExists) => backup_store
-                .verify(&SnapshotId::for_plan(plan))
+                .verify_for_plan(plan)
                 .map_err(ExecutorError::Backup)?,
             Err(error) => {
                 let _ = fs::remove_dir_all(&staging_directory);
@@ -295,7 +326,11 @@ impl AdditiveCopyExecutor {
                 journal,
             );
         }
-        if let Err(error) = verify_source(&source, plan) {
+        if let Err(error) = verify_source_in_root(
+            &current_root.canonical_path,
+            &plan.operation.source.relative_path,
+            plan,
+        ) {
             return self.fail_before_apply(
                 error,
                 &staging_base,
@@ -304,7 +339,34 @@ impl AdditiveCopyExecutor {
                 journal,
             );
         }
-        if let Err(error) = ensure_destination_absent(&destination) {
+        let destination_target = match open_destination_target(
+            &current_root.canonical_path,
+            &plan.operation.destination_relative_path,
+            &operation_id,
+        ) {
+            Ok(target) => target,
+            Err(error) => {
+                return self.fail_before_apply(
+                    error,
+                    &staging_base,
+                    &operation_id,
+                    &journal_path,
+                    journal,
+                );
+            }
+        };
+        if let Err(error) = ensure_destination_target_absent(&destination_target) {
+            return self.fail_before_apply(
+                error,
+                &staging_base,
+                &operation_id,
+                &journal_path,
+                journal,
+            );
+        }
+        if let Err(error) =
+            ensure_root_capacity(&destination_target.parent, plan.estimated_additional_bytes)
+        {
             return self.fail_before_apply(
                 error,
                 &staging_base,
@@ -316,35 +378,111 @@ impl AdditiveCopyExecutor {
 
         journal.status = JournalStatus::Applying;
         write_journal(&journal_path, &journal)?;
-        let destination_created = match copy_new_and_verify(&staged_payload, &destination, plan) {
-            Ok(()) => true,
+        let mut media_destination = match create_media_destination(destination_target) {
+            Ok(destination) => destination,
             Err(error) => {
-                return self.fail_after_apply(
+                return self.fail_before_apply(
                     error,
-                    plan,
-                    &destination,
                     &staging_base,
                     &operation_id,
                     &journal_path,
                     journal,
-                    destination.exists(),
                 );
             }
         };
-        if let Err(error) = destination
-            .parent()
-            .ok_or(ExecutorError::UnsafePath)
-            .and_then(sync_directory)
+        if let Err(error) =
+            checkpoint_media_destination(&mut media_destination, &mut journal, &journal_path)
         {
             return self.fail_after_apply(
                 error,
-                plan,
-                &destination,
+                &media_destination,
                 &staging_base,
                 &operation_id,
                 &journal_path,
                 journal,
-                destination_created,
+            );
+        }
+
+        if fault == Some(FaultPoint::DestinationPartialWrite) {
+            let mut failure =
+                write_partial_media_payload(&staged_payload, &mut media_destination.file).err();
+            if let Err(error) =
+                checkpoint_media_destination(&mut media_destination, &mut journal, &journal_path)
+            {
+                failure.get_or_insert(error);
+            }
+            if simulate_crash {
+                if let Some(error) = failure {
+                    return Err(error);
+                }
+                return Err(ExecutorError::SimulatedCrash);
+            }
+            let error = failure.unwrap_or(ExecutorError::InjectedFault("during_destination_write"));
+            return self.fail_after_apply(
+                error,
+                &media_destination,
+                &staging_base,
+                &operation_id,
+                &journal_path,
+                journal,
+            );
+        }
+
+        if let Err(copy_error) =
+            copy_payload_to_media(&staged_payload, &mut media_destination.file, plan)
+        {
+            let error =
+                checkpoint_media_destination(&mut media_destination, &mut journal, &journal_path)
+                    .err()
+                    .unwrap_or(copy_error);
+            return self.fail_after_apply(
+                error,
+                &media_destination,
+                &staging_base,
+                &operation_id,
+                &journal_path,
+                journal,
+            );
+        }
+        if let Err(error) =
+            checkpoint_media_destination(&mut media_destination, &mut journal, &journal_path)
+        {
+            return self.fail_after_apply(
+                error,
+                &media_destination,
+                &staging_base,
+                &operation_id,
+                &journal_path,
+                journal,
+            );
+        }
+        if let Err(publish_error) = publish_media_destination(&mut media_destination) {
+            let error = if media_destination.published {
+                checkpoint_media_destination(&mut media_destination, &mut journal, &journal_path)
+                    .err()
+                    .unwrap_or(publish_error)
+            } else {
+                publish_error
+            };
+            return self.fail_after_apply(
+                error,
+                &media_destination,
+                &staging_base,
+                &operation_id,
+                &journal_path,
+                journal,
+            );
+        }
+        if let Err(error) =
+            checkpoint_media_destination(&mut media_destination, &mut journal, &journal_path)
+        {
+            return self.fail_after_apply(
+                error,
+                &media_destination,
+                &staging_base,
+                &operation_id,
+                &journal_path,
+                journal,
             );
         }
 
@@ -354,13 +492,11 @@ impl AdditiveCopyExecutor {
             }
             return self.fail_after_apply(
                 ExecutorError::InjectedFault("after_destination_write"),
-                plan,
-                &destination,
+                &media_destination,
                 &staging_base,
                 &operation_id,
                 &journal_path,
                 journal,
-                destination_created,
             );
         }
 
@@ -368,13 +504,11 @@ impl AdditiveCopyExecutor {
         if let Err(error) = write_journal(&journal_path, &journal) {
             return self.fail_after_apply(
                 error,
-                plan,
-                &destination,
+                &media_destination,
                 &staging_base,
                 &operation_id,
                 &journal_path,
                 journal,
-                destination_created,
             );
         }
         let final_root = match authority.resolve_for_write(&plan.root_id) {
@@ -386,51 +520,53 @@ impl AdditiveCopyExecutor {
             Ok(_) => {
                 return self.fail_after_apply(
                     ExecutorError::RootChanged,
-                    plan,
-                    &destination,
+                    &media_destination,
                     &staging_base,
                     &operation_id,
                     &journal_path,
                     journal,
-                    destination_created,
                 );
             }
             Err(error) => {
                 return self.fail_after_apply(
                     error,
-                    plan,
-                    &destination,
+                    &media_destination,
                     &staging_base,
                     &operation_id,
                     &journal_path,
                     journal,
-                    destination_created,
                 );
             }
         };
         debug_assert_eq!(final_root.canonical_path, initial_root.canonical_path);
-        if let Err(error) = verify_source(&source, plan) {
+        if let Err(error) = verify_source_in_root(
+            &final_root.canonical_path,
+            &plan.operation.source.relative_path,
+            plan,
+        ) {
             return self.fail_after_apply(
                 error,
-                plan,
-                &destination,
+                &media_destination,
                 &staging_base,
                 &operation_id,
                 &journal_path,
                 journal,
-                destination_created,
             );
         }
-        if let Err(error) = verify_destination(&destination, plan) {
+        if let Err(error) = verify_published_media_destination(
+            &final_root.canonical_path,
+            &plan.operation.destination_relative_path,
+            &operation_id,
+            &media_destination,
+            plan,
+        ) {
             return self.fail_after_apply(
                 error,
-                plan,
-                &destination,
+                &media_destination,
                 &staging_base,
                 &operation_id,
                 &journal_path,
                 journal,
-                destination_created,
             );
         }
 
@@ -440,13 +576,11 @@ impl AdditiveCopyExecutor {
             }
             return self.fail_after_apply(
                 ExecutorError::InjectedFault("after_verification"),
-                plan,
-                &destination,
+                &media_destination,
                 &staging_base,
                 &operation_id,
                 &journal_path,
                 journal,
-                destination_created,
             );
         }
 
@@ -456,13 +590,27 @@ impl AdditiveCopyExecutor {
         if let Err(error) = write_journal(&journal_path, &committed_journal) {
             return self.fail_after_apply(
                 error,
-                plan,
-                &destination,
+                &media_destination,
                 &staging_base,
                 &operation_id,
                 &journal_path,
                 journal,
-                destination_created,
+            );
+        }
+        if let Err(error) = verify_published_media_destination(
+            &final_root.canonical_path,
+            &plan.operation.destination_relative_path,
+            &operation_id,
+            &media_destination,
+            plan,
+        ) {
+            return self.fail_after_apply(
+                error,
+                &media_destination,
+                &staging_base,
+                &operation_id,
+                &journal_path,
+                journal,
             );
         }
         journal = committed_journal;
@@ -494,30 +642,17 @@ impl AdditiveCopyExecutor {
     fn fail_after_apply(
         &self,
         error: ExecutorError,
-        plan: &ChangePlan,
-        destination: &Path,
+        destination: &MediaDestination,
         staging_base: &Path,
         operation_id: &OperationId,
         journal_path: &Path,
         mut journal: OperationJournal,
-        destination_created: bool,
     ) -> Result<ExecutionResult, ExecutorError> {
-        if destination_created && destination.exists() {
-            match hash_regular_file(destination) {
-                Ok((size, hash))
-                    if size == plan.operation.source.byte_size
-                        && hash == plan.operation.source.content_hash =>
-                {
-                    fs::remove_file(destination).map_err(ExecutorError::io)?;
-                    sync_directory(destination.parent().ok_or(ExecutorError::UnsafePath)?)?;
-                }
-                _ => {
-                    journal.status = JournalStatus::RecoveryRequired;
-                    journal.failure_code = Some("ROLLBACK_DESTINATION_CHANGED".into());
-                    write_journal(journal_path, &journal)?;
-                    return Err(ExecutorError::RecoveryRequired);
-                }
-            }
+        if rollback_media_destination(destination).is_err() {
+            journal.status = JournalStatus::RecoveryRequired;
+            journal.failure_code = Some("ROLLBACK_DESTINATION_CHANGED".into());
+            write_journal(journal_path, &journal)?;
+            return Err(ExecutorError::RecoveryRequired);
         }
         journal.status = JournalStatus::RolledBack;
         journal.failure_code = Some(error.code().into());
@@ -541,8 +676,35 @@ impl AdditiveCopyExecutor {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum FaultPoint {
     Prepared,
+    DestinationPartialWrite,
     DestinationWrite,
     Verification,
+}
+
+fn validate_plan_shape(plan: &ChangePlan) -> Result<(), ExecutorError> {
+    plan.validate_integrity()
+        .map_err(|_| ExecutorError::InvalidPlan)?;
+    let fingerprint = plan
+        .device_fingerprint
+        .strip_prefix("rootfp:v1:")
+        .ok_or(ExecutorError::InvalidPlan)?;
+    let valid_fingerprint = fingerprint.len() == 64
+        && fingerprint
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
+    if !valid_fingerprint
+        || plan.base_observed_revision == 0
+        || plan.operation.source.relative_path == plan.operation.destination_relative_path
+        || plan.estimated_additional_bytes != plan.operation.source.byte_size
+        || plan.backup_relative_paths.len() != 1
+        || plan.backup_relative_paths.first() != Some(&plan.operation.source.relative_path)
+    {
+        return Err(ExecutorError::InvalidPlan);
+    }
+    if !plan.operation.destination_must_be_absent {
+        return Err(ExecutorError::OverwriteForbidden);
+    }
+    Ok(())
 }
 
 fn validate_authority(
@@ -607,60 +769,336 @@ fn reject_local_target_inside_root(path: &Path, root: &Path) -> Result<(), Execu
     Ok(())
 }
 
-fn resolve_regular_file(
+fn open_root_regular_file(root: &Path, relative: &RootRelativePath) -> Result<File, ExecutorError> {
+    let components = relative.as_str().split('/').collect::<Vec<_>>();
+    let root = descriptor_fs::open(
+        root,
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    )
+    .map_err(descriptor_path_error)?;
+    let mut parent = File::from(root);
+    for component in &components[..components.len() - 1] {
+        let child = descriptor_fs::openat(
+            &parent,
+            *component,
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+            Mode::empty(),
+        )
+        .map_err(descriptor_path_error)?;
+        parent = File::from(child);
+    }
+    let file = descriptor_fs::openat(
+        &parent,
+        *components.last().expect("relative path is non-empty"),
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC,
+        Mode::empty(),
+    )
+    .map_err(descriptor_path_error)?;
+    let file = File::from(file);
+    if !file.metadata().map_err(ExecutorError::io)?.is_file() {
+        return Err(ExecutorError::UnsafePath);
+    }
+    Ok(file)
+}
+
+fn open_destination_target(
     root: &Path,
     relative: &RootRelativePath,
-) -> Result<PathBuf, ExecutorError> {
-    let mut candidate = root.to_owned();
+    operation_id: &OperationId,
+) -> Result<DestinationTarget, ExecutorError> {
     let components = relative.as_str().split('/').collect::<Vec<_>>();
-    for (index, component) in components.iter().enumerate() {
-        candidate.push(component);
-        let metadata = fs::symlink_metadata(&candidate).map_err(ExecutorError::io)?;
-        if metadata.file_type().is_symlink() {
-            return Err(ExecutorError::SymlinkEscape);
-        }
-        let last = index + 1 == components.len();
-        if (!last && !metadata.is_dir()) || (last && !metadata.is_file()) {
-            return Err(ExecutorError::UnsafePath);
-        }
-    }
-    let canonical = candidate.canonicalize().map_err(ExecutorError::io)?;
-    if !canonical.starts_with(root) {
-        return Err(ExecutorError::PathEscape);
-    }
-    Ok(canonical)
-}
-
-fn resolve_destination(root: &Path, relative: &RootRelativePath) -> Result<PathBuf, ExecutorError> {
-    let components = relative.as_str().split('/').collect::<Vec<_>>();
-    let mut parent = root.to_owned();
+    let root = descriptor_fs::open(
+        root,
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    )
+    .map_err(descriptor_path_error)?;
+    let mut parent = File::from(root);
     for component in &components[..components.len() - 1] {
-        parent.push(component);
-        let metadata = fs::symlink_metadata(&parent).map_err(ExecutorError::io)?;
-        if metadata.file_type().is_symlink() {
-            return Err(ExecutorError::SymlinkEscape);
-        }
-        if !metadata.is_dir() {
-            return Err(ExecutorError::UnsafePath);
-        }
+        let child = descriptor_fs::openat(
+            &parent,
+            *component,
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+            Mode::empty(),
+        )
+        .map_err(descriptor_path_error)?;
+        parent = File::from(child);
     }
-    let canonical_parent = parent.canonicalize().map_err(ExecutorError::io)?;
-    if !canonical_parent.starts_with(root) {
-        return Err(ExecutorError::PathEscape);
-    }
-    Ok(canonical_parent.join(components.last().expect("relative path is non-empty")))
+    Ok(DestinationTarget {
+        parent,
+        file_name: components
+            .last()
+            .expect("relative path is non-empty")
+            .to_string(),
+        temporary_name: format!(".masterocta-{}.partial", operation_id.file_stem()),
+    })
 }
 
-fn ensure_destination_absent(destination: &Path) -> Result<(), ExecutorError> {
-    match fs::symlink_metadata(destination) {
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Ok(_) => Err(ExecutorError::DestinationExists),
-        Err(error) => Err(ExecutorError::io(error)),
+fn descriptor_path_error(error: rustix::io::Errno) -> ExecutorError {
+    if matches!(error, rustix::io::Errno::LOOP | rustix::io::Errno::NOTDIR) {
+        ExecutorError::SymlinkEscape
+    } else {
+        ExecutorError::io(std::io::Error::from(error))
     }
 }
 
-fn verify_source(source: &Path, plan: &ChangePlan) -> Result<(), ExecutorError> {
-    let (size, hash) = hash_regular_file(source)?;
+fn open_regular_entry(parent: &File, name: &str) -> Result<Option<File>, ExecutorError> {
+    match descriptor_fs::openat(
+        parent,
+        name,
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC,
+        Mode::empty(),
+    ) {
+        Ok(file) => {
+            let file = File::from(file);
+            if !file.metadata().map_err(ExecutorError::io)?.is_file() {
+                return Err(ExecutorError::UnsafePath);
+            }
+            Ok(Some(file))
+        }
+        Err(error) if error == rustix::io::Errno::NOENT => Ok(None),
+        Err(error) => Err(descriptor_path_error(error)),
+    }
+}
+
+fn ensure_destination_target_absent(target: &DestinationTarget) -> Result<(), ExecutorError> {
+    if open_regular_entry(&target.parent, &target.file_name)?.is_some()
+        || open_regular_entry(&target.parent, &target.temporary_name)?.is_some()
+    {
+        Err(ExecutorError::DestinationExists)
+    } else {
+        Ok(())
+    }
+}
+
+fn ensure_root_capacity(parent: &File, required_bytes: u64) -> Result<(), ExecutorError> {
+    let status = descriptor_fs::fstatvfs(parent)
+        .map_err(|error| ExecutorError::io(std::io::Error::from(error)))?;
+    let available_bytes = status.f_bavail.saturating_mul(status.f_frsize);
+    if available_bytes < required_bytes {
+        Err(ExecutorError::NoSpace)
+    } else {
+        Ok(())
+    }
+}
+
+fn file_identity(file: &File) -> Result<JournalFileIdentity, ExecutorError> {
+    let metadata = file.metadata().map_err(ExecutorError::io)?;
+    let identity = JournalFileIdentity {
+        device: metadata.dev(),
+        inode: metadata.ino(),
+        byte_size: metadata.len(),
+        modified_seconds: metadata.mtime(),
+        modified_nanoseconds: metadata.mtime_nsec(),
+        changed_seconds: metadata.ctime(),
+        changed_nanoseconds: metadata.ctime_nsec(),
+    };
+    if identity.inode == 0 {
+        return Err(ExecutorError::UnsafePath);
+    }
+    Ok(identity)
+}
+
+fn checkpoint_media_destination(
+    destination: &mut MediaDestination,
+    journal: &mut OperationJournal,
+    journal_path: &Path,
+) -> Result<(), ExecutorError> {
+    destination.identity = file_identity(&destination.file)?;
+    journal.destination_file_identity = Some(destination.identity.clone());
+    write_journal(journal_path, journal)
+}
+
+fn create_media_destination(target: DestinationTarget) -> Result<MediaDestination, ExecutorError> {
+    let file = descriptor_fs::openat(
+        &target.parent,
+        target.temporary_name.as_str(),
+        OFlags::RDWR | OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::RUSR | Mode::WUSR | Mode::RGRP | Mode::ROTH,
+    )
+    .map_err(|error| {
+        if error == rustix::io::Errno::EXIST {
+            ExecutorError::DestinationExists
+        } else {
+            descriptor_path_error(error)
+        }
+    })?;
+    let file = File::from(file);
+    let identity = match file_identity(&file) {
+        Ok(identity) => identity,
+        Err(error) => {
+            drop(file);
+            let _ = descriptor_fs::unlinkat(
+                &target.parent,
+                target.temporary_name.as_str(),
+                AtFlags::empty(),
+            );
+            let _ = target.parent.sync_all();
+            return Err(error);
+        }
+    };
+    Ok(MediaDestination {
+        target,
+        file,
+        identity,
+        published: false,
+    })
+}
+
+fn write_partial_media_payload(source: &Path, destination: &mut File) -> Result<(), ExecutorError> {
+    let mut source = File::open(source).map_err(ExecutorError::io)?;
+    let mut buffer = [0_u8; 64 * 1024];
+    let read = source.read(&mut buffer).map_err(ExecutorError::io)?;
+    if read > 0 {
+        destination
+            .write_all(&buffer[..read.div_ceil(2)])
+            .map_err(ExecutorError::io)?;
+    }
+    destination.sync_all().map_err(ExecutorError::io)
+}
+
+fn copy_payload_to_media(
+    source: &Path,
+    destination: &mut File,
+    plan: &ChangePlan,
+) -> Result<(), ExecutorError> {
+    let mut source = File::open(source).map_err(ExecutorError::io)?;
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = source.read(&mut buffer).map_err(ExecutorError::io)?;
+        if read == 0 {
+            break;
+        }
+        destination
+            .write_all(&buffer[..read])
+            .map_err(ExecutorError::io)?;
+    }
+    destination.sync_all().map_err(ExecutorError::io)?;
+    verify_open_file(destination, plan)
+}
+
+fn verify_open_file(file: &mut File, plan: &ChangePlan) -> Result<(), ExecutorError> {
+    file.seek(SeekFrom::Start(0)).map_err(ExecutorError::io)?;
+    let (size, hash) = hash_reader(file)?;
+    if size == plan.operation.source.byte_size && hash == plan.operation.source.content_hash {
+        Ok(())
+    } else {
+        Err(ExecutorError::PostWriteVerificationFailed)
+    }
+}
+
+fn publish_media_destination(destination: &mut MediaDestination) -> Result<(), ExecutorError> {
+    descriptor_fs::renameat_with(
+        &destination.target.parent,
+        destination.target.temporary_name.as_str(),
+        &destination.target.parent,
+        destination.target.file_name.as_str(),
+        RenameFlags::NOREPLACE,
+    )
+    .map_err(|error| {
+        if error == rustix::io::Errno::EXIST {
+            ExecutorError::DestinationExists
+        } else {
+            descriptor_path_error(error)
+        }
+    })?;
+    destination.published = true;
+    destination
+        .target
+        .parent
+        .sync_all()
+        .map_err(ExecutorError::io)
+}
+
+fn same_file_identity(file: &File, expected: &JournalFileIdentity) -> Result<bool, ExecutorError> {
+    Ok(file_identity(file)? == *expected)
+}
+
+fn same_open_directory(left: &File, right: &File) -> Result<bool, ExecutorError> {
+    Ok(file_identity(left)? == file_identity(right)?)
+}
+
+fn rollback_media_destination(destination: &MediaDestination) -> Result<(), ExecutorError> {
+    let name = if destination.published {
+        &destination.target.file_name
+    } else {
+        &destination.target.temporary_name
+    };
+    if let Some(current) = open_regular_entry(&destination.target.parent, name)? {
+        if !same_file_identity(&current, &destination.identity)? {
+            return Err(ExecutorError::RecoveryRequired);
+        }
+        descriptor_fs::unlinkat(&destination.target.parent, name.as_str(), AtFlags::empty())
+            .map_err(|error| ExecutorError::io(std::io::Error::from(error)))?;
+        destination
+            .target
+            .parent
+            .sync_all()
+            .map_err(ExecutorError::io)?;
+    }
+    Ok(())
+}
+
+fn recover_media_destination(
+    target: &DestinationTarget,
+    journal: &OperationJournal,
+    plan: &ChangePlan,
+) -> Result<(), ExecutorError> {
+    let destination = open_regular_entry(&target.parent, &target.file_name)?;
+    let temporary = open_regular_entry(&target.parent, &target.temporary_name)?;
+    let (name, mut file, published) = match (destination, temporary) {
+        (None, None) => return Ok(()),
+        (Some(_), Some(_)) => return Err(ExecutorError::RecoveryRequired),
+        (Some(file), None) => (&target.file_name, file, true),
+        (None, Some(file)) => (&target.temporary_name, file, false),
+    };
+    let expected = journal
+        .destination_file_identity
+        .as_ref()
+        .ok_or(ExecutorError::RecoveryRequired)?;
+    if !same_file_identity(&file, expected)? {
+        return Err(ExecutorError::RecoveryRequired);
+    }
+    if published && verify_open_file(&mut file, plan).is_err() {
+        return Err(ExecutorError::RecoveryRequired);
+    }
+    descriptor_fs::unlinkat(&target.parent, name.as_str(), AtFlags::empty())
+        .map_err(|error| ExecutorError::io(std::io::Error::from(error)))?;
+    target.parent.sync_all().map_err(ExecutorError::io)
+}
+
+fn verify_published_media_destination(
+    root: &Path,
+    relative: &RootRelativePath,
+    operation_id: &OperationId,
+    destination: &MediaDestination,
+    plan: &ChangePlan,
+) -> Result<(), ExecutorError> {
+    if !destination.published {
+        return Err(ExecutorError::PostWriteVerificationFailed);
+    }
+    let current = open_destination_target(root, relative, operation_id)?;
+    if !same_open_directory(&current.parent, &destination.target.parent)?
+        || open_regular_entry(&current.parent, &current.temporary_name)?.is_some()
+    {
+        return Err(ExecutorError::RootChanged);
+    }
+    let mut file = open_regular_entry(&current.parent, &current.file_name)?
+        .ok_or(ExecutorError::PostWriteVerificationFailed)?;
+    if !same_file_identity(&file, &destination.identity)? {
+        return Err(ExecutorError::RootChanged);
+    }
+    verify_open_file(&mut file, plan)
+}
+
+fn verify_source_in_root(
+    root: &Path,
+    relative: &RootRelativePath,
+    plan: &ChangePlan,
+) -> Result<(), ExecutorError> {
+    let mut source = open_root_regular_file(root, relative)?;
+    let (size, hash) = hash_reader(&mut source)?;
     if size == plan.operation.source.byte_size && hash == plan.operation.source.content_hash {
         Ok(())
     } else {
@@ -677,12 +1115,13 @@ fn verify_destination(destination: &Path, plan: &ChangePlan) -> Result<(), Execu
     }
 }
 
-fn copy_new_and_verify(
-    source: &Path,
+fn copy_source_to_staging(
+    root: &Path,
+    relative: &RootRelativePath,
     destination: &Path,
     plan: &ChangePlan,
 ) -> Result<(), ExecutorError> {
-    let mut reader = File::open(source).map_err(ExecutorError::io)?;
+    let mut reader = open_root_regular_file(root, relative)?;
     let mut writer = OpenOptions::new()
         .create_new(true)
         .write(true)
@@ -714,6 +1153,10 @@ fn hash_regular_file(path: &Path) -> Result<(u64, ContentHash), ExecutorError> {
         return Err(ExecutorError::UnsafePath);
     }
     let mut reader = File::open(path).map_err(ExecutorError::io)?;
+    hash_reader(&mut reader)
+}
+
+fn hash_reader(reader: &mut impl Read) -> Result<(u64, ContentHash), ExecutorError> {
     let mut hasher = Sha256::new();
     let mut byte_size = 0_u64;
     let mut buffer = [0_u8; 64 * 1024];
@@ -736,16 +1179,31 @@ fn hash_regular_file(path: &Path) -> Result<(u64, ContentHash), ExecutorError> {
 
 fn acquire_root_lock(directory: &Path, fingerprint: &str) -> Result<File, ExecutorError> {
     let locks = directory.join("locks");
-    fs::create_dir_all(&locks).map_err(ExecutorError::io)?;
+    match fs::create_dir(&locks) {
+        Ok(()) => sync_directory(directory)?,
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(ExecutorError::io(error)),
+    }
+    let locks = descriptor_fs::open(
+        &locks,
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    )
+    .map_err(descriptor_path_error)?;
+    let locks = File::from(locks);
     let digest = Sha256::digest(fingerprint.as_bytes());
-    let path = locks.join(format!("{digest:x}.lock"));
-    let file = OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .read(true)
-        .write(true)
-        .open(path)
-        .map_err(ExecutorError::io)?;
+    let lock_name = format!("{digest:x}.lock");
+    let file = descriptor_fs::openat(
+        &locks,
+        lock_name.as_str(),
+        OFlags::RDWR | OFlags::CREATE | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::RUSR | Mode::WUSR,
+    )
+    .map_err(descriptor_path_error)?;
+    let file = File::from(file);
+    if !file.metadata().map_err(ExecutorError::io)?.is_file() {
+        return Err(ExecutorError::UnsafePath);
+    }
     file.try_lock_exclusive().map_err(|error| {
         if error.kind() == std::io::ErrorKind::WouldBlock {
             ExecutorError::RootBusy
@@ -770,6 +1228,7 @@ fn new_journal(
         source_relative_path: plan.operation.source.relative_path.as_str().into(),
         destination_relative_path: plan.operation.destination_relative_path.as_str().into(),
         backup_snapshot_id: snapshot_id.as_str().into(),
+        destination_file_identity: None,
         status: JournalStatus::Prepared,
         failure_code: None,
     }
@@ -829,6 +1288,7 @@ fn validate_journal(
         || journal.base_observed_revision != plan.base_observed_revision
         || journal.source_relative_path != plan.operation.source.relative_path.as_str()
         || journal.destination_relative_path != plan.operation.destination_relative_path.as_str()
+        || journal.backup_snapshot_id != SnapshotId::for_plan(plan).as_str()
     {
         return Err(ExecutorError::InvalidJournal);
     }
@@ -866,6 +1326,8 @@ pub enum ExecutorError {
     SymlinkEscape,
     UnsafePath,
     FileTooLarge,
+    InvalidPlan,
+    NoSpace,
     PostWriteVerificationFailed,
     PlanConsumed,
     InvalidJournal,
@@ -894,6 +1356,8 @@ impl ExecutorError {
             Self::SymlinkEscape => "SYMLINK_ESCAPE",
             Self::UnsafePath => "UNSAFE_PATH",
             Self::FileTooLarge => "FILE_TOO_LARGE",
+            Self::InvalidPlan => "INVALID_PLAN",
+            Self::NoSpace => "NO_SPACE",
             Self::PostWriteVerificationFailed => "VERIFY_FAILED",
             Self::PlanConsumed => "PLAN_CONSUMED",
             Self::RecoveryRequired => "RECOVERY_REQUIRED",
@@ -930,6 +1394,8 @@ impl fmt::Display for ExecutorError {
                 Self::SymlinkEscape => "executor path contains a symbolic link",
                 Self::UnsafePath => "executor encountered an unsafe path",
                 Self::FileTooLarge => "file size overflowed",
+                Self::InvalidPlan => "change plan is not a valid additive-copy plan",
+                Self::NoSpace => "approved root does not have enough free space",
                 Self::PostWriteVerificationFailed => "post-write hash verification failed",
                 Self::PlanConsumed => "plan has already reached a terminal state",
                 Self::InvalidJournal => "operation journal does not match the plan",
@@ -988,6 +1454,31 @@ mod tests {
         root: ApprovedExecutionRoot,
         source: PathBuf,
         resolutions: AtomicUsize,
+    }
+
+    #[cfg(unix)]
+    struct SwapDestinationParentAuthority {
+        root: ApprovedExecutionRoot,
+        destination_parent: PathBuf,
+        outside: PathBuf,
+        resolutions: AtomicUsize,
+    }
+
+    #[cfg(unix)]
+    impl WriteAuthority for SwapDestinationParentAuthority {
+        fn resolve_for_write(
+            &self,
+            root_id: &RootId,
+        ) -> Result<ApprovedExecutionRoot, AuthorityError> {
+            if &self.root.root_id != root_id {
+                return Err(AuthorityError::NotApproved);
+            }
+            if self.resolutions.fetch_add(1, Ordering::SeqCst) == 1 {
+                fs::remove_dir(&self.destination_parent).unwrap();
+                std::os::unix::fs::symlink(&self.outside, &self.destination_parent).unwrap();
+            }
+            Ok(self.root.clone())
+        }
     }
 
     impl WriteAuthority for LateSourceChangeAuthority {
@@ -1159,6 +1650,39 @@ mod tests {
     }
 
     #[test]
+    fn unrelated_existing_snapshot_cannot_bypass_the_verified_backup_gate() {
+        let fixture = Fixture::new();
+        let snapshot_id = SnapshotId::for_plan(&fixture.plan);
+        let snapshot_directory = fixture
+            .local
+            .join("backups")
+            .join(snapshot_id.as_str().strip_prefix("snapshot:v1:").unwrap());
+        fs::create_dir_all(snapshot_directory.join("files")).unwrap();
+        let manifest = ot_backup::BackupManifest {
+            schema: "masterocta-backup:v1".into(),
+            snapshot_id: snapshot_id.as_str().into(),
+            plan_id: format!("plan:v1:{}", "b".repeat(64)),
+            source_fingerprint: format!("rootfp:v1:{}", "c".repeat(64)),
+            complete: true,
+            files: vec![],
+        };
+        fs::write(
+            snapshot_directory.join("manifest.json"),
+            serde_json::to_vec_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+
+        assert!(matches!(
+            fixture
+                .executor()
+                .execute(&fixture.plan, &fixture.authority),
+            Err(ExecutorError::Backup(BackupError::PlanBindingMismatch))
+        ));
+        assert!(!fixture.destination.exists());
+        assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
+    }
+
+    #[test]
     fn read_only_or_changed_authority_fails_closed() {
         let fixture = Fixture::new();
         fixture.authority.root.lock().unwrap().write_enabled = false;
@@ -1182,6 +1706,37 @@ mod tests {
     }
 
     #[test]
+    fn structurally_forged_additive_plan_is_rejected_before_local_or_media_writes() {
+        let fixture = Fixture::new();
+        let mut plan = fixture.plan.clone();
+        plan.backup_relative_paths.clear();
+
+        assert!(matches!(
+            fixture.executor().execute(&plan, &fixture.authority),
+            Err(ExecutorError::InvalidPlan)
+        ));
+        assert!(!fixture.destination.exists());
+        assert!(!fixture.local.exists());
+    }
+
+    #[test]
+    fn destination_changed_after_planning_is_rejected_before_local_or_media_writes() {
+        let fixture = Fixture::new();
+        let mut plan = fixture.plan.clone();
+        let changed_destination = fixture.root.join("SET/PROJECT/replaced.wav");
+        plan.operation.destination_relative_path =
+            RootRelativePath::parse("SET/PROJECT/replaced.wav").unwrap();
+
+        assert!(matches!(
+            fixture.executor().execute(&plan, &fixture.authority),
+            Err(ExecutorError::InvalidPlan)
+        ));
+        assert!(!fixture.destination.exists());
+        assert!(!changed_destination.exists());
+        assert!(!fixture.local.exists());
+    }
+
+    #[test]
     fn a_late_root_path_change_rolls_back_the_destination() {
         let fixture = Fixture::new();
         let changed_path = fixture._temp.path().join("remounted-root");
@@ -1197,6 +1752,27 @@ mod tests {
             Err(ExecutorError::RootChanged)
         ));
         assert!(!fixture.destination.exists());
+        assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_destination_parent_swap_cannot_redirect_the_write_outside_the_root() {
+        let fixture = Fixture::new();
+        let outside = fixture._temp.path().join("outside");
+        fs::create_dir(&outside).unwrap();
+        let authority = SwapDestinationParentAuthority {
+            root: fixture.authority.root.lock().unwrap().clone(),
+            destination_parent: fixture.root.join("SET/PROJECT"),
+            outside: outside.clone(),
+            resolutions: AtomicUsize::new(0),
+        };
+
+        assert!(matches!(
+            fixture.executor().execute(&fixture.plan, &authority),
+            Err(ExecutorError::SymlinkEscape)
+        ));
+        assert!(!outside.join("kick.wav").exists());
         assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
     }
 
@@ -1224,6 +1800,7 @@ mod tests {
     fn every_controlled_fault_rolls_back_without_changing_the_source() {
         for fault in [
             FaultPoint::Prepared,
+            FaultPoint::DestinationPartialWrite,
             FaultPoint::DestinationWrite,
             FaultPoint::Verification,
         ] {
@@ -1263,6 +1840,63 @@ mod tests {
 
         assert_eq!(journal.status, JournalStatus::RolledBack);
         assert!(!fixture.destination.exists());
+        assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
+    }
+
+    #[test]
+    fn crash_during_destination_write_removes_only_the_recorded_partial_file() {
+        let fixture = Fixture::new();
+        let executor = fixture.executor();
+        let operation_id = OperationId::for_plan(&fixture.plan);
+        let temporary = fixture
+            .root
+            .join("SET/PROJECT")
+            .join(format!(".masterocta-{}.partial", operation_id.file_stem()));
+        assert!(matches!(
+            executor.execute_with_fault(
+                &fixture.plan,
+                &fixture.authority,
+                FaultPoint::DestinationPartialWrite,
+                true,
+            ),
+            Err(ExecutorError::SimulatedCrash)
+        ));
+        assert!(temporary.exists());
+        assert!(!fixture.destination.exists());
+
+        let journal = executor
+            .recover_incomplete(&fixture.plan, &fixture.authority)
+            .unwrap();
+
+        assert_eq!(journal.status, JournalStatus::RolledBack);
+        assert!(!temporary.exists());
+        assert!(!fixture.destination.exists());
+        assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
+    }
+
+    #[test]
+    fn recovery_never_deletes_a_replacement_at_the_destination_path() {
+        let fixture = Fixture::new();
+        let executor = fixture.executor();
+        assert!(matches!(
+            executor.execute_with_fault(
+                &fixture.plan,
+                &fixture.authority,
+                FaultPoint::DestinationWrite,
+                true,
+            ),
+            Err(ExecutorError::SimulatedCrash)
+        ));
+        fs::remove_file(&fixture.destination).unwrap();
+        let replacement = vec![b'x'; fixture.source_bytes.len()];
+        fs::write(&fixture.destination, &replacement).unwrap();
+
+        let recovery = executor.recover_incomplete(&fixture.plan, &fixture.authority);
+        assert!(
+            matches!(recovery, Err(ExecutorError::RecoveryRequired)),
+            "unexpected recovery result: {recovery:?}"
+        );
+        assert_eq!(fs::read(&fixture.destination).unwrap(), replacement);
         assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
     }
 
@@ -1324,5 +1958,27 @@ mod tests {
         ));
         assert!(!fixture.destination.exists());
         assert!(!fixture.root.join(".masterocta").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_lock_directory_cannot_redirect_local_state_onto_the_root() {
+        let fixture = Fixture::new();
+        let journals = fixture.local.join("journals");
+        fs::create_dir_all(&journals).unwrap();
+        std::os::unix::fs::symlink(fixture.root.join("SET/PROJECT"), journals.join("locks"))
+            .unwrap();
+
+        assert!(matches!(
+            fixture
+                .executor()
+                .execute(&fixture.plan, &fixture.authority),
+            Err(ExecutorError::SymlinkEscape)
+        ));
+        assert!(fs::read_dir(fixture.root.join("SET/PROJECT"))
+            .unwrap()
+            .next()
+            .is_none());
+        assert!(!fixture.destination.exists());
     }
 }

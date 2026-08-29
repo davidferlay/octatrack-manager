@@ -88,6 +88,27 @@ pub struct ChangePlan {
     pub operation: AdditiveCopyOperation,
     pub estimated_additional_bytes: u64,
     pub backup_relative_paths: Vec<RootRelativePath>,
+    plan_seed: PlanSeed,
+}
+
+impl ChangePlan {
+    pub fn validate_integrity(&self) -> Result<(), PlanError> {
+        let expected = derive_plan_id_from_fields(
+            &self.root_id,
+            &self.plan_seed,
+            &self.device_fingerprint,
+            self.base_observed_revision,
+            &self.operation.source.relative_path,
+            &self.operation.destination_relative_path,
+            &self.operation.source.content_hash,
+            self.operation.source.byte_size,
+        );
+        if expected == self.id {
+            Ok(())
+        } else {
+            Err(PlanError::IntegrityMismatch)
+        }
+    }
 }
 
 pub fn plan_additive_copy(
@@ -132,32 +153,48 @@ pub fn plan_additive_copy(
         },
         estimated_additional_bytes: facts.source.byte_size,
         backup_relative_paths: vec![facts.source.relative_path.clone()],
+        plan_seed: facts.plan_seed.clone(),
     })
 }
 
 fn derive_plan_id(intent: &AdditiveCopyIntent, facts: &AdditiveCopyPlanningFacts) -> PlanId {
+    derive_plan_id_from_fields(
+        &intent.root_id,
+        &facts.plan_seed,
+        &facts.root.device_fingerprint,
+        facts.root.observed_revision,
+        &intent.source_relative_path,
+        &intent.destination_relative_path,
+        &facts.source.content_hash,
+        facts.source.byte_size,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn derive_plan_id_from_fields(
+    root_id: &RootId,
+    plan_seed: &PlanSeed,
+    device_fingerprint: &str,
+    observed_revision: u64,
+    source_relative_path: &RootRelativePath,
+    destination_relative_path: &RootRelativePath,
+    source_content_hash: &ContentHash,
+    source_byte_size: u64,
+) -> PlanId {
     let mut hasher = Sha256::new();
     hasher.update(b"masterocta:additive-copy-plan:v1");
-    encode_field(&mut hasher, 1, intent.root_id.as_str().as_bytes());
-    encode_field(&mut hasher, 2, facts.plan_seed.as_bytes());
-    encode_field(&mut hasher, 3, facts.root.device_fingerprint.as_bytes());
-    encode_field(&mut hasher, 4, &facts.root.observed_revision.to_be_bytes());
-    encode_field(
-        &mut hasher,
-        5,
-        intent.source_relative_path.as_str().as_bytes(),
-    );
+    encode_field(&mut hasher, 1, root_id.as_str().as_bytes());
+    encode_field(&mut hasher, 2, plan_seed.as_bytes());
+    encode_field(&mut hasher, 3, device_fingerprint.as_bytes());
+    encode_field(&mut hasher, 4, &observed_revision.to_be_bytes());
+    encode_field(&mut hasher, 5, source_relative_path.as_str().as_bytes());
     encode_field(
         &mut hasher,
         6,
-        intent.destination_relative_path.as_str().as_bytes(),
+        destination_relative_path.as_str().as_bytes(),
     );
-    encode_field(
-        &mut hasher,
-        7,
-        facts.source.content_hash.as_str().as_bytes(),
-    );
-    encode_field(&mut hasher, 8, &facts.source.byte_size.to_be_bytes());
+    encode_field(&mut hasher, 7, source_content_hash.as_str().as_bytes());
+    encode_field(&mut hasher, 8, &source_byte_size.to_be_bytes());
     let digest = hasher.finalize();
     PlanId(format!("{PLAN_ID_PREFIX}{digest:x}"))
 }
@@ -191,6 +228,7 @@ pub enum PlanError {
     SourceObservationMismatch,
     SourceEqualsDestination,
     DestinationExists,
+    IntegrityMismatch,
 }
 
 impl fmt::Display for PlanError {
@@ -204,6 +242,7 @@ impl fmt::Display for PlanError {
             Self::SourceObservationMismatch => "source observation does not match the intent",
             Self::SourceEqualsDestination => "source and destination must be different paths",
             Self::DestinationExists => "additive copy destination must not already exist",
+            Self::IntegrityMismatch => "change plan contents do not match the versioned plan ID",
         })
     }
 }
@@ -303,5 +342,16 @@ mod tests {
             plan_additive_copy(&intent, &facts),
             Err(PlanError::SourceObservationMismatch)
         );
+    }
+
+    #[test]
+    fn plan_id_detects_a_destination_changed_after_planning() {
+        let (intent, facts) = fixture();
+        let mut plan = plan_additive_copy(&intent, &facts).unwrap();
+        assert_eq!(plan.validate_integrity(), Ok(()));
+
+        plan.operation.destination_relative_path =
+            RootRelativePath::parse("SET/PROJECT/replaced.wav").unwrap();
+        assert_eq!(plan.validate_integrity(), Err(PlanError::IntegrityMismatch));
     }
 }

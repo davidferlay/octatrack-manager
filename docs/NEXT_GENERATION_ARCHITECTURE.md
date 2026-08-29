@@ -950,8 +950,9 @@ M4はproduction writeを安全境界より先に有効化しないため、次�
 #### M4-A — additive copy transaction foundation
 
 - 同一の承認済みroot内にある既存sampleを、未使用のroot-relative pathへ追加copyするplanだけを扱う
-- version付きChangePlan、source hash／size、root fingerprint／revision、destination absentをpreconditionにする
+- version付きChangePlanのIDと内容をapply前に再照合し、source hash／size、root fingerprint／revision、destination absentをpreconditionにする
 - staging、verified local backup、fsync付きjournal、root単位writer lock、post-write hash検証を独立crateで実装する
+- source／destinationはdescriptor-relativeに解決し、operation固有partialを検証後にno-replaceで公開する
 - fault injectionと未完了journal recoveryをtemporary fixtureだけで検証する
 - production RootRegistry wiring、write grant、Tauri API、frontend、削除、上書き、参照更新は行わない
 

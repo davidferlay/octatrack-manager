@@ -335,7 +335,10 @@ M4-A adds the workspace crates `ot-plan`, `ot-backup`, and `ot-executor` without
 adding a crates.io or JavaScript package and without changing a resolved package
 version or checksum. The new direct third-party dependency edges use packages
 already present in `Cargo.lock`: `fs2@0.4.3`, `serde@1.0.228`,
-`serde_json@1.0.149`, and `sha2@0.10.9`; `tempfile@3.25.0` is test-only.
+`serde_json@1.0.149`, `sha2@0.10.9`, and `rustix@1.1.4`; `tempfile@3.25.0`
+is test-only. `rustix` provides safe descriptor-relative filesystem operations
+for backup sources and executor destinations, so traversal, creation, and
+publication do not reopen validated paths through a replaceable symlink parent.
 
 The Tauri composition package does not depend on the three new workspace
 crates in M4-A. They are therefore not product-runtime reachable in this PR.

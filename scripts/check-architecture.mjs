@@ -38,7 +38,7 @@ const dependencyRules = new Map([
   ["ot-plan", ["ot-domain", "sha2"]],
   [
     "ot-backup",
-    ["ot-domain", "ot-plan", "serde", "serde_json", "sha2"],
+    ["ot-domain", "ot-plan", "rustix", "serde", "serde_json", "sha2"],
   ],
   [
     "ot-executor",
@@ -47,6 +47,7 @@ const dependencyRules = new Map([
       "ot-backup",
       "ot-domain",
       "ot-plan",
+      "rustix",
       "serde",
       "serde_json",
       "sha2",
