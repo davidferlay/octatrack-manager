@@ -25,7 +25,7 @@ describe("Root API", () => {
         return session as Response;
       }
       if (command === "v2_library_list") {
-        return { sets: [], standaloneProjects: [], audioFiles: [] } as Response;
+        return { sets: [], standaloneProjects: [], audioFiles: [], usageEdges: [] } as Response;
       }
       return undefined as Response;
     };
@@ -68,6 +68,7 @@ describe("Root API", () => {
         byteSize: 1024,
         storageScope: "set_audio_pool",
       }],
+      usageEdges: [],
     };
     const transport: IpcTransport = async <Response>() => snapshot as Response;
 

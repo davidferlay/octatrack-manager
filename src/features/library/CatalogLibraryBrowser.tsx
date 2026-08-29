@@ -10,6 +10,7 @@ import type {
 import { audioApi, metadataApi } from "../../api";
 import { ManualAssetMetadataEditor } from "../metadata/ManualAssetMetadataEditor";
 import { ProjectWorkspace } from "../project-workspace";
+import { UsageGraphPanel } from "../usage";
 import { WaveformPreview } from "../waveform/WaveformPreview";
 import { AudioLibrary } from "./AudioLibrary";
 import "./CatalogLibraryBrowser.css";
@@ -227,12 +228,19 @@ export function CatalogLibraryBrowser({
           {selectedFile === undefined ? (
             <p className="catalog-library-empty">Select an audio file to edit local metadata.</p>
           ) : (
-            <div className="catalog-library-inspector-content" key={`${rootId}:${selectedFile.assetId}`}>
+            <div
+              className="catalog-library-inspector-content"
+              key={`${rootId}:${selectedFile.assetId}:${selectedFile.relativePath}`}
+            >
               <WaveformPreview
                 api={audioClient}
                 rootId={rootId}
                 assetId={selectedFile.assetId}
                 displayName={selectedFile.displayName}
+              />
+              <UsageGraphPanel
+                relativePath={selectedFile.relativePath}
+                edges={snapshot.usageEdges}
               />
               <ManualAssetMetadataEditor
                 api={metadataClient}

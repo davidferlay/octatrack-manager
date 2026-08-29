@@ -45,10 +45,35 @@ export interface LibraryAudioFile {
   storageScope: SampleStorageScope;
 }
 
+export type SampleSlotKind = "static" | "flex";
+export type SampleUsageKind = "machine" | "sample_lock";
+export type SampleReferenceStatus =
+  | "resolved"
+  | "missing"
+  | "invalid_path"
+  | "unassigned_slot";
+
+/** Catalog usage edge (relative paths only). Sourced from M3-C2 usage graph. */
+export interface SampleUsageEdge {
+  bankDocumentRelativePath: string;
+  projectDocumentRelativePath: string;
+  slotKind: SampleSlotKind;
+  slotNumber: number;
+  usageKind: SampleUsageKind;
+  trackIndex: number;
+  partIndex: number | null;
+  patternIndex: number | null;
+  stepIndex: number | null;
+  audible: boolean;
+  referencedFileRelativePath: string | null;
+  referenceStatus: SampleReferenceStatus;
+}
+
 export interface LibrarySnapshot {
   sets: LibrarySet[];
   standaloneProjects: LibraryProject[];
   audioFiles: LibraryAudioFile[];
+  usageEdges: SampleUsageEdge[];
 }
 
 export interface RootApi {

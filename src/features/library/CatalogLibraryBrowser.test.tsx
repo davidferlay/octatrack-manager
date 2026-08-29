@@ -47,6 +47,7 @@ const snapshot: LibrarySnapshot = {
       storageScope: "project_local",
     },
   ],
+  usageEdges: [],
 };
 
 describe("CatalogLibraryBrowser", () => {
@@ -118,7 +119,7 @@ describe("CatalogLibraryBrowser", () => {
     render(
       <CatalogLibraryBrowser
         rootId="root-opaque"
-        snapshot={{ sets: [], standaloneProjects: [], audioFiles: [] }}
+        snapshot={{ sets: [], standaloneProjects: [], audioFiles: [], usageEdges: [] }}
       />,
     );
 
@@ -198,6 +199,7 @@ describe("CatalogLibraryBrowser", () => {
     fireEvent.click(screen.getByRole("button", { name: /POOL\.wav/ }));
 
     expect(await screen.findByDisplayValue("kick")).toBeInTheDocument();
+    expect(screen.getByLabelText("Usage graph")).toBeInTheDocument();
     expect(metadataClient.loadManualAssetMetadata).toHaveBeenCalledWith(
       "root-opaque",
       "asset:v1:pool",

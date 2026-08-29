@@ -8,7 +8,7 @@ describe('InspectorPane', () => {
     expect(screen.getByLabelText('Inspector')).toBeInTheDocument()
     expect(screen.getByText('Notes & details')).toBeInTheDocument()
     expect(
-      screen.getByText('Select an audio file to inspect waveform and notes.'),
+      screen.getByText('Select an audio file to inspect waveform, usage, and notes.'),
     ).toBeInTheDocument()
   })
 

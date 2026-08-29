@@ -77,7 +77,8 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - UI3 AudioLibrary: #35マージ済み
 - UI4 Notes Inspector: #36マージ済み
 - M4-A transaction boundary hardening: #37マージ済み
-- 現在のmain基準SHA: `11556bcb34f9ae0050253fee2475dd176d8d4517`
+- UI5 Usage Graph: #38マージ済み
+- 現在のmain基準SHA: `dc83ff0f5d45936ec8ab3ec4c463fa7f921119e9`
 - M2: 完了
 - M3-A: 完了
 - M3-B: 完了
