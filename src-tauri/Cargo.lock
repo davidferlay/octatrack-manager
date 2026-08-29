@@ -2578,6 +2578,7 @@ version = "0.1.0"
 dependencies = [
  "ot-domain",
  "ot-plan",
+ "rustix",
  "serde",
  "serde_json",
  "sha2",
@@ -2613,6 +2614,7 @@ dependencies = [
  "ot-backup",
  "ot-domain",
  "ot-plan",
+ "rustix",
  "serde",
  "serde_json",
  "sha2",

@@ -275,8 +275,9 @@ Octatrack媒体へ保存しない。SQLite schemaはv5のまま変更しない�
 
 M4は安全境界を先に固定するためM4-A／M4-Bへ分割する。M4-Aは同一の承認済みroot内で、
 既存sampleを未使用のroot-relative destinationへ追加copyするtransaction foundationに限定する。
-`ot-plan`、`ot-backup`、`ot-executor`を追加し、version付きChangePlan、Mac側local staging、
-再読込検証済みbackup、fsync付きoperation journal、root単位writer lock、post-write hash検証、
+`ot-plan`、`ot-backup`、`ot-executor`を追加し、IDと内容を再照合するversion付きChangePlan、Mac側local staging、
+planへ束縛した再読込検証済みbackup、fsync付きoperation journal、root単位writer lock、
+descriptor-relative path解決、operation固有partialのno-replace公開、post-write hash検証、
 rollback／crash recoveryを一時fixtureだけで検証する。削除、上書き、参照更新、production
 RootRegistry wiring、Tauri command、frontend、write grant発行はM4-Aに含めない。M4-Bで
 session限定write authority、plan diff／明示承認、production compositionを別PRとして扱う。

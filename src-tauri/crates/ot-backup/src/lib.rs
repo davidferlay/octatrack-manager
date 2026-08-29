@@ -2,9 +2,10 @@
 
 use ot_domain::{ContentHash, RootRelativePath};
 use ot_plan::{ChangePlan, PlanId};
+use rustix::fs::{self as descriptor_fs, Mode, OFlags};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
@@ -99,6 +100,7 @@ impl BackupStore {
         source_root: &Path,
         plan: &ChangePlan,
     ) -> Result<VerifiedBackup, BackupError> {
+        validate_change_plan(plan)?;
         let source_root = canonical_directory(source_root)?;
         let base_directory = prepare_local_directory(&self.base_directory, &source_root)?;
         let snapshot_id = SnapshotId::for_plan(plan);
@@ -120,12 +122,23 @@ impl BackupStore {
         sync_directory(&partial_directory)?;
         fs::rename(&partial_directory, &final_directory).map_err(BackupError::io)?;
         sync_directory(&base_directory)?;
-        self.verify_directory(&final_directory)
+        let backup = self.verify_directory(&final_directory)?;
+        validate_plan_binding(&backup, plan)?;
+        Ok(backup)
     }
 
     pub fn verify(&self, snapshot_id: &SnapshotId) -> Result<VerifiedBackup, BackupError> {
-        let directory = self.base_directory.join(snapshot_id.directory_name());
+        let base_directory = canonical_directory(&self.base_directory)?;
+        let directory = base_directory.join(snapshot_id.directory_name());
         self.verify_directory(&directory)
+    }
+
+    pub fn verify_for_plan(&self, plan: &ChangePlan) -> Result<VerifiedBackup, BackupError> {
+        validate_change_plan(plan)?;
+        let expected_snapshot_id = SnapshotId::for_plan(plan);
+        let backup = self.verify(&expected_snapshot_id)?;
+        validate_plan_binding(&backup, plan)?;
+        Ok(backup)
     }
 
     fn populate_partial_snapshot(
@@ -140,9 +153,9 @@ impl BackupStore {
         let mut files = Vec::with_capacity(plan.backup_relative_paths.len());
 
         for relative_path in &plan.backup_relative_paths {
-            let source = resolve_regular_file(source_root, relative_path)?;
+            let mut source = open_root_regular_file(source_root, relative_path)?;
             let destination = create_backup_destination(&files_directory, relative_path)?;
-            let (byte_size, content_hash) = copy_and_hash(&source, &destination)?;
+            let (byte_size, content_hash) = copy_and_hash(&mut source, &destination)?;
 
             if relative_path == &plan.operation.source.relative_path
                 && (byte_size != plan.operation.source.byte_size
@@ -226,21 +239,69 @@ fn validate_manifest(manifest: &BackupManifest) -> Result<(), BackupError> {
     Ok(())
 }
 
+fn validate_plan_binding(backup: &VerifiedBackup, plan: &ChangePlan) -> Result<(), BackupError> {
+    validate_change_plan(plan)?;
+    if backup.snapshot_id != SnapshotId::for_plan(plan)
+        || backup.manifest.plan_id != plan.id.as_str()
+        || backup.manifest.source_fingerprint != plan.device_fingerprint
+    {
+        return Err(BackupError::PlanBindingMismatch);
+    }
+
+    let expected_paths = plan
+        .backup_relative_paths
+        .iter()
+        .map(|path| path.as_str())
+        .collect::<BTreeSet<_>>();
+    if expected_paths.len() != plan.backup_relative_paths.len()
+        || !expected_paths.contains(plan.operation.source.relative_path.as_str())
+    {
+        return Err(BackupError::PlanBindingMismatch);
+    }
+
+    let manifest_files = backup
+        .manifest
+        .files
+        .iter()
+        .map(|file| (file.relative_path.as_str(), file))
+        .collect::<BTreeMap<_, _>>();
+    if manifest_files.len() != backup.manifest.files.len()
+        || manifest_files.keys().copied().collect::<BTreeSet<_>>() != expected_paths
+    {
+        return Err(BackupError::PlanBindingMismatch);
+    }
+
+    let source = manifest_files
+        .get(plan.operation.source.relative_path.as_str())
+        .ok_or(BackupError::PlanBindingMismatch)?;
+    if source.byte_size != plan.operation.source.byte_size
+        || source.content_hash != plan.operation.source.content_hash.as_str()
+    {
+        return Err(BackupError::PlanBindingMismatch);
+    }
+    Ok(())
+}
+
+fn validate_change_plan(plan: &ChangePlan) -> Result<(), BackupError> {
+    plan.validate_integrity()
+        .map_err(|_| BackupError::PlanBindingMismatch)
+}
+
 fn verify_manifest_files(directory: &Path, manifest: &BackupManifest) -> Result<(), BackupError> {
     let files_root = directory.join("files");
     let files_root = canonical_directory(&files_root)?;
     let mut expected = BTreeSet::new();
-    for file in &manifest.files {
-        let relative = RootRelativePath::parse(&file.relative_path)
+    for manifest_file in &manifest.files {
+        let relative = RootRelativePath::parse(&manifest_file.relative_path)
             .map_err(|_| BackupError::InvalidManifest("relative_path"))?;
         if !expected.insert(relative.as_str().to_owned()) {
             return Err(BackupError::InvalidManifest("duplicate_relative_path"));
         }
-        let expected_hash = ContentHash::parse(file.content_hash.clone())
+        let expected_hash = ContentHash::parse(manifest_file.content_hash.clone())
             .map_err(|_| BackupError::InvalidManifest("content_hash"))?;
-        let path = resolve_regular_file(&files_root, &relative)?;
-        let (byte_size, actual_hash) = hash_file(&path)?;
-        if byte_size != file.byte_size || actual_hash != expected_hash {
+        let mut backup_file = open_root_regular_file(&files_root, &relative)?;
+        let (byte_size, actual_hash) = hash_reader(&mut backup_file)?;
+        if byte_size != manifest_file.byte_size || actual_hash != expected_hash {
             return Err(BackupError::VerificationFailed(relative));
         }
     }
@@ -287,28 +348,51 @@ fn reject_local_target_inside_root(path: &Path, source_root: &Path) -> Result<()
     Ok(())
 }
 
-fn resolve_regular_file(
+fn open_root_regular_file(
     root: &Path,
     relative_path: &RootRelativePath,
-) -> Result<PathBuf, BackupError> {
-    let mut candidate = root.to_owned();
+) -> Result<File, BackupError> {
     let components = relative_path.as_str().split('/').collect::<Vec<_>>();
-    for (index, component) in components.iter().enumerate() {
-        candidate.push(component);
-        let metadata = fs::symlink_metadata(&candidate).map_err(BackupError::io)?;
-        if metadata.file_type().is_symlink() {
-            return Err(BackupError::SymlinkEncountered(relative_path.clone()));
-        }
-        let last = index + 1 == components.len();
-        if (!last && !metadata.is_dir()) || (last && !metadata.is_file()) {
-            return Err(BackupError::UnsafePath);
-        }
+    let root = descriptor_fs::open(
+        root,
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    )
+    .map_err(|error| descriptor_path_error(error, relative_path))?;
+    let mut parent = File::from(root);
+    for component in &components[..components.len() - 1] {
+        let child = descriptor_fs::openat(
+            &parent,
+            *component,
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+            Mode::empty(),
+        )
+        .map_err(|error| descriptor_path_error(error, relative_path))?;
+        parent = File::from(child);
     }
-    let canonical = candidate.canonicalize().map_err(BackupError::io)?;
-    if !canonical.starts_with(root) {
-        return Err(BackupError::PathEscape);
+    let file = descriptor_fs::openat(
+        &parent,
+        *components.last().expect("relative path is non-empty"),
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC,
+        Mode::empty(),
+    )
+    .map_err(|error| descriptor_path_error(error, relative_path))?;
+    let file = File::from(file);
+    if !file.metadata().map_err(BackupError::io)?.is_file() {
+        return Err(BackupError::UnsafePath);
     }
-    Ok(canonical)
+    Ok(file)
+}
+
+fn descriptor_path_error(
+    error: rustix::io::Errno,
+    relative_path: &RootRelativePath,
+) -> BackupError {
+    if matches!(error, rustix::io::Errno::LOOP | rustix::io::Errno::NOTDIR) {
+        BackupError::SymlinkEncountered(relative_path.clone())
+    } else {
+        BackupError::io(std::io::Error::from(error))
+    }
 }
 
 fn create_backup_destination(
@@ -332,8 +416,7 @@ fn create_backup_destination(
     Ok(destination)
 }
 
-fn copy_and_hash(source: &Path, destination: &Path) -> Result<(u64, ContentHash), BackupError> {
-    let mut reader = File::open(source).map_err(BackupError::io)?;
+fn copy_and_hash(source: &mut File, destination: &Path) -> Result<(u64, ContentHash), BackupError> {
     let mut writer = OpenOptions::new()
         .create_new(true)
         .write(true)
@@ -343,7 +426,7 @@ fn copy_and_hash(source: &Path, destination: &Path) -> Result<(u64, ContentHash)
     let mut byte_size = 0_u64;
     let mut buffer = [0_u8; 64 * 1024];
     loop {
-        let read = reader.read(&mut buffer).map_err(BackupError::io)?;
+        let read = source.read(&mut buffer).map_err(BackupError::io)?;
         if read == 0 {
             break;
         }
@@ -359,8 +442,7 @@ fn copy_and_hash(source: &Path, destination: &Path) -> Result<(u64, ContentHash)
     Ok((byte_size, hash))
 }
 
-fn hash_file(path: &Path) -> Result<(u64, ContentHash), BackupError> {
-    let mut reader = File::open(path).map_err(BackupError::io)?;
+fn hash_reader(reader: &mut impl Read) -> Result<(u64, ContentHash), BackupError> {
     let mut hasher = Sha256::new();
     let mut byte_size = 0_u64;
     let mut buffer = [0_u8; 64 * 1024];
@@ -456,6 +538,7 @@ pub enum BackupError {
     InvalidManifest(&'static str),
     IncompleteSnapshot,
     SnapshotExists,
+    PlanBindingMismatch,
     BackupInsideSourceRoot,
     SourceChanged,
     PathEscape,
@@ -495,6 +578,9 @@ impl fmt::Display for BackupError {
             }
             Self::IncompleteSnapshot => formatter.write_str("backup snapshot is not complete"),
             Self::SnapshotExists => formatter.write_str("backup snapshot already exists"),
+            Self::PlanBindingMismatch => {
+                formatter.write_str("backup snapshot does not match its change plan")
+            }
             Self::BackupInsideSourceRoot => {
                 formatter.write_str("backup storage must be outside the source root")
             }
@@ -630,6 +716,56 @@ mod tests {
         assert!(matches!(
             store.verify(backup.snapshot_id()),
             Err(BackupError::VerificationFailed(_))
+        ));
+    }
+
+    #[test]
+    fn existing_snapshot_must_be_bound_to_the_exact_plan() {
+        let fixture = TempDir::new().unwrap();
+        let root = fixture.path().join("root");
+        let backups = fixture.path().join("local-backups");
+        fs::create_dir_all(root.join("SET/AUDIO")).unwrap();
+        fs::write(root.join("SET/AUDIO/kick.wav"), b"fixture").unwrap();
+        let plan = plan_for(b"fixture");
+        let snapshot_id = SnapshotId::for_plan(&plan);
+        let snapshot_directory = backups.join(snapshot_id.directory_name());
+        fs::create_dir_all(snapshot_directory.join("files")).unwrap();
+        let unrelated = BackupManifest {
+            schema: MANIFEST_SCHEMA.to_owned(),
+            snapshot_id: snapshot_id.as_str().to_owned(),
+            plan_id: format!("plan:v1:{}", "b".repeat(64)),
+            source_fingerprint: format!("rootfp:v1:{}", "c".repeat(64)),
+            complete: true,
+            files: vec![],
+        };
+        fs::write(
+            snapshot_directory.join("manifest.json"),
+            serde_json::to_vec_pretty(&unrelated).unwrap(),
+        )
+        .unwrap();
+
+        assert!(matches!(
+            BackupStore::new(&backups).verify_for_plan(&plan),
+            Err(BackupError::PlanBindingMismatch)
+        ));
+    }
+
+    #[test]
+    fn changed_plan_contents_cannot_reuse_a_verified_snapshot() {
+        let fixture = TempDir::new().unwrap();
+        let root = fixture.path().join("root");
+        let backups = fixture.path().join("local-backups");
+        fs::create_dir_all(root.join("SET/AUDIO")).unwrap();
+        fs::write(root.join("SET/AUDIO/kick.wav"), b"fixture").unwrap();
+        let mut plan = plan_for(b"fixture");
+        let store = BackupStore::new(&backups);
+        store.create_verified(&root, &plan).unwrap();
+
+        plan.operation.destination_relative_path =
+            RootRelativePath::parse("SET/PROJECT/replaced.wav").unwrap();
+        assert!(matches!(
+            store.verify_for_plan(&plan),
+            Err(BackupError::PlanBindingMismatch)
         ));
     }
 
