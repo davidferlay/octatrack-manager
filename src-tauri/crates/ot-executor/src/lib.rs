@@ -14,9 +14,12 @@ use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 const JOURNAL_SCHEMA: &str = "masterocta-operation-journal:v3";
+const LEGACY_JOURNAL_SCHEMA: &str = "masterocta-operation-journal:v2";
 const OPERATION_ID_PREFIX: &str = "operation:v1:";
 const RECOVERY_BINDING_PREFIX: &str = "recovery-binding:v1:";
 const UNIDENTIFIED_PARTIAL_FAILURE: &str = "RECOVERY_PRESERVED_UNIDENTIFIED_PARTIAL";
+const LEGACY_RECOVERY_BINDING: &str = "legacy-recovery-binding:unavailable";
+const LEGACY_RECOVERY_FAILURE: &str = "LEGACY_RECOVERY_UNAUTHENTICATED";
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct OperationId(String);
@@ -128,6 +131,8 @@ struct DestinationTarget {
     parent: File,
     file_name: String,
     temporary_name: String,
+    published_quarantine_name: String,
+    temporary_quarantine_name: String,
 }
 
 struct MediaDestination {
@@ -180,6 +185,62 @@ pub struct OperationJournal {
     pub destination_file_identity: Option<JournalFileIdentity>,
     pub status: JournalStatus,
     pub failure_code: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+enum LegacyJournalStatus {
+    Prepared,
+    Applying,
+    Verifying,
+    Committed,
+    RolledBack,
+    RecoveryRequired,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+struct LegacyOperationJournal {
+    schema: String,
+    operation_id: String,
+    plan_id: String,
+    root_fingerprint: String,
+    base_observed_revision: u64,
+    source_relative_path: String,
+    destination_relative_path: String,
+    backup_snapshot_id: String,
+    destination_file_identity: Option<JournalFileIdentity>,
+    status: LegacyJournalStatus,
+    failure_code: Option<String>,
+}
+
+impl LegacyOperationJournal {
+    fn into_safe_journal(self) -> OperationJournal {
+        let (status, failure_code) = match self.status {
+            LegacyJournalStatus::Committed => (JournalStatus::Committed, self.failure_code),
+            LegacyJournalStatus::RolledBack => (JournalStatus::RolledBack, self.failure_code),
+            LegacyJournalStatus::Prepared
+            | LegacyJournalStatus::Applying
+            | LegacyJournalStatus::Verifying
+            | LegacyJournalStatus::RecoveryRequired => (
+                JournalStatus::Abandoned,
+                Some(LEGACY_RECOVERY_FAILURE.to_owned()),
+            ),
+        };
+        OperationJournal {
+            schema: self.schema,
+            operation_id: self.operation_id,
+            plan_id: self.plan_id,
+            root_fingerprint: self.root_fingerprint,
+            base_observed_revision: self.base_observed_revision,
+            source_relative_path: self.source_relative_path,
+            destination_relative_path: self.destination_relative_path,
+            backup_snapshot_id: self.backup_snapshot_id,
+            recovery_binding: LEGACY_RECOVERY_BINDING.to_owned(),
+            destination_file_identity: self.destination_file_identity,
+            status,
+            failure_code,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -704,6 +765,19 @@ impl AdditiveCopyExecutor {
                 journal,
             );
         }
+        if fault == Some(FaultPoint::DestinationPublished) {
+            if simulate_crash {
+                return Err(ExecutorError::SimulatedCrash);
+            }
+            return self.fail_after_apply(
+                ExecutorError::InjectedFault("after_destination_publish"),
+                &media_destination,
+                &staging_base,
+                &operation_id,
+                &journal_path,
+                journal,
+            );
+        }
         if let Err(error) =
             checkpoint_media_destination(&mut media_destination, &mut journal, &journal_path)
         {
@@ -910,6 +984,7 @@ enum FaultPoint {
     DestinationCreated,
     DestinationPartialWrite,
     DestinationWrite,
+    DestinationPublished,
     Verification,
 }
 
@@ -1091,6 +1166,14 @@ fn open_destination_target(
             .expect("relative path is non-empty")
             .to_string(),
         temporary_name: format!(".masterocta-{}.partial", operation_id.file_stem()),
+        published_quarantine_name: format!(
+            ".masterocta-{}.published.recovery-quarantine",
+            operation_id.file_stem()
+        ),
+        temporary_quarantine_name: format!(
+            ".masterocta-{}.partial.recovery-quarantine",
+            operation_id.file_stem()
+        ),
     })
 }
 
@@ -1124,6 +1207,8 @@ fn open_regular_entry(parent: &File, name: &str) -> Result<Option<File>, Executo
 fn ensure_destination_target_absent(target: &DestinationTarget) -> Result<(), ExecutorError> {
     if open_regular_entry(&target.parent, &target.file_name)?.is_some()
         || open_regular_entry(&target.parent, &target.temporary_name)?.is_some()
+        || open_regular_entry(&target.parent, &target.published_quarantine_name)?.is_some()
+        || open_regular_entry(&target.parent, &target.temporary_quarantine_name)?.is_some()
     {
         Err(ExecutorError::DestinationExists)
     } else {
@@ -1286,29 +1371,141 @@ fn same_file_identity(file: &File, expected: &JournalFileIdentity) -> Result<boo
     Ok(file_identity(file)? == *expected)
 }
 
+fn recovery_identity_matches(
+    actual: &JournalFileIdentity,
+    expected: &JournalFileIdentity,
+) -> bool {
+    actual.device == expected.device
+        && actual.inode == expected.inode
+        && actual.byte_size == expected.byte_size
+        && actual.modified_seconds == expected.modified_seconds
+        && actual.modified_nanoseconds == expected.modified_nanoseconds
+}
+
+fn same_recovery_file_identity(
+    file: &File,
+    expected: &JournalFileIdentity,
+) -> Result<bool, ExecutorError> {
+    Ok(recovery_identity_matches(&file_identity(file)?, expected))
+}
+
 fn same_open_directory(left: &File, right: &File) -> Result<bool, ExecutorError> {
     Ok(file_identity(left)? == file_identity(right)?)
 }
 
 fn rollback_media_destination(destination: &MediaDestination) -> Result<(), ExecutorError> {
-    let name = if destination.published {
-        &destination.target.file_name
+    let (name, quarantine_name) = if destination.published {
+        (
+            &destination.target.file_name,
+            &destination.target.published_quarantine_name,
+        )
     } else {
-        &destination.target.temporary_name
+        (
+            &destination.target.temporary_name,
+            &destination.target.temporary_quarantine_name,
+        )
     };
-    if let Some(current) = open_regular_entry(&destination.target.parent, name)? {
-        if !same_file_identity(&current, &destination.identity)? {
+    if let Some(mut current) = open_regular_entry(&destination.target.parent, name)? {
+        if !same_recovery_file_identity(&current, &destination.identity)? {
             return Err(ExecutorError::RecoveryRequired);
         }
-        descriptor_fs::unlinkat(&destination.target.parent, name.as_str(), AtFlags::empty())
-            .map_err(|error| ExecutorError::io(std::io::Error::from(error)))?;
-        destination
-            .target
-            .parent
-            .sync_all()
-            .map_err(ExecutorError::io)?;
+        quarantine_and_remove_entry(
+            &destination.target.parent,
+            name,
+            name,
+            quarantine_name,
+            &mut current,
+            &destination.identity,
+            None,
+            false,
+        )?;
     }
     Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn quarantine_and_remove_entry(
+    parent: &File,
+    entry_name: &str,
+    original_name: &str,
+    quarantine_name: &str,
+    opened_file: &mut File,
+    expected_identity: &JournalFileIdentity,
+    expected_content: Option<(u64, &ContentHash)>,
+    already_quarantined: bool,
+) -> Result<(), ExecutorError> {
+    let opened_identity = file_identity(opened_file)?;
+    if !recovery_identity_matches(&opened_identity, expected_identity) {
+        return Err(ExecutorError::RecoveryRequired);
+    }
+    if let Some((expected_size, expected_hash)) = expected_content {
+        if verify_open_file_matching(opened_file, expected_size, expected_hash).is_err() {
+            return Err(ExecutorError::RecoveryRequired);
+        }
+    }
+
+    if !already_quarantined {
+        descriptor_fs::renameat_with(
+            parent,
+            entry_name,
+            parent,
+            quarantine_name,
+            RenameFlags::NOREPLACE,
+        )
+        .map_err(|error| {
+            if matches!(error, rustix::io::Errno::EXIST | rustix::io::Errno::NOENT) {
+                ExecutorError::RecoveryRequired
+            } else {
+                descriptor_path_error(error)
+            }
+        })?;
+        parent.sync_all().map_err(ExecutorError::io)?;
+    }
+
+    let verification = (|| {
+        let mut quarantined = open_regular_entry(parent, quarantine_name)?
+            .ok_or(ExecutorError::RecoveryRequired)?;
+        let quarantined_identity = file_identity(&quarantined)?;
+        if !recovery_identity_matches(&quarantined_identity, expected_identity)
+            || !recovery_identity_matches(&quarantined_identity, &opened_identity)
+        {
+            return Err(ExecutorError::RecoveryRequired);
+        }
+        if let Some((expected_size, expected_hash)) = expected_content {
+            verify_open_file_matching(&mut quarantined, expected_size, expected_hash)?;
+        }
+        Ok(())
+    })();
+    if verification.is_err() {
+        if !already_quarantined {
+            restore_quarantined_entry(parent, quarantine_name, original_name)?;
+        }
+        return Err(ExecutorError::RecoveryRequired);
+    }
+
+    descriptor_fs::unlinkat(parent, quarantine_name, AtFlags::empty())
+        .map_err(|error| ExecutorError::io(std::io::Error::from(error)))?;
+    parent.sync_all().map_err(ExecutorError::io)
+}
+
+fn restore_quarantined_entry(
+    parent: &File,
+    quarantine_name: &str,
+    original_name: &str,
+) -> Result<(), ExecutorError> {
+    match descriptor_fs::renameat_with(
+        parent,
+        quarantine_name,
+        parent,
+        original_name,
+        RenameFlags::NOREPLACE,
+    ) {
+        Ok(()) => parent.sync_all().map_err(ExecutorError::io),
+        Err(error) if matches!(error, rustix::io::Errno::EXIST | rustix::io::Errno::NOENT) => {
+            Ok(())
+        }
+        Err(error) => Err(descriptor_path_error(error)),
+    }
 }
 
 fn recover_media_destination(
@@ -1330,16 +1527,59 @@ fn recover_media_destination_matching(
     expected_size: u64,
     expected_hash: &ContentHash,
 ) -> Result<RecoveryDisposition, ExecutorError> {
-    let destination = open_regular_entry(&target.parent, &target.file_name)?;
-    let temporary = open_regular_entry(&target.parent, &target.temporary_name)?;
-    let (name, mut file, published) = match (destination, temporary) {
-        (None, None) => return Ok(RecoveryDisposition::Cleared),
-        (Some(_), Some(_)) => return Err(ExecutorError::RecoveryRequired),
-        (Some(file), None) => (&target.file_name, file, true),
-        (None, Some(file)) => (&target.temporary_name, file, false),
-    };
+    let mut candidates = Vec::new();
+    for (entry_name, original_name, quarantine_name, published, already_quarantined) in [
+        (
+            target.file_name.as_str(),
+            target.file_name.as_str(),
+            target.published_quarantine_name.as_str(),
+            true,
+            false,
+        ),
+        (
+            target.temporary_name.as_str(),
+            target.temporary_name.as_str(),
+            target.temporary_quarantine_name.as_str(),
+            false,
+            false,
+        ),
+        (
+            target.published_quarantine_name.as_str(),
+            target.file_name.as_str(),
+            target.published_quarantine_name.as_str(),
+            true,
+            true,
+        ),
+        (
+            target.temporary_quarantine_name.as_str(),
+            target.temporary_name.as_str(),
+            target.temporary_quarantine_name.as_str(),
+            false,
+            true,
+        ),
+    ] {
+        if let Some(file) = open_regular_entry(&target.parent, entry_name)? {
+            candidates.push((
+                entry_name,
+                original_name,
+                quarantine_name,
+                published,
+                already_quarantined,
+                file,
+            ));
+        }
+    }
+    if candidates.is_empty() {
+        return Ok(RecoveryDisposition::Cleared);
+    }
+    if candidates.len() != 1 {
+        return Err(ExecutorError::RecoveryRequired);
+    }
+    let (entry_name, original_name, quarantine_name, published, already_quarantined, mut file) =
+        candidates.pop().expect("one candidate was checked");
     let Some(expected) = journal.destination_file_identity.as_ref() else {
         if !published
+            && !already_quarantined
             && journal.status == JournalStatus::Applying
             && file_identity(&file)?.byte_size == 0
         {
@@ -1347,15 +1587,20 @@ fn recover_media_destination_matching(
         }
         return Err(ExecutorError::RecoveryRequired);
     };
-    if !same_file_identity(&file, expected)? {
+    if !same_recovery_file_identity(&file, expected)? {
         return Err(ExecutorError::RecoveryRequired);
     }
-    if published && verify_open_file_matching(&mut file, expected_size, expected_hash).is_err() {
-        return Err(ExecutorError::RecoveryRequired);
-    }
-    descriptor_fs::unlinkat(&target.parent, name.as_str(), AtFlags::empty())
-        .map_err(|error| ExecutorError::io(std::io::Error::from(error)))?;
-    target.parent.sync_all().map_err(ExecutorError::io)?;
+    let expected_content = published.then_some((expected_size, expected_hash));
+    quarantine_and_remove_entry(
+        &target.parent,
+        entry_name,
+        original_name,
+        quarantine_name,
+        &mut file,
+        expected,
+        expected_content,
+        already_quarantined,
+    )?;
     Ok(RecoveryDisposition::Cleared)
 }
 
@@ -1574,7 +1819,23 @@ fn read_journal(path: &Path) -> Result<OperationJournal, ExecutorError> {
     if !file.metadata().map_err(ExecutorError::io)?.is_file() {
         return Err(ExecutorError::UnsafePath);
     }
-    serde_json::from_reader(file).map_err(|error| ExecutorError::Journal(error.to_string()))
+    let value: serde_json::Value = serde_json::from_reader(file)
+        .map_err(|error| ExecutorError::Journal(error.to_string()))?;
+    let schema = value
+        .get("schema")
+        .and_then(serde_json::Value::as_str)
+        .ok_or(ExecutorError::InvalidJournal)?
+        .to_owned();
+    match schema.as_str() {
+        JOURNAL_SCHEMA => serde_json::from_value(value)
+            .map_err(|error| ExecutorError::Journal(error.to_string())),
+        LEGACY_JOURNAL_SCHEMA => {
+            let legacy: LegacyOperationJournal = serde_json::from_value(value)
+                .map_err(|error| ExecutorError::Journal(error.to_string()))?;
+            Ok(legacy.into_safe_journal())
+        }
+        _ => Err(ExecutorError::InvalidJournal),
+    }
 }
 
 fn validate_standalone_journal(
@@ -1582,7 +1843,22 @@ fn validate_standalone_journal(
     operation_id: &OperationId,
     path: &Path,
 ) -> Result<(), ExecutorError> {
-    if journal.schema != JOURNAL_SCHEMA
+    let schema_is_valid = match journal.schema.as_str() {
+        JOURNAL_SCHEMA => validate_recovery_binding(&journal.recovery_binding).is_ok(),
+        LEGACY_JOURNAL_SCHEMA => {
+            journal.recovery_binding == LEGACY_RECOVERY_BINDING
+                && matches!(
+                    journal.status,
+                    JournalStatus::Committed
+                        | JournalStatus::RolledBack
+                        | JournalStatus::Abandoned
+                )
+                && (journal.status != JournalStatus::Abandoned
+                    || journal.failure_code.as_deref() == Some(LEGACY_RECOVERY_FAILURE))
+        }
+        _ => false,
+    };
+    if !schema_is_valid
         || journal.operation_id != operation_id.as_str()
         || path.file_stem().and_then(|stem| stem.to_str()) != Some(operation_id.file_stem())
         || journal.plan_id
@@ -1595,7 +1871,6 @@ fn validate_standalone_journal(
                 .replacen("operation:v1:", "snapshot:v1:", 1)
         || PlanId::parse(journal.plan_id.clone()).is_err()
         || SnapshotId::parse(journal.backup_snapshot_id.clone()).is_err()
-        || validate_recovery_binding(&journal.recovery_binding).is_err()
         || journal.base_observed_revision == 0
         || RootRelativePath::parse(&journal.source_relative_path).is_err()
         || RootRelativePath::parse(&journal.destination_relative_path).is_err()
@@ -1681,7 +1956,20 @@ fn validate_journal(
 ) -> Result<(), ExecutorError> {
     let recovery_binding =
         recovery_binding_for_plan(plan).map_err(|_| ExecutorError::InvalidJournal)?;
-    if journal.schema != JOURNAL_SCHEMA
+    let binding_is_valid = match journal.schema.as_str() {
+        JOURNAL_SCHEMA => journal.recovery_binding == recovery_binding,
+        LEGACY_JOURNAL_SCHEMA => {
+            journal.recovery_binding == LEGACY_RECOVERY_BINDING
+                && matches!(
+                    journal.status,
+                    JournalStatus::Committed
+                        | JournalStatus::RolledBack
+                        | JournalStatus::Abandoned
+                )
+        }
+        _ => false,
+    };
+    if !binding_is_valid
         || journal.operation_id != operation_id.as_str()
         || journal.plan_id != plan.id.as_str()
         || journal.root_fingerprint != plan.device_fingerprint
@@ -1689,7 +1977,6 @@ fn validate_journal(
         || journal.source_relative_path != plan.operation.source.relative_path.as_str()
         || journal.destination_relative_path != plan.operation.destination_relative_path.as_str()
         || journal.backup_snapshot_id != SnapshotId::for_plan(plan).as_str()
-        || journal.recovery_binding != recovery_binding
     {
         return Err(ExecutorError::InvalidJournal);
     }
@@ -2050,6 +2337,66 @@ mod tests {
             })
         }
 
+        fn write_legacy_operation_state(
+            &self,
+            status: &str,
+            destination_file_identity: Option<&JournalFileIdentity>,
+        ) -> (OperationId, PathBuf) {
+            let operation_id = OperationId::for_plan(&self.plan);
+            let snapshot_id = SnapshotId::for_plan(&self.plan);
+            let journal_directory = self.local.join("journals");
+            fs::create_dir_all(&journal_directory).unwrap();
+            fs::write(
+                journal_path(&journal_directory, &operation_id),
+                serde_json::to_vec_pretty(&serde_json::json!({
+                    "schema": LEGACY_JOURNAL_SCHEMA,
+                    "operation_id": operation_id.as_str(),
+                    "plan_id": self.plan.id.as_str(),
+                    "root_fingerprint": self.plan.device_fingerprint,
+                    "base_observed_revision": self.plan.base_observed_revision,
+                    "source_relative_path": self.plan.operation.source.relative_path.as_str(),
+                    "destination_relative_path": self.plan.operation.destination_relative_path.as_str(),
+                    "backup_snapshot_id": snapshot_id.as_str(),
+                    "destination_file_identity": destination_file_identity,
+                    "status": status,
+                    "failure_code": serde_json::Value::Null,
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+
+            let snapshot_directory = self.local.join("backups").join(
+                snapshot_id
+                    .as_str()
+                    .strip_prefix("snapshot:v1:")
+                    .unwrap(),
+            );
+            let backup_file = snapshot_directory
+                .join("files")
+                .join(self.plan.operation.source.relative_path.as_str());
+            fs::create_dir_all(backup_file.parent().unwrap()).unwrap();
+            fs::write(&backup_file, &self.source_bytes).unwrap();
+            let legacy_manifest_path = snapshot_directory.join("manifest.json");
+            fs::write(
+                &legacy_manifest_path,
+                serde_json::to_vec_pretty(&serde_json::json!({
+                    "schema": "masterocta-backup:v1",
+                    "snapshot_id": snapshot_id.as_str(),
+                    "plan_id": self.plan.id.as_str(),
+                    "source_fingerprint": self.plan.device_fingerprint,
+                    "complete": true,
+                    "files": [{
+                        "relative_path": self.plan.operation.source.relative_path.as_str(),
+                        "byte_size": self.plan.operation.source.byte_size,
+                        "content_hash": self.plan.operation.source.content_hash.as_str(),
+                    }],
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+            (operation_id, legacy_manifest_path)
+        }
+
         fn plan_for_destination(&self, destination: &str, seed: u8) -> ChangePlan {
             let source_relative = self.plan.operation.source.relative_path.clone();
             plan_additive_copy(
@@ -2109,6 +2456,97 @@ mod tests {
         .unwrap();
         assert!(!journal_text.contains(fixture.root.to_string_lossy().as_ref()));
         assert!(!journal_text.contains("root-1"));
+    }
+
+    #[test]
+    fn legacy_committed_journal_remains_readable_with_v1_backup_preserved() {
+        let fixture = Fixture::new();
+        let executor = fixture.executor();
+        let (operation_id, legacy_manifest_path) =
+            fixture.write_legacy_operation_state("committed", None);
+        let legacy_manifest = fs::read(&legacy_manifest_path).unwrap();
+
+        let journal = executor.operation_journal(&operation_id).unwrap().unwrap();
+
+        assert_eq!(journal.schema, LEGACY_JOURNAL_SCHEMA);
+        assert_eq!(journal.status, JournalStatus::Committed);
+        assert_eq!(journal.recovery_binding, LEGACY_RECOVERY_BINDING);
+        assert!(executor
+            .incomplete_journals_for_root(&fixture.plan.device_fingerprint)
+            .unwrap()
+            .is_empty());
+        assert!(matches!(
+            executor.recover_incomplete_operation(
+                &fixture.plan.root_id,
+                &operation_id,
+                &fixture.authority,
+            ),
+            Err(ExecutorError::PlanConsumed)
+        ));
+        assert_eq!(fs::read(&legacy_manifest_path).unwrap(), legacy_manifest);
+        assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
+        assert!(!fixture.destination.exists());
+    }
+
+    #[test]
+    fn legacy_incomplete_state_is_abandoned_without_deleting_media_or_blocking_root() {
+        let fixture = Fixture::new();
+        let executor = fixture.executor();
+        let operation_id = OperationId::for_plan(&fixture.plan);
+        let target = open_destination_target(
+            &fixture.root,
+            &fixture.plan.operation.destination_relative_path,
+            &operation_id,
+        )
+        .unwrap();
+        let legacy_partial = fixture
+            .destination
+            .parent()
+            .unwrap()
+            .join(&target.temporary_name);
+        let legacy_partial_bytes = b"legacy partial preserved for manual inspection";
+        fs::write(&legacy_partial, legacy_partial_bytes).unwrap();
+        let legacy_identity = file_identity(&File::open(&legacy_partial).unwrap()).unwrap();
+        let (written_operation_id, legacy_manifest_path) =
+            fixture.write_legacy_operation_state("applying", Some(&legacy_identity));
+        assert_eq!(written_operation_id, operation_id);
+        let legacy_manifest = fs::read(&legacy_manifest_path).unwrap();
+
+        let journal = executor.operation_journal(&operation_id).unwrap().unwrap();
+
+        assert_eq!(journal.schema, LEGACY_JOURNAL_SCHEMA);
+        assert_eq!(journal.status, JournalStatus::Abandoned);
+        assert_eq!(
+            journal.failure_code.as_deref(),
+            Some(LEGACY_RECOVERY_FAILURE)
+        );
+        assert!(executor
+            .incomplete_journals_for_root(&fixture.plan.device_fingerprint)
+            .unwrap()
+            .is_empty());
+        assert!(matches!(
+            executor.recover_incomplete_operation(
+                &fixture.plan.root_id,
+                &operation_id,
+                &fixture.authority,
+            ),
+            Err(ExecutorError::PlanConsumed)
+        ));
+        assert_eq!(fs::read(&legacy_partial).unwrap(), legacy_partial_bytes);
+        assert_eq!(fs::read(&legacy_manifest_path).unwrap(), legacy_manifest);
+        assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
+
+        let independent_plan =
+            fixture.plan_for_destination("SET/PROJECT/independent.wav", 31);
+        let result = executor
+            .execute(&independent_plan, &fixture.authority)
+            .unwrap();
+        assert_eq!(result.journal.status, JournalStatus::Committed);
+        assert_eq!(
+            fs::read(fixture.root.join("SET/PROJECT/independent.wav")).unwrap(),
+            fixture.source_bytes
+        );
+        assert_eq!(fs::read(&legacy_partial).unwrap(), legacy_partial_bytes);
     }
 
     #[test]
@@ -2302,6 +2740,7 @@ mod tests {
             FaultPoint::DestinationCreated,
             FaultPoint::DestinationPartialWrite,
             FaultPoint::DestinationWrite,
+            FaultPoint::DestinationPublished,
             FaultPoint::Verification,
         ] {
             let fixture = Fixture::new();
@@ -2341,6 +2780,42 @@ mod tests {
         assert_eq!(journal.status, JournalStatus::RolledBack);
         assert!(!fixture.destination.exists());
         assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
+    }
+
+    #[test]
+    fn crash_after_publication_before_identity_checkpoint_is_recovered() {
+        let fixture = Fixture::new();
+        let executor = fixture.executor();
+        let operation_id = OperationId::for_plan(&fixture.plan);
+        assert!(matches!(
+            executor.execute_with_fault(
+                &fixture.plan,
+                &fixture.authority,
+                FaultPoint::DestinationPublished,
+                true,
+            ),
+            Err(ExecutorError::SimulatedCrash)
+        ));
+        assert!(fixture.destination.exists());
+        let pending = executor.operation_journal(&operation_id).unwrap().unwrap();
+        assert_eq!(pending.status, JournalStatus::Applying);
+        assert!(pending.destination_file_identity.is_some());
+
+        let recovered = executor
+            .recover_incomplete_operation(
+                &fixture.plan.root_id,
+                &operation_id,
+                &fixture.authority,
+            )
+            .unwrap();
+
+        assert_eq!(recovered.status, JournalStatus::RolledBack);
+        assert!(!fixture.destination.exists());
+        assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
+        assert!(executor
+            .incomplete_journals_for_root(&fixture.plan.device_fingerprint)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -2548,6 +3023,69 @@ mod tests {
             fixture.source_bytes
         );
         assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
+    }
+
+    #[test]
+    fn recovery_quarantine_preserves_a_destination_replaced_after_verification() {
+        let fixture = Fixture::new();
+        let executor = fixture.executor();
+        let operation_id = OperationId::for_plan(&fixture.plan);
+        assert!(matches!(
+            executor.execute_with_fault(
+                &fixture.plan,
+                &fixture.authority,
+                FaultPoint::DestinationWrite,
+                true,
+            ),
+            Err(ExecutorError::SimulatedCrash)
+        ));
+        let target = open_destination_target(
+            &fixture.root,
+            &fixture.plan.operation.destination_relative_path,
+            &operation_id,
+        )
+        .unwrap();
+        let mut verified = open_regular_entry(&target.parent, &target.file_name)
+            .unwrap()
+            .unwrap();
+        let expected_identity = file_identity(&verified).unwrap();
+        verify_open_file_matching(
+            &mut verified,
+            fixture.plan.operation.source.byte_size,
+            &fixture.plan.operation.source.content_hash,
+        )
+        .unwrap();
+
+        let replacement = fixture.root.join("SET/PROJECT/replacement.tmp");
+        let replacement_bytes = b"external replacement fixture";
+        fs::write(&replacement, replacement_bytes).unwrap();
+        fs::rename(&replacement, &fixture.destination).unwrap();
+
+        assert!(matches!(
+            quarantine_and_remove_entry(
+                &target.parent,
+                &target.file_name,
+                &target.file_name,
+                &target.published_quarantine_name,
+                &mut verified,
+                &expected_identity,
+                Some((
+                    fixture.plan.operation.source.byte_size,
+                    &fixture.plan.operation.source.content_hash,
+                )),
+                false,
+            ),
+            Err(ExecutorError::RecoveryRequired)
+        ));
+
+        assert_eq!(fs::read(&fixture.destination).unwrap(), replacement_bytes);
+        assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
+        assert!(!fixture
+            .destination
+            .parent()
+            .unwrap()
+            .join(&target.published_quarantine_name)
+            .exists());
     }
 
     #[test]

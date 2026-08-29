@@ -67,6 +67,9 @@ confirm the following from code and CI before signing off:
 - A published destination is removed only when both its recorded file identity
   and content match the verified backup. A replacement is preserved and keeps
   Recovery required.
+- A candidate is first renamed without replacement to an operation-owned
+  quarantine and reverified there. A destination replaced during verification
+  is restored or preserved, never deleted as the operation-created file.
 - Temporary partial files are removed only when their recorded file identity
   still matches.
 - Source files and verified backups are retained; only the operation-created
@@ -78,6 +81,12 @@ confirm the following from code and CI before signing off:
 - If a crash occurs after creating the empty operation partial but before its
   identity checkpoint, recovery preserves that unidentified partial, reports a
   terminal failure, and does not leave every later write blocked.
+- A crash after publishing the partial but before the next journal checkpoint
+  is recoverable with an identity invariant that survives rename plus content
+  verification.
+- Prior-release journal v2 remains readable. Its paired backup-manifest v1 is
+  not promoted to authenticated deletion evidence; legacy incomplete state is
+  marked terminal while its media and backup artifacts are preserved.
 
 ## Evidence record
 

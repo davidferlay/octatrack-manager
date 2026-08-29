@@ -328,6 +328,14 @@ destination／file identity改変では別fileを削除できない。terminal j
 file identity checkpoint前のcrashでは、空のoperation固有partialを削除せず保持し、失敗終端として
 root全体のwrite blockだけを解除する。
 
+rollbackの削除対象はoperation固有quarantineへno-replace renameしてからidentityと、published fileでは
+backup由来contentを再検証する。検証中にdestinationが外部processから置換された場合は置換fileを
+restoreまたはquarantineに保持し、削除しない。partialからdestinationへのpublish rename直後にcrashしても、
+renameで変化し得るctimeを除いたdevice／inode／size／mtime identityとcontent検証で回復できる。
+前releaseのjournal v2は互換読取りし、対応するbackup manifest v1は認証済み削除根拠として使用しない。
+recovery bindingを持たないlegacy未完了状態はmediaとbackupを保持したまま`Abandoned`へ安全終端化して
+root全体のblockだけを解除する。
+
 この補完PRが成功しても、`docs/testing/GATE_B_CLONE_SMOKE.md`のhuman-reviewed smokeは別の残条件で
 ある。由来確認済みの使い捨てcloneによるsign-off前にGate B完了や原本media write対応を宣言せず、
 M5へ進まない。

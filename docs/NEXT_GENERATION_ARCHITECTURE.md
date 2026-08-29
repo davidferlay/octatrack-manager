@@ -984,6 +984,15 @@ partial作成直後かつfile identityのjournal checkpoint前にcrashした場�
 推測で削除しない。空のoperation固有partialを保持したままoperationを失敗終端へ移し、以後の
 writeをroot全体で永久blockしない。terminal journalへのrecovery再実行は拒否する。rootはwriter
 lock取得後とmedia mutation直前に再観測し、mount observationまたはcanonical rootの変化を拒否する。
+削除候補はoperation固有quarantine名へno-replace renameした後に再度identityと必要なcontentを検証し、
+一致したquarantineだけを削除する。検証中に元のentryが外部processから置換された場合は置換fileを
+元の名前へ戻すかquarantineに保持し、削除しない。partial公開のrenameで変化し得るctimeはrecovery用
+identity invariantから除外し、device／inode／size／mtimeとpublished contentで同一性を確認する。
+
+既存releaseのjournal v2はupgrade後も読取り可能にする。対応するbackup manifest v1は認証済みrecovery
+bindingを持たないため削除根拠へ昇格させず、そのlegacy未完了journalはmediaを削除せず`Abandoned`へ
+安全に正規化する。旧destination／partialとbackupを保持したままroot全体のwrite blockだけを解除し、
+legacy terminal journalは履歴として読み、recovery replayを拒否する。
 
 ### M5 — rename/move/reference update
 
