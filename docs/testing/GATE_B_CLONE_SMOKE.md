@@ -61,6 +61,9 @@ confirm the following from code and CI before signing off:
   stable device fingerprint.
 - The operation journal and verified local backup are revalidated before media
   mutation.
+- The verified backup manifest binds the source and destination, plan/snapshot
+  IDs, root fingerprint, revision, source size/hash, and backup paths with a
+  versioned recovery digest; editing the journal alone cannot redirect deletion.
 - A published destination is removed only when both its recorded file identity
   and content match the verified backup. A replacement is preserved and keeps
   Recovery required.
@@ -70,6 +73,11 @@ confirm the following from code and CI before signing off:
   destination/partial and local staging are eligible for rollback cleanup.
 - Symlinks, malformed journal data, missing/tampered backups, identity changes,
   and ambiguous state fail closed.
+- Recovery re-observes the registered root after taking the writer lock and
+  immediately before media mutation. Terminal journals reject replay.
+- If a crash occurs after creating the empty operation partial but before its
+  identity checkpoint, recovery preserves that unidentified partial, reports a
+  terminal failure, and does not leave every later write blocked.
 
 ## Evidence record
 

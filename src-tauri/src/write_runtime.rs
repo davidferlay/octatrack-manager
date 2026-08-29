@@ -219,7 +219,6 @@ impl WriteRuntime {
             .recover_incomplete_operation(root_id, &operation_id, &authority)
             .map_err(WriteRuntimeError::Executor)?;
         let mut status = status_from_journal(journal)?;
-        status.catalog_refresh_required = true;
 
         let mut state = self.lock_state()?;
         if let Some(stored) = state
@@ -227,8 +226,8 @@ impl WriteRuntime {
             .values_mut()
             .find(|stored| stored.operation_id == operation_id && &stored.plan.root_id == root_id)
         {
-            stored.state = ChangeOperationState::RolledBack;
-            stored.catalog_refresh_required = true;
+            stored.state = status.state;
+            stored.catalog_refresh_required = status.catalog_refresh_required;
             stored.failure_code = status.failure_code.clone();
             stored.backup_snapshot_id = status.backup_snapshot_id.clone();
             status = status_from_stored(stored);
@@ -420,6 +419,7 @@ fn state_from_journal(status: JournalStatus, failure_code: Option<&str>) -> Chan
             ChangeOperationState::RolledBack
         }
         JournalStatus::RolledBack => ChangeOperationState::Failed,
+        JournalStatus::Abandoned => ChangeOperationState::Failed,
         JournalStatus::RecoveryRequired => ChangeOperationState::RecoveryRequired,
     }
 }
@@ -616,6 +616,13 @@ mod tests {
         );
         assert_eq!(
             state_from_journal(JournalStatus::RolledBack, Some("SOURCE_CHANGED")),
+            ChangeOperationState::Failed
+        );
+        assert_eq!(
+            state_from_journal(
+                JournalStatus::Abandoned,
+                Some("RECOVERY_PRESERVED_UNIDENTIFIED_PARTIAL"),
+            ),
             ChangeOperationState::Failed
         );
     }

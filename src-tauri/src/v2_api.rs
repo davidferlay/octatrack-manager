@@ -1430,9 +1430,10 @@ fn recover_change_sync(
     let mut status = write
         .recover_incomplete(root_id, operation_id, approved_operation_id, registry)
         .map_err(write_runtime_error)?;
-    if scan_library_sync(registry, catalog, root_id)
-        .and_then(|(session, snapshot)| store_library_snapshot(catalog, &session, &snapshot))
-        .is_ok()
+    if status.catalog_refresh_required
+        && scan_library_sync(registry, catalog, root_id)
+            .and_then(|(session, snapshot)| store_library_snapshot(catalog, &session, &snapshot))
+            .is_ok()
     {
         let _ = write.mark_catalog_refreshed(root_id, &status.operation_id);
         status.catalog_refresh_required = false;
@@ -1831,6 +1832,38 @@ mod tests {
         fs::write(path, wav).unwrap();
     }
 
+    #[allow(clippy::too_many_arguments)]
+    fn recovery_binding_fixture(
+        plan_id: &str,
+        snapshot_id: &str,
+        source_fingerprint: &str,
+        base_observed_revision: u64,
+        source_relative_path: &str,
+        destination_relative_path: &str,
+        source_byte_size: u64,
+        source_content_hash: &str,
+    ) -> String {
+        fn encode(hasher: &mut Sha256, tag: u8, bytes: &[u8]) {
+            hasher.update([tag]);
+            hasher.update((bytes.len() as u64).to_be_bytes());
+            hasher.update(bytes);
+        }
+
+        let mut hasher = Sha256::new();
+        hasher.update(b"masterocta:recovery-binding:v1");
+        encode(&mut hasher, 1, plan_id.as_bytes());
+        encode(&mut hasher, 2, snapshot_id.as_bytes());
+        encode(&mut hasher, 3, source_fingerprint.as_bytes());
+        encode(&mut hasher, 4, &base_observed_revision.to_be_bytes());
+        encode(&mut hasher, 5, source_relative_path.as_bytes());
+        encode(&mut hasher, 6, destination_relative_path.as_bytes());
+        encode(&mut hasher, 7, &source_byte_size.to_be_bytes());
+        encode(&mut hasher, 8, source_content_hash.as_bytes());
+        encode(&mut hasher, 9, &1_u64.to_be_bytes());
+        encode(&mut hasher, 10, source_relative_path.as_bytes());
+        format!("recovery-binding:v1:{:x}", hasher.finalize())
+    }
+
     #[test]
     fn production_write_composition_requires_exact_approval_and_refreshes_the_catalog() {
         let root = TempDir::new().unwrap();
@@ -1975,21 +2008,35 @@ mod tests {
         let source_relative_path = "SET_A/AUDIO/kick.wav";
         let destination_relative_path = "SET_A/AUDIO/kick-copy.wav";
         let content_hash = format!("sha256:{:x}", Sha256::digest(&source_before));
+        let recovery_binding = recovery_binding_fixture(
+            &plan_id,
+            &snapshot_id,
+            &session.device_fingerprint,
+            session.observed_revision,
+            source_relative_path,
+            destination_relative_path,
+            source_before.len() as u64,
+            &content_hash,
+        );
         let write_state = data_directory.path().join("MasterOCTa/write-state");
         let backup_directory = write_state.join("backups").join(&digest);
         let backup_file = backup_directory.join("files").join(source_relative_path);
         fs::create_dir_all(backup_file.parent().unwrap()).unwrap();
         fs::write(&backup_file, &source_before).unwrap();
         let backup_manifest = serde_json::json!({
-            "schema": "masterocta-backup:v1",
+            "schema": "masterocta-backup:v2",
             "snapshot_id": snapshot_id.clone(),
             "plan_id": plan_id.clone(),
             "source_fingerprint": session.device_fingerprint.clone(),
+            "base_observed_revision": session.observed_revision,
+            "source_relative_path": source_relative_path,
+            "destination_relative_path": destination_relative_path,
+            "recovery_binding": recovery_binding.clone(),
             "complete": true,
             "files": [{
                 "relative_path": source_relative_path,
                 "byte_size": source_before.len() as u64,
-                "content_hash": content_hash,
+                "content_hash": content_hash.clone(),
             }],
         });
         fs::write(
@@ -2000,7 +2047,7 @@ mod tests {
 
         let destination_metadata = fs::metadata(&destination).unwrap();
         let journal = OperationJournal {
-            schema: "masterocta-operation-journal:v2".into(),
+            schema: "masterocta-operation-journal:v3".into(),
             operation_id: operation_id.clone(),
             plan_id,
             root_fingerprint: session.device_fingerprint.clone(),
@@ -2008,6 +2055,7 @@ mod tests {
             source_relative_path: source_relative_path.into(),
             destination_relative_path: destination_relative_path.into(),
             backup_snapshot_id: snapshot_id,
+            recovery_binding,
             destination_file_identity: Some(JournalFileIdentity {
                 device: destination_metadata.dev(),
                 inode: destination_metadata.ino(),
@@ -2082,6 +2130,16 @@ mod tests {
                 .unwrap()
                 .recovery_required
         );
+        let replay = recover_change_sync(
+            &registry,
+            &catalog,
+            &write,
+            &root_id,
+            &operation_id,
+            &operation_id,
+        )
+        .unwrap_err();
+        assert_eq!(replay.code, "PLAN_CONSUMED");
         let refreshed = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
         assert_eq!(refreshed.audio_files.len(), 1);
         assert_eq!(refreshed.audio_files[0].relative_path, source_relative_path);

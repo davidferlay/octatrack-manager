@@ -321,6 +321,13 @@ replacement、tampered/missing backup、root identity変更、symlinkはfail clo
 crash/restart routeはtemporary directoryと合成WAVだけで自動testし、実SD／CFカードや原本データは
 使用しない。production fault injectionは追加しない。
 
+recovery destinationはbackup manifest v2のversion付きrecovery bindingへsource、destination、
+plan／snapshot ID、root fingerprint、revision、source size／hashとともに束縛する。journal単体の
+destination／file identity改変では別fileを削除できない。terminal journalの再実行は
+`PLAN_CONSUMED`として拒否し、writer lock取得後とmedia mutation直前にlive rootを再観測する。
+file identity checkpoint前のcrashでは、空のoperation固有partialを削除せず保持し、失敗終端として
+root全体のwrite blockだけを解除する。
+
 この補完PRが成功しても、`docs/testing/GATE_B_CLONE_SMOKE.md`のhuman-reviewed smokeは別の残条件で
 ある。由来確認済みの使い捨てcloneによるsign-off前にGate B完了や原本media write対応を宣言せず、
 M5へ進まない。

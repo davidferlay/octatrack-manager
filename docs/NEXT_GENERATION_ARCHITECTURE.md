@@ -973,12 +973,17 @@ recoveryの残条件を満たすまでGate Bを完了扱いにせず、M5へ進�
 production recoveryは通常のwrite grantを再発行せず、登録済みlive `RootId`、未完了journalの
 opaque `OperationId`、同じ`OperationId`に対する一回の明示承認だけを受けるrollback専用操作と
 する。開始時に残存write grantを失効させる。journalのstable root fingerprint、operation ID、
-destinationのrelative path／file identity、
+destinationのrelative path／file identityとverified backup manifest内のversion付きrecovery binding、
 Mac側verified backupを再検証し、operationが作成したdestinationまたはpartialだけを削除候補に
 する。destinationが別fileへ置換された場合、backupが欠落・改変された場合、symlinkやidentity
 不一致がある場合は何も削除せずRecovery requiredを維持する。productionにfault injectionを公開
 せず、crash/restartは合成TempDir統合testで検証する。実clone smokeは由来確認済みの使い捨て
 cloneだけで人間が実施し、完了まではGate BとM5を保留する。
+
+partial作成直後かつfile identityのjournal checkpoint前にcrashした場合は、identity不明のpartialを
+推測で削除しない。空のoperation固有partialを保持したままoperationを失敗終端へ移し、以後の
+writeをroot全体で永久blockしない。terminal journalへのrecovery再実行は拒否する。rootはwriter
+lock取得後とmedia mutation直前に再観測し、mount observationまたはcanonical rootの変化を拒否する。
 
 ### M5 — rename/move/reference update
 
