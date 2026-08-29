@@ -1359,12 +1359,7 @@ fn recover_change_sync(
     approved_operation_id: &str,
 ) -> Result<ChangeStatusDto, ApiError> {
     let mut status = write
-        .recover_incomplete(
-            root_id,
-            operation_id,
-            approved_operation_id,
-            registry,
-        )
+        .recover_incomplete(root_id, operation_id, approved_operation_id, registry)
         .map_err(write_runtime_error)?;
     if scan_library_sync(registry, catalog, root_id)
         .and_then(|(session, snapshot)| store_library_snapshot(catalog, &session, &snapshot))
@@ -1982,7 +1977,14 @@ mod tests {
         .unwrap_err();
         assert_eq!(approval_error.code, "APPROVAL_REQUIRED");
         assert!(destination.exists());
-        assert!(registry.resolve(&root_id).unwrap().session.capabilities.write);
+        assert!(
+            registry
+                .resolve(&root_id)
+                .unwrap()
+                .session
+                .capabilities
+                .write
+        );
 
         let recovered = recover_change_sync(
             &registry,
@@ -1999,10 +2001,19 @@ mod tests {
         assert!(!recovered.catalog_refresh_required);
         assert!(!destination.exists());
         assert_eq!(fs::read(&source).unwrap(), source_before);
-        assert!(!registry.resolve(&root_id).unwrap().session.capabilities.write);
-        assert!(!change_recovery_status_sync(&registry, &write, &root_id)
-            .unwrap()
-            .recovery_required);
+        assert!(
+            !registry
+                .resolve(&root_id)
+                .unwrap()
+                .session
+                .capabilities
+                .write
+        );
+        assert!(
+            !change_recovery_status_sync(&registry, &write, &root_id)
+                .unwrap()
+                .recovery_required
+        );
         let refreshed = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
         assert_eq!(refreshed.audio_files.len(), 1);
         assert_eq!(refreshed.audio_files[0].relative_path, source_relative_path);

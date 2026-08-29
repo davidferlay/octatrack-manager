@@ -792,23 +792,27 @@ mod tests {
             Duration::from_secs(10),
         );
         let registered = registry.register(root.path().to_str().unwrap()).unwrap();
-        assert!(registry
-            .enable_write(&registered.root_id)
-            .unwrap()
-            .capabilities
-            .write);
+        assert!(
+            registry
+                .enable_write(&registered.root_id)
+                .unwrap()
+                .capabilities
+                .write
+        );
 
         let disabled = registry.disable_write(&registered.root_id).unwrap();
 
         assert!(disabled.capabilities.read);
         assert!(!disabled.capabilities.write);
         assert_eq!(disabled.write_grant_expires_in_seconds, None);
-        assert!(!registry
-            .resolve(&registered.root_id)
-            .unwrap()
-            .session
-            .capabilities
-            .write);
+        assert!(
+            !registry
+                .resolve(&registered.root_id)
+                .unwrap()
+                .session
+                .capabilities
+                .write
+        );
     }
 
     #[test]

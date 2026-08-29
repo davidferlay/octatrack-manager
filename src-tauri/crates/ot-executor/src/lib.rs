@@ -276,8 +276,8 @@ impl AdditiveCopyExecutor {
         let staging_directory =
             prepare_local_directory(&self.local_paths.staging_directory, &root.canonical_path)?;
         validate_staging_cleanup_target(&staging_directory, operation_id)?;
-        let snapshot_id = SnapshotId::parse(journal.backup_snapshot_id.clone())
-            .map_err(ExecutorError::Backup)?;
+        let snapshot_id =
+            SnapshotId::parse(journal.backup_snapshot_id.clone()).map_err(ExecutorError::Backup)?;
         let backup = BackupStore::new(backup_directory)
             .verify(&snapshot_id)
             .map_err(ExecutorError::Backup)?;
@@ -286,12 +286,9 @@ impl AdditiveCopyExecutor {
         let destination = RootRelativePath::parse(&journal.destination_relative_path)
             .map_err(|_| ExecutorError::InvalidJournal)?;
         let target = open_destination_target(&root.canonical_path, &destination, operation_id)?;
-        if let Err(error) = recover_media_destination_matching(
-            &target,
-            &journal,
-            expected_size,
-            &expected_hash,
-        ) {
+        if let Err(error) =
+            recover_media_destination_matching(&target, &journal, expected_size, &expected_hash)
+        {
             journal.status = JournalStatus::RecoveryRequired;
             journal.failure_code = Some("DESTINATION_CHANGED".into());
             write_journal(&journal_path, &journal)?;
@@ -900,8 +897,7 @@ fn validate_recovery_authority(
     if &root.root_id != root_id {
         return Err(ExecutorError::RootChanged);
     }
-    validate_root_fingerprint(&root.device_fingerprint)
-        .map_err(|_| ExecutorError::RootChanged)?;
+    validate_root_fingerprint(&root.device_fingerprint).map_err(|_| ExecutorError::RootChanged)?;
     if !root.stable_device_identity {
         return Err(ExecutorError::Authority(AuthorityError::UnstableIdentity));
     }
@@ -1531,9 +1527,10 @@ fn validate_recovery_backup(
     let expected_plan_id = operation_id
         .as_str()
         .replacen(OPERATION_ID_PREFIX, "plan:v1:", 1);
-    let expected_snapshot_id = operation_id
-        .as_str()
-        .replacen(OPERATION_ID_PREFIX, "snapshot:v1:", 1);
+    let expected_snapshot_id =
+        operation_id
+            .as_str()
+            .replacen(OPERATION_ID_PREFIX, "snapshot:v1:", 1);
     let manifest = backup.manifest();
     if backup.snapshot_id().as_str() != expected_snapshot_id.as_str()
         || journal.plan_id != expected_plan_id.as_str()
@@ -2198,11 +2195,7 @@ mod tests {
         }
 
         let journal = executor
-            .recover_incomplete_operation(
-                &reopened_root_id,
-                &operation_id,
-                &fixture.authority,
-            )
+            .recover_incomplete_operation(&reopened_root_id, &operation_id, &fixture.authority)
             .unwrap();
 
         assert_eq!(journal.status, JournalStatus::RolledBack);
@@ -2252,7 +2245,10 @@ mod tests {
             recovery,
             Err(ExecutorError::Backup(BackupError::VerificationFailed(_)))
         ));
-        assert_eq!(fs::read(&fixture.destination).unwrap(), fixture.source_bytes);
+        assert_eq!(
+            fs::read(&fixture.destination).unwrap(),
+            fixture.source_bytes
+        );
         assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
     }
 
@@ -2371,10 +2367,7 @@ mod tests {
             ),
             Err(ExecutorError::SimulatedCrash)
         ));
-        let staging = fixture
-            .local
-            .join("staging")
-            .join(operation_id.file_stem());
+        let staging = fixture.local.join("staging").join(operation_id.file_stem());
         fs::remove_dir_all(&staging).unwrap();
         let outside = fixture._temp.path().join("outside-staging");
         fs::create_dir(&outside).unwrap();
@@ -2387,7 +2380,10 @@ mod tests {
         );
 
         assert!(matches!(recovery, Err(ExecutorError::UnsafePath)));
-        assert_eq!(fs::read(&fixture.destination).unwrap(), fixture.source_bytes);
+        assert_eq!(
+            fs::read(&fixture.destination).unwrap(),
+            fixture.source_bytes
+        );
         assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
         assert!(fs::read_dir(&outside).unwrap().next().is_none());
     }

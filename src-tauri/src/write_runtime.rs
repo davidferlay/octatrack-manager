@@ -225,9 +225,7 @@ impl WriteRuntime {
         if let Some(stored) = state
             .plans
             .values_mut()
-            .find(|stored| {
-                stored.operation_id == operation_id && &stored.plan.root_id == root_id
-            })
+            .find(|stored| stored.operation_id == operation_id && &stored.plan.root_id == root_id)
         {
             stored.state = ChangeOperationState::RolledBack;
             stored.catalog_refresh_required = true;
