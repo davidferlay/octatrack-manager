@@ -1691,7 +1691,6 @@ mod tests {
     use crate::catalog_runtime::open_shared_catalog;
     use crate::root_registry::{DeviceIdentityProvider, DeviceObservation};
     use crate::write_runtime::open_shared_write_runtime;
-    use ot_backup::{BackupFileManifest, BackupManifest};
     use ot_executor::{JournalFileIdentity, JournalStatus, OperationJournal};
     use std::fs;
     use std::os::unix::fs::MetadataExt;
@@ -1912,18 +1911,18 @@ mod tests {
         let backup_file = backup_directory.join("files").join(source_relative_path);
         fs::create_dir_all(backup_file.parent().unwrap()).unwrap();
         fs::write(&backup_file, &source_before).unwrap();
-        let backup_manifest = BackupManifest {
-            schema: "masterocta-backup:v1".into(),
-            snapshot_id: snapshot_id.clone(),
-            plan_id: plan_id.clone(),
-            source_fingerprint: session.device_fingerprint.clone(),
-            complete: true,
-            files: vec![BackupFileManifest {
-                relative_path: source_relative_path.into(),
-                byte_size: source_before.len() as u64,
-                content_hash,
+        let backup_manifest = serde_json::json!({
+            "schema": "masterocta-backup:v1",
+            "snapshot_id": snapshot_id.clone(),
+            "plan_id": plan_id.clone(),
+            "source_fingerprint": session.device_fingerprint.clone(),
+            "complete": true,
+            "files": [{
+                "relative_path": source_relative_path,
+                "byte_size": source_before.len() as u64,
+                "content_hash": content_hash,
             }],
-        };
+        });
         fs::write(
             backup_directory.join("manifest.json"),
             serde_json::to_vec_pretty(&backup_manifest).unwrap(),
