@@ -1,6 +1,6 @@
 # Design System Migration
 
-Status: Phase A–UI4 on main; **UI5 Usage Graph in progress**
+Status: Phase A–UI6 on main; **DS7 legacy token removal in progress**
 Updated: 2026-08-29
 
 ## Purpose
@@ -67,8 +67,8 @@ Semantic `--mo-*` tokens are canonical for new code:
 | `--mo-success` / `--mo-warning` / `--mo-danger` | Status |
 | `--mo-info` | Informational highlights |
 
-Legacy `--elektron-*` names remain as **compat aliases** pointing at `--mo-*`
-until PR-DS7. Do not introduce new `--elektron-*` usages.
+Legacy `--elektron-*` names were removed in PR-DS7. New code must use `--mo-*`
+only.
 
 ## Roadmap
 
@@ -82,7 +82,7 @@ Phase D  UI6 Branding → DS7 Legacy CSS removal
 ### PR-DS1 — Design Token Foundation (done)
 
 - Add `src/design-system/tokens/*`.
-- Map current colors to `--mo-*`; keep `--elektron-*` aliases.
+- Map current colors to `--mo-*`; keep `--elektron-*` aliases (removed in DS7).
 - Define spacing, typography, radius, motion, z-index scales.
 - Classify hardcoded Audio Pool hex into tokens (no selector/layout changes).
 - **Done when:** no intentional visual change; new code documents `--mo-*`.
@@ -109,7 +109,7 @@ Phase D  UI6 Branding → DS7 Legacy CSS removal
 - Add `patterns/StatusBadge` (`readonly` reuses `.root-mode-badge`; other tones
   use `.mo-status-badge--*`).
 - Add `patterns/Toolbar` + `Toolbar.Separator` (canonical `.toolbar-separator`
-  in Toolbar.css; AudioPoolPage.css duplicate kept until DS7).
+  in Toolbar.css; AudioPoolPage.css duplicate removed in DS7).
 - Consumers: RootRegistry READ ONLY; Home / ProjectDetail refresh; Audio Pool
   Browse / Import / Refresh (transfers `copy-table-btn` left unchanged).
 - **Out of scope:** filter-results-info, usage/compat badges, DnD, preview,
@@ -170,7 +170,7 @@ Phase D  UI6 Branding → DS7 Legacy CSS removal
   Inspector and hides the inline inspector column.
 - **Out of scope:** Usage Graph (UI5), Change Drawer, legacy ProjectDetail rewrite.
 
-### PR-UI5 — Usage Graph (in progress)
+### PR-UI5 — Usage Graph (done)
 
 - Expose catalog `usage_edges` on `LibrarySnapshot` DTO (relative paths only).
 - Add `features/usage/UsageGraphPanel` in AppShell Inspector (between waveform
@@ -182,12 +182,29 @@ Phase D  UI6 Branding → DS7 Legacy CSS removal
   ProjectDetail / AudioFileTable rewrite, slot-assignment-only badges beyond
   usage edges.
 
+### PR-UI6 — Branding rename artifacts (done)
+
+- Centralize product identity in `src/branding` (`PRODUCT_NAME`, tagline,
+  workspace label).
+- Fix shell document title (`index.html`) from the Tauri template string to
+  MasterOCTa; Home / AppShell / Version chrome consume the shared constants.
+- **Out of scope:** full visual brand swap (palette, logo, typography), DS7
+  `--elektron-*` removal.
+
+### PR-DS7 — Legacy token / duplicate chrome removal (in progress)
+
+- Replace remaining `--elektron-*` call sites with `--mo-*` (App.css, Audio Pool,
+  component CSS/TSX) and delete the compat aliases from `tokens/color.css`.
+- Move `.panel-divider` into `SplitPane.css`; drop duplicate
+  `.toolbar-separator` / `.panel-divider` rules from `AudioPoolPage.css`.
+- **Out of scope:** deleting `App.css` wholesale, visual brand swap, rewriting
+  legacy page layouts.
+
 ### Later (documented only until started)
 
 | PR | Focus |
 |----|--------|
-| UI6 | Branding rename artifacts only |
-| DS7 | Remove unused `--elektron-*` and legacy classes; shrink App.css |
+| — | Design-system Phase D complete after DS7; further CSS deletion is opportunistic |
 
 ## Success criteria
 
@@ -214,7 +231,13 @@ selected catalog asset; inline catalog inspector column is unused in the shell.
 **After UI5:** Inspector also shows the read-only catalog Usage Graph for the
 selected file (relative-path-filtered usage edges).
 
-App.css is not “deleted”; it remains the legacy stylesheet until DS7.
+**After UI6:** User-facing product rename artifacts resolve to MasterOCTa
+(document title, shared branding constants). Full visual brand swap remains
+deferred.
+
+**After DS7:** `--elektron-*` compat aliases are gone; call sites use `--mo-*`.
+Shared SplitPane owns `.panel-divider`. `App.css` remains as the legacy
+stylesheet for unmigrated selectors, without Elektron token aliases.
 
 ## Verification (each DS PR)
 

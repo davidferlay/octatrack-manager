@@ -111,7 +111,7 @@ export function CopyProgressModal({ transferId, label, command, commandArgs, onC
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>
-            <i className={`fas ${isMove ? 'fa-arrows-alt' : 'fa-copy'}`} style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>
+            <i className={`fas ${isMove ? 'fa-arrows-alt' : 'fa-copy'}`} style={{ color: 'var(--mo-accent)', marginRight: '0.5rem' }}></i>
             {error ? (isMove ? 'Move Failed' : 'Copy Failed') : (isMove ? 'Moving...' : 'Copying...')}
           </h3>
         </div>

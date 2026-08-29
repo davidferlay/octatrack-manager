@@ -1005,8 +1005,8 @@ export function FixSamplesModal({
         <div className={`modal-header${phase === 'review' ? ' missing-samples-header' : ''}`}>
           <h3>
             {phase === 'review' && <><i className="fas fa-clipboard-check"></i> Review planned changes - {files.length} incompatible audio file{files.length === 1 ? '' : 's'}</>}
-            {phase === 'converting' && <><i className="fas fa-wrench" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>{progressingLabel}</>}
-            {phase === 'done' && <><i className="fas fa-wrench" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>{doneLabel}</>}
+            {phase === 'converting' && <><i className="fas fa-wrench" style={{ color: 'var(--mo-accent)', marginRight: '0.5rem' }}></i>{progressingLabel}</>}
+            {phase === 'done' && <><i className="fas fa-wrench" style={{ color: 'var(--mo-accent)', marginRight: '0.5rem' }}></i>{doneLabel}</>}
             {phase === 'error' && 'Error'}
           </h3>
           {phase === 'review' && (

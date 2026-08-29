@@ -12,8 +12,8 @@
   align-items: center;
   height: 52px;
   padding: 0 2rem;
-  background-color: var(--elektron-dark-gray);
-  border-bottom: 1px solid var(--elektron-border-gray);
+  background-color: var(--mo-surface-1);
+  border-bottom: 1px solid var(--mo-border);
   flex-shrink: 0;
   user-select: none;
   -webkit-user-select: none;
@@ -37,8 +37,8 @@
   align-items: center;
   gap: 0.5rem;
   background-color: rgba(255, 255, 255, 0.05);
-  color: var(--elektron-text-primary);
-  border: 1px solid var(--elektron-border-gray);
+  color: var(--mo-text);
+  border: 1px solid var(--mo-border);
   padding: 0.5rem 0.75rem;
   border-radius: 4px;
   cursor: pointer;
@@ -49,13 +49,13 @@
 
 .toolbar-button:hover:not(:disabled) {
   background-color: rgba(255, 255, 255, 0.1);
-  border-color: var(--elektron-orange);
+  border-color: var(--mo-accent);
 }
 
 .toolbar-button.active {
   background-color: rgba(255, 102, 0, 0.2);
-  border-color: var(--elektron-orange);
-  color: var(--elektron-orange);
+  border-color: var(--mo-accent);
+  color: var(--mo-accent);
 }
 
 .toolbar-button.has-activity {
@@ -74,11 +74,11 @@
 
 .toolbar-button.refreshing .fa-sync-alt {
   animation: spin-decelerate 0.8s cubic-bezier(0, 0.7, 0.3, 1);
-  color: var(--elektron-orange);
+  color: var(--mo-accent);
 }
 
 .toolbar-button.refreshing {
-  border-color: var(--elektron-orange);
+  border-color: var(--mo-accent);
 }
 
 @keyframes spin-decelerate {
@@ -91,8 +91,8 @@
 }
 
 .toolbar-button .badge {
-  background-color: var(--elektron-orange);
-  color: var(--elektron-black);
+  background-color: var(--mo-accent);
+  color: var(--mo-canvas);
   font-size: 0.7rem;
   font-weight: 700;
   padding: 0.1rem 0.4rem;
@@ -112,13 +112,6 @@
   color: white;
 }
 
-.toolbar-separator {
-  width: 1px;
-  height: 24px;
-  background-color: var(--elektron-border-gray);
-  margin: 0 0.25rem;
-}
-
 /* Import dropdown */
 .import-dropdown-container {
   position: relative;
@@ -130,8 +123,8 @@
   left: 0;
   right: 0;
   margin-top: 4px;
-  background-color: var(--elektron-dark-gray);
-  border: 1px solid var(--elektron-border-gray);
+  background-color: var(--mo-surface-1);
+  border: 1px solid var(--mo-border);
   border-radius: 4px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   z-index: 1000;
@@ -146,7 +139,7 @@
   padding: 0.5rem 0.75rem;
   background: none;
   border: none;
-  color: var(--elektron-text-primary);
+  color: var(--mo-text);
   font-size: 0.85rem;
   cursor: pointer;
   text-align: left;
@@ -160,7 +153,7 @@
 .import-dropdown-item i {
   width: 1rem;
   text-align: center;
-  color: var(--elektron-text-secondary);
+  color: var(--mo-text-muted);
 }
 
 /* Main container */
@@ -169,23 +162,6 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
-}
-
-/* Panel divider for resizing */
-.panel-divider {
-  width: 4px;
-  background-color: rgba(255, 255, 255, 0.08);
-  cursor: ew-resize;
-  flex-shrink: 0;
-  transition: background-color 0.2s ease;
-}
-
-.panel-divider:hover {
-  background-color: rgba(255, 255, 255, 0.25);
-}
-
-.panel-divider:active {
-  background-color: rgba(255, 255, 255, 0.35);
 }
 
 /* Panels */
@@ -235,7 +211,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  border: 2px dashed var(--elektron-orange);
+  border: 2px dashed var(--mo-accent);
   pointer-events: none;
   border-radius: 4px;
 }
@@ -251,7 +227,7 @@
   gap: 1rem;
   padding: 0.75rem 1rem;
   background-color: rgba(255, 255, 255, 0.03);
-  border-bottom: 1px solid var(--elektron-border-gray);
+  border-bottom: 1px solid var(--mo-border);
   flex-shrink: 0;
   user-select: none;
   -webkit-user-select: none;
@@ -260,7 +236,7 @@
 .panel-title {
   font-weight: 600;
   font-size: 0.875rem;
-  color: var(--elektron-white);
+  color: var(--mo-text);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   white-space: nowrap;
@@ -283,7 +259,7 @@
   padding: 6px 0.7rem;
   border-radius: 999px;
   background: rgba(255, 102, 0, 0.15);
-  color: var(--elektron-orange);
+  color: var(--mo-accent);
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
@@ -307,9 +283,9 @@
 
 .path-input {
   flex: 1;
-  background-color: var(--elektron-black);
-  color: var(--elektron-text-primary);
-  border: 1px solid var(--elektron-border-gray);
+  background-color: var(--mo-canvas);
+  color: var(--mo-text);
+  border: 1px solid var(--mo-border);
   padding: 0.4rem 0.6rem;
   border-radius: 4px;
   font-size: 0.8rem;
@@ -318,7 +294,7 @@
 
 .path-input:focus {
   outline: none;
-  border-color: var(--elektron-orange);
+  border-color: var(--mo-accent);
 }
 
 .icon-button {
@@ -326,8 +302,8 @@
   align-items: center;
   justify-content: center;
   background-color: rgba(255, 255, 255, 0.05);
-  color: var(--elektron-text-primary);
-  border: 1px solid var(--elektron-border-gray);
+  color: var(--mo-text);
+  border: 1px solid var(--mo-border);
   padding: 0.4rem 0.6rem;
   border-radius: 4px;
   cursor: pointer;
@@ -337,7 +313,7 @@
 
 .icon-button:hover:not(:disabled) {
   background-color: rgba(255, 255, 255, 0.1);
-  border-color: var(--elektron-orange);
+  border-color: var(--mo-accent);
 }
 
 .icon-button:disabled {
@@ -356,8 +332,8 @@
   display: inline-flex;
   align-items: center;
   background-color: rgba(255, 102, 0, 0.15);
-  border-color: var(--elektron-orange);
-  color: var(--elektron-orange);
+  border-color: var(--mo-accent);
+  color: var(--mo-accent);
 }
 
 .icon-button.copy-to-pool-btn:hover:not(:disabled) {
@@ -366,8 +342,8 @@
 
 .icon-button.copy-to-pool-btn:disabled {
   background-color: rgba(255, 255, 255, 0.05);
-  border-color: var(--elektron-border-gray);
-  color: var(--elektron-text-secondary);
+  border-color: var(--mo-border);
+  color: var(--mo-text-muted);
 }
 
 /* Audio file table container - matches samples-table styling */
@@ -386,16 +362,16 @@
   align-items: center;
   padding: 0.5rem 1rem;
   background-color: rgba(255, 255, 255, 0.02);
-  border-bottom: 1px solid var(--elektron-border-gray);
+  border-bottom: 1px solid var(--mo-border);
   font-size: 1rem;
-  color: var(--elektron-text-secondary);
+  color: var(--mo-text-muted);
   flex-shrink: 0;
 }
 
 .filter-badge {
   display: inline-block;
   background-color: rgba(255, 102, 0, 0.2);
-  color: var(--elektron-orange);
+  color: var(--mo-accent);
   padding: 0.15rem 0.5rem;
   border-radius: 3px;
   font-size: 0.75rem;
@@ -404,8 +380,8 @@
 
 .clear-all-filters-btn {
   background-color: transparent;
-  color: var(--elektron-text-secondary);
-  border: 1px solid var(--elektron-border-gray);
+  color: var(--mo-text-muted);
+  border: 1px solid var(--mo-border);
   padding: 0.2rem 0.5rem;
   border-radius: 3px;
   font-size: 0.75rem;
@@ -415,7 +391,7 @@
 
 .clear-all-filters-btn:hover {
   background-color: rgba(255, 255, 255, 0.1);
-  color: var(--elektron-text-primary);
+  color: var(--mo-text);
 }
 
 /* Table wrapper */
@@ -438,7 +414,7 @@
 .audio-files-table thead {
   position: sticky;
   top: 0;
-  background-color: var(--elektron-dark-gray);
+  background-color: var(--mo-surface-1);
   z-index: 10;
 }
 
@@ -450,7 +426,7 @@
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  border-bottom: 1px solid var(--elektron-border-gray);
+  border-bottom: 1px solid var(--mo-border);
   white-space: nowrap;
   position: relative;
 }
@@ -460,13 +436,13 @@
 }
 
 .audio-files-table th.sortable:hover {
-  color: var(--elektron-text-primary);
+  color: var(--mo-text);
 }
 
 .audio-files-table td {
   padding: 0.55rem 0.75rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  color: var(--elektron-text-primary);
+  color: var(--mo-text);
   font-size: 0.85rem;
 }
 
@@ -482,7 +458,7 @@
 }
 
 .audio-files-table tbody tr:hover {
-  background-color: var(--elektron-medium-gray);
+  background-color: var(--mo-surface-2);
 }
 
 .audio-files-table tbody tr.selected {
@@ -494,12 +470,12 @@
 }
 
 .audio-files-table tbody tr.cursor {
-  outline: 2px solid var(--elektron-orange);
+  outline: 2px solid var(--mo-accent);
   outline-offset: -2px;
 }
 
 .audio-files-table tbody tr.cursor.selected {
-  outline: 2px solid var(--elektron-orange);
+  outline: 2px solid var(--mo-accent);
   outline-offset: -2px;
 }
 
@@ -584,7 +560,7 @@ td.col-size {
 }
 
 .filterable-header .sortable-label:hover {
-  color: var(--elektron-text-primary);
+  color: var(--mo-text);
 }
 
 .col-name .sortable-label {
@@ -595,7 +571,7 @@ td.col-size {
   position: relative;
   background: none;
   border: 1px solid transparent;
-  color: var(--elektron-text-secondary);
+  color: var(--mo-text-muted);
   cursor: pointer;
   padding: 0.15rem 0.25rem;
   border-radius: 3px;
@@ -609,13 +585,13 @@ td.col-size {
 
 .filter-icon:hover {
   background-color: rgba(255, 255, 255, 0.1);
-  border-color: var(--elektron-border-gray);
-  color: var(--elektron-text-primary);
+  border-color: var(--mo-border);
+  color: var(--mo-text);
 }
 
 /* Active filter: the kebab glyph itself turns orange, no box around it */
 .filter-icon.active {
-  color: var(--elektron-orange);
+  color: var(--mo-accent);
   text-shadow: 0 0 6px rgba(255, 102, 0, 0.5);
 }
 
@@ -642,8 +618,8 @@ td.col-size {
 
 /* Transfer queue */
 .transfer-queue {
-  background-color: var(--elektron-dark-gray);
-  border-top: 1px solid var(--elektron-border-gray);
+  background-color: var(--mo-surface-1);
+  border-top: 1px solid var(--mo-border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -675,8 +651,8 @@ td.col-size {
   justify-content: space-between;
   align-items: center;
   padding: 0.4rem 1rem;
-  background-color: var(--elektron-dark-gray);
-  border-bottom: 1px solid var(--elektron-border-gray);
+  background-color: var(--mo-surface-1);
+  border-bottom: 1px solid var(--mo-border);
   position: relative;
   z-index: 10;
 }
@@ -685,12 +661,12 @@ td.col-size {
   margin: 0;
   font-size: 0.9rem;
   font-weight: 600;
-  color: var(--elektron-text-primary);
+  color: var(--mo-text);
 }
 
 .transfer-count-badge {
   background-color: rgba(255, 102, 0, 0.2);
-  color: var(--elektron-orange);
+  color: var(--mo-accent);
   padding: 0.15rem 0.5rem;
   border-radius: 3px;
   font-size: 0.75rem;
@@ -705,8 +681,8 @@ td.col-size {
 
 .transfer-button {
   background-color: transparent;
-  color: var(--elektron-text-secondary);
-  border: 1px solid var(--elektron-border-gray);
+  color: var(--mo-text-muted);
+  border: 1px solid var(--mo-border);
   padding: 0.35rem 0.75rem;
   border-radius: 4px;
   cursor: pointer;
@@ -716,7 +692,7 @@ td.col-size {
 
 .transfer-button:hover:not(:disabled) {
   background-color: rgba(255, 255, 255, 0.1);
-  color: var(--elektron-text-primary);
+  color: var(--mo-text);
 }
 
 .transfer-button:disabled {
@@ -739,10 +715,10 @@ td.col-size {
   text-align: left;
   padding: 0.5rem 0.75rem;
   font-weight: 600;
-  color: var(--elektron-text-secondary);
+  color: var(--mo-text-muted);
   font-size: 0.7rem;
   text-transform: uppercase;
-  border-bottom: 1px solid var(--elektron-border-gray);
+  border-bottom: 1px solid var(--mo-border);
   white-space: nowrap;
   user-select: none;
 }
@@ -753,7 +729,7 @@ td.col-size {
 }
 
 .transfer-list th.sortable:hover {
-  color: var(--elektron-text-primary);
+  color: var(--mo-text);
 }
 
 .transfer-list th .sort-arrow {
@@ -767,7 +743,7 @@ td.col-size {
 .transfer-list td {
   padding: 0.5rem 0.75rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  color: var(--elektron-text-primary);
+  color: var(--mo-text);
 }
 
 /* Transfer list column widths */
@@ -815,7 +791,7 @@ td.col-size {
 
 .progress-bar {
   height: 100%;
-  background: linear-gradient(90deg, var(--elektron-orange), rgba(255, 150, 0, 0.8));
+  background: linear-gradient(90deg, var(--mo-accent), rgba(255, 150, 0, 0.8));
   transition: background 0.3s ease;
 }
 
@@ -893,9 +869,9 @@ td.col-size {
   height: 2.25rem;
   box-sizing: border-box;
   background-color: rgba(255, 255, 255, 0.08);
-  border-top: 1px solid var(--elektron-border-gray);
+  border-top: 1px solid var(--mo-border);
   font-size: 0.8rem;
-  color: var(--elektron-text-secondary);
+  color: var(--mo-text-muted);
   flex-shrink: 0;
 }
 
@@ -917,7 +893,7 @@ td.col-size {
   height: 100%;
   background: none;
   border-top: none;
-  border-left: 1px solid var(--elektron-border-gray);
+  border-left: 1px solid var(--mo-border);
   padding: 0 0.75rem;
 }
 
@@ -965,8 +941,8 @@ td.col-size {
 }
 
 .modal-content {
-  background-color: var(--elektron-dark-gray);
-  border: 1px solid var(--elektron-border-gray);
+  background-color: var(--mo-surface-1);
+  border: 1px solid var(--mo-border);
   border-radius: 8px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   min-width: 380px;
@@ -987,14 +963,14 @@ td.col-size {
 
 .modal-header {
   padding: 1rem 1.25rem;
-  border-bottom: 1px solid var(--elektron-border-gray);
+  border-bottom: 1px solid var(--mo-border);
 }
 
 .modal-header h3 {
   margin: 0;
   font-size: 1rem;
   font-weight: 600;
-  color: var(--elektron-text-primary);
+  color: var(--mo-text);
   display: flex;
   align-items: center;
 }

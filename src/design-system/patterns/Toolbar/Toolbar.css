@@ -1,4 +1,4 @@
-/* Canonical toolbar layout + separator (AudioPoolPage.css keeps a duplicate until DS7). */
+/* Canonical toolbar layout + separator. */
 .mo-toolbar {
   display: inline-flex;
   align-items: center;
@@ -8,7 +8,7 @@
 .toolbar-separator {
   width: 1px;
   height: 24px;
-  background-color: var(--mo-border, var(--elektron-border-gray));
+  background-color: var(--mo-border);
   margin: 0 0.25rem;
   flex-shrink: 0;
 }

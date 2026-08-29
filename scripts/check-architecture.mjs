@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -221,6 +221,42 @@ if (
   );
 }
 
+const colorTokens = readFileSync(
+  path.join(repositoryRoot, "src/design-system/tokens/color.css"),
+  "utf8",
+);
+if (/--elektron-/.test(colorTokens)) {
+  failures.push(
+    "design-system color tokens must not define --elektron-* compat aliases (DS7)",
+  );
+}
+
+const srcRoot = path.join(repositoryRoot, "src");
+const elektronCallSites = [];
+function walkSrc(directory) {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      walkSrc(fullPath);
+      continue;
+    }
+    if (!/\.(css|tsx|ts|jsx|js)$/.test(entry.name)) continue;
+    const relative = path.relative(repositoryRoot, fullPath);
+    if (relative === "src/design-system/tokens/color.css") continue;
+    const contents = readFileSync(fullPath, "utf8");
+    if (/--elektron-/.test(contents)) {
+      elektronCallSites.push(relative);
+    }
+  }
+}
+walkSrc(srcRoot);
+if (elektronCallSites.length > 0) {
+  failures.push(
+    "DS7 forbids --elektron-* call sites; found in: " +
+      elektronCallSites.join(", "),
+  );
+}
+
 if (failures.length > 0) {
   console.error("Architecture dependency check failed:");
   for (const failure of failures) {
@@ -230,3 +266,4 @@ if (failures.length > 0) {
 }
 
 console.log("Architecture dependency rules passed.");
+

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { PRODUCT_NAME, PRODUCT_TAGLINE } from "./branding";
 import "./App.css";
 
 interface OctatrackProject {
@@ -109,8 +110,8 @@ function App() {
 
   return (
     <main className="container">
-      <h1>MasterOCTa</h1>
-      <p className="subtitle">Discover and manage your Elektron Octatrack projects</p>
+      <h1>{PRODUCT_NAME}</h1>
+      <p className="subtitle">{PRODUCT_TAGLINE}</p>
 
       <div className="scan-section">
         <button
