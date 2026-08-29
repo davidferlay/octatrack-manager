@@ -1,6 +1,6 @@
 # Design System Migration
 
-Status: Phase A–UI6 on main; **DS7 legacy token removal in progress**
+Status: Phase A–D complete on main (DS1–DS7, UI1–UI6)
 Updated: 2026-08-29
 
 ## Purpose
@@ -191,7 +191,7 @@ Phase D  UI6 Branding → DS7 Legacy CSS removal
 - **Out of scope:** full visual brand swap (palette, logo, typography), DS7
   `--elektron-*` removal.
 
-### PR-DS7 — Legacy token / duplicate chrome removal (in progress)
+### PR-DS7 — Legacy token / duplicate chrome removal (done)
 
 - Replace remaining `--elektron-*` call sites with `--mo-*` (App.css, Audio Pool,
   component CSS/TSX) and delete the compat aliases from `tokens/color.css`.
@@ -200,11 +200,19 @@ Phase D  UI6 Branding → DS7 Legacy CSS removal
 - **Out of scope:** deleting `App.css` wholesale, visual brand swap, rewriting
   legacy page layouts.
 
+### Opportunistic — unused `App.css` rules (follow-up)
+
+- After DS7, remove top-level selectors with zero TSX/TS call sites (legacy
+  sample cards, unused tools/progress chrome, orphan compound modifiers).
+- Keep Fix/Purge done-screen styles (`fix-done-actions`, `fix-done-failures*`,
+  `fix-done-error`) and any class still referenced from components.
+- Further `App.css` deletion remains opportunistic; do not rewrite layouts.
+
 ### Later (documented only until started)
 
 | PR | Focus |
 |----|--------|
-| — | Design-system Phase D complete after DS7; further CSS deletion is opportunistic |
+| — | Further unused `App.css` deletion as call sites reach zero |
 
 ## Success criteria
 
@@ -237,7 +245,8 @@ deferred.
 
 **After DS7:** `--elektron-*` compat aliases are gone; call sites use `--mo-*`.
 Shared SplitPane owns `.panel-divider`. `App.css` remains as the legacy
-stylesheet for unmigrated selectors, without Elektron token aliases.
+stylesheet for unmigrated selectors, without Elektron token aliases. Unused
+legacy rules may be deleted opportunistically when call sites are confirmed zero.
 
 ## Verification (each DS PR)
 
