@@ -107,17 +107,20 @@ RootRegistry read-only vertical sliceへ進む判定となった。受容期限�
 
 1. 自動更新が本家GitHub Releasesと本家署名鍵を信頼している
 2. Tauri 2.10系に既知のセキュリティ修正漏れがある
-3. CSPが`null`
-4. Rustコマンドが任意のパスを受け取り、読取・削除・移動できる
-5. リネーム／ディレクトリ作成で名前とパストラバーサルの検証が弱い
-6. 削除に`remove_file`／`remove_dir_all`を使う箇所があり、復元できない
-7. updater依存の`tar 0.4.44`などに既知脆弱性がある
+3. CSPが`null`（→ 本ブランチでrestrictive CSPを設定）
+4. Rustコマンドが任意のパスを受け取り、読取・削除・移動できる（legacy残存）
+5. リネーム／ディレクトリ作成で名前とパストラバーサルの検証が弱い（legacyはbasename検証を追加）
+6. 削除に`remove_file`／`remove_dir_all`を使う箇所があり、復元できない（ユーザー削除はtrashへ移行）
+7. updater依存の`tar 0.4.44`などに既知脆弱性がある（updater除去で解消）
 8. `ot-tools-io`経由の`serde_yml`／`libyml`がunsoundかつ保守終了
-9. 一部GitHub Actionsが可変タグ参照のまま残っている
+9. 一部GitHub Actionsが可変タグ参照のまま残っている（→ 本ブランチでSHA固定）
 10. `v0.45.0`は署名タグではなく、配布DMGとソースの同一性保証が弱い
 
 結論は「フォークの素体として条件付き採用」。安全化が終わるまでは、原本SD／
 CFカードではなく複製データだけを使う。
+
+最新のcontainment状況（CSP、Actions SHA固定、ゴミ箱削除、basename検証、残課題）
+は `docs/security/SECURITY_STATUS.md` を正本とする。
 
 ## 4. 実装順序
 

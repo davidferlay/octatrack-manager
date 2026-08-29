@@ -21,7 +21,18 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": {
+        "default-src": "'self'",
+        "connect-src": "ipc: http://ipc.localhost https://ipc.localhost",
+        "img-src": "'self' data: blob:",
+        "media-src": "'self' blob:",
+        "style-src": "'self' 'unsafe-inline'",
+        "font-src": "'self'",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "frame-ancestors": "'none'",
+        "form-action": "'self'"
+      },
       "capabilities": [
         {
           "identifier": "main-capability",

@@ -44,7 +44,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Install pnpm and Node.js
         uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
@@ -54,8 +54,9 @@ jobs:
           install: false
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # stable
         with:
+          toolchain: stable
           targets: ${{ matrix.rust_targets }}
 
       - name: Install dependencies (Ubuntu)
@@ -92,7 +93,7 @@ jobs:
 
       - name: Build and upload artifacts (Ubuntu)
         if: contains(matrix.platform, 'ubuntu')
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@e834788a94591d81e3ae0bd9ec06366f5afb8994 # v0.5.23
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NO_STRIP: 1
@@ -103,7 +104,7 @@ jobs:
 
       - name: Build and upload artifacts (Windows/macOS)
         if: ${{ !contains(matrix.platform, 'ubuntu') }}
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@e834788a94591d81e3ae0bd9ec06366f5afb8994 # v0.5.23
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -122,7 +123,7 @@ jobs:
       contents: write
     steps:
       - name: Publish release (undraft)
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             await github.rest.repos.updateRelease({
