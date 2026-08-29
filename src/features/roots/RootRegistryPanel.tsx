@@ -11,8 +11,14 @@ import {
   type RootSession,
 } from "../../api";
 import { AppShell } from "../../app/index";
+import { InspectorPane } from "../inspector";
+import {
+  CatalogLibraryBrowser,
+  type CatalogAssetSelection,
+} from "../library/CatalogLibraryBrowser";
+import { ManualAssetMetadataEditor } from "../metadata/ManualAssetMetadataEditor";
 import { SourcesPane } from "../sources";
-import { CatalogLibraryBrowser } from "../library/CatalogLibraryBrowser";
+import { WaveformPreview } from "../waveform/WaveformPreview";
 import "./RootRegistryPanel.css";
 
 export type RootDirectoryPicker = () => Promise<string | null>;
@@ -43,7 +49,7 @@ interface RootRegistryPanelProps {
 
 /**
  * HomePage entry for the next-gen root session.
- * Composes UI1 AppShell Sources + catalog Library browser in Main.
+ * Composes UI1 AppShell Sources + catalog Main + UI4 Inspector (notes/waveform).
  */
 export function RootRegistryPanel({
   api = rootApi,
@@ -55,6 +61,7 @@ export function RootRegistryPanel({
   const [library, setLibrary] = useState<LibrarySnapshot | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedAsset, setSelectedAsset] = useState<CatalogAssetSelection | null>(null);
 
   async function registerRoot() {
     setBusy(true);
@@ -67,12 +74,14 @@ export function RootRegistryPanel({
       const snapshot = await api.listLibrary(registered.rootId);
       setSession(registered);
       setLibrary(snapshot);
+      setSelectedAsset(null);
     } catch (reason) {
       if (registered !== null) {
         await api.closeRoot(registered.rootId).catch(() => undefined);
       }
       setSession(null);
       setLibrary(null);
+      setSelectedAsset(null);
       setError(errorMessage(reason));
     } finally {
       setBusy(false);
@@ -87,12 +96,15 @@ export function RootRegistryPanel({
       await api.closeRoot(session.rootId);
       setSession(null);
       setLibrary(null);
+      setSelectedAsset(null);
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
       setBusy(false);
     }
   }
+
+  const catalogReady = session !== null && library !== null;
 
   return (
     <AppShell
@@ -106,18 +118,46 @@ export function RootRegistryPanel({
         />
       }
       main={
-        session !== null && library !== null ? (
+        catalogReady ? (
           <CatalogLibraryBrowser
+            key={session.rootId}
             rootId={session.rootId}
             snapshot={library}
             audioClient={audioClient}
             metadataClient={metadataClient}
+            inspectorPlacement="shell"
+            onSelectedAssetChange={setSelectedAsset}
           />
         ) : (
           <p className="root-registry-main-empty">
             Choose a read-only root to browse the catalog library.
           </p>
         )
+      }
+      inspector={
+        catalogReady ? (
+          <InspectorPane
+            assetLabel={selectedAsset?.displayName}
+            relativePath={selectedAsset?.relativePath}
+          >
+            {selectedAsset !== null && (
+              <div key={`${session.rootId}:${selectedAsset.assetId}`}>
+                <WaveformPreview
+                  api={audioClient}
+                  rootId={session.rootId}
+                  assetId={selectedAsset.assetId}
+                  displayName={selectedAsset.displayName}
+                />
+                <ManualAssetMetadataEditor
+                  api={metadataClient}
+                  rootId={session.rootId}
+                  assetId={selectedAsset.assetId}
+                  displayName={selectedAsset.displayName}
+                />
+              </div>
+            )}
+          </InspectorPane>
+        ) : undefined
       }
     />
   );

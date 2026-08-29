@@ -209,4 +209,28 @@ describe("CatalogLibraryBrowser", () => {
     );
     expect(screen.getByLabelText("Asset inspector")).not.toHaveTextContent("sha256:");
   });
+
+  it("reports shell inspector selection without rendering the inline column", () => {
+    const onSelectedAssetChange = vi.fn();
+    render(
+      <CatalogLibraryBrowser
+        rootId="root-opaque"
+        snapshot={snapshot}
+        inspectorPlacement="shell"
+        onSelectedAssetChange={onSelectedAssetChange}
+      />,
+    );
+
+    expect(screen.queryByLabelText("Asset inspector")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /POOL\.wav/ }));
+    expect(onSelectedAssetChange).toHaveBeenCalledWith({
+      assetId: "asset:v1:pool",
+      fileInstanceId: "fileinst:v1:pool",
+      displayName: "POOL.wav",
+      relativePath: "LIVE_SET/AUDIO/POOL.wav",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /PROJECT_A/ }));
+    expect(onSelectedAssetChange).toHaveBeenLastCalledWith(null);
+  });
 });

@@ -1,6 +1,6 @@
 # Design System Migration
 
-Status: Phase A–UI2 on main; **UI3 Audio Library landing on main**  
+Status: Phase A–UI3 on main; **UI4 Notes / Inspector in progress**  
 Updated: 2026-08-29
 
 ## Purpose
@@ -161,11 +161,20 @@ Phase D  UI6 Branding → DS7 Legacy CSS removal
   region chrome. Relative paths only; selection clears on source/location change.
 - **Out of scope:** legacy `AudioPoolPage` DnD rewrite, transfers, CSS deletion (DS7).
 
+### PR-UI4 — Notes / Inspector (in progress)
+
+- Add `features/inspector/InspectorPane` for AppShell right slot (waveform +
+  tags/notes chrome). Opaque AssetId / relative paths only.
+- `CatalogLibraryBrowser` supports `inspectorPlacement="shell"` and
+  `onSelectedAssetChange`; RootRegistryPanel lifts selection into AppShell
+  Inspector and hides the inline inspector column.
+- **Out of scope:** Usage Graph (UI5), Change Drawer, legacy ProjectDetail rewrite.
+
 ### Later (documented only until started)
 
 | PR | Focus |
 |----|--------|
-| UI4–UI5 | Notes inspector + Usage Graph UI |
+| UI5 | Usage Graph UI |
 | UI6 | Branding rename artifacts only |
 | DS7 | Remove unused `--elektron-*` and legacy classes; shrink App.css |
 
@@ -187,6 +196,9 @@ Sidebar / transfer pane resizers remain page-local until a later pass.
 
 **After UI3:** Audio Pool / unclassified browsing shows AudioLibrary chrome;
 Project vs Library regions are distinct on AppShell Main.
+
+**After UI4:** AppShell Inspector hosts waveform + manual tags/notes for the
+selected catalog asset; inline catalog inspector column is unused in the shell.
 
 App.css is not “deleted”; it remains the legacy stylesheet until DS7.
 

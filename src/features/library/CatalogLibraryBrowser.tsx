@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type {
   AudioApi,
   LibraryAudioFile,
@@ -14,11 +14,27 @@ import { WaveformPreview } from "../waveform/WaveformPreview";
 import { AudioLibrary } from "./AudioLibrary";
 import "./CatalogLibraryBrowser.css";
 
+/** Opaque catalog asset selection for AppShell Inspector (UI4). */
+export interface CatalogAssetSelection {
+  assetId: string;
+  fileInstanceId: string;
+  displayName: string;
+  relativePath: string;
+}
+
+export type CatalogInspectorPlacement = "inline" | "shell";
+
 interface CatalogLibraryBrowserProps {
   rootId: string;
   snapshot: LibrarySnapshot;
   audioClient?: AudioApi;
   metadataClient?: MetadataApi;
+  /**
+   * `inline` keeps the legacy fourth column.
+   * `shell` hides it and reports selection via `onSelectedAssetChange` for AppShell Inspector.
+   */
+  inspectorPlacement?: CatalogInspectorPlacement;
+  onSelectedAssetChange?: (selection: CatalogAssetSelection | null) => void;
 }
 
 type SourceOption =
@@ -122,6 +138,8 @@ export function CatalogLibraryBrowser({
   snapshot,
   audioClient = audioApi,
   metadataClient = metadataApi,
+  inspectorPlacement = "inline",
+  onSelectedAssetChange,
 }: CatalogLibraryBrowserProps) {
   const sources = useMemo(() => sourceOptions(snapshot), [snapshot]);
   const [sourceKey, setSourceKey] = useState<string | null>(sources[0]?.key ?? null);
@@ -141,6 +159,21 @@ export function CatalogLibraryBrowser({
   const selectedFile = audioFiles.find(
     (file) => file.fileInstanceId === selectedFileInstanceId,
   );
+  const shellInspector = inspectorPlacement === "shell";
+
+  useEffect(() => {
+    if (!onSelectedAssetChange) return;
+    if (selectedFile === undefined) {
+      onSelectedAssetChange(null);
+      return;
+    }
+    onSelectedAssetChange({
+      assetId: selectedFile.assetId,
+      fileInstanceId: selectedFile.fileInstanceId,
+      displayName: selectedFile.displayName,
+      relativePath: selectedFile.relativePath,
+    });
+  }, [onSelectedAssetChange, selectedFile]);
 
   function selectSource(nextKey: string) {
     setSourceKey(nextKey);
@@ -158,7 +191,12 @@ export function CatalogLibraryBrowser({
   }
 
   const detail = (
-    <div className="catalog-library-detail">
+    <div
+      className={[
+        "catalog-library-detail",
+        shellInspector ? "catalog-library-detail--files-only" : "",
+      ].filter(Boolean).join(" ")}
+    >
       <div className="catalog-library-column catalog-library-files" aria-label="Audio files">
         <h4>Audio files</h4>
         <div className="catalog-library-options">
@@ -183,27 +221,29 @@ export function CatalogLibraryBrowser({
         </div>
       </div>
 
-      <div className="catalog-library-column catalog-library-inspector" aria-label="Asset inspector">
-        <h4>Inspector</h4>
-        {selectedFile === undefined ? (
-          <p className="catalog-library-empty">Select an audio file to edit local metadata.</p>
-        ) : (
-          <div className="catalog-library-inspector-content" key={`${rootId}:${selectedFile.assetId}`}>
-            <WaveformPreview
-              api={audioClient}
-              rootId={rootId}
-              assetId={selectedFile.assetId}
-              displayName={selectedFile.displayName}
-            />
-            <ManualAssetMetadataEditor
-              api={metadataClient}
-              rootId={rootId}
-              assetId={selectedFile.assetId}
-              displayName={selectedFile.displayName}
-            />
-          </div>
-        )}
-      </div>
+      {!shellInspector && (
+        <div className="catalog-library-column catalog-library-inspector" aria-label="Asset inspector">
+          <h4>Inspector</h4>
+          {selectedFile === undefined ? (
+            <p className="catalog-library-empty">Select an audio file to edit local metadata.</p>
+          ) : (
+            <div className="catalog-library-inspector-content" key={`${rootId}:${selectedFile.assetId}`}>
+              <WaveformPreview
+                api={audioClient}
+                rootId={rootId}
+                assetId={selectedFile.assetId}
+                displayName={selectedFile.displayName}
+              />
+              <ManualAssetMetadataEditor
+                api={metadataClient}
+                rootId={rootId}
+                assetId={selectedFile.assetId}
+                displayName={selectedFile.displayName}
+              />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 
