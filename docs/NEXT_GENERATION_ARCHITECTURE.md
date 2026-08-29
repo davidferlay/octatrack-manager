@@ -945,6 +945,23 @@ M4以降のIntent → Plan → Apply、backup、journal、rollback方針は変�
 
 完了条件: 全stepで意図的に失敗させても、元ファイルが不整合状態で残らない。
 
+M4はproduction writeを安全境界より先に有効化しないため、次の二段階へ分割する。
+
+#### M4-A — additive copy transaction foundation
+
+- 同一の承認済みroot内にある既存sampleを、未使用のroot-relative pathへ追加copyするplanだけを扱う
+- version付きChangePlan、source hash／size、root fingerprint／revision、destination absentをpreconditionにする
+- staging、verified local backup、fsync付きjournal、root単位writer lock、post-write hash検証を独立crateで実装する
+- fault injectionと未完了journal recoveryをtemporary fixtureだけで検証する
+- production RootRegistry wiring、write grant、Tauri API、frontend、削除、上書き、参照更新は行わない
+
+#### M4-B — production authority and approved apply vertical slice
+
+- session限定write grantとlive root再検証をexecutor portへ接続する
+- ChangePlan diffと警告をfrontendへ表示し、applyごとの明示承認を要求する
+- operation status／recovery requiredをversion付きAPIで公開する
+- cloned fixtureでproduction compositionを検証してから、Gate Bの残条件を評価する
+
 ### M5 — rename/move/reference update
 
 - Sample rename/move

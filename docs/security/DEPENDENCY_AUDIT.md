@@ -327,6 +327,33 @@ The existing Rust classifications, acceptance deadlines, and recheck triggers
 remain in force. No new runtime-reachable `critical` or `high` advisory was
 identified by the M3-E3 dependency delta.
 
+## M4-A transaction foundation dependency delta
+
+Audit date: 2026-08-29
+
+M4-A adds the workspace crates `ot-plan`, `ot-backup`, and `ot-executor` without
+adding a crates.io or JavaScript package and without changing a resolved package
+version or checksum. The new direct third-party dependency edges use packages
+already present in `Cargo.lock`: `fs2@0.4.3`, `serde@1.0.228`,
+`serde_json@1.0.149`, and `sha2@0.10.9`; `tempfile@3.25.0` is test-only.
+
+The Tauri composition package does not depend on the three new workspace
+crates in M4-A. They are therefore not product-runtime reachable in this PR.
+Tests exercise them only against generated temporary directories. M4-B must
+repeat the reachability and advisory review before connecting production write
+authority or a Tauri API.
+
+M4-A adds no network endpoint or install-time script. Backup, staging, and
+journal paths are caller-provided Mac-side local directories and are rejected
+before creation if they resolve inside the approved source root. Manifests and
+journals contain validated relative paths and opaque/versioned identifiers,
+not raw absolute paths or session `RootId` values.
+
+`cargo audit` remains unavailable and is not installed by this PR, so this is
+not a complete Rust audit. Because the lockfile delta contains only the three
+new local workspace package records and no new third-party package/version
+pair, the existing Rust classifications and recheck triggers remain in force.
+
 ## Reproduction
 
 Commands used:

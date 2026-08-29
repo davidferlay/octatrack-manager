@@ -68,7 +68,11 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - Design System DS5 DataTable foundation: #21マージ済み
 - M3-E1 manual tags／notes catalog foundation: #23マージ済み
 - M3-E2 manual metadata API／UI: #24マージ済み
-- 現在のmain基準SHA: `ebe275ab2cadc3bdcb3165bf4881830097b558c0`
+- M3-E3 waveform peak cache／期限付きpreview token: #27マージ済み
+- P0 containment追加hardening: #28マージ済み
+- UI1 AppShell／SourcesPane: #29マージ済み
+- macOS AppShell import resolution hotfix: #31マージ済み
+- 現在のmain基準SHA: `7a99e893ec5b69e109e130c58ee6d48c8e1a38ae`
 - M2: 完了
 - M3-A: 完了
 - M3-B: 完了
@@ -79,9 +83,11 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - M3-D: 完了
 - M3-E1: 完了
 - M3-E2: 完了
-- 現在の作業: M3-E3 waveform peak cache／期限付きpreview token
+- M3-E3: 完了
+- M3: 完了
+- 現在の作業: M4-A additive copy transaction foundation
 - SQLite schema: v5（M3-E1で追加）
-- 次の機能実装: M3-E3のマージ後、M4 backup／executor pilot
+- 次の機能実装: M4-Aのマージ後、M4-B production write authority／API／diff UI
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
 - `ot-tools-io`はコミット
@@ -261,11 +267,18 @@ manual metadataだけを取得・更新するTauri APIとLibrary Inspector UIを
 hash、absolute path、session `RootId`をcatalogへ保存せず、Octatrack媒体やaudio fileへwrite
 しない。
 
-M3-E3ではcontent hashと一致するlive audio sourceを再検証してから、Mac側Application
+M3-E3 #27ではcontent hashと一致するlive audio sourceを再検証してから、Mac側Application
 Supportへversion付きmulti-resolution waveform peak cacheを生成する。previewはbackendで
 最大60秒・32 MiBのPCM WAVへ変換し、live `RootId`に束縛した2分間・one-shotのopaque
 tokenで即時取得する。frontendへraw content hashやabsolute pathを返さず、cacheやpreviewを
-Octatrack媒体へ保存しない。SQLite schemaはv5のまま変更しない。次はM4 backup／executor
-pilotへ進む。
+Octatrack媒体へ保存しない。SQLite schemaはv5のまま変更しない。
+
+M4は安全境界を先に固定するためM4-A／M4-Bへ分割する。M4-Aは同一の承認済みroot内で、
+既存sampleを未使用のroot-relative destinationへ追加copyするtransaction foundationに限定する。
+`ot-plan`、`ot-backup`、`ot-executor`を追加し、version付きChangePlan、Mac側local staging、
+再読込検証済みbackup、fsync付きoperation journal、root単位writer lock、post-write hash検証、
+rollback／crash recoveryを一時fixtureだけで検証する。削除、上書き、参照更新、production
+RootRegistry wiring、Tauri command、frontend、write grant発行はM4-Aに含めない。M4-Bで
+session限定write authority、plan diff／明示承認、production compositionを別PRとして扱う。
 テストDBとaudio fixtureは一時directoryだけを使用し、実SD／CFカードやOctatrack原本
 データを使用しない。依存監査の既存受容期限と再確認条件は維持する。

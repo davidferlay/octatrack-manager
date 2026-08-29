@@ -1,0 +1,20 @@
+[package]
+name = "ot-executor"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+fs2 = "0.4"
+ot-backup = { path = "../ot-backup" }
+ot-domain = { path = "../ot-domain" }
+ot-plan = { path = "../ot-plan" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "=0.10.9"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lib]
+path = "src/lib.rs"
