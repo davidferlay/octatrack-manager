@@ -1,6 +1,6 @@
 # Design System Migration
 
-Status: Phase A–UI4 on main; **UI5 Usage Graph in progress**
+Status: Phase A–UI5 on main; **UI6 Branding rename artifacts in progress**
 Updated: 2026-08-29
 
 ## Purpose
@@ -170,7 +170,7 @@ Phase D  UI6 Branding → DS7 Legacy CSS removal
   Inspector and hides the inline inspector column.
 - **Out of scope:** Usage Graph (UI5), Change Drawer, legacy ProjectDetail rewrite.
 
-### PR-UI5 — Usage Graph (in progress)
+### PR-UI5 — Usage Graph (done)
 
 - Expose catalog `usage_edges` on `LibrarySnapshot` DTO (relative paths only).
 - Add `features/usage/UsageGraphPanel` in AppShell Inspector (between waveform
@@ -182,11 +182,19 @@ Phase D  UI6 Branding → DS7 Legacy CSS removal
   ProjectDetail / AudioFileTable rewrite, slot-assignment-only badges beyond
   usage edges.
 
+### PR-UI6 — Branding rename artifacts (in progress)
+
+- Centralize product identity in `src/branding` (`PRODUCT_NAME`, tagline,
+  workspace label).
+- Fix shell document title (`index.html`) from the Tauri template string to
+  MasterOCTa; Home / AppShell / Version chrome consume the shared constants.
+- **Out of scope:** full visual brand swap (palette, logo, typography), DS7
+  `--elektron-*` removal, Change Drawer.
+
 ### Later (documented only until started)
 
 | PR | Focus |
 |----|--------|
-| UI6 | Branding rename artifacts only |
 | DS7 | Remove unused `--elektron-*` and legacy classes; shrink App.css |
 
 ## Success criteria
@@ -213,6 +221,10 @@ selected catalog asset; inline catalog inspector column is unused in the shell.
 
 **After UI5:** Inspector also shows the read-only catalog Usage Graph for the
 selected file (relative-path-filtered usage edges).
+
+**After UI6:** User-facing product rename artifacts resolve to MasterOCTa
+(document title, shared branding constants). Full visual brand swap remains
+deferred; App.css stays until DS7.
 
 App.css is not “deleted”; it remains the legacy stylesheet until DS7.
 

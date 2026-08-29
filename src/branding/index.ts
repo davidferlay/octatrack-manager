@@ -1,0 +1,5 @@
+export {
+  PRODUCT_NAME,
+  PRODUCT_TAGLINE,
+  PRODUCT_WORKSPACE_LABEL,
+} from './product'

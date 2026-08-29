@@ -18,6 +18,7 @@ import { useProjects } from "../context/ProjectsContext";
 import { filterProjects } from "../utils/filterProjects";
 import { useSearchShortcut } from "../hooks/useSearchShortcut";
 import { invalidatePoolUsage } from "../hooks/usePoolUsage";
+import { PRODUCT_NAME, PRODUCT_TAGLINE } from "../branding";
 import { Version } from "../components/Version";
 import { ScrollToTop } from "../components/ScrollToTop";
 import { ProjectGrid } from "../components/ProjectGrid";
@@ -457,8 +458,8 @@ export function HomePage() {
     <main className="container" ref={pageRef}>
       <div className="project-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: '1' }}>
-          <h1>MasterOCTa</h1>
-          <span className="header-path-info">Discover and manage your Elektron Octatrack projects</span>
+          <h1>{PRODUCT_NAME}</h1>
+          <span className="header-path-info">{PRODUCT_TAGLINE}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <div className="header-search-container">
