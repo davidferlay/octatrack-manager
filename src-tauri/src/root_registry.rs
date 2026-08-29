@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const DEFAULT_SESSION_TTL: Duration = Duration::from_secs(8 * 60 * 60);
+const DEFAULT_WRITE_GRANT_TTL: Duration = Duration::from_secs(15 * 60);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DeviceObservation {
@@ -193,6 +194,7 @@ pub struct RootSession {
     pub device_fingerprint: String,
     pub observed_revision: u64,
     pub expires_in_seconds: u64,
+    pub write_grant_expires_in_seconds: Option<u64>,
     pub capabilities: RootCapabilities,
 }
 
@@ -202,6 +204,7 @@ struct RootEntry {
     canonical_path: PathBuf,
     observation: DeviceObservation,
     expires_at: Instant,
+    write_expires_at: Option<Instant>,
 }
 
 #[derive(Default)]
@@ -213,6 +216,7 @@ pub struct RootRegistry {
     state: Mutex<RegistryState>,
     identity_provider: Arc<dyn DeviceIdentityProvider>,
     ttl: Duration,
+    write_ttl: Duration,
     nonce: u128,
     next_id: AtomicU64,
 }
@@ -225,6 +229,14 @@ impl Default for RootRegistry {
 
 impl RootRegistry {
     pub fn new(identity_provider: Arc<dyn DeviceIdentityProvider>, ttl: Duration) -> Self {
+        Self::new_with_ttls(identity_provider, ttl, DEFAULT_WRITE_GRANT_TTL.min(ttl))
+    }
+
+    pub fn new_with_ttls(
+        identity_provider: Arc<dyn DeviceIdentityProvider>,
+        ttl: Duration,
+        write_ttl: Duration,
+    ) -> Self {
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|duration| duration.as_nanos())
@@ -234,6 +246,7 @@ impl RootRegistry {
             state: Mutex::new(RegistryState::default()),
             identity_provider,
             ttl,
+            write_ttl: write_ttl.min(ttl),
             nonce,
             next_id: AtomicU64::new(1),
         }
@@ -290,6 +303,9 @@ impl RootRegistry {
                     .ok_or(RootRegistryError::Unavailable)?;
                 entry.expires_at = expires_at;
                 entry.session.expires_in_seconds = self.ttl.as_secs();
+                entry.write_expires_at = None;
+                entry.session.write_grant_expires_in_seconds = None;
+                entry.session.capabilities.write = false;
                 return Ok(entry.session.clone());
             }
 
@@ -311,6 +327,7 @@ impl RootRegistry {
             device_fingerprint: fingerprint,
             observed_revision: 1,
             expires_in_seconds: self.ttl.as_secs(),
+            write_grant_expires_in_seconds: None,
             capabilities: RootCapabilities {
                 read: true,
                 write: false,
@@ -324,6 +341,7 @@ impl RootRegistry {
                 canonical_path,
                 observation,
                 expires_at,
+                write_expires_at: None,
             },
         );
         Ok(session)
@@ -331,7 +349,7 @@ impl RootRegistry {
 
     pub fn resolve(&self, root_id: &RootId) -> Result<ResolvedRoot, RootRegistryError> {
         let mut state = self.lock_state()?;
-        let Some(entry) = state.roots.get(root_id).cloned() else {
+        let Some(entry) = state.roots.get_mut(root_id) else {
             return Err(RootRegistryError::NotApproved);
         };
 
@@ -340,6 +358,15 @@ impl RootRegistry {
             state.roots.remove(root_id);
             return Err(RootRegistryError::Expired);
         }
+        if entry
+            .write_expires_at
+            .is_some_and(|expires_at| expires_at <= now)
+        {
+            entry.write_expires_at = None;
+            entry.session.write_grant_expires_in_seconds = None;
+            entry.session.capabilities.write = false;
+        }
+        let entry = entry.clone();
 
         let observation = match self.identity_provider.observe(&entry.canonical_path) {
             Ok(observation) => observation,
@@ -356,10 +383,58 @@ impl RootRegistry {
 
         let mut session = entry.session;
         session.expires_in_seconds = entry.expires_at.saturating_duration_since(now).as_secs();
+        session.write_grant_expires_in_seconds = entry
+            .write_expires_at
+            .map(|expires_at| expires_at.saturating_duration_since(now).as_secs());
         Ok(ResolvedRoot {
             session,
             canonical_path: entry.canonical_path,
         })
+    }
+
+    pub fn enable_write(&self, root_id: &RootId) -> Result<RootSession, RootRegistryError> {
+        let now = Instant::now();
+        let mut state = self.lock_state()?;
+        let entry = state
+            .roots
+            .get(root_id)
+            .cloned()
+            .ok_or(RootRegistryError::NotApproved)?;
+        if entry.expires_at <= now {
+            state.roots.remove(root_id);
+            return Err(RootRegistryError::Expired);
+        }
+        let observation = match self.identity_provider.observe(&entry.canonical_path) {
+            Ok(observation) => observation,
+            Err(error @ RootRegistryError::Removed) => {
+                state.roots.remove(root_id);
+                return Err(error);
+            }
+            Err(error) => return Err(error),
+        };
+        if observation != entry.observation {
+            state.roots.remove(root_id);
+            return Err(RootRegistryError::Changed);
+        }
+        if !observation.stable {
+            return Err(RootRegistryError::UnstableIdentity);
+        }
+
+        let entry = state
+            .roots
+            .get_mut(root_id)
+            .ok_or(RootRegistryError::NotApproved)?;
+        let write_expires_at = (now + self.write_ttl).min(entry.expires_at);
+        entry.write_expires_at = Some(write_expires_at);
+        entry.session.capabilities.write = write_expires_at > now;
+        entry.session.write_grant_expires_in_seconds = entry
+            .session
+            .capabilities
+            .write
+            .then(|| write_expires_at.saturating_duration_since(now).as_secs());
+        entry.session.expires_in_seconds =
+            entry.expires_at.saturating_duration_since(now).as_secs();
+        Ok(entry.session.clone())
     }
 
     pub fn close(&self, root_id: &RootId) -> Result<bool, RootRegistryError> {
@@ -445,6 +520,7 @@ pub enum RootRegistryError {
     Removed,
     Changed,
     AmbiguousIdentity,
+    UnstableIdentity,
     PathEscape,
     SymlinkEscape,
     NotRegularFile,
@@ -463,6 +539,7 @@ impl RootRegistryError {
             Self::Removed => "ROOT_REMOVED",
             Self::Changed => "ROOT_CHANGED",
             Self::AmbiguousIdentity => "ROOT_IDENTITY_AMBIGUOUS",
+            Self::UnstableIdentity => "WRITE_NOT_SUPPORTED",
             Self::PathEscape => "PATH_ESCAPE",
             Self::SymlinkEscape => "SYMLINK_ESCAPE",
             Self::NotRegularFile => "AUDIO_SOURCE_UNAVAILABLE",
@@ -487,6 +564,9 @@ impl std::fmt::Display for RootRegistryError {
             Self::Changed => formatter.write_str("the registered root or device identity changed"),
             Self::AmbiguousIdentity => formatter
                 .write_str("another registered root has the same persistent device identity"),
+            Self::UnstableIdentity => {
+                formatter.write_str("the root does not have a stable device identity")
+            }
             Self::PathEscape => {
                 formatter.write_str("the requested file escaped the registered root")
             }
@@ -545,6 +625,20 @@ mod tests {
                 total_capacity: Some(1024),
                 mount_token: format!("mount-{mount_revision}"),
                 stable: true,
+            })
+        }
+    }
+
+    struct UnstableIdentityProvider;
+
+    impl DeviceIdentityProvider for UnstableIdentityProvider {
+        fn observe(&self, _root: &Path) -> Result<DeviceObservation, RootRegistryError> {
+            Ok(DeviceObservation {
+                stable_key: "fallback-device".into(),
+                filesystem_type: None,
+                total_capacity: None,
+                mount_token: "fallback-mount".into(),
+                stable: false,
             })
         }
     }
@@ -631,6 +725,81 @@ mod tests {
             .as_str()
             .contains(root.path().to_str().unwrap()));
         assert!(!first.capabilities.write);
+        assert_eq!(first.write_grant_expires_in_seconds, None);
+    }
+
+    #[test]
+    fn stable_roots_receive_only_a_session_limited_write_grant() {
+        let root = TempDir::new().unwrap();
+        let registry = RootRegistry::new_with_ttls(
+            Arc::new(FakeIdentityProvider::new()),
+            Duration::from_secs(60),
+            Duration::from_secs(10),
+        );
+        let registered = registry.register(root.path().to_str().unwrap()).unwrap();
+
+        let enabled = registry.enable_write(&registered.root_id).unwrap();
+
+        assert!(enabled.capabilities.write);
+        assert!(enabled.write_grant_expires_in_seconds.is_some());
+        assert!(enabled.write_grant_expires_in_seconds.unwrap() <= 10);
+        assert!(
+            registry
+                .resolve(&registered.root_id)
+                .unwrap()
+                .session
+                .capabilities
+                .write
+        );
+
+        let registered_again = registry.register(root.path().to_str().unwrap()).unwrap();
+        assert_eq!(registered_again.root_id, registered.root_id);
+        assert!(!registered_again.capabilities.write);
+        assert_eq!(registered_again.write_grant_expires_in_seconds, None);
+    }
+
+    #[test]
+    fn unstable_roots_never_receive_a_write_grant() {
+        let root = TempDir::new().unwrap();
+        let registry =
+            RootRegistry::new(Arc::new(UnstableIdentityProvider), Duration::from_secs(60));
+        let registered = registry.register(root.path().to_str().unwrap()).unwrap();
+
+        assert_eq!(
+            registry.enable_write(&registered.root_id).unwrap_err(),
+            RootRegistryError::UnstableIdentity
+        );
+        assert!(
+            !registry
+                .resolve(&registered.root_id)
+                .unwrap()
+                .session
+                .capabilities
+                .write
+        );
+    }
+
+    #[test]
+    fn expired_write_grants_fall_back_to_read_only_without_expiring_the_root() {
+        let root = TempDir::new().unwrap();
+        let registry = RootRegistry::new_with_ttls(
+            Arc::new(FakeIdentityProvider::new()),
+            Duration::from_secs(60),
+            Duration::ZERO,
+        );
+        let registered = registry.register(root.path().to_str().unwrap()).unwrap();
+
+        let enabled = registry.enable_write(&registered.root_id).unwrap();
+        assert!(!enabled.capabilities.write);
+        assert_eq!(enabled.write_grant_expires_in_seconds, None);
+        assert!(
+            !registry
+                .resolve(&registered.root_id)
+                .unwrap()
+                .session
+                .capabilities
+                .write
+        );
     }
 
     #[test]
@@ -711,6 +880,7 @@ mod tests {
         let provider = Arc::new(FakeIdentityProvider::new());
         let registry = RootRegistry::new(provider.clone(), Duration::from_secs(60));
         let session = registry.register(root.path().to_str().unwrap()).unwrap();
+        registry.enable_write(&session.root_id).unwrap();
 
         provider.remount();
 

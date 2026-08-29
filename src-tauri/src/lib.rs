@@ -11,6 +11,7 @@ mod project_reader;
 mod purge;
 mod root_registry;
 mod v2_api;
+mod write_runtime;
 
 use audio_pool::{
     cancel_transfer, collect_audio_files_recursive, copy_audio_files_or_use_existing,
@@ -1355,6 +1356,8 @@ pub fn run() {
             app.manage(catalog);
             let audio_runtime = audio_runtime::open_shared_audio_runtime(&data_directory)?;
             app.manage(audio_runtime);
+            let write_runtime = write_runtime::open_shared_write_runtime(&data_directory)?;
+            app.manage(write_runtime);
 
             // Clear WebView session storage in the background on app startup
             let window = app.get_webview_window("main").unwrap();
@@ -1366,9 +1369,11 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            // Next-generation read-only API. Only root registration accepts a raw path.
+            // Next-generation API. Only root registration accepts a raw path; all writes
+            // require a session grant, a versioned plan, and exact per-apply approval.
             v2_api::v2_root_register,
             v2_api::v2_root_status,
+            v2_api::v2_root_enable_write,
             v2_api::v2_root_close,
             v2_api::v2_library_list,
             v2_api::v2_asset_metadata_get,
@@ -1376,6 +1381,11 @@ pub fn run() {
             v2_api::v2_audio_waveform_get,
             v2_api::v2_audio_preview_create,
             v2_api::v2_audio_preview_read,
+            v2_api::v2_change_plan,
+            v2_api::v2_change_get_plan,
+            v2_api::v2_change_apply,
+            v2_api::v2_change_status,
+            v2_api::v2_change_recovery_status,
             greet,
             scan_devices,
             scan_custom_directory,

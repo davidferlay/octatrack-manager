@@ -25,6 +25,7 @@ describe('SourcesPane', () => {
         session={null}
         onRegister={onRegister}
         onClose={vi.fn()}
+        onEnableWrite={vi.fn()}
       />,
     )
     expect(screen.getByRole('heading', { name: 'Sources' })).toBeInTheDocument()
@@ -41,6 +42,7 @@ describe('SourcesPane', () => {
         session={session}
         onRegister={vi.fn()}
         onClose={onClose}
+        onEnableWrite={vi.fn()}
       />,
     )
     expect(screen.getByText('Fixture Root')).toBeInTheDocument()
@@ -57,8 +59,42 @@ describe('SourcesPane', () => {
         error="picker unavailable"
         onRegister={vi.fn()}
         onClose={vi.fn()}
+        onEnableWrite={vi.fn()}
       />,
     )
     expect(screen.getByRole('alert')).toHaveTextContent('picker unavailable')
+  })
+
+  it('requires an explicit action before showing edit-enabled mode', () => {
+    const onEnableWrite = vi.fn()
+    const { rerender } = render(
+      <SourcesPane
+        session={session}
+        onRegister={vi.fn()}
+        onClose={vi.fn()}
+        onEnableWrite={onEnableWrite}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enable edit mode' }))
+    expect(onEnableWrite).toHaveBeenCalledOnce()
+
+    rerender(
+      <SourcesPane
+        session={{
+          ...session,
+          mode: 'write_enabled',
+          writeGrantExpiresInSeconds: 600,
+          capabilities: { ...session.capabilities, write: true },
+        }}
+        onRegister={vi.fn()}
+        onClose={vi.fn()}
+        onEnableWrite={onEnableWrite}
+      />,
+    )
+
+    expect(screen.getByText('EDIT ENABLED')).toBeInTheDocument()
+    expect(screen.getByText('Additive copy only. Use a cloned or test root, never original media.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Enable edit mode' })).not.toBeInTheDocument()
   })
 })

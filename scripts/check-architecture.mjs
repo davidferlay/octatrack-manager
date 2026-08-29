@@ -70,6 +70,8 @@ const allowedCompositionDependencies = new Set([
   "ot-audio",
   "ot-catalog",
   "ot-domain",
+  "ot-executor",
+  "ot-plan",
   "ot-storage-ports",
 ]);
 const packagesByName = new Map(
@@ -162,8 +164,14 @@ const expectedV2Commands = [
   "v2_audio_preview_create",
   "v2_audio_preview_read",
   "v2_audio_waveform_get",
+  "v2_change_apply",
+  "v2_change_get_plan",
+  "v2_change_plan",
+  "v2_change_recovery_status",
+  "v2_change_status",
   "v2_library_list",
   "v2_root_close",
+  "v2_root_enable_write",
   "v2_root_register",
   "v2_root_status",
 ];
@@ -176,21 +184,40 @@ if (JSON.stringify(actualV2Commands) !== JSON.stringify(expectedV2Commands)) {
 }
 
 for (const [, commandName, parameters] of v2Commands) {
-  const rawPathParameters = parameters.match(
+  const pathParameters = parameters.match(
     /\b(?:raw_path|path|[a-z0-9_]+_path)\s*:\s*(?:String|PathBuf)/g,
   ) ?? [];
   if (commandName === "v2_root_register") {
     if (
-      rawPathParameters.length !== 1 ||
-      !rawPathParameters[0].startsWith("raw_path")
+      pathParameters.length !== 1 ||
+      !pathParameters[0].startsWith("raw_path")
     ) {
       failures.push("v2_root_register must be the only raw path boundary");
     }
-  } else if (rawPathParameters.length > 0) {
+  } else if (commandName === "v2_change_plan") {
+    if (
+      pathParameters.length !== 1 ||
+      !pathParameters[0].startsWith("destination_relative_path")
+    ) {
+      failures.push(
+        "v2_change_plan may accept only one explicitly named root-relative destination path",
+      );
+    }
+  } else if (pathParameters.length > 0) {
     failures.push(
-      `${commandName} must not accept raw path parameters: ${rawPathParameters.join(", ")}`,
+      `${commandName} must not accept raw path parameters: ${pathParameters.join(", ")}`,
     );
   }
+}
+
+if (
+  !v2ApiSource.includes(
+    "RootRelativePath::parse(destination_relative_path)",
+  )
+) {
+  failures.push(
+    "v2_change_plan destination must cross the RootRelativePath validation boundary",
+  );
 }
 
 if (failures.length > 0) {

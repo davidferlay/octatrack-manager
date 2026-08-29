@@ -2,15 +2,19 @@ import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   audioApi,
+  changeApi,
   metadataApi,
   rootApi,
   type AudioApi,
+  type ChangeApi,
+  type ChangeRecoveryStatus,
   type LibrarySnapshot,
   type MetadataApi,
   type RootApi,
   type RootSession,
 } from "../../api";
 import { AppShell } from "../../app/index";
+import { AdditiveCopyChangeDrawer } from "../changes";
 import { InspectorPane } from "../inspector";
 import {
   CatalogLibraryBrowser,
@@ -44,6 +48,7 @@ interface RootRegistryPanelProps {
   api?: RootApi;
   audioClient?: AudioApi;
   metadataClient?: MetadataApi;
+  changeClient?: ChangeApi;
   selectDirectory?: RootDirectoryPicker;
 }
 
@@ -55,6 +60,7 @@ export function RootRegistryPanel({
   api = rootApi,
   audioClient = audioApi,
   metadataClient = metadataApi,
+  changeClient = changeApi,
   selectDirectory = pickRootDirectory,
 }: RootRegistryPanelProps) {
   const [session, setSession] = useState<RootSession | null>(null);
@@ -62,6 +68,7 @@ export function RootRegistryPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedAsset, setSelectedAsset] = useState<CatalogAssetSelection | null>(null);
+  const [recovery, setRecovery] = useState<ChangeRecoveryStatus | null>(null);
 
   async function registerRoot() {
     setBusy(true);
@@ -75,6 +82,12 @@ export function RootRegistryPanel({
       setSession(registered);
       setLibrary(snapshot);
       setSelectedAsset(null);
+      try {
+        setRecovery(await changeClient.recoveryStatus(registered.rootId));
+      } catch (reason) {
+        setRecovery(null);
+        setError(`Write safety status unavailable: ${errorMessage(reason)}`);
+      }
     } catch (reason) {
       if (registered !== null) {
         await api.closeRoot(registered.rootId).catch(() => undefined);
@@ -82,6 +95,7 @@ export function RootRegistryPanel({
       setSession(null);
       setLibrary(null);
       setSelectedAsset(null);
+      setRecovery(null);
       setError(errorMessage(reason));
     } finally {
       setBusy(false);
@@ -97,11 +111,56 @@ export function RootRegistryPanel({
       setSession(null);
       setLibrary(null);
       setSelectedAsset(null);
+      setRecovery(null);
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
       setBusy(false);
     }
+  }
+
+  async function enableWrite() {
+    if (session === null || recovery === null || recovery.recoveryRequired) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const latestRecovery = await changeClient.recoveryStatus(session.rootId);
+      setRecovery(latestRecovery);
+      if (latestRecovery.recoveryRequired) {
+        setError("An incomplete operation must be resolved before edit mode can be enabled.");
+        return;
+      }
+      setSession(await api.enableWrite(session.rootId));
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function refreshAfterCommit() {
+    if (session === null) return;
+    try {
+      const [snapshot, latestRecovery] = await Promise.all([
+        api.listLibrary(session.rootId),
+        changeClient.recoveryStatus(session.rootId),
+      ]);
+      setLibrary(snapshot);
+      setRecovery(latestRecovery);
+      setSelectedAsset(null);
+    } catch (reason) {
+      setRecovery(null);
+      setError(`The copy committed, but refresh failed: ${errorMessage(reason)}`);
+    }
+  }
+
+  async function refreshSessionBeforeApply(): Promise<RootSession> {
+    if (session === null) {
+      throw new Error("The root session is no longer available.");
+    }
+    const refreshed = await api.rootStatus(session.rootId);
+    setSession(refreshed);
+    return refreshed;
   }
 
   const catalogReady = session !== null && library !== null;
@@ -115,6 +174,8 @@ export function RootRegistryPanel({
           error={error}
           onRegister={registerRoot}
           onClose={closeRoot}
+          onEnableWrite={enableWrite}
+          writeBlocked={recovery === null || recovery.recoveryRequired}
         />
       }
       main={
@@ -157,6 +218,18 @@ export function RootRegistryPanel({
               </div>
             )}
           </InspectorPane>
+        ) : undefined
+      }
+      changeDrawer={
+        catalogReady ? (
+          <AdditiveCopyChangeDrawer
+            session={session}
+            selectedAsset={selectedAsset}
+            recovery={recovery}
+            api={changeClient}
+            refreshSession={refreshSessionBeforeApply}
+            onCommitted={refreshAfterCommit}
+          />
         ) : undefined
       }
     />

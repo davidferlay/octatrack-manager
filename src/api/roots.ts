@@ -10,9 +10,10 @@ export interface RootSession {
   rootId: string;
   displayName: string;
   deviceFingerprint: string;
-  mode: "read_only";
+  mode: "read_only" | "write_enabled";
   observedRevision: number;
   expiresInSeconds: number;
+  writeGrantExpiresInSeconds?: number | null;
   capabilities: RootCapabilities;
 }
 
@@ -53,6 +54,7 @@ export interface LibrarySnapshot {
 export interface RootApi {
   registerRoot(rawPath: string): Promise<RootSession>;
   rootStatus(rootId: string): Promise<RootSession>;
+  enableWrite(rootId: string): Promise<RootSession>;
   closeRoot(rootId: string): Promise<void>;
   listLibrary(rootId: string): Promise<LibrarySnapshot>;
 }
@@ -63,6 +65,8 @@ export function createRootApi(client: IpcClient = ipcClient): RootApi {
       client.request<RootSession>("v2_root_register", { rawPath }),
     rootStatus: (rootId) =>
       client.request<RootSession>("v2_root_status", { rootId }),
+    enableWrite: (rootId) =>
+      client.request<RootSession>("v2_root_enable_write", { rootId }),
     closeRoot: (rootId) =>
       client.request<void>("v2_root_close", { rootId }),
     listLibrary: (rootId) =>

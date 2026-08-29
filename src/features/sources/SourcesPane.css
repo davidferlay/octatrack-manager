@@ -61,3 +61,9 @@
   color: var(--mo-text-muted);
   font-size: 0.85rem;
 }
+
+.mo-sources-pane__write-warning {
+  margin: 0;
+  color: var(--mo-warning);
+  font-size: 0.8rem;
+}

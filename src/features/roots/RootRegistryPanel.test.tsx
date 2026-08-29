@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { AudioApi, MetadataApi, RootApi, RootSession } from "../../api";
+import type { AudioApi, ChangeApi, MetadataApi, RootApi, RootSession } from "../../api";
 import { RootRegistryPanel } from "./RootRegistryPanel";
 
 const session: RootSession = {
@@ -21,6 +21,12 @@ function fakeApi(): RootApi {
   return {
     registerRoot: vi.fn().mockResolvedValue(session),
     rootStatus: vi.fn().mockResolvedValue(session),
+    enableWrite: vi.fn().mockResolvedValue({
+      ...session,
+      mode: "write_enabled",
+      writeGrantExpiresInSeconds: 600,
+      capabilities: { ...session.capabilities, write: true },
+    }),
     closeRoot: vi.fn().mockResolvedValue(undefined),
     listLibrary: vi.fn().mockResolvedValue({
       sets: [{
@@ -47,11 +53,25 @@ function fakeApi(): RootApi {
   };
 }
 
+function fakeChangeApi(): ChangeApi {
+  return {
+    planAdditiveCopy: vi.fn(),
+    getPlan: vi.fn(),
+    applyChange: vi.fn(),
+    changeStatus: vi.fn(),
+    recoveryStatus: vi.fn().mockResolvedValue({
+      schema: "change-recovery-status:v1",
+      recoveryRequired: false,
+      operations: [],
+    }),
+  };
+}
+
 describe("RootRegistryPanel", () => {
   it("does nothing when the native picker is cancelled", async () => {
     const api = fakeApi();
     const selectDirectory = vi.fn().mockResolvedValue(null);
-    render(<RootRegistryPanel api={api} selectDirectory={selectDirectory} />);
+    render(<RootRegistryPanel api={api} changeClient={fakeChangeApi()} selectDirectory={selectDirectory} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Choose root..." }));
 
@@ -63,7 +83,7 @@ describe("RootRegistryPanel", () => {
   it("reports a native picker failure without registering a root", async () => {
     const api = fakeApi();
     const selectDirectory = vi.fn().mockRejectedValue(new Error("picker unavailable"));
-    render(<RootRegistryPanel api={api} selectDirectory={selectDirectory} />);
+    render(<RootRegistryPanel api={api} changeClient={fakeChangeApi()} selectDirectory={selectDirectory} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Choose root..." }));
 
@@ -77,6 +97,7 @@ describe("RootRegistryPanel", () => {
     render(
       <RootRegistryPanel
         api={api}
+        changeClient={fakeChangeApi()}
         selectDirectory={vi.fn().mockResolvedValue(rawPath)}
       />,
     );
@@ -119,6 +140,7 @@ describe("RootRegistryPanel", () => {
     render(
       <RootRegistryPanel
         api={api}
+        changeClient={fakeChangeApi()}
         audioClient={audioClient}
         metadataClient={metadataClient}
         selectDirectory={vi.fn().mockResolvedValue("/tmp/fixture-root")}
@@ -146,5 +168,25 @@ describe("RootRegistryPanel", () => {
       "root-opaque",
       "asset:v1:opaque",
     );
+  });
+
+  it("enables only the session write grant after recovery status is clear", async () => {
+    const api = fakeApi();
+    const changeClient = fakeChangeApi();
+    render(
+      <RootRegistryPanel
+        api={api}
+        changeClient={changeClient}
+        selectDirectory={vi.fn().mockResolvedValue("/tmp/fixture-root")}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose root..." }));
+    expect(await screen.findByText("PROJECT_A")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Enable edit mode" }));
+
+    expect(await screen.findAllByText("EDIT ENABLED")).toHaveLength(2);
+    expect(changeClient.recoveryStatus).toHaveBeenCalledTimes(2);
+    expect(api.enableWrite).toHaveBeenCalledWith("root-opaque");
   });
 });

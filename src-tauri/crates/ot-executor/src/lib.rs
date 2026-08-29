@@ -3,7 +3,7 @@
 use fs2::FileExt;
 use ot_backup::{BackupError, BackupStore, SnapshotId, VerifiedBackup};
 use ot_domain::{ContentHash, RootId, RootRelativePath};
-use ot_plan::ChangePlan;
+use ot_plan::{ChangePlan, PlanId};
 use rustix::fs::{self as descriptor_fs, AtFlags, Mode, OFlags, RenameFlags};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -20,13 +20,28 @@ const OPERATION_ID_PREFIX: &str = "operation:v1:";
 pub struct OperationId(String);
 
 impl OperationId {
-    fn for_plan(plan: &ChangePlan) -> Self {
+    pub fn for_plan(plan: &ChangePlan) -> Self {
         let digest = plan
             .id
             .as_str()
             .strip_prefix("plan:v1:")
             .expect("ChangePlan contains a validated PlanId");
         Self(format!("{OPERATION_ID_PREFIX}{digest}"))
+    }
+
+    pub fn parse(value: impl Into<String>) -> Result<Self, ExecutorError> {
+        let value = value.into();
+        let digest = value
+            .strip_prefix(OPERATION_ID_PREFIX)
+            .ok_or(ExecutorError::InvalidOperationId)?;
+        if digest.len() != 64
+            || !digest
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(ExecutorError::InvalidOperationId);
+        }
+        Ok(Self(value))
     }
 
     pub fn as_str(&self) -> &str {
@@ -207,6 +222,85 @@ impl AdditiveCopyExecutor {
         journal.failure_code = Some("RECOVERED_INCOMPLETE_OPERATION".into());
         write_journal(&journal_path, &journal)?;
         Ok(journal)
+    }
+
+    pub fn operation_journal(
+        &self,
+        operation_id: &OperationId,
+    ) -> Result<Option<OperationJournal>, ExecutorError> {
+        let directory = &self.local_paths.journal_directory;
+        match fs::symlink_metadata(directory) {
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+                return Err(ExecutorError::UnsafePath);
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(ExecutorError::io(error)),
+        }
+        let path = journal_path(directory, operation_id);
+        match fs::symlink_metadata(&path) {
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+                return Err(ExecutorError::UnsafePath);
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(ExecutorError::io(error)),
+        }
+        let journal = read_journal(&path)?;
+        validate_standalone_journal(&journal, operation_id, &path)?;
+        Ok(Some(journal))
+    }
+
+    pub fn incomplete_journals_for_root(
+        &self,
+        root_fingerprint: &str,
+    ) -> Result<Vec<OperationJournal>, ExecutorError> {
+        validate_root_fingerprint(root_fingerprint)?;
+        let directory = &self.local_paths.journal_directory;
+        match fs::symlink_metadata(directory) {
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+                return Err(ExecutorError::UnsafePath);
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(error) => return Err(ExecutorError::io(error)),
+        }
+
+        let mut journals = Vec::new();
+        for entry in fs::read_dir(directory).map_err(ExecutorError::io)? {
+            let entry = entry.map_err(ExecutorError::io)?;
+            let file_type = entry.file_type().map_err(ExecutorError::io)?;
+            let name = entry.file_name();
+            if name.to_str() == Some("locks") {
+                if file_type.is_symlink() || !file_type.is_dir() {
+                    return Err(ExecutorError::UnsafePath);
+                }
+                continue;
+            }
+            if file_type.is_symlink()
+                || !file_type.is_file()
+                || entry
+                    .path()
+                    .extension()
+                    .and_then(|extension| extension.to_str())
+                    != Some("json")
+            {
+                return Err(ExecutorError::InvalidJournal);
+            }
+            let journal = read_journal(&entry.path())?;
+            let operation_id = OperationId::parse(journal.operation_id.clone())?;
+            validate_standalone_journal(&journal, &operation_id, &entry.path())?;
+            if journal.root_fingerprint == root_fingerprint
+                && !matches!(
+                    journal.status,
+                    JournalStatus::Committed | JournalStatus::RolledBack
+                )
+            {
+                journals.push(journal);
+            }
+        }
+        journals.sort_by(|left, right| left.operation_id.cmp(&right.operation_id));
+        Ok(journals)
     }
 
     fn execute_internal<A: WriteAuthority>(
@@ -684,16 +778,8 @@ enum FaultPoint {
 fn validate_plan_shape(plan: &ChangePlan) -> Result<(), ExecutorError> {
     plan.validate_integrity()
         .map_err(|_| ExecutorError::InvalidPlan)?;
-    let fingerprint = plan
-        .device_fingerprint
-        .strip_prefix("rootfp:v1:")
-        .ok_or(ExecutorError::InvalidPlan)?;
-    let valid_fingerprint = fingerprint.len() == 64
-        && fingerprint
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
-    if !valid_fingerprint
-        || plan.base_observed_revision == 0
+    validate_root_fingerprint(&plan.device_fingerprint).map_err(|_| ExecutorError::InvalidPlan)?;
+    if plan.base_observed_revision == 0
         || plan.operation.source.relative_path == plan.operation.destination_relative_path
         || plan.estimated_additional_bytes != plan.operation.source.byte_size
         || plan.backup_relative_paths.len() != 1
@@ -1272,8 +1358,59 @@ fn remove_stale_journal_temporary(path: &Path) -> Result<(), ExecutorError> {
 }
 
 fn read_journal(path: &Path) -> Result<OperationJournal, ExecutorError> {
-    serde_json::from_reader(File::open(path).map_err(ExecutorError::io)?)
-        .map_err(|error| ExecutorError::Journal(error.to_string()))
+    let file = descriptor_fs::open(
+        path,
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    )
+    .map_err(descriptor_path_error)?;
+    let file = File::from(file);
+    if !file.metadata().map_err(ExecutorError::io)?.is_file() {
+        return Err(ExecutorError::UnsafePath);
+    }
+    serde_json::from_reader(file).map_err(|error| ExecutorError::Journal(error.to_string()))
+}
+
+fn validate_standalone_journal(
+    journal: &OperationJournal,
+    operation_id: &OperationId,
+    path: &Path,
+) -> Result<(), ExecutorError> {
+    if journal.schema != JOURNAL_SCHEMA
+        || journal.operation_id != operation_id.as_str()
+        || path.file_stem().and_then(|stem| stem.to_str()) != Some(operation_id.file_stem())
+        || journal.plan_id
+            != operation_id
+                .as_str()
+                .replacen("operation:v1:", "plan:v1:", 1)
+        || journal.backup_snapshot_id
+            != operation_id
+                .as_str()
+                .replacen("operation:v1:", "snapshot:v1:", 1)
+        || PlanId::parse(journal.plan_id.clone()).is_err()
+        || SnapshotId::parse(journal.backup_snapshot_id.clone()).is_err()
+        || RootRelativePath::parse(&journal.source_relative_path).is_err()
+        || RootRelativePath::parse(&journal.destination_relative_path).is_err()
+        || journal.source_relative_path == journal.destination_relative_path
+    {
+        return Err(ExecutorError::InvalidJournal);
+    }
+    validate_root_fingerprint(&journal.root_fingerprint).map_err(|_| ExecutorError::InvalidJournal)
+}
+
+fn validate_root_fingerprint(value: &str) -> Result<(), ExecutorError> {
+    let digest = value
+        .strip_prefix("rootfp:v1:")
+        .ok_or(ExecutorError::InvalidPlan)?;
+    if digest.len() == 64
+        && digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        Ok(())
+    } else {
+        Err(ExecutorError::InvalidPlan)
+    }
 }
 
 fn validate_journal(
@@ -1327,6 +1464,7 @@ pub enum ExecutorError {
     UnsafePath,
     FileTooLarge,
     InvalidPlan,
+    InvalidOperationId,
     NoSpace,
     PostWriteVerificationFailed,
     PlanConsumed,
@@ -1341,7 +1479,7 @@ impl ExecutorError {
         Self::Io(error.to_string())
     }
 
-    fn code(&self) -> &'static str {
+    pub fn code(&self) -> &'static str {
         match self {
             Self::Authority(_) => "AUTHORITY_FAILED",
             Self::Backup(_) => "BACKUP_FAILED",
@@ -1357,6 +1495,7 @@ impl ExecutorError {
             Self::UnsafePath => "UNSAFE_PATH",
             Self::FileTooLarge => "FILE_TOO_LARGE",
             Self::InvalidPlan => "INVALID_PLAN",
+            Self::InvalidOperationId => "INVALID_OPERATION_ID",
             Self::NoSpace => "NO_SPACE",
             Self::PostWriteVerificationFailed => "VERIFY_FAILED",
             Self::PlanConsumed => "PLAN_CONSUMED",
@@ -1395,6 +1534,7 @@ impl fmt::Display for ExecutorError {
                 Self::UnsafePath => "executor encountered an unsafe path",
                 Self::FileTooLarge => "file size overflowed",
                 Self::InvalidPlan => "change plan is not a valid additive-copy plan",
+                Self::InvalidOperationId => "operation ID is not a versioned SHA-256 identifier",
                 Self::NoSpace => "approved root does not have enough free space",
                 Self::PostWriteVerificationFailed => "post-write hash verification failed",
                 Self::PlanConsumed => "plan has already reached a terminal state",
@@ -1841,6 +1981,42 @@ mod tests {
         assert_eq!(journal.status, JournalStatus::RolledBack);
         assert!(!fixture.destination.exists());
         assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
+    }
+
+    #[test]
+    fn recovery_queries_surface_only_incomplete_journals_for_the_bound_root() {
+        let fixture = Fixture::new();
+        let executor = fixture.executor();
+        let operation_id = OperationId::for_plan(&fixture.plan);
+        assert!(matches!(
+            executor.execute_with_fault(
+                &fixture.plan,
+                &fixture.authority,
+                FaultPoint::DestinationWrite,
+                true,
+            ),
+            Err(ExecutorError::SimulatedCrash)
+        ));
+
+        let journal = executor.operation_journal(&operation_id).unwrap().unwrap();
+        assert_eq!(journal.operation_id, operation_id.as_str());
+        let incomplete = executor
+            .incomplete_journals_for_root(&fixture.plan.device_fingerprint)
+            .unwrap();
+        assert_eq!(incomplete.len(), 1);
+        assert_eq!(incomplete[0].operation_id, operation_id.as_str());
+        assert!(executor
+            .incomplete_journals_for_root(&format!("rootfp:v1:{}", "b".repeat(64)))
+            .unwrap()
+            .is_empty());
+
+        executor
+            .recover_incomplete(&fixture.plan, &fixture.authority)
+            .unwrap();
+        assert!(executor
+            .incomplete_journals_for_root(&fixture.plan.device_fingerprint)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]

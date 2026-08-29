@@ -963,6 +963,13 @@ M4はproduction writeを安全境界より先に有効化しないため、次�
 - operation status／recovery requiredをversion付きAPIで公開する
 - cloned fixtureでproduction compositionを検証してから、Gate Bの残条件を評価する
 
+M4-Bのwrite grantとChangePlanはsession限定・非永続とし、grantは安定したdevice identityと
+期限内のlive rootにだけ発行する。production APIはcatalogのopaque file identityと検証済み
+root-relative destinationだけを受け取り、追加copy以外のoverwrite、delete、rename、参照更新を
+許可しない。未完了journalが見つかった場合は新しいgrantとApplyをfail closedで拒否する。
+status公開だけではrecovery実行導線を代替しないため、review済みclone smokeとproduction
+recoveryの残条件を満たすまでGate Bを完了扱いにせず、M5へ進まない。
+
 ### M5 — rename/move/reference update
 
 - Sample rename/move

@@ -1,7 +1,10 @@
 use crate::audio_runtime::{AudioRuntimeError, SharedAudioRuntime};
 use crate::catalog_runtime::SharedCatalog;
 use crate::legacy_read_adapter::RegisteredLegacyLibrary;
-use crate::root_registry::{RootRegistry, RootRegistryError, RootSession};
+use crate::root_registry::{ResolvedRoot, RootRegistry, RootRegistryError, RootSession};
+use crate::write_runtime::{
+    ChangeOperationState, ChangeOperationStatus, SharedWriteRuntime, WriteRuntimeError,
+};
 use ot_application::{
     ListLibrary, LoadLibrarySnapshot, LoadManualAssetMetadata, ReplaceManualAssetMetadata,
     StoreLibrarySnapshot,
@@ -9,12 +12,20 @@ use ot_application::{
 use ot_audio::AudioError;
 use ot_domain::{
     ContentHash, FileInstance, InvalidManualMetadata, LibraryProject, LibrarySet, LibrarySnapshot,
-    ManualAssetMetadata, ManualNote, ManualTag, RootId, SampleStorageScope,
+    ManualAssetMetadata, ManualNote, ManualTag, RootId, RootRelativePath,
+    SampleSettingsParseStatus, SampleStorageScope, StateDocumentParseStatus,
+};
+use ot_executor::OperationId;
+use ot_plan::{
+    plan_additive_copy, AdditiveCopyIntent, AdditiveCopyPlanningFacts, ChangePlan, PlanSeed,
+    RootPlanObservation, SourceFileObservation,
 };
 use ot_storage_ports::{CatalogError, CatalogRootIdentity, CatalogRootObservation};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::path::PathBuf;
+use std::fs::{self, File};
+use std::io::Read;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::State;
 
@@ -40,7 +51,7 @@ impl ApiError {
     fn task_failed(task: impl std::fmt::Display) -> Self {
         Self {
             code: "INTERNAL_ERROR".into(),
-            message: "the read-only operation could not complete".into(),
+            message: "the operation could not complete".into(),
             recoverable: true,
             details: Some(task.to_string()),
         }
@@ -76,18 +87,25 @@ pub struct RootSessionDto {
     mode: &'static str,
     observed_revision: u64,
     expires_in_seconds: u64,
+    write_grant_expires_in_seconds: Option<u64>,
     capabilities: RootCapabilitiesDto,
 }
 
 impl From<RootSession> for RootSessionDto {
     fn from(session: RootSession) -> Self {
+        let mode = if session.capabilities.write {
+            "write_enabled"
+        } else {
+            "read_only"
+        };
         Self {
             root_id: session.root_id.as_str().to_owned(),
             display_name: session.display_name,
             device_fingerprint: session.device_fingerprint,
-            mode: "read_only",
+            mode,
             observed_revision: session.observed_revision,
             expires_in_seconds: session.expires_in_seconds,
+            write_grant_expires_in_seconds: session.write_grant_expires_in_seconds,
             capabilities: RootCapabilitiesDto {
                 read: session.capabilities.read,
                 write: session.capabilities.write,
@@ -562,6 +580,441 @@ fn read_audio_preview_sync(
         .map_err(Into::into)
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangePlanDto {
+    schema: &'static str,
+    plan_id: String,
+    operation_id: String,
+    operation: &'static str,
+    source_relative_path: String,
+    destination_relative_path: String,
+    byte_size: u64,
+    estimated_additional_bytes: u64,
+    backup_relative_paths: Vec<String>,
+    warnings: Vec<&'static str>,
+    requires_explicit_approval: bool,
+    overwrite_allowed: bool,
+    delete_count: u8,
+}
+
+impl From<&ChangePlan> for ChangePlanDto {
+    fn from(plan: &ChangePlan) -> Self {
+        Self {
+            schema: "change-plan:v1",
+            plan_id: plan.id.as_str().to_owned(),
+            operation_id: OperationId::for_plan(plan).as_str().to_owned(),
+            operation: "additive_copy",
+            source_relative_path: plan.operation.source.relative_path.as_str().to_owned(),
+            destination_relative_path: plan
+                .operation
+                .destination_relative_path
+                .as_str()
+                .to_owned(),
+            byte_size: plan.operation.source.byte_size,
+            estimated_additional_bytes: plan.estimated_additional_bytes,
+            backup_relative_paths: plan
+                .backup_relative_paths
+                .iter()
+                .map(|path| path.as_str().to_owned())
+                .collect(),
+            warnings: vec![
+                "Use only a copied or cloned test root; original Octatrack media is not supported.",
+                "The source hash, live root identity, and absent destination are checked again at apply time.",
+                "This plan creates one file and never overwrites or deletes an existing file.",
+            ],
+            requires_explicit_approval: true,
+            overwrite_allowed: false,
+            delete_count: 0,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeStatusDto {
+    schema: &'static str,
+    operation_id: String,
+    plan_id: String,
+    state: &'static str,
+    recovery_required: bool,
+    catalog_refresh_required: bool,
+    failure_code: Option<String>,
+    backup_snapshot_id: Option<String>,
+}
+
+impl From<ChangeOperationStatus> for ChangeStatusDto {
+    fn from(status: ChangeOperationStatus) -> Self {
+        let state = match status.state {
+            ChangeOperationState::Planned => "planned",
+            ChangeOperationState::Applying => "applying",
+            ChangeOperationState::Committed => "committed",
+            ChangeOperationState::Failed => "failed",
+            ChangeOperationState::RecoveryRequired => "recovery_required",
+        };
+        Self {
+            schema: "change-status:v1",
+            operation_id: status.operation_id.as_str().to_owned(),
+            plan_id: status.plan_id.as_str().to_owned(),
+            state,
+            recovery_required: status.state == ChangeOperationState::RecoveryRequired,
+            catalog_refresh_required: status.catalog_refresh_required,
+            failure_code: status.failure_code,
+            backup_snapshot_id: status.backup_snapshot_id,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeRecoveryStatusDto {
+    schema: &'static str,
+    recovery_required: bool,
+    operations: Vec<ChangeStatusDto>,
+}
+
+fn validate_file_instance_id(file_instance_id: &str) -> Result<(), ApiError> {
+    let digest = file_instance_id
+        .strip_prefix("fileinst:v1:")
+        .ok_or_else(invalid_file_instance_id)?;
+    if digest.len() != 64
+        || !digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(invalid_file_instance_id());
+    }
+    Ok(())
+}
+
+fn invalid_file_instance_id() -> ApiError {
+    ApiError::new(
+        "INVALID_FILE_INSTANCE_ID",
+        "file instance ID must be an opaque fileinst:v1 identifier",
+        false,
+    )
+}
+
+fn file_for_instance_id(
+    identity: &CatalogRootIdentity,
+    snapshot: &LibrarySnapshot,
+    file_instance_id: &str,
+) -> Result<FileInstance, ApiError> {
+    validate_file_instance_id(file_instance_id)?;
+    let mut matches = snapshot
+        .file_instances
+        .iter()
+        .filter(|file| opaque_file_instance_id(identity, file) == file_instance_id);
+    let file = matches.next().cloned().ok_or_else(|| {
+        ApiError::new(
+            "CATALOG_FILE_NOT_FOUND",
+            "the requested file instance is not present in this root snapshot",
+            true,
+        )
+    })?;
+    if matches.next().is_some() {
+        return Err(ApiError::new(
+            "CATALOG_INTEGRITY_ERROR",
+            "the catalog contains an ambiguous file instance identity",
+            false,
+        ));
+    }
+    Ok(file)
+}
+
+fn ensure_write_eligible(snapshot: &LibrarySnapshot) -> Result<(), ApiError> {
+    let unsupported_state = snapshot
+        .state_documents
+        .iter()
+        .any(|document| document.parse_status != StateDocumentParseStatus::Parsed);
+    let unsupported_settings = snapshot
+        .sample_settings
+        .iter()
+        .any(|settings| settings.parse_status != SampleSettingsParseStatus::Parsed);
+    if unsupported_state || unsupported_settings {
+        return Err(ApiError::new(
+            "WRITE_NOT_SUPPORTED",
+            "write mode is unavailable while the catalog contains unsupported or malformed state",
+            true,
+        ));
+    }
+    Ok(())
+}
+
+fn destination_scope(
+    snapshot: &LibrarySnapshot,
+    destination: &RootRelativePath,
+) -> SampleStorageScope {
+    let candidate = destination.as_str();
+    for set in &snapshot.sets {
+        let pool = format!("{}/AUDIO/", set.relative_path.as_str());
+        if candidate.starts_with(&pool) {
+            return SampleStorageScope::SetAudioPool;
+        }
+    }
+    for project in snapshot
+        .sets
+        .iter()
+        .flat_map(|set| set.projects.iter())
+        .chain(snapshot.standalone_projects.iter())
+    {
+        let prefix = format!("{}/", project.relative_path.as_str());
+        if candidate.starts_with(&prefix) {
+            return SampleStorageScope::ProjectLocal;
+        }
+    }
+    SampleStorageScope::Unclassified
+}
+
+fn ensure_matching_audio_extension(
+    source: &RootRelativePath,
+    destination: &RootRelativePath,
+) -> Result<(), ApiError> {
+    let source_extension = Path::new(source.as_str())
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase);
+    let destination_extension = Path::new(destination.as_str())
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_ascii_lowercase);
+    if source_extension
+        .as_deref()
+        .is_none_or(|extension| !matches!(extension, "wav" | "aif" | "aiff"))
+        || source_extension != destination_extension
+    {
+        return Err(ApiError::new(
+            "INVALID_DESTINATION_PATH",
+            "destination must keep the source sample file extension",
+            true,
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_visible_destination(destination: &RootRelativePath) -> Result<(), ApiError> {
+    if destination
+        .as_str()
+        .split('/')
+        .any(|component| component.starts_with('.'))
+    {
+        return Err(ApiError::new(
+            "INVALID_DESTINATION_PATH",
+            "destination must not contain hidden or AppleDouble path components",
+            true,
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_destination_absent(
+    resolved: &ResolvedRoot,
+    destination: &RootRelativePath,
+) -> Result<(), ApiError> {
+    let components = destination.as_str().split('/').collect::<Vec<_>>();
+    let mut candidate = resolved.canonical_path.clone();
+    for (index, component) in components.iter().enumerate() {
+        candidate.push(component);
+        let is_last = index + 1 == components.len();
+        match fs::symlink_metadata(&candidate) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(RootRegistryError::SymlinkEscape.into());
+            }
+            Ok(_) if is_last => {
+                return Err(ApiError::new(
+                    "DESTINATION_EXISTS",
+                    "additive copy destination already exists",
+                    true,
+                ));
+            }
+            Ok(metadata) if !metadata.is_dir() => {
+                return Err(ApiError::new(
+                    "INVALID_DESTINATION_PATH",
+                    "destination parent is not a directory",
+                    true,
+                ));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound && is_last => return Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Err(ApiError::new(
+                    "INVALID_DESTINATION_PATH",
+                    "destination parent directory does not exist",
+                    true,
+                ));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+                return Err(RootRegistryError::PermissionDenied.into());
+            }
+            Err(_) => return Err(RootRegistryError::Unavailable.into()),
+        }
+    }
+    Err(ApiError::new(
+        "INVALID_DESTINATION_PATH",
+        "destination path is invalid",
+        true,
+    ))
+}
+
+fn hash_live_source(path: &Path) -> Result<(u64, ContentHash), ApiError> {
+    let mut file = File::open(path).map_err(|_| RootRegistryError::NotRegularFile)?;
+    let before = file
+        .metadata()
+        .map_err(|_| RootRegistryError::NotRegularFile)?;
+    if !before.is_file() {
+        return Err(RootRegistryError::NotRegularFile.into());
+    }
+    let mut hasher = Sha256::new();
+    let mut bytes = 0_u64;
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let read = file.read(&mut buffer).map_err(|_| {
+            ApiError::new(
+                "AUDIO_SOURCE_UNAVAILABLE",
+                "the source sample could not be read",
+                true,
+            )
+        })?;
+        if read == 0 {
+            break;
+        }
+        bytes = bytes.checked_add(read as u64).ok_or_else(|| {
+            ApiError::new("FILE_TOO_LARGE", "the source sample is too large", false)
+        })?;
+        hasher.update(&buffer[..read]);
+    }
+    let after = file
+        .metadata()
+        .map_err(|_| RootRegistryError::NotRegularFile)?;
+    if before.len() != after.len()
+        || before.modified().ok() != after.modified().ok()
+        || bytes != after.len()
+    {
+        return Err(ApiError::new(
+            "PLAN_STALE",
+            "the source sample changed while the plan was created",
+            true,
+        ));
+    }
+    ContentHash::parse(format!("sha256:{:x}", hasher.finalize()))
+        .map(|hash| (bytes, hash))
+        .map_err(|_| ApiError::new("INTERNAL_ERROR", "could not hash the source sample", false))
+}
+
+fn enable_write_sync(
+    registry: &RootRegistry,
+    catalog: &SharedCatalog,
+    write: &SharedWriteRuntime,
+    root_id: &RootId,
+) -> Result<RootSessionDto, ApiError> {
+    let resolved = registry.resolve(root_id)?;
+    let identity = catalog_identity(&resolved.session)?;
+    let snapshot = load_library_snapshot(catalog, &identity)?;
+    ensure_write_eligible(&snapshot)?;
+    let recovery = write
+        .recovery_required(&resolved.session.device_fingerprint)
+        .map_err(write_runtime_error)?;
+    if !recovery.is_empty() {
+        return Err(ApiError::new(
+            "RECOVERY_REQUIRED",
+            "an incomplete write operation must be resolved before enabling write mode",
+            false,
+        ));
+    }
+    registry
+        .enable_write(root_id)
+        .map(Into::into)
+        .map_err(Into::into)
+}
+
+fn plan_additive_copy_sync(
+    registry: &RootRegistry,
+    catalog: &SharedCatalog,
+    write: &SharedWriteRuntime,
+    root_id: &RootId,
+    source_file_instance_id: &str,
+    destination_relative_path: &str,
+) -> Result<ChangePlanDto, ApiError> {
+    let resolved = registry.resolve(root_id)?;
+    let identity = catalog_identity(&resolved.session)?;
+    let snapshot = load_library_snapshot(catalog, &identity)?;
+    ensure_write_eligible(&snapshot)?;
+    let source = file_for_instance_id(&identity, &snapshot, source_file_instance_id)?;
+    if source.storage_scope == SampleStorageScope::Unclassified {
+        return Err(ApiError::new(
+            "WRITE_NOT_SUPPORTED",
+            "unclassified sample locations remain read-only",
+            true,
+        ));
+    }
+    let destination = RootRelativePath::parse(destination_relative_path)
+        .map_err(|error| ApiError::new("INVALID_DESTINATION_PATH", error.to_string(), true))?;
+    ensure_visible_destination(&destination)?;
+    if destination_scope(&snapshot, &destination) == SampleStorageScope::Unclassified {
+        return Err(ApiError::new(
+            "INVALID_DESTINATION_PATH",
+            "destination must be inside an indexed Set Audio Pool or Project",
+            true,
+        ));
+    }
+    ensure_matching_audio_extension(&source.relative_path, &destination)?;
+    ensure_destination_absent(&resolved, &destination)?;
+    let source_path = resolved.resolve_regular_file(&source.relative_path)?;
+    let (byte_size, content_hash) = hash_live_source(&source_path)?;
+    if byte_size != source.byte_size || content_hash != source.content_hash {
+        return Err(ApiError::new(
+            "CATALOG_STALE",
+            "the source sample no longer matches the catalog; re-register the root before planning",
+            true,
+        ));
+    }
+    let mut seed = [0_u8; 32];
+    getrandom::fill(&mut seed).map_err(|_| {
+        ApiError::new(
+            "WRITE_RUNTIME_UNAVAILABLE",
+            "secure plan identity could not be generated",
+            false,
+        )
+    })?;
+    let plan = plan_additive_copy(
+        &AdditiveCopyIntent {
+            root_id: root_id.clone(),
+            source_relative_path: source.relative_path.clone(),
+            destination_relative_path: destination,
+        },
+        &AdditiveCopyPlanningFacts {
+            plan_seed: PlanSeed::new(seed),
+            root: RootPlanObservation {
+                root_id: root_id.clone(),
+                device_fingerprint: resolved.session.device_fingerprint,
+                observed_revision: resolved.session.observed_revision,
+                identity_is_stable: resolved.session.capabilities.stable_device_identity,
+            },
+            source: SourceFileObservation {
+                relative_path: source.relative_path,
+                byte_size,
+                content_hash,
+            },
+            destination_exists: false,
+        },
+    )
+    .map_err(|error| ApiError::new("INVALID_CHANGE_PLAN", error.to_string(), true))?;
+    write
+        .store_plan(plan.clone())
+        .map_err(write_runtime_error)?;
+    Ok((&plan).into())
+}
+
+fn write_runtime_error(error: WriteRuntimeError) -> ApiError {
+    let recoverable = !matches!(
+        &error,
+        WriteRuntimeError::UnsafeLocalState
+            | WriteRuntimeError::InvalidPlan
+            | WriteRuntimeError::InvalidTransition
+    );
+    ApiError::new(error.code(), error.to_string(), recoverable)
+}
+
 fn parse_root_id(root_id: String) -> Result<RootId, ApiError> {
     RootId::new(root_id)
         .map_err(|error| ApiError::new("ROOT_NOT_APPROVED", error.to_string(), true))
@@ -751,6 +1204,81 @@ fn register_root_sync(
     Ok(resolved_session.into())
 }
 
+fn apply_change_sync(
+    registry: &RootRegistry,
+    catalog: &SharedCatalog,
+    write: &SharedWriteRuntime,
+    root_id: &RootId,
+    plan_id: &str,
+    approved_plan_id: &str,
+) -> Result<ChangeStatusDto, ApiError> {
+    let resolved = registry.resolve(root_id)?;
+    if !resolved.session.capabilities.write {
+        return Err(ApiError::new(
+            "WRITE_GRANT_REQUIRED",
+            "enable the session-limited write grant before applying this plan",
+            true,
+        ));
+    }
+    let recovery = write
+        .recovery_required(&resolved.session.device_fingerprint)
+        .map_err(write_runtime_error)?;
+    if !recovery.is_empty() {
+        return Err(ApiError::new(
+            "RECOVERY_REQUIRED",
+            "an incomplete write operation must be resolved before another apply",
+            false,
+        ));
+    }
+    let started = write
+        .begin_apply(root_id, plan_id, approved_plan_id)
+        .map_err(write_runtime_error)?;
+    let mut status = write
+        .execute_started(started, registry)
+        .map_err(write_runtime_error)?;
+    if scan_library_sync(registry, catalog, root_id)
+        .and_then(|(session, snapshot)| store_library_snapshot(catalog, &session, &snapshot))
+        .is_ok()
+    {
+        if let Ok(refreshed) = write.mark_catalog_refreshed(root_id, &status.operation_id) {
+            status = refreshed;
+        }
+    }
+    Ok(status.into())
+}
+
+fn change_status_sync(
+    registry: &RootRegistry,
+    write: &SharedWriteRuntime,
+    root_id: &RootId,
+    operation_id: &str,
+) -> Result<ChangeStatusDto, ApiError> {
+    let resolved = registry.resolve(root_id)?;
+    write
+        .status(root_id, operation_id, &resolved.session.device_fingerprint)
+        .map(Into::into)
+        .map_err(write_runtime_error)
+}
+
+fn change_recovery_status_sync(
+    registry: &RootRegistry,
+    write: &SharedWriteRuntime,
+    root_id: &RootId,
+) -> Result<ChangeRecoveryStatusDto, ApiError> {
+    let resolved = registry.resolve(root_id)?;
+    let operations = write
+        .recovery_required(&resolved.session.device_fingerprint)
+        .map_err(write_runtime_error)?
+        .into_iter()
+        .map(Into::into)
+        .collect::<Vec<_>>();
+    Ok(ChangeRecoveryStatusDto {
+        schema: "change-recovery-status:v1",
+        recovery_required: !operations.is_empty(),
+        operations,
+    })
+}
+
 #[tauri::command]
 pub async fn v2_root_register(
     raw_path: String,
@@ -777,6 +1305,24 @@ pub async fn v2_root_status(
     .await
     .map_err(ApiError::task_failed)?
     .map_err(ApiError::from)
+}
+
+#[tauri::command]
+pub async fn v2_root_enable_write(
+    root_id: String,
+    registry: State<'_, Arc<RootRegistry>>,
+    catalog: State<'_, SharedCatalog>,
+    write: State<'_, SharedWriteRuntime>,
+) -> Result<RootSessionDto, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let catalog = Arc::clone(catalog.inner());
+    let write = Arc::clone(write.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        enable_write_sync(&registry, &catalog, &write, &root_id)
+    })
+    .await
+    .map_err(ApiError::task_failed)?
 }
 
 #[tauri::command]
@@ -911,12 +1457,121 @@ pub async fn v2_audio_preview_read(
     Ok(tauri::ipc::Response::new(bytes))
 }
 
+#[tauri::command]
+pub async fn v2_change_plan(
+    root_id: String,
+    source_file_instance_id: String,
+    destination_relative_path: String,
+    registry: State<'_, Arc<RootRegistry>>,
+    catalog: State<'_, SharedCatalog>,
+    write: State<'_, SharedWriteRuntime>,
+) -> Result<ChangePlanDto, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let catalog = Arc::clone(catalog.inner());
+    let write = Arc::clone(write.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        plan_additive_copy_sync(
+            &registry,
+            &catalog,
+            &write,
+            &root_id,
+            &source_file_instance_id,
+            &destination_relative_path,
+        )
+    })
+    .await
+    .map_err(ApiError::task_failed)?
+}
+
+#[tauri::command]
+pub async fn v2_change_get_plan(
+    root_id: String,
+    plan_id: String,
+    registry: State<'_, Arc<RootRegistry>>,
+    write: State<'_, SharedWriteRuntime>,
+) -> Result<ChangePlanDto, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let write = Arc::clone(write.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        registry.resolve(&root_id)?;
+        write
+            .get_plan(&root_id, &plan_id)
+            .map(|plan| (&plan).into())
+            .map_err(write_runtime_error)
+    })
+    .await
+    .map_err(ApiError::task_failed)?
+}
+
+#[tauri::command]
+pub async fn v2_change_apply(
+    root_id: String,
+    plan_id: String,
+    approved_plan_id: String,
+    registry: State<'_, Arc<RootRegistry>>,
+    catalog: State<'_, SharedCatalog>,
+    write: State<'_, SharedWriteRuntime>,
+) -> Result<ChangeStatusDto, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let catalog = Arc::clone(catalog.inner());
+    let write = Arc::clone(write.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        apply_change_sync(
+            &registry,
+            &catalog,
+            &write,
+            &root_id,
+            &plan_id,
+            &approved_plan_id,
+        )
+    })
+    .await
+    .map_err(ApiError::task_failed)?
+}
+
+#[tauri::command]
+pub async fn v2_change_status(
+    root_id: String,
+    operation_id: String,
+    registry: State<'_, Arc<RootRegistry>>,
+    write: State<'_, SharedWriteRuntime>,
+) -> Result<ChangeStatusDto, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let write = Arc::clone(write.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        change_status_sync(&registry, &write, &root_id, &operation_id)
+    })
+    .await
+    .map_err(ApiError::task_failed)?
+}
+
+#[tauri::command]
+pub async fn v2_change_recovery_status(
+    root_id: String,
+    registry: State<'_, Arc<RootRegistry>>,
+    write: State<'_, SharedWriteRuntime>,
+) -> Result<ChangeRecoveryStatusDto, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let write = Arc::clone(write.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        change_recovery_status_sync(&registry, &write, &root_id)
+    })
+    .await
+    .map_err(ApiError::task_failed)?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::audio_runtime::open_shared_audio_runtime;
     use crate::catalog_runtime::open_shared_catalog;
     use crate::root_registry::{DeviceIdentityProvider, DeviceObservation};
+    use crate::write_runtime::open_shared_write_runtime;
     use std::fs;
     use std::path::Path;
     use std::time::Duration;
@@ -984,6 +1639,124 @@ mod tests {
         wav.extend_from_slice(&data_size.to_le_bytes());
         wav.extend_from_slice(&samples);
         fs::write(path, wav).unwrap();
+    }
+
+    #[test]
+    fn production_write_composition_requires_exact_approval_and_refreshes_the_catalog() {
+        let root = TempDir::new().unwrap();
+        let audio_pool = root.path().join("SET_A/AUDIO");
+        fs::create_dir_all(&audio_pool).unwrap();
+        fs::create_dir(audio_pool.join(".hidden")).unwrap();
+        let source = audio_pool.join("kick.wav");
+        write_test_wav(&source);
+        let source_before = fs::read(&source).unwrap();
+        let registry = registry();
+        let data_directory = TempDir::new().unwrap();
+        let catalog = open_shared_catalog(data_directory.path()).unwrap();
+        let write = open_shared_write_runtime(data_directory.path()).unwrap();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id.clone()).unwrap();
+        let snapshot = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
+        let source_id = snapshot.audio_files[0].file_instance_id.clone();
+
+        for hidden_destination in [
+            "SET_A/AUDIO/.hidden-copy.wav",
+            "SET_A/AUDIO/._appledouble.wav",
+            "SET_A/AUDIO/.hidden/kick-copy.wav",
+        ] {
+            let error = plan_additive_copy_sync(
+                &registry,
+                &catalog,
+                &write,
+                &root_id,
+                &source_id,
+                hidden_destination,
+            )
+            .unwrap_err();
+            assert_eq!(error.code, "INVALID_DESTINATION_PATH");
+        }
+
+        let plan = plan_additive_copy_sync(
+            &registry,
+            &catalog,
+            &write,
+            &root_id,
+            &source_id,
+            "SET_A/AUDIO/kick-copy.wav",
+        )
+        .unwrap();
+        let plan_json = serde_json::to_string(&plan).unwrap();
+        assert_eq!(plan.operation, "additive_copy");
+        assert!(!plan.overwrite_allowed);
+        assert_eq!(plan.delete_count, 0);
+        assert!(plan.requires_explicit_approval);
+        assert!(!plan_json.contains(root.path().to_str().unwrap()));
+        assert!(!plan_json.contains(&session.root_id));
+        assert!(!plan_json.contains(&session.device_fingerprint));
+
+        let no_grant = apply_change_sync(
+            &registry,
+            &catalog,
+            &write,
+            &root_id,
+            &plan.plan_id,
+            &plan.plan_id,
+        )
+        .unwrap_err();
+        assert_eq!(no_grant.code, "WRITE_GRANT_REQUIRED");
+
+        let enabled = enable_write_sync(&registry, &catalog, &write, &root_id).unwrap();
+        assert!(enabled.capabilities.write);
+        let wrong_approval = format!("plan:v1:{}", "a".repeat(64));
+        let approval_error = apply_change_sync(
+            &registry,
+            &catalog,
+            &write,
+            &root_id,
+            &plan.plan_id,
+            &wrong_approval,
+        )
+        .unwrap_err();
+        assert_eq!(approval_error.code, "APPROVAL_REQUIRED");
+
+        let status = apply_change_sync(
+            &registry,
+            &catalog,
+            &write,
+            &root_id,
+            &plan.plan_id,
+            &plan.plan_id,
+        )
+        .unwrap();
+        assert_eq!(status.state, "committed");
+        assert!(!status.recovery_required);
+        assert!(!status.catalog_refresh_required);
+        assert!(status.backup_snapshot_id.is_some());
+        assert_eq!(
+            fs::read(audio_pool.join("kick-copy.wav")).unwrap(),
+            source_before
+        );
+        assert_eq!(fs::read(&source).unwrap(), source_before);
+
+        let refreshed = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
+        assert_eq!(refreshed.audio_files.len(), 2);
+        assert!(refreshed
+            .audio_files
+            .iter()
+            .any(|file| file.relative_path == "SET_A/AUDIO/kick-copy.wav"));
+        let recovery = change_recovery_status_sync(&registry, &write, &root_id).unwrap();
+        assert!(!recovery.recovery_required);
+        let consumed = apply_change_sync(
+            &registry,
+            &catalog,
+            &write,
+            &root_id,
+            &plan.plan_id,
+            &plan.plan_id,
+        )
+        .unwrap_err();
+        assert_eq!(consumed.code, "PLAN_CONSUMED");
     }
 
     #[test]
