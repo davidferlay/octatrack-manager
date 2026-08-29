@@ -10,7 +10,7 @@ import {
   type RootApi,
   type RootSession,
 } from "../../api";
-import { AppShell } from "../../app";
+import { AppShell } from "../../app/index";
 import { SourcesPane } from "../sources";
 import { CatalogLibraryBrowser } from "../library/CatalogLibraryBrowser";
 import "./RootRegistryPanel.css";
