@@ -1498,9 +1498,7 @@ fn restore_quarantined_entry(
         RenameFlags::NOREPLACE,
     ) {
         Ok(()) => parent.sync_all().map_err(ExecutorError::io),
-        Err(rustix::io::Errno::EXIST | rustix::io::Errno::NOENT) => {
-            Ok(())
-        }
+        Err(rustix::io::Errno::EXIST | rustix::io::Errno::NOENT) => Ok(()),
         Err(error) => Err(descriptor_path_error(error)),
     }
 }
