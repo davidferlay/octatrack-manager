@@ -19,6 +19,7 @@ interface AdditiveCopyChangeDrawerProps {
   disabled?: boolean;
   refreshSession: () => Promise<RootSession>;
   onCommitted: () => Promise<void> | void;
+  onRecovered: () => Promise<void> | void;
   onBusyChange?: (busy: boolean) => void;
   onRecoveryChange?: (recovery: ChangeRecoveryStatus) => void;
 }
@@ -45,6 +46,7 @@ export function AdditiveCopyChangeDrawer({
   disabled = false,
   refreshSession,
   onCommitted,
+  onRecovered,
   onBusyChange,
   onRecoveryChange,
 }: AdditiveCopyChangeDrawerProps) {
@@ -52,6 +54,7 @@ export function AdditiveCopyChangeDrawer({
   const [plan, setPlan] = useState<ChangePlan | null>(null);
   const [status, setStatus] = useState<ChangeStatus | null>(null);
   const [approved, setApproved] = useState(false);
+  const [approvedRecoveryOperationId, setApprovedRecoveryOperationId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,6 +63,7 @@ export function AdditiveCopyChangeDrawer({
     setPlan(null);
     setStatus(null);
     setApproved(false);
+    setApprovedRecoveryOperationId(null);
     setError(null);
   }, [session.rootId, selectedAsset?.fileInstanceId]);
 
@@ -140,6 +144,7 @@ export function AdditiveCopyChangeDrawer({
         if (recoveredStatus?.state === "committed") {
           try {
             await onCommitted();
+            setStatus({ ...recoveredStatus, catalogRefreshRequired: false });
             setError(`Apply response was interrupted: ${primaryError}. Backend status confirms that the operation committed.`);
           } catch (refreshReason) {
             setError(`Backend status confirms that the operation committed, but the catalog refresh failed: ${messageFrom(refreshReason)}`);
@@ -149,6 +154,63 @@ export function AdditiveCopyChangeDrawer({
           onRecoveryChange?.(await api.recoveryStatus(session.rootId));
         } catch {
           // Local status still fails closed when recovery status cannot be refreshed.
+        }
+      }
+    } finally {
+      setChangeBusy(false);
+    }
+  }
+
+  async function recoverOperation(operation: ChangeStatus) {
+    if (disabled || approvedRecoveryOperationId !== operation.operationId) return;
+    setChangeBusy(true);
+    setError(null);
+    setApprovedRecoveryOperationId(null);
+    let recoveryAttempted = false;
+    try {
+      const currentSession = await refreshSession();
+      if (!currentSession.capabilities.stableDeviceIdentity) {
+        throw new Error("Recovery requires the same live root with a stable device identity.");
+      }
+      recoveryAttempted = true;
+      const recovered = await api.recoverChange(
+        session.rootId,
+        operation.operationId,
+        operation.operationId,
+      );
+      setStatus(recovered);
+      if (recovered.state !== "rolled_back") {
+        throw new Error("The backend did not confirm that the incomplete copy was rolled back.");
+      }
+      try {
+        await onRecovered();
+      } catch (refreshReason) {
+        setError(`The rollback completed, but the catalog refresh failed: ${messageFrom(refreshReason)}`);
+      }
+    } catch (reason) {
+      const primaryError = messageFrom(reason);
+      setError(primaryError);
+      if (recoveryAttempted) {
+        let recoveredStatus: ChangeStatus | null = null;
+        try {
+          recoveredStatus = await api.changeStatus(session.rootId, operation.operationId);
+          setStatus(recoveredStatus);
+        } catch {
+          // Keep the primary error when no operation status can be recovered.
+        }
+        if (recoveredStatus?.state === "rolled_back") {
+          try {
+            await onRecovered();
+            setStatus({ ...recoveredStatus, catalogRefreshRequired: false });
+            setError(`Recovery response was interrupted: ${primaryError}. Backend status confirms that rollback completed.`);
+          } catch (refreshReason) {
+            setError(`Backend status confirms that rollback completed, but the catalog refresh failed: ${messageFrom(refreshReason)}`);
+          }
+        }
+        try {
+          onRecoveryChange?.(await api.recoveryStatus(session.rootId));
+        } catch {
+          // The UI remains fail closed when recovery status cannot be refreshed.
         }
       }
     } finally {
@@ -177,6 +239,53 @@ export function AdditiveCopyChangeDrawer({
         <p className="mo-change-drawer__blocking" role="alert">
           An incomplete operation exists. Do not write to this root until recovery is resolved.
         </p>
+      )}
+
+      {recovery?.recoveryRequired && (
+        <div className="mo-change-drawer__recovery" aria-label="Incomplete operation recovery">
+          <h4>Rollback required</h4>
+          <p>
+            Recovery can only remove the exact file recorded by the operation journal after its
+            identity and verified local backup are checked again.
+          </p>
+          {recovery.operations.map((operation) => (
+            <div className="mo-change-drawer__recovery-operation" key={operation.operationId}>
+              <dl>
+                <div>
+                  <dt>Operation</dt>
+                  <dd><code>{operation.operationId}</code></dd>
+                </div>
+                <div>
+                  <dt>Failure</dt>
+                  <dd>{operation.failureCode ?? "INCOMPLETE_OPERATION"}</dd>
+                </div>
+              </dl>
+              <label className="mo-change-drawer__approval">
+                <input
+                  type="checkbox"
+                  checked={approvedRecoveryOperationId === operation.operationId}
+                  disabled={interactionBusy}
+                  onChange={(event) => setApprovedRecoveryOperationId(
+                    event.target.checked ? operation.operationId : null,
+                  )}
+                />
+                <span>
+                  I approve rollback of this exact incomplete additive-copy operation.
+                </span>
+              </label>
+              <Button
+                variant="danger"
+                disabled={
+                  interactionBusy
+                  || approvedRecoveryOperationId !== operation.operationId
+                }
+                onClick={() => recoverOperation(operation)}
+              >
+                {busy ? "Recovering..." : "Roll back incomplete copy"}
+              </Button>
+            </div>
+          ))}
+        </div>
       )}
 
       {selectedAsset === null ? (

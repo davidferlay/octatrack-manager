@@ -167,6 +167,7 @@ const expectedV2Commands = [
   "v2_change_apply",
   "v2_change_get_plan",
   "v2_change_plan",
+  "v2_change_recover",
   "v2_change_recovery_status",
   "v2_change_status",
   "v2_library_list",

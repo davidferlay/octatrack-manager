@@ -1385,6 +1385,7 @@ pub fn run() {
             v2_api::v2_change_get_plan,
             v2_api::v2_change_apply,
             v2_api::v2_change_status,
+            v2_api::v2_change_recover,
             v2_api::v2_change_recovery_status,
             greet,
             scan_devices,

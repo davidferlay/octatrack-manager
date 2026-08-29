@@ -25,6 +25,7 @@ describe("Change API", () => {
     await api.applyChange("root-opaque", planId, planId);
     await api.changeStatus("root-opaque", operationId);
     await api.recoveryStatus("root-opaque");
+    await api.recoverChange("root-opaque", operationId, operationId);
 
     expect(calls).toEqual([
       ["v2_change_plan", {
@@ -36,6 +37,11 @@ describe("Change API", () => {
       ["v2_change_apply", { rootId: "root-opaque", planId, approvedPlanId: planId }],
       ["v2_change_status", { rootId: "root-opaque", operationId }],
       ["v2_change_recovery_status", { rootId: "root-opaque" }],
+      ["v2_change_recover", {
+        rootId: "root-opaque",
+        operationId,
+        approvedOperationId: operationId,
+      }],
     ]);
     expect(JSON.stringify(calls)).not.toContain("/Volumes/");
     expect(JSON.stringify(calls)).not.toContain("sha256:");

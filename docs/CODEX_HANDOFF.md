@@ -1,6 +1,6 @@
 # Codex引継ぎ — MasterOCTa
 
-更新日: 2026-08-29
+更新日: 2026-08-30
 
 ## 1. 目的
 
@@ -78,7 +78,8 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - UI4 Notes Inspector: #36マージ済み
 - M4-A transaction boundary hardening: #37マージ済み
 - UI5 Usage Graph: #38マージ済み
-- 現在のmain基準SHA: `dc83ff0f5d45936ec8ab3ec4c463fa7f921119e9`
+- M4-B production authority／approved apply: #39マージ済み
+- 現在のmain基準SHA: `b26246cf2d0a282451d22f68a994c3856e132074`
 - M2: 完了
 - M3-A: 完了
 - M3-B: 完了
@@ -92,10 +93,12 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - M3-E3: 完了
 - M3: 完了
 - M4-A: 完了
-- 現在の作業: M4-B production authority and approved apply vertical slice
+- M4-B: 完了
+- 現在の作業: Gate B production recovery導線とclone smoke gate
 - SQLite schema: v5（M3-E1で追加）
-- 次の機能実装: M4-Bマージ後、Gate Bのproduction recovery導線とreview済みclone smokeを
-  残条件として評価し、未充足ならM5より先に補完する
+- 次の機能実装: production recovery導線をマージ後、
+  `docs/testing/GATE_B_CLONE_SMOKE.md`を由来確認済みの使い捨てcloneで人間が実施・reviewする。
+  sign-offまではGate Bを完了扱いにせず、M5へ進まない
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
 - `ot-tools-io`はコミット
@@ -305,3 +308,16 @@ Support配下だけに置く。
 Gate Bはreview済みclone smokeと明示的recovery導線の要否を確認するまで完了扱いにしない。
 production composition testは生成したtemporary rootと合成WAVだけを使用し、sourceの
 byte-for-byte不変、追加先の一致、catalog再取得を確認する。
+
+Gate B recovery補完では、通常write grantとは分離したrollback専用authorityを追加する。
+frontend／Tauri APIはlive `RootId`、opaque `OperationId`、同じ`OperationId`への明示承認だけを
+受け、raw pathやplan内容を受け取らない。Recovery開始時に残存write grantを失効させる。
+executorはjournalとverified backupを再検証し、記録済み
+file identityとbackup内容に一致するoperation-created destination／partialだけを削除する。
+replacement、tampered/missing backup、root identity変更、symlinkはfail closedで保持する。
+crash/restart routeはtemporary directoryと合成WAVだけで自動testし、実SD／CFカードや原本データは
+使用しない。production fault injectionは追加しない。
+
+この補完PRが成功しても、`docs/testing/GATE_B_CLONE_SMOKE.md`のhuman-reviewed smokeは別の残条件で
+ある。由来確認済みの使い捨てcloneによるsign-off前にGate B完了や原本media write対応を宣言せず、
+M5へ進まない。

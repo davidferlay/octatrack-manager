@@ -144,20 +144,30 @@ export function RootRegistryPanel({
     }
   }
 
-  async function refreshAfterCommit() {
+  async function refreshAfterWrite(failureMessage: string) {
     if (session === null) return;
     try {
-      const [snapshot, latestRecovery] = await Promise.all([
+      const [latestSession, snapshot, latestRecovery] = await Promise.all([
+        api.rootStatus(session.rootId),
         api.listLibrary(session.rootId),
         changeClient.recoveryStatus(session.rootId),
       ]);
+      setSession(latestSession);
       setLibrary(snapshot);
       setRecovery(latestRecovery);
       setSelectedAsset(null);
     } catch (reason) {
       setRecovery(null);
-      setError(`The copy committed, but refresh failed: ${errorMessage(reason)}`);
+      setError(`${failureMessage}: ${errorMessage(reason)}`);
     }
+  }
+
+  async function refreshAfterCommit() {
+    await refreshAfterWrite("The copy committed, but refresh failed");
+  }
+
+  async function refreshAfterRecovery() {
+    await refreshAfterWrite("The rollback completed, but refresh failed");
   }
 
   async function refreshSessionBeforeApply(): Promise<RootSession> {
@@ -242,6 +252,7 @@ export function RootRegistryPanel({
             disabled={busy}
             refreshSession={refreshSessionBeforeApply}
             onCommitted={refreshAfterCommit}
+            onRecovered={refreshAfterRecovery}
             onBusyChange={setChangeBusy}
             onRecoveryChange={setRecovery}
           />

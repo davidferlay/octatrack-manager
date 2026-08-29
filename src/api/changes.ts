@@ -20,6 +20,7 @@ export type ChangeOperationState =
   | "planned"
   | "applying"
   | "committed"
+  | "rolled_back"
   | "failed"
   | "recovery_required";
 
@@ -54,6 +55,11 @@ export interface ChangeApi {
   ): Promise<ChangeStatus>;
   changeStatus(rootId: string, operationId: string): Promise<ChangeStatus>;
   recoveryStatus(rootId: string): Promise<ChangeRecoveryStatus>;
+  recoverChange(
+    rootId: string,
+    operationId: string,
+    approvedOperationId: string,
+  ): Promise<ChangeStatus>;
 }
 
 export function createChangeApi(client: IpcClient = ipcClient): ChangeApi {
@@ -76,6 +82,12 @@ export function createChangeApi(client: IpcClient = ipcClient): ChangeApi {
       client.request<ChangeStatus>("v2_change_status", { rootId, operationId }),
     recoveryStatus: (rootId) =>
       client.request<ChangeRecoveryStatus>("v2_change_recovery_status", { rootId }),
+    recoverChange: (rootId, operationId, approvedOperationId) =>
+      client.request<ChangeStatus>("v2_change_recover", {
+        rootId,
+        operationId,
+        approvedOperationId,
+      }),
   };
 }
 

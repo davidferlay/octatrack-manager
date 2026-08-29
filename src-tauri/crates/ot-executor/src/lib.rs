@@ -69,6 +69,21 @@ pub trait WriteAuthority {
     fn resolve_for_write(&self, root_id: &RootId) -> Result<ApprovedExecutionRoot, AuthorityError>;
 }
 
+#[derive(Clone, Debug)]
+pub struct ApprovedRecoveryRoot {
+    pub root_id: RootId,
+    pub device_fingerprint: String,
+    pub canonical_path: PathBuf,
+    pub stable_device_identity: bool,
+}
+
+pub trait RecoveryAuthority {
+    fn resolve_for_recovery(
+        &self,
+        root_id: &RootId,
+    ) -> Result<ApprovedRecoveryRoot, AuthorityError>;
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthorityError {
     NotApproved,
@@ -206,6 +221,10 @@ impl AdditiveCopyExecutor {
             | JournalStatus::Verifying => {}
         }
 
+        let staging_directory =
+            prepare_local_directory(&self.local_paths.staging_directory, &root.canonical_path)?;
+        validate_staging_cleanup_target(&staging_directory, &operation_id)?;
+
         let target = open_destination_target(
             &root.canonical_path,
             &plan.operation.destination_relative_path,
@@ -217,7 +236,68 @@ impl AdditiveCopyExecutor {
             write_journal(&journal_path, &journal)?;
             return Err(error);
         }
-        cleanup_staging(&self.local_paths.staging_directory, &operation_id)?;
+        cleanup_staging(&staging_directory, &operation_id)?;
+        journal.status = JournalStatus::RolledBack;
+        journal.failure_code = Some("RECOVERED_INCOMPLETE_OPERATION".into());
+        write_journal(&journal_path, &journal)?;
+        Ok(journal)
+    }
+
+    pub fn recover_incomplete_operation<A: RecoveryAuthority>(
+        &self,
+        root_id: &RootId,
+        operation_id: &OperationId,
+        authority: &A,
+    ) -> Result<OperationJournal, ExecutorError> {
+        let root = authority
+            .resolve_for_recovery(root_id)
+            .map_err(ExecutorError::Authority)?;
+        let root = validate_recovery_authority(root_id, root)?;
+        let journal_directory =
+            prepare_local_directory(&self.local_paths.journal_directory, &root.canonical_path)?;
+        let _lock = acquire_root_lock(&journal_directory, &root.device_fingerprint)?;
+        let journal_path = journal_path(&journal_directory, operation_id);
+        let mut journal = read_journal(&journal_path)?;
+        validate_standalone_journal(&journal, operation_id, &journal_path)?;
+        if journal.root_fingerprint != root.device_fingerprint {
+            return Err(ExecutorError::RootChanged);
+        }
+        match journal.status {
+            JournalStatus::RolledBack => return Ok(journal),
+            JournalStatus::Committed => return Err(ExecutorError::PlanConsumed),
+            JournalStatus::RecoveryRequired
+            | JournalStatus::Prepared
+            | JournalStatus::Applying
+            | JournalStatus::Verifying => {}
+        }
+
+        let backup_directory =
+            prepare_local_directory(&self.local_paths.backup_directory, &root.canonical_path)?;
+        let staging_directory =
+            prepare_local_directory(&self.local_paths.staging_directory, &root.canonical_path)?;
+        validate_staging_cleanup_target(&staging_directory, operation_id)?;
+        let snapshot_id = SnapshotId::parse(journal.backup_snapshot_id.clone())
+            .map_err(ExecutorError::Backup)?;
+        let backup = BackupStore::new(backup_directory)
+            .verify(&snapshot_id)
+            .map_err(ExecutorError::Backup)?;
+        let (expected_size, expected_hash) =
+            validate_recovery_backup(&backup, &journal, operation_id)?;
+        let destination = RootRelativePath::parse(&journal.destination_relative_path)
+            .map_err(|_| ExecutorError::InvalidJournal)?;
+        let target = open_destination_target(&root.canonical_path, &destination, operation_id)?;
+        if let Err(error) = recover_media_destination_matching(
+            &target,
+            &journal,
+            expected_size,
+            &expected_hash,
+        ) {
+            journal.status = JournalStatus::RecoveryRequired;
+            journal.failure_code = Some("DESTINATION_CHANGED".into());
+            write_journal(&journal_path, &journal)?;
+            return Err(error);
+        }
+        cleanup_staging(&staging_directory, operation_id)?;
         journal.status = JournalStatus::RolledBack;
         journal.failure_code = Some("RECOVERED_INCOMPLETE_OPERATION".into());
         write_journal(&journal_path, &journal)?;
@@ -809,18 +889,36 @@ fn validate_authority(
     if !root.stable_device_identity {
         return Err(ExecutorError::Authority(AuthorityError::UnstableIdentity));
     }
-    let metadata = fs::symlink_metadata(&root.canonical_path).map_err(ExecutorError::io)?;
+    validate_canonical_root(&root.canonical_path)?;
+    Ok(root)
+}
+
+fn validate_recovery_authority(
+    root_id: &RootId,
+    root: ApprovedRecoveryRoot,
+) -> Result<ApprovedRecoveryRoot, ExecutorError> {
+    if &root.root_id != root_id {
+        return Err(ExecutorError::RootChanged);
+    }
+    validate_root_fingerprint(&root.device_fingerprint)
+        .map_err(|_| ExecutorError::RootChanged)?;
+    if !root.stable_device_identity {
+        return Err(ExecutorError::Authority(AuthorityError::UnstableIdentity));
+    }
+    validate_canonical_root(&root.canonical_path)?;
+    Ok(root)
+}
+
+fn validate_canonical_root(canonical_path: &Path) -> Result<(), ExecutorError> {
+    let metadata = fs::symlink_metadata(canonical_path).map_err(ExecutorError::io)?;
     if metadata.file_type().is_symlink() || !metadata.is_dir() {
         return Err(ExecutorError::UnsafePath);
     }
-    let canonical = root
-        .canonical_path
-        .canonicalize()
-        .map_err(ExecutorError::io)?;
-    if canonical != root.canonical_path {
+    let canonical = canonical_path.canonicalize().map_err(ExecutorError::io)?;
+    if canonical != canonical_path {
         return Err(ExecutorError::UnsafePath);
     }
-    Ok(root)
+    Ok(())
 }
 
 fn prepare_local_directory(path: &Path, root: &Path) -> Result<PathBuf, ExecutorError> {
@@ -1065,9 +1163,21 @@ fn copy_payload_to_media(
 }
 
 fn verify_open_file(file: &mut File, plan: &ChangePlan) -> Result<(), ExecutorError> {
+    verify_open_file_matching(
+        file,
+        plan.operation.source.byte_size,
+        &plan.operation.source.content_hash,
+    )
+}
+
+fn verify_open_file_matching(
+    file: &mut File,
+    expected_size: u64,
+    expected_hash: &ContentHash,
+) -> Result<(), ExecutorError> {
     file.seek(SeekFrom::Start(0)).map_err(ExecutorError::io)?;
     let (size, hash) = hash_reader(file)?;
-    if size == plan.operation.source.byte_size && hash == plan.operation.source.content_hash {
+    if size == expected_size && &hash == expected_hash {
         Ok(())
     } else {
         Err(ExecutorError::PostWriteVerificationFailed)
@@ -1131,6 +1241,20 @@ fn recover_media_destination(
     journal: &OperationJournal,
     plan: &ChangePlan,
 ) -> Result<(), ExecutorError> {
+    recover_media_destination_matching(
+        target,
+        journal,
+        plan.operation.source.byte_size,
+        &plan.operation.source.content_hash,
+    )
+}
+
+fn recover_media_destination_matching(
+    target: &DestinationTarget,
+    journal: &OperationJournal,
+    expected_size: u64,
+    expected_hash: &ContentHash,
+) -> Result<(), ExecutorError> {
     let destination = open_regular_entry(&target.parent, &target.file_name)?;
     let temporary = open_regular_entry(&target.parent, &target.temporary_name)?;
     let (name, mut file, published) = match (destination, temporary) {
@@ -1146,7 +1270,7 @@ fn recover_media_destination(
     if !same_file_identity(&file, expected)? {
         return Err(ExecutorError::RecoveryRequired);
     }
-    if published && verify_open_file(&mut file, plan).is_err() {
+    if published && verify_open_file_matching(&mut file, expected_size, expected_hash).is_err() {
         return Err(ExecutorError::RecoveryRequired);
     }
     descriptor_fs::unlinkat(&target.parent, name.as_str(), AtFlags::empty())
@@ -1389,6 +1513,7 @@ fn validate_standalone_journal(
                 .replacen("operation:v1:", "snapshot:v1:", 1)
         || PlanId::parse(journal.plan_id.clone()).is_err()
         || SnapshotId::parse(journal.backup_snapshot_id.clone()).is_err()
+        || journal.base_observed_revision == 0
         || RootRelativePath::parse(&journal.source_relative_path).is_err()
         || RootRelativePath::parse(&journal.destination_relative_path).is_err()
         || journal.source_relative_path == journal.destination_relative_path
@@ -1396,6 +1521,39 @@ fn validate_standalone_journal(
         return Err(ExecutorError::InvalidJournal);
     }
     validate_root_fingerprint(&journal.root_fingerprint).map_err(|_| ExecutorError::InvalidJournal)
+}
+
+fn validate_recovery_backup(
+    backup: &VerifiedBackup,
+    journal: &OperationJournal,
+    operation_id: &OperationId,
+) -> Result<(u64, ContentHash), ExecutorError> {
+    let expected_plan_id = operation_id
+        .as_str()
+        .replacen(OPERATION_ID_PREFIX, "plan:v1:", 1);
+    let expected_snapshot_id = operation_id
+        .as_str()
+        .replacen(OPERATION_ID_PREFIX, "snapshot:v1:", 1);
+    let manifest = backup.manifest();
+    if backup.snapshot_id().as_str() != expected_snapshot_id.as_str()
+        || journal.plan_id != expected_plan_id.as_str()
+        || journal.backup_snapshot_id != expected_snapshot_id.as_str()
+        || manifest.plan_id.as_str() != journal.plan_id.as_str()
+        || manifest.source_fingerprint.as_str() != journal.root_fingerprint.as_str()
+        || manifest.files.len() != 1
+    {
+        return Err(ExecutorError::InvalidJournal);
+    }
+    let source = manifest
+        .files
+        .first()
+        .ok_or(ExecutorError::InvalidJournal)?;
+    if source.relative_path.as_str() != journal.source_relative_path.as_str() {
+        return Err(ExecutorError::InvalidJournal);
+    }
+    let content_hash = ContentHash::parse(source.content_hash.clone())
+        .map_err(|_| ExecutorError::InvalidJournal)?;
+    Ok((source.byte_size, content_hash))
 }
 
 fn validate_root_fingerprint(value: &str) -> Result<(), ExecutorError> {
@@ -1434,11 +1592,26 @@ fn validate_journal(
 
 fn cleanup_staging(base: &Path, operation_id: &OperationId) -> Result<(), ExecutorError> {
     let directory = base.join(operation_id.file_stem());
-    if directory.exists() {
+    if validate_staging_cleanup_target(base, operation_id)? {
         fs::remove_dir_all(directory).map_err(ExecutorError::io)?;
         sync_directory(base)?;
     }
     Ok(())
+}
+
+fn validate_staging_cleanup_target(
+    base: &Path,
+    operation_id: &OperationId,
+) -> Result<bool, ExecutorError> {
+    let directory = base.join(operation_id.file_stem());
+    match fs::symlink_metadata(&directory) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            Err(ExecutorError::UnsafePath)
+        }
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(ExecutorError::io(error)),
+    }
 }
 
 fn sync_directory(path: &Path) -> Result<(), ExecutorError> {
@@ -1646,6 +1819,24 @@ mod tests {
                 return Err(AuthorityError::NotApproved);
             }
             Ok(root)
+        }
+    }
+
+    impl RecoveryAuthority for FixtureAuthority {
+        fn resolve_for_recovery(
+            &self,
+            root_id: &RootId,
+        ) -> Result<ApprovedRecoveryRoot, AuthorityError> {
+            let root = self.root.lock().unwrap().clone();
+            if &root.root_id != root_id {
+                return Err(AuthorityError::NotApproved);
+            }
+            Ok(ApprovedRecoveryRoot {
+                root_id: root.root_id,
+                device_fingerprint: root.device_fingerprint,
+                canonical_path: root.canonical_path,
+                stable_device_identity: root.stable_device_identity,
+            })
         }
     }
 
@@ -1984,6 +2175,88 @@ mod tests {
     }
 
     #[test]
+    fn journal_bound_recovery_survives_restart_without_a_general_write_grant() {
+        let fixture = Fixture::new();
+        let executor = fixture.executor();
+        let operation_id = OperationId::for_plan(&fixture.plan);
+        assert!(matches!(
+            executor.execute_with_fault(
+                &fixture.plan,
+                &fixture.authority,
+                FaultPoint::DestinationWrite,
+                true,
+            ),
+            Err(ExecutorError::SimulatedCrash)
+        ));
+        assert!(fixture.destination.exists());
+
+        let reopened_root_id = RootId::new("root-reopened").unwrap();
+        {
+            let mut root = fixture.authority.root.lock().unwrap();
+            root.root_id = reopened_root_id.clone();
+            root.write_enabled = false;
+        }
+
+        let journal = executor
+            .recover_incomplete_operation(
+                &reopened_root_id,
+                &operation_id,
+                &fixture.authority,
+            )
+            .unwrap();
+
+        assert_eq!(journal.status, JournalStatus::RolledBack);
+        assert!(!fixture.destination.exists());
+        assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
+        assert!(executor
+            .incomplete_journals_for_root(&fixture.plan.device_fingerprint)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn journal_bound_recovery_preserves_media_when_the_verified_backup_changed() {
+        let fixture = Fixture::new();
+        let executor = fixture.executor();
+        let operation_id = OperationId::for_plan(&fixture.plan);
+        assert!(matches!(
+            executor.execute_with_fault(
+                &fixture.plan,
+                &fixture.authority,
+                FaultPoint::DestinationWrite,
+                true,
+            ),
+            Err(ExecutorError::SimulatedCrash)
+        ));
+        let snapshot_digest = operation_id
+            .as_str()
+            .strip_prefix(OPERATION_ID_PREFIX)
+            .unwrap();
+        fs::write(
+            fixture
+                .local
+                .join("backups")
+                .join(snapshot_digest)
+                .join("files/SET/AUDIO/kick.wav"),
+            b"tampered local backup",
+        )
+        .unwrap();
+
+        let recovery = executor.recover_incomplete_operation(
+            &fixture.plan.root_id,
+            &operation_id,
+            &fixture.authority,
+        );
+
+        assert!(matches!(
+            recovery,
+            Err(ExecutorError::Backup(BackupError::VerificationFailed(_)))
+        ));
+        assert_eq!(fs::read(&fixture.destination).unwrap(), fixture.source_bytes);
+        assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
+    }
+
+    #[test]
     fn recovery_queries_surface_only_incomplete_journals_for_the_bound_root() {
         let fixture = Fixture::new();
         let executor = fixture.executor();
@@ -2067,13 +2340,56 @@ mod tests {
         let replacement = vec![b'x'; fixture.source_bytes.len()];
         fs::write(&fixture.destination, &replacement).unwrap();
 
-        let recovery = executor.recover_incomplete(&fixture.plan, &fixture.authority);
+        let operation_id = OperationId::for_plan(&fixture.plan);
+        let recovery = executor.recover_incomplete_operation(
+            &fixture.plan.root_id,
+            &operation_id,
+            &fixture.authority,
+        );
         assert!(
             matches!(recovery, Err(ExecutorError::RecoveryRequired)),
             "unexpected recovery result: {recovery:?}"
         );
         assert_eq!(fs::read(&fixture.destination).unwrap(), replacement);
         assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn recovery_rejects_a_symlinked_operation_staging_directory_before_media_mutation() {
+        use std::os::unix::fs::symlink;
+
+        let fixture = Fixture::new();
+        let executor = fixture.executor();
+        let operation_id = OperationId::for_plan(&fixture.plan);
+        assert!(matches!(
+            executor.execute_with_fault(
+                &fixture.plan,
+                &fixture.authority,
+                FaultPoint::DestinationWrite,
+                true,
+            ),
+            Err(ExecutorError::SimulatedCrash)
+        ));
+        let staging = fixture
+            .local
+            .join("staging")
+            .join(operation_id.file_stem());
+        fs::remove_dir_all(&staging).unwrap();
+        let outside = fixture._temp.path().join("outside-staging");
+        fs::create_dir(&outside).unwrap();
+        symlink(&outside, &staging).unwrap();
+
+        let recovery = executor.recover_incomplete_operation(
+            &fixture.plan.root_id,
+            &operation_id,
+            &fixture.authority,
+        );
+
+        assert!(matches!(recovery, Err(ExecutorError::UnsafePath)));
+        assert_eq!(fs::read(&fixture.destination).unwrap(), fixture.source_bytes);
+        assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
+        assert!(fs::read_dir(&outside).unwrap().next().is_none());
     }
 
     #[test]

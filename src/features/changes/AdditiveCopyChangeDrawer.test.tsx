@@ -73,6 +73,16 @@ function fakeApi(): ChangeApi {
     }),
     changeStatus: vi.fn(),
     recoveryStatus: vi.fn().mockResolvedValue(recoveryClear),
+    recoverChange: vi.fn().mockResolvedValue({
+      schema: "change-status:v1",
+      operationId,
+      planId,
+      state: "rolled_back",
+      recoveryRequired: false,
+      catalogRefreshRequired: false,
+      failureCode: "RECOVERED_INCOMPLETE_OPERATION",
+      backupSnapshotId: `snapshot:v1:${"a".repeat(64)}`,
+    }),
   };
 }
 
@@ -88,6 +98,7 @@ describe("AdditiveCopyChangeDrawer", () => {
         api={api}
         refreshSession={vi.fn().mockResolvedValue(session(true))}
         onCommitted={onCommitted}
+        onRecovered={vi.fn()}
       />,
     );
 
@@ -123,6 +134,7 @@ describe("AdditiveCopyChangeDrawer", () => {
         api={api}
         refreshSession={vi.fn().mockResolvedValue(session(false))}
         onCommitted={vi.fn()}
+        onRecovered={vi.fn()}
       />,
     );
 
@@ -145,6 +157,7 @@ describe("AdditiveCopyChangeDrawer", () => {
         api={fakeApi()}
         refreshSession={vi.fn().mockResolvedValue(session(true))}
         onCommitted={vi.fn()}
+        onRecovered={vi.fn()}
       />,
     );
 
@@ -163,6 +176,7 @@ describe("AdditiveCopyChangeDrawer", () => {
         api={fakeApi()}
         refreshSession={vi.fn().mockResolvedValue(session(true))}
         onCommitted={vi.fn()}
+        onRecovered={vi.fn()}
       />,
     );
     expect(screen.getByRole("alert")).toHaveTextContent("incomplete operation exists");
@@ -178,6 +192,7 @@ describe("AdditiveCopyChangeDrawer", () => {
         api={api}
         refreshSession={vi.fn().mockResolvedValue(session(false))}
         onCommitted={vi.fn()}
+        onRecovered={vi.fn()}
       />,
     );
 
@@ -218,6 +233,7 @@ describe("AdditiveCopyChangeDrawer", () => {
         api={api}
         refreshSession={vi.fn().mockResolvedValue(session(true))}
         onCommitted={onCommitted}
+        onRecovered={vi.fn()}
         onRecoveryChange={onRecoveryChange}
       />,
     );
@@ -235,7 +251,7 @@ describe("AdditiveCopyChangeDrawer", () => {
     expect(onRecoveryChange).toHaveBeenCalledWith(recoveryClear);
     expect(screen.getByRole("checkbox")).not.toBeChecked();
     expect(screen.getByRole("button", { name: "Apply approved plan" })).toBeDisabled();
-    expect(screen.getByRole("alert")).toHaveTextContent("response was interrupted");
+    expect(screen.getByText(/Apply response was interrupted/)).toBeInTheDocument();
   });
 
   it("locks the drawer and reports recovery when an attempted Apply needs recovery", async () => {
@@ -266,6 +282,7 @@ describe("AdditiveCopyChangeDrawer", () => {
         api={api}
         refreshSession={vi.fn().mockResolvedValue(session(true))}
         onCommitted={vi.fn()}
+        onRecovered={vi.fn()}
         onRecoveryChange={onRecoveryChange}
       />,
     );
@@ -284,5 +301,107 @@ describe("AdditiveCopyChangeDrawer", () => {
     expect(screen.getByRole("checkbox")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Review plan" })).toBeDisabled();
     expect(onRecoveryChange).toHaveBeenCalledWith(recoveryRequired);
+  });
+
+  it("requires exact one-shot approval before rolling back an incomplete operation", async () => {
+    const api = fakeApi();
+    const recoveryRequired: ChangeRecoveryStatus = {
+      schema: "change-recovery-status:v1",
+      recoveryRequired: true,
+      operations: [{
+        schema: "change-status:v1",
+        operationId,
+        planId,
+        state: "recovery_required",
+        recoveryRequired: true,
+        catalogRefreshRequired: true,
+        failureCode: "SIMULATED_PROCESS_EXIT",
+        backupSnapshotId: `snapshot:v1:${"a".repeat(64)}`,
+      }],
+    };
+    const refreshSession = vi.fn().mockResolvedValue(session(false));
+    const onRecovered = vi.fn();
+    render(
+      <AdditiveCopyChangeDrawer
+        session={session(false)}
+        selectedAsset={selectedAsset}
+        recovery={recoveryRequired}
+        api={api}
+        refreshSession={refreshSession}
+        onCommitted={vi.fn()}
+        onRecovered={onRecovered}
+      />,
+    );
+
+    const recoverButton = screen.getByRole("button", { name: "Roll back incomplete copy" });
+    expect(recoverButton).toBeDisabled();
+    fireEvent.click(screen.getByLabelText(
+      "I approve rollback of this exact incomplete additive-copy operation.",
+    ));
+    expect(recoverButton).toBeEnabled();
+    fireEvent.click(recoverButton);
+
+    await waitFor(() => expect(api.recoverChange).toHaveBeenCalledWith(
+      "root-opaque",
+      operationId,
+      operationId,
+    ));
+    expect(refreshSession).toHaveBeenCalledOnce();
+    expect(onRecovered).toHaveBeenCalledOnce();
+    expect(await screen.findByRole("status")).toHaveTextContent("Operation rolled back");
+    expect(screen.getByLabelText(
+      "I approve rollback of this exact incomplete additive-copy operation.",
+    )).not.toBeChecked();
+  });
+
+  it("reconciles a completed rollback after the Recovery response is interrupted", async () => {
+    const api = fakeApi();
+    const operation = {
+      schema: "change-status:v1" as const,
+      operationId,
+      planId,
+      state: "recovery_required" as const,
+      recoveryRequired: true,
+      catalogRefreshRequired: true,
+      failureCode: "SIMULATED_PROCESS_EXIT",
+      backupSnapshotId: `snapshot:v1:${"a".repeat(64)}`,
+    };
+    const rolledBack = {
+      ...operation,
+      state: "rolled_back" as const,
+      recoveryRequired: false,
+      failureCode: "RECOVERED_INCOMPLETE_OPERATION",
+    };
+    vi.mocked(api.recoverChange).mockRejectedValue(new Error("IPC response interrupted"));
+    vi.mocked(api.changeStatus).mockResolvedValue(rolledBack);
+    vi.mocked(api.recoveryStatus).mockResolvedValue(recoveryClear);
+    const onRecovered = vi.fn();
+    const onRecoveryChange = vi.fn();
+    render(
+      <AdditiveCopyChangeDrawer
+        session={session(false)}
+        selectedAsset={selectedAsset}
+        recovery={{
+          schema: "change-recovery-status:v1",
+          recoveryRequired: true,
+          operations: [operation],
+        }}
+        api={api}
+        refreshSession={vi.fn().mockResolvedValue(session(false))}
+        onCommitted={vi.fn()}
+        onRecovered={onRecovered}
+        onRecoveryChange={onRecoveryChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText(
+      "I approve rollback of this exact incomplete additive-copy operation.",
+    ));
+    fireEvent.click(screen.getByRole("button", { name: "Roll back incomplete copy" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Operation rolled back");
+    expect(onRecovered).toHaveBeenCalledOnce();
+    expect(onRecoveryChange).toHaveBeenCalledWith(recoveryClear);
+    expect(screen.getByText(/Recovery response was interrupted/)).toBeInTheDocument();
   });
 });

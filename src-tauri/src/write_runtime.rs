@@ -3,8 +3,9 @@ use ot_domain::RootId;
 #[cfg(test)]
 use ot_domain::RootRelativePath;
 use ot_executor::{
-    AdditiveCopyExecutor, ApprovedExecutionRoot, AuthorityError, ExecutorError, ExecutorLocalPaths,
-    JournalStatus, OperationId, WriteAuthority,
+    AdditiveCopyExecutor, ApprovedExecutionRoot, ApprovedRecoveryRoot, AuthorityError,
+    ExecutorError, ExecutorLocalPaths, JournalStatus, OperationId, RecoveryAuthority,
+    WriteAuthority,
 };
 use ot_plan::{ChangePlan, PlanId};
 use std::collections::HashMap;
@@ -25,6 +26,7 @@ pub enum ChangeOperationState {
     Planned,
     Applying,
     Committed,
+    RolledBack,
     Failed,
     RecoveryRequired,
 }
@@ -194,6 +196,48 @@ impl WriteRuntime {
         }
     }
 
+    pub fn recover_incomplete(
+        &self,
+        root_id: &RootId,
+        operation_id: &str,
+        approved_operation_id: &str,
+        registry: &RootRegistry,
+    ) -> Result<ChangeOperationStatus, WriteRuntimeError> {
+        let operation_id =
+            OperationId::parse(operation_id).map_err(|_| WriteRuntimeError::InvalidOperationId)?;
+        let approved_operation_id = OperationId::parse(approved_operation_id)
+            .map_err(|_| WriteRuntimeError::RecoveryApprovalRequired)?;
+        if operation_id != approved_operation_id {
+            return Err(WriteRuntimeError::RecoveryApprovalRequired);
+        }
+        registry.disable_write(root_id).map_err(|error| {
+            WriteRuntimeError::Executor(ExecutorError::Authority(map_authority_error(error)))
+        })?;
+        let authority = RegistryRecoveryAuthority { registry };
+        let journal = self
+            .executor
+            .recover_incomplete_operation(root_id, &operation_id, &authority)
+            .map_err(WriteRuntimeError::Executor)?;
+        let mut status = status_from_journal(journal)?;
+        status.catalog_refresh_required = true;
+
+        let mut state = self.lock_state()?;
+        if let Some(stored) = state
+            .plans
+            .values_mut()
+            .find(|stored| {
+                stored.operation_id == operation_id && &stored.plan.root_id == root_id
+            })
+        {
+            stored.state = ChangeOperationState::RolledBack;
+            stored.catalog_refresh_required = true;
+            stored.failure_code = status.failure_code.clone();
+            stored.backup_snapshot_id = status.backup_snapshot_id.clone();
+            status = status_from_stored(stored);
+        }
+        Ok(status)
+    }
+
     pub fn mark_catalog_refreshed(
         &self,
         root_id: &RootId,
@@ -205,7 +249,10 @@ impl WriteRuntime {
             .values_mut()
             .find(|stored| &stored.operation_id == operation_id && &stored.plan.root_id == root_id)
             .ok_or(WriteRuntimeError::OperationNotFound)?;
-        if stored.state != ChangeOperationState::Committed {
+        if !matches!(
+            stored.state,
+            ChangeOperationState::Committed | ChangeOperationState::RolledBack
+        ) {
             return Err(WriteRuntimeError::InvalidTransition);
         }
         stored.catalog_refresh_required = false;
@@ -240,16 +287,7 @@ impl WriteRuntime {
         if journal.root_fingerprint != root_fingerprint {
             return Err(WriteRuntimeError::OperationNotFound);
         }
-        let plan_id = PlanId::parse(journal.plan_id).map_err(|_| WriteRuntimeError::InvalidPlan)?;
-        let operation_state = state_from_journal(journal.status);
-        Ok(ChangeOperationStatus {
-            operation_id,
-            plan_id,
-            state: operation_state,
-            catalog_refresh_required: matches!(operation_state, ChangeOperationState::Committed),
-            failure_code: journal.failure_code,
-            backup_snapshot_id: Some(journal.backup_snapshot_id),
-        })
+        status_from_journal(journal)
     }
 
     pub fn recovery_required(
@@ -354,12 +392,35 @@ fn status_from_stored(stored: &StoredPlan) -> ChangeOperationStatus {
     }
 }
 
-fn state_from_journal(status: JournalStatus) -> ChangeOperationState {
+fn status_from_journal(
+    journal: ot_executor::OperationJournal,
+) -> Result<ChangeOperationStatus, WriteRuntimeError> {
+    let operation_id = OperationId::parse(journal.operation_id)
+        .map_err(|_| WriteRuntimeError::InvalidOperationId)?;
+    let plan_id = PlanId::parse(journal.plan_id).map_err(|_| WriteRuntimeError::InvalidPlan)?;
+    let operation_state = state_from_journal(journal.status, journal.failure_code.as_deref());
+    Ok(ChangeOperationStatus {
+        operation_id,
+        plan_id,
+        state: operation_state,
+        catalog_refresh_required: matches!(
+            operation_state,
+            ChangeOperationState::Committed | ChangeOperationState::RolledBack
+        ),
+        failure_code: journal.failure_code,
+        backup_snapshot_id: Some(journal.backup_snapshot_id),
+    })
+}
+
+fn state_from_journal(status: JournalStatus, failure_code: Option<&str>) -> ChangeOperationState {
     match status {
         JournalStatus::Prepared | JournalStatus::Applying | JournalStatus::Verifying => {
             ChangeOperationState::RecoveryRequired
         }
         JournalStatus::Committed => ChangeOperationState::Committed,
+        JournalStatus::RolledBack if failure_code == Some("RECOVERED_INCOMPLETE_OPERATION") => {
+            ChangeOperationState::RolledBack
+        }
         JournalStatus::RolledBack => ChangeOperationState::Failed,
         JournalStatus::RecoveryRequired => ChangeOperationState::RecoveryRequired,
     }
@@ -381,6 +442,28 @@ impl WriteAuthority for RegistryWriteAuthority<'_> {
             observed_revision: resolved.session.observed_revision,
             canonical_path: resolved.canonical_path,
             write_enabled: resolved.session.capabilities.write,
+            stable_device_identity: resolved.session.capabilities.stable_device_identity,
+        })
+    }
+}
+
+struct RegistryRecoveryAuthority<'a> {
+    registry: &'a RootRegistry,
+}
+
+impl RecoveryAuthority for RegistryRecoveryAuthority<'_> {
+    fn resolve_for_recovery(
+        &self,
+        root_id: &RootId,
+    ) -> Result<ApprovedRecoveryRoot, AuthorityError> {
+        let resolved = self
+            .registry
+            .resolve(root_id)
+            .map_err(map_authority_error)?;
+        Ok(ApprovedRecoveryRoot {
+            root_id: resolved.session.root_id,
+            device_fingerprint: resolved.session.device_fingerprint,
+            canonical_path: resolved.canonical_path,
             stable_device_identity: resolved.session.capabilities.stable_device_identity,
         })
     }
@@ -410,6 +493,7 @@ pub enum WriteRuntimeError {
     DuplicatePlan,
     PlanLimitReached,
     ApprovalRequired,
+    RecoveryApprovalRequired,
     PlanConsumed,
     InvalidTransition,
     Executor(ExecutorError),
@@ -430,7 +514,7 @@ impl WriteRuntimeError {
             Self::OperationNotFound => "OPERATION_NOT_FOUND",
             Self::DuplicatePlan => "DUPLICATE_PLAN",
             Self::PlanLimitReached => "PLAN_LIMIT_REACHED",
-            Self::ApprovalRequired => "APPROVAL_REQUIRED",
+            Self::ApprovalRequired | Self::RecoveryApprovalRequired => "APPROVAL_REQUIRED",
             Self::PlanConsumed => "PLAN_CONSUMED",
             Self::InvalidTransition => "INVALID_OPERATION_STATE",
             Self::Executor(error) => error.code(),
@@ -456,6 +540,9 @@ impl std::fmt::Display for WriteRuntimeError {
                 Self::DuplicatePlan => "the same plan is already registered",
                 Self::PlanLimitReached => "too many change plans are retained in this session",
                 Self::ApprovalRequired => "apply requires approval of the exact displayed plan ID",
+                Self::RecoveryApprovalRequired => {
+                    "recovery requires approval of the exact displayed operation ID"
+                }
                 Self::PlanConsumed => "change plan has already been applied or attempted",
                 Self::InvalidTransition => "change operation is in an invalid state",
                 Self::Io(_) | Self::Executor(_) => unreachable!(),
@@ -518,6 +605,21 @@ mod tests {
             },
         )
         .unwrap()
+    }
+
+    #[test]
+    fn only_an_explicit_recovery_rollback_is_reported_as_recovered() {
+        assert_eq!(
+            state_from_journal(
+                JournalStatus::RolledBack,
+                Some("RECOVERED_INCOMPLETE_OPERATION"),
+            ),
+            ChangeOperationState::RolledBack
+        );
+        assert_eq!(
+            state_from_journal(JournalStatus::RolledBack, Some("SOURCE_CHANGED")),
+            ChangeOperationState::Failed
+        );
     }
 
     #[test]
