@@ -1371,10 +1371,7 @@ fn same_file_identity(file: &File, expected: &JournalFileIdentity) -> Result<boo
     Ok(file_identity(file)? == *expected)
 }
 
-fn recovery_identity_matches(
-    actual: &JournalFileIdentity,
-    expected: &JournalFileIdentity,
-) -> bool {
+fn recovery_identity_matches(actual: &JournalFileIdentity, expected: &JournalFileIdentity) -> bool {
     actual.device == expected.device
         && actual.inode == expected.inode
         && actual.byte_size == expected.byte_size
@@ -1463,8 +1460,8 @@ fn quarantine_and_remove_entry(
     }
 
     let verification = (|| {
-        let mut quarantined = open_regular_entry(parent, quarantine_name)?
-            .ok_or(ExecutorError::RecoveryRequired)?;
+        let mut quarantined =
+            open_regular_entry(parent, quarantine_name)?.ok_or(ExecutorError::RecoveryRequired)?;
         let quarantined_identity = file_identity(&quarantined)?;
         if !recovery_identity_matches(&quarantined_identity, expected_identity)
             || !recovery_identity_matches(&quarantined_identity, &opened_identity)
@@ -1819,16 +1816,17 @@ fn read_journal(path: &Path) -> Result<OperationJournal, ExecutorError> {
     if !file.metadata().map_err(ExecutorError::io)?.is_file() {
         return Err(ExecutorError::UnsafePath);
     }
-    let value: serde_json::Value = serde_json::from_reader(file)
-        .map_err(|error| ExecutorError::Journal(error.to_string()))?;
+    let value: serde_json::Value =
+        serde_json::from_reader(file).map_err(|error| ExecutorError::Journal(error.to_string()))?;
     let schema = value
         .get("schema")
         .and_then(serde_json::Value::as_str)
         .ok_or(ExecutorError::InvalidJournal)?
         .to_owned();
     match schema.as_str() {
-        JOURNAL_SCHEMA => serde_json::from_value(value)
-            .map_err(|error| ExecutorError::Journal(error.to_string())),
+        JOURNAL_SCHEMA => {
+            serde_json::from_value(value).map_err(|error| ExecutorError::Journal(error.to_string()))
+        }
         LEGACY_JOURNAL_SCHEMA => {
             let legacy: LegacyOperationJournal = serde_json::from_value(value)
                 .map_err(|error| ExecutorError::Journal(error.to_string()))?;
@@ -1849,9 +1847,7 @@ fn validate_standalone_journal(
             journal.recovery_binding == LEGACY_RECOVERY_BINDING
                 && matches!(
                     journal.status,
-                    JournalStatus::Committed
-                        | JournalStatus::RolledBack
-                        | JournalStatus::Abandoned
+                    JournalStatus::Committed | JournalStatus::RolledBack | JournalStatus::Abandoned
                 )
                 && (journal.status != JournalStatus::Abandoned
                     || journal.failure_code.as_deref() == Some(LEGACY_RECOVERY_FAILURE))
@@ -1962,9 +1958,7 @@ fn validate_journal(
             journal.recovery_binding == LEGACY_RECOVERY_BINDING
                 && matches!(
                     journal.status,
-                    JournalStatus::Committed
-                        | JournalStatus::RolledBack
-                        | JournalStatus::Abandoned
+                    JournalStatus::Committed | JournalStatus::RolledBack | JournalStatus::Abandoned
                 )
         }
         _ => false,
@@ -2365,12 +2359,10 @@ mod tests {
             )
             .unwrap();
 
-            let snapshot_directory = self.local.join("backups").join(
-                snapshot_id
-                    .as_str()
-                    .strip_prefix("snapshot:v1:")
-                    .unwrap(),
-            );
+            let snapshot_directory = self
+                .local
+                .join("backups")
+                .join(snapshot_id.as_str().strip_prefix("snapshot:v1:").unwrap());
             let backup_file = snapshot_directory
                 .join("files")
                 .join(self.plan.operation.source.relative_path.as_str());
@@ -2536,8 +2528,7 @@ mod tests {
         assert_eq!(fs::read(&legacy_manifest_path).unwrap(), legacy_manifest);
         assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
 
-        let independent_plan =
-            fixture.plan_for_destination("SET/PROJECT/independent.wav", 31);
+        let independent_plan = fixture.plan_for_destination("SET/PROJECT/independent.wav", 31);
         let result = executor
             .execute(&independent_plan, &fixture.authority)
             .unwrap();
@@ -2802,11 +2793,7 @@ mod tests {
         assert!(pending.destination_file_identity.is_some());
 
         let recovered = executor
-            .recover_incomplete_operation(
-                &fixture.plan.root_id,
-                &operation_id,
-                &fixture.authority,
-            )
+            .recover_incomplete_operation(&fixture.plan.root_id, &operation_id, &fixture.authority)
             .unwrap();
 
         assert_eq!(recovered.status, JournalStatus::RolledBack);
