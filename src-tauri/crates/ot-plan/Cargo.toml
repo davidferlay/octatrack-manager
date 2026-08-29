@@ -1,0 +1,12 @@
+[package]
+name = "ot-plan"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+ot-domain = { path = "../ot-domain" }
+sha2 = "=0.10.9"
+
+[lib]
+path = "src/lib.rs"

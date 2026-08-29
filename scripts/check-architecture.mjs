@@ -35,6 +35,23 @@ const dependencyRules = new Map([
     "ot-audio",
     ["ot-domain", "serde", "serde_json", "sha2", "symphonia"],
   ],
+  ["ot-plan", ["ot-domain", "sha2"]],
+  [
+    "ot-backup",
+    ["ot-domain", "ot-plan", "serde", "serde_json", "sha2"],
+  ],
+  [
+    "ot-executor",
+    [
+      "fs2",
+      "ot-backup",
+      "ot-domain",
+      "ot-plan",
+      "serde",
+      "serde_json",
+      "sha2",
+    ],
+  ],
   [
     "ot-application",
     ["ot-codec-ports", "ot-domain", "ot-storage-ports"],
@@ -45,6 +62,8 @@ const devDependencyRules = new Map(
 );
 devDependencyRules.set("ot-catalog", ["tempfile"]);
 devDependencyRules.set("ot-audio", ["tempfile"]);
+devDependencyRules.set("ot-backup", ["tempfile"]);
+devDependencyRules.set("ot-executor", ["tempfile"]);
 const allowedCompositionDependencies = new Set([
   "ot-application",
   "ot-audio",

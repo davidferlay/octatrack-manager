@@ -7,6 +7,9 @@ members = [
     "crates/ot-application",
     "crates/ot-catalog",
     "crates/ot-audio",
+    "crates/ot-plan",
+    "crates/ot-backup",
+    "crates/ot-executor",
 ]
 resolver = "2"
 

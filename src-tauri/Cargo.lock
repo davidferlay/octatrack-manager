@@ -2573,6 +2573,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ot-backup"
+version = "0.1.0"
+dependencies = [
+ "ot-domain",
+ "ot-plan",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
 name = "ot-catalog"
 version = "0.1.0"
 dependencies = [
@@ -2592,6 +2604,28 @@ dependencies = [
 [[package]]
 name = "ot-domain"
 version = "0.1.0"
+
+[[package]]
+name = "ot-executor"
+version = "0.1.0"
+dependencies = [
+ "fs2",
+ "ot-backup",
+ "ot-domain",
+ "ot-plan",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
+name = "ot-plan"
+version = "0.1.0"
+dependencies = [
+ "ot-domain",
+ "sha2",
+]
 
 [[package]]
 name = "ot-storage-ports"
