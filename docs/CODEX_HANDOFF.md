@@ -78,7 +78,9 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - UI4 Notes Inspector: #36マージ済み
 - M4-A transaction boundary hardening: #37マージ済み
 - UI5 Usage Graph: #38マージ済み
-- 現在のmain基準SHA: `dc83ff0f5d45936ec8ab3ec4c463fa7f921119e9`
+- M4-B approved additive copy／live write grant: #39マージ済み
+- UI6 MasterOCTa branding rename artifacts: #40マージ済み
+- 現在のmain基準SHA: `44554d0c27e30f08b1d7c743fd31960cc2c07363`
 - M2: 完了
 - M3-A: 完了
 - M3-B: 完了
@@ -92,9 +94,10 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - M3-E3: 完了
 - M3: 完了
 - M4-A: 完了
-- 現在の作業: M4-B production authority and approved apply vertical slice
+- M4-B: 完了（Gate B recovery実行は未完了）
+- 現在の作業: 全体セキュリティ再監査とGate B残条件の評価
 - SQLite schema: v5（M3-E1で追加）
-- 次の機能実装: M4-Bマージ後、Gate Bのproduction recovery導線とreview済みclone smokeを
+- 次の機能実装: Gate Bのproduction recovery導線とreview済みclone smokeを
   残条件として評価し、未充足ならM5より先に補完する
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
