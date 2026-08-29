@@ -1,0 +1,102 @@
+.mo-usage-graph {
+  display: grid;
+  gap: var(--mo-space-3);
+  padding-bottom: var(--mo-space-4);
+  border-bottom: 1px solid var(--mo-border);
+}
+
+.mo-usage-graph__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--mo-space-2);
+}
+
+.mo-usage-graph__heading > p {
+  margin: 0;
+  color: var(--mo-text-muted);
+  font-size: var(--mo-font-size-xs);
+  font-weight: var(--mo-font-weight-bold);
+  letter-spacing: var(--mo-letter-spacing-wide);
+  text-transform: uppercase;
+}
+
+.mo-usage-graph__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mo-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--mo-text-muted);
+  font-size: 0.78rem;
+}
+
+.mo-usage-graph__summary [data-tone='audible'] {
+  color: var(--mo-success);
+}
+
+.mo-usage-graph__summary [data-tone='missing'] {
+  color: var(--mo-danger);
+}
+
+.mo-usage-graph__empty,
+.mo-usage-graph__boundary {
+  margin: 0;
+  color: var(--mo-text-muted);
+  font-size: 0.78rem;
+}
+
+.mo-usage-graph__list {
+  display: grid;
+  gap: var(--mo-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mo-usage-graph__list > li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--mo-space-2);
+  align-items: start;
+  min-width: 0;
+}
+
+.mo-usage-graph__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mo-space-1);
+}
+
+.mo-usage-graph__badge {
+  display: inline-block;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid var(--mo-border);
+  border-radius: var(--mo-radius-sm);
+  color: var(--mo-text-muted);
+  font-size: 0.7rem;
+  font-weight: var(--mo-font-weight-bold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.mo-usage-graph__badge[data-audible='true'] {
+  border-color: color-mix(in srgb, var(--mo-success) 55%, transparent);
+  color: var(--mo-success);
+}
+
+.mo-usage-graph__badge[data-tone='missing'] {
+  border-color: color-mix(in srgb, var(--mo-danger) 55%, transparent);
+  color: var(--mo-danger);
+}
+
+.mo-usage-graph__detail {
+  min-width: 0;
+  color: var(--mo-text);
+  font-size: 0.82rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}

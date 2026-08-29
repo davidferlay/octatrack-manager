@@ -1,6 +1,6 @@
 # Design System Migration
 
-Status: Phase A–UI3 on main; **UI4 Notes / Inspector in progress**  
+Status: Phase A–UI4 on main; **UI5 Usage Graph in progress**
 Updated: 2026-08-29
 
 ## Purpose
@@ -161,7 +161,7 @@ Phase D  UI6 Branding → DS7 Legacy CSS removal
   region chrome. Relative paths only; selection clears on source/location change.
 - **Out of scope:** legacy `AudioPoolPage` DnD rewrite, transfers, CSS deletion (DS7).
 
-### PR-UI4 — Notes / Inspector (in progress)
+### PR-UI4 — Notes / Inspector (done)
 
 - Add `features/inspector/InspectorPane` for AppShell right slot (waveform +
   tags/notes chrome). Opaque AssetId / relative paths only.
@@ -170,11 +170,22 @@ Phase D  UI6 Branding → DS7 Legacy CSS removal
   Inspector and hides the inline inspector column.
 - **Out of scope:** Usage Graph (UI5), Change Drawer, legacy ProjectDetail rewrite.
 
+### PR-UI5 — Usage Graph (in progress)
+
+- Expose catalog `usage_edges` on `LibrarySnapshot` DTO (relative paths only).
+- Add `features/usage/UsageGraphPanel` in AppShell Inspector (between waveform
+  and tags/notes): filter edges by selected file relative path (case-insensitive);
+  show used / referenced / missing summaries; distinguish Working (.work) vs
+  Saved (.strd); machine/lock detail lines. Also shown in the inline catalog
+  inspector for parity.
+- **Out of scope:** Change Drawer, physical delete / unreferenced proof, legacy
+  ProjectDetail / AudioFileTable rewrite, slot-assignment-only badges beyond
+  usage edges.
+
 ### Later (documented only until started)
 
 | PR | Focus |
 |----|--------|
-| UI5 | Usage Graph UI |
 | UI6 | Branding rename artifacts only |
 | DS7 | Remove unused `--elektron-*` and legacy classes; shrink App.css |
 
@@ -199,6 +210,9 @@ Project vs Library regions are distinct on AppShell Main.
 
 **After UI4:** AppShell Inspector hosts waveform + manual tags/notes for the
 selected catalog asset; inline catalog inspector column is unused in the shell.
+
+**After UI5:** Inspector also shows the read-only catalog Usage Graph for the
+selected file (relative-path-filtered usage edges).
 
 App.css is not “deleted”; it remains the legacy stylesheet until DS7.
 

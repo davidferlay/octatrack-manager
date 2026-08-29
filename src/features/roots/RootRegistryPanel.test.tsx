@@ -43,6 +43,20 @@ function fakeApi(): RootApi {
         byteSize: 2048,
         storageScope: "set_audio_pool",
       }],
+      usageEdges: [{
+        bankDocumentRelativePath: "LIVE_SET/PROJECT_A/bank01.work",
+        projectDocumentRelativePath: "LIVE_SET/PROJECT_A/project.work",
+        slotKind: "static",
+        slotNumber: 1,
+        usageKind: "machine",
+        trackIndex: 0,
+        partIndex: 0,
+        patternIndex: null,
+        stepIndex: null,
+        audible: true,
+        referencedFileRelativePath: "LIVE_SET/AUDIO/KICK.wav",
+        referenceStatus: "resolved",
+      }],
     }),
   };
 }
@@ -137,6 +151,11 @@ describe("RootRegistryPanel", () => {
     expect(screen.getByDisplayValue("Shell note")).toBeInTheDocument();
     expect(inspector).toHaveTextContent("KICK.wav");
     expect(inspector).toHaveTextContent("LIVE_SET/AUDIO/KICK.wav");
+    expect(
+      screen.getByText(/PROJECT_A · Bank A \(1\) · S001 · Part 1 · T1 · Machine · Working/),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Usage graph")).toBeInTheDocument();
+    expect(screen.getByLabelText("Usage summary")).toHaveTextContent("1 used");
     expect(audioClient.getWaveform).toHaveBeenCalledWith(
       "root-opaque",
       "asset:v1:opaque",

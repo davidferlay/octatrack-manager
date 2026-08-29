@@ -9,7 +9,8 @@ use ot_application::{
 use ot_audio::AudioError;
 use ot_domain::{
     ContentHash, FileInstance, InvalidManualMetadata, LibraryProject, LibrarySet, LibrarySnapshot,
-    ManualAssetMetadata, ManualNote, ManualTag, RootId, SampleStorageScope,
+    ManualAssetMetadata, ManualNote, ManualTag, RootId, SampleReferenceStatus, SampleSlotKind,
+    SampleStorageScope, SampleUsageEdge, SampleUsageKind,
 };
 use ot_storage_ports::{CatalogError, CatalogRootIdentity, CatalogRootObservation};
 use serde::{Deserialize, Serialize};
@@ -143,6 +144,46 @@ pub struct LibrarySnapshotDto {
     sets: Vec<LibrarySetDto>,
     standalone_projects: Vec<LibraryProjectDto>,
     audio_files: Vec<LibraryAudioFileDto>,
+    /// Catalog usage edges (relative paths only). UI5 Usage Graph.
+    usage_edges: Vec<SampleUsageEdgeDto>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SampleUsageEdgeDto {
+    bank_document_relative_path: String,
+    project_document_relative_path: String,
+    slot_kind: &'static str,
+    slot_number: u16,
+    usage_kind: &'static str,
+    track_index: u8,
+    part_index: Option<u8>,
+    pattern_index: Option<u8>,
+    step_index: Option<u8>,
+    audible: bool,
+    referenced_file_relative_path: Option<String>,
+    reference_status: &'static str,
+}
+
+impl SampleUsageEdgeDto {
+    fn from_edge(edge: SampleUsageEdge) -> Self {
+        Self {
+            bank_document_relative_path: edge.bank_document_relative_path.as_str().to_owned(),
+            project_document_relative_path: edge.project_document_relative_path.as_str().to_owned(),
+            slot_kind: slot_kind_name(edge.slot.kind()),
+            slot_number: edge.slot.number(),
+            usage_kind: usage_kind_name(edge.usage_kind),
+            track_index: edge.track_index,
+            part_index: edge.part_index,
+            pattern_index: edge.pattern_index,
+            step_index: edge.step_index,
+            audible: edge.audible,
+            referenced_file_relative_path: edge
+                .referenced_file_relative_path
+                .map(|path| path.as_str().to_owned()),
+            reference_status: reference_status_name(edge.reference_status),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -185,6 +226,11 @@ impl LibrarySnapshotDto {
             .iter()
             .map(|file| LibraryAudioFileDto::from_catalog_file(root_identity, file))
             .collect();
+        let usage_edges = snapshot
+            .usage_edges
+            .into_iter()
+            .map(SampleUsageEdgeDto::from_edge)
+            .collect();
         Self {
             sets: snapshot.sets.into_iter().map(Into::into).collect(),
             standalone_projects: snapshot
@@ -193,6 +239,7 @@ impl LibrarySnapshotDto {
                 .map(Into::into)
                 .collect(),
             audio_files,
+            usage_edges,
         }
     }
 }
@@ -228,6 +275,29 @@ fn storage_scope_name(scope: SampleStorageScope) -> &'static str {
         SampleStorageScope::SetAudioPool => "set_audio_pool",
         SampleStorageScope::ProjectLocal => "project_local",
         SampleStorageScope::Unclassified => "unclassified",
+    }
+}
+
+fn slot_kind_name(kind: SampleSlotKind) -> &'static str {
+    match kind {
+        SampleSlotKind::Static => "static",
+        SampleSlotKind::Flex => "flex",
+    }
+}
+
+fn usage_kind_name(kind: SampleUsageKind) -> &'static str {
+    match kind {
+        SampleUsageKind::Machine => "machine",
+        SampleUsageKind::SampleLock => "sample_lock",
+    }
+}
+
+fn reference_status_name(status: SampleReferenceStatus) -> &'static str {
+    match status {
+        SampleReferenceStatus::Resolved => "resolved",
+        SampleReferenceStatus::Missing => "missing",
+        SampleReferenceStatus::InvalidPath => "invalid_path",
+        SampleReferenceStatus::UnassignedSlot => "unassigned_slot",
     }
 }
 
@@ -1174,14 +1244,97 @@ mod tests {
             .file_instance_id
             .starts_with("fileinst:v1:"));
         assert!(dto.audio_files[0].asset_id.starts_with("asset:v1:"));
+        assert!(dto.usage_edges.is_empty());
 
         let json = serde_json::to_string(&dto).unwrap();
         assert!(json.contains("audioFiles"));
+        assert!(json.contains("usageEdges"));
         assert!(!json.contains("contentHash"));
         assert!(!json.contains(&content_hash));
         assert!(!json.contains("modifiedAt"));
         assert!(!json.contains(identity.as_str()));
         assert!(!json.contains(root.path().to_str().unwrap()));
+    }
+
+    #[test]
+    fn frontend_snapshot_dto_exposes_usage_edges_with_relative_paths_only() {
+        use ot_domain::{
+            ContentHashFreshness, ParserProvenance, RootRelativePath, SampleSlotId, SampleSlotKind,
+            StateDocument, StateDocumentKind, StateDocumentParseStatus, StateDocumentRole,
+        };
+
+        let identity = CatalogRootIdentity::new(format!("rootfp:v1:{}", "a".repeat(64))).unwrap();
+        let audio = FileInstance {
+            relative_path: RootRelativePath::parse("SET_A/AUDIO/kick.wav").unwrap(),
+            content_hash: ContentHash::parse(format!("sha256:{}", "c".repeat(64))).unwrap(),
+            byte_size: 12,
+            modified_at_unix_ns: Some(1),
+            storage_scope: SampleStorageScope::SetAudioPool,
+            hash_freshness: ContentHashFreshness::ComputedThisScan,
+        };
+        let project_document = RootRelativePath::parse("SET_A/PROJECT_A/project.work").unwrap();
+        let bank_document = RootRelativePath::parse("SET_A/PROJECT_A/bank01.work").unwrap();
+        let provenance = ParserProvenance {
+            parser_name: "fixture".into(),
+            parser_revision: "1".into(),
+            source_version: None,
+        };
+        let snapshot = LibrarySnapshot {
+            sets: vec![LibrarySet {
+                display_name: "SET_A".into(),
+                relative_path: RootRelativePath::parse("SET_A").unwrap(),
+                has_audio_pool: true,
+                projects: vec![LibraryProject {
+                    display_name: "PROJECT_A".into(),
+                    relative_path: RootRelativePath::parse("SET_A/PROJECT_A").unwrap(),
+                    has_project_file: true,
+                    has_banks: true,
+                }],
+            }],
+            standalone_projects: vec![],
+            audio_assets: vec![],
+            file_instances: vec![audio.clone()],
+            state_documents: vec![StateDocument {
+                project_relative_path: RootRelativePath::parse("SET_A/PROJECT_A").unwrap(),
+                source_relative_path: bank_document.clone(),
+                kind: StateDocumentKind::Bank,
+                role: StateDocumentRole::Working,
+                bank_index: Some(0),
+                parse_status: StateDocumentParseStatus::Parsed,
+                parser_provenance: provenance,
+            }],
+            slot_assignments: vec![],
+            usage_edges: vec![SampleUsageEdge {
+                bank_document_relative_path: bank_document,
+                project_document_relative_path: project_document,
+                slot: SampleSlotId::new(SampleSlotKind::Static, 1).unwrap(),
+                usage_kind: SampleUsageKind::Machine,
+                track_index: 0,
+                part_index: Some(0),
+                pattern_index: None,
+                step_index: None,
+                audible: true,
+                referenced_file_relative_path: Some(audio.relative_path.clone()),
+                reference_status: SampleReferenceStatus::Resolved,
+            }],
+            sample_settings: vec![],
+        };
+
+        let dto = LibrarySnapshotDto::from_catalog_snapshot(&identity, snapshot);
+        assert_eq!(dto.usage_edges.len(), 1);
+        assert_eq!(
+            dto.usage_edges[0].referenced_file_relative_path.as_deref(),
+            Some("SET_A/AUDIO/kick.wav")
+        );
+        assert_eq!(dto.usage_edges[0].slot_kind, "static");
+        assert_eq!(dto.usage_edges[0].usage_kind, "machine");
+        assert!(dto.usage_edges[0].audible);
+
+        let json = serde_json::to_string(&dto).unwrap();
+        assert!(json.contains("usageEdges"));
+        assert!(json.contains("SET_A/PROJECT_A/bank01.work"));
+        assert!(!json.contains("/private/"));
+        assert!(!json.contains(identity.as_str()));
     }
 
     #[test]

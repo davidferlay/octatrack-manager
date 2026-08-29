@@ -19,5 +19,9 @@ export type {
   RootApi,
   RootCapabilities,
   RootSession,
+  SampleReferenceStatus,
+  SampleSlotKind,
   SampleStorageScope,
+  SampleUsageEdge,
+  SampleUsageKind,
 } from "./roots";

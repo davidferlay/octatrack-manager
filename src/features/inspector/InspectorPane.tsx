@@ -17,7 +17,7 @@ export interface InspectorPaneProps {
 export function InspectorPane({
   assetLabel = null,
   relativePath = null,
-  emptyMessage = 'Select an audio file to inspect waveform and notes.',
+        emptyMessage = 'Select an audio file to inspect waveform, usage, and notes.',
   children,
 }: InspectorPaneProps) {
   const hasAsset = assetLabel != null && assetLabel !== ''
