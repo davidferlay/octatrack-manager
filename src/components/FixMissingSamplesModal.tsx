@@ -783,7 +783,7 @@ export function FixMissingSamplesModal({
               <div className="missing-samples-header-info">
                 <span className={`fix-confirm-status${resolvedFiles.length === allConfirmRows.length ? " all-resolved" : ""}`}>
                   <strong>{resolvedFiles.length}/{allConfirmRows.length}</strong> missing files found
-                  {sortedConfirmRows.length !== allConfirmRows.length && <span style={{ color: 'var(--elektron-text-secondary)', fontWeight: 400 }}> - showing {sortedConfirmRows.length}</span>}
+                  {sortedConfirmRows.length !== allConfirmRows.length && <span style={{ color: 'var(--mo-text-muted)', fontWeight: 400 }}> - showing {sortedConfirmRows.length}</span>}
                 </span>
                 {foundFilter !== "all" && <span className="filter-badge">Found: {foundFilter === "yes" ? "Yes" : "No"}</span>}
                 {actionFilter !== "all" && <span className="filter-badge">Action: {actionFilter}</span>}

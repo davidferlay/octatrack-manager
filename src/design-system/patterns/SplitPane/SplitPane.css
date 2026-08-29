@@ -1,4 +1,4 @@
-/* Horizontal split shell. Divider visuals may also use .panel-divider until DS7. */
+/* Horizontal split shell. Divider visuals use shared .panel-divider. */
 .mo-split-pane {
   display: flex;
   flex: 1;
@@ -31,4 +31,21 @@
 
 .mo-split-pane__divider {
   flex-shrink: 0;
+}
+
+/* Shared resize handle (AppShell + Audio Pool SplitPane). */
+.panel-divider {
+  width: 4px;
+  background-color: rgba(255, 255, 255, 0.08);
+  cursor: ew-resize;
+  flex-shrink: 0;
+  transition: background-color 0.2s ease;
+}
+
+.panel-divider:hover {
+  background-color: rgba(255, 255, 255, 0.25);
+}
+
+.panel-divider:active {
+  background-color: rgba(255, 255, 255, 0.35);
 }

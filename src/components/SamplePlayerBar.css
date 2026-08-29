@@ -8,9 +8,9 @@
   gap: 0.6rem;
   padding: 0 0.75rem;
   background: rgba(255, 255, 255, 0.06);
-  border-top: 1px solid var(--elektron-border-gray);
+  border-top: 1px solid var(--mo-border);
   font-size: 0.78rem;
-  color: var(--elektron-text-secondary);
+  color: var(--mo-text-muted);
 }
 
 .sample-player-bar.idle {
@@ -29,7 +29,7 @@
   background: none;
   border: none;
   padding: 0;
-  color: var(--elektron-text-primary);
+  color: var(--mo-text);
   font-size: 0.95rem;
   line-height: 1;
   cursor: pointer;
@@ -47,7 +47,7 @@
   text-overflow: ellipsis;
   position: relative;
   top: -1px;
-  color: var(--elektron-text-primary);
+  color: var(--mo-text);
 }
 
 /* Seek: a horizontal line with a vertical playhead browsing across it.
@@ -66,7 +66,7 @@
   left: 0;
   right: 0;
   height: 2px;
-  background: var(--elektron-border-gray);
+  background: var(--mo-border);
 }
 
 .player-seek-fill {
@@ -113,7 +113,7 @@
   gap: 0.25rem;
   font-size: 0.75rem;
   letter-spacing: 0.08em;
-  color: var(--elektron-text-primary);
+  color: var(--mo-text);
   cursor: ns-resize;
   user-select: none;
 }
@@ -136,16 +136,16 @@
   font-family: inherit; /* buttons don't inherit the page font by default — match the VOL span */
   font-size: 0.75rem;
   letter-spacing: 0.08em;
-  color: var(--elektron-text-secondary);
+  color: var(--mo-text-muted);
   cursor: pointer;
 }
-.player-auto.on { color: var(--elektron-text-primary); }
+.player-auto.on { color: var(--mo-text); }
 
 .player-auto-led {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--elektron-border-gray);
+  background: var(--mo-border);
 }
 .player-auto.on .player-auto-led {
   background: #4a9eff;

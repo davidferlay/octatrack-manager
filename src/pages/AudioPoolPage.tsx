@@ -2343,7 +2343,7 @@ export function AudioPoolPage() {
         <div className="modal-overlay" onClick={() => setRenameModal({ isOpen: false, file: null, panel: 'dest', newName: '' })}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3><i className="fas fa-edit" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>Rename</h3>
+              <h3><i className="fas fa-edit" style={{ color: 'var(--mo-accent)', marginRight: '0.5rem' }}></i>Rename</h3>
             </div>
             <div className="modal-body">
               <p>Enter new name for <strong>"{renameModal.file?.name}"</strong>:</p>
@@ -2391,7 +2391,7 @@ export function AudioPoolPage() {
               ) : (
                 <>
                   <p>Are you sure you want to delete <strong>{deleteModal.files.length} items</strong>?</p>
-                  <ul style={{ maxHeight: '150px', overflowY: 'auto', margin: '0.5rem 0', paddingLeft: '1.5rem', fontSize: '0.85rem', color: 'var(--elektron-text-secondary)' }}>
+                  <ul style={{ maxHeight: '150px', overflowY: 'auto', margin: '0.5rem 0', paddingLeft: '1.5rem', fontSize: '0.85rem', color: 'var(--mo-text-muted)' }}>
                     {deleteModal.files.map((f, idx) => (
                       <li key={idx}>{f.name}{f.is_directory ? ' (folder)' : ''}</li>
                     ))}
@@ -2421,7 +2421,7 @@ export function AudioPoolPage() {
         <div className="modal-overlay" onClick={() => setCreateFolderModal({ isOpen: false, panel: 'dest', folderName: '' })}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3><i className="fas fa-folder-plus" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>Create Folder</h3>
+              <h3><i className="fas fa-folder-plus" style={{ color: 'var(--mo-accent)', marginRight: '0.5rem' }}></i>Create Folder</h3>
             </div>
             <div className="modal-body">
               <p>Enter name for the new folder:</p>

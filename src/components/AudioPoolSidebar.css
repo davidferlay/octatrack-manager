@@ -89,7 +89,7 @@
   background: var(--mo-surface-inset);
   flex-wrap: nowrap;
   align-items: center;
-  color: var(--elektron-text-secondary);
+  color: var(--mo-text-muted);
 }
 
 .audio-pool-sidebar .table-wrapper {
@@ -145,7 +145,7 @@
    !important because the base .audio-files-table td rule above would
    otherwise win on source order for that glyph's inherited color. */
 .audio-pool-sidebar .audio-files-table td.col-usage {
-  color: var(--elektron-text-dim) !important;
+  color: var(--mo-text-dim) !important;
 }
 
 .audio-pool-sidebar .audio-files-table tbody tr {

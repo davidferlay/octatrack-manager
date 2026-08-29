@@ -20,7 +20,7 @@
 
 /* Background arc track (unfilled portion) */
 .knob-track {
-  stroke: var(--elektron-text-primary);
+  stroke: var(--mo-text);
   transition: stroke 0.1s ease;
 }
 
@@ -32,7 +32,7 @@
 
 /* Hand indicator */
 .knob-hand {
-  stroke: var(--elektron-text-primary);
+  stroke: var(--mo-text);
   transition: stroke 0.1s ease;
 }
 
@@ -40,7 +40,7 @@
 /* Corner brackets for selection */
 .knob-corners path {
   fill: none;
-  stroke: var(--elektron-text-secondary);
+  stroke: var(--mo-text-muted);
   stroke-width: 1;
 }
 

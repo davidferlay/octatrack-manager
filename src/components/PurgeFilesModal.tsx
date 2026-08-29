@@ -900,8 +900,8 @@ export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsT
         <div className={`modal-header${phase === 'review' ? ' missing-samples-header' : ''}`}>
           <h3>
             {phase === 'review' && <><i className="fas fa-trash"></i> Review planned changes - {units.length} item{units.length !== 1 ? 's' : ''}</>}
-            {phase === 'removing' && <><i className="fas fa-trash" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>{progressingLabel}</>}
-            {phase === 'done' && <><i className="fas fa-trash" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>{doneLabel}</>}
+            {phase === 'removing' && <><i className="fas fa-trash" style={{ color: 'var(--mo-accent)', marginRight: '0.5rem' }}></i>{progressingLabel}</>}
+            {phase === 'done' && <><i className="fas fa-trash" style={{ color: 'var(--mo-accent)', marginRight: '0.5rem' }}></i>{doneLabel}</>}
             {phase === 'error' && 'Error'}
           </h3>
           {phase === 'review' && (
@@ -1019,7 +1019,7 @@ export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsT
             <div className="fix-pool-summary">
               <p className="purge-done-summary">
                 {result.cancelled
-                  ? <i className="fas fa-ban" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>
+                  ? <i className="fas fa-ban" style={{ color: 'var(--mo-accent)', marginRight: '0.5rem' }}></i>
                   : <i className="fas fa-check" style={{ color: '#2ecc71', marginRight: '0.5rem' }}></i>}
                 {result.cancelled && <>Cancelled - <br /></>}
                 {slotsOnly ? (
