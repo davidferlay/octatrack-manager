@@ -1850,16 +1850,19 @@ mod tests {
         let error = enable_write_sync(&registry, &catalog, &write, &root_id).unwrap_err();
 
         assert_eq!(error.code, "WRITE_NOT_SUPPORTED");
-        assert!(!registry
-            .resolve(&root_id)
-            .unwrap()
-            .session
-            .capabilities
-            .write);
+        assert!(
+            !registry
+                .resolve(&root_id)
+                .unwrap()
+                .session
+                .capabilities
+                .write
+        );
         let refreshed = list_library_sync(&registry, &catalog, &root_id).unwrap();
-        assert!(refreshed.state_documents.iter().any(|document| {
-            document.parse_status == StateDocumentParseStatus::Malformed
-        }));
+        assert!(refreshed
+            .state_documents
+            .iter()
+            .any(|document| { document.parse_status == StateDocumentParseStatus::Malformed }));
     }
 
     #[test]
