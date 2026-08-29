@@ -10,9 +10,10 @@ use sha2::{Digest, Sha256};
 use std::fmt;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
-const JOURNAL_SCHEMA: &str = "masterocta-operation-journal:v1";
+const JOURNAL_SCHEMA: &str = "masterocta-operation-journal:v2";
 const OPERATION_ID_PREFIX: &str = "operation:v1:";
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -119,6 +120,11 @@ pub enum JournalStatus {
 pub struct JournalFileIdentity {
     pub device: u64,
     pub inode: u64,
+    pub byte_size: u64,
+    pub modified_seconds: i64,
+    pub modified_nanoseconds: i64,
+    pub changed_seconds: i64,
+    pub changed_nanoseconds: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -190,7 +196,7 @@ impl AdditiveCopyExecutor {
             &plan.operation.destination_relative_path,
             &operation_id,
         )?;
-        if let Err(error) = recover_media_destination(&target, &journal) {
+        if let Err(error) = recover_media_destination(&target, &journal, plan) {
             journal.status = JournalStatus::RecoveryRequired;
             journal.failure_code = Some("DESTINATION_CHANGED".into());
             write_journal(&journal_path, &journal)?;
@@ -384,8 +390,9 @@ impl AdditiveCopyExecutor {
                 );
             }
         };
-        journal.destination_file_identity = Some(media_destination.identity.clone());
-        if let Err(error) = write_journal(&journal_path, &journal) {
+        if let Err(error) =
+            checkpoint_media_destination(&mut media_destination, &mut journal, &journal_path)
+        {
             return self.fail_after_apply(
                 error,
                 &media_destination,
@@ -397,15 +404,20 @@ impl AdditiveCopyExecutor {
         }
 
         if fault == Some(FaultPoint::DestinationPartialWrite) {
-            let partial_result =
-                write_partial_media_payload(&staged_payload, &mut media_destination.file);
+            let mut failure =
+                write_partial_media_payload(&staged_payload, &mut media_destination.file).err();
+            if let Err(error) =
+                checkpoint_media_destination(&mut media_destination, &mut journal, &journal_path)
+            {
+                failure.get_or_insert(error);
+            }
             if simulate_crash {
-                partial_result?;
+                if let Some(error) = failure {
+                    return Err(error);
+                }
                 return Err(ExecutorError::SimulatedCrash);
             }
-            let error = partial_result
-                .err()
-                .unwrap_or(ExecutorError::InjectedFault("during_destination_write"));
+            let error = failure.unwrap_or(ExecutorError::InjectedFault("during_destination_write"));
             return self.fail_after_apply(
                 error,
                 &media_destination,
@@ -416,8 +428,24 @@ impl AdditiveCopyExecutor {
             );
         }
 
-        if let Err(error) =
+        if let Err(copy_error) =
             copy_payload_to_media(&staged_payload, &mut media_destination.file, plan)
+        {
+            let error =
+                checkpoint_media_destination(&mut media_destination, &mut journal, &journal_path)
+                    .err()
+                    .unwrap_or(copy_error);
+            return self.fail_after_apply(
+                error,
+                &media_destination,
+                &staging_base,
+                &operation_id,
+                &journal_path,
+                journal,
+            );
+        }
+        if let Err(error) =
+            checkpoint_media_destination(&mut media_destination, &mut journal, &journal_path)
         {
             return self.fail_after_apply(
                 error,
@@ -428,7 +456,26 @@ impl AdditiveCopyExecutor {
                 journal,
             );
         }
-        if let Err(error) = publish_media_destination(&mut media_destination) {
+        if let Err(publish_error) = publish_media_destination(&mut media_destination) {
+            let error = if media_destination.published {
+                checkpoint_media_destination(&mut media_destination, &mut journal, &journal_path)
+                    .err()
+                    .unwrap_or(publish_error)
+            } else {
+                publish_error
+            };
+            return self.fail_after_apply(
+                error,
+                &media_destination,
+                &staging_base,
+                &operation_id,
+                &journal_path,
+                journal,
+            );
+        }
+        if let Err(error) =
+            checkpoint_media_destination(&mut media_destination, &mut journal, &journal_path)
+        {
             return self.fail_after_apply(
                 error,
                 &media_destination,
@@ -837,16 +884,30 @@ fn ensure_root_capacity(parent: &File, required_bytes: u64) -> Result<(), Execut
 }
 
 fn file_identity(file: &File) -> Result<JournalFileIdentity, ExecutorError> {
-    let stat = descriptor_fs::fstat(file)
-        .map_err(|error| ExecutorError::io(std::io::Error::from(error)))?;
+    let metadata = file.metadata().map_err(ExecutorError::io)?;
     let identity = JournalFileIdentity {
-        device: stat.st_dev as u64,
-        inode: stat.st_ino as u64,
+        device: metadata.dev(),
+        inode: metadata.ino(),
+        byte_size: metadata.len(),
+        modified_seconds: metadata.mtime(),
+        modified_nanoseconds: metadata.mtime_nsec(),
+        changed_seconds: metadata.ctime(),
+        changed_nanoseconds: metadata.ctime_nsec(),
     };
     if identity.inode == 0 {
         return Err(ExecutorError::UnsafePath);
     }
     Ok(identity)
+}
+
+fn checkpoint_media_destination(
+    destination: &mut MediaDestination,
+    journal: &mut OperationJournal,
+    journal_path: &Path,
+) -> Result<(), ExecutorError> {
+    destination.identity = file_identity(&destination.file)?;
+    journal.destination_file_identity = Some(destination.identity.clone());
+    write_journal(journal_path, journal)
 }
 
 fn create_media_destination(target: DestinationTarget) -> Result<MediaDestination, ExecutorError> {
@@ -982,20 +1043,24 @@ fn rollback_media_destination(destination: &MediaDestination) -> Result<(), Exec
 fn recover_media_destination(
     target: &DestinationTarget,
     journal: &OperationJournal,
+    plan: &ChangePlan,
 ) -> Result<(), ExecutorError> {
     let destination = open_regular_entry(&target.parent, &target.file_name)?;
     let temporary = open_regular_entry(&target.parent, &target.temporary_name)?;
-    let (name, file) = match (destination, temporary) {
+    let (name, mut file, published) = match (destination, temporary) {
         (None, None) => return Ok(()),
         (Some(_), Some(_)) => return Err(ExecutorError::RecoveryRequired),
-        (Some(file), None) => (&target.file_name, file),
-        (None, Some(file)) => (&target.temporary_name, file),
+        (Some(file), None) => (&target.file_name, file, true),
+        (None, Some(file)) => (&target.temporary_name, file, false),
     };
     let expected = journal
         .destination_file_identity
         .as_ref()
         .ok_or(ExecutorError::RecoveryRequired)?;
     if !same_file_identity(&file, expected)? {
+        return Err(ExecutorError::RecoveryRequired);
+    }
+    if published && verify_open_file(&mut file, plan).is_err() {
         return Err(ExecutorError::RecoveryRequired);
     }
     descriptor_fs::unlinkat(&target.parent, name.as_str(), AtFlags::empty())
@@ -1823,16 +1888,15 @@ mod tests {
             Err(ExecutorError::SimulatedCrash)
         ));
         fs::remove_file(&fixture.destination).unwrap();
-        fs::write(&fixture.destination, b"unrelated replacement").unwrap();
+        let replacement = vec![b'x'; fixture.source_bytes.len()];
+        fs::write(&fixture.destination, &replacement).unwrap();
 
-        assert!(matches!(
-            executor.recover_incomplete(&fixture.plan, &fixture.authority),
-            Err(ExecutorError::RecoveryRequired)
-        ));
-        assert_eq!(
-            fs::read(&fixture.destination).unwrap(),
-            b"unrelated replacement"
+        let recovery = executor.recover_incomplete(&fixture.plan, &fixture.authority);
+        assert!(
+            matches!(recovery, Err(ExecutorError::RecoveryRequired)),
+            "unexpected recovery result: {recovery:?}"
         );
+        assert_eq!(fs::read(&fixture.destination).unwrap(), replacement);
         assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
     }
 
