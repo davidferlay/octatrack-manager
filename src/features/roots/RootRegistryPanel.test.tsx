@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { RootApi, RootSession } from "../../api";
+import type { AudioApi, MetadataApi, RootApi, RootSession } from "../../api";
 import { RootRegistryPanel } from "./RootRegistryPanel";
 
 const session: RootSession = {
@@ -88,8 +88,63 @@ describe("RootRegistryPanel", () => {
     expect(await screen.findByText("PROJECT_A")).toBeInTheDocument();
     expect(screen.getByText("KICK.wav")).toBeInTheDocument();
     expect(screen.getByText("LIVE_SET/AUDIO/KICK.wav")).toBeInTheDocument();
+    expect(screen.getByLabelText("Inspector")).toBeInTheDocument();
+    expect(screen.getByText("Notes & details")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Asset inspector")).not.toBeInTheDocument();
     expect(screen.queryByText(rawPath)).not.toBeInTheDocument();
     expect(api.registerRoot).toHaveBeenCalledWith(rawPath);
     expect(api.listLibrary).toHaveBeenCalledWith("root-opaque");
+  });
+
+  it("loads shell Inspector waveform and metadata for the selected asset", async () => {
+    const api = fakeApi();
+    const audioClient: AudioApi = {
+      getWaveform: vi.fn().mockResolvedValue({
+        durationSeconds: 1,
+        sampleRate: 44100,
+        channels: 1,
+        peaks: [{ min: -0.2, max: 0.4 }],
+      }),
+      createPreviewToken: vi.fn(),
+      readPreview: vi.fn(),
+    };
+    const metadataClient: MetadataApi = {
+      loadManualAssetMetadata: vi.fn().mockResolvedValue({
+        tags: ["kick"],
+        note: "Shell note",
+      }),
+      replaceManualAssetMetadata: vi.fn(),
+    };
+
+    render(
+      <RootRegistryPanel
+        api={api}
+        audioClient={audioClient}
+        metadataClient={metadataClient}
+        selectDirectory={vi.fn().mockResolvedValue("/tmp/fixture-root")}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose root..." }));
+    expect(await screen.findByText("KICK.wav")).toBeInTheDocument();
+
+    const inspector = screen.getByLabelText("Inspector");
+    expect(inspector).toHaveTextContent("Select an audio file to inspect");
+
+    fireEvent.click(screen.getByRole("button", { name: /KICK\.wav/ }));
+
+    expect(await screen.findByDisplayValue("kick")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Shell note")).toBeInTheDocument();
+    expect(inspector).toHaveTextContent("KICK.wav");
+    expect(inspector).toHaveTextContent("LIVE_SET/AUDIO/KICK.wav");
+    expect(audioClient.getWaveform).toHaveBeenCalledWith(
+      "root-opaque",
+      "asset:v1:opaque",
+      640,
+    );
+    expect(metadataClient.loadManualAssetMetadata).toHaveBeenCalledWith(
+      "root-opaque",
+      "asset:v1:opaque",
+    );
   });
 });

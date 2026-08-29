@@ -55,6 +55,10 @@
   min-height: 15rem;
 }
 
+.catalog-library-detail--files-only {
+  grid-template-columns: 1fr;
+}
+
 .catalog-library-column {
   min-width: 0;
   padding: var(--mo-space-3);

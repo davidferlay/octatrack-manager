@@ -39,7 +39,7 @@
 }
 
 .mo-app-shell__inspector {
-  padding: 0.85rem 0.9rem;
+  padding: 0;
   border-left: 1px solid var(--mo-border);
   background: color-mix(in srgb, var(--mo-surface-1) 40%, transparent);
 }

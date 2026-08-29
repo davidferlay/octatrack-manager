@@ -3,4 +3,8 @@ export {
   type AudioLibraryProps,
   type AudioLibraryScope,
 } from './AudioLibrary'
-export { CatalogLibraryBrowser } from './CatalogLibraryBrowser'
+export {
+  CatalogLibraryBrowser,
+  type CatalogAssetSelection,
+  type CatalogInspectorPlacement,
+} from './CatalogLibraryBrowser'

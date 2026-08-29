@@ -7,7 +7,7 @@ export interface AppShellProps extends HTMLAttributes<HTMLElement> {
   sources: ReactNode
   /** Center Library / Project workspace. */
   main: ReactNode
-  /** Optional right Inspector; omitted until UI4. */
+  /** Optional right Inspector (UI4 Notes / waveform / metadata). */
   inspector?: ReactNode
   /** Controlled Sources pane width %. Omit for uncontrolled resize. */
   sourcesSize?: number
