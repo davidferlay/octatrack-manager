@@ -978,9 +978,6 @@ fn enable_write_sync(
     root_id: &RootId,
 ) -> Result<RootSessionDto, ApiError> {
     let resolved = registry.resolve(root_id)?;
-    let identity = catalog_identity(&resolved.session)?;
-    let snapshot = load_library_snapshot(catalog, &identity)?;
-    ensure_write_eligible(&snapshot)?;
     let recovery = write
         .recovery_required(&resolved.session.device_fingerprint)
         .map_err(write_runtime_error)?;
@@ -991,6 +988,9 @@ fn enable_write_sync(
             false,
         ));
     }
+    let (live_session, live_snapshot) = scan_library_sync(registry, catalog, root_id)?;
+    store_library_snapshot(catalog, &live_session, &live_snapshot)?;
+    ensure_write_eligible(&live_snapshot)?;
     registry
         .enable_write(root_id)
         .map(Into::into)
@@ -1827,6 +1827,39 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(consumed.code, "PLAN_CONSUMED");
+    }
+
+    #[test]
+    fn write_grant_rechecks_live_format_eligibility() {
+        let root = TempDir::new().unwrap();
+        let audio_pool = root.path().join("SET_A/AUDIO");
+        fs::create_dir_all(&audio_pool).unwrap();
+        write_test_wav(&audio_pool.join("kick.wav"));
+        let registry = registry();
+        let data_directory = TempDir::new().unwrap();
+        let catalog = open_shared_catalog(data_directory.path()).unwrap();
+        let write = open_shared_write_runtime(data_directory.path()).unwrap();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+
+        let project = root.path().join("SET_A/PROJECT_A");
+        fs::create_dir(&project).unwrap();
+        fs::write(project.join("project.work"), b"synthetic malformed project").unwrap();
+
+        let error = enable_write_sync(&registry, &catalog, &write, &root_id).unwrap_err();
+
+        assert_eq!(error.code, "WRITE_NOT_SUPPORTED");
+        assert!(!registry
+            .resolve(&root_id)
+            .unwrap()
+            .session
+            .capabilities
+            .write);
+        let refreshed = list_library_sync(&registry, &catalog, &root_id).unwrap();
+        assert!(refreshed.state_documents.iter().any(|document| {
+            document.parse_status == StateDocumentParseStatus::Malformed
+        }));
     }
 
     #[test]

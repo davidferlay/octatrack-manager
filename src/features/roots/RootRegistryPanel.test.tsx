@@ -208,4 +208,48 @@ describe("RootRegistryPanel", () => {
     expect(changeClient.recoveryStatus).toHaveBeenCalledTimes(2);
     expect(api.enableWrite).toHaveBeenCalledWith("root-opaque");
   });
+
+  it("blocks root closure while a change request is in flight", async () => {
+    const api = fakeApi();
+    const changeClient = fakeChangeApi();
+    const audioClient: AudioApi = {
+      getWaveform: vi.fn().mockResolvedValue({
+        durationSeconds: 1,
+        sampleRate: 44100,
+        channels: 1,
+        peaks: [{ min: -0.2, max: 0.4 }],
+      }),
+      createPreviewToken: vi.fn(),
+      readPreview: vi.fn(),
+    };
+    const metadataClient: MetadataApi = {
+      loadManualAssetMetadata: vi.fn().mockResolvedValue({ tags: [], note: "" }),
+      replaceManualAssetMetadata: vi.fn(),
+    };
+    vi.mocked(changeClient.planAdditiveCopy).mockImplementation(
+      () => new Promise(() => undefined),
+    );
+    render(
+      <RootRegistryPanel
+        api={api}
+        changeClient={changeClient}
+        audioClient={audioClient}
+        metadataClient={metadataClient}
+        selectDirectory={vi.fn().mockResolvedValue("/tmp/fixture-root")}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose root..." }));
+    expect(await screen.findByText("PROJECT_A")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /KICK\.wav/ }));
+    const closeRoot = screen.getByRole("button", { name: "Close root" });
+    fireEvent.change(screen.getByLabelText("Destination relative path"), {
+      target: { value: "LIVE_SET/PROJECT_A/KICK_COPY.wav" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Review plan" }));
+
+    await waitFor(() => expect(closeRoot).toBeDisabled());
+    fireEvent.click(closeRoot);
+    expect(api.closeRoot).not.toHaveBeenCalled();
+  });
 });

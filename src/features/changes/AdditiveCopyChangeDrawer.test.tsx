@@ -193,4 +193,96 @@ describe("AdditiveCopyChangeDrawer", () => {
     expect(api.getPlan).not.toHaveBeenCalled();
     expect(api.applyChange).not.toHaveBeenCalled();
   });
+
+  it("recovers a committed result after the Apply response is interrupted", async () => {
+    const api = fakeApi();
+    const committed = {
+      schema: "change-status:v1" as const,
+      operationId,
+      planId,
+      state: "committed" as const,
+      recoveryRequired: false,
+      catalogRefreshRequired: false,
+      failureCode: null,
+      backupSnapshotId: `snapshot:v1:${"a".repeat(64)}`,
+    };
+    vi.mocked(api.applyChange).mockRejectedValue(new Error("IPC response interrupted"));
+    vi.mocked(api.changeStatus).mockResolvedValue(committed);
+    const onCommitted = vi.fn();
+    const onRecoveryChange = vi.fn();
+    render(
+      <AdditiveCopyChangeDrawer
+        session={session(true)}
+        selectedAsset={selectedAsset}
+        recovery={recoveryClear}
+        api={api}
+        refreshSession={vi.fn().mockResolvedValue(session(true))}
+        onCommitted={onCommitted}
+        onRecoveryChange={onRecoveryChange}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Destination relative path"), {
+      target: { value: "LIVE_SET/PROJECT_A/KICK_COPY.wav" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Review plan" }));
+    await screen.findByLabelText("Additive copy plan");
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Apply approved plan" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Operation committed");
+    expect(onCommitted).toHaveBeenCalledOnce();
+    expect(onRecoveryChange).toHaveBeenCalledWith(recoveryClear);
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Apply approved plan" })).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent("response was interrupted");
+  });
+
+  it("locks the drawer and reports recovery when an attempted Apply needs recovery", async () => {
+    const api = fakeApi();
+    const recoveryRequired = {
+      schema: "change-recovery-status:v1" as const,
+      recoveryRequired: true,
+      operations: [{
+        schema: "change-status:v1" as const,
+        operationId,
+        planId,
+        state: "recovery_required" as const,
+        recoveryRequired: true,
+        catalogRefreshRequired: true,
+        failureCode: "ROLLBACK_DESTINATION_CHANGED",
+        backupSnapshotId: `snapshot:v1:${"a".repeat(64)}`,
+      }],
+    };
+    vi.mocked(api.applyChange).mockRejectedValue(new Error("recovery required"));
+    vi.mocked(api.changeStatus).mockResolvedValue(recoveryRequired.operations[0]);
+    vi.mocked(api.recoveryStatus).mockResolvedValue(recoveryRequired);
+    const onRecoveryChange = vi.fn();
+    render(
+      <AdditiveCopyChangeDrawer
+        session={session(true)}
+        selectedAsset={selectedAsset}
+        recovery={recoveryClear}
+        api={api}
+        refreshSession={vi.fn().mockResolvedValue(session(true))}
+        onCommitted={vi.fn()}
+        onRecoveryChange={onRecoveryChange}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Destination relative path"), {
+      target: { value: "LIVE_SET/PROJECT_A/KICK_COPY.wav" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Review plan" }));
+    await screen.findByLabelText("Additive copy plan");
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Apply approved plan" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Operation recovery required");
+    expect(screen.getByText("RECOVERY REQUIRED")).toBeInTheDocument();
+    expect(screen.getByText(/incomplete operation exists/)).toBeInTheDocument();
+    expect(screen.getByRole("checkbox")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Review plan" })).toBeDisabled();
+    expect(onRecoveryChange).toHaveBeenCalledWith(recoveryRequired);
+  });
 });

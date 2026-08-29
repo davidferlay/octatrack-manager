@@ -16,8 +16,11 @@ interface AdditiveCopyChangeDrawerProps {
   selectedAsset: CatalogAssetSelection | null;
   recovery: ChangeRecoveryStatus | null;
   api?: ChangeApi;
+  disabled?: boolean;
   refreshSession: () => Promise<RootSession>;
   onCommitted: () => Promise<void> | void;
+  onBusyChange?: (busy: boolean) => void;
+  onRecoveryChange?: (recovery: ChangeRecoveryStatus) => void;
 }
 
 function messageFrom(error: unknown): string {
@@ -39,8 +42,11 @@ export function AdditiveCopyChangeDrawer({
   selectedAsset,
   recovery,
   api = changeApi,
+  disabled = false,
   refreshSession,
   onCommitted,
+  onBusyChange,
+  onRecoveryChange,
 }: AdditiveCopyChangeDrawerProps) {
   const [destination, setDestination] = useState("");
   const [plan, setPlan] = useState<ChangePlan | null>(null);
@@ -57,12 +63,19 @@ export function AdditiveCopyChangeDrawer({
     setError(null);
   }, [session.rootId, selectedAsset?.fileInstanceId]);
 
-  const recoveryRequired = recovery?.recoveryRequired ?? true;
+  const recoveryRequired = (recovery?.recoveryRequired ?? true)
+    || status?.recoveryRequired === true;
   const writeEnabled = session.mode === "write_enabled" && session.capabilities.write;
+  const interactionBusy = busy || disabled;
+
+  function setChangeBusy(nextBusy: boolean) {
+    setBusy(nextBusy);
+    onBusyChange?.(nextBusy);
+  }
 
   async function createPlan() {
-    if (selectedAsset === null || destination.trim() === "") return;
-    setBusy(true);
+    if (disabled || selectedAsset === null || destination.trim() === "") return;
+    setChangeBusy(true);
     setError(null);
     setStatus(null);
     setApproved(false);
@@ -77,14 +90,15 @@ export function AdditiveCopyChangeDrawer({
       setPlan(null);
       setError(messageFrom(reason));
     } finally {
-      setBusy(false);
+      setChangeBusy(false);
     }
   }
 
   async function applyPlan() {
-    if (plan === null || !approved || !writeEnabled || recoveryRequired) return;
-    setBusy(true);
+    if (disabled || plan === null || !approved || !writeEnabled || recoveryRequired) return;
+    setChangeBusy(true);
     setError(null);
+    setApproved(false);
     let applyAttempted = false;
     try {
       const currentSession = await refreshSession();
@@ -105,21 +119,40 @@ export function AdditiveCopyChangeDrawer({
       applyAttempted = true;
       const applied = await api.applyChange(session.rootId, plan.planId, plan.planId);
       setStatus(applied);
-      setApproved(false);
       if (applied.state === "committed") {
-        await onCommitted();
+        try {
+          await onCommitted();
+        } catch (refreshReason) {
+          setError(`The operation committed, but the catalog refresh failed: ${messageFrom(refreshReason)}`);
+        }
       }
     } catch (reason) {
-      setError(messageFrom(reason));
+      const primaryError = messageFrom(reason);
+      setError(primaryError);
       if (applyAttempted) {
+        let recoveredStatus: ChangeStatus | null = null;
         try {
-          setStatus(await api.changeStatus(session.rootId, plan.operationId));
+          recoveredStatus = await api.changeStatus(session.rootId, plan.operationId);
+          setStatus(recoveredStatus);
         } catch {
           // The apply may have failed before an operation was started. Keep the primary error.
         }
+        if (recoveredStatus?.state === "committed") {
+          try {
+            await onCommitted();
+            setError(`Apply response was interrupted: ${primaryError}. Backend status confirms that the operation committed.`);
+          } catch (refreshReason) {
+            setError(`Backend status confirms that the operation committed, but the catalog refresh failed: ${messageFrom(refreshReason)}`);
+          }
+        }
+        try {
+          onRecoveryChange?.(await api.recoveryStatus(session.rootId));
+        } catch {
+          // Local status still fails closed when recovery status cannot be refreshed.
+        }
       }
     } finally {
-      setBusy(false);
+      setChangeBusy(false);
     }
   }
 
@@ -140,7 +173,7 @@ export function AdditiveCopyChangeDrawer({
           Write safety status is unavailable. Applying changes is disabled.
         </p>
       )}
-      {recovery?.recoveryRequired && (
+      {(recovery?.recoveryRequired || status?.recoveryRequired) && (
         <p className="mo-change-drawer__blocking" role="alert">
           An incomplete operation exists. Do not write to this root until recovery is resolved.
         </p>
@@ -161,7 +194,7 @@ export function AdditiveCopyChangeDrawer({
             <span>Destination relative path</span>
             <input
               value={destination}
-              disabled={busy}
+              disabled={interactionBusy}
               placeholder="LIVE_SET/PROJECT_A/KICK_COPY.wav"
               onChange={(event) => {
                 setDestination(event.target.value);
@@ -173,7 +206,7 @@ export function AdditiveCopyChangeDrawer({
           </label>
           <Button
             variant="secondary"
-            disabled={busy || destination.trim() === "" || recoveryRequired}
+            disabled={interactionBusy || destination.trim() === "" || recoveryRequired}
             onClick={createPlan}
           >
             {busy ? "Checking..." : "Review plan"}
@@ -214,7 +247,7 @@ export function AdditiveCopyChangeDrawer({
             <input
               type="checkbox"
               checked={approved}
-              disabled={busy || !writeEnabled || recoveryRequired}
+              disabled={interactionBusy || !writeEnabled || recoveryRequired}
               onChange={(event) => setApproved(event.target.checked)}
             />
             <span>
@@ -223,7 +256,7 @@ export function AdditiveCopyChangeDrawer({
           </label>
           <Button
             variant="modalPrimary"
-            disabled={busy || !approved || !writeEnabled || recoveryRequired}
+            disabled={interactionBusy || !approved || !writeEnabled || recoveryRequired}
             onClick={applyPlan}
           >
             {busy ? "Applying..." : "Apply approved plan"}

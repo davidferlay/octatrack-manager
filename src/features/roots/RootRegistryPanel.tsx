@@ -68,6 +68,7 @@ export function RootRegistryPanel({
   const [session, setSession] = useState<RootSession | null>(null);
   const [library, setLibrary] = useState<LibrarySnapshot | null>(null);
   const [busy, setBusy] = useState(false);
+  const [changeBusy, setChangeBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedAsset, setSelectedAsset] = useState<CatalogAssetSelection | null>(null);
   const [recovery, setRecovery] = useState<ChangeRecoveryStatus | null>(null);
@@ -84,6 +85,7 @@ export function RootRegistryPanel({
       setSession(registered);
       setLibrary(snapshot);
       setSelectedAsset(null);
+      setChangeBusy(false);
       try {
         setRecovery(await changeClient.recoveryStatus(registered.rootId));
       } catch (reason) {
@@ -98,6 +100,7 @@ export function RootRegistryPanel({
       setLibrary(null);
       setSelectedAsset(null);
       setRecovery(null);
+      setChangeBusy(false);
       setError(errorMessage(reason));
     } finally {
       setBusy(false);
@@ -114,6 +117,7 @@ export function RootRegistryPanel({
       setLibrary(null);
       setSelectedAsset(null);
       setRecovery(null);
+      setChangeBusy(false);
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
@@ -172,7 +176,7 @@ export function RootRegistryPanel({
       sources={
         <SourcesPane
           session={session}
-          busy={busy}
+          busy={busy || changeBusy}
           error={error}
           onRegister={registerRoot}
           onClose={closeRoot}
@@ -235,8 +239,11 @@ export function RootRegistryPanel({
             selectedAsset={selectedAsset}
             recovery={recovery}
             api={changeClient}
+            disabled={busy}
             refreshSession={refreshSessionBeforeApply}
             onCommitted={refreshAfterCommit}
+            onBusyChange={setChangeBusy}
+            onRecoveryChange={setRecovery}
           />
         ) : undefined
       }
