@@ -1,0 +1,51 @@
+/* Next-gen shell layout. Keep compact when empty so Home legacy UI stays in view. */
+.mo-app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin: 1rem 0 1.5rem;
+  border: 1px solid color-mix(in srgb, var(--mo-accent) 45%, transparent);
+  border-radius: var(--mo-radius-lg);
+  background: color-mix(in srgb, var(--mo-accent) 5%, var(--mo-canvas));
+  overflow: hidden;
+}
+
+.mo-app-shell__body {
+  /* Content-sized: avoid claiming large viewport height on Home above legacy grids. */
+  flex: 0 1 auto;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.mo-app-shell__sources,
+.mo-app-shell__main,
+.mo-app-shell__inspector {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.mo-app-shell__sources {
+  padding: 0.85rem 0.9rem;
+  background: color-mix(in srgb, var(--mo-surface-1) 55%, transparent);
+  border-right: 1px solid var(--mo-border);
+}
+
+.mo-app-shell__main {
+  flex: 1 1 auto;
+  padding: 0.85rem 1rem;
+}
+
+.mo-app-shell__inspector {
+  padding: 0.85rem 0.9rem;
+  border-left: 1px solid var(--mo-border);
+  background: color-mix(in srgb, var(--mo-surface-1) 40%, transparent);
+}
+
+.mo-app-shell__inspector-placeholder {
+  margin: 0;
+  color: var(--mo-text-muted);
+  font-size: 0.85rem;
+}

@@ -1,7 +1,7 @@
 # Design System Migration
 
-Status: DS1–DS5 done; **DS6 implemented**  
-Updated: 2026-08-28
+Status: Phase A (DS1–DS6) on main; **UI1 Sources / AppShell landing on main**  
+Updated: 2026-08-29
 
 ## Purpose
 
@@ -132,11 +132,21 @@ Phase D  UI6 Branding → DS7 Legacy CSS removal
 - **Out of scope:** AudioPoolSidebar resize, TransferProgressPanel height,
   vertical orientation, DnD/preview rewrites.
 
+### PR-UI1 — Sources / AppShell (in progress)
+
+- Add `src/app/AppShell` (Sources | Main | optional Inspector) using `SplitPane`.
+- Add `features/sources/SourcesPane` for root-session chrome (READ ONLY,
+  choose/close, fingerprint summary). No raw absolute paths in the UI.
+- Compose `RootRegistryPanel` as AppShell + SourcesPane + `CatalogLibraryBrowser`
+  in Main. HomePage legacy scan / DnD / project grid stay untouched.
+- **Out of scope:** Inspector content (UI4), Project workspace rewrite (UI2),
+  replacing legacy Home locations with Sources tree, branding (UI6).
+
 ### Later (documented only until started)
 
 | PR | Focus |
 |----|--------|
-| UI1–UI3 | Sources / Project Workspace / Audio Library on AppShell |
+| UI2–UI3 | Project Workspace / Audio Library regions on AppShell |
 | UI4–UI5 | Notes inspector + Usage Graph UI |
 | UI6 | Branding rename artifacts only |
 | DS7 | Remove unused `--elektron-*` and legacy classes; shrink App.css |
@@ -154,6 +164,9 @@ the first consumer. Domain sorting/filtering/DnD remain feature-owned.
 
 **After DS6:** SplitPane owns horizontal panel resize for Audio Pool Files tab.
 Sidebar / transfer pane resizers remain page-local until a later pass.
+
+**After UI1:** AppShell hosts Sources + Main for the next-gen root session on
+HomePage; legacy discovery UI remains below it until UI2/UI3.
 
 App.css is not “deleted”; it remains the legacy stylesheet until DS7.
 
