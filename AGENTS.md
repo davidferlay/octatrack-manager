@@ -75,3 +75,32 @@ skill before work covered by its description. Skills do not expand user
 authorization or override the hard safety boundaries in this file, the
 architecture guard, or CI. Do not modify the user-level skill that prohibits
 mutations against the upstream repository.
+
+## Cursor Cloud specific instructions
+
+The Cloud Agent environment for this repository is a saved base snapshot
+(Cursor's default image plus the extra toolchain below) configured through the
+Cursor dashboard, not a committed `.cursor/environment.json`. Two base
+requirements are non-obvious and will otherwise break the build:
+
+- The default Cloud image ships Rust 1.83, which cannot compile the dependency
+  tree (a transitive crate requires the `edition2024` feature, i.e. Rust
+  `>= 1.85`). The saved environment pins the `stable` toolchain
+  (`rustup default stable`) with the `clippy` and `rustfmt` components.
+- Tauri needs GTK/WebKit system packages that are not in the default image:
+  `libwebkit2gtk-4.1-dev`, `libssl-dev`, `libgtk-3-dev`,
+  `libayatana-appindicator3-dev`, `librsvg2-dev`.
+
+Repository bootstrap (the saved `install` command):
+
+```bash
+corepack enable
+pnpm install --frozen-lockfile
+pnpm exec playwright install chromium
+cd src-tauri && cargo fetch --locked
+```
+
+The desktop app itself needs a display, so verify changes with the frontend
+build, the unit tests, `cargo test --workspace`, and Playwright E2E rather than
+launching the Tauri GUI headless. The Vite dev server the E2E suite drives runs
+with `pnpm run dev` on port 1420.
