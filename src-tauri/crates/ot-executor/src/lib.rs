@@ -1,9 +1,7 @@
 #![forbid(unsafe_code)]
 
 use fs2::FileExt;
-use ot_backup::{
-    recovery_binding_for_plan, BackupError, BackupStore, SnapshotId, VerifiedBackup,
-};
+use ot_backup::{recovery_binding_for_plan, BackupError, BackupStore, SnapshotId, VerifiedBackup};
 use ot_domain::{ContentHash, RootId, RootRelativePath};
 use ot_plan::{ChangePlan, PlanId};
 use rustix::fs::{self as descriptor_fs, AtFlags, Mode, OFlags, RenameFlags};
@@ -276,8 +274,10 @@ impl AdditiveCopyExecutor {
             .resolve_for_recovery(root_id)
             .map_err(ExecutorError::Authority)?;
         let initial_root = validate_recovery_authority(root_id, initial_root)?;
-        let journal_directory =
-            prepare_local_directory(&self.local_paths.journal_directory, &initial_root.canonical_path)?;
+        let journal_directory = prepare_local_directory(
+            &self.local_paths.journal_directory,
+            &initial_root.canonical_path,
+        )?;
         let _lock = acquire_root_lock(&journal_directory, &initial_root.device_fingerprint)?;
         let locked_root = revalidate_recovery_authority(root_id, &initial_root, authority)?;
         let journal_path = journal_path(&journal_directory, operation_id);
@@ -415,9 +415,7 @@ impl AdditiveCopyExecutor {
             if journal.root_fingerprint == root_fingerprint
                 && !matches!(
                     journal.status,
-                    JournalStatus::Committed
-                        | JournalStatus::RolledBack
-                        | JournalStatus::Abandoned
+                    JournalStatus::Committed | JournalStatus::RolledBack | JournalStatus::Abandoned
                 )
             {
                 journals.push(journal);
@@ -457,9 +455,9 @@ impl AdditiveCopyExecutor {
         if journal_path.exists() {
             let journal = read_journal(&journal_path)?;
             return Err(match journal.status {
-                JournalStatus::Committed
-                | JournalStatus::RolledBack
-                | JournalStatus::Abandoned => ExecutorError::PlanConsumed,
+                JournalStatus::Committed | JournalStatus::RolledBack | JournalStatus::Abandoned => {
+                    ExecutorError::PlanConsumed
+                }
                 _ => ExecutorError::RecoveryRequired,
             });
         }
@@ -2441,11 +2439,7 @@ mod tests {
         assert!(pending.destination_file_identity.is_none());
 
         let abandoned = executor
-            .recover_incomplete_operation(
-                &fixture.plan.root_id,
-                &operation_id,
-                &fixture.authority,
-            )
+            .recover_incomplete_operation(&fixture.plan.root_id, &operation_id, &fixture.authority)
             .unwrap();
 
         assert_eq!(abandoned.status, JournalStatus::Abandoned);
@@ -2549,7 +2543,10 @@ mod tests {
             Err(ExecutorError::InvalidJournal)
         ));
         assert_eq!(fs::read(&victim).unwrap(), fixture.source_bytes);
-        assert_eq!(fs::read(&fixture.destination).unwrap(), fixture.source_bytes);
+        assert_eq!(
+            fs::read(&fixture.destination).unwrap(),
+            fixture.source_bytes
+        );
         assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
     }
 
@@ -2601,7 +2598,10 @@ mod tests {
                 ),
                 Err(ExecutorError::RootChanged)
             ));
-            assert_eq!(fs::read(&fixture.destination).unwrap(), fixture.source_bytes);
+            assert_eq!(
+                fs::read(&fixture.destination).unwrap(),
+                fixture.source_bytes
+            );
             assert_eq!(
                 fs::read(&replacement_destination).unwrap(),
                 fixture.source_bytes

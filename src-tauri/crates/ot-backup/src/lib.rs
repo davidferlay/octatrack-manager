@@ -183,11 +183,7 @@ impl BackupStore {
             source_fingerprint: plan.device_fingerprint.clone(),
             base_observed_revision: plan.base_observed_revision,
             source_relative_path: plan.operation.source.relative_path.as_str().to_owned(),
-            destination_relative_path: plan
-                .operation
-                .destination_relative_path
-                .as_str()
-                .to_owned(),
+            destination_relative_path: plan.operation.destination_relative_path.as_str().to_owned(),
             recovery_binding: recovery_binding_for_plan(plan)?,
             complete: true,
             files,
@@ -885,7 +881,11 @@ mod tests {
         let mut manifest: BackupManifest =
             serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
         manifest.destination_relative_path = "SET/PROJECT/victim.wav".into();
-        fs::write(&manifest_path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
+        fs::write(
+            &manifest_path,
+            serde_json::to_vec_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
 
         assert!(matches!(
             store.verify(backup.snapshot_id()),
