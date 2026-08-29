@@ -63,13 +63,17 @@ confirm the following from code and CI before signing off:
   mutation.
 - The verified backup manifest binds the source and destination, plan/snapshot
   IDs, root fingerprint, revision, source size/hash, and backup paths with a
-  versioned recovery digest; editing the journal alone cannot redirect deletion.
+  versioned recovery digest. A separate create-once, read-only plan
+  authorization record is checked as the independent source of truth, so
+  jointly editing the journal and manifest cannot redirect deletion.
 - A published destination is removed only when both its recorded file identity
   and content match the verified backup. A replacement is preserved and keeps
   Recovery required.
 - A candidate is first renamed without replacement to an operation-owned
   quarantine and reverified there. A destination replaced during verification
   is restored or preserved, never deleted as the operation-created file.
+- Immediate rollback also verifies published bytes against the expected source;
+  an equal-size external rewrite with a retained coarse mtime is preserved.
 - Temporary partial files are removed only when their recorded file identity
   still matches.
 - Source files and verified backups are retained; only the operation-created
@@ -84,6 +88,10 @@ confirm the following from code and CI before signing off:
 - A crash after publishing the partial but before the next journal checkpoint
   is recoverable with an identity invariant that survives rename plus content
   verification.
+- Media disposition is checkpointed as terminal before best-effort Mac-local
+  staging cleanup, so a local cleanup error cannot re-block the root.
+- A safely abandoned unidentified partial triggers a session/recovery refresh
+  while retaining an explicit UI warning that the partial was preserved.
 - Prior-release journal v2 remains readable. Its paired backup-manifest v1 is
   not promoted to authenticated deletion evidence; legacy incomplete state is
   marked terminal while its media and backup artifacts are preserved.

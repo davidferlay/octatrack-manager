@@ -328,10 +328,18 @@ destination／file identity改変では別fileを削除できない。terminal j
 file identity checkpoint前のcrashでは、空のoperation固有partialを削除せず保持し、失敗終端として
 root全体のwrite blockだけを解除する。
 
+manifestとjournalの同時改変にも依存しないよう、plan時のsource／destination／identity／bindingは
+別のread-only plan authorization recordへcreate-onceで固定し、standalone recoveryで三者を照合する。
+このrecordにもsession `RootId`、absolute path、mount pathは保存しない。recoveryはmedia dispositionを
+terminal journalへfsyncした後にMac側staging cleanupを行うため、local cleanup失敗でrootを再blockしない。
+
 rollbackの削除対象はoperation固有quarantineへno-replace renameしてからidentityと、published fileでは
 backup由来contentを再検証する。検証中にdestinationが外部processから置換された場合は置換fileを
 restoreまたはquarantineに保持し、削除しない。partialからdestinationへのpublish rename直後にcrashしても、
 renameで変化し得るctimeを除いたdevice／inode／size／mtime identityとcontent検証で回復できる。
+同一process内の即時rollbackでもpublished fileはexpected size／hashを再検証し、粗いmtimeを維持した
+同size外部rewriteを削除しない。unidentified empty partialを`Abandoned`へ終端化した場合もfrontendは
+session／recovery状態をrefreshし、partial保持のwarningを残す。
 前releaseのjournal v2は互換読取りし、対応するbackup manifest v1は認証済み削除根拠として使用しない。
 recovery bindingを持たないlegacy未完了状態はmediaとbackupを保持したまま`Abandoned`へ安全終端化して
 root全体のblockだけを解除する。

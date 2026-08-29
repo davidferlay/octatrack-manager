@@ -10,16 +10,20 @@ use sha2::{Digest, Sha256};
 use std::fmt;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 const JOURNAL_SCHEMA: &str = "masterocta-operation-journal:v3";
 const LEGACY_JOURNAL_SCHEMA: &str = "masterocta-operation-journal:v2";
 const OPERATION_ID_PREFIX: &str = "operation:v1:";
 const RECOVERY_BINDING_PREFIX: &str = "recovery-binding:v1:";
+const RECOVERY_AUTHORIZATION_SCHEMA: &str = "masterocta-recovery-authorization:v1";
+const RECOVERY_AUTHORIZATION_DIRECTORY: &str = "authorizations";
 const UNIDENTIFIED_PARTIAL_FAILURE: &str = "RECOVERY_PRESERVED_UNIDENTIFIED_PARTIAL";
 const LEGACY_RECOVERY_BINDING: &str = "legacy-recovery-binding:unavailable";
 const LEGACY_RECOVERY_FAILURE: &str = "LEGACY_RECOVERY_UNAUTHENTICATED";
+#[cfg(test)]
+const STAGING_CLEANUP_FAILURE_SENTINEL: &str = ".masterocta-test-cleanup-failure";
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct OperationId(String);
@@ -139,6 +143,8 @@ struct MediaDestination {
     target: DestinationTarget,
     file: File,
     identity: JournalFileIdentity,
+    expected_byte_size: u64,
+    expected_content_hash: ContentHash,
     published: bool,
 }
 
@@ -185,6 +191,21 @@ pub struct OperationJournal {
     pub destination_file_identity: Option<JournalFileIdentity>,
     pub status: JournalStatus,
     pub failure_code: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+struct RecoveryAuthorization {
+    schema: String,
+    operation_id: String,
+    plan_id: String,
+    root_fingerprint: String,
+    base_observed_revision: u64,
+    source_relative_path: String,
+    destination_relative_path: String,
+    backup_snapshot_id: String,
+    recovery_binding: String,
+    source_byte_size: u64,
+    source_content_hash: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
@@ -292,6 +313,14 @@ impl AdditiveCopyExecutor {
             | JournalStatus::Verifying => {}
         }
 
+        let authorization_directory =
+            prepare_recovery_authorization_directory(&journal_directory)?;
+        let authorization = read_recovery_authorization(
+            &recovery_authorization_path(&authorization_directory, &operation_id),
+            &operation_id,
+        )?;
+        validate_recovery_authorization_for_plan(&authorization, plan, &operation_id)?;
+
         let staging_directory =
             prepare_local_directory(&self.local_paths.staging_directory, &root.canonical_path)?;
         validate_staging_cleanup_target(&staging_directory, &operation_id)?;
@@ -310,7 +339,6 @@ impl AdditiveCopyExecutor {
                 return Err(error);
             }
         };
-        cleanup_staging(&staging_directory, &operation_id)?;
         match recovery {
             RecoveryDisposition::Cleared => {
                 journal.status = JournalStatus::RolledBack;
@@ -322,6 +350,7 @@ impl AdditiveCopyExecutor {
             }
         }
         write_journal(&journal_path, &journal)?;
+        cleanup_staging(&staging_directory, &operation_id)?;
         Ok(journal)
     }
 
@@ -357,6 +386,13 @@ impl AdditiveCopyExecutor {
             | JournalStatus::Verifying => {}
         }
 
+        let authorization_directory =
+            prepare_recovery_authorization_directory(&journal_directory)?;
+        let authorization = read_recovery_authorization(
+            &recovery_authorization_path(&authorization_directory, operation_id),
+            operation_id,
+        )?;
+
         let backup_directory = prepare_local_directory(
             &self.local_paths.backup_directory,
             &locked_root.canonical_path,
@@ -371,8 +407,12 @@ impl AdditiveCopyExecutor {
         let backup = BackupStore::new(backup_directory)
             .verify(&snapshot_id)
             .map_err(ExecutorError::Backup)?;
-        let (expected_size, expected_hash) =
-            validate_recovery_backup(&backup, &journal, operation_id)?;
+        let (expected_size, expected_hash) = validate_recovery_backup(
+            &backup,
+            &journal,
+            &authorization,
+            operation_id,
+        )?;
         let current_root = revalidate_recovery_authority(root_id, &locked_root, authority)?;
         let destination = RootRelativePath::parse(&journal.destination_relative_path)
             .map_err(|_| ExecutorError::InvalidJournal)?;
@@ -392,7 +432,6 @@ impl AdditiveCopyExecutor {
                 return Err(error);
             }
         };
-        cleanup_staging(&staging_directory, operation_id)?;
         match recovery {
             RecoveryDisposition::Cleared => {
                 journal.status = JournalStatus::RolledBack;
@@ -404,6 +443,7 @@ impl AdditiveCopyExecutor {
             }
         }
         write_journal(&journal_path, &journal)?;
+        cleanup_staging(&staging_directory, operation_id)?;
         Ok(journal)
     }
 
@@ -454,7 +494,8 @@ impl AdditiveCopyExecutor {
             let entry = entry.map_err(ExecutorError::io)?;
             let file_type = entry.file_type().map_err(ExecutorError::io)?;
             let name = entry.file_name();
-            if name.to_str() == Some("locks") {
+            let name = name.to_str();
+            if name == Some("locks") || name == Some(RECOVERY_AUTHORIZATION_DIRECTORY) {
                 if file_type.is_symlink() || !file_type.is_dir() {
                     return Err(ExecutorError::UnsafePath);
                 }
@@ -512,6 +553,8 @@ impl AdditiveCopyExecutor {
             &initial_root.canonical_path,
         )?;
         let _lock = acquire_root_lock(&journal_directory, &plan.device_fingerprint)?;
+        let authorization_directory =
+            prepare_recovery_authorization_directory(&journal_directory)?;
         let journal_path = journal_path(&journal_directory, &operation_id);
         if journal_path.exists() {
             let journal = read_journal(&journal_path)?;
@@ -550,6 +593,18 @@ impl AdditiveCopyExecutor {
         }
         sync_directory(&staging_directory)?;
 
+        let authorization = match ensure_recovery_authorization(
+            &authorization_directory,
+            plan,
+            &operation_id,
+        ) {
+            Ok(authorization) => authorization,
+            Err(error) => {
+                let _ = fs::remove_dir_all(&staging_directory);
+                return Err(error);
+            }
+        };
+
         let backup_store = BackupStore::new(backup_directory);
         let backup = match backup_store.create_verified(&initial_root.canonical_path, plan) {
             Ok(backup) => backup,
@@ -561,6 +616,10 @@ impl AdditiveCopyExecutor {
                 return Err(ExecutorError::Backup(error));
             }
         };
+        if backup.manifest().recovery_binding != authorization.recovery_binding {
+            let _ = fs::remove_dir_all(&staging_directory);
+            return Err(ExecutorError::InvalidJournal);
+        }
         let mut journal = new_journal(plan, &operation_id, &backup);
         if let Err(error) = write_journal(&journal_path, &journal) {
             let _ = cleanup_staging(&staging_base, &operation_id);
@@ -657,7 +716,7 @@ impl AdditiveCopyExecutor {
 
         journal.status = JournalStatus::Applying;
         write_journal(&journal_path, &journal)?;
-        let mut media_destination = match create_media_destination(destination_target) {
+        let mut media_destination = match create_media_destination(destination_target, plan) {
             Ok(destination) => destination,
             Err(error) => {
                 return self.fail_before_apply(
@@ -1254,7 +1313,10 @@ fn checkpoint_media_destination(
     write_journal(journal_path, journal)
 }
 
-fn create_media_destination(target: DestinationTarget) -> Result<MediaDestination, ExecutorError> {
+fn create_media_destination(
+    target: DestinationTarget,
+    plan: &ChangePlan,
+) -> Result<MediaDestination, ExecutorError> {
     let file = descriptor_fs::openat(
         &target.parent,
         target.temporary_name.as_str(),
@@ -1286,6 +1348,8 @@ fn create_media_destination(target: DestinationTarget) -> Result<MediaDestinatio
         target,
         file,
         identity,
+        expected_byte_size: plan.operation.source.byte_size,
+        expected_content_hash: plan.operation.source.content_hash.clone(),
         published: false,
     })
 }
@@ -1403,9 +1467,18 @@ fn rollback_media_destination(destination: &MediaDestination) -> Result<(), Exec
         )
     };
     if let Some(mut current) = open_regular_entry(&destination.target.parent, name)? {
-        if !same_recovery_file_identity(&current, &destination.identity)? {
+        let identity_matches = if destination.published {
+            same_recovery_file_identity(&current, &destination.identity)?
+        } else {
+            same_file_identity(&current, &destination.identity)?
+        };
+        if !identity_matches {
             return Err(ExecutorError::RecoveryRequired);
         }
+        let expected_content = destination.published.then_some((
+            destination.expected_byte_size,
+            &destination.expected_content_hash,
+        ));
         quarantine_and_remove_entry(
             &destination.target.parent,
             name,
@@ -1413,8 +1486,9 @@ fn rollback_media_destination(destination: &MediaDestination) -> Result<(), Exec
             quarantine_name,
             &mut current,
             &destination.identity,
-            None,
+            expected_content,
             false,
+            !destination.published,
         )?;
     }
     Ok(())
@@ -1430,9 +1504,15 @@ fn quarantine_and_remove_entry(
     expected_identity: &JournalFileIdentity,
     expected_content: Option<(u64, &ContentHash)>,
     already_quarantined: bool,
+    require_strict_open_identity: bool,
 ) -> Result<(), ExecutorError> {
     let opened_identity = file_identity(opened_file)?;
-    if !recovery_identity_matches(&opened_identity, expected_identity) {
+    let identity_matches = if require_strict_open_identity {
+        opened_identity == *expected_identity
+    } else {
+        recovery_identity_matches(&opened_identity, expected_identity)
+    };
+    if !identity_matches {
         return Err(ExecutorError::RecoveryRequired);
     }
     if let Some((expected_size, expected_hash)) = expected_content {
@@ -1595,6 +1675,7 @@ fn recover_media_destination_matching(
         expected,
         expected_content,
         already_quarantined,
+        false,
     )?;
     Ok(RecoveryDisposition::Cleared)
 }
@@ -1766,6 +1847,198 @@ fn new_journal(
     }
 }
 
+fn recovery_authorization_for_plan(
+    plan: &ChangePlan,
+    operation_id: &OperationId,
+) -> Result<RecoveryAuthorization, ExecutorError> {
+    Ok(RecoveryAuthorization {
+        schema: RECOVERY_AUTHORIZATION_SCHEMA.to_owned(),
+        operation_id: operation_id.as_str().to_owned(),
+        plan_id: plan.id.as_str().to_owned(),
+        root_fingerprint: plan.device_fingerprint.clone(),
+        base_observed_revision: plan.base_observed_revision,
+        source_relative_path: plan.operation.source.relative_path.as_str().to_owned(),
+        destination_relative_path: plan
+            .operation
+            .destination_relative_path
+            .as_str()
+            .to_owned(),
+        backup_snapshot_id: SnapshotId::for_plan(plan).as_str().to_owned(),
+        recovery_binding: recovery_binding_for_plan(plan)
+            .map_err(|_| ExecutorError::InvalidPlan)?,
+        source_byte_size: plan.operation.source.byte_size,
+        source_content_hash: plan.operation.source.content_hash.as_str().to_owned(),
+    })
+}
+
+fn prepare_recovery_authorization_directory(
+    journal_directory: &Path,
+) -> Result<PathBuf, ExecutorError> {
+    let directory = journal_directory.join(RECOVERY_AUTHORIZATION_DIRECTORY);
+    match fs::create_dir(&directory) {
+        Ok(()) => sync_directory(journal_directory)?,
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(ExecutorError::io(error)),
+    }
+    let metadata = fs::symlink_metadata(&directory).map_err(ExecutorError::io)?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(ExecutorError::UnsafePath);
+    }
+    let canonical = directory.canonicalize().map_err(ExecutorError::io)?;
+    if canonical.parent() != Some(journal_directory) {
+        return Err(ExecutorError::UnsafePath);
+    }
+    Ok(canonical)
+}
+
+fn recovery_authorization_path(directory: &Path, operation_id: &OperationId) -> PathBuf {
+    directory.join(format!("{}.json", operation_id.file_stem()))
+}
+
+fn ensure_recovery_authorization(
+    directory: &Path,
+    plan: &ChangePlan,
+    operation_id: &OperationId,
+) -> Result<RecoveryAuthorization, ExecutorError> {
+    let expected = recovery_authorization_for_plan(plan, operation_id)?;
+    let path = recovery_authorization_path(directory, operation_id);
+    match fs::symlink_metadata(&path) {
+        Ok(_) => {
+            let existing = read_recovery_authorization(&path, operation_id)?;
+            if existing != expected {
+                return Err(ExecutorError::InvalidJournal);
+            }
+            return Ok(existing);
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(ExecutorError::io(error)),
+    }
+
+    let temporary = path.with_extension("json.tmp");
+    remove_stale_authorization_temporary(&temporary)?;
+    let bytes = serde_json::to_vec_pretty(&expected)
+        .map_err(|error| ExecutorError::Journal(error.to_string()))?;
+    let result = (|| {
+        let mut file = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temporary)
+            .map_err(ExecutorError::io)?;
+        file.write_all(&bytes).map_err(ExecutorError::io)?;
+        file.sync_all().map_err(ExecutorError::io)?;
+        file.set_permissions(fs::Permissions::from_mode(0o400))
+            .map_err(ExecutorError::io)?;
+        file.sync_all().map_err(ExecutorError::io)?;
+
+        let parent = File::open(directory).map_err(ExecutorError::io)?;
+        let temporary_name = temporary
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or(ExecutorError::UnsafePath)?;
+        let final_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or(ExecutorError::UnsafePath)?;
+        descriptor_fs::renameat_with(
+            &parent,
+            temporary_name,
+            &parent,
+            final_name,
+            RenameFlags::NOREPLACE,
+        )
+        .map_err(descriptor_path_error)?;
+        parent.sync_all().map_err(ExecutorError::io)
+    })();
+    if let Err(error) = result {
+        let _ = remove_stale_authorization_temporary(&temporary);
+        return Err(error);
+    }
+
+    let stored = read_recovery_authorization(&path, operation_id)?;
+    if stored != expected {
+        return Err(ExecutorError::InvalidJournal);
+    }
+    Ok(stored)
+}
+
+fn remove_stale_authorization_temporary(path: &Path) -> Result<(), ExecutorError> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
+            Err(ExecutorError::UnsafePath)
+        }
+        Ok(_) => {
+            fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+                .map_err(ExecutorError::io)?;
+            fs::remove_file(path).map_err(ExecutorError::io)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(ExecutorError::io(error)),
+    }
+}
+
+fn read_recovery_authorization(
+    path: &Path,
+    operation_id: &OperationId,
+) -> Result<RecoveryAuthorization, ExecutorError> {
+    let file = descriptor_fs::open(
+        path,
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    )
+    .map_err(descriptor_path_error)?;
+    let file = File::from(file);
+    let metadata = file.metadata().map_err(ExecutorError::io)?;
+    if !metadata.is_file() || metadata.mode() & 0o222 != 0 {
+        return Err(ExecutorError::UnsafePath);
+    }
+    let authorization: RecoveryAuthorization = serde_json::from_reader(file)
+        .map_err(|error| ExecutorError::Journal(error.to_string()))?;
+    validate_recovery_authorization(&authorization, operation_id, path)?;
+    Ok(authorization)
+}
+
+fn validate_recovery_authorization(
+    authorization: &RecoveryAuthorization,
+    operation_id: &OperationId,
+    path: &Path,
+) -> Result<(), ExecutorError> {
+    if authorization.schema != RECOVERY_AUTHORIZATION_SCHEMA
+        || authorization.operation_id != operation_id.as_str()
+        || path.file_stem().and_then(|stem| stem.to_str()) != Some(operation_id.file_stem())
+        || authorization.plan_id
+            != operation_id
+                .as_str()
+                .replacen(OPERATION_ID_PREFIX, "plan:v1:", 1)
+        || authorization.backup_snapshot_id
+            != operation_id
+                .as_str()
+                .replacen(OPERATION_ID_PREFIX, "snapshot:v1:", 1)
+        || authorization.base_observed_revision == 0
+        || PlanId::parse(authorization.plan_id.clone()).is_err()
+        || SnapshotId::parse(authorization.backup_snapshot_id.clone()).is_err()
+        || validate_root_fingerprint(&authorization.root_fingerprint).is_err()
+        || validate_recovery_binding(&authorization.recovery_binding).is_err()
+        || RootRelativePath::parse(&authorization.source_relative_path).is_err()
+        || RootRelativePath::parse(&authorization.destination_relative_path).is_err()
+        || authorization.source_relative_path == authorization.destination_relative_path
+        || ContentHash::parse(authorization.source_content_hash.clone()).is_err()
+    {
+        return Err(ExecutorError::InvalidJournal);
+    }
+    Ok(())
+}
+
+fn validate_recovery_authorization_for_plan(
+    authorization: &RecoveryAuthorization,
+    plan: &ChangePlan,
+    operation_id: &OperationId,
+) -> Result<(), ExecutorError> {
+    if authorization != &recovery_authorization_for_plan(plan, operation_id)? {
+        return Err(ExecutorError::InvalidJournal);
+    }
+    Ok(())
+}
+
 fn journal_path(directory: &Path, operation_id: &OperationId) -> PathBuf {
     directory.join(format!("{}.json", operation_id.file_stem()))
 }
@@ -1878,6 +2151,7 @@ fn validate_standalone_journal(
 fn validate_recovery_backup(
     backup: &VerifiedBackup,
     journal: &OperationJournal,
+    authorization: &RecoveryAuthorization,
     operation_id: &OperationId,
 ) -> Result<(u64, ContentHash), ExecutorError> {
     let expected_plan_id = operation_id
@@ -1897,6 +2171,14 @@ fn validate_recovery_backup(
         || manifest.source_relative_path != journal.source_relative_path
         || manifest.destination_relative_path != journal.destination_relative_path
         || manifest.recovery_binding != journal.recovery_binding
+        || authorization.operation_id != journal.operation_id
+        || authorization.plan_id != journal.plan_id
+        || authorization.root_fingerprint != journal.root_fingerprint
+        || authorization.base_observed_revision != journal.base_observed_revision
+        || authorization.source_relative_path != journal.source_relative_path
+        || authorization.destination_relative_path != journal.destination_relative_path
+        || authorization.backup_snapshot_id != journal.backup_snapshot_id
+        || authorization.recovery_binding != journal.recovery_binding
         || manifest.files.len() != 1
     {
         return Err(ExecutorError::InvalidJournal);
@@ -1905,7 +2187,10 @@ fn validate_recovery_backup(
         .files
         .first()
         .ok_or(ExecutorError::InvalidJournal)?;
-    if source.relative_path.as_str() != journal.source_relative_path.as_str() {
+    if source.relative_path.as_str() != journal.source_relative_path.as_str()
+        || source.byte_size != authorization.source_byte_size
+        || source.content_hash != authorization.source_content_hash
+    {
         return Err(ExecutorError::InvalidJournal);
     }
     let content_hash = ContentHash::parse(source.content_hash.clone())
@@ -1978,6 +2263,12 @@ fn validate_journal(
 fn cleanup_staging(base: &Path, operation_id: &OperationId) -> Result<(), ExecutorError> {
     let directory = base.join(operation_id.file_stem());
     if validate_staging_cleanup_target(base, operation_id)? {
+        #[cfg(test)]
+        if directory.join(STAGING_CLEANUP_FAILURE_SENTINEL).exists() {
+            return Err(ExecutorError::io(std::io::Error::other(
+                "test-injected staging cleanup failure",
+            )));
+        }
         fs::remove_dir_all(directory).map_err(ExecutorError::io)?;
         sync_directory(base)?;
     }
@@ -2415,6 +2706,49 @@ mod tests {
         }
     }
 
+    fn public_recovery_binding_for_manifest(manifest: &ot_backup::BackupManifest) -> String {
+        fn encode(hasher: &mut Sha256, tag: u8, bytes: &[u8]) {
+            hasher.update([tag]);
+            hasher.update((bytes.len() as u64).to_be_bytes());
+            hasher.update(bytes);
+        }
+
+        let mut paths = manifest
+            .files
+            .iter()
+            .map(|file| file.relative_path.clone())
+            .collect::<Vec<_>>();
+        paths.sort();
+        let source = manifest
+            .files
+            .iter()
+            .find(|file| file.relative_path == manifest.source_relative_path)
+            .unwrap();
+        let mut hasher = Sha256::new();
+        hasher.update(b"masterocta:recovery-binding:v1");
+        encode(&mut hasher, 1, manifest.plan_id.as_bytes());
+        encode(&mut hasher, 2, manifest.snapshot_id.as_bytes());
+        encode(&mut hasher, 3, manifest.source_fingerprint.as_bytes());
+        encode(
+            &mut hasher,
+            4,
+            &manifest.base_observed_revision.to_be_bytes(),
+        );
+        encode(&mut hasher, 5, manifest.source_relative_path.as_bytes());
+        encode(
+            &mut hasher,
+            6,
+            manifest.destination_relative_path.as_bytes(),
+        );
+        encode(&mut hasher, 7, &source.byte_size.to_be_bytes());
+        encode(&mut hasher, 8, source.content_hash.as_bytes());
+        encode(&mut hasher, 9, &(paths.len() as u64).to_be_bytes());
+        for path in paths {
+            encode(&mut hasher, 10, path.as_bytes());
+        }
+        format!("{RECOVERY_BINDING_PREFIX}{:x}", hasher.finalize())
+    }
+
     #[test]
     fn additive_copy_commits_only_after_backup_and_verification() {
         let fixture = Fixture::new();
@@ -2446,6 +2780,16 @@ mod tests {
         .unwrap();
         assert!(!journal_text.contains(fixture.root.to_string_lossy().as_ref()));
         assert!(!journal_text.contains("root-1"));
+        let authorization_text = fs::read_to_string(recovery_authorization_path(
+            &fixture
+                .local
+                .join("journals")
+                .join(RECOVERY_AUTHORIZATION_DIRECTORY),
+            &result.operation_id,
+        ))
+        .unwrap();
+        assert!(!authorization_text.contains(fixture.root.to_string_lossy().as_ref()));
+        assert!(!authorization_text.contains("root-1"));
     }
 
     #[test]
@@ -2748,6 +3092,46 @@ mod tests {
     }
 
     #[test]
+    fn immediate_rollback_preserves_equal_size_rewritten_published_content() {
+        let fixture = Fixture::new();
+        let operation_id = OperationId::for_plan(&fixture.plan);
+        let target = open_destination_target(
+            &fixture.root,
+            &fixture.plan.operation.destination_relative_path,
+            &operation_id,
+        )
+        .unwrap();
+        let mut destination = create_media_destination(target, &fixture.plan).unwrap();
+        copy_payload_to_media(&fixture.source, &mut destination.file, &fixture.plan).unwrap();
+        destination.identity = file_identity(&destination.file).unwrap();
+        let original_modified = destination.file.metadata().unwrap().modified().unwrap();
+        publish_media_destination(&mut destination).unwrap();
+
+        let replacement = vec![b'x'; fixture.source_bytes.len()];
+        let mut external = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(&fixture.destination)
+            .unwrap();
+        external.write_all(&replacement).unwrap();
+        external.sync_all().unwrap();
+        external
+            .set_times(std::fs::FileTimes::new().set_modified(original_modified))
+            .unwrap();
+        assert!(recovery_identity_matches(
+            &file_identity(&external).unwrap(),
+            &destination.identity,
+        ));
+
+        assert!(matches!(
+            rollback_media_destination(&destination),
+            Err(ExecutorError::RecoveryRequired)
+        ));
+        assert_eq!(fs::read(&fixture.destination).unwrap(), replacement);
+        assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
+    }
+
+    #[test]
     fn crash_after_destination_write_is_recovered_from_the_journal() {
         let fixture = Fixture::new();
         let executor = fixture.executor();
@@ -2767,6 +3151,48 @@ mod tests {
             .unwrap();
 
         assert_eq!(journal.status, JournalStatus::RolledBack);
+        assert!(!fixture.destination.exists());
+        assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
+    }
+
+    #[test]
+    fn recovery_checkpoints_terminal_state_before_staging_cleanup_failure() {
+        let fixture = Fixture::new();
+        let executor = fixture.executor();
+        let operation_id = OperationId::for_plan(&fixture.plan);
+        assert!(matches!(
+            executor.execute_with_fault(
+                &fixture.plan,
+                &fixture.authority,
+                FaultPoint::DestinationWrite,
+                true,
+            ),
+            Err(ExecutorError::SimulatedCrash)
+        ));
+        let staging = fixture.local.join("staging").join(operation_id.file_stem());
+        fs::write(
+            staging.join(STAGING_CLEANUP_FAILURE_SENTINEL),
+            b"synthetic cleanup fault",
+        )
+        .unwrap();
+
+        let recovery = executor.recover_incomplete_operation(
+            &fixture.plan.root_id,
+            &operation_id,
+            &fixture.authority,
+        );
+
+        assert!(matches!(recovery, Err(ExecutorError::Io(_))));
+        let terminal = executor.operation_journal(&operation_id).unwrap().unwrap();
+        assert_eq!(terminal.status, JournalStatus::RolledBack);
+        assert_eq!(
+            terminal.failure_code.as_deref(),
+            Some("RECOVERED_INCOMPLETE_OPERATION")
+        );
+        assert!(executor
+            .incomplete_journals_for_root(&fixture.plan.device_fingerprint)
+            .unwrap()
+            .is_empty());
         assert!(!fixture.destination.exists());
         assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
     }
@@ -3011,6 +3437,73 @@ mod tests {
     }
 
     #[test]
+    fn sealed_plan_authorization_rejects_joint_manifest_and_journal_tampering() {
+        let fixture = Fixture::new();
+        let executor = fixture.executor();
+        let operation_id = OperationId::for_plan(&fixture.plan);
+        assert!(matches!(
+            executor.execute_with_fault(
+                &fixture.plan,
+                &fixture.authority,
+                FaultPoint::DestinationWrite,
+                true,
+            ),
+            Err(ExecutorError::SimulatedCrash)
+        ));
+
+        let victim = fixture.root.join("SET/PROJECT/victim.wav");
+        fs::write(&victim, &fixture.source_bytes).unwrap();
+        let victim_identity = file_identity(&File::open(&victim).unwrap()).unwrap();
+        let journal_path = journal_path(&fixture.local.join("journals"), &operation_id);
+        let mut journal = read_journal(&journal_path).unwrap();
+        let snapshot_digest = operation_id
+            .as_str()
+            .strip_prefix(OPERATION_ID_PREFIX)
+            .unwrap();
+        let manifest_path = fixture
+            .local
+            .join("backups")
+            .join(snapshot_digest)
+            .join("manifest.json");
+        let mut manifest: ot_backup::BackupManifest =
+            serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+        manifest.destination_relative_path = "SET/PROJECT/victim.wav".into();
+        manifest.recovery_binding = public_recovery_binding_for_manifest(&manifest);
+        fs::write(
+            &manifest_path,
+            serde_json::to_vec_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+        journal.destination_relative_path = manifest.destination_relative_path.clone();
+        journal.recovery_binding = manifest.recovery_binding.clone();
+        journal.destination_file_identity = Some(victim_identity);
+        write_journal(&journal_path, &journal).unwrap();
+
+        let authorization_path = recovery_authorization_path(
+            &fixture
+                .local
+                .join("journals")
+                .join(RECOVERY_AUTHORIZATION_DIRECTORY),
+            &operation_id,
+        );
+        assert_eq!(
+            fs::metadata(&authorization_path).unwrap().permissions().mode() & 0o222,
+            0
+        );
+        assert!(matches!(
+            executor.recover_incomplete_operation(
+                &fixture.plan.root_id,
+                &operation_id,
+                &fixture.authority,
+            ),
+            Err(ExecutorError::InvalidJournal)
+        ));
+        assert_eq!(fs::read(&victim).unwrap(), fixture.source_bytes);
+        assert_eq!(fs::read(&fixture.destination).unwrap(), fixture.source_bytes);
+        assert_eq!(fs::read(&fixture.source).unwrap(), fixture.source_bytes);
+    }
+
+    #[test]
     fn recovery_quarantine_preserves_a_destination_replaced_after_verification() {
         let fixture = Fixture::new();
         let executor = fixture.executor();
@@ -3058,6 +3551,7 @@ mod tests {
                     fixture.plan.operation.source.byte_size,
                     &fixture.plan.operation.source.content_hash,
                 )),
+                false,
                 false,
             ),
             Err(ExecutorError::RecoveryRequired)

@@ -38,6 +38,20 @@ function formatBytes(byteSize: number): string {
   return `${(byteSize / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+const preservedUnidentifiedPartial = "RECOVERY_PRESERVED_UNIDENTIFIED_PARTIAL";
+
+function isPreservedRecovery(status: ChangeStatus): boolean {
+  return status.state === "failed" && status.failureCode === preservedUnidentifiedPartial;
+}
+
+function isResolvedRecovery(status: ChangeStatus): boolean {
+  return status.state === "rolled_back" || isPreservedRecovery(status);
+}
+
+function preservedRecoveryMessage(prefix: string): string {
+  return `${prefix} The unidentified partial was preserved for manual inspection and edit mode was disabled.`;
+}
+
 export function AdditiveCopyChangeDrawer({
   session,
   selectedAsset,
@@ -179,13 +193,19 @@ export function AdditiveCopyChangeDrawer({
         operation.operationId,
       );
       setStatus(recovered);
-      if (recovered.state !== "rolled_back") {
+      if (!isResolvedRecovery(recovered)) {
         throw new Error("The backend did not confirm that the incomplete copy was rolled back.");
       }
       try {
         await onRecovered();
+        if (isPreservedRecovery(recovered)) {
+          setError(preservedRecoveryMessage("Recovery reached a safe terminal state."));
+        }
       } catch (refreshReason) {
-        setError(`The rollback completed, but the catalog refresh failed: ${messageFrom(refreshReason)}`);
+        const outcome = isPreservedRecovery(recovered)
+          ? "Recovery safely preserved the unidentified partial"
+          : "The rollback completed";
+        setError(`${outcome}, but the session refresh failed: ${messageFrom(refreshReason)}`);
       }
     } catch (reason) {
       const primaryError = messageFrom(reason);
@@ -198,13 +218,20 @@ export function AdditiveCopyChangeDrawer({
         } catch {
           // Keep the primary error when no operation status can be recovered.
         }
-        if (recoveredStatus?.state === "rolled_back") {
+        if (recoveredStatus !== null && isResolvedRecovery(recoveredStatus)) {
           try {
             await onRecovered();
             setStatus({ ...recoveredStatus, catalogRefreshRequired: false });
-            setError(`Recovery response was interrupted: ${primaryError}. Backend status confirms that rollback completed.`);
+            setError(isPreservedRecovery(recoveredStatus)
+              ? preservedRecoveryMessage(
+                `Recovery response was interrupted: ${primaryError}. Backend status confirms a safe terminal state.`,
+              )
+              : `Recovery response was interrupted: ${primaryError}. Backend status confirms that rollback completed.`);
           } catch (refreshReason) {
-            setError(`Backend status confirms that rollback completed, but the catalog refresh failed: ${messageFrom(refreshReason)}`);
+            const outcome = isPreservedRecovery(recoveredStatus)
+              ? "Backend status confirms that the unidentified partial was safely preserved"
+              : "Backend status confirms that rollback completed";
+            setError(`${outcome}, but the session refresh failed: ${messageFrom(refreshReason)}`);
           }
         }
         try {

@@ -404,4 +404,103 @@ describe("AdditiveCopyChangeDrawer", () => {
     expect(onRecoveryChange).toHaveBeenCalledWith(recoveryClear);
     expect(screen.getByText(/Recovery response was interrupted/)).toBeInTheDocument();
   });
+
+  it("refreshes the session when recovery safely preserves an unidentified partial", async () => {
+    const api = fakeApi();
+    const operation = {
+      schema: "change-status:v1" as const,
+      operationId,
+      planId,
+      state: "recovery_required" as const,
+      recoveryRequired: true,
+      catalogRefreshRequired: true,
+      failureCode: "SIMULATED_PROCESS_EXIT",
+      backupSnapshotId: `snapshot:v1:${"a".repeat(64)}`,
+    };
+    vi.mocked(api.recoverChange).mockResolvedValue({
+      ...operation,
+      state: "failed",
+      recoveryRequired: false,
+      catalogRefreshRequired: false,
+      failureCode: "RECOVERY_PRESERVED_UNIDENTIFIED_PARTIAL",
+    });
+    const onRecovered = vi.fn();
+    render(
+      <AdditiveCopyChangeDrawer
+        session={session(false)}
+        selectedAsset={selectedAsset}
+        recovery={{
+          schema: "change-recovery-status:v1",
+          recoveryRequired: true,
+          operations: [operation],
+        }}
+        api={api}
+        refreshSession={vi.fn().mockResolvedValue(session(false))}
+        onCommitted={vi.fn()}
+        onRecovered={onRecovered}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText(
+      "I approve rollback of this exact incomplete additive-copy operation.",
+    ));
+    fireEvent.click(screen.getByRole("button", { name: "Roll back incomplete copy" }));
+
+    expect(await screen.findByText(/unidentified partial was preserved/)).toBeInTheDocument();
+    expect(onRecovered).toHaveBeenCalledOnce();
+    expect(screen.getByRole("status")).toHaveTextContent("Operation failed");
+  });
+
+  it("reconciles an interrupted response after an unidentified partial is preserved", async () => {
+    const api = fakeApi();
+    const operation = {
+      schema: "change-status:v1" as const,
+      operationId,
+      planId,
+      state: "recovery_required" as const,
+      recoveryRequired: true,
+      catalogRefreshRequired: true,
+      failureCode: "SIMULATED_PROCESS_EXIT",
+      backupSnapshotId: `snapshot:v1:${"a".repeat(64)}`,
+    };
+    const abandoned = {
+      ...operation,
+      state: "failed" as const,
+      recoveryRequired: false,
+      catalogRefreshRequired: false,
+      failureCode: "RECOVERY_PRESERVED_UNIDENTIFIED_PARTIAL",
+    };
+    vi.mocked(api.recoverChange).mockRejectedValue(new Error("IPC response interrupted"));
+    vi.mocked(api.changeStatus).mockResolvedValue(abandoned);
+    vi.mocked(api.recoveryStatus).mockResolvedValue(recoveryClear);
+    const onRecovered = vi.fn();
+    const onRecoveryChange = vi.fn();
+    render(
+      <AdditiveCopyChangeDrawer
+        session={session(false)}
+        selectedAsset={selectedAsset}
+        recovery={{
+          schema: "change-recovery-status:v1",
+          recoveryRequired: true,
+          operations: [operation],
+        }}
+        api={api}
+        refreshSession={vi.fn().mockResolvedValue(session(false))}
+        onCommitted={vi.fn()}
+        onRecovered={onRecovered}
+        onRecoveryChange={onRecoveryChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText(
+      "I approve rollback of this exact incomplete additive-copy operation.",
+    ));
+    fireEvent.click(screen.getByRole("button", { name: "Roll back incomplete copy" }));
+
+    expect(await screen.findByText(/Backend status confirms a safe terminal state/))
+      .toBeInTheDocument();
+    expect(screen.getByText(/unidentified partial was preserved/)).toBeInTheDocument();
+    expect(onRecovered).toHaveBeenCalledOnce();
+    expect(onRecoveryChange).toHaveBeenCalledWith(recoveryClear);
+  });
 });
