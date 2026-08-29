@@ -9,6 +9,7 @@ import type {
 } from "../../api";
 import { audioApi, metadataApi } from "../../api";
 import { ManualAssetMetadataEditor } from "../metadata/ManualAssetMetadataEditor";
+import { ProjectWorkspace } from "../project-workspace";
 import { WaveformPreview } from "../waveform/WaveformPreview";
 import "./CatalogLibraryBrowser.css";
 
@@ -144,6 +145,98 @@ export function CatalogLibraryBrowser({
     return <p className="catalog-library-empty">No catalog entries are available.</p>;
   }
 
+  const columns = (
+    <div className="catalog-library-columns">
+      <div className="catalog-library-column" aria-label="Sources">
+        <h4>Browse</h4>
+        <div className="catalog-library-options">
+          {sources.map((source) => (
+            <button
+              type="button"
+              className="catalog-library-option"
+              aria-pressed={source.key === selectedSource?.key}
+              key={source.key}
+              onClick={() => {
+                setSourceKey(source.key);
+                setLocationKey(null);
+              }}
+            >
+              <span>{source.label}</span>
+              <span aria-hidden="true">›</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="catalog-library-column" aria-label="Locations">
+        <h4>Locations</h4>
+        <div className="catalog-library-options">
+          {locations.map((location) => (
+            <button
+              type="button"
+              className="catalog-library-option"
+              aria-pressed={location.key === selectedLocation?.key}
+              key={location.key}
+              onClick={() => setLocationKey(location.key)}
+            >
+              <span>{location.label}</span>
+              <span aria-hidden="true">›</span>
+            </button>
+          ))}
+          {locations.length === 0 && (
+            <p className="catalog-library-empty">No locations indexed.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="catalog-library-column catalog-library-files" aria-label="Audio files">
+        <h4>Audio files</h4>
+        <div className="catalog-library-options">
+          {audioFiles.map((file) => (
+            <button
+              type="button"
+              className="catalog-library-file"
+              aria-pressed={file.fileInstanceId === selectedFile?.fileInstanceId}
+              key={file.fileInstanceId}
+              onClick={() => setSelectedFileInstanceId(file.fileInstanceId)}
+            >
+              <div>
+                <strong>{file.displayName}</strong>
+                <code>{file.relativePath}</code>
+              </div>
+              <span>{formatBytes(file.byteSize)}</span>
+            </button>
+          ))}
+          {audioFiles.length === 0 && (
+            <p className="catalog-library-empty">No audio files indexed here.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="catalog-library-column catalog-library-inspector" aria-label="Asset inspector">
+        <h4>Inspector</h4>
+        {selectedFile === undefined ? (
+          <p className="catalog-library-empty">Select an audio file to edit local metadata.</p>
+        ) : (
+          <div className="catalog-library-inspector-content" key={`${rootId}:${selectedFile.assetId}`}>
+            <WaveformPreview
+              api={audioClient}
+              rootId={rootId}
+              assetId={selectedFile.assetId}
+              displayName={selectedFile.displayName}
+            />
+            <ManualAssetMetadataEditor
+              api={metadataClient}
+              rootId={rootId}
+              assetId={selectedFile.assetId}
+              displayName={selectedFile.displayName}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <section className="catalog-library" aria-labelledby="catalog-library-title">
       <div className="catalog-library-title-row">
@@ -154,95 +247,16 @@ export function CatalogLibraryBrowser({
         <span className="catalog-library-count">{snapshot.audioFiles.length} files</span>
       </div>
 
-      <div className="catalog-library-columns">
-        <div className="catalog-library-column" aria-label="Sources">
-          <h4>Sources</h4>
-          <div className="catalog-library-options">
-            {sources.map((source) => (
-              <button
-                type="button"
-                className="catalog-library-option"
-                aria-pressed={source.key === selectedSource?.key}
-                key={source.key}
-                onClick={() => {
-                  setSourceKey(source.key);
-                  setLocationKey(null);
-                }}
-              >
-                <span>{source.label}</span>
-                <span aria-hidden="true">›</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="catalog-library-column" aria-label="Locations">
-          <h4>Locations</h4>
-          <div className="catalog-library-options">
-            {locations.map((location) => (
-              <button
-                type="button"
-                className="catalog-library-option"
-                aria-pressed={location.key === selectedLocation?.key}
-                key={location.key}
-                onClick={() => setLocationKey(location.key)}
-              >
-                <span>{location.label}</span>
-                <span aria-hidden="true">›</span>
-              </button>
-            ))}
-            {locations.length === 0 && (
-              <p className="catalog-library-empty">No locations indexed.</p>
-            )}
-          </div>
-        </div>
-
-        <div className="catalog-library-column catalog-library-files" aria-label="Audio files">
-          <h4>Audio files</h4>
-          <div className="catalog-library-options">
-            {audioFiles.map((file) => (
-              <button
-                type="button"
-                className="catalog-library-file"
-                aria-pressed={file.fileInstanceId === selectedFile?.fileInstanceId}
-                key={file.fileInstanceId}
-                onClick={() => setSelectedFileInstanceId(file.fileInstanceId)}
-              >
-                <div>
-                  <strong>{file.displayName}</strong>
-                  <code>{file.relativePath}</code>
-                </div>
-                <span>{formatBytes(file.byteSize)}</span>
-              </button>
-            ))}
-            {audioFiles.length === 0 && (
-              <p className="catalog-library-empty">No audio files indexed here.</p>
-            )}
-          </div>
-        </div>
-
-        <div className="catalog-library-column catalog-library-inspector" aria-label="Asset inspector">
-          <h4>Inspector</h4>
-          {selectedFile === undefined ? (
-            <p className="catalog-library-empty">Select an audio file to edit local metadata.</p>
-          ) : (
-            <div className="catalog-library-inspector-content" key={`${rootId}:${selectedFile.assetId}`}>
-              <WaveformPreview
-                api={audioClient}
-                rootId={rootId}
-                assetId={selectedFile.assetId}
-                displayName={selectedFile.displayName}
-              />
-              <ManualAssetMetadataEditor
-                api={metadataClient}
-                rootId={rootId}
-                assetId={selectedFile.assetId}
-                displayName={selectedFile.displayName}
-              />
-            </div>
-          )}
-        </div>
-      </div>
+      {selectedLocation?.kind === "project" ? (
+        <ProjectWorkspace
+          project={selectedLocation.project}
+          localSampleCount={audioFiles.length}
+        >
+          {columns}
+        </ProjectWorkspace>
+      ) : (
+        columns
+      )}
     </section>
   );
 }

@@ -1,6 +1,6 @@
 # Design System Migration
 
-Status: Phase A (DS1–DS6) on main; **UI1 Sources / AppShell landing on main**  
+Status: Phase A on main; UI1 on main; **UI2 landing on main; UI3 next**  
 Updated: 2026-08-29
 
 ## Purpose
@@ -132,21 +132,37 @@ Phase D  UI6 Branding → DS7 Legacy CSS removal
 - **Out of scope:** AudioPoolSidebar resize, TransferProgressPanel height,
   vertical orientation, DnD/preview rewrites.
 
-### PR-UI1 — Sources / AppShell (in progress)
+### PR-UI1 — Sources / AppShell (done)
 
 - Add `src/app/AppShell` (Sources | Main | optional Inspector) using `SplitPane`.
 - Add `features/sources/SourcesPane` for root-session chrome (READ ONLY,
   choose/close, fingerprint summary). No raw absolute paths in the UI.
 - Compose `RootRegistryPanel` as AppShell + SourcesPane + `CatalogLibraryBrowser`
-  in Main. HomePage legacy scan / DnD / project grid stay untouched.
+  in Main (preserves waveform `audioClient` wiring). HomePage legacy scan /
+  DnD / project grid stay untouched.
 - **Out of scope:** Inspector content (UI4), Project workspace rewrite (UI2),
   replacing legacy Home locations with Sources tree, branding (UI6).
+
+### PR-UI2 — Project Workspace (done)
+
+- Add `features/project-workspace` for catalog-backed project summary in AppShell Main.
+- First consumer: wrap column browser when a Project location is selected in
+  `CatalogLibraryBrowser` (display name, relative path, file/banks flags, local
+  sample count). No raw absolute paths.
+- **Out of scope:** rewriting legacy `ProjectDetail`, Pattern/Slot editors, writes,
+  Inspector AppShell slot (UI4).
+
+### PR-UI3 — Audio Library region (next)
+
+- Formalize Audio Pool / set-library browsing chrome on AppShell Main (parallel to
+  ProjectWorkspace), without rewriting Audio Pool page DnD.
+- **Out of scope:** legacy AudioPoolPage rewrite, transfers, CSS deletion (DS7).
 
 ### Later (documented only until started)
 
 | PR | Focus |
 |----|--------|
-| UI2–UI3 | Project Workspace / Audio Library regions on AppShell |
+| UI3 | Audio Library region formalization on AppShell |
 | UI4–UI5 | Notes inspector + Usage Graph UI |
 | UI6 | Branding rename artifacts only |
 | DS7 | Remove unused `--elektron-*` and legacy classes; shrink App.css |

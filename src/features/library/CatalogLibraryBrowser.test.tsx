@@ -53,14 +53,19 @@ describe("CatalogLibraryBrowser", () => {
   it("browses Set Audio Pool and Project-local files without absolute paths", () => {
     render(<CatalogLibraryBrowser rootId="root-opaque" snapshot={snapshot} />);
 
-    const files = screen.getByLabelText("Audio files");
-    expect(within(files).getByText("POOL.wav")).toBeInTheDocument();
-    expect(within(files).queryByText("PROJECT.wav")).not.toBeInTheDocument();
+    const poolFiles = screen.getByLabelText("Audio files");
+    expect(within(poolFiles).getByText("POOL.wav")).toBeInTheDocument();
+    expect(within(poolFiles).queryByText("PROJECT.wav")).not.toBeInTheDocument();
+    expect(screen.queryByText("Project workspace")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /PROJECT_A/ }));
-    expect(within(files).getByText("PROJECT.wav")).toBeInTheDocument();
-    expect(within(files).queryByText("POOL.wav")).not.toBeInTheDocument();
-    expect(files).not.toHaveTextContent("/private/");
+    const projectFiles = screen.getByLabelText("Audio files");
+    expect(within(projectFiles).getByText("PROJECT.wav")).toBeInTheDocument();
+    expect(within(projectFiles).queryByText("POOL.wav")).not.toBeInTheDocument();
+    expect(projectFiles).not.toHaveTextContent("/private/");
+    expect(screen.getByRole("heading", { name: "PROJECT_A" })).toBeInTheDocument();
+    expect(screen.getByText("Project workspace")).toBeInTheDocument();
+    expect(screen.getByText("1 local sample")).toBeInTheDocument();
   });
 
   it("keeps standalone Projects in a separate source", () => {
