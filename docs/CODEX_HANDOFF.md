@@ -72,7 +72,13 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - P0 containment追加hardening: #28マージ済み
 - UI1 AppShell／SourcesPane: #29マージ済み
 - macOS AppShell import resolution hotfix: #31マージ済み
-- 現在のmain基準SHA: `7a99e893ec5b69e109e130c58ee6d48c8e1a38ae`
+- UI2 ProjectWorkspace: #32マージ済み
+- M4-A additive copy transaction foundation: #34マージ済み
+- UI3 AudioLibrary: #35マージ済み
+- UI4 Notes Inspector: #36マージ済み
+- M4-A transaction boundary hardening: #37マージ済み
+- UI5 Usage Graph: #38マージ済み
+- 現在のmain基準SHA: `dc83ff0f5d45936ec8ab3ec4c463fa7f921119e9`
 - M2: 完了
 - M3-A: 完了
 - M3-B: 完了
@@ -85,9 +91,11 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - M3-E2: 完了
 - M3-E3: 完了
 - M3: 完了
-- 現在の作業: M4-A additive copy transaction foundation
+- M4-A: 完了
+- 現在の作業: M4-B production authority and approved apply vertical slice
 - SQLite schema: v5（M3-E1で追加）
-- 次の機能実装: M4-Aのマージ後、M4-B production write authority／API／diff UI
+- 次の機能実装: M4-Bマージ後、Gate Bのproduction recovery導線とreview済みclone smokeを
+  残条件として評価し、未充足ならM5より先に補完する
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
 - `ot-tools-io`はコミット
@@ -283,3 +291,17 @@ RootRegistry wiring、Tauri command、frontend、write grant発行はM4-Aに含�
 session限定write authority、plan diff／明示承認、production compositionを別PRとして扱う。
 テストDBとaudio fixtureは一時directoryだけを使用し、実SD／CFカードやOctatrack原本
 データを使用しない。依存監査の既存受容期限と再確認条件は維持する。
+
+M4-Bでは、stable identityを持つlive RootRegistry sessionに15分以内の非永続write grantを
+明示的に付与し、executorの各checkpointで再検証する。`change-plan:v1`はcatalogのopaque
+FileInstance IDと検証済みroot-relative destinationから生成し、frontendのChange Drawerで
+CREATE diff、verified backup対象、警告、overwrite/delete禁止を表示する。Applyは表示した
+同一PlanIdの明示承認を一回だけ受理し、成功後にcatalogを再scanして置換する。plan、grant、
+session RootId、absolute pathは永続化しない。journal／backup／stagingはMac側Application
+Support配下だけに置く。
+
+`change-status:v1`と`change-recovery-status:v1`は未完了journalをfail-closedに公開し、存在時は
+新しいgrantとApplyを拒否する。このPRはproduction recovery実行commandを公開しないため、
+Gate Bはreview済みclone smokeと明示的recovery導線の要否を確認するまで完了扱いにしない。
+production composition testは生成したtemporary rootと合成WAVだけを使用し、sourceの
+byte-for-byte不変、追加先の一致、catalog再取得を確認する。

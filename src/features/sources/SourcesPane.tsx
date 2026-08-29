@@ -9,6 +9,8 @@ export interface SourcesPaneProps {
   error?: string | null
   onRegister: () => void
   onClose: () => void
+  onEnableWrite: () => void
+  writeBlocked?: boolean
   /** Optional Set/Project tree or saved views (UI1+). */
   children?: ReactNode
 }
@@ -23,13 +25,18 @@ export function SourcesPane({
   error = null,
   onRegister,
   onClose,
+  onEnableWrite,
+  writeBlocked = false,
   children,
 }: SourcesPaneProps) {
+  const writeEnabled = session?.mode === 'write_enabled' && session.capabilities.write
   return (
     <div className="mo-sources-pane" aria-labelledby="mo-sources-title">
       <div className="mo-sources-pane__title-row">
         <h2 id="mo-sources-title">Sources</h2>
-        <StatusBadge tone="readonly">READ ONLY</StatusBadge>
+        <StatusBadge tone={writeEnabled ? 'warning' : 'readonly'}>
+          {writeEnabled ? 'EDIT ENABLED' : 'READ ONLY'}
+        </StatusBadge>
       </div>
       <p className="mo-sources-pane__lede">
         Registered Octatrack roots. Only the native picker may submit an absolute path.
@@ -41,9 +48,20 @@ export function SourcesPane({
             {busy ? 'Registering...' : 'Choose root...'}
           </Button>
         ) : (
-          <Button variant="secondary" disabled={busy} onClick={onClose}>
-            {busy ? 'Closing...' : 'Close root'}
-          </Button>
+          <>
+            {!writeEnabled && (
+              <Button
+                variant="secondary"
+                disabled={busy || writeBlocked || !session.capabilities.stableDeviceIdentity}
+                onClick={onEnableWrite}
+              >
+                Enable edit mode
+              </Button>
+            )}
+            <Button variant="secondary" disabled={busy} onClick={onClose}>
+              {busy ? 'Working...' : 'Close root'}
+            </Button>
+          </>
         )}
       </div>
 
@@ -67,9 +85,23 @@ export function SourcesPane({
           </div>
           <div>
             <dt>Mode</dt>
-            <dd>Read only</dd>
+            <dd>{writeEnabled ? 'Edit enabled (session only)' : 'Read only'}</dd>
           </div>
+          {writeEnabled && (
+            <div>
+              <dt>Write grant</dt>
+              <dd>
+                {session.writeGrantExpiresInSeconds ?? 0} seconds remaining
+              </dd>
+            </div>
+          )}
         </dl>
+      )}
+
+      {writeEnabled && (
+        <p className="mo-sources-pane__write-warning">
+          Additive copy only. Use a cloned or test root, never original media.
+        </p>
       )}
 
       {children}

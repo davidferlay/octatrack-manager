@@ -49,3 +49,8 @@
   color: var(--mo-text-muted);
   font-size: 0.85rem;
 }
+
+.mo-app-shell__change-drawer {
+  border-top: 1px solid var(--mo-border);
+  background: color-mix(in srgb, var(--mo-surface-1) 70%, var(--mo-canvas));
+}

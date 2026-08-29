@@ -357,6 +357,44 @@ not a complete Rust audit. Because the lockfile delta contains only the three
 new local workspace package records and no new third-party package/version
 pair, the existing Rust classifications and recheck triggers remain in force.
 
+## M4-B production write reachability delta
+
+Audit date: 2026-08-29
+
+M4-B connects the Tauri composition package directly to the existing local
+workspace crates `ot-plan` and `ot-executor`; `ot-backup` becomes product-runtime
+reachable through the executor. `Cargo.lock` changes only the composition
+package's two local dependency edges. No crates.io package, resolved version, or
+checksum changes, and the JavaScript lockfiles are unchanged.
+
+The runtime-reachable third-party edges used by this path are the already locked
+`fs2@0.4.3`, `serde@1.0.228`, `serde_json@1.0.149`, `sha2@0.10.9`, and
+`rustix@1.1.4`. An exact package/version OSV query returned no advisory for all
+five packages. `cargo audit` remains unavailable (`cargo: no such command:
+audit`) and was not installed, so this is not a complete RustSec audit. No new
+runtime-reachable critical/high advisory or critical advisory with unknown
+reachability was identified by this dependency delta.
+
+The new product write path is limited to an absent root-relative destination on
+a live, stable, session-approved root. It requires a short-lived write grant,
+the exact displayed PlanId as one-shot approval, a verified local backup,
+operation journal, descriptor-relative source/destination validation,
+no-replace publication, and post-write hash verification. Backup, staging, and
+journal state is stored only below Mac-side Application Support. An incomplete
+journal blocks later grants and applies; this PR exposes recovery-required
+status but does not expose production recovery execution.
+
+Re-running the JavaScript audits produced the same classified totals:
+
+- root: 31 advisories (`low: 2`, `moderate: 12`, `high: 16`, `critical: 1`);
+- docs/PDF: 88 findings (`low: 5`, `moderate: 33`, `high: 48`, `critical: 2`).
+
+These findings pre-date M4-B and no JavaScript package changed. M4-B adds no
+network endpoint, install-time script, dependency override, or audit suppression.
+All write-composition tests used generated temporary directories and synthetic
+WAV bytes; no physical Octatrack, SD/CF card, original media, release, deploy,
+or user Application Support directory was used.
+
 ## Reproduction
 
 Commands used:

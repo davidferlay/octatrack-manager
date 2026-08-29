@@ -27,6 +27,18 @@ describe('AppShell', () => {
     expect(screen.getByText('Inspector content')).toBeInTheDocument()
   })
 
+  it('renders the Change Drawer below the workspace regions', () => {
+    render(
+      <AppShell
+        sources={<div>Sources content</div>}
+        main={<div>Main content</div>}
+        changeDrawer={<div>Review additive copy</div>}
+      />,
+    )
+
+    expect(screen.getByText('Review additive copy')).toBeInTheDocument()
+  })
+
   it('resizes Sources width in uncontrolled mode by default', () => {
     render(
       <AppShell

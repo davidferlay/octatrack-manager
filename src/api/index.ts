@@ -10,6 +10,14 @@ export type {
 } from "./audio";
 export { createMetadataApi, metadataApi } from "./metadata";
 export type { ManualAssetMetadata, MetadataApi } from "./metadata";
+export { changeApi, createChangeApi } from "./changes";
+export type {
+  ChangeApi,
+  ChangeOperationState,
+  ChangePlan,
+  ChangeRecoveryStatus,
+  ChangeStatus,
+} from "./changes";
 export { createRootApi, rootApi } from "./roots";
 export type {
   LibraryAudioFile,

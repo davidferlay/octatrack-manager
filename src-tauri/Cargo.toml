@@ -58,6 +58,8 @@ ot-application = { path = "crates/ot-application" }
 ot-audio = { path = "crates/ot-audio" }
 ot-catalog = { path = "crates/ot-catalog" }
 ot-domain = { path = "crates/ot-domain" }
+ot-executor = { path = "crates/ot-executor" }
+ot-plan = { path = "crates/ot-plan" }
 ot-storage-ports = { path = "crates/ot-storage-ports" }
 
 [dev-dependencies]

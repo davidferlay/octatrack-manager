@@ -9,6 +9,8 @@ export interface AppShellProps extends HTMLAttributes<HTMLElement> {
   main: ReactNode
   /** Optional right Inspector (UI4 Notes / waveform / metadata). */
   inspector?: ReactNode
+  /** Optional bottom Change Drawer for Intent → Plan → Apply review. */
+  changeDrawer?: ReactNode
   /** Controlled Sources pane width %. Omit for uncontrolled resize. */
   sourcesSize?: number
   /** Uncontrolled initial Sources width % (default 28). */
@@ -24,6 +26,7 @@ export function AppShell({
   sources,
   main,
   inspector,
+  changeDrawer,
   sourcesSize,
   defaultSourcesSize = 28,
   onSourcesSizeChange,
@@ -71,6 +74,9 @@ export function AppShell({
           )}
         </SplitPane.Secondary>
       </SplitPane>
+      {changeDrawer != null && (
+        <div className="mo-app-shell__change-drawer">{changeDrawer}</div>
+      )}
     </section>
   )
 }
