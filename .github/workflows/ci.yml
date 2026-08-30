@@ -19,6 +19,7 @@ on:
       - 'playwright.config.*'
       - 'scripts/**'
       - '.github/workflows/**'
+      - '.github/actions/**'
   pull_request:
     branches: [main]
     paths:
@@ -35,6 +36,7 @@ on:
       - 'playwright.config.*'
       - 'scripts/**'
       - '.github/workflows/**'
+      - '.github/actions/**'
 
 concurrency:
   group: ci-${{ github.ref }}
