@@ -161,8 +161,8 @@ vulnerability. No `critical` advisory was returned.
 | Package / resolved version | Shortest dependency path | Advisory / fix | Affected use and reachability | Action |
 | --- | --- | --- | --- | --- |
 | `libyml@0.0.5` | `octatrack-manager > ot-tools-io > serde_yml > libyml` | `RUSTSEC-2025-0067` / `GHSA-gfxp-f68g-8x78`, high; no maintained fixed release | Affected YAML parsing. The pinned `ot-tools` revision exposes YAML convenience APIs, but repository source does not call `from_yaml*`, `to_yaml*`, or `serde_yml`; Octatrack parsing uses binary/text APIs. **Not runtime reachable.** | Isolate behind the legacy adapter. Remediate/replace `serde_yml` before adding YAML import/export; recheck on any `ot-tools` revision change. |
-| `quick-xml@0.38.4` | `octatrack-manager > tauri > plist > quick-xml` | `RUSTSEC-2026-0194`, high, `>=0.41.0`; `RUSTSEC-2026-0195`, high, `>=0.41.0` | In Tauri `2.10.2`, this plist parser is called by macOS `restart_macos_app` to read `Contents/Info.plist`. The repository does not call process restart, and updater/process integrations remain removed. **Not runtime reachable.** | Keep restart/updater disabled. Remediate through a reviewed Tauri update; recheck immediately if restart/updater is reintroduced. |
-| `tauri@2.10.2` | direct | `GHSA-7gmj-67g7-phm9`, moderate, `>=2.11.1` | Origin confusion affects Windows/Android remote WebViews. This macOS-first app uses local `frontendDist`/localhost development and constructs no remote WebView. **Not runtime reachable under current targets/configuration.** | Monitor; remediate in a Tauri update PR. Recheck before Windows/Android distribution or any remote WebView. |
+| `quick-xml@0.38.4` | `masterocta > tauri > plist > quick-xml` | `RUSTSEC-2026-0194`, high, `>=0.41.0`; `RUSTSEC-2026-0195`, high, `>=0.41.0` | Still resolved through Tauri `2.11.5` → `plist`. Called by macOS `restart_macos_app` to read `Contents/Info.plist`. The repository does not call process restart, and updater/process integrations remain removed. **Not runtime reachable.** | Keep restart/updater disabled. Recheck immediately if restart/updater is reintroduced or Tauri drops the vulnerable `quick-xml` edge. |
+| `tauri@2.11.5` | direct | `GHSA-7gmj-67g7-phm9`, moderate, fixed in `>=2.11.1` | Origin confusion affects Windows/Android remote WebViews. **Remediated** by pinning `tauri`/`@tauri-apps/*` to the 2.11 line (DEP-1). Recheck before any remote WebView. | Remediated 2026-08-30 (DEP-1). |
 | `serde_yml@0.0.12` | `octatrack-manager > ot-tools-io > serde_yml` | `RUSTSEC-2025-0068` / `GHSA-hhw4-xg65-fp2x`, moderate; unmaintained, no fixed release | Same unused YAML API path as `libyml`. **Not runtime reachable.** | Replace upstream YAML dependency before exposing YAML features; recheck on `ot-tools` changes. |
 | `glib@0.18.5` | `tauri > gtk > glib` | `RUSTSEC-2024-0429` / `GHSA-wrw7-89jp-8q8g`, moderate, `>=0.20.0` | Linux GTK target dependency; not compiled into the macOS application. **Not runtime reachable on supported target.** | Monitor Tauri's Linux dependency update; recheck before Linux distribution. |
 | `serde_with@3.16.1` | `tauri > tauri-utils > serde_with` | `GHSA-7gcf-g7xr-8hxj`, moderate, `>=3.21.0` | Affected deserialization helpers are not directly called by application code. The Tauri utility layer is compiled, so **potentially reachable**, but no attacker-controlled use was identified. | Remediate through Tauri; recheck on IPC/schema changes. |
@@ -394,6 +394,29 @@ network endpoint, install-time script, dependency override, or audit suppression
 All write-composition tests used generated temporary directories and synthetic
 WAV bytes; no physical Octatrack, SD/CF card, original media, release, deploy,
 or user Application Support directory was used.
+
+## DEP-1 Tauri security baseline (2026-08-30)
+
+Pinned the Tauri stack without unrelated dependency bumps or `pnpm.overrides`:
+
+| Component | Before | After |
+| --- | --- | --- |
+| `tauri` (Rust) | `2.10.2` | `2.11.5` (manifest floor `2.11.1`) |
+| `tauri-build` | `2.5.5` | `2.6.3` |
+| `tauri-plugin-dialog` | `2.6.0` | `2.7.2` |
+| `tauri-plugin-opener` | `2.5.3` | `2.5.4` |
+| `@tauri-apps/api` | `2.10.1` | `2.11.1` |
+| `@tauri-apps/cli` | `2.10.0` | `2.11.4` |
+| `@tauri-apps/plugin-dialog` | `2.6.0` | `2.7.2` |
+| `@tauri-apps/plugin-opener` | `2.5.3` | `2.5.4` |
+
+`GHSA-7gmj-67g7-phm9` is remediated by the `tauri` floor. Transitive
+`quick-xml@0.38.4` and `serde_with@3.16.1` remain resolved through current
+Tauri; restart/updater stay disabled and those edges stay documented above.
+No React Router or frontend toolchain packages were changed in DEP-1.
+
+Mac `.app` / `.dmg` generation and live Root/preview/metadata/copy/recovery
+smoke require a macOS host and were not executed in the Linux CI agent.
 
 ## DEP-2 frontend toolchain (2026-08-30)
 
