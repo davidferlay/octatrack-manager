@@ -1763,7 +1763,7 @@ mod tests {
     use crate::write_runtime::open_shared_write_runtime;
     use ot_executor::{JournalFileIdentity, JournalStatus, OperationJournal};
     use std::fs;
-    use std::os::unix::fs::MetadataExt;
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
     use std::path::Path;
     use std::time::Duration;
     use tempfile::TempDir;
@@ -2075,6 +2075,28 @@ mod tests {
             serde_json::to_vec_pretty(&journal).unwrap(),
         )
         .unwrap();
+        let authorization_directory = journal_directory.join("authorizations");
+        fs::create_dir_all(&authorization_directory).unwrap();
+        let authorization_path = authorization_directory.join(format!("{digest}.json"));
+        let authorization = serde_json::json!({
+            "schema": "masterocta-recovery-authorization:v1",
+            "operation_id": operation_id.clone(),
+            "plan_id": journal.plan_id.clone(),
+            "root_fingerprint": journal.root_fingerprint.clone(),
+            "base_observed_revision": journal.base_observed_revision,
+            "source_relative_path": source_relative_path,
+            "destination_relative_path": destination_relative_path,
+            "backup_snapshot_id": journal.backup_snapshot_id.clone(),
+            "recovery_binding": journal.recovery_binding.clone(),
+            "source_byte_size": source_before.len() as u64,
+            "source_content_hash": content_hash,
+        });
+        fs::write(
+            &authorization_path,
+            serde_json::to_vec_pretty(&authorization).unwrap(),
+        )
+        .unwrap();
+        fs::set_permissions(&authorization_path, fs::Permissions::from_mode(0o400)).unwrap();
 
         assert!(registry.enable_write(&root_id).unwrap().capabilities.write);
 
