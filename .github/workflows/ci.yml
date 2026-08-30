@@ -33,7 +33,10 @@ on:
       - '.github/workflows/ci.yml'
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # A branch push and its pull_request event test the same head SHA. Give both
+  # events one key so the newer run cancels the duplicate instead of running
+  # the full E2E suite twice.
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 env:
