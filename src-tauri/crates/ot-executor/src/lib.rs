@@ -3,7 +3,9 @@
 use fs2::FileExt;
 use ot_backup::{recovery_binding_for_plan, BackupError, BackupStore, SnapshotId, VerifiedBackup};
 use ot_domain::{ContentHash, RootId, RootRelativePath};
-use ot_plan::{ChangePlan, PlanId};
+use ot_plan::{
+    derive_additive_copy_plan_id, ChangePlan, PlanId, PlanSeed,
+};
 use rustix::fs::{self as descriptor_fs, AtFlags, Mode, OFlags, RenameFlags};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -17,7 +19,7 @@ const JOURNAL_SCHEMA: &str = "masterocta-operation-journal:v3";
 const LEGACY_JOURNAL_SCHEMA: &str = "masterocta-operation-journal:v2";
 const OPERATION_ID_PREFIX: &str = "operation:v1:";
 const RECOVERY_BINDING_PREFIX: &str = "recovery-binding:v1:";
-const RECOVERY_AUTHORIZATION_SCHEMA: &str = "masterocta-recovery-authorization:v1";
+const RECOVERY_AUTHORIZATION_SCHEMA: &str = "masterocta-recovery-authorization:v2";
 const RECOVERY_AUTHORIZATION_DIRECTORY: &str = "authorizations";
 const UNIDENTIFIED_PARTIAL_FAILURE: &str = "RECOVERY_PRESERVED_UNIDENTIFIED_PARTIAL";
 const LEGACY_RECOVERY_BINDING: &str = "legacy-recovery-binding:unavailable";
@@ -198,6 +200,14 @@ struct RecoveryAuthorization {
     schema: String,
     operation_id: String,
     plan_id: String,
+    /// Opaque session RootId captured when the plan was created. Used only to
+    /// re-derive PlanId integrity; live recovery still resolves through the
+    /// current registry RootId.
+    root_id: String,
+    /// Hex-encoded PlanSeed. Binding destination/source fields to PlanId so a
+    /// rewritten authorization cannot retarget deletion while keeping the same
+    /// operation/plan identifiers.
+    plan_seed: String,
     root_fingerprint: String,
     base_observed_revision: u64,
     source_relative_path: String,
@@ -1845,6 +1855,8 @@ fn recovery_authorization_for_plan(
         schema: RECOVERY_AUTHORIZATION_SCHEMA.to_owned(),
         operation_id: operation_id.as_str().to_owned(),
         plan_id: plan.id.as_str().to_owned(),
+        root_id: plan.root_id.as_str().to_owned(),
+        plan_seed: plan.plan_seed().to_hex(),
         root_fingerprint: plan.device_fingerprint.clone(),
         base_observed_revision: plan.base_observed_revision,
         source_relative_path: plan.operation.source.relative_path.as_str().to_owned(),
@@ -2008,7 +2020,38 @@ fn validate_recovery_authorization(
         || RootRelativePath::parse(&authorization.destination_relative_path).is_err()
         || authorization.source_relative_path == authorization.destination_relative_path
         || ContentHash::parse(authorization.source_content_hash.clone()).is_err()
+        || RootId::new(authorization.root_id.clone()).is_err()
+        || PlanSeed::parse_hex(&authorization.plan_seed).is_err()
     {
+        return Err(ExecutorError::InvalidJournal);
+    }
+    verify_recovery_authorization_plan_binding(authorization)?;
+    Ok(())
+}
+
+fn verify_recovery_authorization_plan_binding(
+    authorization: &RecoveryAuthorization,
+) -> Result<(), ExecutorError> {
+    let root_id = RootId::new(authorization.root_id.clone()).map_err(|_| ExecutorError::InvalidJournal)?;
+    let plan_seed =
+        PlanSeed::parse_hex(&authorization.plan_seed).map_err(|_| ExecutorError::InvalidJournal)?;
+    let source = RootRelativePath::parse(&authorization.source_relative_path)
+        .map_err(|_| ExecutorError::InvalidJournal)?;
+    let destination = RootRelativePath::parse(&authorization.destination_relative_path)
+        .map_err(|_| ExecutorError::InvalidJournal)?;
+    let content_hash = ContentHash::parse(authorization.source_content_hash.clone())
+        .map_err(|_| ExecutorError::InvalidJournal)?;
+    let expected = derive_additive_copy_plan_id(
+        &root_id,
+        &plan_seed,
+        &authorization.root_fingerprint,
+        authorization.base_observed_revision,
+        &source,
+        &destination,
+        &content_hash,
+        authorization.source_byte_size,
+    );
+    if expected.as_str() != authorization.plan_id {
         return Err(ExecutorError::InvalidJournal);
     }
     Ok(())
@@ -2775,7 +2818,9 @@ mod tests {
         ))
         .unwrap();
         assert!(!authorization_text.contains(fixture.root.to_string_lossy().as_ref()));
-        assert!(!authorization_text.contains("root-1"));
+        // Opaque session RootId is stored for PlanId re-derivation; absolute paths are not.
+        assert!(authorization_text.contains("root-1"));
+        assert!(authorization_text.contains("plan_seed"));
     }
 
     #[test]
@@ -3480,6 +3525,19 @@ mod tests {
                 & 0o222,
             0
         );
+        // Same-user attackers can chmod and rewrite the authorization file; the
+        // durable plan_seed still binds destination to PlanId/OperationId.
+        fs::set_permissions(&authorization_path, fs::Permissions::from_mode(0o600)).unwrap();
+        let mut authorization: RecoveryAuthorization =
+            serde_json::from_slice(&fs::read(&authorization_path).unwrap()).unwrap();
+        authorization.destination_relative_path = "SET/PROJECT/victim.wav".into();
+        authorization.recovery_binding = manifest.recovery_binding.clone();
+        fs::write(
+            &authorization_path,
+            serde_json::to_vec_pretty(&authorization).unwrap(),
+        )
+        .unwrap();
+        fs::set_permissions(&authorization_path, fs::Permissions::from_mode(0o400)).unwrap();
         assert!(matches!(
             executor.recover_incomplete_operation(
                 &fixture.plan.root_id,

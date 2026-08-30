@@ -503,4 +503,52 @@ describe("AdditiveCopyChangeDrawer", () => {
     expect(onRecovered).toHaveBeenCalledOnce();
     expect(onRecoveryChange).toHaveBeenCalledWith(recoveryClear);
   });
+
+  it("refreshes the revoked session after a nonterminal recovery failure", async () => {
+    const api = fakeApi();
+    const operation = {
+      schema: "change-status:v1" as const,
+      operationId,
+      planId,
+      state: "recovery_required" as const,
+      recoveryRequired: true,
+      catalogRefreshRequired: true,
+      failureCode: "SIMULATED_PROCESS_EXIT",
+      backupSnapshotId: `snapshot:v1:${"a".repeat(64)}`,
+    };
+    vi.mocked(api.recoverChange).mockRejectedValue(new Error("Journal no longer validates"));
+    vi.mocked(api.changeStatus).mockResolvedValue(operation);
+    vi.mocked(api.recoveryStatus).mockResolvedValue({
+      schema: "change-recovery-status:v1",
+      recoveryRequired: true,
+      operations: [operation],
+    });
+    const onRecovered = vi.fn();
+    const onRecoveryChange = vi.fn();
+    render(
+      <AdditiveCopyChangeDrawer
+        session={session(true)}
+        selectedAsset={selectedAsset}
+        recovery={{
+          schema: "change-recovery-status:v1",
+          recoveryRequired: true,
+          operations: [operation],
+        }}
+        api={api}
+        refreshSession={vi.fn().mockResolvedValue(session(false))}
+        onCommitted={vi.fn()}
+        onRecovered={onRecovered}
+        onRecoveryChange={onRecoveryChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText(
+      "I approve rollback of this exact incomplete additive-copy operation.",
+    ));
+    fireEvent.click(screen.getByRole("button", { name: "Roll back incomplete copy" }));
+
+    expect(await screen.findByText(/Journal no longer validates/)).toBeInTheDocument();
+    expect(onRecovered).toHaveBeenCalledOnce();
+    expect(onRecoveryChange).toHaveBeenCalled();
+  });
 });

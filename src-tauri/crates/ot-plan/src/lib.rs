@@ -30,8 +30,42 @@ impl PlanSeed {
         Self(bytes)
     }
 
+    pub fn parse_hex(value: &str) -> Result<Self, PlanError> {
+        if value.len() != 64
+            || !value
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(PlanError::InvalidPlanSeed);
+        }
+        let mut bytes = [0u8; 32];
+        for (index, chunk) in value.as_bytes().chunks_exact(2).enumerate() {
+            let high = hex_nibble(chunk[0]).ok_or(PlanError::InvalidPlanSeed)?;
+            let low = hex_nibble(chunk[1]).ok_or(PlanError::InvalidPlanSeed)?;
+            bytes[index] = (high << 4) | low;
+        }
+        Ok(Self(bytes))
+    }
+
+    pub fn to_hex(&self) -> String {
+        let mut hex = String::with_capacity(64);
+        for byte in self.0 {
+            use std::fmt::Write as _;
+            let _ = write!(hex, "{byte:02x}");
+        }
+        hex
+    }
+
     fn as_bytes(&self) -> &[u8; 32] {
         &self.0
+    }
+}
+
+fn hex_nibble(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        _ => None,
     }
 }
 
@@ -92,6 +126,10 @@ pub struct ChangePlan {
 }
 
 impl ChangePlan {
+    pub fn plan_seed(&self) -> &PlanSeed {
+        &self.plan_seed
+    }
+
     pub fn validate_integrity(&self) -> Result<(), PlanError> {
         let expected = derive_plan_id_from_fields(
             &self.root_id,
@@ -109,6 +147,33 @@ impl ChangePlan {
             Err(PlanError::IntegrityMismatch)
         }
     }
+}
+
+/// Re-derive the additive-copy PlanId from durable recovery fields.
+///
+/// Recovery authorization stores the plan seed so a rewritten destination
+/// cannot keep the original operation/plan IDs without breaking SHA-256.
+#[allow(clippy::too_many_arguments)]
+pub fn derive_additive_copy_plan_id(
+    root_id: &RootId,
+    plan_seed: &PlanSeed,
+    device_fingerprint: &str,
+    observed_revision: u64,
+    source_relative_path: &RootRelativePath,
+    destination_relative_path: &RootRelativePath,
+    source_content_hash: &ContentHash,
+    source_byte_size: u64,
+) -> PlanId {
+    derive_plan_id_from_fields(
+        root_id,
+        plan_seed,
+        device_fingerprint,
+        observed_revision,
+        source_relative_path,
+        destination_relative_path,
+        source_content_hash,
+        source_byte_size,
+    )
 }
 
 pub fn plan_additive_copy(
@@ -221,6 +286,7 @@ fn validate_prefixed_sha256(value: &str, prefix: &str) -> Result<(), ()> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PlanError {
     InvalidPlanId,
+    InvalidPlanSeed,
     RootMismatch,
     UnstableRootIdentity,
     InvalidRootFingerprint,
@@ -235,6 +301,7 @@ impl fmt::Display for PlanError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::InvalidPlanId => "plan ID is not a versioned SHA-256 identifier",
+            Self::InvalidPlanSeed => "plan seed is not a 32-byte lowercase hex value",
             Self::RootMismatch => "intent and observed source root do not match",
             Self::UnstableRootIdentity => "additive copy requires a stable root identity",
             Self::InvalidRootFingerprint => "root fingerprint is not a supported versioned value",
