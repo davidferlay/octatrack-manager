@@ -30,7 +30,7 @@ destructive operations against original Octatrack media.
 | # | Issue | Status |
 | --- | --- | --- |
 | 1 | Upstream auto-update trusts upstream releases/keys | **Fixed** — updater plugin, endpoints, and artifacts disabled (PR-0). |
-| 2 | Tauri 2.10.x missing security fixes | **Open** — lockfile still resolves `tauri@2.10.2`; remediate in a dedicated dependency PR (≥2.11.1 per audit). |
+| 2 | Tauri 2.10.x missing security fixes | **Fixed** — `tauri@2.11.5` with aligned CLI/API/plugins (DEP-1). |
 | 3 | CSP is `null` | **Fixed** — restrictive CSP in `src-tauri/tauri.conf.json` (PR #28); **CI-enforced** by SEC-1 `scripts/check-containment.mjs`. |
 | 4 | Rust commands accept arbitrary paths | **Partial** — v2 API bounded by `RootId` / opaque IDs + M4 write path; legacy ~80 commands still path-unbounded; **legacy surface frozen** by SEC-1. |
 | 5 | Weak rename/mkdir traversal checks | **Partial** — next-gen `RootRelativePath` strong; legacy `rename_file` / `create_directory` reject separators / `..` / absolute names (PR #28). |
@@ -78,8 +78,8 @@ Still open / deferred:
 1. **High (ops / Gate B)** — incomplete journals refuse new grants/applies until
    an explicit recovery path exists.
 2. **High (legacy)** — absolute-path command surface remains fully wired.
-3. **Open** — Tauri 2.10.2 upgrade and frontend advisory deadlines in
-   `DEPENDENCY_AUDIT.md`.
+3. **Open** — frontend advisory deadlines in `DEPENDENCY_AUDIT.md` (DEP-2;
+   Vitest/Vite/Rollup/PostCSS by 2026-09-15). Tauri DEP-1 is merged separately.
 
 ## Remaining high-priority risks
 
@@ -87,7 +87,8 @@ Still open / deferred:
    once the desktop app is running. Do not point it at original media.
 2. Without a reviewed recovery-execute flow, a crashed M4 apply can leave the
    root write-blocked until manual intervention.
-3. Tauri crate upgrade and frontend toolchain advisory remediation remain due.
+3. Frontend toolchain advisory remediation (Vitest ≥4.1.0 / Vite ≥7.3.5 line)
+   remains due by 2026-09-15.
 
 ## Verification performed in this recheck
 
