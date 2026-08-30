@@ -31,13 +31,13 @@ destructive operations against original Octatrack media.
 | --- | --- | --- |
 | 1 | Upstream auto-update trusts upstream releases/keys | **Fixed** — updater plugin, endpoints, and artifacts disabled (PR-0). |
 | 2 | Tauri 2.10.x missing security fixes | **Open** — lockfile still resolves `tauri@2.10.2`; remediate in a dedicated dependency PR (≥2.11.1 per audit). |
-| 3 | CSP is `null` | **Fixed** — restrictive CSP in `src-tauri/tauri.conf.json` (PR #28). |
-| 4 | Rust commands accept arbitrary paths | **Partial** — v2 API bounded by `RootId` / opaque IDs + M4 write path; legacy ~80 commands still path-unbounded. |
+| 3 | CSP is `null` | **Fixed** — restrictive CSP in `src-tauri/tauri.conf.json` (PR #28); **CI-enforced** by SEC-1 `scripts/check-containment.mjs`. |
+| 4 | Rust commands accept arbitrary paths | **Partial** — v2 API bounded by `RootId` / opaque IDs + M4 write path; legacy ~80 commands still path-unbounded; **legacy surface frozen** by SEC-1. |
 | 5 | Weak rename/mkdir traversal checks | **Partial** — next-gen `RootRelativePath` strong; legacy `rename_file` / `create_directory` reject separators / `..` / absolute names (PR #28). |
 | 6 | Unrecoverable `remove_file` / `remove_dir_all` deletes | **Partial** — user-facing `delete_files`, `delete_project`, and `delete_set` use `trash`. Copy/move rollback and internal temp cleanup still use hard removes. |
-| 7 | Updater-related `tar` advisories | **Fixed** via updater removal. |
+| 7 | Updater-related `tar` advisories | **Fixed** via updater removal; **CI-enforced** (no updater reintroduction / `createUpdaterArtifacts: false`). |
 | 8 | `ot-tools-io` → `serde_yml` / `libyml` | **Open / accepted** — documented in `DEPENDENCY_AUDIT.md` as not runtime-reachable for current YAML use. |
-| 9 | GitHub Actions mutable tags | **Fixed** — workflows pin full commit SHAs; `dtolnay/rust-toolchain` requires explicit `toolchain: stable` when SHA-pinned. |
+| 9 | GitHub Actions mutable tags | **Fixed** — workflows pin full commit SHAs; **CI-enforced** by SEC-1. |
 | 10 | Weak DMG↔source binding for historical `v0.45.0` | **Open** — release-process risk; not a runtime code defect. |
 
 ## Next-gen surface notes (post M4-B)
