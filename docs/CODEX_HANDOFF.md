@@ -80,9 +80,10 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - UI5 Usage Graph: #38マージ済み
 - M4-B approved additive copy／live write grant: #39マージ済み
 - UI6 MasterOCTa branding rename artifacts: #40マージ済み
-- Design System DS7 legacy token removal: #41マージ済み
+- Design System DS7 `--elektron-*` removal: #41マージ済み
 - Security recheck R2／v2 error sanitization: #42マージ済み
-- 現在のmain基準SHA: `e7745acb68489b7fd8065abf1fbe79fd067a8d8a`
+- opportunistic `App.css` unused rule cleanup: #45マージ済み
+- 現在のmain基準SHA: `ad3313f6a8b41b44bd61e65c6af873bb1aa4832b`
 - M2: 完了
 - M3-A: 完了
 - M3-B: 完了
@@ -96,8 +97,9 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - M3-E3: 完了
 - M3: 完了
 - M4-A: 完了
-- M4-B: 完了
-- 現在の作業: Gate B production recovery導線とclone smoke gate
+- M4-B: 完了（Gate B recovery実行は未完了）
+- Design System Phase A–D: 完了（DS1–DS7 / UI1–UI6）
+- 現在の作業: Gate B production recovery導線（PR #43）とclone smoke gate
 - SQLite schema: v5（M3-E1で追加）
 - 次の機能実装: production recovery導線をマージ後、
   `docs/testing/GATE_B_CLONE_SMOKE.md`を由来確認済みの使い捨てcloneで人間が実施・reviewする。
