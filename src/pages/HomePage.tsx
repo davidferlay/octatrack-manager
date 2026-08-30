@@ -28,7 +28,7 @@ import { RenameProjectModal } from "../components/RenameProjectModal";
 import { ProjectContextMenu } from "../components/ProjectContextMenu";
 import { CopyProgressModal } from "../components/CopyProgressModal";
 import { RootRegistryPanel } from "../features/roots/RootRegistryPanel";
-import { Button, Toolbar } from "../design-system";
+import { Button, ThemeSwitcher, Toolbar } from "../design-system";
 import type {
   ClipboardState,
   ContextMenuState,
@@ -491,6 +491,7 @@ export function HomePage() {
               <i className="fas fa-sync-alt"></i>
             </Button>
           </Toolbar>
+          <ThemeSwitcher />
           <Version />
         </div>
       </div>

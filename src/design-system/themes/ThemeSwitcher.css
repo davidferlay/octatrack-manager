@@ -1,0 +1,36 @@
+.mo-theme-switcher {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.mo-theme-switcher__label {
+  color: var(--mo-text-muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.mo-theme-switcher__select {
+  appearance: none;
+  border: 1px solid var(--mo-border);
+  border-radius: 2px;
+  background: var(--mo-surface-2);
+  color: var(--mo-text);
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.25rem 0.45rem;
+  min-width: 7.5rem;
+  max-width: 100%;
+}
+
+.mo-theme-switcher__select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.mo-theme-switcher__select:focus-visible {
+  outline: 2px solid var(--mo-accent);
+  outline-offset: 1px;
+}

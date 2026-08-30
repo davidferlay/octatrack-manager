@@ -104,10 +104,11 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - M4-A: 完了
 - M4-B: 完了
 - Design System Phase A–D: 完了（DS1–DS7 / UI1–UI6）
-- 現在の作業: Gate B合成ディスクsmoke証拠の人間review、および DEP-3 React Router 修復
+- 現在の作業: Gate B合成ディスクsmoke証拠の人間review、および appearance theme registry／切替
 - SQLite schema: v5（M3-E1で追加）
 - 次の機能実装: Gate B人間reviewまでM5へ進まない。
-  DEP-1／DEP-2／SEC-1はマージ済み。Mac `.app`／`.dmg`と実機smokeはmacOSホストで確認する
+  DEP-1／DEP-2／SEC-1／DEP-3はマージ済み。Mac `.app`／`.dmg`と実機smokeはmacOSホストで確認する
+  Appearance theme（classic / MasterOCTa）は design-system token 層の follow-up
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
 - `ot-tools-io`はコミット

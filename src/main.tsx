@@ -6,8 +6,15 @@ import { ProjectDetail } from "./pages/ProjectDetail";
 import { AudioPoolPage } from "./pages/AudioPoolPage";
 import { ProjectsProvider } from "./context/ProjectsContext";
 import { TablePreferencesProvider } from "./context/TablePreferencesContext";
+import {
+  ThemeProvider,
+  applyStoredThemeBeforePaint,
+} from "./design-system";
 import "./design-system/tokens/index.css";
 import '@fortawesome/fontawesome-free/css/all.min.css';
+
+// Apply persisted appearance before first paint so token consumers do not flash classic.
+applyStoredThemeBeforePaint();
 
 // The browser's own history-based scroll restoration fights HomePage's manual
 // save/restore (sessionStorage-keyed, see HomePage.tsx) on route changes -
@@ -29,16 +36,18 @@ document.addEventListener('keydown', (e) => {
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <ProjectsProvider>
-      <TablePreferencesProvider>
-        <HashRouter>
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/project" element={<ProjectDetail />} />
-            <Route path="/audio-pool" element={<AudioPoolPage />} />
-          </Routes>
-        </HashRouter>
-      </TablePreferencesProvider>
-    </ProjectsProvider>
+    <ThemeProvider>
+      <ProjectsProvider>
+        <TablePreferencesProvider>
+          <HashRouter>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/project" element={<ProjectDetail />} />
+              <Route path="/audio-pool" element={<AudioPoolPage />} />
+            </Routes>
+          </HashRouter>
+        </TablePreferencesProvider>
+      </ProjectsProvider>
+    </ThemeProvider>
   </React.StrictMode>,
 );
