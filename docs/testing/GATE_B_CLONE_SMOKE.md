@@ -64,8 +64,10 @@ confirm the following from code and CI before signing off:
 - The verified backup manifest binds the source and destination, plan/snapshot
   IDs, root fingerprint, revision, source size/hash, and backup paths with a
   versioned recovery digest. A separate create-once, read-only plan
-  authorization record is checked as the independent source of truth, so
-  jointly editing the journal and manifest cannot redirect deletion.
+  authorization record stores the plan seed and opaque plan-time RootId so
+  destination/source fields must re-derive the same PlanId; jointly editing the
+  journal, manifest, and authorization cannot retarget deletion while keeping
+  the original operation identifiers.
 - A published destination is removed only when both its recorded file identity
   and content match the verified backup. A replacement is preserved and keeps
   Recovery required.
