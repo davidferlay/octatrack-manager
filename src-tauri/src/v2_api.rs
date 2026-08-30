@@ -18,8 +18,8 @@ use ot_domain::{
 };
 use ot_executor::OperationId;
 use ot_plan::{
-    derive_additive_copy_plan_id, plan_additive_copy, AdditiveCopyIntent,
-    AdditiveCopyPlanningFacts, ChangePlan, PlanSeed, RootPlanObservation, SourceFileObservation,
+    plan_additive_copy, AdditiveCopyIntent, AdditiveCopyPlanningFacts, ChangePlan, PlanSeed,
+    RootPlanObservation, SourceFileObservation,
 };
 use ot_storage_ports::{CatalogError, CatalogRootIdentity, CatalogRootObservation};
 use serde::{Deserialize, Serialize};
@@ -1762,6 +1762,7 @@ mod tests {
     use crate::root_registry::{DeviceIdentityProvider, DeviceObservation};
     use crate::write_runtime::open_shared_write_runtime;
     use ot_executor::{JournalFileIdentity, JournalStatus, OperationJournal};
+    use ot_plan::derive_additive_copy_plan_id;
     use std::fs;
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
     use std::path::Path;
