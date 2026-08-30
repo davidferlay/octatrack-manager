@@ -78,8 +78,8 @@ Still open / deferred:
 1. **High (ops / Gate B)** — incomplete journals refuse new grants/applies until
    an explicit recovery path exists.
 2. **High (legacy)** — absolute-path command surface remains fully wired.
-3. **Open** — frontend advisory deadlines in `DEPENDENCY_AUDIT.md` (DEP-2;
-   Vitest/Vite/Rollup/PostCSS by 2026-09-15). Tauri DEP-1 is merged separately.
+3. **Open** — React Router advisories remain deferred to a dedicated PR.
+   Frontend Vitest/Vite/Rollup/PostCSS advisories are remediated in DEP-2.
 
 ## Remaining high-priority risks
 
@@ -87,9 +87,7 @@ Still open / deferred:
    once the desktop app is running. Do not point it at original media.
 2. Without a reviewed recovery-execute flow, a crashed M4 apply can leave the
    root write-blocked until manual intervention.
-3. Frontend toolchain advisory remediation (Vitest ≥4.1.0 / Vite ≥7.3.5 line)
-   remains due by 2026-09-15.
-
+3. React Router advisory remediation remains deferred to a dedicated PR.
 ## Verification performed in this recheck
 
 - Architecture guard pass against the live 15-command v2 surface.

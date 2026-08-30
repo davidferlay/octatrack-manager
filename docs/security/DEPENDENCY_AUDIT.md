@@ -75,14 +75,14 @@ Actions used below:
 | Package / resolved version | Shortest dependency path | Advisory, severity, fixed version | Affected use and reachability | Action |
 | --- | --- | --- | --- | --- |
 | `react-router@7.12.0` | `react-router-dom > react-router` | `GHSA-49rj-9fvp-4h2h` high, `>=7.14.2`; `GHSA-8646-j5j9-6r62` high, `>=7.13.2`; `GHSA-f22v-gfqf-p8f3` moderate, `>=7.13.2`; `GHSA-8x6r-g9mw-2r78` high, `>=7.15.0`; `GHSA-rxv8-25v2-qmq8` high, `>=7.14.0`; `GHSA-84g9-w2xq-vcv6` low, `>=7.15.1`; `GHSA-wrjc-x8rr-h8h6` moderate, `>=7.18.0`; `GHSA-jjmj-jmhj-qwj2` moderate, `>=7.13.0`; `GHSA-h8fp-f39c-q6mh` moderate, `>=7.18.0`; `GHSA-337j-9hxr-rhxg` moderate, `>=7.18.0`; `GHSA-chx6-hx7r-mcp5` high, `>=7.18.0`; `GHSA-2j2x-hqr9-3h42` moderate, `>=7.14.1`; `GHSA-qwww-vcr4-c8h2` high, `>=7.18.2` | The app uses `HashRouter`, `Routes`, and `Route` in Declarative Mode. The RSC, Framework Mode, SSR/hydration, prerender, manifest, single-fetch, action/CSRF, and `redirect()` paths are absent. The two open-redirect findings affect navigation APIs, but every current `navigate()` target is an internal `/...` path and interpolated identifiers are `encodeURIComponent`-encoded. **Not runtime reachable under current code.** | Accept temporarily; remediate in a focused React Router PR. Recheck immediately if RSC/Framework/SSR APIs are introduced or untrusted input can become a direct `to`, `redirect()`, or `navigate()` target. |
-| `vitest@4.0.17` | direct dev dependency | `GHSA-5xrq-8626-4rwp` critical, `>=4.1.0` | Arbitrary file read/execution requires a listening Vitest UI server. The repository runs `vitest run` and does not enable the UI server. Test-only; **not runtime reachable**. | Isolate; remediate before enabling Vitest UI and no later than 2026-09-15. |
-| `vite@7.1.12` | direct / `@vitejs/plugin-react > vite` | `GHSA-4w7w-66w2-5vf9` moderate, `>=7.3.2`; `GHSA-v2wj-q39q-566r` high, `>=7.3.2`; `GHSA-p9ff-h696-f583` high, `>=7.3.2`; `GHSA-v6wh-96g9-6wx3` moderate, `>=7.3.5`; `GHSA-fx2h-pf6j-xcff` high, `>=7.3.5` | Dev-server file access/Windows launch-editor issues. The server binds to loopback unless `TAURI_DEV_HOST` is explicitly set; Vite is absent from the production bundle. **Potentially reachable in an explicitly exposed dev session; not runtime reachable.** | Keep loopback-only; never expose it to untrusted networks. Remediate by 2026-09-15 or before changing host/network policy. |
-| `rollup@4.52.5` | `vite > rollup` | `GHSA-mw96-cpmx-2vgc` high, `>=4.59.0` | Arbitrary write requires crafted build input/path. It executes only while building reviewed repository sources. **Potentially reachable in the build; not runtime reachable.** | Accept temporarily; do not build untrusted branches with secrets. Remediate with the Vite toolchain by 2026-09-15. |
-| `postcss@8.5.6` | `vite > postcss` | `GHSA-qx2v-qp2m-jg93` moderate, `>=8.5.10`; `GHSA-6g55-p6wh-862q` high, `>=8.5.12`; `GHSA-fxqj-rqcc-2cmp` moderate, `>=8.5.23`; `GHSA-r28c-9q8g-f849` high, `>=8.5.18` | Source-map/CSS parsing issues require crafted build input. It processes reviewed repository CSS and is not bundled. **Potentially reachable in the build; not runtime reachable.** | Accept temporarily; remediate with Vite by 2026-09-15 or before processing untrusted CSS. |
-| `nanoid@3.3.11` | `vite > postcss > nanoid` | `GHSA-28wg-ghj8-5hjv` high, `>=3.3.16`; `GHSA-2v37-7h3g-55p8` high, `>=3.3.18` | Infinite loops require invalid sizes passed to non-secure/custom generators; application code does not call this transitive copy. **Not runtime reachable.** | Monitor; remediate with PostCSS/Vite by 2026-09-15. |
-| `picomatch@4.0.3` | `vite > picomatch` | `GHSA-3v7f-55p6-f55p` moderate, `>=4.0.4`; `GHSA-c2c7-rcm5-vvqj` high, `>=4.0.4` | Glob parser receives build-tool patterns, not product input. **Potentially reachable in build tooling; not runtime reachable.** | Accept temporarily; remediate with Vite by 2026-09-15. |
-| `ws@8.19.0` | `jsdom > ws` | `GHSA-58qx-3vcg-4xpx` moderate, `>=8.20.1`; `GHSA-96hv-2xvq-fx4p` high, `>=8.21.0` | Test-only jsdom WebSocket implementation; no listening production server. **Not runtime reachable.** | Isolate to tests; remediate by 2026-09-15 or before adding WebSocket tests against untrusted peers. |
-| `@babel/core@7.28.5` | `@vitejs/plugin-react > @babel/core` | `GHSA-4x5r-pxfx-6jf8` low, `>=7.29.6` | Source-map file read requires crafted source comments during compilation. Reviewed source only; **potentially reachable in build tooling, not runtime reachable.** | Accept temporarily; remediate with the frontend toolchain by 2026-09-15. |
+| `vitest@4.1.11` | direct dev dependency | `GHSA-5xrq-8626-4rwp` critical, fixed in `>=4.1.0` | **Remediated** (DEP-2). UI server remains unused (`vitest run` only). | Remediated 2026-08-30 (DEP-2). |
+| `vite@7.3.6` | direct / `@vitejs/plugin-react > vite` | advisories requiring `>=7.3.2` / `>=7.3.5` | **Remediated** (DEP-2). Dev server stays loopback-only unless `TAURI_DEV_HOST` is set. | Remediated 2026-08-30 (DEP-2). |
+| `rollup@4.59.0` | direct toolchain + `vite > rollup` | `GHSA-mw96-cpmx-2vgc` high, fixed in `>=4.59.0` | **Remediated** as a direct toolchain pin (no overrides). | Remediated 2026-08-30 (DEP-2). |
+| `postcss@8.5.23` | direct toolchain + `vite > postcss` | advisories requiring `>=8.5.10` / `>=8.5.12` / `>=8.5.18` / `>=8.5.23` | **Remediated** as a direct toolchain pin (no overrides). | Remediated 2026-08-30 (DEP-2). |
+| `nanoid@3.3.18` | direct toolchain + `postcss > nanoid` | advisories requiring `>=3.3.16` / `>=3.3.18` | **Remediated** as a direct toolchain pin (no overrides). | Remediated 2026-08-30 (DEP-2). |
+| `picomatch@4.0.4` | direct toolchain + `vite > picomatch` | advisories requiring `>=4.0.4` | **Remediated** as a direct toolchain pin (no overrides). | Remediated 2026-08-30 (DEP-2). |
+| `ws@8.21.0` | direct toolchain + `jsdom > ws` | advisories requiring `>=8.20.1` / `>=8.21.0` | **Remediated** as a direct toolchain pin (no overrides). Still test-only. | Remediated 2026-08-30 (DEP-2). |
+| `@babel/core@7.29.6` | direct toolchain + `@vitejs/plugin-react > @babel/core` | `GHSA-4x5r-pxfx-6jf8` low, fixed in `>=7.29.6` | **Remediated** as a direct toolchain pin (no overrides). | Remediated 2026-08-30 (DEP-2). |
 
 ## Documentation and PDF graph
 
@@ -417,6 +417,24 @@ No React Router or frontend toolchain packages were changed in DEP-1.
 
 Mac `.app` / `.dmg` generation and live Root/preview/metadata/copy/recovery
 smoke require a macOS host and were not executed in the Linux CI agent.
+
+## DEP-2 frontend toolchain (2026-08-30)
+
+Remediated the 2026-09-15 frontend advisory set without `pnpm.overrides` and
+without touching React Router (separate PR):
+
+| Package | Before | After |
+| --- | --- | --- |
+| `vitest` | `4.0.17` | `4.1.11` |
+| `vite` | `7.1.12` | `7.3.6` |
+| `rollup` | `4.52.5` (transitive) | `4.59.0` (direct toolchain pin) |
+| `postcss` | `8.5.6` (transitive) | `8.5.23` (direct toolchain pin) |
+| `nanoid` | `3.3.11` (transitive) | `3.3.18` (direct toolchain pin) |
+| `picomatch` | `4.0.3` (transitive) | `4.0.4` (direct toolchain pin) |
+| `ws` | `8.19.0` (transitive) | `8.21.0` (direct toolchain pin) |
+| `@babel/core` | `7.28.5` (transitive) | `7.29.6` (direct toolchain pin) |
+
+`pnpm audit` after DEP-2 reports only the deferred React Router advisories.
 
 ## Reproduction
 
