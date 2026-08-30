@@ -1152,14 +1152,10 @@ h1 {
 }
 
 /* Search box in the project picker header, between the title and the close
-   button. Wider than the home page one: the modal has the room. */
+   button. Same width as the home page one, so the two read as one control. */
 .project-selector-search {
   margin-left: auto;
   margin-right: 1.5rem;
-}
-
-.project-selector-search .header-search-input {
-  width: 220px;
 }
 
 .modal-header h3 i {
