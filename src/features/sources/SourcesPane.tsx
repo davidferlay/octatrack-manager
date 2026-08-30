@@ -10,6 +10,7 @@ export interface SourcesPaneProps {
   onRegister: () => void
   onClose: () => void
   onEnableWrite: () => void
+  onDisableWrite: () => void
   writeBlocked?: boolean
   /** Optional Set/Project tree or saved views (UI1+). */
   children?: ReactNode
@@ -26,10 +27,14 @@ export function SourcesPane({
   onRegister,
   onClose,
   onEnableWrite,
+  onDisableWrite,
   writeBlocked = false,
   children,
 }: SourcesPaneProps) {
   const writeEnabled = session?.mode === 'write_enabled' && session.capabilities.write
+  const editDisabled =
+    busy || writeBlocked || session === null || !session.capabilities.stableDeviceIdentity
+
   return (
     <div className="mo-sources-pane" aria-labelledby="mo-sources-title">
       <div className="mo-sources-pane__title-row">
@@ -49,15 +54,38 @@ export function SourcesPane({
           </Button>
         ) : (
           <>
-            {!writeEnabled && (
-              <Button
-                variant="secondary"
-                disabled={busy || writeBlocked || !session.capabilities.stableDeviceIdentity}
+            <div
+              className="mo-sources-pane__mode-toggle"
+              role="group"
+              aria-label="Session UI mode"
+            >
+              <button
+                type="button"
+                className={`mo-sources-pane__mode-btn${!writeEnabled ? ' is-active' : ''}`}
+                disabled={busy || !writeEnabled}
+                aria-pressed={!writeEnabled}
+                title="Switch to read-only View mode"
+                onClick={onDisableWrite}
+              >
+                View
+              </button>
+              <button
+                type="button"
+                className={`mo-sources-pane__mode-btn${writeEnabled ? ' is-active' : ''}`}
+                disabled={editDisabled || writeEnabled}
+                aria-pressed={writeEnabled}
+                title={
+                  writeBlocked
+                    ? 'Resolve recovery before enabling Edit mode'
+                    : !session.capabilities.stableDeviceIdentity
+                      ? 'Stable device identity is required for Edit mode'
+                      : 'Switch to session Edit mode (additive copy only)'
+                }
                 onClick={onEnableWrite}
               >
-                Enable edit mode
-              </Button>
-            )}
+                Edit
+              </button>
+            </div>
             <Button variant="secondary" disabled={busy} onClick={onClose}>
               {busy ? 'Working...' : 'Close root'}
             </Button>

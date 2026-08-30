@@ -1040,6 +1040,18 @@ fn enable_write_sync(
         .map_err(Into::into)
 }
 
+fn disable_write_sync(
+    registry: &RootRegistry,
+    root_id: &RootId,
+) -> Result<RootSessionDto, ApiError> {
+    // Resolve first so an expired/removed root fails closed the same way as status.
+    registry.resolve(root_id)?;
+    registry
+        .disable_write(root_id)
+        .map(Into::into)
+        .map_err(Into::into)
+}
+
 fn plan_additive_copy_sync(
     registry: &RootRegistry,
     catalog: &SharedCatalog,
@@ -1485,6 +1497,18 @@ pub async fn v2_root_enable_write(
     })
     .await
     .map_err(ApiError::task_failed)?
+}
+
+#[tauri::command]
+pub async fn v2_root_disable_write(
+    root_id: String,
+    registry: State<'_, Arc<RootRegistry>>,
+) -> Result<RootSessionDto, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    tauri::async_runtime::spawn_blocking(move || disable_write_sync(&registry, &root_id))
+        .await
+        .map_err(ApiError::task_failed)?
 }
 
 #[tauri::command]

@@ -34,6 +34,7 @@ describe("Root API", () => {
     await api.registerRoot("/private/tmp/fixture");
     await api.rootStatus(session.rootId);
     await api.enableWrite(session.rootId);
+    await api.disableWrite(session.rootId);
     await api.listLibrary(session.rootId);
     await api.closeRoot(session.rootId);
 
@@ -41,6 +42,7 @@ describe("Root API", () => {
       ["v2_root_register", { rawPath: "/private/tmp/fixture" }],
       ["v2_root_status", { rootId: "root-opaque" }],
       ["v2_root_enable_write", { rootId: "root-opaque" }],
+      ["v2_root_disable_write", { rootId: "root-opaque" }],
       ["v2_library_list", { rootId: "root-opaque" }],
       ["v2_root_close", { rootId: "root-opaque" }],
     ]);

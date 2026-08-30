@@ -1374,6 +1374,7 @@ pub fn run() {
             v2_api::v2_root_register,
             v2_api::v2_root_status,
             v2_api::v2_root_enable_write,
+            v2_api::v2_root_disable_write,
             v2_api::v2_root_close,
             v2_api::v2_library_list,
             v2_api::v2_asset_metadata_get,

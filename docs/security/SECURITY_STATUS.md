@@ -44,7 +44,7 @@ destructive operations against original Octatrack media.
 
 Allowed v2 commands (architecture guard allowlist):
 
-- root: `register`, `status`, `close`, `enable_write`
+- root: `register`, `status`, `close`, `enable_write`, `disable_write`
 - library / metadata / audio: `library_list`, `asset_metadata_*`, `audio_waveform_get`, `audio_preview_*`
 - changes: `change_plan`, `change_get_plan`, `change_apply`, `change_status`,
   `change_recovery_status`, `change_recover`
