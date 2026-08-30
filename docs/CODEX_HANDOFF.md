@@ -86,7 +86,9 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - M4-B recovery gate／production recovery導線: #43マージ済み（#47含む）
 - Gate B合成ディスクsmoke証拠: #48マージ済み
 - DEP-1 Tauri security baseline: #49マージ済み
-- 現在のmain基準SHA: `944af32`
+- DEP-2 frontend toolchain: #50マージ済み
+- SEC-1 containment CI guard: #51マージ済み
+- 現在のmain基準SHA: `0fcb93d`
 - M2: 完了
 - M3-A: 完了
 - M3-B: 完了
@@ -102,12 +104,10 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - M4-A: 完了
 - M4-B: 完了
 - Design System Phase A–D: 完了（DS1–DS7 / UI1–UI6）
-- 現在の作業: Gate B合成ディスクsmoke証拠の人間review、および依存修復
-  （DEP-2 frontend toolchain / SEC-1 containment CI は別PR、DEP-3 React Router 本ブランチ）
+- 現在の作業: Gate B合成ディスクsmoke証拠の人間review、および DEP-3 React Router 修復
 - SQLite schema: v5（M3-E1で追加）
-- 次の機能実装: 合成ディスクsmokeはautomated PASS済み。人間が
-  `docs/testing/GATE_B_SMOKE_EVIDENCE.md`と`docs/testing/GATE_B_CLONE_SMOKE.md`を
-  review／sign-offするまでGate Bを完了扱いにせず、M5へ進まない
+- 次の機能実装: Gate B人間reviewまでM5へ進まない。
+  DEP-1／DEP-2／SEC-1はマージ済み。Mac `.app`／`.dmg`と実機smokeはmacOSホストで確認する
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
 - `ot-tools-io`はコミット

@@ -17,7 +17,9 @@ on:
       - 'tsconfig*.json'
       - 'vite.config.*'
       - 'playwright.config.*'
-      - '.github/workflows/ci.yml'
+      - 'scripts/**'
+      - '.github/workflows/**'
+      - '.github/actions/**'
   pull_request:
     branches: [main]
     paths:
@@ -32,7 +34,9 @@ on:
       - 'tsconfig*.json'
       - 'vite.config.*'
       - 'playwright.config.*'
-      - '.github/workflows/ci.yml'
+      - 'scripts/**'
+      - '.github/workflows/**'
+      - '.github/actions/**'
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -70,6 +74,9 @@ jobs:
 
       - name: Check architecture dependencies
         run: node scripts/check-architecture.mjs
+
+      - name: Check containment guards
+        run: node scripts/check-containment.mjs
 
       # Needs no build, so a bad format fails in seconds instead of after the
       # compile.

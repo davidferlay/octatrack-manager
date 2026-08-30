@@ -31,13 +31,13 @@ destructive operations against original Octatrack media.
 | --- | --- | --- |
 | 1 | Upstream auto-update trusts upstream releases/keys | **Fixed** — updater plugin, endpoints, and artifacts disabled (PR-0). |
 | 2 | Tauri 2.10.x missing security fixes | **Fixed** — `tauri@2.11.5` with aligned CLI/API/plugins (DEP-1). |
-| 3 | CSP is `null` | **Fixed** — restrictive CSP in `src-tauri/tauri.conf.json` (PR #28). |
-| 4 | Rust commands accept arbitrary paths | **Partial** — v2 API bounded by `RootId` / opaque IDs + M4 write path; legacy ~80 commands still path-unbounded. |
+| 3 | CSP is `null` | **Fixed** — restrictive CSP in `src-tauri/tauri.conf.json` (PR #28); **CI-enforced** by SEC-1 (exact directive freeze, rejects `*` / `'unsafe-eval'`, checks `tauri.*.conf.json` merges). |
+| 4 | Rust commands accept arbitrary paths | **Partial** — v2 API bounded by `RootId` / opaque IDs + M4 write path; legacy ~80 commands still path-unbounded; **legacy surface frozen** by SEC-1 (generate_handler + per-file invoke command freeze). |
 | 5 | Weak rename/mkdir traversal checks | **Partial** — next-gen `RootRelativePath` strong; legacy `rename_file` / `create_directory` reject separators / `..` / absolute names (PR #28). |
 | 6 | Unrecoverable `remove_file` / `remove_dir_all` deletes | **Partial** — user-facing `delete_files`, `delete_project`, and `delete_set` use `trash`. Copy/move rollback and internal temp cleanup still use hard removes. |
-| 7 | Updater-related `tar` advisories | **Fixed** via updater removal. |
+| 7 | Updater-related `tar` advisories | **Fixed** via updater removal; **CI-enforced** (no updater reintroduction / `createUpdaterArtifacts: false`). |
 | 8 | `ot-tools-io` → `serde_yml` / `libyml` | **Open / accepted** — documented in `DEPENDENCY_AUDIT.md` as not runtime-reachable for current YAML use. |
-| 9 | GitHub Actions mutable tags | **Fixed** — workflows pin full commit SHAs; `dtolnay/rust-toolchain` requires explicit `toolchain: stable` when SHA-pinned. |
+| 9 | GitHub Actions mutable tags | **Fixed** — workflows and composite actions pin full commit SHAs; **CI-enforced** by SEC-1 (scans `.github/workflows` and `.github/actions`). |
 | 10 | Weak DMG↔source binding for historical `v0.45.0` | **Open** — release-process risk; not a runtime code defect. |
 
 ## Next-gen surface notes (post M4-B)
@@ -81,9 +81,9 @@ Still open / deferred:
 1. **High (ops / Gate B)** — human review/sign-off of
    `docs/testing/GATE_B_SMOKE_EVIDENCE.md` before declaring Gate B complete / M5.
 2. **High (legacy)** — absolute-path command surface remains fully wired.
-3. **Open** — frontend toolchain advisory deadlines in `DEPENDENCY_AUDIT.md`
-   (DEP-2; Vitest/Vite/Rollup/PostCSS by 2026-09-15). Tauri DEP-1 and React
-   Router DEP-3 are remediated separately.
+3. **Resolved in follow-up PRs** — frontend toolchain (DEP-2) and React Router
+   (DEP-3) production advisories; Tauri DEP-1 and SEC-1 containment CI are
+   merged on main.
 
 ## Remaining high-priority risks
 
@@ -91,10 +91,6 @@ Still open / deferred:
    once the desktop app is running. Do not point it at original media.
 2. Gate B remains unsigned until a human reviews the synthetic-disk smoke
    evidence; do not start M5 before that sign-off.
-3. Frontend toolchain advisory remediation (Vitest ≥4.1.0 / Vite ≥7.3.5 line)
-   remains due by 2026-09-15 (DEP-2). React Router production advisories are
-   remediated in DEP-3.
-
 ## Verification performed in this recheck
 
 - Architecture guard pass against the live 15-command v2 surface.
