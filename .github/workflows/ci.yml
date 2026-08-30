@@ -2,7 +2,9 @@ name: CI
 
 on:
   push:
-    branches: ['**']
+    # Feature branches are validated by pull_request below. Restricting push
+    # runs to main avoids testing the same feature-branch SHA twice.
+    branches: [main]
     paths:
       - 'src/**'
       - 'src-tauri/**'
@@ -33,10 +35,7 @@ on:
       - '.github/workflows/ci.yml'
 
 concurrency:
-  # A branch push and its pull_request event test the same head SHA. Give both
-  # events one key so the newer run cancels the duplicate instead of running
-  # the full E2E suite twice.
-  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 env:
