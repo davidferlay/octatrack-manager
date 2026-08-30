@@ -112,5 +112,10 @@ absolute paths, volume identifiers, personal filenames, or media fingerprints:
 - deviations, failures, and whether the disposable clone was retained
 
 Gate B remains incomplete until this checklist is executed against an approved
-disposable clone and the evidence is reviewed by a human. M5 must not begin
-before that sign-off.
+disposable clone **or** the recorded synthetic-disk evidence in
+`docs/testing/GATE_B_SMOKE_EVIDENCE.md` is reviewed and signed off by a human.
+M5 must not begin before that sign-off.
+
+Automated synthetic-disk smoke (no original media) is available via
+`scripts/gate-b-synthetic-smoke.sh` and recorded under
+`docs/testing/GATE_B_SMOKE_EVIDENCE.md`.

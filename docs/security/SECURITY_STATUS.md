@@ -20,8 +20,10 @@ destructive operations against original Octatrack media.
 - Legacy Tauri commands remain registered and still accept caller-supplied
   absolute paths. Treat original SD/CF cards as out of scope until that surface
   is retired or root-bounded.
-- Gate B is incomplete: recovery status is exposed, but no production
-  recovery-execute command exists yet.
+- Gate B production recovery is merged (PR #43 / #47). Automated synthetic-disk
+  smoke is PASS on `70d622e`; human review of
+  `docs/testing/GATE_B_SMOKE_EVIDENCE.md` remains required before Gate B
+  sign-off / M5.
 
 ## CODEX_HANDOFF §3 checklist
 
