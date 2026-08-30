@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import type { RootSession } from '../../api'
-import { Button, StatusBadge, ThemeSwitcher } from '../../design-system'
+import { Button, StatusBadge } from '../../design-system'
 import './SourcesPane.css'
 
 export interface SourcesPaneProps {
@@ -105,10 +105,6 @@ export function SourcesPane({
       )}
 
       {children}
-
-      <div className="mo-sources-pane__appearance">
-        <ThemeSwitcher />
-      </div>
     </div>
   )
 }

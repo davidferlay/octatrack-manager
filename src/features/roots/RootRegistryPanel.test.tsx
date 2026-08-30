@@ -1,13 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { AudioApi, ChangeApi, MetadataApi, RootApi, RootSession } from "../../api";
-import { ThemeProvider } from "../../design-system";
 import { RootRegistryPanel } from "./RootRegistryPanel";
-
-function renderPanel(ui: ReactElement) {
-  return render(<ThemeProvider>{ui}</ThemeProvider>);
-}
 
 const session: RootSession = {
   rootId: "root-opaque",
@@ -92,7 +86,7 @@ describe("RootRegistryPanel", () => {
   it("does nothing when the native picker is cancelled", async () => {
     const api = fakeApi();
     const selectDirectory = vi.fn().mockResolvedValue(null);
-    renderPanel(<RootRegistryPanel api={api} changeClient={fakeChangeApi()} selectDirectory={selectDirectory} />);
+    render(<RootRegistryPanel api={api} changeClient={fakeChangeApi()} selectDirectory={selectDirectory} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Choose root..." }));
 
@@ -104,7 +98,7 @@ describe("RootRegistryPanel", () => {
   it("reports a native picker failure without registering a root", async () => {
     const api = fakeApi();
     const selectDirectory = vi.fn().mockRejectedValue(new Error("picker unavailable"));
-    renderPanel(<RootRegistryPanel api={api} changeClient={fakeChangeApi()} selectDirectory={selectDirectory} />);
+    render(<RootRegistryPanel api={api} changeClient={fakeChangeApi()} selectDirectory={selectDirectory} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Choose root..." }));
 
@@ -115,7 +109,7 @@ describe("RootRegistryPanel", () => {
   it("renders only backend-approved display names and relative paths", async () => {
     const api = fakeApi();
     const rawPath = "/private/tmp/secret-fixture-root";
-    renderPanel(
+    render(
       <RootRegistryPanel
         api={api}
         changeClient={fakeChangeApi()}
@@ -158,7 +152,7 @@ describe("RootRegistryPanel", () => {
       replaceManualAssetMetadata: vi.fn(),
     };
 
-    renderPanel(
+    render(
       <RootRegistryPanel
         api={api}
         changeClient={fakeChangeApi()}
@@ -199,7 +193,7 @@ describe("RootRegistryPanel", () => {
   it("enables only the session write grant after recovery status is clear", async () => {
     const api = fakeApi();
     const changeClient = fakeChangeApi();
-    renderPanel(
+    render(
       <RootRegistryPanel
         api={api}
         changeClient={changeClient}
@@ -251,7 +245,7 @@ describe("RootRegistryPanel", () => {
       failureCode: "RECOVERED_INCOMPLETE_OPERATION",
       backupSnapshotId: `snapshot:v1:${"a".repeat(64)}`,
     });
-    renderPanel(
+    render(
       <RootRegistryPanel
         api={api}
         changeClient={changeClient}
@@ -296,7 +290,7 @@ describe("RootRegistryPanel", () => {
     vi.mocked(changeClient.planAdditiveCopy).mockImplementation(
       () => new Promise(() => undefined),
     );
-    renderPanel(
+    render(
       <RootRegistryPanel
         api={api}
         changeClient={changeClient}

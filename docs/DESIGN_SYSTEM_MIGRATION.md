@@ -218,8 +218,10 @@ Phase D  UI6 Branding → DS7 Legacy CSS removal
   (cool graphite + teal accent). Applied via `data-mo-theme` on `<html>`.
 - `ThemeProvider` + `applyStoredThemeBeforePaint()` persist choice in
   `localStorage` (`masterocta.ui-theme`).
-- `ThemeSwitcher` lives in Sources (AppShell). Token consumers (`--mo-*`) follow
-  the active theme; hardcoded `App.css` hex values do not until migrated.
+- `ThemeSwitcher` lives in the Home header (keeps AppShell content-sized so
+  legacy project grids stay in view for context menus). Token consumers
+  (`--mo-*`) follow the active theme; hardcoded `App.css` hex values do not
+  until migrated.
 - **Out of scope:** rewriting `App.css` onto tokens, system light/dark preference,
   per-window themes.
 

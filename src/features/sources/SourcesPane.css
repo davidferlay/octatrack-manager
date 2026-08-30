@@ -68,8 +68,3 @@
   font-size: 0.8rem;
 }
 
-.mo-sources-pane__appearance {
-  margin-top: auto;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--mo-border);
-}
