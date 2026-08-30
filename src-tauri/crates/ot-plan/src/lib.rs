@@ -39,7 +39,7 @@ impl PlanSeed {
             return Err(PlanError::InvalidPlanSeed);
         }
         let mut bytes = [0u8; 32];
-        for (index, chunk) in value.as_bytes().chunks_exact(2).enumerate() {
+        for (index, chunk) in value.as_bytes().as_chunks::<2>().0.iter().enumerate() {
             let high = hex_nibble(chunk[0]).ok_or(PlanError::InvalidPlanSeed)?;
             let low = hex_nibble(chunk[1]).ok_or(PlanError::InvalidPlanSeed)?;
             bytes[index] = (high << 4) | low;
