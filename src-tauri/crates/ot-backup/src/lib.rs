@@ -11,8 +11,9 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-const MANIFEST_SCHEMA: &str = "masterocta-backup:v1";
+const MANIFEST_SCHEMA: &str = "masterocta-backup:v2";
 const SNAPSHOT_ID_PREFIX: &str = "snapshot:v1:";
+const RECOVERY_BINDING_PREFIX: &str = "recovery-binding:v1:";
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct SnapshotId(String);
@@ -58,6 +59,10 @@ pub struct BackupManifest {
     pub snapshot_id: String,
     pub plan_id: String,
     pub source_fingerprint: String,
+    pub base_observed_revision: u64,
+    pub source_relative_path: String,
+    pub destination_relative_path: String,
+    pub recovery_binding: String,
     pub complete: bool,
     pub files: Vec<BackupFileManifest>,
 }
@@ -176,6 +181,10 @@ impl BackupStore {
             snapshot_id: snapshot_id.as_str().to_owned(),
             plan_id: plan.id.as_str().to_owned(),
             source_fingerprint: plan.device_fingerprint.clone(),
+            base_observed_revision: plan.base_observed_revision,
+            source_relative_path: plan.operation.source.relative_path.as_str().to_owned(),
+            destination_relative_path: plan.operation.destination_relative_path.as_str().to_owned(),
+            recovery_binding: recovery_binding_for_plan(plan)?,
             complete: true,
             files,
         };
@@ -184,11 +193,14 @@ impl BackupStore {
             &serde_json::to_vec_pretty(&manifest).map_err(BackupError::serialize)?,
         )?;
         let context = format!(
-            "# MasterOCTa verified backup\n\n- Schema: `{}`\n- Snapshot: `{}`\n- Plan: `{}`\n- Source fingerprint: `{}`\n- Files: {}\n",
+            "# MasterOCTa verified backup\n\n- Schema: `{}`\n- Snapshot: `{}`\n- Plan: `{}`\n- Source fingerprint: `{}`\n- Source: `{}`\n- Destination: `{}`\n- Recovery binding: `{}`\n- Files: {}\n",
             MANIFEST_SCHEMA,
             snapshot_id.as_str(),
             plan.id.as_str(),
             plan.device_fingerprint,
+            plan.operation.source.relative_path.as_str(),
+            plan.operation.destination_relative_path.as_str(),
+            manifest.recovery_binding,
             manifest.files.len()
         );
         write_new_synced(&partial_directory.join("context.md"), context.as_bytes())?;
@@ -236,7 +248,131 @@ fn validate_manifest(manifest: &BackupManifest) -> Result<(), BackupError> {
     PlanId::parse(manifest.plan_id.clone()).map_err(|_| BackupError::InvalidManifest("plan_id"))?;
     validate_prefixed_digest(&manifest.source_fingerprint, "rootfp:v1:")
         .map_err(|_| BackupError::InvalidManifest("source_fingerprint"))?;
+    validate_prefixed_digest(&manifest.recovery_binding, RECOVERY_BINDING_PREFIX)
+        .map_err(|_| BackupError::InvalidManifest("recovery_binding"))?;
+    let expected = recovery_binding_for_manifest(manifest)?;
+    if manifest.recovery_binding != expected {
+        return Err(BackupError::InvalidManifest("recovery_binding"));
+    }
     Ok(())
+}
+
+pub fn recovery_binding_for_plan(plan: &ChangePlan) -> Result<String, BackupError> {
+    validate_change_plan(plan)?;
+    if plan.base_observed_revision == 0
+        || plan.operation.source.relative_path == plan.operation.destination_relative_path
+    {
+        return Err(BackupError::PlanBindingMismatch);
+    }
+    let mut backup_paths = plan
+        .backup_relative_paths
+        .iter()
+        .map(|path| path.as_str().to_owned())
+        .collect::<Vec<_>>();
+    backup_paths.sort();
+    if backup_paths.windows(2).any(|pair| pair[0] == pair[1])
+        || !backup_paths
+            .iter()
+            .any(|path| path == plan.operation.source.relative_path.as_str())
+    {
+        return Err(BackupError::PlanBindingMismatch);
+    }
+    Ok(derive_recovery_binding(
+        plan.id.as_str(),
+        SnapshotId::for_plan(plan).as_str(),
+        &plan.device_fingerprint,
+        plan.base_observed_revision,
+        plan.operation.source.relative_path.as_str(),
+        plan.operation.destination_relative_path.as_str(),
+        plan.operation.source.byte_size,
+        plan.operation.source.content_hash.as_str(),
+        &backup_paths,
+    ))
+}
+
+fn recovery_binding_for_manifest(manifest: &BackupManifest) -> Result<String, BackupError> {
+    if manifest.base_observed_revision == 0 {
+        return Err(BackupError::InvalidManifest("base_observed_revision"));
+    }
+    let plan_digest = manifest
+        .plan_id
+        .strip_prefix("plan:v1:")
+        .ok_or(BackupError::InvalidManifest("plan_id"))?;
+    let snapshot_digest = manifest
+        .snapshot_id
+        .strip_prefix(SNAPSHOT_ID_PREFIX)
+        .ok_or(BackupError::InvalidManifest("snapshot_id"))?;
+    if plan_digest != snapshot_digest {
+        return Err(BackupError::InvalidManifest("plan_snapshot_binding"));
+    }
+    let source = RootRelativePath::parse(&manifest.source_relative_path)
+        .map_err(|_| BackupError::InvalidManifest("source_relative_path"))?;
+    let destination = RootRelativePath::parse(&manifest.destination_relative_path)
+        .map_err(|_| BackupError::InvalidManifest("destination_relative_path"))?;
+    if source == destination {
+        return Err(BackupError::InvalidManifest("destination_relative_path"));
+    }
+
+    let mut files = BTreeMap::new();
+    for file in &manifest.files {
+        let relative = RootRelativePath::parse(&file.relative_path)
+            .map_err(|_| BackupError::InvalidManifest("relative_path"))?;
+        ContentHash::parse(file.content_hash.clone())
+            .map_err(|_| BackupError::InvalidManifest("content_hash"))?;
+        if files.insert(relative.as_str().to_owned(), file).is_some() {
+            return Err(BackupError::InvalidManifest("duplicate_relative_path"));
+        }
+    }
+    let source_file = files
+        .get(source.as_str())
+        .ok_or(BackupError::InvalidManifest("source_relative_path"))?;
+    let backup_paths = files.keys().cloned().collect::<Vec<_>>();
+    Ok(derive_recovery_binding(
+        &manifest.plan_id,
+        &manifest.snapshot_id,
+        &manifest.source_fingerprint,
+        manifest.base_observed_revision,
+        source.as_str(),
+        destination.as_str(),
+        source_file.byte_size,
+        &source_file.content_hash,
+        &backup_paths,
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn derive_recovery_binding(
+    plan_id: &str,
+    snapshot_id: &str,
+    source_fingerprint: &str,
+    base_observed_revision: u64,
+    source_relative_path: &str,
+    destination_relative_path: &str,
+    source_byte_size: u64,
+    source_content_hash: &str,
+    backup_paths: &[String],
+) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"masterocta:recovery-binding:v1");
+    encode_recovery_field(&mut hasher, 1, plan_id.as_bytes());
+    encode_recovery_field(&mut hasher, 2, snapshot_id.as_bytes());
+    encode_recovery_field(&mut hasher, 3, source_fingerprint.as_bytes());
+    encode_recovery_field(&mut hasher, 4, &base_observed_revision.to_be_bytes());
+    encode_recovery_field(&mut hasher, 5, source_relative_path.as_bytes());
+    encode_recovery_field(&mut hasher, 6, destination_relative_path.as_bytes());
+    encode_recovery_field(&mut hasher, 7, &source_byte_size.to_be_bytes());
+    encode_recovery_field(&mut hasher, 8, source_content_hash.as_bytes());
+    encode_recovery_field(&mut hasher, 9, &(backup_paths.len() as u64).to_be_bytes());
+    for path in backup_paths {
+        encode_recovery_field(&mut hasher, 10, path.as_bytes());
+    }
+    format!("{RECOVERY_BINDING_PREFIX}{:x}", hasher.finalize())
+}
+
+fn encode_recovery_field(hasher: &mut Sha256, tag: u8, bytes: &[u8]) {
+    hasher.update([tag]);
+    hasher.update((bytes.len() as u64).to_be_bytes());
+    hasher.update(bytes);
 }
 
 fn validate_plan_binding(backup: &VerifiedBackup, plan: &ChangePlan) -> Result<(), BackupError> {
@@ -244,6 +380,11 @@ fn validate_plan_binding(backup: &VerifiedBackup, plan: &ChangePlan) -> Result<(
     if backup.snapshot_id != SnapshotId::for_plan(plan)
         || backup.manifest.plan_id != plan.id.as_str()
         || backup.manifest.source_fingerprint != plan.device_fingerprint
+        || backup.manifest.base_observed_revision != plan.base_observed_revision
+        || backup.manifest.source_relative_path != plan.operation.source.relative_path.as_str()
+        || backup.manifest.destination_relative_path
+            != plan.operation.destination_relative_path.as_str()
+        || backup.manifest.recovery_binding != recovery_binding_for_plan(plan)?
     {
         return Err(BackupError::PlanBindingMismatch);
     }
@@ -667,6 +808,14 @@ mod tests {
 
         assert_eq!(verified.manifest().files.len(), 1);
         assert_eq!(
+            verified.manifest().destination_relative_path,
+            plan.operation.destination_relative_path.as_str()
+        );
+        assert_eq!(
+            verified.manifest().recovery_binding,
+            recovery_binding_for_plan(&plan).unwrap()
+        );
+        assert_eq!(
             fs::read(verified.directory().join("files/SET/AUDIO/kick.wav")).unwrap(),
             bytes
         );
@@ -720,6 +869,31 @@ mod tests {
     }
 
     #[test]
+    fn tampering_with_the_recovery_destination_invalidates_the_snapshot() {
+        let fixture = TempDir::new().unwrap();
+        let root = fixture.path().join("root");
+        let backups = fixture.path().join("local-backups");
+        fs::create_dir_all(root.join("SET/AUDIO")).unwrap();
+        fs::write(root.join("SET/AUDIO/kick.wav"), b"fixture").unwrap();
+        let store = BackupStore::new(&backups);
+        let backup = store.create_verified(&root, &plan_for(b"fixture")).unwrap();
+        let manifest_path = backup.directory().join("manifest.json");
+        let mut manifest: BackupManifest =
+            serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+        manifest.destination_relative_path = "SET/PROJECT/victim.wav".into();
+        fs::write(
+            &manifest_path,
+            serde_json::to_vec_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+
+        assert!(matches!(
+            store.verify(backup.snapshot_id()),
+            Err(BackupError::InvalidManifest("recovery_binding"))
+        ));
+    }
+
+    #[test]
     fn existing_snapshot_must_be_bound_to_the_exact_plan() {
         let fixture = TempDir::new().unwrap();
         let root = fixture.path().join("root");
@@ -735,6 +909,10 @@ mod tests {
             snapshot_id: snapshot_id.as_str().to_owned(),
             plan_id: format!("plan:v1:{}", "b".repeat(64)),
             source_fingerprint: format!("rootfp:v1:{}", "c".repeat(64)),
+            base_observed_revision: plan.base_observed_revision,
+            source_relative_path: plan.operation.source.relative_path.as_str().into(),
+            destination_relative_path: plan.operation.destination_relative_path.as_str().into(),
+            recovery_binding: recovery_binding_for_plan(&plan).unwrap(),
             complete: true,
             files: vec![],
         };
@@ -746,7 +924,7 @@ mod tests {
 
         assert!(matches!(
             BackupStore::new(&backups).verify_for_plan(&plan),
-            Err(BackupError::PlanBindingMismatch)
+            Err(BackupError::InvalidManifest("plan_snapshot_binding"))
         ));
     }
 

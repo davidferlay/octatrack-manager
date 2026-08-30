@@ -437,6 +437,31 @@ impl RootRegistry {
         Ok(entry.session.clone())
     }
 
+    pub fn disable_write(&self, root_id: &RootId) -> Result<RootSession, RootRegistryError> {
+        let now = Instant::now();
+        let mut state = self.lock_state()?;
+        let expired = state
+            .roots
+            .get(root_id)
+            .ok_or(RootRegistryError::NotApproved)?
+            .expires_at
+            <= now;
+        if expired {
+            state.roots.remove(root_id);
+            return Err(RootRegistryError::Expired);
+        }
+        let entry = state
+            .roots
+            .get_mut(root_id)
+            .ok_or(RootRegistryError::NotApproved)?;
+        entry.write_expires_at = None;
+        entry.session.write_grant_expires_in_seconds = None;
+        entry.session.capabilities.write = false;
+        entry.session.expires_in_seconds =
+            entry.expires_at.saturating_duration_since(now).as_secs();
+        Ok(entry.session.clone())
+    }
+
     pub fn close(&self, root_id: &RootId) -> Result<bool, RootRegistryError> {
         Ok(self.lock_state()?.roots.remove(root_id).is_some())
     }
@@ -756,6 +781,38 @@ mod tests {
         assert_eq!(registered_again.root_id, registered.root_id);
         assert!(!registered_again.capabilities.write);
         assert_eq!(registered_again.write_grant_expires_in_seconds, None);
+    }
+
+    #[test]
+    fn write_grant_can_be_revoked_without_closing_the_read_session() {
+        let root = TempDir::new().unwrap();
+        let registry = RootRegistry::new_with_ttls(
+            Arc::new(FakeIdentityProvider::new()),
+            Duration::from_secs(60),
+            Duration::from_secs(10),
+        );
+        let registered = registry.register(root.path().to_str().unwrap()).unwrap();
+        assert!(
+            registry
+                .enable_write(&registered.root_id)
+                .unwrap()
+                .capabilities
+                .write
+        );
+
+        let disabled = registry.disable_write(&registered.root_id).unwrap();
+
+        assert!(disabled.capabilities.read);
+        assert!(!disabled.capabilities.write);
+        assert_eq!(disabled.write_grant_expires_in_seconds, None);
+        assert!(
+            !registry
+                .resolve(&registered.root_id)
+                .unwrap()
+                .session
+                .capabilities
+                .write
+        );
     }
 
     #[test]

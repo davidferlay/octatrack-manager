@@ -737,6 +737,7 @@ impl From<ChangeOperationStatus> for ChangeStatusDto {
             ChangeOperationState::Planned => "planned",
             ChangeOperationState::Applying => "applying",
             ChangeOperationState::Committed => "committed",
+            ChangeOperationState::RolledBack => "rolled_back",
             ChangeOperationState::Failed => "failed",
             ChangeOperationState::RecoveryRequired => "recovery_required",
         };
@@ -1418,6 +1419,28 @@ fn change_recovery_status_sync(
     })
 }
 
+fn recover_change_sync(
+    registry: &RootRegistry,
+    catalog: &SharedCatalog,
+    write: &SharedWriteRuntime,
+    root_id: &RootId,
+    operation_id: &str,
+    approved_operation_id: &str,
+) -> Result<ChangeStatusDto, ApiError> {
+    let mut status = write
+        .recover_incomplete(root_id, operation_id, approved_operation_id, registry)
+        .map_err(write_runtime_error)?;
+    if status.catalog_refresh_required
+        && scan_library_sync(registry, catalog, root_id)
+            .and_then(|(session, snapshot)| store_library_snapshot(catalog, &session, &snapshot))
+            .is_ok()
+    {
+        let _ = write.mark_catalog_refreshed(root_id, &status.operation_id);
+        status.catalog_refresh_required = false;
+    }
+    Ok(status.into())
+}
+
 #[tauri::command]
 pub async fn v2_root_register(
     raw_path: String,
@@ -1704,6 +1727,33 @@ pub async fn v2_change_recovery_status(
     .map_err(ApiError::task_failed)?
 }
 
+#[tauri::command]
+pub async fn v2_change_recover(
+    root_id: String,
+    operation_id: String,
+    approved_operation_id: String,
+    registry: State<'_, Arc<RootRegistry>>,
+    catalog: State<'_, SharedCatalog>,
+    write: State<'_, SharedWriteRuntime>,
+) -> Result<ChangeStatusDto, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let catalog = Arc::clone(catalog.inner());
+    let write = Arc::clone(write.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        recover_change_sync(
+            &registry,
+            &catalog,
+            &write,
+            &root_id,
+            &operation_id,
+            &approved_operation_id,
+        )
+    })
+    .await
+    .map_err(ApiError::task_failed)?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1711,7 +1761,10 @@ mod tests {
     use crate::catalog_runtime::open_shared_catalog;
     use crate::root_registry::{DeviceIdentityProvider, DeviceObservation};
     use crate::write_runtime::open_shared_write_runtime;
+    use ot_executor::{JournalFileIdentity, JournalStatus, OperationJournal};
+    use ot_plan::derive_additive_copy_plan_id;
     use std::fs;
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
     use std::path::Path;
     use std::time::Duration;
     use tempfile::TempDir;
@@ -1778,6 +1831,38 @@ mod tests {
         wav.extend_from_slice(&data_size.to_le_bytes());
         wav.extend_from_slice(&samples);
         fs::write(path, wav).unwrap();
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn recovery_binding_fixture(
+        plan_id: &str,
+        snapshot_id: &str,
+        source_fingerprint: &str,
+        base_observed_revision: u64,
+        source_relative_path: &str,
+        destination_relative_path: &str,
+        source_byte_size: u64,
+        source_content_hash: &str,
+    ) -> String {
+        fn encode(hasher: &mut Sha256, tag: u8, bytes: &[u8]) {
+            hasher.update([tag]);
+            hasher.update((bytes.len() as u64).to_be_bytes());
+            hasher.update(bytes);
+        }
+
+        let mut hasher = Sha256::new();
+        hasher.update(b"masterocta:recovery-binding:v1");
+        encode(&mut hasher, 1, plan_id.as_bytes());
+        encode(&mut hasher, 2, snapshot_id.as_bytes());
+        encode(&mut hasher, 3, source_fingerprint.as_bytes());
+        encode(&mut hasher, 4, &base_observed_revision.to_be_bytes());
+        encode(&mut hasher, 5, source_relative_path.as_bytes());
+        encode(&mut hasher, 6, destination_relative_path.as_bytes());
+        encode(&mut hasher, 7, &source_byte_size.to_be_bytes());
+        encode(&mut hasher, 8, source_content_hash.as_bytes());
+        encode(&mut hasher, 9, &1_u64.to_be_bytes());
+        encode(&mut hasher, 10, source_relative_path.as_bytes());
+        format!("recovery-binding:v1:{:x}", hasher.finalize())
     }
 
     #[test]
@@ -1896,6 +1981,215 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(consumed.code, "PLAN_CONSUMED");
+    }
+
+    #[test]
+    fn production_recovery_route_rolls_back_a_journaled_synthetic_clone_after_restart() {
+        let root = TempDir::new().unwrap();
+        let audio_pool = root.path().join("SET_A/AUDIO");
+        fs::create_dir_all(&audio_pool).unwrap();
+        let source = audio_pool.join("kick.wav");
+        let destination = audio_pool.join("kick-copy.wav");
+        write_test_wav(&source);
+        fs::copy(&source, &destination).unwrap();
+        let source_before = fs::read(&source).unwrap();
+        let registry = registry();
+        let data_directory = TempDir::new().unwrap();
+        let catalog = open_shared_catalog(data_directory.path()).unwrap();
+        let write = open_shared_write_runtime(data_directory.path()).unwrap();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id.clone()).unwrap();
+        assert!(!session.capabilities.write);
+
+        let plan_seed = PlanSeed::new([0x5a; 32]);
+        let source_relative = RootRelativePath::parse("SET_A/AUDIO/kick.wav").unwrap();
+        let destination_relative = RootRelativePath::parse("SET_A/AUDIO/kick-copy.wav").unwrap();
+        let content_hash =
+            ContentHash::parse(format!("sha256:{:x}", Sha256::digest(&source_before))).unwrap();
+        let plan_id = derive_additive_copy_plan_id(
+            &root_id,
+            &plan_seed,
+            &session.device_fingerprint,
+            session.observed_revision,
+            &source_relative,
+            &destination_relative,
+            &content_hash,
+            source_before.len() as u64,
+        );
+        let digest = plan_id
+            .as_str()
+            .strip_prefix("plan:v1:")
+            .unwrap()
+            .to_owned();
+        let operation_id = format!("operation:v1:{digest}");
+        let snapshot_id = format!("snapshot:v1:{digest}");
+        let source_relative_path = source_relative.as_str();
+        let destination_relative_path = destination_relative.as_str();
+        let content_hash = content_hash.as_str().to_owned();
+        let recovery_binding = recovery_binding_fixture(
+            plan_id.as_str(),
+            &snapshot_id,
+            &session.device_fingerprint,
+            session.observed_revision,
+            source_relative_path,
+            destination_relative_path,
+            source_before.len() as u64,
+            &content_hash,
+        );
+        let write_state = data_directory.path().join("MasterOCTa/write-state");
+        let backup_directory = write_state.join("backups").join(&digest);
+        let backup_file = backup_directory.join("files").join(source_relative_path);
+        fs::create_dir_all(backup_file.parent().unwrap()).unwrap();
+        fs::write(&backup_file, &source_before).unwrap();
+        let backup_manifest = serde_json::json!({
+            "schema": "masterocta-backup:v2",
+            "snapshot_id": snapshot_id.clone(),
+            "plan_id": plan_id.as_str(),
+            "source_fingerprint": session.device_fingerprint.clone(),
+            "base_observed_revision": session.observed_revision,
+            "source_relative_path": source_relative_path,
+            "destination_relative_path": destination_relative_path,
+            "recovery_binding": recovery_binding.clone(),
+            "complete": true,
+            "files": [{
+                "relative_path": source_relative_path,
+                "byte_size": source_before.len() as u64,
+                "content_hash": content_hash.clone(),
+            }],
+        });
+        fs::write(
+            backup_directory.join("manifest.json"),
+            serde_json::to_vec_pretty(&backup_manifest).unwrap(),
+        )
+        .unwrap();
+
+        let destination_metadata = fs::metadata(&destination).unwrap();
+        let journal = OperationJournal {
+            schema: "masterocta-operation-journal:v3".into(),
+            operation_id: operation_id.clone(),
+            plan_id: plan_id.as_str().to_owned(),
+            root_fingerprint: session.device_fingerprint.clone(),
+            base_observed_revision: session.observed_revision,
+            source_relative_path: source_relative_path.into(),
+            destination_relative_path: destination_relative_path.into(),
+            backup_snapshot_id: snapshot_id,
+            recovery_binding,
+            destination_file_identity: Some(JournalFileIdentity {
+                device: destination_metadata.dev(),
+                inode: destination_metadata.ino(),
+                byte_size: destination_metadata.size(),
+                modified_seconds: destination_metadata.mtime(),
+                modified_nanoseconds: destination_metadata.mtime_nsec(),
+                changed_seconds: destination_metadata.ctime(),
+                changed_nanoseconds: destination_metadata.ctime_nsec(),
+            }),
+            status: JournalStatus::Applying,
+            failure_code: Some("SIMULATED_PROCESS_EXIT".into()),
+        };
+        let journal_directory = write_state.join("journals");
+        fs::create_dir_all(&journal_directory).unwrap();
+        fs::write(
+            journal_directory.join(format!("{digest}.json")),
+            serde_json::to_vec_pretty(&journal).unwrap(),
+        )
+        .unwrap();
+        let authorization_directory = journal_directory.join("authorizations");
+        fs::create_dir_all(&authorization_directory).unwrap();
+        let authorization_path = authorization_directory.join(format!("{digest}.json"));
+        let authorization = serde_json::json!({
+            "schema": "masterocta-recovery-authorization:v2",
+            "operation_id": operation_id.clone(),
+            "plan_id": journal.plan_id.clone(),
+            "root_id": root_id.as_str(),
+            "plan_seed": plan_seed.to_hex(),
+            "root_fingerprint": journal.root_fingerprint.clone(),
+            "base_observed_revision": journal.base_observed_revision,
+            "source_relative_path": source_relative_path,
+            "destination_relative_path": destination_relative_path,
+            "backup_snapshot_id": journal.backup_snapshot_id.clone(),
+            "recovery_binding": journal.recovery_binding.clone(),
+            "source_byte_size": source_before.len() as u64,
+            "source_content_hash": content_hash,
+        });
+        fs::write(
+            &authorization_path,
+            serde_json::to_vec_pretty(&authorization).unwrap(),
+        )
+        .unwrap();
+        fs::set_permissions(&authorization_path, fs::Permissions::from_mode(0o400)).unwrap();
+
+        assert!(registry.enable_write(&root_id).unwrap().capabilities.write);
+
+        let pending = change_recovery_status_sync(&registry, &write, &root_id).unwrap();
+        assert!(pending.recovery_required);
+        assert_eq!(pending.operations.len(), 1);
+        let wrong_approval = format!("operation:v1:{}", "b".repeat(64));
+        let approval_error = recover_change_sync(
+            &registry,
+            &catalog,
+            &write,
+            &root_id,
+            &operation_id,
+            &wrong_approval,
+        )
+        .unwrap_err();
+        assert_eq!(approval_error.code, "APPROVAL_REQUIRED");
+        assert!(destination.exists());
+        assert!(
+            registry
+                .resolve(&root_id)
+                .unwrap()
+                .session
+                .capabilities
+                .write
+        );
+
+        let recovered = recover_change_sync(
+            &registry,
+            &catalog,
+            &write,
+            &root_id,
+            &operation_id,
+            &operation_id,
+        )
+        .unwrap();
+
+        assert_eq!(recovered.state, "rolled_back");
+        assert!(!recovered.recovery_required);
+        assert!(!recovered.catalog_refresh_required);
+        assert!(!destination.exists());
+        assert_eq!(fs::read(&source).unwrap(), source_before);
+        assert!(
+            !registry
+                .resolve(&root_id)
+                .unwrap()
+                .session
+                .capabilities
+                .write
+        );
+        assert!(
+            !change_recovery_status_sync(&registry, &write, &root_id)
+                .unwrap()
+                .recovery_required
+        );
+        let replay = recover_change_sync(
+            &registry,
+            &catalog,
+            &write,
+            &root_id,
+            &operation_id,
+            &operation_id,
+        )
+        .unwrap_err();
+        assert_eq!(replay.code, "PLAN_CONSUMED");
+        let refreshed = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
+        assert_eq!(refreshed.audio_files.len(), 1);
+        assert_eq!(refreshed.audio_files[0].relative_path, source_relative_path);
+        let response_json = serde_json::to_string(&recovered).unwrap();
+        assert!(!response_json.contains(root.path().to_str().unwrap()));
+        assert!(!response_json.contains(&session.root_id));
+        assert!(!response_json.contains(&session.device_fingerprint));
     }
 
     #[test]

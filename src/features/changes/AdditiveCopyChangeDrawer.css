@@ -98,6 +98,47 @@
   border-top: 1px solid var(--mo-border);
 }
 
+.mo-change-drawer__recovery {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--mo-danger) 55%, var(--mo-border));
+  border-radius: var(--mo-radius-sm);
+  background: color-mix(in srgb, var(--mo-danger) 7%, transparent);
+}
+
+.mo-change-drawer__recovery h4,
+.mo-change-drawer__recovery p,
+.mo-change-drawer__recovery dl {
+  margin: 0;
+}
+
+.mo-change-drawer__recovery p,
+.mo-change-drawer__recovery-operation {
+  font-size: 0.82rem;
+}
+
+.mo-change-drawer__recovery-operation {
+  display: grid;
+  gap: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--mo-border);
+}
+
+.mo-change-drawer__recovery-operation dl {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.mo-change-drawer__recovery-operation dt {
+  color: var(--mo-text-muted);
+  font-size: 0.72rem;
+}
+
+.mo-change-drawer__recovery-operation dd {
+  margin: 0.1rem 0 0;
+}
+
 .mo-change-drawer__diff {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -150,7 +191,8 @@
   font-size: 0.85rem;
 }
 
-.mo-change-drawer__status--committed {
+.mo-change-drawer__status--committed,
+.mo-change-drawer__status--rolled_back {
   color: var(--mo-success);
 }
 

@@ -1,6 +1,6 @@
 # Codex引継ぎ — MasterOCTa
 
-更新日: 2026-08-29
+更新日: 2026-08-30
 
 ## 1. 目的
 
@@ -81,8 +81,9 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - M4-B approved additive copy／live write grant: #39マージ済み
 - UI6 MasterOCTa branding rename artifacts: #40マージ済み
 - Design System DS7 `--elektron-*` removal: #41マージ済み
-- セキュリティ再監査 hardening: #42マージ済み
-- 現在のmain基準SHA: `e7745acb68489b7fd8065abf1fbe79fd067a8d8a`
+- Security recheck R2／v2 error sanitization: #42マージ済み
+- opportunistic `App.css` unused rule cleanup: #45マージ済み
+- 現在のmain基準SHA: `ad3313f6a8b41b44bd61e65c6af873bb1aa4832b`
 - M2: 完了
 - M3-A: 完了
 - M3-B: 完了
@@ -98,11 +99,11 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - M4-A: 完了
 - M4-B: 完了（Gate B recovery実行は未完了）
 - Design System Phase A–D: 完了（DS1–DS7 / UI1–UI6）
-- 現在の作業: Gate B recovery導線（PR #43）と opportunistic `App.css` 未使用削除
+- 現在の作業: Gate B production recovery導線（PR #43）とclone smoke gate
 - SQLite schema: v5（M3-E1で追加）
-- 次の機能実装: Gate Bのproduction recovery導線とreview済みclone smokeを
-  残条件として評価し、未充足ならM5より先に補完する
-  （M4-B recoveryは `codex/m4b-recovery-gate` / PR #43 と重複させない）
+- 次の機能実装: production recovery導線をマージ後、
+  `docs/testing/GATE_B_CLONE_SMOKE.md`を由来確認済みの使い捨てcloneで人間が実施・reviewする。
+  sign-offまではGate Bを完了扱いにせず、M5へ進まない
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
 - `ot-tools-io`はコミット
@@ -312,3 +313,39 @@ Support配下だけに置く。
 Gate Bはreview済みclone smokeと明示的recovery導線の要否を確認するまで完了扱いにしない。
 production composition testは生成したtemporary rootと合成WAVだけを使用し、sourceの
 byte-for-byte不変、追加先の一致、catalog再取得を確認する。
+
+Gate B recovery補完では、通常write grantとは分離したrollback専用authorityを追加する。
+frontend／Tauri APIはlive `RootId`、opaque `OperationId`、同じ`OperationId`への明示承認だけを
+受け、raw pathやplan内容を受け取らない。Recovery開始時に残存write grantを失効させる。
+executorはjournalとverified backupを再検証し、記録済み
+file identityとbackup内容に一致するoperation-created destination／partialだけを削除する。
+replacement、tampered/missing backup、root identity変更、symlinkはfail closedで保持する。
+crash/restart routeはtemporary directoryと合成WAVだけで自動testし、実SD／CFカードや原本データは
+使用しない。production fault injectionは追加しない。
+
+recovery destinationはbackup manifest v2のversion付きrecovery bindingへsource、destination、
+plan／snapshot ID、root fingerprint、revision、source size／hashとともに束縛する。journal単体の
+destination／file identity改変では別fileを削除できない。terminal journalの再実行は
+`PLAN_CONSUMED`として拒否し、writer lock取得後とmedia mutation直前にlive rootを再観測する。
+file identity checkpoint前のcrashでは、空のoperation固有partialを削除せず保持し、失敗終端として
+root全体のwrite blockだけを解除する。
+
+manifestとjournalの同時改変にも依存しないよう、plan時のsource／destination／identity／bindingは
+別のread-only plan authorization recordへcreate-onceで固定し、standalone recoveryで三者を照合する。
+このrecordにもsession `RootId`、absolute path、mount pathは保存しない。recoveryはmedia dispositionを
+terminal journalへfsyncした後にMac側staging cleanupを行うため、local cleanup失敗でrootを再blockしない。
+
+rollbackの削除対象はoperation固有quarantineへno-replace renameしてからidentityと、published fileでは
+backup由来contentを再検証する。検証中にdestinationが外部processから置換された場合は置換fileを
+restoreまたはquarantineに保持し、削除しない。partialからdestinationへのpublish rename直後にcrashしても、
+renameで変化し得るctimeを除いたdevice／inode／size／mtime identityとcontent検証で回復できる。
+同一process内の即時rollbackでもpublished fileはexpected size／hashを再検証し、粗いmtimeを維持した
+同size外部rewriteを削除しない。unidentified empty partialを`Abandoned`へ終端化した場合もfrontendは
+session／recovery状態をrefreshし、partial保持のwarningを残す。
+前releaseのjournal v2は互換読取りし、対応するbackup manifest v1は認証済み削除根拠として使用しない。
+recovery bindingを持たないlegacy未完了状態はmediaとbackupを保持したまま`Abandoned`へ安全終端化して
+root全体のblockだけを解除する。
+
+この補完PRが成功しても、`docs/testing/GATE_B_CLONE_SMOKE.md`のhuman-reviewed smokeは別の残条件で
+ある。由来確認済みの使い捨てcloneによるsign-off前にGate B完了や原本media write対応を宣言せず、
+M5へ進まない。

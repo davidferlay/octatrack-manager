@@ -970,6 +970,38 @@ root-relative destinationだけを受け取り、追加copy以外のoverwrite、
 status公開だけではrecovery実行導線を代替しないため、review済みclone smokeとproduction
 recoveryの残条件を満たすまでGate Bを完了扱いにせず、M5へ進まない。
 
+production recoveryは通常のwrite grantを再発行せず、登録済みlive `RootId`、未完了journalの
+opaque `OperationId`、同じ`OperationId`に対する一回の明示承認だけを受けるrollback専用操作と
+する。開始時に残存write grantを失効させる。journalのstable root fingerprint、operation ID、
+destinationのrelative path／file identityとverified backup manifest内のversion付きrecovery binding、
+Mac側verified backupを再検証し、operationが作成したdestinationまたはpartialだけを削除候補に
+する。destinationが別fileへ置換された場合、backupが欠落・改変された場合、symlinkやidentity
+不一致がある場合は何も削除せずRecovery requiredを維持する。productionにfault injectionを公開
+せず、crash/restartは合成TempDir統合testで検証する。実clone smokeは由来確認済みの使い捨て
+cloneだけで人間が実施し、完了まではGate BとM5を保留する。
+
+recovery bindingはmutableなmanifest／journal二者だけを根拠にしない。planの削除対象とsource証拠は
+Mac側Application Supportの独立したread-only authorization recordへcreate-onceで固定し、recovery時に
+manifest／journal／authorizationの三者を一致確認する。authorizationにsession `RootId`やabsolute pathを
+保存しない。mediaのrollback／保持をterminal journalへ先にfsyncし、その後のMac側staging cleanup失敗は
+terminal stateを未完了へ戻さない。
+
+partial作成直後かつfile identityのjournal checkpoint前にcrashした場合は、identity不明のpartialを
+推測で削除しない。空のoperation固有partialを保持したままoperationを失敗終端へ移し、以後の
+writeをroot全体で永久blockしない。terminal journalへのrecovery再実行は拒否する。rootはwriter
+lock取得後とmedia mutation直前に再観測し、mount observationまたはcanonical rootの変化を拒否する。
+削除候補はoperation固有quarantine名へno-replace renameした後に再度identityと必要なcontentを検証し、
+一致したquarantineだけを削除する。検証中に元のentryが外部processから置換された場合は置換fileを
+元の名前へ戻すかquarantineに保持し、削除しない。partial公開のrenameで変化し得るctimeはrecovery用
+identity invariantから除外し、device／inode／size／mtimeとpublished contentで同一性を確認する。
+同一process内の即時rollbackもpublished contentをsource size／hashへ照合し、mtimeを維持した同size rewriteを
+削除しない。`Abandoned`で安全終端したrecoveryもfrontend sessionをrefreshしてwrite grant失効を反映する。
+
+既存releaseのjournal v2はupgrade後も読取り可能にする。対応するbackup manifest v1は認証済みrecovery
+bindingを持たないため削除根拠へ昇格させず、そのlegacy未完了journalはmediaを削除せず`Abandoned`へ
+安全に正規化する。旧destination／partialとbackupを保持したままroot全体のwrite blockだけを解除し、
+legacy terminal journalは履歴として読み、recovery replayを拒否する。
+
 ### M5 — rename/move/reference update
 
 - Sample rename/move

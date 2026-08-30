@@ -73,6 +73,7 @@ function fakeChangeApi(): ChangeApi {
     getPlan: vi.fn(),
     applyChange: vi.fn(),
     changeStatus: vi.fn(),
+    recoverChange: vi.fn(),
     recoveryStatus: vi.fn().mockResolvedValue({
       schema: "change-recovery-status:v1",
       recoveryRequired: false,
@@ -207,6 +208,66 @@ describe("RootRegistryPanel", () => {
     expect(await screen.findAllByText("EDIT ENABLED")).toHaveLength(2);
     expect(changeClient.recoveryStatus).toHaveBeenCalledTimes(2);
     expect(api.enableWrite).toHaveBeenCalledWith("root-opaque");
+  });
+
+  it("refreshes the catalog and recovery gate after an approved rollback", async () => {
+    const api = fakeApi();
+    const changeClient = fakeChangeApi();
+    const operationId = `operation:v1:${"a".repeat(64)}`;
+    const planId = `plan:v1:${"a".repeat(64)}`;
+    vi.mocked(changeClient.recoveryStatus)
+      .mockResolvedValueOnce({
+        schema: "change-recovery-status:v1",
+        recoveryRequired: true,
+        operations: [{
+          schema: "change-status:v1",
+          operationId,
+          planId,
+          state: "recovery_required",
+          recoveryRequired: true,
+          catalogRefreshRequired: true,
+          failureCode: "SIMULATED_PROCESS_EXIT",
+          backupSnapshotId: `snapshot:v1:${"a".repeat(64)}`,
+        }],
+      })
+      .mockResolvedValue({
+        schema: "change-recovery-status:v1",
+        recoveryRequired: false,
+        operations: [],
+      });
+    vi.mocked(changeClient.recoverChange).mockResolvedValue({
+      schema: "change-status:v1",
+      operationId,
+      planId,
+      state: "rolled_back",
+      recoveryRequired: false,
+      catalogRefreshRequired: false,
+      failureCode: "RECOVERED_INCOMPLETE_OPERATION",
+      backupSnapshotId: `snapshot:v1:${"a".repeat(64)}`,
+    });
+    render(
+      <RootRegistryPanel
+        api={api}
+        changeClient={changeClient}
+        selectDirectory={vi.fn().mockResolvedValue("/tmp/fixture-root")}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose root..." }));
+    expect(await screen.findByText("Rollback required")).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText(
+      "I approve rollback of this exact incomplete additive-copy operation.",
+    ));
+    fireEvent.click(screen.getByRole("button", { name: "Roll back incomplete copy" }));
+
+    await waitFor(() => expect(changeClient.recoverChange).toHaveBeenCalledWith(
+      "root-opaque",
+      operationId,
+      operationId,
+    ));
+    await waitFor(() => expect(api.listLibrary).toHaveBeenCalledTimes(2));
+    expect(changeClient.recoveryStatus).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("Rollback required")).not.toBeInTheDocument();
   });
 
   it("blocks root closure while a change request is in flight", async () => {
