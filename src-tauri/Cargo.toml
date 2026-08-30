@@ -30,12 +30,12 @@ name = "masterocta_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
-tauri-plugin-opener = "2"
-tauri-plugin-dialog = "2"
+tauri = { version = "2.11.1", features = [] }
+tauri-plugin-opener = "2.5.4"
+tauri-plugin-dialog = "2.7.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ot-tools-io = { git = "https://gitlab.com/davidferlay/ot-tools-io.git", rev = "cd246d8a595647364eb4cc78211033b2d1302526" }
