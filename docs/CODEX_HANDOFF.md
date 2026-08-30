@@ -80,7 +80,9 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - UI5 Usage Graph: #38マージ済み
 - M4-B approved additive copy／live write grant: #39マージ済み
 - UI6 MasterOCTa branding rename artifacts: #40マージ済み
-- 現在のmain基準SHA: `44554d0c27e30f08b1d7c743fd31960cc2c07363`
+- Design System DS7 `--elektron-*` removal: #41マージ済み
+- セキュリティ再監査 hardening: #42マージ済み
+- 現在のmain基準SHA: `e7745acb68489b7fd8065abf1fbe79fd067a8d8a`
 - M2: 完了
 - M3-A: 完了
 - M3-B: 完了
@@ -95,10 +97,12 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - M3: 完了
 - M4-A: 完了
 - M4-B: 完了（Gate B recovery実行は未完了）
-- 現在の作業: 全体セキュリティ再監査とGate B残条件の評価
+- Design System Phase A–D: 完了（DS1–DS7 / UI1–UI6）
+- 現在の作業: Gate B recovery導線（PR #43）と opportunistic `App.css` 未使用削除
 - SQLite schema: v5（M3-E1で追加）
 - 次の機能実装: Gate Bのproduction recovery導線とreview済みclone smokeを
   残条件として評価し、未充足ならM5より先に補完する
+  （M4-B recoveryは `codex/m4b-recovery-gate` / PR #43 と重複させない）
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
 - `ot-tools-io`はコミット
