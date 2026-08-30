@@ -69,12 +69,13 @@ Actions used below:
 ## Application JavaScript graph
 
 `pnpm audit` reported `low: 2`, `moderate: 12`, `high: 16`, `critical: 1`.
-`pnpm audit --prod` contains only the 13 React Router advisories (`low: 1`,
-`moderate: 6`, `high: 6`, `critical: 0`).
+`pnpm audit --prod` previously contained only the 13 React Router advisories
+(`low: 1`, `moderate: 6`, `high: 6`, `critical: 0`); those are remediated in
+DEP-3 (`react-router` / `react-router-dom` `7.18.3`).
 
 | Package / resolved version | Shortest dependency path | Advisory, severity, fixed version | Affected use and reachability | Action |
 | --- | --- | --- | --- | --- |
-| `react-router@7.12.0` | `react-router-dom > react-router` | `GHSA-49rj-9fvp-4h2h` high, `>=7.14.2`; `GHSA-8646-j5j9-6r62` high, `>=7.13.2`; `GHSA-f22v-gfqf-p8f3` moderate, `>=7.13.2`; `GHSA-8x6r-g9mw-2r78` high, `>=7.15.0`; `GHSA-rxv8-25v2-qmq8` high, `>=7.14.0`; `GHSA-84g9-w2xq-vcv6` low, `>=7.15.1`; `GHSA-wrjc-x8rr-h8h6` moderate, `>=7.18.0`; `GHSA-jjmj-jmhj-qwj2` moderate, `>=7.13.0`; `GHSA-h8fp-f39c-q6mh` moderate, `>=7.18.0`; `GHSA-337j-9hxr-rhxg` moderate, `>=7.18.0`; `GHSA-chx6-hx7r-mcp5` high, `>=7.18.0`; `GHSA-2j2x-hqr9-3h42` moderate, `>=7.14.1`; `GHSA-qwww-vcr4-c8h2` high, `>=7.18.2` | The app uses `HashRouter`, `Routes`, and `Route` in Declarative Mode. The RSC, Framework Mode, SSR/hydration, prerender, manifest, single-fetch, action/CSRF, and `redirect()` paths are absent. The two open-redirect findings affect navigation APIs, but every current `navigate()` target is an internal `/...` path and interpolated identifiers are `encodeURIComponent`-encoded. **Not runtime reachable under current code.** | Accept temporarily; remediate in a focused React Router PR. Recheck immediately if RSC/Framework/SSR APIs are introduced or untrusted input can become a direct `to`, `redirect()`, or `navigate()` target. |
+| `react-router@7.18.3` | `react-router-dom > react-router` | Prior open set through `GHSA-qwww-vcr4-c8h2` (high, fixed `>=7.18.2`) and related Router advisories | The app uses `HashRouter`, `Routes`, and `Route` in Declarative Mode. Navigation targets remain internal `/...` paths with `encodeURIComponent` for interpolated identifiers. | **Remediated** by pinning `react-router-dom@7.18.3` (DEP-3). Recheck if RSC/Framework/SSR APIs are introduced or untrusted input can become a direct `to`, `redirect()`, or `navigate()` target. |
 | `vitest@4.1.11` | direct dev dependency | `GHSA-5xrq-8626-4rwp` critical, fixed in `>=4.1.0` | **Remediated** (DEP-2). UI server remains unused (`vitest run` only). | Remediated 2026-08-30 (DEP-2). |
 | `vite@7.3.6` | direct / `@vitejs/plugin-react > vite` | advisories requiring `>=7.3.2` / `>=7.3.5` | **Remediated** (DEP-2). Dev server stays loopback-only unless `TAURI_DEV_HOST` is set. | Remediated 2026-08-30 (DEP-2). |
 | `rollup@4.59.0` | direct toolchain + `vite > rollup` | `GHSA-mw96-cpmx-2vgc` high, fixed in `>=4.59.0` | **Remediated** as a direct toolchain pin (no overrides). | Remediated 2026-08-30 (DEP-2). |
@@ -434,7 +435,20 @@ without touching React Router (separate PR):
 | `ws` | `8.19.0` (transitive) | `8.21.0` (direct toolchain pin) |
 | `@babel/core` | `7.28.5` (transitive) | `7.29.6` (direct toolchain pin) |
 
-`pnpm audit` after DEP-2 reports only the deferred React Router advisories.
+`pnpm audit` after DEP-2 reported only the deferred React Router advisories.
+
+## DEP-3 React Router remediation (2026-08-30)
+
+Pinned the Declarative Mode router without unrelated frontend toolchain bumps
+or `pnpm.overrides`:
+
+| Component | Before | After |
+| --- | --- | --- |
+| `react-router-dom` | `7.12.0` (via `^7.9.5`) | `7.18.3` |
+| `react-router` (transitive) | `7.12.0` | `7.18.3` |
+
+`pnpm audit --prod` reports no known vulnerabilities after this pin. Call sites
+remain `HashRouter` / `Routes` / `Route` plus internal `navigate()` targets.
 
 ## Reproduction
 
