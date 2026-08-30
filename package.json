@@ -21,7 +21,8 @@
     "test:frontend": "vitest run",
     "test:e2e": "playwright test",
     "test:rust": "cd src-tauri && cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace",
-    "docs:watch": "pnpm --dir user-guide run start"
+    "docs:watch": "pnpm --dir user-guide run start",
+    "check:containment": "node scripts/check-containment.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -100,11 +100,10 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - M4-A: 完了
 - M4-B: 完了
 - Design System Phase A–D: 完了（DS1–DS7 / UI1–UI6）
-- 現在の作業: Gate B合成ディスクsmoke証拠の人間review（`docs/testing/GATE_B_SMOKE_EVIDENCE.md`）
+- 現在の作業: Phase 1 Security Baseline（DEP-1 Tauri／DEP-2 frontend toolchain／SEC-1 containment CI）
 - SQLite schema: v5（M3-E1で追加）
-- 次の機能実装: 合成ディスクsmokeはautomated PASS済み。人間が
-  `docs/testing/GATE_B_SMOKE_EVIDENCE.md`と`docs/testing/GATE_B_CLONE_SMOKE.md`を
-  review／sign-offするまでGate Bを完了扱いにせず、M5へ進まない
+- 次の機能実装: Gate B人間reviewとSecurity Baselineマージ後までM5へ進まない。
+  React Router advisoryは別PR。Mac `.app`／`.dmg`と実機smokeはmacOSホストで確認する
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
 - `ot-tools-io`はコミット
