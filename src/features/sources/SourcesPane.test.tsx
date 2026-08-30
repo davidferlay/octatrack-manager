@@ -1,7 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import type { ReactElement } from 'react'
 import type { RootSession } from '../../api'
+import { ThemeProvider } from '../../design-system'
 import { SourcesPane } from './SourcesPane'
+
+function renderSources(ui: ReactElement) {
+  return render(<ThemeProvider>{ui}</ThemeProvider>)
+}
 
 const session: RootSession = {
   rootId: 'root-opaque',
@@ -20,7 +26,7 @@ const session: RootSession = {
 describe('SourcesPane', () => {
   it('shows empty state and register action without a session', () => {
     const onRegister = vi.fn()
-    render(
+    renderSources(
       <SourcesPane
         session={null}
         onRegister={onRegister}
@@ -37,7 +43,7 @@ describe('SourcesPane', () => {
 
   it('renders backend display fields and close action for a session', () => {
     const onClose = vi.fn()
-    render(
+    renderSources(
       <SourcesPane
         session={session}
         onRegister={vi.fn()}
@@ -53,7 +59,7 @@ describe('SourcesPane', () => {
   })
 
   it('surfaces errors without exposing caller-owned raw paths', () => {
-    render(
+    renderSources(
       <SourcesPane
         session={null}
         error="picker unavailable"
@@ -67,7 +73,7 @@ describe('SourcesPane', () => {
 
   it('requires an explicit action before showing edit-enabled mode', () => {
     const onEnableWrite = vi.fn()
-    const { rerender } = render(
+    const { rerender } = renderSources(
       <SourcesPane
         session={session}
         onRegister={vi.fn()}
@@ -80,21 +86,36 @@ describe('SourcesPane', () => {
     expect(onEnableWrite).toHaveBeenCalledOnce()
 
     rerender(
-      <SourcesPane
-        session={{
-          ...session,
-          mode: 'write_enabled',
-          writeGrantExpiresInSeconds: 600,
-          capabilities: { ...session.capabilities, write: true },
-        }}
-        onRegister={vi.fn()}
-        onClose={vi.fn()}
-        onEnableWrite={onEnableWrite}
-      />,
+      <ThemeProvider>
+        <SourcesPane
+          session={{
+            ...session,
+            mode: 'write_enabled',
+            writeGrantExpiresInSeconds: 600,
+            capabilities: { ...session.capabilities, write: true },
+          }}
+          onRegister={vi.fn()}
+          onClose={vi.fn()}
+          onEnableWrite={onEnableWrite}
+        />
+      </ThemeProvider>,
     )
 
     expect(screen.getByText('EDIT ENABLED')).toBeInTheDocument()
     expect(screen.getByText('Additive copy only. Use a cloned or test root, never original media.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Enable edit mode' })).not.toBeInTheDocument()
+  })
+
+  it('exposes appearance theme switcher', () => {
+    renderSources(
+      <SourcesPane
+        session={null}
+        onRegister={vi.fn()}
+        onClose={vi.fn()}
+        onEnableWrite={vi.fn()}
+      />,
+    )
+    expect(screen.getByLabelText('Design system appearance theme')).toBeInTheDocument()
+    expect(screen.getByText('Appearance')).toBeInTheDocument()
   })
 })

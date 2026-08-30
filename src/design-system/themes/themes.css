@@ -1,0 +1,61 @@
+/* Theme packs override semantic --mo-* tokens on [data-mo-theme].
+ * :root keeps classic values so first paint matches the pre-theme baseline.
+ * Hardcoded App.css hex values do not follow themes until migrated to tokens.
+ */
+
+[data-mo-theme='classic'] {
+  --mo-canvas: #0a0a0a;
+  --mo-surface-1: #1a1a1a;
+  --mo-surface-2: #2a2a2a;
+  --mo-surface-raised: #121212;
+  --mo-surface-inset: #222222;
+
+  --mo-border: #333333;
+  --mo-border-strong: #555555;
+
+  --mo-text: #ffffff;
+  --mo-text-muted: #999999;
+  --mo-text-dim: #666666;
+  --mo-text-subtle: #bbbbbb;
+  --mo-text-soft: #dddddd;
+
+  --mo-accent: #ff6600;
+  --mo-accent-hover: #ff7722;
+  --mo-accent-pressed: #cc5200;
+
+  --mo-success: #4caf50;
+  --mo-success-strong: #2ecc71;
+  --mo-warning: #f59e0b;
+  --mo-danger: #dc3545;
+  --mo-danger-bright: #f44336;
+  --mo-info: #4a9eff;
+}
+
+/* MasterOCTa brand pack: cool graphite surfaces + teal signal accent. */
+[data-mo-theme='masterocta'] {
+  --mo-canvas: #07090c;
+  --mo-surface-1: #12171d;
+  --mo-surface-2: #1c2430;
+  --mo-surface-raised: #0d1116;
+  --mo-surface-inset: #182029;
+
+  --mo-border: #2a3542;
+  --mo-border-strong: #4a5b6d;
+
+  --mo-text: #f2f5f7;
+  --mo-text-muted: #8b9aab;
+  --mo-text-dim: #5f6f80;
+  --mo-text-subtle: #b7c3d0;
+  --mo-text-soft: #d7dee6;
+
+  --mo-accent: #2bb3a3;
+  --mo-accent-hover: #3fc4b4;
+  --mo-accent-pressed: #1f8f82;
+
+  --mo-success: #3dba6e;
+  --mo-success-strong: #47d18a;
+  --mo-warning: #e0a23a;
+  --mo-danger: #e14b5a;
+  --mo-danger-bright: #f0616f;
+  --mo-info: #5aa7e0;
+}

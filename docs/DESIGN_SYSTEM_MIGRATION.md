@@ -1,7 +1,7 @@
 # Design System Migration
 
-Status: Phase A–D complete on main (DS1–DS7, UI1–UI6)
-Updated: 2026-08-29
+Status: Phase A–D complete on main (DS1–DS7, UI1–UI6); theme registry follow-up
+Updated: 2026-08-30
 
 ## Purpose
 
@@ -22,6 +22,8 @@ be mixed into the same PR as design-system changes.
 4. Delete legacy CSS only after call sites reach zero.
 5. Keep Masta-Octa branding separate from Elektron-compatible presentation
    (full brand swap is PR-UI6, only if formally decided).
+6. Appearance themes are registered token packs (`data-mo-theme` + `--mo-*`).
+   Extending a theme means a CSS pack + registry entry — not a parallel CSS tree.
 
 **Forbidden during foundation PRs:** opportunistic React state refactors around
 Drag & Drop, Modal flows, keyboard handling, audio preview, HomePage, or Audio
@@ -38,6 +40,7 @@ src/design-system/
 ├── tokens/
 ├── primitives/
 ├── patterns/          # StatusBadge, Toolbar, DataTable, SplitPane (DS4–DS6)
+├── themes/            # Theme registry, provider, switcher, token packs
 └── index.ts
 ```
 
@@ -208,11 +211,24 @@ Phase D  UI6 Branding → DS7 Legacy CSS removal
   `fix-done-error`) and any class still referenced from components.
 - Further `App.css` deletion remains opportunistic; do not rewrite layouts.
 
+### Theme registry + switcher (follow-up)
+
+- Register appearance themes in `src/design-system/themes/` (`THEME_REGISTRY`).
+- Current packs: `classic` (Elektron orange baseline) and `masterocta`
+  (cool graphite + teal accent). Applied via `data-mo-theme` on `<html>`.
+- `ThemeProvider` + `applyStoredThemeBeforePaint()` persist choice in
+  `localStorage` (`masterocta.ui-theme`).
+- `ThemeSwitcher` lives in Sources (AppShell). Token consumers (`--mo-*`) follow
+  the active theme; hardcoded `App.css` hex values do not until migrated.
+- **Out of scope:** rewriting `App.css` onto tokens, system light/dark preference,
+  per-window themes.
+
 ### Later (documented only until started)
 
 | PR | Focus |
 |----|--------|
 | — | Further unused `App.css` deletion as call sites reach zero |
+| — | Migrate remaining hardcoded chrome onto `--mo-*` so themes cover legacy surfaces |
 
 ## Success criteria
 
@@ -247,6 +263,10 @@ deferred.
 Shared SplitPane owns `.panel-divider`. `App.css` remains as the legacy
 stylesheet for unmigrated selectors, without Elektron token aliases. Unused
 legacy rules may be deleted opportunistically when call sites are confirmed zero.
+
+**After theme registry:** Appearance themes are switched through registered
+`--mo-*` packs (`classic` / `masterocta`). Design-system consumers update
+immediately; leftover hardcoded `App.css` colors remain classic until tokenized.
 
 ## Verification (each DS PR)
 

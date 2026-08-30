@@ -1,4 +1,7 @@
-/* MasterOCTa semantic color tokens. Values match the pre-migration palette. */
+/* MasterOCTa semantic color tokens. Values match the pre-migration palette.
+ * Theme packs in themes/themes.css override these via [data-mo-theme].
+ * :root remains the classic baseline for first paint before the attribute is set.
+ */
 :root {
   --mo-canvas: #0a0a0a;
   --mo-surface-1: #1a1a1a;
