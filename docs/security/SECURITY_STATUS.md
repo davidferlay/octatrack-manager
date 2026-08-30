@@ -46,7 +46,8 @@ Allowed v2 commands (architecture guard allowlist):
 
 - root: `register`, `status`, `close`, `enable_write`
 - library / metadata / audio: `library_list`, `asset_metadata_*`, `audio_waveform_get`, `audio_preview_*`
-- changes: `change_plan`, `change_get_plan`, `change_apply`, `change_status`, `change_recovery_status`
+- changes: `change_plan`, `change_get_plan`, `change_apply`, `change_status`,
+  `change_recovery_status`, `change_recover`
 
 Only `v2_root_register` accepts a raw absolute path. `v2_change_plan` accepts only a
 validated `destination_relative_path` via `RootRelativePath::parse`.
@@ -58,7 +59,9 @@ Write path properties:
 - Descriptor-relative copy with `NOFOLLOW`; symlink escape rejected
 - Write grant: live, non-persistent, 15-minute TTL, requires stable identity
 - Apply: exact displayed `planId` one-shot approval; consumed afterward
-- Recovery: status fail-closed; **no** production recover-execute command yet
+- Recovery: status fail-closed; production recover-execute is available
+  (`v2_change_recover` / PR #43–#47) with journal-bound approval. Human review of
+  Gate B smoke evidence remains required before M5.
 
 ## Findings from 2026-08-29 recheck
 
@@ -75,20 +78,22 @@ Fixed in this recheck branch:
 
 Still open / deferred:
 
-1. **High (ops / Gate B)** — incomplete journals refuse new grants/applies until
-   an explicit recovery path exists.
+1. **High (ops / Gate B)** — human review/sign-off of
+   `docs/testing/GATE_B_SMOKE_EVIDENCE.md` before declaring Gate B complete / M5.
 2. **High (legacy)** — absolute-path command surface remains fully wired.
-3. **Open** — frontend advisory deadlines in `DEPENDENCY_AUDIT.md` (DEP-2;
-   Vitest/Vite/Rollup/PostCSS by 2026-09-15). Tauri DEP-1 is merged separately.
+3. **Open** — frontend toolchain advisory deadlines in `DEPENDENCY_AUDIT.md`
+   (DEP-2; Vitest/Vite/Rollup/PostCSS by 2026-09-15). Tauri DEP-1 and React
+   Router DEP-3 are remediated separately.
 
 ## Remaining high-priority risks
 
 1. Legacy command surface can still read/write/delete arbitrary absolute paths
    once the desktop app is running. Do not point it at original media.
-2. Without a reviewed recovery-execute flow, a crashed M4 apply can leave the
-   root write-blocked until manual intervention.
+2. Gate B remains unsigned until a human reviews the synthetic-disk smoke
+   evidence; do not start M5 before that sign-off.
 3. Frontend toolchain advisory remediation (Vitest ≥4.1.0 / Vite ≥7.3.5 line)
-   remains due by 2026-09-15.
+   remains due by 2026-09-15 (DEP-2). React Router production advisories are
+   remediated in DEP-3.
 
 ## Verification performed in this recheck
 

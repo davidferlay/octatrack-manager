@@ -84,7 +84,9 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - Security recheck R2／v2 error sanitization: #42マージ済み
 - opportunistic `App.css` unused rule cleanup: #45マージ済み
 - M4-B recovery gate／production recovery導線: #43マージ済み（#47含む）
-- 現在のmain基準SHA: `70d622e69f13bfe227660ca7b96da62909249c0f`
+- Gate B合成ディスクsmoke証拠: #48マージ済み
+- DEP-1 Tauri security baseline: #49マージ済み
+- 現在のmain基準SHA: `944af32`
 - M2: 完了
 - M3-A: 完了
 - M3-B: 完了
@@ -100,7 +102,8 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - M4-A: 完了
 - M4-B: 完了
 - Design System Phase A–D: 完了（DS1–DS7 / UI1–UI6）
-- 現在の作業: Gate B合成ディスクsmoke証拠の人間review（`docs/testing/GATE_B_SMOKE_EVIDENCE.md`）
+- 現在の作業: Gate B合成ディスクsmoke証拠の人間review、および依存修復
+  （DEP-2 frontend toolchain / SEC-1 containment CI は別PR、DEP-3 React Router 本ブランチ）
 - SQLite schema: v5（M3-E1で追加）
 - 次の機能実装: 合成ディスクsmokeはautomated PASS済み。人間が
   `docs/testing/GATE_B_SMOKE_EVIDENCE.md`と`docs/testing/GATE_B_CLONE_SMOKE.md`を
