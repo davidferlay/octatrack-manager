@@ -18,8 +18,8 @@ use ot_domain::{
 };
 use ot_executor::OperationId;
 use ot_plan::{
-    plan_additive_copy, AdditiveCopyIntent, AdditiveCopyPlanningFacts, ChangePlan, PlanSeed,
-    RootPlanObservation, SourceFileObservation,
+    derive_additive_copy_plan_id, plan_additive_copy, AdditiveCopyIntent,
+    AdditiveCopyPlanningFacts, ChangePlan, PlanSeed, RootPlanObservation, SourceFileObservation,
 };
 use ot_storage_ports::{CatalogError, CatalogRootIdentity, CatalogRootObservation};
 use serde::{Deserialize, Serialize};
@@ -2001,15 +2001,33 @@ mod tests {
         let root_id = RootId::new(session.root_id.clone()).unwrap();
         assert!(!session.capabilities.write);
 
-        let digest = format!("{:x}", Sha256::digest(b"synthetic recovery operation"));
+        let plan_seed = PlanSeed::new([0x5a; 32]);
+        let source_relative = RootRelativePath::parse("SET_A/AUDIO/kick.wav").unwrap();
+        let destination_relative = RootRelativePath::parse("SET_A/AUDIO/kick-copy.wav").unwrap();
+        let content_hash =
+            ContentHash::parse(format!("sha256:{:x}", Sha256::digest(&source_before))).unwrap();
+        let plan_id = derive_additive_copy_plan_id(
+            &root_id,
+            &plan_seed,
+            &session.device_fingerprint,
+            session.observed_revision,
+            &source_relative,
+            &destination_relative,
+            &content_hash,
+            source_before.len() as u64,
+        );
+        let digest = plan_id
+            .as_str()
+            .strip_prefix("plan:v1:")
+            .unwrap()
+            .to_owned();
         let operation_id = format!("operation:v1:{digest}");
-        let plan_id = format!("plan:v1:{digest}");
         let snapshot_id = format!("snapshot:v1:{digest}");
-        let source_relative_path = "SET_A/AUDIO/kick.wav";
-        let destination_relative_path = "SET_A/AUDIO/kick-copy.wav";
-        let content_hash = format!("sha256:{:x}", Sha256::digest(&source_before));
+        let source_relative_path = source_relative.as_str();
+        let destination_relative_path = destination_relative.as_str();
+        let content_hash = content_hash.as_str().to_owned();
         let recovery_binding = recovery_binding_fixture(
-            &plan_id,
+            plan_id.as_str(),
             &snapshot_id,
             &session.device_fingerprint,
             session.observed_revision,
@@ -2026,7 +2044,7 @@ mod tests {
         let backup_manifest = serde_json::json!({
             "schema": "masterocta-backup:v2",
             "snapshot_id": snapshot_id.clone(),
-            "plan_id": plan_id.clone(),
+            "plan_id": plan_id.as_str(),
             "source_fingerprint": session.device_fingerprint.clone(),
             "base_observed_revision": session.observed_revision,
             "source_relative_path": source_relative_path,
@@ -2049,7 +2067,7 @@ mod tests {
         let journal = OperationJournal {
             schema: "masterocta-operation-journal:v3".into(),
             operation_id: operation_id.clone(),
-            plan_id,
+            plan_id: plan_id.as_str().to_owned(),
             root_fingerprint: session.device_fingerprint.clone(),
             base_observed_revision: session.observed_revision,
             source_relative_path: source_relative_path.into(),
@@ -2079,9 +2097,11 @@ mod tests {
         fs::create_dir_all(&authorization_directory).unwrap();
         let authorization_path = authorization_directory.join(format!("{digest}.json"));
         let authorization = serde_json::json!({
-            "schema": "masterocta-recovery-authorization:v1",
+            "schema": "masterocta-recovery-authorization:v2",
             "operation_id": operation_id.clone(),
             "plan_id": journal.plan_id.clone(),
+            "root_id": root_id.as_str(),
+            "plan_seed": plan_seed.to_hex(),
             "root_fingerprint": journal.root_fingerprint.clone(),
             "base_observed_revision": journal.base_observed_revision,
             "source_relative_path": source_relative_path,

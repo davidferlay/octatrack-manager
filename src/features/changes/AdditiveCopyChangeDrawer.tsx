@@ -233,6 +233,14 @@ export function AdditiveCopyChangeDrawer({
               : "Backend status confirms that rollback completed";
             setError(`${outcome}, but the session refresh failed: ${messageFrom(refreshReason)}`);
           }
+        } else {
+          // Backend revokes the write grant before recovery mutates media. Refresh
+          // the parent session even when recovery remains required or fails closed.
+          try {
+            await onRecovered();
+          } catch {
+            // Keep the primary recovery error when session refresh fails.
+          }
         }
         try {
           onRecoveryChange?.(await api.recoveryStatus(session.rootId));
