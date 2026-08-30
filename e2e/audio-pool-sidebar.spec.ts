@@ -98,10 +98,8 @@ async function setupMocks(page: Page, opts?: { withAudioPool?: boolean }) {
 
 async function openFlexTab(page: Page) {
   await page.goto('/#/project?path=/test/set/TestProject&name=TestProject')
-  await page.waitForTimeout(1500)
   const flexTab = page.locator('.header-tab', { hasText: 'Flex' })
   await flexTab.click()
-  await page.waitForTimeout(500)
 }
 
 test.describe('Audio Pool sidebar in Flex slots', () => {
@@ -125,7 +123,6 @@ test.describe('Audio Pool sidebar in Flex slots', () => {
     await expect(page.locator('th', { hasText: 'SOURCE' })).toBeVisible()
 
     await page.locator('.audio-pool-toggle-btn').first().click()
-    await page.waitForTimeout(500)
 
     // Sidebar appears with audio files
     await expect(page.locator('.audio-pool-sidebar')).toBeVisible()
@@ -396,7 +393,6 @@ test.describe('Audio Pool sidebar in Flex slots', () => {
     await setupMocks(page, { withAudioPool: true })
     await openFlexTab(page)
     await page.locator('.audio-pool-toggle-btn').first().click()
-    await page.waitForTimeout(300)
 
     // Start a real dnd-kit pointer drag on a pool file (past the 5px activation distance).
     const row = page.locator('.audio-pool-sidebar tr', { hasText: 'kick.wav' }).first()

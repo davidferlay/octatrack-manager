@@ -2,7 +2,9 @@ name: CI
 
 on:
   push:
-    branches: ['**']
+    # Feature branches are validated by pull_request below. Restricting push
+    # runs to main avoids testing the same feature-branch SHA twice.
+    branches: [main]
     paths:
       - 'src/**'
       - 'src-tauri/**'

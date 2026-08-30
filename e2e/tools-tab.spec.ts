@@ -317,8 +317,6 @@ test.describe('Tools Tab - UI Tests', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    // Wait for React to render with mock data
-    await page.waitForTimeout(2000)
   })
 
   test('Tools tab is visible in project header', async ({ page }) => {
@@ -340,10 +338,8 @@ test.describe('Tools Tab - Operation Selector', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(1000)
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()
-    await page.waitForTimeout(500)
   })
 
   test('operation selector has all 5 copy operations', async ({ page }) => {
@@ -363,7 +359,6 @@ test.describe('Tools Tab - Operation Selector', () => {
 
     // Switch to Copy Sample Slots
     await operationSelect.selectOption('copy_sample_slots')
-    await page.waitForTimeout(300)
 
     // Should show Slot Type options
     await expect(page.getByText('Slot Type')).toBeVisible()
@@ -371,7 +366,6 @@ test.describe('Tools Tab - Operation Selector', () => {
 
     // Switch to Copy Patterns
     await operationSelect.selectOption('copy_patterns')
-    await page.waitForTimeout(300)
 
     // Should show Part Assignment options (use locator to avoid matching description text)
     const partAssignmentField = page.locator('.tools-field').filter({ hasText: 'Part Assignment' })
@@ -385,15 +379,11 @@ test.describe('Tools Tab - Operation Selector', () => {
 
     // Go to Copy Patterns, enable Specific Tracks, select T1 and T2
     await operationSelect.selectOption('copy_patterns')
-    await page.waitForTimeout(300)
     const specificBtn = page.locator('.tools-toggle-btn', { hasText: 'Specific Tracks' })
     await specificBtn.click()
-    await page.waitForTimeout(200)
     const trackButtons = optionsPanel.locator('.tools-multi-select.tracks-stacked')
     await trackButtons.locator('.tools-multi-btn.track-btn', { hasText: 'T1' }).click()
-    await page.waitForTimeout(100)
     await trackButtons.locator('.tools-multi-btn.track-btn', { hasText: 'T2' }).click()
-    await page.waitForTimeout(100)
 
     // Positive control: prove the selection actually took, otherwise the
     // "does not bleed" assertions below hold trivially.
@@ -401,7 +391,6 @@ test.describe('Tools Tab - Operation Selector', () => {
 
     // Switch to Copy Tracks
     await operationSelect.selectOption('copy_tracks')
-    await page.waitForTimeout(300)
 
     // Source tracks should be empty (no bleeding from Copy Patterns)
     const selectedSourceTracks = sourcePanel.locator('.tools-multi-btn.track-btn.selected')
@@ -425,16 +414,12 @@ test.describe('Tools Tab - Operation Selector', () => {
 
     // Go to Copy Tracks, select source T3
     await operationSelect.selectOption('copy_tracks')
-    await page.waitForTimeout(300)
     await sourcePanel.locator('.tools-multi-btn.track-btn', { hasText: 'T3' }).click()
-    await page.waitForTimeout(200)
 
     // Switch to Copy Patterns, enable Specific Tracks
     await operationSelect.selectOption('copy_patterns')
-    await page.waitForTimeout(300)
     const specificBtn = page.locator('.tools-toggle-btn', { hasText: 'Specific Tracks' })
     await specificBtn.click()
-    await page.waitForTimeout(200)
 
     // No tracks should be selected (no bleeding from Copy Tracks)
     const trackButtons = optionsPanel.locator('.tools-multi-select.tracks-stacked')
@@ -448,25 +433,18 @@ test.describe('Tools Tab - Operation Selector', () => {
 
     // Go to Copy Patterns, enable Specific Tracks, select T1 and M3
     await operationSelect.selectOption('copy_patterns')
-    await page.waitForTimeout(300)
     const specificBtn = page.locator('.tools-toggle-btn', { hasText: 'Specific Tracks' })
     await specificBtn.click()
-    await page.waitForTimeout(200)
     const trackButtons = optionsPanel.locator('.tools-multi-select.tracks-stacked')
     await trackButtons.locator('.tools-multi-btn.track-btn', { hasText: 'T1' }).click()
-    await page.waitForTimeout(100)
     await trackButtons.locator('.tools-multi-btn.track-btn', { hasText: 'M3' }).click()
-    await page.waitForTimeout(100)
 
     // Switch to Copy Tracks then back
     await operationSelect.selectOption('copy_tracks')
-    await page.waitForTimeout(300)
     await operationSelect.selectOption('copy_patterns')
-    await page.waitForTimeout(300)
 
     // Re-enable Specific Tracks and verify selections persisted
     await specificBtn.click()
-    await page.waitForTimeout(200)
     const trackButtonsAfter = optionsPanel.locator('.tools-multi-select.tracks-stacked')
     await expect(trackButtonsAfter.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })).toHaveClass(/selected/)
     await expect(trackButtonsAfter.locator('.tools-multi-btn.track-btn', { hasText: 'M3' })).toHaveClass(/selected/)
@@ -477,15 +455,12 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(1000)
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()
-    await page.waitForTimeout(500)
 
     // Select Copy Sample Slots operation
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_sample_slots')
-    await page.waitForTimeout(300)
   })
 
   test('Slot Type has three toggle buttons', async ({ page }) => {
@@ -508,7 +483,6 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
     const staticFlexBtn = page.locator('.tools-toggle-btn', { hasText: 'Static + Flex' })
 
     await flexBtn.click()
-    await page.waitForTimeout(200)
 
     await expect(flexBtn).toHaveClass(/selected/)
     await expect(staticFlexBtn).not.toHaveClass(/selected/)
@@ -544,7 +518,6 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
   test('Audio Files sub-options hidden when assignments Don\'t Copy selected', async ({ page }) => {
     const dontCopyBtn = page.locator('.tools-toggle-btn', { hasText: "Don't Copy" }).first()
     await dontCopyBtn.click()
-    await page.waitForTimeout(200)
 
     await expect(page.locator('.tools-toggle-btn', { hasText: 'Mirror' })).not.toBeVisible()
   })
@@ -558,7 +531,6 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
     // Click Copy to show attribute list
     const attrSection = page.locator('.tools-field:has(label:text("Sample Attributes"))')
     await attrSection.locator('.tools-toggle-btn', { hasText: /^Copy$/ }).click()
-    await page.waitForTimeout(200)
 
     // Attribute rows should now be visible
     await expect(page.locator('.tools-attr-row', { hasText: 'Gain' })).toBeVisible()
@@ -572,12 +544,10 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
     // First enable Copy for attributes
     const attrSection = page.locator('.tools-field:has(label:text("Sample Attributes"))')
     await attrSection.locator('.tools-toggle-btn', { hasText: /^Copy$/ }).click()
-    await page.waitForTimeout(200)
     await expect(page.locator('.tools-attr-row', { hasText: 'Gain' })).toBeVisible()
 
     // Now click Don't Copy for Sample Attributes
     await attrSection.locator('.tools-toggle-btn', { hasText: "Don't Copy" }).click()
-    await page.waitForTimeout(200)
 
     await expect(page.locator('.tools-attr-row', { hasText: 'Gain' })).not.toBeVisible()
   })
@@ -587,7 +557,6 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
     const attrSection = page.locator('.tools-field:has(label:text("Sample Attributes"))')
     const attrCopyBtn = attrSection.locator('.tools-toggle-btn', { hasText: /^Copy$/ })
     await attrCopyBtn.click()
-    await page.waitForTimeout(300)
 
     // All attributes should be selected by default
     const gainBtn = page.locator('button.tools-attr-row', { hasText: 'Gain' })
@@ -596,7 +565,6 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
 
     // Click Gain to deselect it
     await gainBtn.click()
-    await page.waitForTimeout(200)
 
     // Gain should be deselected, but BPM should still be selected
     await expect(gainBtn).not.toHaveClass(/selected/)
@@ -608,11 +576,9 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
     // Enable Copy for attributes
     const attrSection = page.locator('.tools-field:has(label:text("Sample Attributes"))')
     await attrSection.locator('.tools-toggle-btn', { hasText: /^Copy$/ }).click()
-    await page.waitForTimeout(300)
 
     // Click None to deselect all
     await page.locator('.tools-attribute-actions').getByText('None').click()
-    await page.waitForTimeout(200)
 
     // All should be deselected
     const selectedAttrs = page.locator('button.tools-attr-row.selected')
@@ -621,7 +587,6 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
     // Click Gain to select it individually
     const gainBtn = page.locator('button.tools-attr-row', { hasText: 'Gain' })
     await gainBtn.click()
-    await page.waitForTimeout(200)
 
     await expect(gainBtn).toHaveClass(/selected/)
     // Only 1 should be selected
@@ -632,20 +597,19 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
     // Enable Copy for attributes
     const attrSection = page.locator('.tools-field:has(label:text("Sample Attributes"))')
     await attrSection.locator('.tools-toggle-btn', { hasText: /^Copy$/ }).click()
-    await page.waitForTimeout(300)
 
     // Click None, then select only Gain and Slices
     await page.locator('.tools-attribute-actions').getByText('None').click()
-    await page.waitForTimeout(200)
     await page.locator('button.tools-attr-row', { hasText: 'Gain' }).click()
     await page.locator('button.tools-attr-row', { hasText: 'Slices' }).click()
-    await page.waitForTimeout(200)
 
     // Execute and check the invoke args
     const executeBtn = page.locator('.tools-execute-btn')
     await executeBtn.click()
-    await page.waitForTimeout(1000)
 
+    await expect.poll(() =>
+      page.evaluate(() => Boolean((window as any).__lastInvokeArgs__)),
+    ).toBe(true)
     const lastCall = await page.evaluate(() => (window as any).__lastInvokeArgs__)
     expect(lastCall?.attributeSelection).toEqual(['gain', 'slices'])
   })
@@ -654,8 +618,10 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
     // Attributes default to Don't Copy, just execute
     const executeBtn = page.locator('.tools-execute-btn')
     await executeBtn.click()
-    await page.waitForTimeout(1000)
 
+    await expect.poll(() =>
+      page.evaluate(() => Boolean((window as any).__lastInvokeArgs__)),
+    ).toBe(true)
     const lastCall = await page.evaluate(() => (window as any).__lastInvokeArgs__)
     expect(lastCall?.attributeSelection).toEqual([])
   })
@@ -664,7 +630,6 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
     // Set Assignments to Don't Copy
     const dontCopyBtns = page.locator('.tools-toggle-btn', { hasText: "Don't Copy" })
     await dontCopyBtns.first().click()
-    await page.waitForTimeout(200)
 
     // Attributes already defaults to Don't Copy
     const executeBtn = page.locator('.tools-execute-btn')
@@ -684,9 +649,11 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
     // Copy is already selected by default, click Execute
     const executeBtn = page.locator('.tools-execute-btn')
     await executeBtn.click()
-    await page.waitForTimeout(1000)
 
     // Check backup calls — only destination backup, no source backup
+    await expect.poll(() =>
+      page.evaluate(() => ((window as any).__backupCalls__ || []).length),
+    ).toBe(1)
     const backupCalls = await page.evaluate(() => (window as any).__backupCalls__ || [])
     expect(backupCalls.length).toBe(1)
     expect(backupCalls[0].label).toBe('copy_sample_slots')
@@ -699,14 +666,15 @@ test.describe('Tools Tab - Copy Sample Slots Options', () => {
     // Select Move to Pool mode
     const moveToPoolBtn = page.locator('.tools-toggle-btn', { hasText: 'Move to Pool' })
     await moveToPoolBtn.click()
-    await page.waitForTimeout(200)
 
     // Click Execute
     const executeBtn = page.locator('.tools-execute-btn')
     await executeBtn.click()
-    await page.waitForTimeout(1000)
 
     // Check backup calls
+    await expect.poll(() =>
+      page.evaluate(() => ((window as any).__backupCalls__ || []).length),
+    ).toBe(2)
     const backupCalls = await page.evaluate(() => (window as any).__backupCalls__ || [])
     expect(backupCalls.length).toBe(2)
 
@@ -725,14 +693,11 @@ test.describe('Tools Tab - Destination Modal Browse', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page, { sameSet: false, withOtherProject: true })
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(1000)
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()
-    await page.waitForTimeout(500)
 
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_sample_slots')
-    await page.waitForTimeout(300)
 
     await page.locator('.tools-project-selector-btn').click()
     await expect(page.locator('.project-selector-modal')).toBeVisible()
@@ -836,56 +801,38 @@ test.describe('Tools Tab - Copy Sample Slots Not Same Set', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page, { sameSet: false, withOtherProject: true })
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(1000)
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()
-    await page.waitForTimeout(500)
 
     // Select Copy Sample Slots operation
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_sample_slots')
-    await page.waitForTimeout(300)
 
     // Open project selector and pick OtherProject (different set)
     const destButton = page.locator('.tools-project-selector-btn')
     await destButton.click()
-    await page.waitForTimeout(300)
 
     // Click "Rescan for Projects" to populate the list
     const rescanBtn = page.locator('.project-selector-modal .scan-button', { hasText: 'Rescan for Projects' })
     await rescanBtn.click()
-    await page.waitForTimeout(500)
 
     // Expand location (collapsed by default in modal)
     const locationHeader = page.locator('.project-selector-modal .location-header').first()
     await expect(locationHeader).toBeAttached({ timeout: 5000 })
-    await page.evaluate(() => {
-      const el = document.querySelector('.project-selector-modal .location-header') as HTMLElement
-      if (el) el.click()
-    })
-    await page.waitForTimeout(300)
+    await locationHeader.evaluate((element: HTMLElement) => element.click())
 
     // Expand set within location
-    await page.evaluate(() => {
-      const el = document.querySelector('.project-selector-modal .set-header') as HTMLElement
-      if (el) el.click()
-    })
-    await page.waitForTimeout(300)
+    const setHeader = page.locator('.project-selector-modal .set-header').first()
+    await expect(setHeader).toBeAttached()
+    await setHeader.evaluate((element: HTMLElement) => element.click())
 
     // Select the other project
-    await page.evaluate(() => {
-      const cards = document.querySelectorAll('.project-selector-card')
-      for (const card of cards) {
-        if (card.textContent?.includes('OtherProject')) {
-          (card as HTMLElement).click()
-          break
-        }
-      }
-    })
+    const otherProject = page.locator('.project-selector-card', { hasText: 'OtherProject' })
+    await expect(otherProject).toBeAttached()
+    await otherProject.evaluate((element: HTMLElement) => element.click())
 
-    // Wait for destination to update (modal closes, UI reflects new project)
+    // The modal closes only after the destination state is committed.
     await expect(page.locator('.tools-project-selector-name')).toContainText('OtherProject', { timeout: 5000 })
-    await page.waitForTimeout(500)
   })
 
   test('Move to Pool is disabled when projects are not in the same Set', async ({ page }) => {
@@ -914,15 +861,12 @@ test.describe('Tools Tab - Copy Patterns Options', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(1000)
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()
-    await page.waitForTimeout(500)
 
     // Select Copy Patterns operation
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_patterns')
-    await page.waitForTimeout(300)
   })
 
   test('Part Assignment selector is visible', async ({ page }) => {
@@ -965,7 +909,6 @@ test.describe('Tools Tab - Copy Patterns Options', () => {
   test('User Selection shows Destination Part selector', async ({ page }) => {
     const userSelectionBtn = page.locator('.tools-toggle-btn', { hasText: 'User Selection' })
     await userSelectionBtn.click()
-    await page.waitForTimeout(200)
 
     // Destination Part selector should be visible
     await expect(page.getByText('Destination Part')).toBeVisible()
@@ -981,19 +924,16 @@ test.describe('Tools Tab - Copy Patterns Options', () => {
   test('Destination Part supports click-to-deselect', async ({ page }) => {
     const userSelectionBtn = page.locator('.tools-toggle-btn', { hasText: 'User Selection' })
     await userSelectionBtn.click()
-    await page.waitForTimeout(200)
 
     const partCross = page.locator('.tools-options-panel .tools-part-cross')
     const part1 = partCross.locator('.tools-toggle-btn.part-btn', { hasText: /^1$/ })
 
     // Click part 1 to select it
     await part1.click()
-    await page.waitForTimeout(200)
     await expect(part1).toHaveClass(/selected/)
 
     // Click part 1 again to deselect
     await part1.click()
-    await page.waitForTimeout(200)
     await expect(part1).not.toHaveClass(/selected/)
 
     // Execute button should be disabled (no destination part selected)
@@ -1004,7 +944,6 @@ test.describe('Tools Tab - Copy Patterns Options', () => {
   test('Destination Part buttons have correct tooltips', async ({ page }) => {
     const userSelectionBtn = page.locator('.tools-toggle-btn', { hasText: 'User Selection' })
     await userSelectionBtn.click()
-    await page.waitForTimeout(200)
 
     const partCross = page.locator('.tools-options-panel .tools-part-cross')
 
@@ -1017,7 +956,6 @@ test.describe('Tools Tab - Copy Patterns Options', () => {
   test('Specific Tracks shows track buttons in stacked layout', async ({ page }) => {
     const specificTracksBtn = page.locator('.tools-toggle-btn', { hasText: 'Specific Tracks' })
     await specificTracksBtn.click()
-    await page.waitForTimeout(200)
 
     // Tracks field label should be visible
     await expect(page.locator('.tools-options-panel .tools-field label', { hasText: /^Tracks$/ })).toBeVisible()
@@ -1038,7 +976,6 @@ test.describe('Tools Tab - Copy Patterns Options', () => {
   test('Track buttons have correct tooltips', async ({ page }) => {
     const specificTracksBtn = page.locator('.tools-toggle-btn', { hasText: 'Specific Tracks' })
     await specificTracksBtn.click()
-    await page.waitForTimeout(200)
 
     const trackButtons = page.locator('.tools-options-panel .tools-multi-select.tracks-stacked')
 
@@ -1054,7 +991,6 @@ test.describe('Tools Tab - Copy Patterns Options', () => {
   test('Track buttons support click-to-deselect and Execute disabled when none selected', async ({ page }) => {
     const specificTracksBtn = page.locator('.tools-toggle-btn', { hasText: 'Specific Tracks' })
     await specificTracksBtn.click()
-    await page.waitForTimeout(200)
 
     const trackButtons = page.locator('.tools-options-panel .tools-multi-select.tracks-stacked')
 
@@ -1068,12 +1004,10 @@ test.describe('Tools Tab - Copy Patterns Options', () => {
 
     // Select T1
     await t1Button.click()
-    await page.waitForTimeout(200)
     await expect(t1Button).toHaveClass(/selected/)
 
     // Deselect T1
     await t1Button.click()
-    await page.waitForTimeout(200)
     await expect(t1Button).not.toHaveClass(/selected/)
 
     // No tracks should be selected now
@@ -1089,15 +1023,12 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(1000)
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()
-    await page.waitForTimeout(500)
 
     // Select Copy Tracks operation
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_tracks')
-    await page.waitForTimeout(300)
   })
 
   test('Copy Mode selector is visible', async ({ page }) => {
@@ -1156,12 +1087,10 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
 
     // Click T1 to select it
     await t1.click()
-    await page.waitForTimeout(200)
     await expect(t1).toHaveClass(/selected/)
 
     // Click T2 - should switch selection
     await t2.click()
-    await page.waitForTimeout(200)
     await expect(t2).toHaveClass(/selected/)
     await expect(t1).not.toHaveClass(/selected/)
   })
@@ -1172,12 +1101,10 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
 
     // Click T1 to select it
     await t1.click()
-    await page.waitForTimeout(200)
     await expect(t1).toHaveClass(/selected/)
 
     // Click T1 again to deselect
     await t1.click()
-    await page.waitForTimeout(200)
     await expect(t1).not.toHaveClass(/selected/)
   })
 
@@ -1189,7 +1116,6 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
     const destPanel = page.locator('.tools-dest-panel')
     const destM1 = destPanel.locator('.tools-multi-btn.track-btn', { hasText: 'M1' })
     await destM1.click()
-    await page.waitForTimeout(200)
 
     // Source Audio tracks should be disabled
     await expect(t1).toHaveClass(/disabled/)
@@ -1203,7 +1129,6 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
     const destPanel = page.locator('.tools-dest-panel')
     const destT1 = destPanel.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })
     await destT1.click()
-    await page.waitForTimeout(200)
 
     // Source MIDI tracks should be disabled
     await expect(m1).toHaveClass(/disabled/)
@@ -1216,7 +1141,6 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
     // Select source T1
     const sourceT1 = sourcePanel.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })
     await sourceT1.click()
-    await page.waitForTimeout(200)
 
     // Select multiple destination Audio tracks
     const destT1 = destPanel.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })
@@ -1224,11 +1148,8 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
     const destT3 = destPanel.locator('.tools-multi-btn.track-btn', { hasText: 'T3' })
 
     await destT1.click()
-    await page.waitForTimeout(200)
     await destT2.click()
-    await page.waitForTimeout(200)
     await destT3.click()
-    await page.waitForTimeout(200)
 
     // All three should be selected
     await expect(destT1).toHaveClass(/selected/)
@@ -1243,7 +1164,6 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
     // Select source T1 (Audio)
     const sourceT1 = sourcePanel.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })
     await sourceT1.click()
-    await page.waitForTimeout(200)
 
     // Destination MIDI tracks should be disabled
     const destM1 = destPanel.locator('.tools-multi-btn.track-btn', { hasText: 'M1' })
@@ -1257,7 +1177,6 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
     // Select source M1 (MIDI)
     const sourceM1 = sourcePanel.locator('.tools-multi-btn.track-btn', { hasText: 'M1' })
     await sourceM1.click()
-    await page.waitForTimeout(200)
 
     // Destination Audio tracks should be disabled
     const destT1 = destPanel.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })
@@ -1269,7 +1188,6 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
     const allAudioBtn = sourcePanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'All Audio' })
 
     await allAudioBtn.click()
-    await page.waitForTimeout(200)
 
     // All 8 audio tracks should be selected
     const selectedAudio = sourcePanel.locator('.tools-multi-btn.track-btn.selected').filter({ hasText: /^T[1-8]$/ })
@@ -1281,7 +1199,6 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
     const allMidiBtn = sourcePanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'All MIDI' })
 
     await allMidiBtn.click()
-    await page.waitForTimeout(200)
 
     // All 8 MIDI tracks should be selected
     const selectedMidi = sourcePanel.locator('.tools-multi-btn.track-btn.selected').filter({ hasText: /^M[1-8]$/ })
@@ -1294,7 +1211,6 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
     const sourceAllAudio = sourcePanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'All Audio' })
 
     await sourceAllAudio.click()
-    await page.waitForTimeout(200)
 
     // Destination should also have all 8 Audio tracks selected
     const destSelectedAudio = destPanel.locator('.tools-multi-btn.track-btn.selected').filter({ hasText: /^T[1-8]$/ })
@@ -1307,7 +1223,6 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
     const sourceAllMidi = sourcePanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'All MIDI' })
 
     await sourceAllMidi.click()
-    await page.waitForTimeout(200)
 
     // Destination should also have all 8 MIDI tracks selected
     const destSelectedMidi = destPanel.locator('.tools-multi-btn.track-btn.selected').filter({ hasText: /^M[1-8]$/ })
@@ -1321,7 +1236,6 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
 
     // Select All Audio
     await sourceAllAudio.click()
-    await page.waitForTimeout(200)
 
     // Positive control: without this, the count-0 assertions below would also
     // pass if the .selected class were renamed and nothing ever matched.
@@ -1330,7 +1244,6 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
 
     // Deselect by clicking again
     await sourceAllAudio.click()
-    await page.waitForTimeout(200)
 
     // No source tracks should be selected
     await expect(sourceSelected).toHaveCount(0)
@@ -1346,7 +1259,6 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
     const sourceAllAudio = sourcePanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'All Audio' })
 
     await sourceAllAudio.click()
-    await page.waitForTimeout(200)
 
     // Destination track buttons should have disabled class
     const destT1 = destPanel.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })
@@ -1363,7 +1275,6 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
     const sourceAllAudio = sourcePanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'All Audio' })
 
     await sourceAllAudio.click()
-    await page.waitForTimeout(200)
 
     const destAllAudio = destPanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'All Audio' })
     const destAllMidi = destPanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'All MIDI' })
@@ -1381,15 +1292,12 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
     // First select a source MIDI track, then a destination MIDI track
     const sourceM1 = sourcePanel.locator('.tools-multi-btn.track-btn', { hasText: 'M1' })
     await sourceM1.click()
-    await page.waitForTimeout(200)
 
     const destM1 = destPanel.locator('.tools-multi-btn.track-btn', { hasText: 'M1' })
     await destM1.click()
-    await page.waitForTimeout(200)
 
     // Deselect source to make All buttons available
     await sourceM1.click()
-    await page.waitForTimeout(200)
 
     // All Audio should be disabled because dest has MIDI
     const sourceAllAudio = sourcePanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'All Audio' })
@@ -1403,20 +1311,16 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
     // Select source T1
     const sourceT1 = sourcePanel.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })
     await sourceT1.click()
-    await page.waitForTimeout(200)
 
     // Select multiple destination tracks
     const destT1 = destPanel.locator('.tools-multi-btn.track-btn', { hasText: 'T1' })
     const destT2 = destPanel.locator('.tools-multi-btn.track-btn', { hasText: 'T2' })
     await destT1.click()
-    await page.waitForTimeout(200)
     await destT2.click()
-    await page.waitForTimeout(200)
 
     // Click None button
     const destNone = destPanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'None' })
     await destNone.click()
-    await page.waitForTimeout(200)
 
     // No destination tracks should be selected
     const destSelected = destPanel.locator('.tools-multi-btn.track-btn.selected').filter({ hasText: /^[TM][1-8]$/ })
@@ -1429,7 +1333,6 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
     const sourceAllPart = sourcePanel.locator('.tools-toggle-btn.part-btn.part-all')
 
     await sourceAllPart.click()
-    await page.waitForTimeout(200)
 
     // Source All should be selected
     await expect(sourceAllPart).toHaveClass(/selected/)
@@ -1445,7 +1348,6 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
     const sourceAllPart = sourcePanel.locator('.tools-toggle-btn.part-btn.part-all')
 
     await sourceAllPart.click()
-    await page.waitForTimeout(200)
 
     // Destination part buttons should be disabled
     const destPart1 = destPanel.locator('.tools-toggle-btn.part-btn', { hasText: /^1$/ })
@@ -1463,11 +1365,9 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
 
     // Select All
     await sourceAllPart.click()
-    await page.waitForTimeout(200)
 
     // Deselect by clicking again
     await sourceAllPart.click()
-    await page.waitForTimeout(200)
 
     // No source parts should be selected
     const sourceSelectedParts = sourcePanel.locator('.tools-toggle-btn.part-btn.selected')
@@ -1508,7 +1408,6 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
     const sourceAllPart = sourcePanel.locator('.tools-toggle-btn.part-btn.part-all')
 
     await sourceAllPart.click()
-    await page.waitForTimeout(200)
 
     // Destination part buttons should show sync tooltip
     const destPart1 = destPanel.locator('.tools-toggle-btn.part-btn', { hasText: /^1$/ })
@@ -1523,14 +1422,12 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
 
     // First select All
     await sourceAllPart.click()
-    await page.waitForTimeout(200)
 
     // All should be selected
     await expect(sourceAllPart).toHaveClass(/selected/)
 
     // Click part 2 to switch to single mode
     await sourcePart2.click()
-    await page.waitForTimeout(200)
 
     // Only part 2 should be selected, All should be deselected
     await expect(sourcePart2).toHaveClass(/selected/)
@@ -1546,7 +1443,6 @@ test.describe('Tools Tab - Copy Tracks Options', () => {
     const sourceAllAudio = sourcePanel.locator('.tools-multi-btn.track-btn.tools-select-all', { hasText: 'All Audio' })
 
     await sourceAllAudio.click()
-    await page.waitForTimeout(200)
 
     // All Audio button should have selected class
     await expect(sourceAllAudio).toHaveClass(/selected/)
@@ -1557,10 +1453,8 @@ test.describe('Tools Tab - Destination Panel', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(1000)
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()
-    await page.waitForTimeout(500)
   })
 
   test('Destination panel is visible', async ({ page }) => {
@@ -1581,15 +1475,12 @@ test.describe('Tools Tab - Copy Banks Options', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(1000)
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()
-    await page.waitForTimeout(500)
 
     // Copy Banks is selected by default, but ensure it
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_bank')
-    await page.waitForTimeout(300)
   })
 
   test('Source panel has Bank label (singular) for single-select', async ({ page }) => {
@@ -1626,7 +1517,6 @@ test.describe('Tools Tab - Copy Banks Options', () => {
 
     // Click Bank B to switch selection
     await bankB.click()
-    await page.waitForTimeout(200)
 
     // Only Bank B should be selected
     await expect(bankA).not.toHaveClass(/selected/)
@@ -1642,7 +1532,6 @@ test.describe('Tools Tab - Copy Banks Options', () => {
 
     // Click bank A to deselect it
     await bankA.click()
-    await page.waitForTimeout(200)
 
     // Bank A should no longer be selected
     await expect(bankA).not.toHaveClass(/selected/)
@@ -1664,7 +1553,6 @@ test.describe('Tools Tab - Copy Banks Options', () => {
 
     // Click bank B to add it to selection
     await bankB.click()
-    await page.waitForTimeout(200)
 
     // Both A and B should be selected
     await expect(bankA).toHaveClass(/selected/)
@@ -1678,7 +1566,6 @@ test.describe('Tools Tab - Copy Banks Options', () => {
 
     // Click All button
     await allButton.click()
-    await page.waitForTimeout(200)
 
     // All 16 banks should be selected (exclude All/None buttons)
     const selectedBanks = destPanel.locator('.tools-multi-btn.bank-btn.selected:not(.tools-select-all)')
@@ -1694,12 +1581,10 @@ test.describe('Tools Tab - Copy Banks Options', () => {
 
     // Click All button to select all
     await allButton.click()
-    await page.waitForTimeout(200)
     await expect(allButton).toHaveClass(/selected/)
 
     // Click All button again to deselect all
     await allButton.click()
-    await page.waitForTimeout(200)
 
     // No banks should be selected
     const selectedBanks = destPanel.locator('.tools-multi-btn.bank-btn.selected:not(.tools-select-all)')
@@ -1716,7 +1601,6 @@ test.describe('Tools Tab - Copy Banks Options', () => {
 
     // Click None button
     await noneButton.click()
-    await page.waitForTimeout(200)
 
     // No banks should be selected
     const selectedBanks = destPanel.locator('.tools-multi-btn.bank-btn.selected')
@@ -1738,7 +1622,6 @@ test.describe('Tools Tab - Copy Banks Options', () => {
 
     // Click bank A to deselect it
     await bankA.click()
-    await page.waitForTimeout(200)
 
     // Bank A should no longer be selected
     await expect(bankA).not.toHaveClass(/selected/)
@@ -1765,15 +1648,12 @@ test.describe('Tools Tab - Copy Parts Options', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(1000)
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()
-    await page.waitForTimeout(500)
 
     // Select Copy Parts operation
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_parts')
-    await page.waitForTimeout(300)
   })
 
   test('Default source Part is Part 1', async ({ page }) => {
@@ -1823,7 +1703,6 @@ test.describe('Tools Tab - Copy Parts Options', () => {
 
     // Click source All
     await sourceAll.click()
-    await page.waitForTimeout(200)
 
     // Destination part should show sync tooltip
     const destPart1 = destPanel.locator('.tools-toggle-btn.part-btn', { hasText: /^1$/ })
@@ -1840,7 +1719,6 @@ test.describe('Tools Tab - Copy Parts Options', () => {
 
     // Click part 2 to switch selection
     await part2.click()
-    await page.waitForTimeout(200)
 
     // Only part 2 should be selected
     await expect(part1).not.toHaveClass(/selected/)
@@ -1856,7 +1734,6 @@ test.describe('Tools Tab - Copy Parts Options', () => {
 
     // Click part 1 to deselect
     await part1.click()
-    await page.waitForTimeout(200)
 
     // Part 1 should no longer be selected
     await expect(part1).not.toHaveClass(/selected/)
@@ -1873,7 +1750,6 @@ test.describe('Tools Tab - Copy Parts Options', () => {
 
     // Click All button
     await sourceAll.click()
-    await page.waitForTimeout(200)
 
     // All source parts should be selected
     const sourceSelectedParts = sourcePanel.locator('.tools-toggle-btn.part-btn.selected')
@@ -1891,11 +1767,9 @@ test.describe('Tools Tab - Copy Parts Options', () => {
 
     // Click All button to select all
     await sourceAll.click()
-    await page.waitForTimeout(200)
 
     // Click All button again to deselect
     await sourceAll.click()
-    await page.waitForTimeout(200)
 
     // No source parts should be selected
     const sourceSelectedParts = sourcePanel.locator('.tools-toggle-btn.part-btn.selected')
@@ -1921,9 +1795,7 @@ test.describe('Tools Tab - Copy Parts Options', () => {
 
     // Click part 2 and 3 to add them
     await destPart2.click()
-    await page.waitForTimeout(200)
     await destPart3.click()
-    await page.waitForTimeout(200)
 
     // Parts 1, 2, and 3 should all be selected
     await expect(destPart1).toHaveClass(/selected/)
@@ -1940,7 +1812,6 @@ test.describe('Tools Tab - Copy Parts Options', () => {
 
     // Click part 1 to deselect
     await destPart1.click()
-    await page.waitForTimeout(200)
 
     // Part 1 should no longer be selected
     await expect(destPart1).not.toHaveClass(/selected/)
@@ -1958,7 +1829,6 @@ test.describe('Tools Tab - Copy Parts Options', () => {
 
     // Click source All button
     await sourceAll.click()
-    await page.waitForTimeout(200)
 
     // Destination part buttons should be disabled
     await expect(destPart1).toBeDisabled()
@@ -1977,7 +1847,6 @@ test.describe('Tools Tab - Copy Parts Options', () => {
 
     // Click bank A to deselect
     await bankA.click()
-    await page.waitForTimeout(200)
 
     // Bank A should no longer be selected
     await expect(bankA).not.toHaveClass(/selected/)
@@ -1996,7 +1865,6 @@ test.describe('Tools Tab - Copy Parts Options', () => {
 
     // Click bank A to deselect
     await bankA.click()
-    await page.waitForTimeout(200)
 
     // Bank A should no longer be selected
     await expect(bankA).not.toHaveClass(/selected/)
@@ -2014,14 +1882,12 @@ test.describe('Tools Tab - Copy Parts Options', () => {
 
     // First select All
     await sourceAll.click()
-    await page.waitForTimeout(200)
 
     // All should be selected
     await expect(sourceAll).toHaveClass(/selected/)
 
     // Click part 2 to switch to single mode
     await sourcePart2.click()
-    await page.waitForTimeout(200)
 
     // Only part 2 should be selected, All should be deselected
     await expect(sourcePart2).toHaveClass(/selected/)
@@ -2037,15 +1903,12 @@ test.describe('Tools Tab - Copy Patterns Selection', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(1000)
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()
-    await page.waitForTimeout(500)
 
     // Select Copy Patterns operation
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_patterns')
-    await page.waitForTimeout(300)
   })
 
   test('Default source Pattern is Pattern 1', async ({ page }) => {
@@ -2082,7 +1945,6 @@ test.describe('Tools Tab - Copy Patterns Selection', () => {
 
     // Click pattern 2 to switch selection
     await pattern2.click()
-    await page.waitForTimeout(200)
 
     // Only pattern 2 should be selected
     await expect(pattern1).not.toHaveClass(/selected/)
@@ -2098,7 +1960,6 @@ test.describe('Tools Tab - Copy Patterns Selection', () => {
 
     // Click pattern 1 to deselect
     await pattern1.click()
-    await page.waitForTimeout(200)
 
     // Pattern 1 should no longer be selected
     await expect(pattern1).not.toHaveClass(/selected/)
@@ -2115,7 +1976,6 @@ test.describe('Tools Tab - Copy Patterns Selection', () => {
 
     // Click All button
     await sourceAll.click()
-    await page.waitForTimeout(200)
 
     // All source patterns should be selected (16 pattern buttons + All button)
     const sourceSelectedPatterns = sourcePanel.locator('.tools-multi-btn.pattern-btn.selected')
@@ -2133,11 +1993,9 @@ test.describe('Tools Tab - Copy Patterns Selection', () => {
 
     // Click All button to select all
     await sourceAll.click()
-    await page.waitForTimeout(200)
 
     // Click All button again to deselect
     await sourceAll.click()
-    await page.waitForTimeout(200)
 
     // No source patterns should be selected
     const sourceSelectedPatterns = sourcePanel.locator('.tools-multi-btn.pattern-btn.selected')
@@ -2163,9 +2021,7 @@ test.describe('Tools Tab - Copy Patterns Selection', () => {
 
     // Click pattern 2 and 3 to add them
     await destPattern2.click()
-    await page.waitForTimeout(200)
     await destPattern3.click()
-    await page.waitForTimeout(200)
 
     // Patterns 1, 2, and 3 should all be selected
     await expect(destPattern1).toHaveClass(/selected/)
@@ -2182,7 +2038,6 @@ test.describe('Tools Tab - Copy Patterns Selection', () => {
 
     // Click pattern 1 to deselect
     await destPattern1.click()
-    await page.waitForTimeout(200)
 
     // Pattern 1 should no longer be selected
     await expect(destPattern1).not.toHaveClass(/selected/)
@@ -2200,7 +2055,6 @@ test.describe('Tools Tab - Copy Patterns Selection', () => {
 
     // Click source All button
     await sourceAll.click()
-    await page.waitForTimeout(200)
 
     // Destination pattern buttons should be disabled
     await expect(destPattern1).toBeDisabled()
@@ -2220,7 +2074,6 @@ test.describe('Tools Tab - Copy Patterns Selection', () => {
 
     // Click bank A to deselect
     await bankA.click()
-    await page.waitForTimeout(200)
 
     // Bank A should no longer be selected
     await expect(bankA).not.toHaveClass(/selected/)
@@ -2239,7 +2092,6 @@ test.describe('Tools Tab - Copy Patterns Selection', () => {
 
     // Click bank A to deselect
     await bankA.click()
-    await page.waitForTimeout(200)
 
     // Bank A should no longer be selected
     await expect(bankA).not.toHaveClass(/selected/)
@@ -2257,14 +2109,12 @@ test.describe('Tools Tab - Copy Patterns Selection', () => {
 
     // First select All
     await sourceAll.click()
-    await page.waitForTimeout(200)
 
     // All should be selected
     await expect(sourceAll).toHaveClass(/selected/)
 
     // Click pattern 5 to switch to single mode
     await sourcePattern5.click()
-    await page.waitForTimeout(200)
 
     // Only pattern 5 should be selected, All should be deselected
     await expect(sourcePattern5).toHaveClass(/selected/)
@@ -2281,7 +2131,6 @@ test.describe('Tools Tab - Copy Patterns Selection', () => {
 
     // Click destination All button
     await destAll.click()
-    await page.waitForTimeout(200)
 
     // All destination patterns should be selected (16 pattern buttons + All button)
     const destSelectedPatterns = destPanel.locator('.tools-multi-btn.pattern-btn.selected')
@@ -2294,7 +2143,6 @@ test.describe('Tools Tab - Copy Patterns Selection', () => {
 
     // Click destination None button
     await destNone.click()
-    await page.waitForTimeout(200)
 
     // No destination patterns should be selected
     const destSelectedPatterns = destPanel.locator('.tools-multi-btn.pattern-btn.selected')
@@ -2328,10 +2176,8 @@ test.describe('Tools Tab - Execute Button', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(1000)
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()
-    await page.waitForTimeout(500)
   })
 
   test('Execute button is visible', async ({ page }) => {
@@ -2349,15 +2195,12 @@ test.describe('Tools Tab - Copy Patterns Mode Scope', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(1000)
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()
-    await page.waitForTimeout(500)
 
     // Select Copy Patterns operation
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_patterns')
-    await page.waitForTimeout(300)
   })
 
   test('Mode Scope is visible when All Tracks is selected', async ({ page }) => {
@@ -2388,13 +2231,11 @@ test.describe('Tools Tab - Copy Patterns Mode Scope', () => {
 
     // Click Both
     await bothBtn.click()
-    await page.waitForTimeout(200)
     await expect(bothBtn).toHaveClass(/selected/)
     await expect(audioBtn).not.toHaveClass(/selected/)
 
     // Click MIDI
     await midiBtn.click()
-    await page.waitForTimeout(200)
     await expect(midiBtn).toHaveClass(/selected/)
     await expect(bothBtn).not.toHaveClass(/selected/)
   })
@@ -2402,7 +2243,6 @@ test.describe('Tools Tab - Copy Patterns Mode Scope', () => {
   test('Mode Scope is hidden when Specific Tracks is selected', async ({ page }) => {
     const specificTracksBtn = page.locator('.tools-toggle-btn', { hasText: 'Specific Tracks' })
     await specificTracksBtn.click()
-    await page.waitForTimeout(200)
 
     // Mode Scope should not be visible
     const modeScopeField = page.locator('.tools-field').filter({ hasText: 'Mode Scope' })
@@ -2425,15 +2265,12 @@ test.describe('Tools Tab - Copy Tracks Pattern Selector', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(1000)
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()
-    await page.waitForTimeout(500)
 
     // Select Copy Tracks operation
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_tracks')
-    await page.waitForTimeout(300)
   })
 
   test('Pattern selector is not visible when Part Parameters mode is selected', async ({ page }) => {
@@ -2446,7 +2283,6 @@ test.describe('Tools Tab - Copy Tracks Pattern Selector', () => {
   test('Pattern selector is visible when Both mode is selected', async ({ page }) => {
     const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
     await bothBtn.click()
-    await page.waitForTimeout(200)
 
     const sourcePanel = page.locator('.tools-source-panel')
     const patternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
@@ -2456,7 +2292,6 @@ test.describe('Tools Tab - Copy Tracks Pattern Selector', () => {
   test('Pattern selector is visible when Pattern Triggers mode is selected', async ({ page }) => {
     const trigBtn = page.locator('.tools-toggle-btn', { hasText: 'Pattern Triggers' })
     await trigBtn.click()
-    await page.waitForTimeout(200)
 
     const sourcePanel = page.locator('.tools-source-panel')
     const patternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
@@ -2466,7 +2301,6 @@ test.describe('Tools Tab - Copy Tracks Pattern Selector', () => {
   test('Source pattern selector has 16 pattern buttons and All button', async ({ page }) => {
     const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
     await bothBtn.click()
-    await page.waitForTimeout(200)
 
     const sourcePanel = page.locator('.tools-source-panel')
     const patternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
@@ -2482,7 +2316,6 @@ test.describe('Tools Tab - Copy Tracks Pattern Selector', () => {
   test('Source Pattern 1 is selected by default in Both mode', async ({ page }) => {
     const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
     await bothBtn.click()
-    await page.waitForTimeout(200)
 
     const sourcePanel = page.locator('.tools-source-panel')
     const patternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
@@ -2496,7 +2329,6 @@ test.describe('Tools Tab - Copy Tracks Pattern Selector', () => {
   test('Clicking specific source pattern deselects All', async ({ page }) => {
     const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
     await bothBtn.click()
-    await page.waitForTimeout(200)
 
     const sourcePanel = page.locator('.tools-source-panel')
     const patternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
@@ -2505,7 +2337,6 @@ test.describe('Tools Tab - Copy Tracks Pattern Selector', () => {
     // Click pattern 3
     const pattern3 = patternField.locator('.tools-multi-btn.pattern-btn', { hasText: /^3$/ }).first()
     await pattern3.click()
-    await page.waitForTimeout(200)
 
     await expect(pattern3).toHaveClass(/selected/)
     await expect(allBtn).not.toHaveClass(/selected/)
@@ -2514,14 +2345,12 @@ test.describe('Tools Tab - Copy Tracks Pattern Selector', () => {
   test('Destination pattern selector is disabled when source All is selected', async ({ page }) => {
     const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
     await bothBtn.click()
-    await page.waitForTimeout(200)
 
     // Explicitly select All (Both mode now defaults to Pattern 1)
     const sourcePanel = page.locator('.tools-source-panel')
     const sourcePatternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
     const allBtn = sourcePatternField.locator('.tools-multi-btn.pattern-btn.tools-select-all')
     await allBtn.click()
-    await page.waitForTimeout(200)
 
     const destPanel = page.locator('.tools-dest-panel')
     const patternField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
@@ -2533,7 +2362,6 @@ test.describe('Tools Tab - Copy Tracks Pattern Selector', () => {
   test('Destination pattern selector is enabled when source is specific pattern', async ({ page }) => {
     const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
     await bothBtn.click()
-    await page.waitForTimeout(200)
 
     // Both mode now defaults to Pattern 1 (specific), so dest should be enabled
     const destPanel = page.locator('.tools-dest-panel')
@@ -2546,14 +2374,12 @@ test.describe('Tools Tab - Copy Tracks Pattern Selector', () => {
   test('Destination pattern buttons show sync tooltip when source All is selected', async ({ page }) => {
     const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
     await bothBtn.click()
-    await page.waitForTimeout(200)
 
     // Explicitly select All (Both mode now defaults to Pattern 1)
     const sourcePanel = page.locator('.tools-source-panel')
     const sourcePatternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
     const allBtn = sourcePatternField.locator('.tools-multi-btn.pattern-btn.tools-select-all')
     await allBtn.click()
-    await page.waitForTimeout(200)
 
     const destPanel = page.locator('.tools-dest-panel')
     const destPatternField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
@@ -2565,7 +2391,6 @@ test.describe('Tools Tab - Copy Tracks Pattern Selector', () => {
   test('Source pattern can be deselected to re-enable All', async ({ page }) => {
     const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
     await bothBtn.click()
-    await page.waitForTimeout(200)
 
     const sourcePanel = page.locator('.tools-source-panel')
     const patternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
@@ -2574,19 +2399,16 @@ test.describe('Tools Tab - Copy Tracks Pattern Selector', () => {
     // Select specific pattern
     const pattern5 = patternField.locator('.tools-multi-btn.pattern-btn', { hasText: /^5$/ }).first()
     await pattern5.click()
-    await page.waitForTimeout(200)
     await expect(allBtn).not.toHaveClass(/selected/)
 
     // Click All to go back to All
     await allBtn.click()
-    await page.waitForTimeout(200)
     await expect(allBtn).toHaveClass(/selected/)
   })
 
   test('Pattern buttons have correct tooltips', async ({ page }) => {
     const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
     await bothBtn.click()
-    await page.waitForTimeout(200)
 
     const sourcePanel = page.locator('.tools-source-panel')
     const patternField = sourcePanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
@@ -2603,21 +2425,17 @@ test.describe('Tools Tab - Copy Tracks Destination Patterns Multi-Select', () =>
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(1000)
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()
-    await page.waitForTimeout(500)
 
     // Select Copy Tracks operation
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_tracks')
-    await page.waitForTimeout(300)
   })
 
   test('Pattern Triggers mode defaults to Pattern 1 (not All)', async ({ page }) => {
     const trigBtn = page.locator('.tools-toggle-btn', { hasText: 'Pattern Triggers' })
     await trigBtn.click()
-    await page.waitForTimeout(200)
 
     // Source pattern 1 should be selected
     const sourcePanel = page.locator('.tools-source-panel')
@@ -2639,7 +2457,6 @@ test.describe('Tools Tab - Copy Tracks Destination Patterns Multi-Select', () =>
   test('Both mode defaults to Pattern 1', async ({ page }) => {
     const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
     await bothBtn.click()
-    await page.waitForTimeout(200)
 
     // Source Pattern 1 should be selected (not All)
     const sourcePanel = page.locator('.tools-source-panel')
@@ -2653,7 +2470,6 @@ test.describe('Tools Tab - Copy Tracks Destination Patterns Multi-Select', () =>
   test('Destination patterns allow multi-select when source is specific pattern', async ({ page }) => {
     const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
     await bothBtn.click()
-    await page.waitForTimeout(200)
 
     // Both mode defaults to source Pattern 1, dest Pattern 1
     // Add more destination patterns
@@ -2668,9 +2484,7 @@ test.describe('Tools Tab - Copy Tracks Destination Patterns Multi-Select', () =>
 
     // Add pattern 2 and 3
     await destPattern2.click()
-    await page.waitForTimeout(200)
     await destPattern3.click()
-    await page.waitForTimeout(200)
 
     // All three should be selected
     await expect(destPattern1).toHaveClass(/selected/)
@@ -2681,7 +2495,6 @@ test.describe('Tools Tab - Copy Tracks Destination Patterns Multi-Select', () =>
   test('Destination pattern can be deselected (multi-select)', async ({ page }) => {
     const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
     await bothBtn.click()
-    await page.waitForTimeout(200)
 
     // Both mode defaults to source Pattern 1, dest Pattern 1
     const destPanel = page.locator('.tools-dest-panel')
@@ -2691,13 +2504,11 @@ test.describe('Tools Tab - Copy Tracks Destination Patterns Multi-Select', () =>
 
     // Pattern 1 already selected, add pattern 2
     await destPattern2.click()
-    await page.waitForTimeout(200)
     await expect(destPattern1).toHaveClass(/selected/)
     await expect(destPattern2).toHaveClass(/selected/)
 
     // Deselect pattern 2
     await destPattern2.click()
-    await page.waitForTimeout(200)
     await expect(destPattern2).not.toHaveClass(/selected/)
     await expect(destPattern1).toHaveClass(/selected/)
   })
@@ -2705,7 +2516,6 @@ test.describe('Tools Tab - Copy Tracks Destination Patterns Multi-Select', () =>
   test('Destination All button selects all patterns', async ({ page }) => {
     const bothBtn = page.locator('.tools-toggle-btn', { hasText: 'Both' })
     await bothBtn.click()
-    await page.waitForTimeout(200)
 
     // Both mode defaults to source Pattern 1, so dest is enabled
     // Click dest All
@@ -2713,7 +2523,6 @@ test.describe('Tools Tab - Copy Tracks Destination Patterns Multi-Select', () =>
     const destPatternField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Pattern' }) })
     const destAll = destPatternField.locator('.tools-multi-btn.pattern-btn.tools-select-all', { hasText: 'All' })
     await destAll.click()
-    await page.waitForTimeout(200)
 
     // All 16 patterns + All button should be selected
     const destSelectedPatterns = destPatternField.locator('.tools-multi-btn.pattern-btn.selected')
@@ -2725,16 +2534,13 @@ test.describe('Tools Tab - Operation Descriptions', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(1000)
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()
-    await page.waitForTimeout(500)
   })
 
   test('Copy Banks shows description', async ({ page }) => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_bank')
-    await page.waitForTimeout(300)
 
     const description = page.locator('.tools-description-pane')
     await expect(description).toBeVisible()
@@ -2744,7 +2550,6 @@ test.describe('Tools Tab - Operation Descriptions', () => {
   test('Copy Parts shows description', async ({ page }) => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_parts')
-    await page.waitForTimeout(300)
 
     const description = page.locator('.tools-description-pane')
     await expect(description).toBeVisible()
@@ -2754,7 +2559,6 @@ test.describe('Tools Tab - Operation Descriptions', () => {
   test('Copy Patterns shows description', async ({ page }) => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_patterns')
-    await page.waitForTimeout(300)
 
     const description = page.locator('.tools-description-pane')
     await expect(description).toBeVisible()
@@ -2764,7 +2568,6 @@ test.describe('Tools Tab - Operation Descriptions', () => {
   test('Copy Tracks shows description', async ({ page }) => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_tracks')
-    await page.waitForTimeout(300)
 
     const description = page.locator('.tools-description-pane')
     await expect(description).toBeVisible()
@@ -2774,7 +2577,6 @@ test.describe('Tools Tab - Operation Descriptions', () => {
   test('Copy Sample Slots shows description', async ({ page }) => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_sample_slots')
-    await page.waitForTimeout(300)
 
     const description = page.locator('.tools-description-pane')
     await expect(description).toBeVisible()
@@ -2784,7 +2586,6 @@ test.describe('Tools Tab - Operation Descriptions', () => {
   test('Copy Banks shows OPTIONS pane', async ({ page }) => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_bank')
-    await page.waitForTimeout(300)
 
     const optionsPanel = page.locator('.tools-options-panel')
     await expect(optionsPanel).toBeVisible()
@@ -2793,7 +2594,6 @@ test.describe('Tools Tab - Operation Descriptions', () => {
   test('Copy Parts hides OPTIONS pane', async ({ page }) => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_parts')
-    await page.waitForTimeout(300)
 
     const optionsPanel = page.locator('.tools-options-panel')
     await expect(optionsPanel).toHaveCount(0)
@@ -2802,7 +2602,6 @@ test.describe('Tools Tab - Operation Descriptions', () => {
   test('Copy Patterns shows OPTIONS pane', async ({ page }) => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_patterns')
-    await page.waitForTimeout(300)
 
     const optionsPanel = page.locator('.tools-options-panel')
     await expect(optionsPanel).toBeVisible()
@@ -2811,7 +2610,6 @@ test.describe('Tools Tab - Operation Descriptions', () => {
   test('Copy Sample Slots shows OPTIONS pane', async ({ page }) => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_sample_slots')
-    await page.waitForTimeout(300)
 
     const optionsPanel = page.locator('.tools-options-panel')
     await expect(optionsPanel).toBeVisible()
@@ -2822,15 +2620,12 @@ test.describe('Tools Tab - Select Source Track Message', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(1000)
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()
-    await page.waitForTimeout(500)
 
     // Select Copy Tracks operation
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_tracks')
-    await page.waitForTimeout(300)
   })
 
   test('Execute button shows track selection hint when no tracks selected', async ({ page }) => {
@@ -2846,14 +2641,11 @@ test.describe('Tools Tab - Copy Parts Multi-Select Destination Banks', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(1000)
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()
-    await page.waitForTimeout(500)
 
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_parts')
-    await page.waitForTimeout(300)
   })
 
   test('Destination Banks label is plural (multi-select)', async ({ page }) => {
@@ -2872,7 +2664,6 @@ test.describe('Tools Tab - Copy Parts Multi-Select Destination Banks', () => {
 
     // Click bank B to add it
     await bankB.click()
-    await page.waitForTimeout(200)
 
     // Both should be selected
     await expect(bankA).toHaveClass(/selected/)
@@ -2891,7 +2682,6 @@ test.describe('Tools Tab - Copy Parts Multi-Select Destination Banks', () => {
     const destPanel = page.locator('.tools-dest-panel')
     const noneButton = destPanel.locator('.tools-multi-btn.tools-select-all', { hasText: 'None' })
     await noneButton.click()
-    await page.waitForTimeout(200)
 
     const executeBtn = page.locator('.tools-execute-btn')
     await expect(executeBtn).toBeDisabled()
@@ -2902,14 +2692,11 @@ test.describe('Tools Tab - Copy Sample Slots One/Range Mode', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(1000)
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()
-    await page.waitForTimeout(500)
 
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_sample_slots')
-    await page.waitForTimeout(300)
   })
 
   test('Range button is visible and selected by default', async ({ page }) => {
@@ -2927,7 +2714,6 @@ test.describe('Tools Tab - Copy Sample Slots One/Range Mode', () => {
     const sourcePanel = page.locator('.tools-source-panel')
     const oneBtn = sourcePanel.locator('.tools-slot-all-btn', { hasText: 'One' })
     await oneBtn.click()
-    await page.waitForTimeout(200)
 
     // Source range slider should be visible with single-range class
     const rangeSlider = sourcePanel.locator('.tools-dual-range-slider.tools-single-range')
@@ -2947,12 +2733,10 @@ test.describe('Tools Tab - Copy Sample Slots One/Range Mode', () => {
     // First switch to One
     const oneBtn = sourcePanel.locator('.tools-slot-all-btn', { hasText: 'One' })
     await oneBtn.click()
-    await page.waitForTimeout(200)
 
     // Switch back to Range
     const rangeBtn = sourcePanel.locator('.tools-slot-all-btn', { hasText: 'Range' })
     await rangeBtn.click()
-    await page.waitForTimeout(200)
 
     // Range slider should be visible without single-range class
     const rangeSlider = sourcePanel.locator('.tools-dual-range-slider').first()
@@ -2970,7 +2754,6 @@ test.describe('Tools Tab - Copy Sample Slots One/Range Mode', () => {
     const sourcePanel = page.locator('.tools-source-panel')
     const oneBtn = sourcePanel.locator('.tools-slot-all-btn', { hasText: 'One' })
     await oneBtn.click()
-    await page.waitForTimeout(200)
 
     // Should have exactly one input in the source range display
     const inputs = sourcePanel.locator('.tools-slot-range-display .tools-slot-value-input')
@@ -2997,7 +2780,6 @@ test.describe('Tools Tab - Copy Sample Slots One/Range Mode', () => {
     const destInput = page.locator('.tools-slot-selector .tools-slot-value-input').last()
     await destInput.fill('2')
     await destInput.blur()
-    await page.waitForTimeout(300)
 
     // Warning badge should be visible
     const warningBadge = page.locator('.tools-warning-badge')
@@ -3014,7 +2796,6 @@ test.describe('Tools Tab - Copy Sample Slots One/Range Mode', () => {
     const destInput = page.locator('.tools-slot-selector .tools-slot-value-input').last()
     await destInput.fill('2')
     await destInput.blur()
-    await page.waitForTimeout(300)
 
     // Confirm disabled
     const executeBtn = page.locator('.tools-execute-btn')
@@ -3023,7 +2804,6 @@ test.describe('Tools Tab - Copy Sample Slots One/Range Mode', () => {
     // Fix overflow: reset dest start to 1
     await destInput.fill('1')
     await destInput.blur()
-    await page.waitForTimeout(300)
 
     // Warning should disappear
     const warningBadge = page.locator('.tools-warning-badge')
@@ -3038,10 +2818,8 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(2000)
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()
-    await page.waitForTimeout(500)
   })
 
   test('Fix Missing Samples appears in operation dropdown', async ({ page }) => {
@@ -3052,7 +2830,6 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
   test('selecting Fix Missing Samples shows status badge', async ({ page }) => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('fix_missing_samples')
-    await page.waitForTimeout(1000)
 
     // Status badge should show count
     const statusCount = page.locator('.tools-fix-status-count')
@@ -3063,7 +2840,6 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
   test('missing files list modal shows correct slot data', async ({ page }) => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('fix_missing_samples')
-    await page.waitForTimeout(1000)
 
     // Open the modal via the missing files summary button
     const summaryBtn = page.locator('.tools-missing-files-summary')
@@ -3081,7 +2857,6 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
   test('Execute button is visible when missing files exist', async ({ page }) => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('fix_missing_samples')
-    await page.waitForTimeout(1000)
 
     const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
     await expect(executeBtn).toBeVisible()
@@ -3100,7 +2875,6 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
 
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('fix_missing_samples')
-    await page.waitForTimeout(1000)
 
     const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
     await expect(executeBtn).not.toBeVisible()
@@ -3109,11 +2883,9 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
   test('clicking Execute opens modal with search steps', async ({ page }) => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('fix_missing_samples')
-    await page.waitForTimeout(1000)
 
     const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
     await executeBtn.click()
-    await page.waitForTimeout(2500)
 
     // Modal should be visible
     const modal = page.locator('.fix-missing-modal')
@@ -3123,7 +2895,6 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
   test('progress modal shows Browse button when files are still missing', async ({ page }) => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('fix_missing_samples')
-    await page.waitForTimeout(1000)
 
     // Enable "Review before applying" to prevent auto-apply
     const checkbox = page.locator('.tools-options-panel .tools-checkbox input[type="checkbox"]')
@@ -3133,7 +2904,6 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
 
     const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
     await executeBtn.click()
-    await page.waitForTimeout(4000)
 
     const modal = page.locator('.fix-missing-modal')
     await expect(modal).toBeVisible()
@@ -3150,7 +2920,6 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
   test('Review changes button opens review modal with unified table', async ({ page }) => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('fix_missing_samples')
-    await page.waitForTimeout(1000)
 
     // Uncheck skip-review so Review changes button is visible
     const checkbox = page.locator('.tools-options-panel .tools-checkbox input[type="checkbox"]')
@@ -3160,14 +2929,12 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
 
     const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
     await executeBtn.click()
-    await page.waitForTimeout(4000)
 
     const modal = page.locator('.fix-missing-modal')
 
     // Click Review changes to go to confirmation
     const reviewBtn = modal.locator('.fix-done-actions .tools-execute-btn', { hasText: 'Review changes' })
     await reviewBtn.click()
-    await page.waitForTimeout(500)
 
     // Review title should be visible
     await expect(modal.locator('.modal-header h3')).toContainText('Review planned changes')
@@ -3193,7 +2960,6 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
   test('review modal supports filtering by Found status', async ({ page }) => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('fix_missing_samples')
-    await page.waitForTimeout(1000)
 
     // Uncheck skip-review so Review changes button is visible
     const checkbox = page.locator('.tools-options-panel .tools-checkbox input[type="checkbox"]')
@@ -3203,12 +2969,10 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
 
     const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
     await executeBtn.click()
-    await page.waitForTimeout(4000)
 
     const modal = page.locator('.fix-missing-modal')
     const reviewBtn = modal.locator('.fix-done-actions .tools-execute-btn', { hasText: 'Review changes' })
     await reviewBtn.click()
-    await page.waitForTimeout(500)
 
     // Search box should be visible
     await expect(modal.locator('.header-search-input')).toBeVisible()
@@ -3221,11 +2985,9 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
   test('review modal has resize handles', async ({ page }) => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('fix_missing_samples')
-    await page.waitForTimeout(1000)
 
     const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
     await executeBtn.click()
-    await page.waitForTimeout(500)
 
     const modal = page.locator('.fix-missing-modal')
 
@@ -3238,7 +3000,6 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
   test('missing samples list modal has resize handles', async ({ page }) => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('fix_missing_samples')
-    await page.waitForTimeout(1000)
 
     const summaryBtn = page.locator('.tools-missing-files-summary')
     await summaryBtn.click()
@@ -3255,7 +3016,6 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
   test('auto-apply option is visible in Options panel', async ({ page }) => {
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('fix_missing_samples')
-    await page.waitForTimeout(1000)
 
     const optionsPanel = page.locator('.tools-options-panel')
     await expect(optionsPanel).toBeVisible()
@@ -3286,12 +3046,10 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
 
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('fix_missing_samples')
-    await page.waitForTimeout(1000)
 
     // skipReview defaults to true, so auto-apply fires after all samples found
     const executeBtn = page.locator('.tools-fix-missing-layout .tools-execute-btn')
     await executeBtn.click()
-    await page.waitForTimeout(4000)
 
     const modal = page.locator('.fix-missing-modal')
 
@@ -3301,8 +3059,7 @@ test.describe('Tools Tab - Fix Missing Samples', () => {
 
     // Search steps should still be visible
     const searchSteps = modal.locator('.fix-search-steps .fix-search-step')
-    const count = await searchSteps.count()
-    expect(count).toBeGreaterThanOrEqual(3)
+    await expect.poll(() => searchSteps.count()).toBeGreaterThanOrEqual(3)
 
     // Done button should be visible (auto-apply completed)
     await expect(modal.locator('.fix-done-actions .tools-execute-btn', { hasText: 'Done' })).toBeVisible()
@@ -3313,14 +3070,11 @@ test.describe('Tools Tab - Copy Banks Sample Options', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(1000)
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()
-    await page.waitForTimeout(500)
 
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_bank')
-    await page.waitForTimeout(300)
   })
 
   test('Copy Sample Slots toggle defaults to Yes', async ({ page }) => {
@@ -3339,7 +3093,6 @@ test.describe('Tools Tab - Copy Banks Sample Options', () => {
     // Click No to hide them
     const noBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'No' }).first()
     await noBtn.click()
-    await page.waitForTimeout(300)
 
     // Now Sample Scope should be hidden
     await expect(optionsPanel.locator('label', { hasText: 'Sample Scope' })).toHaveCount(0)
@@ -3351,13 +3104,11 @@ test.describe('Tools Tab - Copy Banks Sample Options', () => {
     // Enable
     const yesBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'Yes' }).first()
     await yesBtn.click()
-    await page.waitForTimeout(300)
     await expect(optionsPanel.locator('label', { hasText: 'Sample Scope' })).toBeVisible()
 
     // Disable
     const noBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'No' }).first()
     await noBtn.click()
-    await page.waitForTimeout(300)
     await expect(optionsPanel.locator('label', { hasText: 'Sample Scope' })).toHaveCount(0)
   })
 
@@ -3365,7 +3116,6 @@ test.describe('Tools Tab - Copy Banks Sample Options', () => {
     const optionsPanel = page.locator('.tools-options-panel')
     const yesBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'Yes' }).first()
     await yesBtn.click()
-    await page.waitForTimeout(300)
 
     const referencedBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'Used by bank' })
     await expect(referencedBtn).toHaveClass(/selected/)
@@ -3375,11 +3125,9 @@ test.describe('Tools Tab - Copy Banks Sample Options', () => {
     const optionsPanel = page.locator('.tools-options-panel')
     const yesBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'Yes' }).first()
     await yesBtn.click()
-    await page.waitForTimeout(300)
 
     const allConfiguredBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'All assigned' })
     await allConfiguredBtn.click()
-    await page.waitForTimeout(200)
     await expect(allConfiguredBtn).toHaveClass(/selected/)
   })
 
@@ -3387,7 +3135,6 @@ test.describe('Tools Tab - Copy Banks Sample Options', () => {
     const optionsPanel = page.locator('.tools-options-panel')
     const yesBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'Yes' }).first()
     await yesBtn.click()
-    await page.waitForTimeout(500)
 
     const validationStatus = page.locator('.tools-validation-status')
     await expect(validationStatus).toBeVisible()
@@ -3426,10 +3173,8 @@ test.describe('Tools Tab - Copy Banks Sample Options', () => {
     const optionsPanel = page.locator('.tools-options-panel')
     const noBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'No' }).first()
     await noBtn.click()
-    await page.waitForTimeout(200)
     const yesBtn = optionsPanel.locator('.tools-toggle-btn', { hasText: 'Yes' }).first()
     await yesBtn.click()
-    await page.waitForTimeout(500)
 
     const validationStatus = page.locator('.tools-validation-status')
     await expect(validationStatus).toHaveClass(/invalid/)
@@ -3439,17 +3184,14 @@ test.describe('Tools Tab - Copy Banks Sample Options', () => {
   })
 
   test('Execute sends correct parameters with sample options', async ({ page }) => {
-    const optionsPanel = page.locator('.tools-options-panel')
-
-    // Default is Copy Sample Slots = Yes, so just wait for validation
-    await page.waitForTimeout(500)
-
-    // Click Execute
+    // Copy Sample Slots defaults to Yes; Playwright waits until validation enables Execute.
     const executeBtn = page.locator('.tools-execute-btn')
     await executeBtn.click()
-    await page.waitForTimeout(1000)
 
     // Check the captured args
+    await expect.poll(() =>
+      page.evaluate(() => Boolean((window as any).__lastCopyBankArgs__)),
+    ).toBe(true)
     const args = await page.evaluate(() => (window as any).__lastCopyBankArgs__)
     expect(args).toBeTruthy()
     expect(args.copySamples).toBe(true)
@@ -3465,10 +3207,8 @@ test.describe('Tools Tab - Audio Pool Present', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page, { withAudioPool: true })
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(1000)
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()
-    await page.waitForTimeout(500)
   })
 
   test('Copy Sample Slots shows Move to Pool option when Audio Pool exists', async ({ page }) => {
@@ -3496,14 +3236,11 @@ test.describe('Tools Tab - Copy Patterns Multi-Select Destination Banks', () => 
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(1000)
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()
-    await page.waitForTimeout(500)
 
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_patterns')
-    await page.waitForTimeout(300)
   })
 
   test('Destination Banks label is plural (multi-select)', async ({ page }) => {
@@ -3522,7 +3259,6 @@ test.describe('Tools Tab - Copy Patterns Multi-Select Destination Banks', () => 
 
     // Click bank B to add it
     await bankB.click()
-    await page.waitForTimeout(200)
 
     // Both should be selected
     await expect(bankA).toHaveClass(/selected/)
@@ -3543,7 +3279,6 @@ test.describe('Tools Tab - Copy Patterns Multi-Select Destination Banks', () => 
     const bankField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Banks' }) })
     const allButton = bankField.locator('.tools-multi-btn.tools-select-all', { hasText: 'All' })
     await allButton.click()
-    await page.waitForTimeout(200)
 
     const selectedBanks = bankField.locator('.tools-multi-btn.bank-btn.selected')
     // All 16 bank buttons + the All button itself
@@ -3555,7 +3290,6 @@ test.describe('Tools Tab - Copy Patterns Multi-Select Destination Banks', () => 
     const bankField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Banks' }) })
     const noneButton = bankField.locator('.tools-multi-btn.tools-select-all', { hasText: 'None' })
     await noneButton.click()
-    await page.waitForTimeout(200)
 
     const selectedBanks = bankField.locator('.tools-multi-btn.bank-btn.selected:not(.tools-select-all)')
     await expect(selectedBanks).toHaveCount(0)
@@ -3566,7 +3300,6 @@ test.describe('Tools Tab - Copy Patterns Multi-Select Destination Banks', () => 
     const bankField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Banks' }) })
     const noneButton = bankField.locator('.tools-multi-btn.tools-select-all', { hasText: 'None' })
     await noneButton.click()
-    await page.waitForTimeout(200)
 
     const executeBtn = page.locator('.tools-execute-btn')
     await expect(executeBtn).toBeDisabled()
@@ -3581,7 +3314,6 @@ test.describe('Tools Tab - Copy Patterns Multi-Select Destination Banks', () => 
 
     // Click to deselect
     await bankA.click()
-    await page.waitForTimeout(200)
 
     await expect(bankA).not.toHaveClass(/selected/)
   })
@@ -3591,14 +3323,11 @@ test.describe('Tools Tab - Copy Tracks Multi-Select Destination Banks', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(1000)
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()
-    await page.waitForTimeout(500)
 
     const operationSelect = page.locator('.tools-section .tools-select')
     await operationSelect.selectOption('copy_tracks')
-    await page.waitForTimeout(300)
   })
 
   test('Destination Banks label is plural (multi-select)', async ({ page }) => {
@@ -3617,7 +3346,6 @@ test.describe('Tools Tab - Copy Tracks Multi-Select Destination Banks', () => {
 
     // Click bank C to add it
     await bankC.click()
-    await page.waitForTimeout(200)
 
     // Both should be selected
     await expect(bankA).toHaveClass(/selected/)
@@ -3638,7 +3366,6 @@ test.describe('Tools Tab - Copy Tracks Multi-Select Destination Banks', () => {
     const bankField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Banks' }) })
     const allButton = bankField.locator('.tools-multi-btn.tools-select-all', { hasText: 'All' })
     await allButton.click()
-    await page.waitForTimeout(200)
 
     const selectedBanks = bankField.locator('.tools-multi-btn.bank-btn.selected')
     // All 16 bank buttons + the All button itself
@@ -3650,7 +3377,6 @@ test.describe('Tools Tab - Copy Tracks Multi-Select Destination Banks', () => {
     const bankField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Banks' }) })
     const noneButton = bankField.locator('.tools-multi-btn.tools-select-all', { hasText: 'None' })
     await noneButton.click()
-    await page.waitForTimeout(200)
 
     const selectedBanks = bankField.locator('.tools-multi-btn.bank-btn.selected:not(.tools-select-all)')
     await expect(selectedBanks).toHaveCount(0)
@@ -3661,7 +3387,6 @@ test.describe('Tools Tab - Copy Tracks Multi-Select Destination Banks', () => {
     const bankField = destPanel.locator('.tools-field').filter({ has: page.locator('label', { hasText: 'Banks' }) })
     const noneButton = bankField.locator('.tools-multi-btn.tools-select-all', { hasText: 'None' })
     await noneButton.click()
-    await page.waitForTimeout(200)
 
     const executeBtn = page.locator('.tools-execute-btn')
     await expect(executeBtn).toBeDisabled()
@@ -3676,7 +3401,6 @@ test.describe('Tools Tab - Copy Tracks Multi-Select Destination Banks', () => {
 
     // Click to deselect
     await bankA.click()
-    await page.waitForTimeout(200)
 
     await expect(bankA).not.toHaveClass(/selected/)
   })
@@ -3692,11 +3416,8 @@ test.describe('Tools Tab - Copy Operation Payloads', () => {
     await setupTauriMocks(page)
     await page.goto('/')
     await page.goto('/#/project?path=/test/project&name=TestProject')
-    await page.waitForTimeout(1000)
     await page.locator('.header-tab', { hasText: 'Tools' }).click()
-    await page.waitForTimeout(500)
     await page.locator('.tools-section .tools-select').selectOption(operation)
-    await page.waitForTimeout(300)
   }
 
   async function execute(page: import('@playwright/test').Page) {
@@ -3705,7 +3426,9 @@ test.describe('Tools Tab - Copy Operation Payloads', () => {
       ;(window as any).__copyCalls__ = []
     })
     await page.locator('.tools-execute-btn').click()
-    await page.waitForTimeout(800)
+    await expect.poll(() =>
+      page.evaluate(() => Boolean((window as any).__lastCopyArgs__)),
+    ).toBe(true)
   }
 
   const lastArgs = (page: import('@playwright/test').Page) =>
@@ -3733,11 +3456,9 @@ test.describe('Tools Tab - Copy Operation Payloads', () => {
     await openTools(page, 'copy_patterns')
     const partAssignment = page.locator('.tools-field').filter({ hasText: 'Part Assignment' })
     await partAssignment.locator('.tools-toggle-btn', { hasText: 'User Selection' }).click()
-    await page.waitForTimeout(200)
     // Execute stays disabled until a destination part is picked in this mode.
     const partCross = page.locator('.tools-options-panel .tools-part-cross')
     await partCross.locator('.tools-toggle-btn.part-btn', { hasText: /^2$/ }).click()
-    await page.waitForTimeout(200)
     await execute(page)
 
     const call = await lastArgs(page)
@@ -3749,10 +3470,8 @@ test.describe('Tools Tab - Copy Operation Payloads', () => {
     await openTools(page, 'copy_patterns')
     const options = page.locator('.tools-options-panel')
     await page.locator('.tools-toggle-btn', { hasText: 'Specific Tracks' }).click()
-    await page.waitForTimeout(200)
     // Execute stays disabled until at least one track is picked in this mode.
     await options.locator('.tools-multi-select.tracks-stacked .tools-multi-btn.track-btn', { hasText: 'T1' }).click()
-    await page.waitForTimeout(200)
     await execute(page)
 
     const call = await lastArgs(page)
@@ -3767,7 +3486,6 @@ test.describe('Tools Tab - Copy Operation Payloads', () => {
     await openTools(page, 'copy_patterns')
     const destPanel = page.locator('.tools-dest-panel')
     await destPanel.locator('.tools-multi-btn.bank-btn', { hasText: /^C$/ }).click()
-    await page.waitForTimeout(200)
     await execute(page)
 
     const calls = await allCalls(page)
@@ -3781,7 +3499,6 @@ test.describe('Tools Tab - Copy Operation Payloads', () => {
     // until both ends have one.
     await page.locator('.tools-source-panel .tools-multi-btn.track-btn', { hasText: 'T1' }).first().click()
     await page.locator('.tools-dest-panel .tools-multi-btn.track-btn', { hasText: 'T1' }).first().click()
-    await page.waitForTimeout(200)
   }
 
   test('Copy Tracks sends the selected mode and its pattern selection', async ({ page }) => {
@@ -3829,7 +3546,6 @@ test.describe('Tools Tab - Copy Operation Payloads', () => {
     await openTools(page, 'copy_parts')
     const destPanel = page.locator('.tools-dest-panel')
     await destPanel.locator('.tools-multi-btn.bank-btn', { hasText: /^D$/ }).click()
-    await page.waitForTimeout(200)
     await execute(page)
 
     const calls = await allCalls(page)

@@ -146,7 +146,7 @@ test.describe('Homepage scroll restoration', () => {
   test('scroll position survives a project round trip', async ({ page }) => {
     await page.mouse.move(640, 360)
     await page.mouse.wheel(0, 2000)
-    await page.waitForTimeout(100)
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(100)
     const scrollBefore = await page.evaluate(() => window.scrollY)
     expect(scrollBefore).toBeGreaterThan(100)
 
@@ -161,7 +161,7 @@ test.describe('Homepage scroll restoration', () => {
   test('scroll position survives an Audio Pool round trip', async ({ page }) => {
     await page.mouse.move(640, 360)
     await page.mouse.wheel(0, 2000)
-    await page.waitForTimeout(100)
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(100)
     const scrollBefore = await page.evaluate(() => window.scrollY)
     expect(scrollBefore).toBeGreaterThan(100)
 
