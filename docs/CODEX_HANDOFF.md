@@ -84,12 +84,12 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - Security recheck R2／v2 error sanitization: #42マージ済み
 - opportunistic `App.css` unused rule cleanup: #45マージ済み
 - M4-B recovery gate／production recovery導線: #43マージ済み（#47含む）
-- Gate B合成ディスクsmoke証拠: #48マージ済み；`e5a34d4` で Linux／macOS 両 PASS（portable script #55）を記録更新中
+- Gate B合成ディスクsmoke証拠: #48／#56マージ済み；tip `199114e` で Linux／macOS 両 PASS を再確認
 - DEP-1 Tauri security baseline: #49マージ済み
 - DEP-2 frontend toolchain: #50マージ済み
 - SEC-1 containment CI guard: #51マージ済み
 - Gate B smoke macOS移植: #55マージ済み
-- 現在のmain基準SHA: `e5a34d4`
+- 現在のmain基準SHA: `199114e`
 - M2: 完了
 - M3-A: 完了
 - M3-B: 完了
@@ -108,7 +108,7 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - 現在の作業: Gate B合成ディスクsmoke証拠の人間review、および DMG 人間smoke／Gate B署名
 - SQLite schema: v5（M3-E1で追加）
 - 次の機能実装: Gate B人間review／署名までM5へ進まない。
-  DEP-1／DEP-2／SEC-1／DEP-3／#55はマージ済み。自動synthetic smokeは Linux／macOS とも PASS（`e5a34d4`）
+  DEP-1／DEP-2／SEC-1／DEP-3／#55／#56はマージ済み。自動synthetic smokeは Linux／macOS とも PASS（`199114e`）
   Appearance theme（classic / MasterOCTa）は design-system token 層の follow-up
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
