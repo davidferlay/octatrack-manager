@@ -21,9 +21,9 @@ destructive operations against original Octatrack media.
   absolute paths. Treat original SD/CF cards as out of scope until that surface
   is retired or root-bounded.
 - Gate B production recovery is merged (PR #43 / #47). Automated synthetic-disk
-  smoke is PASS on `70d622e`; human review of
-  `docs/testing/GATE_B_SMOKE_EVIDENCE.md` remains required before Gate B
-  sign-off / M5.
+  smoke is **PASS on Linux and macOS** at `e5a34d4` (portable script via PR #55);
+  human review of `docs/testing/GATE_B_SMOKE_EVIDENCE.md` and DMG human smoke
+  remain required before Gate B sign-off / M5.
 
 ## CODEX_HANDOFF §3 checklist
 
@@ -79,7 +79,8 @@ Fixed in this recheck branch:
 Still open / deferred:
 
 1. **High (ops / Gate B)** — human review/sign-off of
-   `docs/testing/GATE_B_SMOKE_EVIDENCE.md` before declaring Gate B complete / M5.
+   `docs/testing/GATE_B_SMOKE_EVIDENCE.md` (dual-host automated PASS on
+   `e5a34d4`) plus DMG human smoke before declaring Gate B complete / M5.
 2. **High (legacy)** — absolute-path command surface remains fully wired.
 3. **Resolved in follow-up PRs** — frontend toolchain (DEP-2) and React Router
    (DEP-3) production advisories; Tauri DEP-1 and SEC-1 containment CI are
@@ -90,7 +91,8 @@ Still open / deferred:
 1. Legacy command surface can still read/write/delete arbitrary absolute paths
    once the desktop app is running. Do not point it at original media.
 2. Gate B remains unsigned until a human reviews the synthetic-disk smoke
-   evidence; do not start M5 before that sign-off.
+   evidence (now dual-host PASS on `e5a34d4`) and completes DMG human smoke;
+   do not start M5 before that sign-off.
 ## Verification performed in this recheck
 
 - Architecture guard pass against the live 15-command v2 surface.
