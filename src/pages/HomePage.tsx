@@ -123,6 +123,46 @@ export function HomePage() {
   const searchActive = searchText.trim().length > 0;
   useSearchShortcut(searchInputRef, () => setSearchText(''));
 
+  // A search used to force every group open by OR-ing `searchActive` into each
+  // open test, which made the headers look clickable but do nothing. Instead the
+  // groups are really opened when a search starts, and the pre-search shape is
+  // put back when it ends - so collapsing a group mid-search works normally.
+  const preSearchOpenState = useRef<{
+    openLocations: Set<number>;
+    openSets: Set<string>;
+    isIndividualProjectsOpen: boolean;
+    isLocationsOpen: boolean;
+    closedStandaloneGroups: Set<string>;
+  } | null>(null);
+
+  useEffect(() => {
+    if (searchActive) {
+      if (preSearchOpenState.current) return; // already expanded for this search
+      preSearchOpenState.current = {
+        openLocations,
+        openSets,
+        isIndividualProjectsOpen,
+        isLocationsOpen,
+        closedStandaloneGroups,
+      };
+      setOpenLocations(new Set(locations.map((_, i) => i)));
+      setOpenSets(new Set(locations.flatMap((loc, i) => loc.sets.map((set) => `${i}-${set.name}`))));
+      setIsIndividualProjectsOpen(true);
+      setIsLocationsOpen(true);
+      setClosedStandaloneGroups(new Set());
+    } else if (preSearchOpenState.current) {
+      const before = preSearchOpenState.current;
+      preSearchOpenState.current = null;
+      setOpenLocations(before.openLocations);
+      setOpenSets(before.openSets);
+      setIsIndividualProjectsOpen(before.isIndividualProjectsOpen);
+      setIsLocationsOpen(before.isLocationsOpen);
+      setClosedStandaloneGroups(before.closedStandaloneGroups);
+    }
+    // Only the search edge matters here; the open state is what this effect writes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchActive, locations]);
+
   // Filtered view of the tree. `filterProjects` returns its inputs by reference when the
   // query is empty, so the unfiltered render path allocates nothing.
   const filtered = useMemo(
@@ -661,13 +701,13 @@ export function HomePage() {
                 onClick={() => setIsIndividualProjectsOpen(!isIndividualProjectsOpen)}
                 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
               >
-                <span>{searchActive || isIndividualProjectsOpen ? '▼' : '▶'}</span>
+                <span>{isIndividualProjectsOpen ? '▼' : '▶'}</span>
                 {visibleStandaloneProjects.length} Individual Project{visibleStandaloneProjects.length > 1 ? 's' : ''}
               </h2>
-              <div className={`sets-section ${searchActive || isIndividualProjectsOpen ? 'open' : 'closed'}`}>
+              <div className={`sets-section ${isIndividualProjectsOpen ? 'open' : 'closed'}`}>
                 <div className="sets-section-content">
                   {multiGroups.map(([dir, projects]) => {
-                    const isOpen = searchActive || !closedStandaloneGroups.has(dir);
+                    const isOpen = !closedStandaloneGroups.has(dir);
                     return (
                     <div key={dir} className="standalone-group"
                       onContextMenu={(e) => {
@@ -712,7 +752,7 @@ export function HomePage() {
                     );
                   })}
                   {loneProjects.length > 0 && (() => {
-                    const isOpen = searchActive || !closedStandaloneGroups.has('__other__');
+                    const isOpen = !closedStandaloneGroups.has('__other__');
                     return (
                     <div className="standalone-group">
                       <div className="standalone-group-label clickable" onClick={() => toggleGroup('__other__')}>
@@ -746,13 +786,17 @@ export function HomePage() {
                 onClick={() => setIsLocationsOpen(!isLocationsOpen)}
                 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
               >
-                <span>{searchActive || isLocationsOpen ? '▼' : '▶'}</span>
+                <span>{isLocationsOpen ? '▼' : '▶'}</span>
                 {visibleLocations.length} Location{visibleLocations.length > 1 ? 's' : ''}
               </h2>
-              <div className={`sets-section ${searchActive || isLocationsOpen ? 'open' : 'closed'}`}>
+              <div className={`sets-section ${isLocationsOpen ? 'open' : 'closed'}`}>
                 <div className="sets-section-content">
-                  {visibleLocations.map((location, locIdx) => {
-                    const isOpen = searchActive || openLocations.has(locIdx);
+                  {visibleLocations.map((location) => {
+                    // Index in the unfiltered list: a search drops locations, and
+                    // keying the open state on the filtered position would move it
+                    // from one location to another as the query changes.
+                    const locIdx = locations.findIndex(l => l.path === location.path);
+                    const isOpen = openLocations.has(locIdx);
                     return (
                       <DroppableLocationCard key={locIdx} locationPath={location.path} deviceType={location.device_type}>
                         <div
@@ -812,7 +856,7 @@ export function HomePage() {
                                 return 0;
                               }).map((set, setIdx) => {
                                 const setKey = `${locIdx}-${set.name}`;
-                                const isSetOpen = searchActive || openSets.has(setKey);
+                                const isSetOpen = openSets.has(setKey);
                                 return (
                                 <DroppableSetCard key={setIdx} setPath={set.path} set={set} locationPath={location.path} disabled={activeItem?.type === 'set'}
                                   onContextMenu={(e) => {

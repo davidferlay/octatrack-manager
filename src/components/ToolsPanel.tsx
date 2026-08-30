@@ -335,9 +335,15 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   // What the purge run should actually do. Replaces the old "Clear unused
   // sample slot assignments" checkbox: the two effects are independent, and
   // a slots-only run was previously impossible to express.
-  // Right-click menu on the Move destination path - the same Copy path /
-  // Open in file explorer pair the purge tables offer on their rows.
-  const [destMenu, setDestMenu] = useState<{ x: number; y: number; path: string } | null>(null);
+  // Right-click menu on the Move destination path and on the source/destination
+  // project buttons - the same Copy path / Open in file explorer pair the purge
+  // tables offer on their rows.
+  const [destMenu, setDestMenu] = useState<{ x: number; y: number; path: string; isDirectory?: boolean } | null>(null);
+  const openPathMenu = useCallback((path: string, isDirectory = false) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDestMenu({ x: e.clientX, y: e.clientY, path, isDirectory });
+  }, []);
   useEffect(() => {
     if (!destMenu) return;
     // Capture phase (the panel stops propagation), but clicks landing on the
@@ -1400,6 +1406,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               type="button"
               className="tools-project-selector-btn"
               onClick={() => setShowProjectSelector("source")}
+              onContextMenu={openPathMenu(sourceProject, true)}
               title={sourceProject}
             >
               <span className="tools-project-selector-name">
@@ -2686,6 +2693,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               type="button"
               className="tools-project-selector-btn"
               onClick={() => setShowProjectSelector("dest")}
+              onContextMenu={openPathMenu(destProject, true)}
               title={destProject}
             >
               <span className="tools-project-selector-name">
@@ -3979,7 +3987,13 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
       )}
 
       {/* Unused Project Samples List Modal */}
-      {destMenu && <PathContextMenu menu={destMenu} onClose={() => setDestMenu(null)} />}
+      {destMenu && (
+        <PathContextMenu
+          menu={destMenu}
+          onClose={() => setDestMenu(null)}
+          copyLabel={destMenu.isDirectory ? 'Copy path to clipboard' : undefined}
+        />
+      )}
       {showPurgeListModal && (
         <PurgeUnusedListModal units={purgePlan} scope="project" slotsToClear={purgeSlotList} actionVerb={purgesFiles ? (purgeMode === "delete" ? "Delete" : "Move") : null} onClose={() => setShowPurgeListModal(false)} />
       )}

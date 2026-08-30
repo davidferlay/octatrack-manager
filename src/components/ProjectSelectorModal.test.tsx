@@ -148,3 +148,101 @@ describe('ProjectSelectorModal', () => {
     expect(screen.getByText('Scanning...')).toBeInTheDocument()
   })
 })
+
+describe('ProjectSelectorModal - search', () => {
+  it('does not steal focus when the picker opens', () => {
+    renderModal({ locations })
+    expect(screen.getByLabelText('Search projects')).not.toHaveFocus()
+  })
+
+  it('focuses the search box on Ctrl+F', async () => {
+    const user = userEvent.setup()
+    renderModal({ locations })
+    const input = screen.getByLabelText('Search projects')
+    expect(input).not.toHaveFocus()
+
+    await user.keyboard('{Control>}f{/Control}')
+    expect(input).toHaveFocus()
+  })
+
+  it('Escape clears the query while the search box has focus', async () => {
+    const user = userEvent.setup()
+    renderModal({ locations })
+    const input = screen.getByLabelText('Search projects')
+    await user.keyboard('{Control>}f{/Control}')
+    await user.type(input, 'other')
+    expect(input).toHaveValue('other')
+
+    await user.keyboard('{Escape}')
+    expect(input).toHaveValue('')
+  })
+
+  it('narrows the list to matching project names', async () => {
+    const user = userEvent.setup()
+    renderModal({ locations })
+    expect(screen.getByText('OtherProject')).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('Search projects'), 'other')
+    expect(screen.getByText('OtherProject')).toBeInTheDocument()
+    // The current project card goes too, so a search shows only hits.
+    expect(screen.queryByText('Current Project')).not.toBeInTheDocument()
+  })
+
+  it('keeps the current project when its name matches', async () => {
+    const user = userEvent.setup()
+    renderModal({ locations })
+    await user.type(screen.getByLabelText('Search projects'), 'my')
+    expect(screen.getByText('Current Project')).toBeInTheDocument()
+  })
+
+  it('filters browsed results too', async () => {
+    const user = userEvent.setup()
+    renderModal({ browsedProjects: [
+      { name: 'OtherProject', path: '/set/Other' },
+      { name: 'Unrelated', path: '/set/Unrelated' },
+    ] })
+    await user.type(screen.getByLabelText('Search projects'), 'other')
+    expect(screen.getByText('OtherProject')).toBeInTheDocument()
+    expect(screen.queryByText('Unrelated')).not.toBeInTheDocument()
+  })
+
+  it('says when nothing matches and clears back to the full list', async () => {
+    const user = userEvent.setup()
+    renderModal({ locations })
+    const input = screen.getByLabelText('Search projects')
+    await user.type(input, 'zzzznothing')
+    expect(screen.getByText(/No projects match/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Clear search' }))
+    expect(screen.queryByText(/No projects match/)).not.toBeInTheDocument()
+    expect(screen.getByText('OtherProject')).toBeInTheDocument()
+  })
+
+  it('expands the groups so hits are visible, and restores the shape after', async () => {
+    const user = userEvent.setup()
+    // With locations present the Individual group starts collapsed, so the search
+    // has to open it for the hit inside to be reachable.
+    renderModal({ locations, standaloneProjects: [{ ...other, name: 'LoneOther', path: '/lone/LoneOther' }] })
+    const section = () => screen.getByText(/Individual Project/).nextElementSibling
+    expect(section()?.className).toContain('closed')
+
+    const input = screen.getByLabelText('Search projects')
+    await user.type(input, 'loneother')
+    expect(section()?.className).toContain('open')
+
+    await user.clear(input)
+    expect(section()?.className).toContain('closed')
+  })
+
+  it('lets a group be collapsed while the search is running', async () => {
+    const user = userEvent.setup()
+    renderModal({ locations, standaloneProjects: [{ ...other, name: 'LoneOther', path: '/lone/LoneOther' }] })
+    const input = screen.getByLabelText('Search projects')
+    await user.type(input, 'loneother')
+
+    const header = screen.getByText(/Individual Project/)
+    expect(header.nextElementSibling?.className).toContain('open')
+    await user.click(header)
+    expect(header.nextElementSibling?.className).toContain('closed')
+  })
+})

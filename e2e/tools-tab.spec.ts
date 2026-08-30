@@ -192,6 +192,10 @@ async function setupTauriMocks(page: Page, overrides?: { sameSet?: boolean; with
           case 'get_slot_audio_paths':
             return []
 
+          case 'reveal_in_file_manager':
+            (window as any).__lastRevealPath__ = args?.path
+            return null
+
           case 'backup_project_files':
             if (!(window as any).__backupCalls__) (window as any).__backupCalls__ = []
             ;(window as any).__backupCalls__.push(args)
@@ -4190,6 +4194,88 @@ test.describe('Tools Tab - source project selection', () => {
     expect(calls).toHaveLength(1)
     expect(calls[0].sourceProject).toBe('/test/other-project')
     expect(calls[0].destProject).toBe('/test/project')
+  })
+
+  test('the picker search box waits for Ctrl+F rather than grabbing focus', async ({ page }) => {
+    await openToolsPanel(page, 'copy_bank', { withOtherProject: true })
+    await page.locator(sourceBtn).click()
+
+    const search = page.locator('.project-selector-modal .header-search-input')
+    await expect(search).toBeVisible()
+    await expect(search).not.toBeFocused()
+
+    await page.keyboard.press('Control+f')
+    await expect(search).toBeFocused()
+  })
+
+  test('the picker filters the list as you type and clears back', async ({ page }) => {
+    await openToolsPanel(page, 'copy_bank', { withOtherProject: true })
+    await page.locator(sourceBtn).click()
+    await page.locator('.project-selector-modal .scan-button', { hasText: 'Rescan for Projects' }).click()
+    await page.waitForTimeout(500)
+
+    const search = page.locator('.project-selector-modal .header-search-input')
+    await expect(search).toBeVisible()
+
+    // A search expands the groups, so a hit is reachable without opening anything.
+    await search.fill('other')
+    await expect(page.locator('.project-selector-card', { hasText: 'OtherProject' })).toBeVisible()
+    await expect(page.locator('.project-selector-card', { hasText: 'TestProject' })).toHaveCount(0)
+
+    await search.fill('')
+    await expect(page.locator('.project-selector-card', { hasText: 'TestProject' })).toHaveCount(1)
+  })
+
+  test('the picker says so when nothing matches, and the clear button brings the list back', async ({ page }) => {
+    await openToolsPanel(page, 'copy_bank', { withOtherProject: true })
+    await page.locator(sourceBtn).click()
+    await page.locator('.project-selector-modal .scan-button', { hasText: 'Rescan for Projects' }).click()
+    await page.waitForTimeout(500)
+
+    const search = page.locator('.project-selector-modal .header-search-input')
+    await search.fill('zzzznothing')
+    await expect(page.locator('.project-selector-modal .no-matches')).toBeVisible()
+
+    await page.locator('.project-selector-modal .no-matches button', { hasText: 'Clear search' }).click()
+    await expect(page.locator('.project-selector-modal .no-matches')).toHaveCount(0)
+    await expect(search).toHaveValue('')
+  })
+
+  test('group headers in the picker still collapse while a search is active', async ({ page }) => {
+    await openToolsPanel(page, 'copy_bank', { withOtherProject: true })
+    await page.locator(sourceBtn).click()
+    await page.locator('.project-selector-modal .scan-button', { hasText: 'Rescan for Projects' }).click()
+    await page.waitForTimeout(500)
+
+    await page.locator('.project-selector-modal .header-search-input').fill('project')
+    const setSection = page.locator('.project-selector-modal .set-card').locator('.sets-section')
+    await expect(setSection).toHaveClass(/open/)
+    await page.locator('.project-selector-modal .set-header').click()
+    await expect(setSection).toHaveClass(/closed/)
+  })
+
+  test('both project buttons offer a right-click path menu', async ({ page }) => {
+    await openToolsPanel(page, 'copy_bank', { withOtherProject: true })
+    for (const btn of [sourceBtn, destBtn]) {
+      await page.locator(btn).click({ button: 'right' })
+      const menu = page.locator('.context-menu')
+      await expect(menu).toBeVisible()
+      await expect(menu.locator('.context-menu-item', { hasText: 'Open in file explorer' })).toBeVisible()
+      await expect(menu.locator('.context-menu-item', { hasText: 'Copy path to clipboard' })).toBeVisible()
+      // Not Escape: that is the project page's own "go back" key.
+      await page.locator('.tools-source-panel h3').click()
+      await expect(menu).toHaveCount(0)
+    }
+  })
+
+  test('the right-click menu reveals the project it was opened on', async ({ page }) => {
+    await openToolsPanel(page, 'copy_bank', { withOtherProject: true })
+    await page.evaluate(() => { (window as any).__revealed__ = [] })
+    await page.locator(sourceBtn).click({ button: 'right' })
+    await page.locator('.context-menu-item', { hasText: 'Open in file explorer' }).click()
+    // The mock records every invoke; assert the path it was handed.
+    const revealed = await page.evaluate(() => (window as any).__lastRevealPath__)
+    expect(revealed).toBe('/test/project')
   })
 
   test('the other copy tools carry the chosen source project too', async ({ page }) => {

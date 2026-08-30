@@ -545,14 +545,19 @@ export function PurgeFilterBadges({ table }: { table: ReturnType<typeof usePurge
  * FixPoolFilesModal's row context menu, generalized to a bare path since a
  * purge row's menu also has to work for a tree-child row (a plain absorbed
  * file path, not a full PurgeUnit). */
-export function PathContextMenu({ menu, onClose }: { menu: { x: number; y: number; path: string }; onClose: () => void }) {
+export function PathContextMenu({ menu, onClose, copyLabel = 'Copy file path' }: {
+  menu: { x: number; y: number; path: string };
+  onClose: () => void;
+  /** "file path" reads wrong for a directory - callers on a folder pass their own. */
+  copyLabel?: string;
+}) {
   return (
     <div className="context-menu" style={{ position: 'fixed', top: menu.y, left: menu.x }} onClick={(e) => e.stopPropagation()}>
       <button className="context-menu-item" onClick={() => { invoke('reveal_in_file_manager', { path: menu.path }); onClose(); }}>
         <i className="fas fa-folder-open"></i> Open in file explorer
       </button>
       <button className="context-menu-item" onClick={() => { navigator.clipboard.writeText(menu.path); onClose(); }}>
-        <i className="fas fa-copy"></i> Copy file path
+        <i className="fas fa-copy"></i> {copyLabel}
       </button>
     </div>
   );

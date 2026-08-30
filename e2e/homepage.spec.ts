@@ -133,6 +133,70 @@ test.describe('HomePage', () => {
     await expect(page.getByText('PadSet')).toBeVisible()
   })
 
+  test('group headers still collapse and expand while a search is active', async ({ page }) => {
+    await page.addInitScript(() => {
+      const proj = (name: string, dir: string) => ({
+        name, path: `${dir}/${name}`, has_project_file: true, has_banks: true,
+      })
+      ;(window as any).__TAURI_INTERNALS__ = {
+        transformCallback: () => {},
+        invoke: async (cmd: string) => {
+          if (cmd === 'scan_devices') {
+            return {
+              locations: [{
+                name: 'OCTATRACK', path: '/media', device_type: 'CompactFlash',
+                sets: [
+                  { name: 'DrumSet', path: '/media/OCTATRACK/DrumSet', has_audio_pool: true,
+                    projects: [proj('KICKS_2024', '/media/OCTATRACK/DrumSet')] },
+                ],
+              }],
+              standalone_projects: [proj('kick-standalone', '/other')],
+            }
+          }
+          return null
+        },
+      }
+    })
+    await page.reload()
+    await page.getByRole('button', { name: /Scan/i }).first().click()
+
+    const search = page.getByLabel('Search projects')
+    await expect(search).toBeVisible({ timeout: 10000 })
+    await search.fill('kick')
+
+    // The search opens every group, so both hits are visible up front.
+    await expect(page.getByText('KICKS_2024')).toBeVisible()
+    await expect(page.getByText('kick-standalone')).toBeVisible()
+
+    // Collapsing a group mid-search used to be ignored: searchActive was OR-ed
+    // into every open test, so the header toggled state nothing looked at. A
+    // collapsed section keeps its box (0fr grid row plus opacity), so assert the
+    // state the class and caret carry rather than Playwright visibility.
+    const locationsHeader = page.locator('h2.clickable', { hasText: /Location/ })
+    const locationsSection = locationsHeader.locator('xpath=following-sibling::div[1]')
+    await expect(locationsSection).toHaveClass(/open/)
+
+    await locationsHeader.click()
+    await expect(locationsSection).toHaveClass(/closed/)
+    await expect(locationsHeader).toContainText('\u25b6')
+
+    await locationsHeader.click()
+    await expect(locationsSection).toHaveClass(/open/)
+    await expect(locationsHeader).toContainText('\u25bc')
+
+    const individualHeader = page.locator('h2.clickable', { hasText: /Individual Project/ })
+    const individualSection = individualHeader.locator('xpath=following-sibling::div[1]')
+    await expect(individualSection).toHaveClass(/open/)
+    await individualHeader.click()
+    await expect(individualSection).toHaveClass(/closed/)
+
+    // A Set inside a Location collapses too.
+    const setSection = page.locator('.set-card', { hasText: 'DrumSet' }).locator('.sets-section')
+    await expect(setSection).toHaveClass(/open/)
+    await page.locator('.set-header', { hasText: 'DrumSet' }).click()
+    await expect(setSection).toHaveClass(/closed/)
+  })
+
   test('Ctrl+F focuses the project search box', async ({ page }) => {
     // Wait for the input to exist: pressing straight after goto() races the mount that
     // installs the keydown listener, and the press is silently lost.

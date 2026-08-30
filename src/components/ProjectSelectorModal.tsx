@@ -1,31 +1,16 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "../App.css";
+import { filterProjects } from "../utils/filterProjects";
+import { useSearchShortcut } from "../hooks/useSearchShortcut";
+import type { OctatrackLocation, OctatrackProject } from "../types/projectManagement";
 
 /** Natural sort: "Project_2" < "Project_10". */
 function naturalCompare(a: string, b: string): number {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
 }
 
-export interface SelectorProject {
-  name: string;
-  path: string;
-  has_project_file: boolean;
-  has_banks: boolean;
-}
-
-export interface SelectorSet {
-  name: string;
-  path: string;
-  has_audio_pool: boolean;
-  projects: SelectorProject[];
-}
-
-export interface SelectorLocation {
-  name: string;
-  path: string;
-  device_type: "CompactFlash" | "Usb" | "LocalCopy";
-  sets: SelectorSet[];
-}
+export type SelectorProject = OctatrackProject;
+export type SelectorLocation = OctatrackLocation;
 
 interface ProjectSelectorModalProps {
   title: string;
@@ -94,29 +79,115 @@ export function ProjectSelectorModal({
   const [isIndividualProjectsOpenInModal, setIsIndividualProjectsOpenInModal] = useState<boolean>(initial.individual);
   const [isLocationsOpenInModal, setIsLocationsOpenInModal] = useState<boolean>(initial.locationsOpen);
 
+  const [search, setSearch] = useState<string>("");
+  const searchActive = search.trim().length > 0;
+  // Not autofocused: the picker is a list to look at first, and typing into it
+  // should be a deliberate act. Ctrl/Cmd+F focuses it, as everywhere else.
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  useSearchShortcut(searchInputRef, () => setSearch(''));
+  const needle = search.trim().toLowerCase();
+
+  // Same matching rule as the home page: project names only, so a Set shows up
+  // because something inside it matched.
+  const filtered = useMemo(
+    () => filterProjects(locations, standaloneProjects, search),
+    [locations, standaloneProjects, search],
+  );
+  const shownLocations = filtered.locations;
+  const shownStandalone = filtered.standaloneProjects;
+  const shownBrowsed = useMemo(
+    () => (needle ? browsedProjects.filter((p) => p.name.toLowerCase().includes(needle)) : browsedProjects),
+    [browsedProjects, needle],
+  );
+  const currentMatches = !needle || currentProjectName.toLowerCase().includes(needle);
+  const nothingMatches = searchActive && !currentMatches
+    && shownLocations.length === 0 && shownStandalone.length === 0
+    && shownBrowsed.filter((p) => p.path !== currentProjectPath).length === 0;
+
+  // Expand the groups while a search is running, and put the shape back when it
+  // ends - the headers stay clickable throughout, unlike forcing them open.
+  const preSearch = useRef<{ sets: Set<string>; locs: Set<number>; individual: boolean; locationsOpen: boolean } | null>(null);
+  useEffect(() => {
+    if (searchActive) {
+      if (preSearch.current) return;
+      preSearch.current = {
+        sets: openSetsInModal,
+        locs: openLocationsInModal,
+        individual: isIndividualProjectsOpenInModal,
+        locationsOpen: isLocationsOpenInModal,
+      };
+      setOpenLocationsInModal(new Set(locations.map((_, i) => i)));
+      setOpenSetsInModal(new Set(locations.flatMap((loc, i) => loc.sets.map((set) => `${i}-${set.name}`))));
+      setIsIndividualProjectsOpenInModal(true);
+      setIsLocationsOpenInModal(true);
+    } else if (preSearch.current) {
+      const before = preSearch.current;
+      preSearch.current = null;
+      setOpenSetsInModal(before.sets);
+      setOpenLocationsInModal(before.locs);
+      setIsIndividualProjectsOpenInModal(before.individual);
+      setIsLocationsOpenInModal(before.locationsOpen);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchActive, locations]);
+
   return (
       <div className="modal-overlay" onClick={() => onClose()}>
         <div className="modal-content project-selector-modal" onClick={(e) => e.stopPropagation()}>
           <div className="modal-header">
             <h3>{title}</h3>
+            <div className="project-selector-search">
+              <div className="header-search-container">
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Search projects..."
+                  aria-label="Search projects"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="header-search-input"
+                />
+                {search && (
+                  <button
+                    className="header-search-clear"
+                    onClick={() => setSearch('')}
+                    title="Clear search"
+                  >×</button>
+                )}
+              </div>
+            </div>
             <button className="modal-close" onClick={() => onClose()}>×</button>
           </div>
           <div className="modal-body project-selector-body">
+            {nothingMatches && (
+              <div className="no-matches">
+                <i className="fas fa-search no-matches-icon"></i>
+                <p className="no-matches-title">
+                  No projects match <span className="no-matches-term">{search}</span>
+                </p>
+                <button className="scan-button browse-button" onClick={() => setSearch('')}>
+                  Clear search
+                </button>
+              </div>
+            )}
+
             {/* Header row with Current Project, Manual Browse, and Actions */}
             <div className="project-selector-header-row">
               <div className="project-selector-left-group">
-                <div className="project-selector-section project-selector-current">
-                  <h4>Current Project</h4>
-                  <div className="projects-grid">
-                    <div
-                      className={`project-card project-selector-card ${value === currentProjectPath ? 'selected' : ''}`}
-                      onClick={() => onSelect(currentProjectPath)}
-                      title={currentProjectPath}
-                    >
-                      <div className="project-name">{currentProjectName}</div>
+                {currentMatches && (
+                  <div className="project-selector-section project-selector-current">
+                    <h4>Current Project</h4>
+                    <div className="projects-grid">
+                      <div
+                        className={`project-card project-selector-card ${value === currentProjectPath ? 'selected' : ''}`}
+                        onClick={() => onSelect(currentProjectPath)}
+                        title={currentProjectPath}
+                      >
+                        <div className="project-name">{currentProjectName}</div>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
               <div className="project-selector-section project-selector-actions-section">
                 <h4>Actions</h4>
@@ -140,8 +211,8 @@ export function ProjectSelectorModal({
 
             {/* Manual Browse: every project found under the browsed folder,
                 in a collapsible full-width section below the header */}
-            {browsedProjects.some(p => p.path !== currentProjectPath) && (() => {
-              const browseCards = browsedProjects.filter(p => p.path !== currentProjectPath);
+            {shownBrowsed.some(p => p.path !== currentProjectPath) && (() => {
+              const browseCards = shownBrowsed.filter(p => p.path !== currentProjectPath);
               return (
               <div className="project-selector-section project-selector-manual">
                 <h4
@@ -173,8 +244,8 @@ export function ProjectSelectorModal({
             })()}
 
             {/* Individual Projects (collapsible, grouped by parent dir) */}
-            {standaloneProjects.some(p => p.path !== currentProjectPath && p.has_project_file) && (() => {
-              const filteredStandalone = standaloneProjects.filter(p => p.path !== currentProjectPath && p.has_project_file);
+            {shownStandalone.some(p => p.path !== currentProjectPath && p.has_project_file) && (() => {
+              const filteredStandalone = shownStandalone.filter(p => p.path !== currentProjectPath && p.has_project_file);
               // Group by parent directory
               const byParent = new Map<string, SelectorProject[]>();
               for (const project of filteredStandalone) {
@@ -248,7 +319,7 @@ export function ProjectSelectorModal({
             })()}
 
             {/* Locations (collapsible, each containing sets) */}
-            {locations.filter(loc => loc.sets.some(set => set.projects.some(p => p.path !== currentProjectPath && p.has_project_file))).length > 0 && (
+            {shownLocations.filter(loc => loc.sets.some(set => set.projects.some(p => p.path !== currentProjectPath && p.has_project_file))).length > 0 && (
               <div className="project-selector-section">
                 <h4
                   className="clickable"
@@ -256,11 +327,14 @@ export function ProjectSelectorModal({
                   style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
                 >
                   <span className="collapse-indicator">{isLocationsOpenInModal ? '▼' : '▶'}</span>
-                  {locations.filter(loc => loc.sets.some(set => set.projects.some(p => p.path !== currentProjectPath && p.has_project_file))).length} Location{locations.filter(loc => loc.sets.some(set => set.projects.some(p => p.path !== currentProjectPath && p.has_project_file))).length !== 1 ? 's' : ''}
+                  {shownLocations.filter(loc => loc.sets.some(set => set.projects.some(p => p.path !== currentProjectPath && p.has_project_file))).length} Location{shownLocations.filter(loc => loc.sets.some(set => set.projects.some(p => p.path !== currentProjectPath && p.has_project_file))).length !== 1 ? 's' : ''}
                 </h4>
                 <div className={`sets-section ${isLocationsOpenInModal ? 'open' : 'closed'}`}>
                   <div className="sets-section-content">
-            {locations.map((location, locIdx) => {
+            {shownLocations.map((location) => {
+              // Index in the unfiltered list: a search drops locations, and keying
+              // the open state on the filtered position would move it around.
+              const locIdx = locations.findIndex(l => l.path === location.path);
               const hasValidProjects = location.sets.some(set => set.projects.some(p => p.path !== currentProjectPath && p.has_project_file));
               if (!hasValidProjects) return null;
               const isLocationOpen = openLocationsInModal.has(locIdx);
