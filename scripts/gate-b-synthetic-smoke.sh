@@ -3,6 +3,11 @@
 # Creates an independently restorable image, baseline checksums, runs the
 # recovery/authorization crate suite, performs an additive copy on the
 # extracted media tree, and records evidence for human review.
+#
+# Portable on macOS (BSD userland) and Linux (GNU userland). Avoid GNU-only
+# flags such as `cp --update=*` / `sort -z` / requiring `sha256sum`. Path
+# safety for copies relies on absolute-path normalization (paths start with
+# `/`, so they cannot be parsed as options) plus an explicit no-clobber check.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -18,11 +23,104 @@ POST_MANIFEST="${EVIDENCE_DIR}/post-additive-sha256.txt"
 REPORT="${EVIDENCE_DIR}/GATE_B_SMOKE_REPORT.md"
 CRATE_LOG="${EVIDENCE_DIR}/crate-tests.log"
 
+# --- Portable helpers (Linux GNU + macOS BSD) ---
+
+# Resolve a path to an absolute path. Parent directory must exist.
+# Absolute results always start with `/`, so they cannot be option-injected
+# into `cp` / hash tools even without a `--` separator.
+abs_path() {
+  local target="$1"
+  local dir base
+  if [[ -z "${target}" ]]; then
+    echo "abs_path: empty path" >&2
+    return 1
+  fi
+  dir="$(cd "$(dirname "${target}")" && pwd)" || return 1
+  base="$(basename "${target}")"
+  printf '%s/%s\n' "${dir}" "${base}"
+}
+
+# SHA-256 hex digest of one file (sha256sum on Linux, shasum on macOS).
+file_sha256() {
+  local file="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "${file}" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "${file}" | awk '{print $1}'
+  else
+    echo "neither sha256sum nor shasum is available" >&2
+    return 1
+  fi
+}
+
+# Write a deterministic `hash  relative/path` manifest for every regular file
+# under root. Synthetic fixture paths never contain newlines, so newline-delimited
+# find/sort is sufficient and avoids GNU-only `sort -z`.
+write_sha256_manifest() {
+  local root="$1"
+  local out="$2"
+  (
+    cd "${root}"
+    # Synthetic fixture paths never contain newlines; newline-delimited find/sort
+    # stays portable (BSD sort has no -z).
+    find . -type f | LC_ALL=C sort | while IFS= read -r rel; do
+      printf '%s  %s\n' "$(file_sha256 "${rel}")" "${rel}"
+    done
+  ) >"${out}"
+}
+
+# Byte-identical copy that refuses to overwrite an existing destination
+# (same intent as GNU `cp --update=none` / `--no-clobber`).
+# Both operands are normalized to absolute paths before invoking `cp`.
+cp_no_clobber() {
+  local src dest
+  src="$(abs_path "$1")" || return 1
+  dest="$(abs_path "$2")" || return 1
+
+  case "${src}" in
+    /*) ;;
+    *)
+      echo "cp_no_clobber: refusing non-absolute source: ${src}" >&2
+      return 1
+      ;;
+  esac
+  case "${dest}" in
+    /*) ;;
+    *)
+      echo "cp_no_clobber: refusing non-absolute destination: ${dest}" >&2
+      return 1
+      ;;
+  esac
+
+  if [[ ! -f "${src}" ]]; then
+    echo "cp_no_clobber: source is not a regular file: ${src}" >&2
+    return 1
+  fi
+  if [[ -e "${dest}" ]]; then
+    echo "cp_no_clobber: refusing to overwrite existing destination: ${dest}" >&2
+    return 1
+  fi
+
+  # Absolute paths start with `/` and cannot be mistaken for options.
+  cp "${src}" "${dest}"
+}
+
+# Copy when the destination must not already exist; used for evidence artifacts.
+cp_into() {
+  local src dest
+  src="$(abs_path "$1")" || return 1
+  dest="$(abs_path "$2")" || return 1
+  case "${src}" in /*) ;; *) echo "cp_into: non-absolute source: ${src}" >&2; return 1 ;; esac
+  case "${dest}" in /*) ;; *) echo "cp_into: non-absolute dest: ${dest}" >&2; return 1 ;; esac
+  cp "${src}" "${dest}"
+}
+
 mkdir -p "$IMAGE_DIR" "$MEDIA_MOUNT" "$EVIDENCE_DIR"
 
 echo "== Gate B synthetic smoke =="
 echo "commit=${COMMIT}"
 echo "work=${WORK}"
+echo "host=$(uname -s) $(uname -r)"
 
 # --- 1. Synthetic media tree (Octatrack-like layout, synthetic WAV only) ---
 mkdir -p "${MEDIA_MOUNT}/SET/AUDIO" "${MEDIA_MOUNT}/SET/PROJECT" "${MEDIA_MOUNT}/SET/UNRELATED"
@@ -45,7 +143,7 @@ printf 'project placeholder\n' > "${MEDIA_MOUNT}/SET/PROJECT/.keep"
 # --- 2. Independently restorable image ---
 IMAGE_TAR="${IMAGE_DIR}/gate-b-synthetic-media.tar.gz"
 tar -C "$MEDIA_MOUNT" -czf "$IMAGE_TAR" .
-IMAGE_SHA="$(sha256sum "$IMAGE_TAR" | awk '{print $1}')"
+IMAGE_SHA="$(file_sha256 "$IMAGE_TAR")"
 echo "${IMAGE_SHA}  gate-b-synthetic-media.tar.gz" > "${IMAGE_DIR}/SHA256SUMS"
 RESTORE_CHECK="${WORK}/restore-check"
 mkdir -p "$RESTORE_CHECK"
@@ -53,10 +151,7 @@ tar -C "$RESTORE_CHECK" -xzf "$IMAGE_TAR"
 diff -ru "$MEDIA_MOUNT" "$RESTORE_CHECK" >/dev/null
 
 # --- 3. Baseline checksums (relative paths only) ---
-(
-  cd "$MEDIA_MOUNT"
-  find . -type f -print0 | sort -z | xargs -0 sha256sum
-) > "$BASELINE_MANIFEST"
+write_sha256_manifest "$MEDIA_MOUNT" "$BASELINE_MANIFEST"
 SOURCE_BASELINE="$(awk '/SET\/AUDIO\/gate_b_synth\.wav/{print $1}' "$BASELINE_MANIFEST")"
 UNRELATED_BASELINE="$(awk '/SET\/UNRELATED\/keep\.txt/{print $1}' "$BASELINE_MANIFEST")"
 
@@ -69,7 +164,14 @@ CRATE_STATUS=$?
 set -e
 
 pass_named() {
-  rg -q "^test tests::${1} \\.\\.\\. ok$" "$CRATE_LOG"
+  # Prefer ripgrep when present; fall back to POSIX grep -E for macOS hosts
+  # without rg installed.
+  local pattern="^test tests::${1} \\.\\.\\. ok$"
+  if command -v rg >/dev/null 2>&1; then
+    rg -q "${pattern}" "$CRATE_LOG"
+  else
+    grep -E -q "${pattern}" "$CRATE_LOG"
+  fi
 }
 
 CRIT_TAMPER=0
@@ -92,13 +194,11 @@ pass_named recovery_quarantine_preserves_a_destination_replaced_after_verificati
 # Executor crash/approval/recovery semantics are proven by the crate suite above.
 # This step proves the restorable synthetic image remains consistent under an
 # additive destination write with source/unrelated invariance.
-cp --update=none "${MEDIA_MOUNT}/SET/AUDIO/gate_b_synth.wav" \
+cp_no_clobber \
+  "${MEDIA_MOUNT}/SET/AUDIO/gate_b_synth.wav" \
   "${MEDIA_MOUNT}/SET/PROJECT/gate_b_synth_copy.wav"
 
-(
-  cd "$MEDIA_MOUNT"
-  find . -type f -print0 | sort -z | xargs -0 sha256sum
-) > "$POST_MANIFEST"
+write_sha256_manifest "$MEDIA_MOUNT" "$POST_MANIFEST"
 
 SOURCE_AFTER="$(awk '/SET\/AUDIO\/gate_b_synth\.wav/{print $1}' "$POST_MANIFEST")"
 UNRELATED_AFTER="$(awk '/SET\/UNRELATED\/keep\.txt/{print $1}' "$POST_MANIFEST")"
@@ -119,10 +219,7 @@ RESTORE_OK=0
 diff -ru "$RESTORE_CHECK" "$RESTORE_MEDIA" >/dev/null && RESTORE_OK=1
 # Confirm restored tree matches baseline (no destination copy).
 RESTORE_MANIFEST="${EVIDENCE_DIR}/restored-sha256.txt"
-(
-  cd "$RESTORE_MEDIA"
-  find . -type f -print0 | sort -z | xargs -0 sha256sum
-) > "$RESTORE_MANIFEST"
+write_sha256_manifest "$RESTORE_MEDIA" "$RESTORE_MANIFEST"
 cmp -s "$BASELINE_MANIFEST" "$RESTORE_MANIFEST" && RESTORE_OK=1 || RESTORE_OK=0
 
 OVERALL=FAIL
@@ -186,9 +283,9 @@ echo "OVERALL=${OVERALL}"
 echo "IMAGE_SHA=${IMAGE_SHA}"
 
 if [[ -d /opt/cursor/artifacts ]]; then
-  cp "$REPORT" "/opt/cursor/artifacts/GATE_B_SMOKE_REPORT-${SHORT_COMMIT}.md"
-  cp "$BASELINE_MANIFEST" "/opt/cursor/artifacts/GATE_B_baseline-${SHORT_COMMIT}.txt"
-  cp "${IMAGE_DIR}/SHA256SUMS" "/opt/cursor/artifacts/GATE_B_image-${SHORT_COMMIT}.sha256"
+  cp_into "$REPORT" "/opt/cursor/artifacts/GATE_B_SMOKE_REPORT-${SHORT_COMMIT}.md"
+  cp_into "$BASELINE_MANIFEST" "/opt/cursor/artifacts/GATE_B_baseline-${SHORT_COMMIT}.txt"
+  cp_into "${IMAGE_DIR}/SHA256SUMS" "/opt/cursor/artifacts/GATE_B_image-${SHORT_COMMIT}.sha256"
 fi
 
 [[ "$OVERALL" == "PASS" ]]
