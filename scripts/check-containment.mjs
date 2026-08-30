@@ -28,7 +28,11 @@ function walkFiles(directory, predicate, out = []) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const fullPath = path.join(directory, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name === "node_modules" || entry.name === "dist" || entry.name === "target") {
+      if (
+        entry.name === "node_modules" ||
+        entry.name === "dist" ||
+        entry.name === "target"
+      ) {
         continue;
       }
       walkFiles(fullPath, predicate, out);
@@ -37,6 +41,12 @@ function walkFiles(directory, predicate, out = []) {
     if (predicate(fullPath, entry.name)) out.push(fullPath);
   }
   return out;
+}
+
+function stripYamlInlineComment(line) {
+  // Workflow `uses:` values are unquoted; strip trailing `# ...` comments.
+  const hash = line.indexOf("#");
+  return hash === -1 ? line : line.slice(0, hash);
 }
 
 // --- CSP / updater / createUpdaterArtifacts ---
@@ -61,20 +71,41 @@ const cargoToml = readFileSync(
   "utf8",
 );
 const packageJson = readFileSync(path.join(repositoryRoot, "package.json"), "utf8");
-const lockSnippet = readFileSync(path.join(repositoryRoot, "src-tauri", "Cargo.lock"), "utf8");
+const lockSnippet = readFileSync(
+  path.join(repositoryRoot, "src-tauri", "Cargo.lock"),
+  "utf8",
+);
 const forbiddenUpdaterMarkers = [
   /tauri-plugin-updater/,
   /@tauri-apps\/plugin-updater/,
   /plugins\.updater/,
   /"updater"\s*:\s*\{/,
   /createUpdaterArtifacts\s*:\s*true/,
+  /updater:default/,
+  /"updater:/,
 ];
-for (const [label, text] of [
+
+const updaterScanTargets = [
   ["src-tauri/Cargo.toml", cargoToml],
   ["package.json", packageJson],
   ["src-tauri/Cargo.lock", lockSnippet],
   ["src-tauri/tauri.conf.json", JSON.stringify(tauriConf)],
-]) {
+];
+const capabilityFiles = walkFiles(
+  path.join(repositoryRoot, "src-tauri"),
+  (full, name) =>
+    name.endsWith(".json") &&
+    (full.includes(`${path.sep}capabilities${path.sep}`) ||
+      name === "capabilities.json"),
+);
+for (const capabilityPath of capabilityFiles) {
+  updaterScanTargets.push([
+    path.relative(repositoryRoot, capabilityPath).split(path.sep).join("/"),
+    readFileSync(capabilityPath, "utf8"),
+  ]);
+}
+
+for (const [label, text] of updaterScanTargets) {
   for (const marker of forbiddenUpdaterMarkers) {
     if (marker.test(text)) {
       fail(`${label} must not reintroduce updater (${marker})`);
@@ -84,24 +115,29 @@ for (const [label, text] of [
 
 // --- GitHub Actions mutable tags ---
 const workflowDir = path.join(repositoryRoot, ".github", "workflows");
-const workflowFiles = walkFiles(workflowDir, (_full, name) => /\.ya?ml$/i.test(name));
-const shaPinnedUses =
-  /^\s*(?:-\s*)?uses:\s+[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+@[0-9a-f]{40}\b/i;
+const workflowFiles = walkFiles(workflowDir, (_full, name) =>
+  /\.ya?ml$/i.test(name),
+);
 const usesLine = /^\s*(?:-\s*)?uses:\s+/i;
-const mutableUses =
-  /^\s*(?:-\s*)?uses:\s+[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+@(?:v?\d[\w.-]*|main|master|latest)\b/i;
 for (const workflowPath of workflowFiles) {
   const relative = path.relative(repositoryRoot, workflowPath);
   const lines = readFileSync(workflowPath, "utf8").split(/\r?\n/);
   lines.forEach((line, index) => {
     if (!usesLine.test(line)) return;
-    if (line.includes("./")) return; // local composite actions
-    if (mutableUses.test(line) || !shaPinnedUses.test(line)) {
-      if (!/@[0-9a-f]{40}\b/i.test(line)) {
-        fail(
-          `${relative}:${index + 1} Actions use must pin a full 40-char commit SHA (no mutable tags)`,
-        );
-      }
+    const withoutComment = stripYamlInlineComment(line).trimEnd();
+    const match = withoutComment.match(/^\s*(?:-\s*)?uses:\s+(\S+)\s*$/i);
+    if (!match) {
+      fail(`${relative}:${index + 1} Actions uses line could not be parsed`);
+      return;
+    }
+    const actionRef = match[1];
+    if (actionRef.startsWith("./")) return; // local composite actions
+    const at = actionRef.lastIndexOf("@");
+    const pin = at === -1 ? "" : actionRef.slice(at + 1);
+    if (!/^[0-9a-f]{40}$/i.test(pin)) {
+      fail(
+        `${relative}:${index + 1} Actions use must pin a full 40-char commit SHA (no mutable tags)`,
+      );
     }
   });
 }
@@ -194,7 +230,10 @@ const expectedLegacyCommands = [
   "project_manager::delete_set",
 ];
 
-const libRs = readFileSync(path.join(repositoryRoot, "src-tauri", "src", "lib.rs"), "utf8");
+const libRs = readFileSync(
+  path.join(repositoryRoot, "src-tauri", "src", "lib.rs"),
+  "utf8",
+);
 const handlerMatch = libRs.match(/generate_handler!\[([\s\S]*?)\]/);
 if (!handlerMatch) {
   fail("src-tauri/src/lib.rs must contain tauri::generate_handler![...]");
@@ -212,7 +251,8 @@ if (!handlerMatch) {
     const removed = expectedSorted.filter((name) => !actualSorted.includes(name));
     if (added.length > 0) {
       fail(
-        "safe-build legacy generate_handler grew unexpectedly: " + added.join(", "),
+        "safe-build legacy generate_handler grew unexpectedly: " +
+          added.join(", "),
       );
     }
     if (removed.length > 0) {
@@ -252,28 +292,39 @@ const allowedLegacyInvokeFiles = new Set([
 ]);
 
 const srcRoot = path.join(repositoryRoot, "src");
-const invokeImport =
-  /from\s+['"]@tauri-apps\/api(?:\/core)?['"]|require\(\s*['"]@tauri-apps\/api(?:\/core)?['"]\s*\)/;
+const tauriApiImport =
+  /(?:from|import\()\s*['"]@tauri-apps\/api(?:\/[^'"]*)?['"]|require\(\s*['"]@tauri-apps\/api(?:\/[^'"]*)?['"]\s*\)/;
+const invokeCall = /\binvoke\s*\(/;
 const invokeCallSites = [];
-for (const filePath of walkFiles(srcRoot, (_full, name) => /\.(tsx?|jsx?)$/.test(name))) {
-  const relative = path.relative(repositoryRoot, filePath).split(path.sep).join("/");
-  if (relative === "src/api/client.ts" || relative.startsWith("src/api/")) {
-    // Central IPC client and api modules may import invoke.
+for (const filePath of walkFiles(srcRoot, (_full, name) =>
+  /\.(tsx?|jsx?)$/.test(name),
+)) {
+  const relative = path
+    .relative(repositoryRoot, filePath)
+    .split(path.sep)
+    .join("/");
+  if (relative.startsWith("src/api/")) {
+    // Central IPC client and api modules may import/call invoke.
     continue;
   }
+  if (allowedLegacyInvokeFiles.has(relative)) continue;
+
   const contents = readFileSync(filePath, "utf8");
-  if (!invokeImport.test(contents)) continue;
-  // Only flag files that both import the core API and mention invoke(
-  // (event/window/app imports without invoke are out of this rule).
-  if (!/\binvoke\b/.test(contents)) continue;
-  if (!allowedLegacyInvokeFiles.has(relative)) {
+  const loadsTauriApi = tauriApiImport.test(contents);
+  const callsInvoke = invokeCall.test(contents);
+  // Catch static imports, dynamic import(), and re-exported invoke() call sites.
+  if (loadsTauriApi && /\binvoke\b/.test(contents)) {
+    invokeCallSites.push(relative);
+    continue;
+  }
+  if (callsInvoke) {
     invokeCallSites.push(relative);
   }
 }
 if (invokeCallSites.length > 0) {
   fail(
     "new direct invoke() outside src/api is forbidden; found in: " +
-      invokeCallSites.sort().join(", "),
+      [...new Set(invokeCallSites)].sort().join(", "),
   );
 }
 
