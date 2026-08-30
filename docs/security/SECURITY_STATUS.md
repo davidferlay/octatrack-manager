@@ -78,8 +78,8 @@ Still open / deferred:
 1. **High (ops / Gate B)** — incomplete journals refuse new grants/applies until
    an explicit recovery path exists.
 2. **High (legacy)** — absolute-path command surface remains fully wired.
-3. **Open** — Tauri 2.10.2 upgrade and frontend advisory deadlines in
-   `DEPENDENCY_AUDIT.md`.
+3. **Open** — React Router advisories remain deferred to a dedicated PR.
+   Frontend Vitest/Vite/Rollup/PostCSS advisories are remediated in DEP-2.
 
 ## Remaining high-priority risks
 
@@ -87,7 +87,7 @@ Still open / deferred:
    once the desktop app is running. Do not point it at original media.
 2. Without a reviewed recovery-execute flow, a crashed M4 apply can leave the
    root write-blocked until manual intervention.
-3. Tauri crate upgrade and frontend toolchain advisory remediation remain due.
+3. React Router advisory remediation remains deferred to a dedicated PR.
 
 ## Verification performed in this recheck
 
