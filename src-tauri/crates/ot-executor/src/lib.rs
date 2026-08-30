@@ -3,9 +3,7 @@
 use fs2::FileExt;
 use ot_backup::{recovery_binding_for_plan, BackupError, BackupStore, SnapshotId, VerifiedBackup};
 use ot_domain::{ContentHash, RootId, RootRelativePath};
-use ot_plan::{
-    derive_additive_copy_plan_id, ChangePlan, PlanId, PlanSeed,
-};
+use ot_plan::{derive_additive_copy_plan_id, ChangePlan, PlanId, PlanSeed};
 use rustix::fs::{self as descriptor_fs, AtFlags, Mode, OFlags, RenameFlags};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -2032,7 +2030,8 @@ fn validate_recovery_authorization(
 fn verify_recovery_authorization_plan_binding(
     authorization: &RecoveryAuthorization,
 ) -> Result<(), ExecutorError> {
-    let root_id = RootId::new(authorization.root_id.clone()).map_err(|_| ExecutorError::InvalidJournal)?;
+    let root_id =
+        RootId::new(authorization.root_id.clone()).map_err(|_| ExecutorError::InvalidJournal)?;
     let plan_seed =
         PlanSeed::parse_hex(&authorization.plan_seed).map_err(|_| ExecutorError::InvalidJournal)?;
     let source = RootRelativePath::parse(&authorization.source_relative_path)
