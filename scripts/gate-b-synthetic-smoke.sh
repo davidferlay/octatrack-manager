@@ -92,7 +92,7 @@ pass_named recovery_quarantine_preserves_a_destination_replaced_after_verificati
 # Executor crash/approval/recovery semantics are proven by the crate suite above.
 # This step proves the restorable synthetic image remains consistent under an
 # additive destination write with source/unrelated invariance.
-cp -n "${MEDIA_MOUNT}/SET/AUDIO/gate_b_synth.wav" \
+cp --update=none "${MEDIA_MOUNT}/SET/AUDIO/gate_b_synth.wav" \
   "${MEDIA_MOUNT}/SET/PROJECT/gate_b_synth_copy.wav"
 
 (
