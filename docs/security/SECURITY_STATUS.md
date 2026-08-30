@@ -87,7 +87,8 @@ Still open / deferred:
    once the desktop app is running. Do not point it at original media.
 2. Without a reviewed recovery-execute flow, a crashed M4 apply can leave the
    root write-blocked until manual intervention.
-3. Tauri crate upgrade and frontend toolchain advisory remediation remain due.
+3. Frontend toolchain advisory remediation (Vitest ≥4.1.0 / Vite ≥7.3.5 line)
+   remains due by 2026-09-15.
 
 ## Verification performed in this recheck
 
