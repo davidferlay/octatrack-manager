@@ -27,6 +27,7 @@ function fakeApi(): RootApi {
       writeGrantExpiresInSeconds: 600,
       capabilities: { ...session.capabilities, write: true },
     }),
+    disableWrite: vi.fn().mockResolvedValue(session),
     closeRoot: vi.fn().mockResolvedValue(undefined),
     listLibrary: vi.fn().mockResolvedValue({
       sets: [{
@@ -203,11 +204,15 @@ describe("RootRegistryPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Choose root..." }));
     expect(await screen.findByText("PROJECT_A")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Enable edit mode" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
 
     expect(await screen.findAllByText("EDIT ENABLED")).toHaveLength(2);
     expect(changeClient.recoveryStatus).toHaveBeenCalledTimes(2);
     expect(api.enableWrite).toHaveBeenCalledWith("root-opaque");
+
+    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    expect(api.disableWrite).toHaveBeenCalledWith("root-opaque");
+    expect(await screen.findAllByText("READ ONLY")).toHaveLength(2);
   });
 
   it("refreshes the catalog and recovery gate after an approved rollback", async () => {

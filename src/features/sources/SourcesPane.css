@@ -26,6 +26,47 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+  align-items: center;
+}
+
+.mo-sources-pane__mode-toggle {
+  display: inline-flex;
+  border: 1px solid var(--mo-border);
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--mo-surface-2);
+}
+
+.mo-sources-pane__mode-btn {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 0.35rem 0.7rem;
+  background: transparent;
+  color: var(--mo-text-muted);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.mo-sources-pane__mode-btn + .mo-sources-pane__mode-btn {
+  border-left: 1px solid var(--mo-border);
+}
+
+.mo-sources-pane__mode-btn.is-active {
+  background: var(--mo-surface-inset);
+  color: var(--mo-text);
+}
+
+.mo-sources-pane__mode-btn:disabled:not(.is-active) {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.mo-sources-pane__mode-btn.is-active:disabled {
+  cursor: default;
 }
 
 .mo-sources-pane__error {

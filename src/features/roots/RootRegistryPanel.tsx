@@ -144,6 +144,20 @@ export function RootRegistryPanel({
     }
   }
 
+  async function disableWrite() {
+    if (session === null) return;
+    if (!(session.mode === "write_enabled" && session.capabilities.write)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setSession(await api.disableWrite(session.rootId));
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function refreshAfterWrite(failureMessage: string) {
     if (session === null) return;
     try {
@@ -191,6 +205,7 @@ export function RootRegistryPanel({
           onRegister={registerRoot}
           onClose={closeRoot}
           onEnableWrite={enableWrite}
+          onDisableWrite={disableWrite}
           writeBlocked={recovery === null || recovery.recoveryRequired}
         />
       }
