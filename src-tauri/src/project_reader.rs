@@ -6565,37 +6565,54 @@ pub fn save_memory_settings_data(
 /// the source bank's sample slots. Returns validation result without writing anything.
 pub fn validate_bank_sample_slots(
     source_project: &str,
-    source_bank_index: u8,
+    source_bank_indices: &[u8],
     dest_project: &str,
     sample_scope: &str,
     slot_placement: &str,
 ) -> Result<SlotValidationResult, String> {
-    if source_bank_index > 15 {
-        return Err("Source bank index must be between 0 and 15".to_string());
+    if source_bank_indices.is_empty() {
+        return Err("At least one source bank must be selected".to_string());
+    }
+    if let Some(bad) = source_bank_indices.iter().find(|&&i| i > 15) {
+        return Err(format!(
+            "Source bank index must be between 0 and 15, got {}",
+            bad
+        ));
     }
 
     let source_path = Path::new(source_project);
     let dest_path = Path::new(dest_project);
 
-    // Read source bank
-    let source_bank_num = source_bank_index + 1;
-    let source_work_file = format!("bank{:02}.work", source_bank_num);
-    let source_strd_file = format!("bank{:02}.strd", source_bank_num);
-    let source_bank_path = if source_path.join(&source_work_file).exists() {
-        source_path.join(&source_work_file)
-    } else if source_path.join(&source_strd_file).exists() {
-        source_path.join(&source_strd_file)
-    } else {
-        return Err(format!("Source bank {} not found", source_bank_index));
-    };
+    // Resolve every source bank up front so a missing one is reported whatever
+    // the sample scope is.
+    let mut source_bank_paths = Vec::with_capacity(source_bank_indices.len());
+    for &source_bank_index in source_bank_indices {
+        let source_bank_num = source_bank_index + 1;
+        let source_work_file = format!("bank{:02}.work", source_bank_num);
+        let source_strd_file = format!("bank{:02}.strd", source_bank_num);
+        if source_path.join(&source_work_file).exists() {
+            source_bank_paths.push(source_path.join(&source_work_file));
+        } else if source_path.join(&source_strd_file).exists() {
+            source_bank_paths.push(source_path.join(&source_strd_file));
+        } else {
+            return Err(format!("Source bank {} not found", source_bank_index));
+        }
+    }
 
-    let bank = BankFile::from_data_file(&source_bank_path)
-        .map_err(|e| format!("Failed to read source bank: {:?}", e))?;
-
-    // Collect source slots
+    // Collect source slots. Several source banks land in the destination in one
+    // run, so what has to fit is the union of what they reference - a sample two
+    // banks share is copied once.
     let (source_static, source_flex) = match sample_scope {
         "referenced_only" => {
-            let (referenced_static, referenced_flex) = collect_referenced_slots(&bank);
+            let mut referenced_static = std::collections::HashSet::new();
+            let mut referenced_flex = std::collections::HashSet::new();
+            for source_bank_path in &source_bank_paths {
+                let bank = BankFile::from_data_file(source_bank_path)
+                    .map_err(|e| format!("Failed to read source bank: {:?}", e))?;
+                let (bank_static, bank_flex) = collect_referenced_slots(&bank);
+                referenced_static.extend(bank_static);
+                referenced_flex.extend(bank_flex);
+            }
             // Filter: only keep slots that actually have audio files in project.work
             let (configured_static, configured_flex) = collect_all_configured_slots(source_path)?;
             (
@@ -9726,6 +9743,104 @@ mod tests {
                 );
             }
         }
+
+        /// Selecting several source banks issues one `copy_bank` per pair. Each
+        /// call re-reads the source bank off disk, so when the destination range
+        /// overlaps the source range inside one project the call order decides
+        /// whether a bank is read before or after it is overwritten. The UI orders
+        /// the pairs (`src/utils/multiSelect.ts: orderCopyPairs`); these pin what
+        /// that ordering has to produce, and what going the other way costs.
+        mod overlapping_pairwise_copies {
+            use super::*;
+
+            fn project_with_marked_banks() -> TestProject {
+                let project = TestProject::new();
+                for bank_index in 0..16u8 {
+                    let path =
+                        Path::new(&project.path).join(format!("bank{:02}.work", bank_index + 1));
+                    let mut bank = BankFile::from_data_file(&path).unwrap();
+                    // Distinct, readable marker per bank: bank N carries N+1.
+                    bank.parts_edited_bitmask = bank_index + 1;
+                    bank.checksum = bank.calculate_checksum().unwrap();
+                    bank.to_data_file(&path).unwrap();
+                }
+                project
+            }
+
+            fn mark(project: &TestProject, bank_index: u8) -> u8 {
+                source_bank_data(&project.path, bank_index).parts_edited_bitmask
+            }
+
+            fn run(project: &TestProject, pairs: &[(u8, u8)]) {
+                for &(src, dst) in pairs {
+                    copy_bank(
+                        &project.path,
+                        src,
+                        &project.path,
+                        &[dst],
+                        false,
+                        "",
+                        "",
+                        "keep_position",
+                        false,
+                        &[],
+                    )
+                    .expect("copy should succeed");
+                }
+            }
+
+            #[test]
+            fn shifting_a_range_up_needs_the_highest_pair_first() {
+                let project = project_with_marked_banks();
+                // A,B,C -> B,C,D, ordered high to low.
+                run(&project, &[(2, 3), (1, 2), (0, 1)]);
+                assert_eq!(mark(&project, 1), 1, "bank B must hold the original A");
+                assert_eq!(mark(&project, 2), 2, "bank C must hold the original B");
+                assert_eq!(mark(&project, 3), 3, "bank D must hold the original C");
+            }
+
+            #[test]
+            fn shifting_a_range_down_needs_the_lowest_pair_first() {
+                let project = project_with_marked_banks();
+                // B,C,D -> A,B,C, ordered low to high.
+                run(&project, &[(1, 0), (2, 1), (3, 2)]);
+                assert_eq!(mark(&project, 0), 2, "bank A must hold the original B");
+                assert_eq!(mark(&project, 1), 3, "bank B must hold the original C");
+                assert_eq!(mark(&project, 2), 4, "bank C must hold the original D");
+            }
+
+            #[test]
+            fn the_wrong_order_propagates_an_overwritten_bank() {
+                // Why the ordering exists: ascending on a shift-up smears the first
+                // source across the whole destination range.
+                let project = project_with_marked_banks();
+                run(&project, &[(0, 1), (1, 2), (2, 3)]);
+                assert_eq!(mark(&project, 1), 1);
+                assert_eq!(mark(&project, 2), 1, "bank B was re-read after overwrite");
+                assert_eq!(mark(&project, 3), 1, "and again into bank D");
+            }
+
+            #[test]
+            fn discrete_sources_landing_on_a_contiguous_run_are_unaffected() {
+                let project = project_with_marked_banks();
+                run(&project, &[(1, 4), (5, 5), (9, 6)]);
+                assert_eq!(mark(&project, 4), 2);
+                assert_eq!(mark(&project, 5), 6, "a self-copy leaves the bank alone");
+                assert_eq!(mark(&project, 6), 10);
+            }
+
+            #[test]
+            fn a_disjoint_destination_range_is_order_independent() {
+                let ascending = project_with_marked_banks();
+                run(&ascending, &[(0, 8), (1, 9)]);
+                let descending = project_with_marked_banks();
+                run(&descending, &[(1, 9), (0, 8)]);
+                assert_eq!(mark(&ascending, 8), mark(&descending, 8));
+                assert_eq!(mark(&ascending, 9), mark(&descending, 9));
+                assert_eq!(mark(&ascending, 8), 1);
+                assert_eq!(mark(&ascending, 9), 2);
+            }
+        }
     }
 
     // ==================== COPY BANK SAMPLE/ATTRIBUTE TESTS ====================
@@ -11231,6 +11346,96 @@ mod tests {
 
     mod copy_patterns_tests {
         use super::*;
+
+        /// A multi-pattern source selection maps source[i] onto dest[i] in a single
+        /// call, and the whole source bank is read before anything is written - so
+        /// unlike the bank tool, an overlapping range needs no ordering from the UI.
+        /// These pin that, because the pre-existing N-to-N tests only assert `is_ok`.
+        mod overlapping_pattern_ranges {
+            use super::*;
+
+            fn marked_patterns() -> TestProject {
+                TestProject::with_modified_bank(0, |bank| {
+                    for (i, pattern) in bank.patterns.0.iter_mut().enumerate() {
+                        // Distinct, readable marker per pattern: pattern N carries N+1.
+                        pattern.audio_track_trigs.0[0].trig_masks.trigger[0] = (i + 1) as u8;
+                    }
+                })
+            }
+
+            fn mark(project: &TestProject, pattern: usize) -> u8 {
+                source_bank_data(&project.path, 0).patterns.0[pattern]
+                    .audio_track_trigs
+                    .0[0]
+                    .trig_masks
+                    .trigger[0]
+            }
+
+            fn run(project: &TestProject, sources: Vec<u8>, dests: Vec<u8>) {
+                copy_patterns(
+                    &project.path,
+                    0,
+                    sources,
+                    &project.path,
+                    0,
+                    dests,
+                    "keep_original",
+                    None,
+                    "all",
+                    None,
+                    "audio",
+                )
+                .expect("copy should succeed");
+            }
+
+            #[test]
+            fn a_range_shifted_up_inside_one_bank_keeps_every_source() {
+                let project = marked_patterns();
+                run(&project, vec![0, 1, 2], vec![1, 2, 3]);
+                assert_eq!(
+                    [mark(&project, 1), mark(&project, 2), mark(&project, 3)],
+                    [1, 2, 3]
+                );
+                assert_eq!(mark(&project, 0), 1, "the untouched source stays put");
+            }
+
+            #[test]
+            fn a_range_shifted_down_inside_one_bank_keeps_every_source() {
+                let project = marked_patterns();
+                run(&project, vec![1, 2, 3], vec![0, 1, 2]);
+                assert_eq!(
+                    [mark(&project, 0), mark(&project, 1), mark(&project, 2)],
+                    [2, 3, 4]
+                );
+            }
+
+            #[test]
+            fn discrete_sources_land_on_a_contiguous_run_in_order() {
+                let project = marked_patterns();
+                run(&project, vec![0, 5, 9], vec![4, 5, 6]);
+                assert_eq!(
+                    [mark(&project, 4), mark(&project, 5), mark(&project, 6)],
+                    [1, 6, 10]
+                );
+            }
+
+            #[test]
+            fn a_reversed_pairing_swaps_rather_than_smears() {
+                let project = marked_patterns();
+                run(&project, vec![0, 1], vec![1, 0]);
+                assert_eq!([mark(&project, 0), mark(&project, 1)], [2, 1]);
+            }
+
+            #[test]
+            fn one_source_still_fans_out_to_every_destination() {
+                let project = marked_patterns();
+                run(&project, vec![7], vec![0, 1, 2]);
+                assert_eq!(
+                    [mark(&project, 0), mark(&project, 1), mark(&project, 2)],
+                    [8, 8, 8]
+                );
+            }
+        }
 
         #[test]
         fn test_copy_single_pattern() {
@@ -21744,9 +21949,14 @@ mod tests {
     fn test_validate_empty_banks() {
         let src = TestProject::new();
         let dst = TestProject::new();
-        let result =
-            validate_bank_sample_slots(&src.path, 0, &dst.path, "referenced_only", "keep_position")
-                .unwrap();
+        let result = validate_bank_sample_slots(
+            &src.path,
+            &[0],
+            &dst.path,
+            "referenced_only",
+            "keep_position",
+        )
+        .unwrap();
         assert!(result.is_valid);
         assert_eq!(result.static_needed, 0);
         assert_eq!(result.flex_needed, 0);
@@ -21758,7 +21968,7 @@ mod tests {
         let dst = TestProject::new();
         let err = validate_bank_sample_slots(
             &src.path,
-            16,
+            &[16],
             &dst.path,
             "referenced_only",
             "keep_position",
@@ -21768,13 +21978,203 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_rejects_an_out_of_range_bank_among_valid_ones() {
+        let src = TestProject::new();
+        let dst = TestProject::new();
+        let err = validate_bank_sample_slots(
+            &src.path,
+            &[0, 1, 99],
+            &dst.path,
+            "referenced_only",
+            "keep_position",
+        )
+        .unwrap_err();
+        assert!(err.contains("0 and 15"), "got: {}", err);
+    }
+
+    #[test]
+    fn test_validate_requires_at_least_one_source_bank() {
+        let src = TestProject::new();
+        let dst = TestProject::new();
+        let err = validate_bank_sample_slots(
+            &src.path,
+            &[],
+            &dst.path,
+            "referenced_only",
+            "keep_position",
+        )
+        .unwrap_err();
+        assert!(err.to_lowercase().contains("at least one"), "got: {}", err);
+    }
+
+    #[test]
     fn test_validate_invalid_scope() {
         let src = TestProject::new();
         let dst = TestProject::new();
-        let err =
-            validate_bank_sample_slots(&src.path, 0, &dst.path, "invalid_scope", "keep_position")
-                .unwrap_err();
+        let err = validate_bank_sample_slots(
+            &src.path,
+            &[0],
+            &dst.path,
+            "invalid_scope",
+            "keep_position",
+        )
+        .unwrap_err();
         assert!(err.contains("Invalid sample_scope"), "got: {}", err);
+    }
+
+    /// Selecting several source banks at once means the destination has to hold
+    /// the union of what they reference, deduplicated: a sample two banks share
+    /// is copied once, not twice.
+    mod validate_multi_source_banks {
+        use super::surgical_write_tests::{
+            create_raw_project_work_with_custom_fields, write_raw_project_work,
+        };
+        use super::*;
+
+        /// A project configuring `samples`, with each `(bank, static_slot_id)` in
+        /// `refs` wiring track 1 of that bank's part 1 to a static slot.
+        fn project_with(samples: &[SampleFixture], refs: &[(u8, u8)]) -> TempDir {
+            let temp = TempDir::new().unwrap();
+            let dir = temp.path();
+
+            for bank_num in 1..=16u8 {
+                let mut bank = BankFile::default();
+                for &(bank_index, slot_id) in refs {
+                    if bank_index + 1 == bank_num {
+                        bank.parts.unsaved.0[0].audio_track_machine_types[0] = 0; // Static
+                        bank.parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id =
+                            slot_id;
+                    }
+                }
+                bank.checksum = bank.calculate_checksum().unwrap();
+                bank.to_data_file(&dir.join(format!("bank{:02}.work", bank_num)))
+                    .unwrap();
+            }
+            MarkersFile::default()
+                .to_data_file(&dir.join("markers.work"))
+                .unwrap();
+            write_raw_project_work(dir, &create_raw_project_work_with_custom_fields(samples));
+            for (_, _, path, _, _, _) in samples {
+                if !path.is_empty() {
+                    fs::write(dir.join(path), b"fake audio").unwrap();
+                }
+            }
+            temp
+        }
+
+        fn needed(src: &Path, banks: &[u8], dst: &Path) -> (u32, u32) {
+            let r = validate_bank_sample_slots(
+                &src.to_string_lossy(),
+                banks,
+                &dst.to_string_lossy(),
+                "referenced_only",
+                "keep_position",
+            )
+            .expect("validation should succeed");
+            assert!(r.is_valid, "should be valid: {:?}", r.error_message);
+            (r.static_needed, r.flex_needed)
+        }
+
+        /// Slots are kept clear of 1-8: a default bank has every track on a
+        /// Static machine pointing at its own index, so ids 0-7 are referenced by
+        /// every bank whether the test wires them or not.
+        const A: SampleFixture<'static> = ("STATIC", 10, "a.wav", None, None, None);
+        const B: SampleFixture<'static> = ("STATIC", 20, "b.wav", None, None, None);
+        const A_ID: u8 = 9;
+        const B_ID: u8 = 19;
+
+        #[test]
+        fn one_bank_counts_only_its_own_reference() {
+            let src = project_with(&[A, B], &[(0, A_ID), (1, B_ID)]);
+            let dst = TestProject::new();
+            assert_eq!(needed(src.path(), &[0], Path::new(&dst.path)), (1, 0));
+        }
+
+        #[test]
+        fn two_banks_referencing_different_slots_need_both() {
+            let src = project_with(&[A, B], &[(0, A_ID), (1, B_ID)]);
+            let dst = TestProject::new();
+            assert_eq!(needed(src.path(), &[0, 1], Path::new(&dst.path)), (2, 0));
+        }
+
+        #[test]
+        fn two_banks_sharing_a_slot_need_it_once() {
+            let src = project_with(&[A, B], &[(0, A_ID), (1, A_ID)]);
+            let dst = TestProject::new();
+            assert_eq!(
+                needed(src.path(), &[0, 1], Path::new(&dst.path)),
+                (1, 0),
+                "the shared slot must be counted once, not once per bank"
+            );
+        }
+
+        #[test]
+        fn bank_order_does_not_change_the_result() {
+            let src = project_with(&[A, B], &[(0, A_ID), (1, B_ID)]);
+            let dst = TestProject::new();
+            assert_eq!(
+                needed(src.path(), &[0, 1], Path::new(&dst.path)),
+                needed(src.path(), &[1, 0], Path::new(&dst.path))
+            );
+        }
+
+        #[test]
+        fn a_repeated_bank_is_not_counted_twice() {
+            let src = project_with(&[A], &[(0, A_ID)]);
+            let dst = TestProject::new();
+            assert_eq!(needed(src.path(), &[0, 0], Path::new(&dst.path)), (1, 0));
+        }
+
+        #[test]
+        fn all_configured_scope_ignores_which_banks_are_selected() {
+            let src = project_with(
+                &[
+                    ("STATIC", 1, "a.wav", None, None, None),
+                    ("FLEX", 3, "c.wav", None, None, None),
+                ],
+                &[(0, 0)],
+            );
+            let dst = TestProject::new();
+            let one = validate_bank_sample_slots(
+                &src.path().to_string_lossy(),
+                &[0],
+                &dst.path,
+                "all_configured",
+                "keep_position",
+            )
+            .unwrap();
+            let many = validate_bank_sample_slots(
+                &src.path().to_string_lossy(),
+                &[0, 1, 2],
+                &dst.path,
+                "all_configured",
+                "keep_position",
+            )
+            .unwrap();
+            assert_eq!(
+                (one.static_needed, one.flex_needed),
+                (many.static_needed, many.flex_needed)
+            );
+            assert_eq!((one.static_needed, one.flex_needed), (1, 1));
+        }
+
+        #[test]
+        fn a_missing_source_bank_is_reported_under_every_scope() {
+            let src = project_with(&[A], &[(0, A_ID)]);
+            fs::remove_file(src.path().join("bank03.work")).unwrap();
+            let dst = TestProject::new();
+            for scope in ["referenced_only", "all_configured"] {
+                let err = validate_bank_sample_slots(
+                    &src.path().to_string_lossy(),
+                    &[0, 2],
+                    &dst.path,
+                    scope,
+                    "keep_position",
+                )
+                .unwrap_err();
+                assert!(err.contains("Source bank 2 not found"), "got: {}", err);
+            }
+        }
     }
 
     // ============================================================================

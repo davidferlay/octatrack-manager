@@ -115,7 +115,7 @@ async function setupTauriMocks(page: Page, overrides?: { sameSet?: boolean; with
 
           case 'load_project_banks':
             return Array(16).fill(null).map((_, i) => ({
-              name: `BANK ${String.fromCharCode(65 + i)}`,
+              name: `${args?.path === '/test/other-project' ? 'OTHER' : 'BANK'} ${String.fromCharCode(65 + i)}`,
               index: i,
               parts: [
                 { name: 'PART 1', patterns: Array(16).fill(null).map((_, j) => ({
@@ -140,7 +140,9 @@ async function setupTauriMocks(page: Page, overrides?: { sameSet?: boolean; with
             }))
 
           case 'get_existing_banks':
-            return [0, 1, 2, 3] // Banks A, B, C, D exist
+            // The other project holds fewer banks, so a source pane pointed at it
+            // is visibly reading that project and not the one on screen.
+            return args?.path === '/test/other-project' ? [0, 1] : [0, 1, 2, 3]
 
           case 'scan_devices':
             if (opts.withOtherProject) {
@@ -241,6 +243,7 @@ async function setupTauriMocks(page: Page, overrides?: { sameSet?: boolean; with
 
           case 'copy_bank':
             (window as any).__lastCopyBankArgs__ = args;
+            ((window as any).__copyBankCalls__ ||= []).push(args);
             return {
               slots_copied_static: 0,
               slots_copied_flex: 0,
@@ -250,6 +253,7 @@ async function setupTauriMocks(page: Page, overrides?: { sameSet?: boolean; with
             }
 
           case 'validate_bank_sample_slots':
+            (window as any).__lastValidateArgs__ = args
             return {
               static_needed: 3,
               flex_needed: 2,
@@ -734,7 +738,7 @@ test.describe('Tools Tab - Destination Modal Browse', () => {
     await operationSelect.selectOption('copy_sample_slots')
     await page.waitForTimeout(300)
 
-    await page.locator('.tools-project-selector-btn').click()
+    await page.locator('.tools-dest-panel .tools-project-selector-btn').click()
     await expect(page.locator('.project-selector-modal')).toBeVisible()
   })
 
@@ -778,7 +782,7 @@ test.describe('Tools Tab - Destination Modal Browse', () => {
 
     await manualSection.locator('.project-selector-card', { hasText: 'SetProject' }).click()
     await expect(page.locator('.project-selector-modal')).toHaveCount(0)
-    await expect(page.locator('.tools-project-selector-name')).toContainText('SetProject')
+    await expect(page.locator('.tools-dest-panel .tools-project-selector-name')).toContainText('SetProject')
   })
 
   test('a long Browse result wraps instead of overflowing the modal', async ({ page }) => {
@@ -819,7 +823,7 @@ test.describe('Tools Tab - Destination Modal Browse', () => {
     })
     await browseBtn(page).click()
     await expect(page.locator('.project-selector-modal')).toHaveCount(0)
-    await expect(page.locator('.tools-project-selector-name')).toContainText('MyProject')
+    await expect(page.locator('.tools-dest-panel .tools-project-selector-name')).toContainText('MyProject')
   })
 
   test('Browse reports when no project is found under the folder', async ({ page }) => {
@@ -847,7 +851,7 @@ test.describe('Tools Tab - Copy Sample Slots Not Same Set', () => {
     await page.waitForTimeout(300)
 
     // Open project selector and pick OtherProject (different set)
-    const destButton = page.locator('.tools-project-selector-btn')
+    const destButton = page.locator('.tools-dest-panel .tools-project-selector-btn')
     await destButton.click()
     await page.waitForTimeout(300)
 
@@ -884,7 +888,7 @@ test.describe('Tools Tab - Copy Sample Slots Not Same Set', () => {
     })
 
     // Wait for destination to update (modal closes, UI reflects new project)
-    await expect(page.locator('.tools-project-selector-name')).toContainText('OtherProject', { timeout: 5000 })
+    await expect(page.locator('.tools-dest-panel .tools-project-selector-name')).toContainText('OtherProject', { timeout: 5000 })
     await page.waitForTimeout(500)
   })
 
@@ -1573,7 +1577,7 @@ test.describe('Tools Tab - Destination Panel', () => {
   })
 
   test('Project selector is visible', async ({ page }) => {
-    await expect(page.locator('.tools-project-selector-btn')).toBeVisible()
+    await expect(page.locator('.tools-dest-panel .tools-project-selector-btn')).toBeVisible()
   })
 })
 
@@ -3847,6 +3851,358 @@ test.describe('Tools Tab - Copy Operation Payloads', () => {
       expect(call, `${op} should have been invoked`).toBeTruthy()
       expect(call.args.sourceProject).toBe('/test/project')
       expect(call.args.destProject).toBeTruthy()
+    }
+  })
+})
+
+// ============================================================================
+// Multi-item source selection (Copy Banks / Copy Patterns)
+// ============================================================================
+
+/** Open the Tools tab on the test project with `operation` selected. */
+async function openToolsPanel(page: Page, operation: string, opts?: Parameters<typeof setupTauriMocks>[1]) {
+  await setupTauriMocks(page, opts)
+  await page.goto('/')
+  await page.goto('/#/project?path=/test/project&name=TestProject')
+  await page.waitForTimeout(1000)
+  await page.locator('.header-tab', { hasText: 'Tools' }).click()
+  await page.waitForTimeout(500)
+  await page.locator('.tools-section .tools-select').selectOption(operation)
+  await page.waitForTimeout(300)
+}
+
+async function runExecute(page: Page) {
+  await page.evaluate(() => {
+    ;(window as any).__copyBankCalls__ = []
+    ;(window as any).__copyCalls__ = []
+  })
+  await page.locator('.tools-execute-btn').click()
+  await page.waitForTimeout(800)
+}
+
+const bankCalls = (page: Page) => page.evaluate(() => (window as any).__copyBankCalls__ ?? [])
+const copyCalls = (page: Page) => page.evaluate(() => (window as any).__copyCalls__ ?? [])
+
+/** Letters of the selected buttons in a panel, in DOM order. */
+async function selectedLabels(page: Page, panel: string, kind: string) {
+  return page.locator(`${panel} .tools-multi-btn.${kind}.selected:not(.tools-select-all)`).allTextContents()
+}
+
+test.describe('Tools Tab - Copy Banks multi-select source', () => {
+  const source = '.tools-source-panel'
+  const dest = '.tools-dest-panel'
+  const bank = (page: Page, panel: string, letter: string) =>
+    page.locator(`${panel} .tools-multi-btn.bank-btn`, { hasText: new RegExp(`^${letter}$`) })
+
+  test.beforeEach(async ({ page }) => {
+    await openToolsPanel(page, 'copy_bank')
+  })
+
+  test('starts on a single source bank', async ({ page }) => {
+    expect(await selectedLabels(page, source, 'bank-btn')).toEqual(['A'])
+  })
+
+  test('shift-click selects the range between the anchor and the click', async ({ page }) => {
+    // Bank A is selected by default, so it is already the anchor.
+    await bank(page, source, 'D').click({ modifiers: ['Shift'] })
+    expect(await selectedLabels(page, source, 'bank-btn')).toEqual(['A', 'B', 'C', 'D'])
+  })
+
+  test('shift-click backwards selects the same range', async ({ page }) => {
+    await bank(page, source, 'D').click()
+    await bank(page, source, 'B').click({ modifiers: ['Shift'] })
+    expect(await selectedLabels(page, source, 'bank-btn')).toEqual(['B', 'C', 'D'])
+  })
+
+  test('a second shift-click re-ranges from the same anchor', async ({ page }) => {
+    await bank(page, source, 'D').click({ modifiers: ['Shift'] })
+    await bank(page, source, 'B').click({ modifiers: ['Shift'] })
+    expect(await selectedLabels(page, source, 'bank-btn')).toEqual(['A', 'B'])
+  })
+
+  test('ctrl-click adds a bank without dropping the others', async ({ page }) => {
+    await bank(page, source, 'C').click({ modifiers: ['ControlOrMeta'] })
+    expect(await selectedLabels(page, source, 'bank-btn')).toEqual(['A', 'C'])
+  })
+
+  test('ctrl-click on a selected bank removes it', async ({ page }) => {
+    await bank(page, source, 'C').click({ modifiers: ['ControlOrMeta'] })
+    await bank(page, source, 'A').click({ modifiers: ['ControlOrMeta'] })
+    expect(await selectedLabels(page, source, 'bank-btn')).toEqual(['C'])
+  })
+
+  test('a plain click collapses the selection back to one bank', async ({ page }) => {
+    await bank(page, source, 'D').click({ modifiers: ['Shift'] })
+    await bank(page, source, 'C').click()
+    expect(await selectedLabels(page, source, 'bank-btn')).toEqual(['C'])
+  })
+
+  test('the destination locks to as many banks as the source', async ({ page }) => {
+    await bank(page, source, 'C').click({ modifiers: ['Shift'] })
+    expect((await selectedLabels(page, dest, 'bank-btn')).length).toBe(3)
+  })
+
+  test('clicking a destination starts the run there', async ({ page }) => {
+    await bank(page, source, 'C').click({ modifiers: ['Shift'] })
+    await bank(page, dest, 'E').click()
+    expect(await selectedLabels(page, dest, 'bank-btn')).toEqual(['E', 'F', 'G'])
+  })
+
+  test('a run near the end slides back so it fits', async ({ page }) => {
+    await bank(page, source, 'C').click({ modifiers: ['Shift'] })
+    await bank(page, dest, 'P').click()
+    expect(await selectedLabels(page, dest, 'bank-btn')).toEqual(['N', 'O', 'P'])
+  })
+
+  test('the destination All button is disabled while the run is locked', async ({ page }) => {
+    const all = page.locator(`${dest} .tools-multi-btn.bank-btn.tools-select-all`, { hasText: 'All' })
+    await expect(all).toBeEnabled()
+    await bank(page, source, 'C').click({ modifiers: ['Shift'] })
+    await expect(all).toBeDisabled()
+  })
+
+  test('one source bank still fans out to several destinations', async ({ page }) => {
+    await bank(page, dest, 'C').click()
+    await bank(page, dest, 'D').click()
+    expect((await selectedLabels(page, dest, 'bank-btn')).length).toBeGreaterThan(1)
+
+    await runExecute(page)
+    const calls = await bankCalls(page)
+    expect(calls).toHaveLength(1)
+    expect(calls[0].sourceBankIndex).toBe(0)
+    expect(calls[0].destBankIndices.length).toBeGreaterThan(1)
+  })
+
+  test('several source banks issue one call per pair', async ({ page }) => {
+    await bank(page, source, 'C').click({ modifiers: ['Shift'] })
+    await bank(page, dest, 'I').click()
+    await runExecute(page)
+
+    const calls = await bankCalls(page)
+    expect(calls).toHaveLength(3)
+    const pairs = calls.map((c: any) => [c.sourceBankIndex, c.destBankIndices])
+    expect(pairs.sort()).toEqual([[0, [8]], [1, [9]], [2, [10]]])
+  })
+
+  test('an overlapping shift up is copied from the top down', async ({ page }) => {
+    // A,B,C -> B,C,D inside one project: B and C are both a source and a
+    // destination, so the highest pair has to run first.
+    await bank(page, source, 'C').click({ modifiers: ['Shift'] })
+    await bank(page, dest, 'B').click()
+    await runExecute(page)
+
+    const calls = await bankCalls(page)
+    expect(calls.map((c: any) => c.sourceBankIndex)).toEqual([2, 1, 0])
+  })
+
+  test('an overlapping shift down is copied from the bottom up', async ({ page }) => {
+    await bank(page, source, 'B').click()
+    await bank(page, source, 'D').click({ modifiers: ['Shift'] })
+    await bank(page, dest, 'A').click()
+    await runExecute(page)
+
+    const calls = await bankCalls(page)
+    expect(calls.map((c: any) => c.sourceBankIndex)).toEqual([1, 2, 3])
+  })
+
+  test('sample validation is asked about every selected source bank', async ({ page }) => {
+    await bank(page, source, 'C').click({ modifiers: ['Shift'] })
+    await page.waitForTimeout(400)
+    const args = await page.evaluate(() => (window as any).__lastValidateArgs__)
+    expect(args.sourceBankIndices).toEqual([0, 1, 2])
+  })
+})
+
+test.describe('Tools Tab - Copy Patterns multi-select source', () => {
+  const source = '.tools-source-panel'
+  const dest = '.tools-dest-panel'
+  const pattern = (page: Page, panel: string, n: number) =>
+    page.locator(`${panel} .tools-multi-btn.pattern-btn`, { hasText: new RegExp(`^${n}$`) })
+
+  test.beforeEach(async ({ page }) => {
+    await openToolsPanel(page, 'copy_patterns')
+  })
+
+  test('shift-click selects a range of source patterns', async ({ page }) => {
+    // Pattern 1 is selected by default, so it is already the anchor.
+    await pattern(page, source, 4).click({ modifiers: ['Shift'] })
+    expect(await selectedLabels(page, source, 'pattern-btn')).toEqual(['1', '2', '3', '4'])
+  })
+
+  test('ctrl-click picks discrete source patterns', async ({ page }) => {
+    await pattern(page, source, 5).click({ modifiers: ['ControlOrMeta'] })
+    await pattern(page, source, 9).click({ modifiers: ['ControlOrMeta'] })
+    expect(await selectedLabels(page, source, 'pattern-btn')).toEqual(['1', '5', '9'])
+  })
+
+  test('the destination locks to the same number of patterns', async ({ page }) => {
+    await pattern(page, source, 3).click({ modifiers: ['Shift'] })
+    expect((await selectedLabels(page, dest, 'pattern-btn')).length).toBe(3)
+
+    await pattern(page, dest, 5).click()
+    expect(await selectedLabels(page, dest, 'pattern-btn')).toEqual(['5', '6', '7'])
+  })
+
+  test('the destination run slides back so it fits', async ({ page }) => {
+    await pattern(page, source, 3).click({ modifiers: ['Shift'] })
+    await pattern(page, dest, 16).click()
+    expect(await selectedLabels(page, dest, 'pattern-btn')).toEqual(['14', '15', '16'])
+  })
+
+  test('execute sends the source and destination patterns one for one', async ({ page }) => {
+    await pattern(page, source, 5).click({ modifiers: ['ControlOrMeta'] })
+    await pattern(page, source, 9).click({ modifiers: ['ControlOrMeta'] })
+    await pattern(page, dest, 5).click()
+    await runExecute(page)
+
+    const calls = await copyCalls(page)
+    expect(calls.length).toBeGreaterThan(0)
+    expect(calls[0].args.sourcePatternIndices).toEqual([0, 4, 8])
+    expect(calls[0].args.destPatternIndices).toEqual([4, 5, 6])
+  })
+
+  test('one source pattern still fans out to several destinations', async ({ page }) => {
+    await pattern(page, dest, 3).click()
+    await pattern(page, dest, 4).click()
+    await runExecute(page)
+
+    const calls = await copyCalls(page)
+    expect(calls[0].args.sourcePatternIndices).toEqual([0])
+    expect(calls[0].args.destPatternIndices.length).toBeGreaterThan(1)
+  })
+
+  test('All selects every source pattern and syncs the destination', async ({ page }) => {
+    await page.locator(`${source} .tools-multi-btn.pattern-btn.tools-select-all`, { hasText: 'All' }).click()
+    expect((await selectedLabels(page, source, 'pattern-btn')).length).toBe(16)
+    expect((await selectedLabels(page, dest, 'pattern-btn')).length).toBe(16)
+    await expect(pattern(page, dest, 1)).toBeDisabled()
+  })
+
+  test('execute is blocked while the counts disagree', async ({ page }) => {
+    await pattern(page, source, 3).click({ modifiers: ['Shift'] })
+    await page.locator(`${dest} .tools-multi-btn.pattern-btn.tools-select-all`, { hasText: 'None' }).click()
+    await expect(page.locator('.tools-execute-btn')).toBeDisabled()
+  })
+})
+
+test.describe('Tools Tab - source project selection', () => {
+  const sourceBtn = '.tools-source-panel .tools-project-selector-btn'
+  const destBtn = '.tools-dest-panel .tools-project-selector-btn'
+
+  /** Pick OtherProject in whichever picker is open. */
+  async function pickOtherProject(page: Page) {
+    await page.locator('.project-selector-modal .scan-button', { hasText: 'Rescan for Projects' }).click()
+    await page.waitForTimeout(500)
+    await page.evaluate(() => {
+      ;(document.querySelector('.project-selector-modal .location-header') as HTMLElement)?.click()
+    })
+    await page.waitForTimeout(300)
+    await page.evaluate(() => {
+      ;(document.querySelector('.project-selector-modal .set-header') as HTMLElement)?.click()
+    })
+    await page.waitForTimeout(300)
+    await page.evaluate(() => {
+      for (const card of document.querySelectorAll('.project-selector-card')) {
+        if (card.textContent?.includes('OtherProject')) {
+          ;(card as HTMLElement).click()
+          return
+        }
+      }
+    })
+    await page.waitForTimeout(500)
+  }
+
+  test('the source panel has its own project selector, on the current project', async ({ page }) => {
+    await openToolsPanel(page, 'copy_bank', { withOtherProject: true })
+    await expect(page.locator(sourceBtn)).toBeVisible()
+    await expect(page.locator('.tools-source-panel .tools-project-selector-name')).toContainText('TestProject')
+    await expect(page.locator('.tools-source-panel .tools-project-selector-current')).toBeVisible()
+  })
+
+  test('the picker opens titled for the pane that asked for it', async ({ page }) => {
+    await openToolsPanel(page, 'copy_bank', { withOtherProject: true })
+    await page.locator(sourceBtn).click()
+    await expect(page.locator('.project-selector-modal h3')).toHaveText('Select Source Project')
+    await page.locator('.project-selector-modal .modal-close').click()
+    await page.locator(destBtn).click()
+    await expect(page.locator('.project-selector-modal h3')).toHaveText('Select Destination Project')
+  })
+
+  test('the source picker offers no New Project card', async ({ page }) => {
+    await openToolsPanel(page, 'copy_bank', { withOtherProject: true })
+    await page.locator(sourceBtn).click()
+    await page.locator('.project-selector-modal .scan-button', { hasText: 'Rescan for Projects' }).click()
+    await page.waitForTimeout(500)
+    await page.evaluate(() => {
+      ;(document.querySelector('.project-selector-modal .location-header') as HTMLElement)?.click()
+    })
+    await page.waitForTimeout(300)
+    await page.evaluate(() => {
+      ;(document.querySelector('.project-selector-modal .set-header') as HTMLElement)?.click()
+    })
+    await page.waitForTimeout(300)
+    await expect(page.locator('.project-selector-modal .new-project-card')).toHaveCount(0)
+  })
+
+  test('choosing another project switches the source without touching the destination', async ({ page }) => {
+    await openToolsPanel(page, 'copy_bank', { withOtherProject: true })
+    await page.locator(sourceBtn).click()
+    await pickOtherProject(page)
+
+    await expect(page.locator('.tools-source-panel .tools-project-selector-name')).toContainText('OtherProject')
+    await expect(page.locator('.tools-dest-panel .tools-project-selector-name')).toContainText('TestProject')
+  })
+
+  test('the source bank grid follows the source project', async ({ page }) => {
+    await openToolsPanel(page, 'copy_bank', { withOtherProject: true })
+    const sourceBankC = page.locator('.tools-source-panel .tools-multi-btn.bank-btn', { hasText: /^C$/ })
+    await expect(sourceBankC).toBeEnabled()
+
+    await page.locator(sourceBtn).click()
+    await pickOtherProject(page)
+
+    // OtherProject holds banks A and B only.
+    await expect(sourceBankC).toBeDisabled()
+    const sourceBankB = page.locator('.tools-source-panel .tools-multi-btn.bank-btn', { hasText: /^B$/ })
+    await expect(sourceBankB).toBeEnabled()
+    await sourceBankB.click({ modifiers: ['Shift'] })
+    expect(await selectedLabels(page, '.tools-source-panel', 'bank-btn')).toEqual(['A', 'B'])
+  })
+
+  test('a source bank that the new project lacks is dropped from the selection', async ({ page }) => {
+    await openToolsPanel(page, 'copy_bank', { withOtherProject: true })
+    const sourcePanel = '.tools-source-panel'
+    await page.locator(`${sourcePanel} .tools-multi-btn.bank-btn`, { hasText: /^C$/ }).click()
+    expect(await selectedLabels(page, sourcePanel, 'bank-btn')).toEqual(['C'])
+
+    await page.locator(sourceBtn).click()
+    await pickOtherProject(page)
+    expect(await selectedLabels(page, sourcePanel, 'bank-btn')).toEqual([])
+  })
+
+  test('copy_bank is sent with the chosen source project', async ({ page }) => {
+    await openToolsPanel(page, 'copy_bank', { withOtherProject: true })
+    await page.locator(sourceBtn).click()
+    await pickOtherProject(page)
+    await runExecute(page)
+
+    const calls = await bankCalls(page)
+    expect(calls).toHaveLength(1)
+    expect(calls[0].sourceProject).toBe('/test/other-project')
+    expect(calls[0].destProject).toBe('/test/project')
+  })
+
+  test('the other copy tools carry the chosen source project too', async ({ page }) => {
+    for (const op of ['copy_patterns', 'copy_parts']) {
+      await openToolsPanel(page, op, { withOtherProject: true })
+      await page.locator(sourceBtn).click()
+      await pickOtherProject(page)
+      await page.waitForTimeout(200)
+      await runExecute(page)
+
+      const calls = await copyCalls(page)
+      expect(calls.length, `${op} should have been invoked`).toBeGreaterThan(0)
+      expect(calls[0].args.sourceProject).toBe('/test/other-project')
     }
   })
 })

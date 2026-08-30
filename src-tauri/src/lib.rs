@@ -595,7 +595,7 @@ async fn copy_bank(
 #[tauri::command]
 async fn validate_bank_sample_slots(
     source_project: String,
-    source_bank_index: u8,
+    source_bank_indices: Vec<u8>,
     dest_project: String,
     sample_scope: String,
     slot_placement: String,
@@ -603,7 +603,7 @@ async fn validate_bank_sample_slots(
     tauri::async_runtime::spawn_blocking(move || {
         project_reader::validate_bank_sample_slots(
             &source_project,
-            source_bank_index,
+            &source_bank_indices,
             &dest_project,
             &sample_scope,
             &slot_placement,

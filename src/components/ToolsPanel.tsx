@@ -10,14 +10,34 @@ import "../App.css";
 import { FixMissingSamplesModal } from "./FixMissingSamplesModal";
 import { MissingSamplesListModal } from "./MissingSamplesListModal";
 import { CreateProjectModal } from "./CreateProjectModal";
+import { ProjectSelectorModal } from "./ProjectSelectorModal";
 import { ProjectIncompatibleListModal, FixProjectFilesModal } from "./FixProjectFilesModal";
 import type { IncompatibleFile, PoolFixResult } from "./FixPoolFilesModal";
 import { PathContextMenu, PurgeFilesModal, purgeAudioFileCount, purgeNonAudioFileCount, PurgeUnusedListModal, type ClearableSlot, type PurgeUnit } from "./PurgeFilesModal";
 import { audioKind, usageKey } from "./AudioFileTable";
 import { normalizePath } from "./SampleSlotsTable";
 import { isUnderBackupsDir } from "../utils/purgeBackups";
+import {
+  applyItemClick,
+  destRangeFrom,
+  pairSourcesWithDests,
+  orderCopyPairs,
+  type SelectionState,
+} from "../utils/multiSelect";
 
 const TOOLS_STORAGE_KEY_PREFIX = "octatrack-tools-settings-";
+
+/** Appended to the tooltip of every source item that takes a multi-selection. */
+const MULTI_SELECT_HINT = " - shift-click for a range, ctrl-click to add";
+
+function sameIndices(a: number[], b: number[]): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+/** A DOM click carrying the file-explorer modifiers. */
+function clickModifiers(e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }) {
+  return { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey };
+}
 
 // Natural sort comparator: "Project_2" < "Project_10" (not lexicographic)
 function naturalCompare(a: string, b: string): number {
@@ -109,6 +129,7 @@ interface ToolsSettings {
   copyAssignments: boolean;
   copyAttributes: boolean;
   selectedAttributes: string[];
+  sourceProject: string;
   destProject: string;
   sourceSampleStart: number;
   sourceSampleEnd: number;
@@ -189,10 +210,18 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialOperation]);
 
-  // Source selection (current project only)
+  // Source selection
   const [sourceBankIndex, setSourceBankIndex] = useState<number>(0);
+  // Copy Banks takes several source banks at once; the rest of the tools still
+  // copy out of one bank. Shift/ctrl-click ranges need an anchor to range from.
+  const [sourceBankSelection, setSourceBankSelection] = useState<SelectionState>({ selection: [0], anchor: 0 });
+  const sourceBankIndices = sourceBankSelection.selection;
   const [sourcePartIndices, setSourcePartIndices] = useState<number[]>([0]);
-  const [sourcePatternIndices, setSourcePatternIndices] = useState<number[]>([0]);
+  const [sourcePatternSelection, setSourcePatternSelection] = useState<SelectionState>({ selection: [0], anchor: 0 });
+  const sourcePatternIndices = sourcePatternSelection.selection;
+  const setSourcePatternIndices = useCallback((selection: number[]) => {
+    setSourcePatternSelection({ selection, anchor: selection.length > 0 ? selection[0] : null });
+  }, []);
   const [sourceTrackIndices, setSourceTrackIndices] = useState<number[]>([]); // Copy Tracks source
   const [patternsTrackIndices, setPatternsTrackIndices] = useState<number[]>([]); // Copy Patterns specific tracks filter
   const [sourceSampleIndices, setSourceSampleIndices] = useState<number[]>(() => {
@@ -200,6 +229,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     const end = savedSettings.sourceSampleEnd ?? 127;
     return Array.from({ length: end - start + 1 }, (_, i) => start + i);
   });
+
+  // Source project: defaults to the project being viewed, but any project can be
+  // read from - the copy commands have always taken a source path.
+  const [sourceProject, setSourceProject] = useState<string>(savedSettings.sourceProject || projectPath);
 
   // Destination selection
   const [destProject, setDestProject] = useState<string>(savedSettings.destProject || projectPath);
@@ -347,13 +380,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [executingDetails, setExecutingDetails] = useState<string>("");
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [statusType, setStatusType] = useState<"success" | "error" | "info" | "">("");
-  const [showProjectSelector, setShowProjectSelector] = useState<boolean>(false);
-  const [openSetsInModal, setOpenSetsInModal] = useState<Set<string>>(new Set()); // Track which sets are open in modal
-  const [openLocationsInModal, setOpenLocationsInModal] = useState<Set<number>>(new Set()); // Track which locations are open in modal
+  // Which pane the project picker was opened for, or null when it is closed.
+  const [showProjectSelector, setShowProjectSelector] = useState<"source" | "dest" | null>(null);
   const [createModalTarget, setCreateModalTarget] = useState<{ setPath: string; setName: string } | null>(null);
-  const [isIndividualProjectsOpenInModal, setIsIndividualProjectsOpenInModal] = useState<boolean>(false);
   const [isManualBrowseOpen, setIsManualBrowseOpen] = useState<boolean>(true);
-  const [isLocationsOpenInModal, setIsLocationsOpenInModal] = useState<boolean>(true);
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [browsedProjects, setBrowsedProjects] = useState<{ name: string; path: string }[]>([]);
 
@@ -406,19 +436,19 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             // The folder itself is a project: select it directly
             setBrowsedProjects([exact]);
             setDestProject(exact.path);
-            setShowProjectSelector(false);
+            setShowProjectSelector(null);
           } else if (found.length > 0) {
             // Offer everything found in the Manual Browse section
             found.sort((a, b) => naturalCompare(a.name, b.name));
             setBrowsedProjects(found);
             setIsManualBrowseOpen(true);
           } else {
-            setShowProjectSelector(false);
+            setShowProjectSelector(null);
             setStatusMessage("No Octatrack project found in the selected folder (searched recursively).");
             setStatusType("error");
           }
         } catch (err) {
-          setShowProjectSelector(false);
+          setShowProjectSelector(null);
           setStatusMessage("Failed to scan the selected folder: " + String(err));
           setStatusType("error");
         }
@@ -441,6 +471,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
       copyAssignments,
       copyAttributes,
       selectedAttributes,
+      sourceProject,
       destProject,
       sourceSampleStart: sourceSampleIndices[0],
       sourceSampleEnd: sourceSampleIndices[sourceSampleIndices.length - 1],
@@ -450,7 +481,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
       skipReview,
       skipProjectReview,
     });
-  }, [projectPath, operation, partAssignmentMode, trackMode, modeScope, copyTrackMode, slotType, audioMode, copyAssignments, copyAttributes, selectedAttributes, destProject, sourceSampleIndices, destSampleStart, poolOption, otherProjectOption, skipReview, skipProjectReview]);
+  }, [projectPath, operation, partAssignmentMode, trackMode, modeScope, copyTrackMode, slotType, audioMode, copyAssignments, copyAttributes, selectedAttributes, sourceProject, destProject, sourceSampleIndices, destSampleStart, poolOption, otherProjectOption, skipReview, skipProjectReview]);
 
   // Load missing samples when Fix Missing Samples operation is selected
   useEffect(() => {
@@ -754,46 +785,156 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   });
 
   // Helper to get display info for selected destination project
-  function getDestProjectInfo(): { name: string; setName?: string; isCurrentProject: boolean } {
-    if (destProject === projectPath) {
+  function getProjectInfo(path: string): { name: string; setName?: string; isCurrentProject: boolean } {
+    if (path === projectPath) {
       return { name: projectName, isCurrentProject: true };
     }
     // Check in locations
     for (const location of locations) {
       for (const set of location.sets) {
-        const project = set.projects.find(p => p.path === destProject);
+        const project = set.projects.find(p => p.path === path);
         if (project) {
           return { name: project.name, setName: set.name, isCurrentProject: false };
         }
       }
     }
     // Check in standalone projects
-    const standalone = standaloneProjects.find(p => p.path === destProject);
+    const standalone = standaloneProjects.find(p => p.path === path);
     if (standalone) {
       return { name: standalone.name, isCurrentProject: false };
     }
     // Check in manually browsed projects
-    const browsed = browsedProjects.find(p => p.path === destProject);
+    const browsed = browsedProjects.find(p => p.path === path);
     if (browsed) {
       return { name: browsed.name, isCurrentProject: false };
     }
     return { name: "Unknown", isCurrentProject: false };
   }
 
-  const destProjectInfo = getDestProjectInfo();
+  const destProjectInfo = getProjectInfo(destProject);
+  const sourceProjectInfo = getProjectInfo(sourceProject);
+
+  // Bank names and which banks exist come from the parent for the project being
+  // viewed; any other source project has to be read on demand.
+  const isForeignSource = sourceProject !== projectPath;
+  const [foreignSource, setForeignSource] = useState<{ banks: Bank[]; loaded: Set<number> } | null>(null);
+  const [foreignSourceError, setForeignSourceError] = useState<string | null>(null);
+  const [foreignSourceLoading, setForeignSourceLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!isForeignSource) {
+      setForeignSource(null);
+      setForeignSourceError(null);
+      setForeignSourceLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setForeignSourceLoading(true);
+    setForeignSourceError(null);
+    Promise.all([
+      invoke<Bank[]>("load_project_banks", { path: sourceProject }),
+      invoke<number[]>("get_existing_banks", { path: sourceProject }),
+    ]).then(([loadedBanks, existing]) => {
+      if (cancelled) return;
+      setForeignSource({ banks: loadedBanks, loaded: new Set(existing) });
+    }).catch((err) => {
+      if (cancelled) return;
+      setForeignSource(null);
+      setForeignSourceError(String(err));
+    }).finally(() => {
+      if (!cancelled) setForeignSourceLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [sourceProject, isForeignSource]);
+
+  const sourceBanks = isForeignSource ? (foreignSource?.banks ?? []) : banks;
+  const sourceLoadedBankIndices = isForeignSource ? (foreignSource?.loaded ?? new Set<number>()) : loadedBankIndices;
+
+  // A bank selected in one project may not exist in the next one. Only applied
+  // once a foreign project has been read: the parent fills loadedBankIndices in
+  // stages, so clamping against a partial local set would clear the default.
+  useEffect(() => {
+    if (!foreignSource) return;
+    const loaded = foreignSource.loaded;
+    setSourceBankSelection((prev) => {
+      const selection = prev.selection.filter((i) => loaded.has(i));
+      return sameIndices(selection, prev.selection)
+        ? prev
+        : { selection, anchor: selection.length > 0 ? selection[0] : null };
+    });
+    setSourceBankIndex((prev) => (prev >= 0 && !loaded.has(prev) ? -1 : prev));
+  }, [foreignSource]);
+
+  const selectSourceBank = useCallback((idx: number, e: React.MouseEvent) => {
+    setSourceBankSelection((prev) => applyItemClick(prev, idx, clickModifiers(e), (i) => sourceLoadedBankIndices.has(i)));
+  }, [sourceLoadedBankIndices]);
+  const selectSourcePattern = useCallback((idx: number, e: React.MouseEvent) => {
+    setSourcePatternSelection((prev) => applyItemClick(prev, idx, clickModifiers(e)));
+  }, []);
+
+  // With several source items selected the copy is pairwise, so the destination
+  // has to hold exactly as many items: clicking one starts a run of that length.
+  const destPairLocked = operation === "copy_bank" && sourceBankIndices.length > 1;
+  const destPatternsSynced = sourcePatternIndices.length === 16;
+  const destPatternPairLocked = sourcePatternIndices.length > 1 && !destPatternsSynced;
+
+  const selectDestBank = useCallback((idx: number) => {
+    if (sourceBankIndices.length > 1) {
+      setDestBankIndices(destRangeFrom(idx, sourceBankIndices.length, 16));
+    } else {
+      setDestBankIndices((prev) => prev.includes(idx)
+        ? prev.filter(i => i !== idx)
+        : [...prev, idx].sort((a, b) => a - b));
+    }
+  }, [sourceBankIndices.length]);
+
+  const selectDestPattern = useCallback((idx: number) => {
+    if (sourcePatternIndices.length === 16) return; // synced with the source
+    if (sourcePatternIndices.length > 1) {
+      setDestPatternIndices(destRangeFrom(idx, sourcePatternIndices.length, 16));
+    } else {
+      setDestPatternIndices((prev) => prev.includes(idx)
+        ? prev.filter(i => i !== idx)
+        : [...prev, idx].sort((a, b) => a - b));
+    }
+  }, [sourcePatternIndices.length]);
+
+  // Keep the destination the right length as the source selection grows or
+  // shrinks, anchored where the user last put it.
+  const sourceBankCount = sourceBankIndices.length;
+  useEffect(() => {
+    if (sourceBankCount <= 1) return;
+    setDestBankIndices((prev) => {
+      const next = destRangeFrom(prev.length > 0 ? prev[0] : 0, sourceBankCount, 16);
+      return sameIndices(prev, next) ? prev : next;
+    });
+  }, [sourceBankCount]);
+
+  const sourcePatternCount = sourcePatternIndices.length;
+  useEffect(() => {
+    if (sourcePatternCount <= 1) return;
+    setDestPatternIndices((prev) => {
+      const next = destRangeFrom(prev.length > 0 ? prev[0] : 0, sourcePatternCount, 16);
+      return sameIndices(prev, next) ? prev : next;
+    });
+  }, [sourcePatternCount]);
 
   // Check audio pool status when destination project changes
   useEffect(() => {
     async function checkAudioPool() {
       if (destProject && (operation === "copy_sample_slots" || operation === "fix_missing_samples" || operation === "copy_bank" || operation === "purge_project_samples")) {
         try {
-          const status = await invoke<AudioPoolStatus>("get_audio_pool_status", { projectPath });
+          // Mirror / Move to Pool are about the Set the copy runs between, which is
+          // the source's, not necessarily the project being viewed. Fix and Purge
+          // still work on the current project's own pool.
+          const poolProject = (operation === "copy_sample_slots" || operation === "copy_bank") ? sourceProject : projectPath;
+          const status = await invoke<AudioPoolStatus>("get_audio_pool_status", { projectPath: poolProject });
           setAudioPoolStatus(status);
 
           let sameSet: boolean;
-          if (destProject !== projectPath) {
+          if (destProject !== sourceProject) {
             sameSet = await invoke<boolean>("check_projects_in_same_set", {
-              project1: projectPath,
+              project1: sourceProject,
               project2: destProject,
             });
           } else {
@@ -823,7 +964,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     }
     checkAudioPool();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [destProject, projectPath, operation]);
+  }, [destProject, sourceProject, projectPath, operation]);
 
   // Check for missing source audio files when audio mode requires files
   useEffect(() => {
@@ -833,7 +974,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     }
     let cancelled = false;
     invoke<number>("check_missing_source_files", {
-      projectPath,
+      projectPath: sourceProject,
       slotType,
       sourceIndices: sourceSampleIndices.map(i => i + 1),
     }).then(count => {
@@ -842,7 +983,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
       if (!cancelled) setMissingSourceFiles(0);
     });
     return () => { cancelled = true; };
-  }, [operation, audioMode, copyAssignments, slotType, sourceSampleIndices, projectPath]);
+  }, [operation, audioMode, copyAssignments, slotType, sourceSampleIndices, sourceProject]);
 
   // Derive destination sample indices from destSampleStart and source count
   const destSampleIndices = useMemo(() => {
@@ -863,7 +1004,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
 
   // Validate bank sample slots when Copy Samples is enabled
   useEffect(() => {
-    if (operation === "copy_bank" && copySamples && destProject && sourceBankIndex >= 0) {
+    if (operation === "copy_bank" && copySamples && destProject && sourceBankIndices.length > 0) {
       invoke<{
         static_needed: number;
         flex_needed: number;
@@ -879,8 +1020,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         is_valid: boolean;
         error_message: string | null;
       }>("validate_bank_sample_slots", {
-        sourceProject: projectPath,
-        sourceBankIndex,
+        sourceProject,
+        sourceBankIndices,
         destProject,
         sampleScope,
         slotPlacement,
@@ -888,13 +1029,18 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     } else {
       setSlotValidation(null);
     }
-  }, [operation, copySamples, sampleScope, slotPlacement, sourceBankIndex, destProject, projectPath]);
+    // sourceBankIndices is derived from the selection state; keying the effect on
+    // its join keeps a new array of the same banks from re-running the check.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [operation, copySamples, sampleScope, slotPlacement, sourceBankIndices.join(","), destProject, projectPath]);
 
   // Helper to get operation details for display
   function getExecutingDetails(): string {
     switch (operation) {
       case "copy_bank":
-        return `Copying Bank ${String.fromCharCode(65 + sourceBankIndex)} to ${destBankIndices.length} bank${destBankIndices.length > 1 ? 's' : ''}...`;
+        return sourceBankIndices.length > 1
+          ? `Copying ${sourceBankIndices.length} banks to ${destBankIndices.length} bank${destBankIndices.length > 1 ? 's' : ''}...`
+          : `Copying Bank ${String.fromCharCode(65 + (sourceBankIndices[0] ?? 0))} to ${destBankIndices.length} bank${destBankIndices.length > 1 ? 's' : ''}...`;
       case "copy_parts":
         return sourcePartIndices.length === 4
           ? "Copying all parts..."
@@ -933,7 +1079,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         // Back up source project files when Move to Pool (source gets modified)
         if (copySamples && bankAudioMode === "move_to_pool") {
           backups.push({
-            project: projectPath,
+            project: sourceProject,
             files: ["project.work"],
             label: "copy_bank_source",
           });
@@ -967,7 +1113,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         if (copyAssignments && audioMode === "copy") {
           try {
             const audioPaths = await invoke<string[]>("get_slot_audio_paths", {
-              projectPath, slotType, sourceIndices: sourceIndices1, flatten: true,
+              projectPath: sourceProject, slotType, sourceIndices: sourceIndices1, flatten: true,
             });
             destFiles.push(...audioPaths);
           } catch { /* ignore */ }
@@ -978,10 +1124,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         if (copyAssignments && audioMode === "move_to_pool") {
           try {
             const sourceAudioPaths = await invoke<string[]>("get_slot_audio_paths", {
-              projectPath, slotType, sourceIndices: sourceIndices1, flatten: false,
+              projectPath: sourceProject, slotType, sourceIndices: sourceIndices1, flatten: false,
             });
             const sourceFiles = ["project.work", ...sourceAudioPaths];
-            backups.push({ project: projectPath, files: sourceFiles, label: "move_to_pool_source" });
+            backups.push({ project: sourceProject, files: sourceFiles, label: "move_to_pool_source" });
           } catch { /* ignore */ }
         }
 
@@ -1015,32 +1161,64 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
 
       switch (operation) {
         case "copy_bank": {
-          const bankResult = await invoke<{
+          type CopyBankResult = {
             slots_copied_static: number;
             slots_copied_flex: number;
             slots_deduplicated: number;
             shared_files_kept: number;
             remap_log: string[];
-          }>("copy_bank", {
-            sourceProject: projectPath,
-            sourceBankIndex,
-            destProject,
-            destBankIndices,
+          };
+          const bankOptions = {
             copySamples: copySamples || undefined,
             sampleScope: copySamples ? sampleScope : undefined,
             audioMode: copySamples ? bankAudioMode : undefined,
             slotPlacement: copySamples ? slotPlacement : undefined,
             copyAttributes: copySamples ? true : undefined,
             attributeSelection: copySamples ? [...ALL_ATTRIBUTES] : undefined,
-          });
-          if (copySamples && (bankResult.slots_copied_static > 0 || bankResult.slots_copied_flex > 0)) {
-            const parts = [];
-            if (bankResult.slots_copied_static > 0) parts.push(`${bankResult.slots_copied_static} Static`);
-            if (bankResult.slots_copied_flex > 0) parts.push(`${bankResult.slots_copied_flex} Flex`);
-            const dedup = bankResult.slots_deduplicated > 0 ? ` (${bankResult.slots_deduplicated} already in destination and reused)` : '';
-            setStatusMessage(`Bank ${String.fromCharCode(65 + sourceBankIndex)} copied to ${destBankIndices.length} bank${destBankIndices.length > 1 ? 's' : ''} with ${parts.join(' + ')} sample slots${dedup}`);
+          };
+
+          // One source bank fans out to every destination in a single call; several
+          // source banks pair up with the destination run one for one. Inside a
+          // single project an overlapping run has to be ordered so no bank is
+          // overwritten before the pair that reads it has run.
+          const results: CopyBankResult[] = [];
+          if (sourceBankIndices.length > 1) {
+            const pairs = pairSourcesWithDests(sourceBankIndices, destBankIndices);
+            const ordered = destProject === sourceProject ? orderCopyPairs(pairs) : pairs;
+            for (const pair of ordered) {
+              results.push(await invoke<CopyBankResult>("copy_bank", {
+                sourceProject,
+                sourceBankIndex: pair.src,
+                destProject,
+                destBankIndices: [pair.dst],
+                ...bankOptions,
+              }));
+            }
           } else {
-            setStatusMessage(`Bank ${String.fromCharCode(65 + sourceBankIndex)} copied to ${destBankIndices.length} bank${destBankIndices.length > 1 ? 's' : ''} successfully`);
+            results.push(await invoke<CopyBankResult>("copy_bank", {
+              sourceProject,
+              sourceBankIndex: sourceBankIndices[0],
+              destProject,
+              destBankIndices,
+              ...bankOptions,
+            }));
+          }
+
+          const copiedStatic = results.reduce((n, r) => n + r.slots_copied_static, 0);
+          const copiedFlex = results.reduce((n, r) => n + r.slots_copied_flex, 0);
+          const deduplicated = results.reduce((n, r) => n + r.slots_deduplicated, 0);
+          const what = sourceBankIndices.length > 1
+            ? `${sourceBankIndices.length} banks`
+            : `Bank ${String.fromCharCode(65 + sourceBankIndices[0])}`;
+          const target = `${destBankIndices.length} bank${destBankIndices.length > 1 ? 's' : ''}`;
+          if (copySamples && (copiedStatic > 0 || copiedFlex > 0)) {
+            const parts = [];
+            if (copiedStatic > 0) parts.push(`${copiedStatic} Static`);
+            if (copiedFlex > 0) parts.push(`${copiedFlex} Flex`);
+            const dedup = deduplicated > 0 ? ` (${deduplicated} already in destination and reused)` : '';
+            setStatusMessage(`${what} copied to ${target} with ${parts.join(' + ')} sample slots${dedup}`);
+          } else {
+            setStatusMessage(`${what} copied to ${target} successfully`);
           }
           if (destProject === projectPath) {
             if (onBankUpdated) destBankIndices.forEach(idx => onBankUpdated(idx));
@@ -1052,7 +1230,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         case "copy_parts":
           for (const bankIdx of destPartBankIndices) {
             await invoke("copy_parts", {
-              sourceProject: projectPath,
+              sourceProject,
               sourceBankIndex,
               sourcePartIndices,
               destProject,
@@ -1072,12 +1250,12 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         case "copy_patterns": {
           // Process self-copy (source bank == dest bank, same project) last to avoid
           // source data being overwritten before other banks read it.
-          const patternBanksOrdered = destProject === projectPath && destPatternBankIndices.includes(sourceBankIndex)
+          const patternBanksOrdered = destProject === sourceProject && destPatternBankIndices.includes(sourceBankIndex)
             ? [...destPatternBankIndices.filter(i => i !== sourceBankIndex), sourceBankIndex]
             : destPatternBankIndices;
           for (const bankIdx of patternBanksOrdered) {
             await invoke("copy_patterns", {
-              sourceProject: projectPath,
+              sourceProject,
               sourceBankIndex,
               sourcePatternIndices,
               destProject,
@@ -1110,12 +1288,12 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
 
         case "copy_tracks": {
           // Process self-copy last to avoid source data being overwritten mid-loop.
-          const trackBanksOrdered = destProject === projectPath && destTrackBankIndices.includes(sourceBankIndex)
+          const trackBanksOrdered = destProject === sourceProject && destTrackBankIndices.includes(sourceBankIndex)
             ? [...destTrackBankIndices.filter(i => i !== sourceBankIndex), sourceBankIndex]
             : destTrackBankIndices;
           for (const bankIdx of trackBanksOrdered) {
             await invoke("copy_tracks", {
-              sourceProject: projectPath,
+              sourceProject,
               sourceBankIndex,
               sourcePartIndex: sourcePartIndex === -1 ? null : sourcePartIndex, // null = all parts
               sourceTrackIndices,
@@ -1141,7 +1319,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         case "copy_sample_slots":
           // Convert 0-based indices to 1-based for backend
           const slotsResult = await invoke<{ shared_files_kept: number }>("copy_sample_slots", {
-            sourceProject: projectPath,
+            sourceProject,
             destProject,
             slotType,
             sourceIndices: sourceSampleIndices.map(i => i + 1),
@@ -1215,8 +1393,64 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         <div className="tools-source-panel">
           <h3>Source</h3>
 
-          {/* Bank selector for bank-related operations (except copy_tracks) */}
-          {(operation === "copy_bank" || operation === "copy_parts") && (
+          {/* Project selector - reads from any project, defaults to this one */}
+          <div className="tools-field">
+            <label>Project</label>
+            <button
+              type="button"
+              className="tools-project-selector-btn"
+              onClick={() => setShowProjectSelector("source")}
+              title={sourceProject}
+            >
+              <span className="tools-project-selector-name">
+                {sourceProjectInfo.name}
+                {sourceProjectInfo.isCurrentProject && <span className="tools-project-selector-current">Current</span>}
+              </span>
+              {sourceProjectInfo.setName && (
+                <span className="tools-project-selector-set">{sourceProjectInfo.setName}</span>
+              )}
+              <i className="fas fa-folder-open"></i>
+            </button>
+            {isForeignSource && foreignSourceLoading && (
+              <div className="tools-hint">Loading banks from {sourceProjectInfo.name}...</div>
+            )}
+            {isForeignSource && foreignSourceError && (
+              <div className="tools-hint tools-hint-error">Could not read {sourceProjectInfo.name}: {foreignSourceError}</div>
+            )}
+          </div>
+
+          {/* Bank selector for copy_bank - multi-select (shift = range, ctrl = pick) */}
+          {operation === "copy_bank" && (
+            <div className="tools-field">
+              <label>Bank</label>
+              <div className="tools-multi-select banks-stacked">
+                {[[0, 1, 2, 3, 4, 5, 6, 7], [8, 9, 10, 11, 12, 13, 14, 15]].map((row, rowIdx) => (
+                  <div className="tools-track-row-buttons" key={rowIdx}>
+                    {row.map((idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className={`tools-multi-btn bank-btn ${sourceBankIndices.includes(idx) ? "selected" : ""} ${!sourceLoadedBankIndices.has(idx) ? "disabled" : ""}`}
+                        onClick={(e) => selectSourceBank(idx, e)}
+                        disabled={!sourceLoadedBankIndices.has(idx)}
+                        title={sourceLoadedBankIndices.has(idx) ? `${sourceBanks[idx] ? formatBankName(sourceBanks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`}${MULTI_SELECT_HINT}` : "Bank not loaded"}
+                      >
+                        {String.fromCharCode(65 + idx)}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              {sourceBankIndices.length > 1 && (
+                <div className="tools-hint">
+                  {sourceBankIndices.length} banks - destination locked to {sourceBankIndices.length} consecutive banks
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Bank selector for copy_parts */}
+          {operation === "copy_parts" && (
             <div className="tools-field">
               <label>Bank</label>
               <div className="tools-multi-select banks-stacked">
@@ -1225,10 +1459,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     <button
                       key={idx}
                       type="button"
-                      className={`tools-multi-btn bank-btn ${sourceBankIndex === idx ? "selected" : ""} ${!loadedBankIndices.has(idx) ? "disabled" : ""}`}
-                      onClick={() => loadedBankIndices.has(idx) && setSourceBankIndex(sourceBankIndex === idx ? -1 : idx)}
-                      disabled={!loadedBankIndices.has(idx)}
-                      title={loadedBankIndices.has(idx) ? (banks[idx] ? formatBankName(banks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`) : "Bank not loaded"}
+                      className={`tools-multi-btn bank-btn ${sourceBankIndex === idx ? "selected" : ""} ${!sourceLoadedBankIndices.has(idx) ? "disabled" : ""}`}
+                      onClick={() => sourceLoadedBankIndices.has(idx) && setSourceBankIndex(sourceBankIndex === idx ? -1 : idx)}
+                      disabled={!sourceLoadedBankIndices.has(idx)}
+                      title={sourceLoadedBankIndices.has(idx) ? (sourceBanks[idx] ? formatBankName(sourceBanks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`) : "Bank not loaded"}
                     >
                       {String.fromCharCode(65 + idx)}
                     </button>
@@ -1239,10 +1473,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     <button
                       key={idx}
                       type="button"
-                      className={`tools-multi-btn bank-btn ${sourceBankIndex === idx ? "selected" : ""} ${!loadedBankIndices.has(idx) ? "disabled" : ""}`}
-                      onClick={() => loadedBankIndices.has(idx) && setSourceBankIndex(sourceBankIndex === idx ? -1 : idx)}
-                      disabled={!loadedBankIndices.has(idx)}
-                      title={loadedBankIndices.has(idx) ? (banks[idx] ? formatBankName(banks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`) : "Bank not loaded"}
+                      className={`tools-multi-btn bank-btn ${sourceBankIndex === idx ? "selected" : ""} ${!sourceLoadedBankIndices.has(idx) ? "disabled" : ""}`}
+                      onClick={() => sourceLoadedBankIndices.has(idx) && setSourceBankIndex(sourceBankIndex === idx ? -1 : idx)}
+                      disabled={!sourceLoadedBankIndices.has(idx)}
+                      title={sourceLoadedBankIndices.has(idx) ? (sourceBanks[idx] ? formatBankName(sourceBanks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`) : "Bank not loaded"}
                     >
                       {String.fromCharCode(65 + idx)}
                     </button>
@@ -1262,10 +1496,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     <button
                       key={idx}
                       type="button"
-                      className={`tools-multi-btn bank-btn ${sourceBankIndex === idx ? "selected" : ""} ${!loadedBankIndices.has(idx) ? "disabled" : ""}`}
-                      onClick={() => loadedBankIndices.has(idx) && setSourceBankIndex(sourceBankIndex === idx ? -1 : idx)}
-                      disabled={!loadedBankIndices.has(idx)}
-                      title={loadedBankIndices.has(idx) ? (banks[idx] ? formatBankName(banks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`) : "Bank not loaded"}
+                      className={`tools-multi-btn bank-btn ${sourceBankIndex === idx ? "selected" : ""} ${!sourceLoadedBankIndices.has(idx) ? "disabled" : ""}`}
+                      onClick={() => sourceLoadedBankIndices.has(idx) && setSourceBankIndex(sourceBankIndex === idx ? -1 : idx)}
+                      disabled={!sourceLoadedBankIndices.has(idx)}
+                      title={sourceLoadedBankIndices.has(idx) ? (sourceBanks[idx] ? formatBankName(sourceBanks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`) : "Bank not loaded"}
                     >
                       {String.fromCharCode(65 + idx)}
                     </button>
@@ -1276,10 +1510,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     <button
                       key={idx}
                       type="button"
-                      className={`tools-multi-btn bank-btn ${sourceBankIndex === idx ? "selected" : ""} ${!loadedBankIndices.has(idx) ? "disabled" : ""}`}
-                      onClick={() => loadedBankIndices.has(idx) && setSourceBankIndex(sourceBankIndex === idx ? -1 : idx)}
-                      disabled={!loadedBankIndices.has(idx)}
-                      title={loadedBankIndices.has(idx) ? (banks[idx] ? formatBankName(banks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`) : "Bank not loaded"}
+                      className={`tools-multi-btn bank-btn ${sourceBankIndex === idx ? "selected" : ""} ${!sourceLoadedBankIndices.has(idx) ? "disabled" : ""}`}
+                      onClick={() => sourceLoadedBankIndices.has(idx) && setSourceBankIndex(sourceBankIndex === idx ? -1 : idx)}
+                      disabled={!sourceLoadedBankIndices.has(idx)}
+                      title={sourceLoadedBankIndices.has(idx) ? (sourceBanks[idx] ? formatBankName(sourceBanks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`) : "Bank not loaded"}
                     >
                       {String.fromCharCode(65 + idx)}
                     </button>
@@ -1376,47 +1610,25 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             </div>
           )}
 
-          {/* Pattern selector for copy_patterns - single select or All */}
+          {/* Pattern selector for copy_patterns - multi-select (shift = range, ctrl = pick) */}
           {operation === "copy_patterns" && (
             <div className="tools-field">
               <label>Pattern</label>
               <div className="tools-multi-select banks-stacked">
-                <div className="tools-track-row-buttons">
-                  {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
-                    <button
-                      key={idx}
-                      className={`tools-multi-btn pattern-btn ${(sourcePatternIndices.length === 1 && sourcePatternIndices.includes(idx)) || sourcePatternIndices.length === 16 ? "selected" : ""}`}
-                      onClick={() => {
-                        if (sourcePatternIndices.length === 1 && sourcePatternIndices.includes(idx)) {
-                          setSourcePatternIndices([]);
-                        } else {
-                          setSourcePatternIndices([idx]);
-                        }
-                      }}
-                      title={`Pattern ${idx + 1}`}
-                    >
-                      {idx + 1}
-                    </button>
-                  ))}
-                </div>
-                <div className="tools-track-row-buttons">
-                  {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
-                    <button
-                      key={idx}
-                      className={`tools-multi-btn pattern-btn ${(sourcePatternIndices.length === 1 && sourcePatternIndices.includes(idx)) || sourcePatternIndices.length === 16 ? "selected" : ""}`}
-                      onClick={() => {
-                        if (sourcePatternIndices.length === 1 && sourcePatternIndices.includes(idx)) {
-                          setSourcePatternIndices([]);
-                        } else {
-                          setSourcePatternIndices([idx]);
-                        }
-                      }}
-                      title={`Pattern ${idx + 1}`}
-                    >
-                      {idx + 1}
-                    </button>
-                  ))}
-                </div>
+                {[[0, 1, 2, 3, 4, 5, 6, 7], [8, 9, 10, 11, 12, 13, 14, 15]].map((row, rowIdx) => (
+                  <div className="tools-track-row-buttons" key={rowIdx}>
+                    {row.map((idx) => (
+                      <button
+                        key={idx}
+                        className={`tools-multi-btn pattern-btn ${sourcePatternIndices.includes(idx) ? "selected" : ""}`}
+                        onClick={(e) => selectSourcePattern(idx, e)}
+                        title={`Pattern ${idx + 1}${MULTI_SELECT_HINT}`}
+                      >
+                        {idx + 1}
+                      </button>
+                    ))}
+                  </div>
+                ))}
                 <div className="tools-select-actions">
                   <button
                     className={`tools-multi-btn pattern-btn tools-select-all ${sourcePatternIndices.length === 16 ? "selected" : ""}`}
@@ -1449,10 +1661,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       <button
                         key={idx}
                         type="button"
-                        className={`tools-multi-btn bank-btn ${sourceBankIndex === idx ? "selected" : ""} ${!loadedBankIndices.has(idx) ? "disabled" : ""}`}
-                        onClick={() => loadedBankIndices.has(idx) && setSourceBankIndex(sourceBankIndex === idx ? -1 : idx)}
-                        disabled={!loadedBankIndices.has(idx)}
-                        title={loadedBankIndices.has(idx) ? (banks[idx] ? formatBankName(banks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`) : "Bank not loaded"}
+                        className={`tools-multi-btn bank-btn ${sourceBankIndex === idx ? "selected" : ""} ${!sourceLoadedBankIndices.has(idx) ? "disabled" : ""}`}
+                        onClick={() => sourceLoadedBankIndices.has(idx) && setSourceBankIndex(sourceBankIndex === idx ? -1 : idx)}
+                        disabled={!sourceLoadedBankIndices.has(idx)}
+                        title={sourceLoadedBankIndices.has(idx) ? (sourceBanks[idx] ? formatBankName(sourceBanks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`) : "Bank not loaded"}
                       >
                         {String.fromCharCode(65 + idx)}
                       </button>
@@ -1463,10 +1675,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                       <button
                         key={idx}
                         type="button"
-                        className={`tools-multi-btn bank-btn ${sourceBankIndex === idx ? "selected" : ""} ${!loadedBankIndices.has(idx) ? "disabled" : ""}`}
-                        onClick={() => loadedBankIndices.has(idx) && setSourceBankIndex(sourceBankIndex === idx ? -1 : idx)}
-                        disabled={!loadedBankIndices.has(idx)}
-                        title={loadedBankIndices.has(idx) ? (banks[idx] ? formatBankName(banks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`) : "Bank not loaded"}
+                        className={`tools-multi-btn bank-btn ${sourceBankIndex === idx ? "selected" : ""} ${!sourceLoadedBankIndices.has(idx) ? "disabled" : ""}`}
+                        onClick={() => sourceLoadedBankIndices.has(idx) && setSourceBankIndex(sourceBankIndex === idx ? -1 : idx)}
+                        disabled={!sourceLoadedBankIndices.has(idx)}
+                        title={sourceLoadedBankIndices.has(idx) ? (sourceBanks[idx] ? formatBankName(sourceBanks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`) : "Bank not loaded"}
                       >
                         {String.fromCharCode(65 + idx)}
                       </button>
@@ -2473,37 +2685,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             <button
               type="button"
               className="tools-project-selector-btn"
-              onClick={() => {
-                // Auto-open the most relevant fieldset based on current project context
-                let foundInSet = false;
-                for (let locIdx = 0; locIdx < locations.length; locIdx++) {
-                  const loc = locations[locIdx];
-                  for (const set of loc.sets) {
-                    if (set.projects.some(p => p.path === projectPath)) {
-                      const setKey = `${locIdx}-${set.name}`;
-                      setOpenLocationsInModal(new Set([locIdx]));
-                      setOpenSetsInModal(new Set([setKey]));
-                      setIsLocationsOpenInModal(true);
-                      setIsIndividualProjectsOpenInModal(false);
-                      foundInSet = true;
-                      break;
-                    }
-                  }
-                  if (foundInSet) break;
-                }
-                if (!foundInSet) {
-                  if (locations.length > 0) {
-                    setIsLocationsOpenInModal(true);
-                    setOpenLocationsInModal(new Set());
-                    setOpenSetsInModal(new Set());
-                    setIsIndividualProjectsOpenInModal(false);
-                  } else {
-                    setIsIndividualProjectsOpenInModal(true);
-                    setIsLocationsOpenInModal(false);
-                  }
-                }
-                setShowProjectSelector(true);
-              }}
+              onClick={() => setShowProjectSelector("dest")}
               title={destProject}
             >
               <span className="tools-project-selector-name">
@@ -2517,43 +2699,27 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             </button>
           </div>
 
-          {/* Bank selector for copy_bank - multi-select */}
+          {/* Bank selector for copy_bank - free multi-select for one source bank,
+              locked to a run of N when several source banks are selected */}
           {operation === "copy_bank" && (
             <div className="tools-field">
               <label>Banks</label>
               <div className="tools-multi-select banks-stacked">
-                <div className="tools-track-row-buttons">
-                  {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      className={`tools-multi-btn bank-btn ${destBankIndices.includes(idx) ? "selected" : ""}`}
-                      onClick={() => destBankIndices.includes(idx)
-                        ? setDestBankIndices(destBankIndices.filter(i => i !== idx))
-                        : setDestBankIndices([...destBankIndices, idx].sort((a, b) => a - b))
-                      }
-                      title={`Bank ${String.fromCharCode(65 + idx)} (${idx + 1})`}
-                    >
-                      {String.fromCharCode(65 + idx)}
-                    </button>
-                  ))}
-                </div>
-                <div className="tools-track-row-buttons">
-                  {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      className={`tools-multi-btn bank-btn ${destBankIndices.includes(idx) ? "selected" : ""}`}
-                      onClick={() => destBankIndices.includes(idx)
-                        ? setDestBankIndices(destBankIndices.filter(i => i !== idx))
-                        : setDestBankIndices([...destBankIndices, idx].sort((a, b) => a - b))
-                      }
-                      title={`Bank ${String.fromCharCode(65 + idx)} (${idx + 1})`}
-                    >
-                      {String.fromCharCode(65 + idx)}
-                    </button>
-                  ))}
-                </div>
+                {[[0, 1, 2, 3, 4, 5, 6, 7], [8, 9, 10, 11, 12, 13, 14, 15]].map((row, rowIdx) => (
+                  <div className="tools-track-row-buttons" key={rowIdx}>
+                    {row.map((idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className={`tools-multi-btn bank-btn ${destBankIndices.includes(idx) ? "selected" : ""}`}
+                        onClick={() => selectDestBank(idx)}
+                        title={destPairLocked ? `Start the ${sourceBankIndices.length}-bank run at Bank ${String.fromCharCode(65 + idx)} (${idx + 1})` : `Bank ${String.fromCharCode(65 + idx)} (${idx + 1})`}
+                      >
+                        {String.fromCharCode(65 + idx)}
+                      </button>
+                    ))}
+                  </div>
+                ))}
                 <div className="tools-select-actions">
                   <button
                     className="tools-multi-btn bank-btn tools-select-all"
@@ -2563,14 +2729,20 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     None
                   </button>
                   <button
-                    className={`tools-multi-btn bank-btn tools-select-all ${destBankIndices.length === 16 ? "selected" : ""}`}
-                    onClick={() => destBankIndices.length === 16 ? setDestBankIndices([]) : selectAllIndices(16, setDestBankIndices)}
-                    title="Select all banks"
+                    className={`tools-multi-btn bank-btn tools-select-all ${destBankIndices.length === 16 ? "selected" : ""} ${destPairLocked ? "disabled" : ""}`}
+                    onClick={() => { if (destPairLocked) return; destBankIndices.length === 16 ? setDestBankIndices([]) : selectAllIndices(16, setDestBankIndices); }}
+                    disabled={destPairLocked}
+                    title={destPairLocked ? `Locked to ${sourceBankIndices.length} banks by the source selection` : "Select all banks"}
                   >
                     All
                   </button>
                 </div>
               </div>
+              {destPairLocked && (
+                <div className="tools-hint">
+                  {sourceBankIndices.map(i => String.fromCharCode(65 + i)).join(", ")} to {destBankIndices.map(i => String.fromCharCode(65 + i)).join(", ")}
+                </div>
+              )}
             </div>
           )}
 
@@ -2763,67 +2935,66 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             </div>
           )}
 
-          {/* Pattern selector for copy_patterns - multi-select, disabled when source All is selected */}
+          {/* Pattern selector for copy_patterns - free multi-select for one source
+              pattern, locked to a run of N when several are selected, fully synced
+              (and disabled) when the source is All 16 */}
           {operation === "copy_patterns" && (
             <div className="tools-field">
               <label>Patterns</label>
-              <div className={`tools-multi-select banks-stacked ${sourcePatternIndices.length === 16 ? "disabled" : ""}`}>
-                <div className="tools-track-row-buttons">
-                  {[0, 1, 2, 3, 4, 5, 6, 7].map((idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      className={`tools-multi-btn pattern-btn ${destPatternIndices.includes(idx) ? "selected" : ""}`}
-                      onClick={() => sourcePatternIndices.length !== 16 && (destPatternIndices.includes(idx)
-                        ? setDestPatternIndices(destPatternIndices.filter(i => i !== idx))
-                        : setDestPatternIndices([...destPatternIndices, idx].sort((a, b) => a - b))
-                      )}
-                      disabled={sourcePatternIndices.length === 16}
-                      title={sourcePatternIndices.length === 16 ? "Synced with source All selection" : `Pattern ${idx + 1}`}
-                    >
-                      {idx + 1}
-                    </button>
-                  ))}
-                </div>
-                <div className="tools-track-row-buttons">
-                  {[8, 9, 10, 11, 12, 13, 14, 15].map((idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      className={`tools-multi-btn pattern-btn ${destPatternIndices.includes(idx) ? "selected" : ""}`}
-                      onClick={() => sourcePatternIndices.length !== 16 && (destPatternIndices.includes(idx)
-                        ? setDestPatternIndices(destPatternIndices.filter(i => i !== idx))
-                        : setDestPatternIndices([...destPatternIndices, idx].sort((a, b) => a - b))
-                      )}
-                      disabled={sourcePatternIndices.length === 16}
-                      title={sourcePatternIndices.length === 16 ? "Synced with source All selection" : `Pattern ${idx + 1}`}
-                    >
-                      {idx + 1}
-                    </button>
-                  ))}
-                </div>
+              <div className={`tools-multi-select banks-stacked ${destPatternsSynced ? "disabled" : ""}`}>
+                {[[0, 1, 2, 3, 4, 5, 6, 7], [8, 9, 10, 11, 12, 13, 14, 15]].map((row, rowIdx) => (
+                  <div className="tools-track-row-buttons" key={rowIdx}>
+                    {row.map((idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className={`tools-multi-btn pattern-btn ${destPatternIndices.includes(idx) ? "selected" : ""}`}
+                        onClick={() => selectDestPattern(idx)}
+                        disabled={destPatternsSynced}
+                        title={destPatternsSynced
+                          ? "Synced with source All selection"
+                          : destPatternPairLocked
+                            ? `Start the ${sourcePatternIndices.length}-pattern run at Pattern ${idx + 1}`
+                            : `Pattern ${idx + 1}`}
+                      >
+                        {idx + 1}
+                      </button>
+                    ))}
+                  </div>
+                ))}
                 <div className="tools-select-actions">
                   <button
                     className="tools-multi-btn pattern-btn tools-select-all"
-                    onClick={() => sourcePatternIndices.length !== 16 && setDestPatternIndices([])}
-                    disabled={sourcePatternIndices.length === 16}
-                    title={sourcePatternIndices.length === 16 ? "Synced with source All selection" : "Deselect all patterns"}
+                    onClick={() => !destPatternsSynced && setDestPatternIndices([])}
+                    disabled={destPatternsSynced}
+                    title={destPatternsSynced ? "Synced with source All selection" : "Deselect all patterns"}
                   >
                     None
                   </button>
                   <button
-                    className={`tools-multi-btn pattern-btn tools-select-all ${destPatternIndices.length === 16 ? "selected" : ""}`}
-                    onClick={() => sourcePatternIndices.length !== 16 && (destPatternIndices.length === 16
-                      ? setDestPatternIndices([])
-                      : setDestPatternIndices(Array.from({ length: 16 }, (_, i) => i))
-                    )}
-                    disabled={sourcePatternIndices.length === 16}
-                    title={sourcePatternIndices.length === 16 ? "Synced with source All selection" : "Select all patterns"}
+                    className={`tools-multi-btn pattern-btn tools-select-all ${destPatternIndices.length === 16 ? "selected" : ""} ${destPatternPairLocked ? "disabled" : ""}`}
+                    onClick={() => {
+                      if (destPatternsSynced || destPatternPairLocked) return;
+                      destPatternIndices.length === 16
+                        ? setDestPatternIndices([])
+                        : setDestPatternIndices(Array.from({ length: 16 }, (_, i) => i));
+                    }}
+                    disabled={destPatternsSynced || destPatternPairLocked}
+                    title={destPatternsSynced
+                      ? "Synced with source All selection"
+                      : destPatternPairLocked
+                        ? `Locked to ${sourcePatternIndices.length} patterns by the source selection`
+                        : "Select all patterns"}
                   >
                     All
                   </button>
                 </div>
               </div>
+              {destPatternPairLocked && (
+                <div className="tools-hint">
+                  {sourcePatternIndices.map(i => i + 1).join(", ")} to {destPatternIndices.map(i => i + 1).join(", ")}
+                </div>
+              )}
             </div>
           )}
 
@@ -3605,12 +3776,13 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         <button
           className="tools-execute-btn"
           onClick={executeOperation}
-          disabled={isExecuting || (operation === "copy_bank" && sourceBankIndex === -1) || (operation === "copy_bank" && destBankIndices.length === 0) || (operation === "copy_bank" && copySamples && slotValidation !== null && !slotValidation.is_valid) || (operation === "copy_bank" && copySamples && slotValidation !== null && slotValidation.flex_memory_warning !== null) || (operation === "copy_parts" && sourceBankIndex === -1) || (operation === "copy_parts" && destPartBankIndices.length === 0) || (operation === "copy_parts" && sourcePartIndices.length === 0) || (operation === "copy_parts" && destPartIndices.length === 0) || (operation === "copy_tracks" && sourceBankIndex === -1) || (operation === "copy_tracks" && sourceTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex === -2) || (operation === "copy_tracks" && destTrackBankIndices.length === 0) || (operation === "copy_tracks" && destTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex !== -1 && destTrackPartIndices.length === 0) || (operation === "copy_patterns" && sourceBankIndex === -1) || (operation === "copy_patterns" && sourcePatternIndices.length === 0) || (operation === "copy_patterns" && destPatternBankIndices.length === 0) || (operation === "copy_patterns" && destPatternIndices.length === 0) || (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1) || (operation === "copy_patterns" && trackMode === "specific" && patternsTrackIndices.length === 0) || (operation === "copy_sample_slots" && sourceSampleIndices.length + destSampleStart > 128) || (operation === "copy_sample_slots" && !copyAssignments && !copyAttributes) || (operation === "copy_sample_slots" && copyAttributes && selectedAttributes.length === 0 && !copyAssignments)}
+          disabled={isExecuting || (operation === "copy_bank" && sourceBankIndices.length === 0) || (operation === "copy_bank" && destBankIndices.length === 0) || (operation === "copy_bank" && sourceBankIndices.length > 1 && destBankIndices.length !== sourceBankIndices.length) || (operation === "copy_bank" && copySamples && slotValidation !== null && !slotValidation.is_valid) || (operation === "copy_bank" && copySamples && slotValidation !== null && slotValidation.flex_memory_warning !== null) || (operation === "copy_parts" && sourceBankIndex === -1) || (operation === "copy_parts" && destPartBankIndices.length === 0) || (operation === "copy_parts" && sourcePartIndices.length === 0) || (operation === "copy_parts" && destPartIndices.length === 0) || (operation === "copy_tracks" && sourceBankIndex === -1) || (operation === "copy_tracks" && sourceTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex === -2) || (operation === "copy_tracks" && destTrackBankIndices.length === 0) || (operation === "copy_tracks" && destTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex !== -1 && destTrackPartIndices.length === 0) || (operation === "copy_patterns" && sourceBankIndex === -1) || (operation === "copy_patterns" && sourcePatternIndices.length === 0) || (operation === "copy_patterns" && destPatternBankIndices.length === 0) || (operation === "copy_patterns" && destPatternIndices.length === 0) || (operation === "copy_patterns" && sourcePatternIndices.length > 1 && destPatternIndices.length !== sourcePatternIndices.length) || (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1) || (operation === "copy_patterns" && trackMode === "specific" && patternsTrackIndices.length === 0) || (operation === "copy_sample_slots" && sourceSampleIndices.length + destSampleStart > 128) || (operation === "copy_sample_slots" && !copyAssignments && !copyAttributes) || (operation === "copy_sample_slots" && copyAttributes && selectedAttributes.length === 0 && !copyAssignments)}
           title={
             isExecuting ? "Operation in progress..." :
-            (operation === "copy_bank" && sourceBankIndex === -1 && destBankIndices.length === 0) ? "Select source and destination banks" :
-            (operation === "copy_bank" && sourceBankIndex === -1) ? "Select a source bank" :
+            (operation === "copy_bank" && sourceBankIndices.length === 0 && destBankIndices.length === 0) ? "Select source and destination banks" :
+            (operation === "copy_bank" && sourceBankIndices.length === 0) ? "Select a source bank" :
             (operation === "copy_bank" && destBankIndices.length === 0) ? "Select at least one destination bank" :
+            (operation === "copy_bank" && sourceBankIndices.length > 1 && destBankIndices.length !== sourceBankIndices.length) ? `Select ${sourceBankIndices.length} destination banks, one per source bank` :
             (operation === "copy_bank" && copySamples && slotValidation !== null && !slotValidation.is_valid) || (operation === "copy_bank" && copySamples && slotValidation !== null && slotValidation.flex_memory_warning !== null) ? (slotValidation.error_message || "Not enough free slots in destination project") :
             (operation === "copy_parts" && sourceBankIndex === -1 && destPartBankIndices.length === 0) ? "Select source and destination banks" :
             (operation === "copy_parts" && sourceBankIndex === -1) ? "Select a source bank" :
@@ -3633,6 +3805,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             (operation === "copy_patterns" && sourcePatternIndices.length === 0 && destPatternIndices.length === 0) ? "Select source and destination patterns" :
             (operation === "copy_patterns" && sourcePatternIndices.length === 0) ? "Select a source pattern" :
             (operation === "copy_patterns" && destPatternIndices.length === 0) ? "Select at least one destination pattern" :
+            (operation === "copy_patterns" && sourcePatternIndices.length > 1 && destPatternIndices.length !== sourcePatternIndices.length) ? `Select ${sourcePatternIndices.length} destination patterns, one per source pattern` :
             (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1) ? "Select a destination part" :
             (operation === "copy_patterns" && trackMode === "specific" && patternsTrackIndices.length === 0) ? "Select at least one track" :
             (operation === "copy_sample_slots" && sourceSampleIndices.length + destSampleStart > 128) ? "Destination slot range overflows beyond slot 128. Adjust source range or destination slots." :
@@ -3692,309 +3865,31 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         </div>
       )}
 
-      {/* Project Selector Modal */}
+      {/* Project Selector Modal - same picker for both panes */}
       {showProjectSelector && (
-        <div className="modal-overlay" onClick={() => setShowProjectSelector(false)}>
-          <div className="modal-content project-selector-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Select Destination Project</h3>
-              <button className="modal-close" onClick={() => setShowProjectSelector(false)}>×</button>
-            </div>
-            <div className="modal-body project-selector-body">
-              {/* Header row with Current Project, Manual Browse, and Actions */}
-              <div className="project-selector-header-row">
-                <div className="project-selector-left-group">
-                  <div className="project-selector-section project-selector-current">
-                    <h4>Current Project</h4>
-                    <div className="projects-grid">
-                      <div
-                        className={`project-card project-selector-card ${destProject === projectPath ? 'selected' : ''}`}
-                        onClick={() => {
-                          setDestProject(projectPath);
-                          setShowProjectSelector(false);
-                        }}
-                        title={projectPath}
-                      >
-                        <div className="project-name">{projectName}</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="project-selector-section project-selector-actions-section">
-                  <h4>Actions</h4>
-                  <div className="project-selector-actions">
-                    <button
-                      onClick={handleRescan}
-                      disabled={isScanning}
-                      className="scan-button browse-button"
-                    >
-                      {isScanning ? "Scanning..." : "Rescan for Projects"}
-                    </button>
-                    <button
-                      onClick={handleBrowse}
-                      className="scan-button browse-button"
-                    >
-                      Browse...
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Manual Browse: every project found under the browsed folder,
-                  in a collapsible full-width section below the header */}
-              {browsedProjects.some(p => p.path !== projectPath) && (() => {
-                const browseCards = browsedProjects.filter(p => p.path !== projectPath);
-                return (
-                <div className="project-selector-section project-selector-manual">
-                  <h4
-                    className="clickable"
-                    onClick={() => setIsManualBrowseOpen(!isManualBrowseOpen)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
-                  >
-                    <span className="collapse-indicator">{isManualBrowseOpen ? '▼' : '▶'}</span>
-                    Manual Browse - {browseCards.length} Project{browseCards.length !== 1 ? 's' : ''}
-                  </h4>
-                  <div className={`sets-section ${isManualBrowseOpen ? 'open' : 'closed'}`}>
-                    <div className="sets-section-content">
-                      <div className="projects-grid">
-                        {browseCards.map((p) => (
-                          <div
-                            key={p.path}
-                            className={`project-card project-selector-card ${destProject === p.path ? 'selected' : ''}`}
-                            onClick={() => {
-                              setDestProject(p.path);
-                              setShowProjectSelector(false);
-                            }}
-                            title={p.path}
-                          >
-                            <div className="project-name">{p.name}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                );
-              })()}
-
-              {/* Individual Projects (collapsible, grouped by parent dir) */}
-              {standaloneProjects.some(p => p.path !== projectPath && p.has_project_file) && (() => {
-                const filteredStandalone = standaloneProjects.filter(p => p.path !== projectPath && p.has_project_file);
-                // Group by parent directory
-                const byParent = new Map<string, OctatrackProject[]>();
-                for (const project of filteredStandalone) {
-                  const parentDir = project.path.substring(0, project.path.lastIndexOf('/'));
-                  const group = byParent.get(parentDir);
-                  if (group) group.push(project);
-                  else byParent.set(parentDir, [project]);
-                }
-                const multiGroups: [string, OctatrackProject[]][] = [];
-                const loneProjects: OctatrackProject[] = [];
-                for (const [dir, projects] of byParent) {
-                  if (projects.length > 1) multiGroups.push([dir, projects]);
-                  else loneProjects.push(projects[0]);
-                }
-                multiGroups.sort((a, b) => naturalCompare(a[0], b[0]));
-                loneProjects.sort((a, b) => naturalCompare(a.name, b.name));
-
-                const renderSelectorCard = (project: OctatrackProject) => (
-                  <div
-                    key={project.path}
-                    className={`project-card project-selector-card ${destProject === project.path ? 'selected' : ''}`}
-                    onClick={() => {
-                      setDestProject(project.path);
-                      setShowProjectSelector(false);
-                    }}
-                    title={project.path}
-                  >
-                    <div className="project-name">{project.name}</div>
-                  </div>
-                );
-
-                return (
-                <div className="project-selector-section">
-                  <h4
-                    className="clickable"
-                    onClick={() => setIsIndividualProjectsOpenInModal(!isIndividualProjectsOpenInModal)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
-                  >
-                    <span className="collapse-indicator">{isIndividualProjectsOpenInModal ? '▼' : '▶'}</span>
-                    {filteredStandalone.length} Individual Project{filteredStandalone.length !== 1 ? 's' : ''}
-                  </h4>
-                  <div className={`sets-section ${isIndividualProjectsOpenInModal ? 'open' : 'closed'}`}>
-                    <div className="sets-section-content">
-                      {multiGroups.map(([dir, projects]) => (
-                        <div key={dir} className="standalone-group">
-                          <div className="standalone-group-label" title={dir}>
-                            {dir.substring(dir.lastIndexOf('/') + 1) || dir}
-                            <span style={{ opacity: 0.5, marginLeft: '0.5rem', textTransform: 'none', fontFamily: 'inherit', letterSpacing: 0 }}>
-                              - {projects.length} project{projects.length > 1 ? 's' : ''}
-                            </span>
-                          </div>
-                          <div className="projects-grid">
-                            {[...projects].sort((a, b) => naturalCompare(a.name, b.name)).map(renderSelectorCard)}
-                          </div>
-                        </div>
-                      ))}
-                      {loneProjects.length > 0 && (
-                        <div className="standalone-group">
-                          <div className="standalone-group-label">
-                            Other Locations
-                            <span style={{ opacity: 0.5, marginLeft: '0.5rem', textTransform: 'none', fontFamily: 'inherit', letterSpacing: 0 }}>
-                              - {loneProjects.length} project{loneProjects.length > 1 ? 's' : ''}
-                            </span>
-                          </div>
-                          <div className="projects-grid">
-                            {loneProjects.map(renderSelectorCard)}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                );
-              })()}
-
-              {/* Locations (collapsible, each containing sets) */}
-              {locations.filter(loc => loc.sets.some(set => set.projects.some(p => p.path !== projectPath && p.has_project_file))).length > 0 && (
-                <div className="project-selector-section">
-                  <h4
-                    className="clickable"
-                    onClick={() => setIsLocationsOpenInModal(!isLocationsOpenInModal)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
-                  >
-                    <span className="collapse-indicator">{isLocationsOpenInModal ? '▼' : '▶'}</span>
-                    {locations.filter(loc => loc.sets.some(set => set.projects.some(p => p.path !== projectPath && p.has_project_file))).length} Location{locations.filter(loc => loc.sets.some(set => set.projects.some(p => p.path !== projectPath && p.has_project_file))).length !== 1 ? 's' : ''}
-                  </h4>
-                  <div className={`sets-section ${isLocationsOpenInModal ? 'open' : 'closed'}`}>
-                    <div className="sets-section-content">
-              {locations.map((location, locIdx) => {
-                const hasValidProjects = location.sets.some(set => set.projects.some(p => p.path !== projectPath && p.has_project_file));
-                if (!hasValidProjects) return null;
-                const isLocationOpen = openLocationsInModal.has(locIdx);
-                return (
-                  <div key={locIdx} className="project-selector-location">
-                    <div className={`location-card location-type-${location.device_type.toLowerCase()}`}>
-                      <div
-                        className="location-header clickable"
-                        onClick={() => {
-                          setOpenLocationsInModal(prev => {
-                            const newSet = new Set(prev);
-                            if (newSet.has(locIdx)) {
-                              newSet.delete(locIdx);
-                            } else {
-                              newSet.add(locIdx);
-                            }
-                            return newSet;
-                          });
-                        }}
-                      >
-                        <div className="location-header-left">
-                          <span className="collapse-indicator">{isLocationOpen ? '▼' : '▶'}</span>
-                          <h3>{location.name}</h3>
-                          <span className="location-path-inline">{location.path}</span>
-                        </div>
-                        <div className="location-header-right">
-                          <span className="device-type">
-                            {location.device_type === 'CompactFlash' ? 'CF Card' :
-                             location.device_type === 'LocalCopy' ? 'Local Copy' :
-                             location.device_type === 'Usb' ? 'USB' : location.device_type}
-                          </span>
-                          <span className="sets-count">{location.sets.filter(set => set.projects.some(p => p.path !== projectPath && p.has_project_file)).length} Set{location.sets.filter(set => set.projects.some(p => p.path !== projectPath && p.has_project_file)).length !== 1 ? 's' : ''}</span>
-                        </div>
-                      </div>
-
-                      <div className={`sets-section ${isLocationOpen ? 'open' : 'closed'}`}>
-                        <div className="sets-section-content">
-                          {[...location.sets].sort((a, b) => {
-                            const aIsPresets = a.name.toLowerCase() === 'presets';
-                            const bIsPresets = b.name.toLowerCase() === 'presets';
-                            if (aIsPresets && !bIsPresets) return 1;
-                            if (!aIsPresets && bIsPresets) return -1;
-                            return naturalCompare(a.name, b.name);
-                          }).map((set, setIdx) => {
-                            const validProjects = set.projects.filter(p => p.path !== projectPath && p.has_project_file);
-                            if (validProjects.length === 0) return null;
-                            const setKey = `${locIdx}-${set.name}`;
-                            const isSetOpen = openSetsInModal.has(setKey);
-                            return (
-                              <div key={setIdx} className="set-card" title={set.path}>
-                                <div
-                                  className="set-header clickable"
-                                  onClick={() => {
-                                    setOpenSetsInModal(prev => {
-                                      const newSet = new Set(prev);
-                                      if (newSet.has(setKey)) {
-                                        newSet.delete(setKey);
-                                      } else {
-                                        newSet.add(setKey);
-                                      }
-                                      return newSet;
-                                    });
-                                  }}
-                                >
-                                  <div className="set-name">
-                                    <span className="collapse-indicator">{isSetOpen ? '▼' : '▶'}</span>
-                                    {set.name}
-                                  </div>
-                                  <div className="set-info">
-                                    <span
-                                      className={set.has_audio_pool ? "status-audio-pool" : "status-audio-pool-empty"}
-                                      title={set.has_audio_pool ? "Audio Pool folder contains samples" : "Audio Pool folder is empty or missing"}
-                                    >
-                                      {set.has_audio_pool ? "✓ Audio Pool" : "✗ Audio Pool"}
-                                    </span>
-                                    <span className="project-count">
-                                      {validProjects.length} Project{validProjects.length !== 1 ? 's' : ''}
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className={`sets-section ${isSetOpen ? 'open' : 'closed'}`}>
-                                  <div className="sets-section-content">
-                                    <div className="projects-grid">
-                                      {[...validProjects].sort((a, b) => naturalCompare(a.name, b.name)).map((project, projIdx) => (
-                                        <div
-                                          key={projIdx}
-                                          className={`project-card project-selector-card ${destProject === project.path ? 'selected' : ''}`}
-                                          onClick={() => {
-                                            setDestProject(project.path);
-                                            setShowProjectSelector(false);
-                                          }}
-                                          title={project.path}
-                                        >
-                                          <div className="project-name">{project.name}</div>
-                                        </div>
-                                      ))}
-                                      <div
-                                        className="project-card new-project-card"
-                                        role="button"
-                                        tabIndex={0}
-                                        aria-label={`New project in ${set.name}`}
-                                        onClick={() => setCreateModalTarget({ setPath: set.path, setName: set.name })}
-                                        onKeyDown={(e) => { if (e.key === 'Enter') setCreateModalTarget({ setPath: set.path, setName: set.name }) }}
-                                      >
-                                        <div className="new-project-icon">+</div>
-                                        <div className="new-project-label">New Project</div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-                      </div>
-                    </div>
-                  </div>
-                )}
-            </div>
-          </div>
-        </div>
+        <ProjectSelectorModal
+          title={showProjectSelector === "source" ? "Select Source Project" : "Select Destination Project"}
+          value={showProjectSelector === "source" ? sourceProject : destProject}
+          onSelect={(path) => {
+            if (showProjectSelector === "source") setSourceProject(path);
+            else setDestProject(path);
+            setShowProjectSelector(null);
+          }}
+          onClose={() => setShowProjectSelector(null)}
+          currentProjectPath={projectPath}
+          currentProjectName={projectName}
+          locations={locations}
+          standaloneProjects={standaloneProjects}
+          browsedProjects={browsedProjects}
+          isManualBrowseOpen={isManualBrowseOpen}
+          setIsManualBrowseOpen={setIsManualBrowseOpen}
+          onRescan={handleRescan}
+          onBrowse={handleBrowse}
+          isScanning={isScanning}
+          onCreateProject={showProjectSelector === "dest"
+            ? (setPath, setName) => setCreateModalTarget({ setPath, setName })
+            : undefined}
+        />
       )}
 
       {/* Create Project Modal (from destination selector) */}
@@ -4017,7 +3912,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               setStandaloneProjects([...result.standalone_projects].sort((a, b) => naturalCompare(a.name, b.name)));
               // Auto-select the new project as destination
               setDestProject(newPath);
-              setShowProjectSelector(false);
+              setShowProjectSelector(null);
             } catch (err) {
               alert(`Create failed: ${err}`);
             }
