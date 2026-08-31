@@ -241,3 +241,59 @@
 | PRG-85 | Purge Project Samples | A triggered machine still protects its slot | Find a slot whose Usage badge is the green "played in N places" one | It is never offered for clearing, in any purge scope |
 | PRG-86 | Purge Project Samples | Master track does not hold slots hostage | On a project with the Master track enabled (project setting MASTER_TRACK, making T8 the Master track), find a slot whose only reference is a machine on T8 | The Usage badge does not list T8 at all, and the slot is offered for clearing. With the Master track disabled, that same T8 machine counts as normal usage again |
 | PRG-87 | Purge Audio Pool Samples | Master track does not hold pool files hostage | Same as PRG-86 but for a pool file whose only Set-wide reference is a T8 machine on a Master-track project | The file counts as unused and is offered for purging |
+| **Clear Project** | | | | |
+| CLR-1 | Clear Project | Operation is offered | Open a project's Tools tab and read the Operation dropdown | "Clear Project" is listed after "Copy Sample Slots" |
+| CLR-2 | Clear Project | Single Target pane | Select Clear Project | One pane titled "Target" is shown - no Source/Destination split and no project selector, since it always acts on the project you are viewing |
+| CLR-3 | Clear Project | Scope selector | Look at the "Clear" field | Five choices: Banks, Parts, Patterns, Tracks, Sample Slots. Banks is selected by default |
+| CLR-4 | Clear Project | Execute blocked until a target is chosen | Select Clear Project and hover Execute before selecting anything | Execute is disabled and its tooltip states what is missing (e.g. "Select at least one bank to clear") |
+| CLR-5 | Clear Project | Summary states the target | Select a bank | A line above Execute reads "Clears 1 bank (A)" and follows every change to the selection |
+| CLR-6 | Clear Project | Confirmation before anything happens | Press Execute | A "Clear Project" dialog names the exact target, states it resets it to the factory-default state, and notes that rewritten files are backed up in the project's directory |
+| CLR-7 | Clear Project | Cancel changes nothing | Press Execute then Cancel | No file is modified and no backup is created |
+| CLR-8 | Clear Project | Backups are written | Clear anything, then look in the project directory | A timestamped backups/ entry with a clear_<scope> label holds the previous version of every file that was rewritten |
+| **Clear Project - Banks** | | | | |
+| CLR-9 | Clear Banks | Bank is emptied | Clear a bank holding parts and patterns, then reopen it | All 4 Parts are back to default, all 16 Patterns hold no trigs, and part names read ONE / TWO / THREE / FOUR |
+| CLR-10 | Clear Banks | Multi-select | Shift-click a range of banks, or ctrl-click individual ones, then Execute | Exactly the selected banks are cleared |
+| CLR-11 | Clear Banks | None / All row | Use the None and All buttons under the bank grid | All selects every bank that exists on disk (never a bank that does not); None empties the selection and disables Execute |
+| CLR-12 | Clear Banks | Banks not on disk cannot be targeted | Open a project that has fewer than 16 bank files | The missing banks are greyed out and cannot be selected, with tooltip "Bank not loaded" |
+| CLR-13 | Clear Banks | Other banks untouched | Clear Bank B on a project where every bank has content | Only Bank B is empty; every other bank still holds its parts and patterns |
+| CLR-14 | Clear Banks | Bank file is kept | Clear a bank, then look at the project directory | bankNN.work still exists (rewritten empty) - the project keeps the same number of banks |
+| CLR-15 | Clear Banks | Device reads the result | Clear a bank, sync the project to the Octatrack and open that bank | The device loads it as an empty bank with no error |
+| **Clear Project - Parts** | | | | |
+| CLR-16 | Clear Parts | Part cross widget | Select the Parts scope | The Part selector is the same cross as Copy Parts: 1 on top, 4 / All / 2 across, 3 below |
+| CLR-17 | Clear Parts | Single part reset | Clear Part 2 of a bank | Part 2's machines, amp, LFOs, FX and volumes are back to default in both the saved and the unsaved state |
+| CLR-18 | Clear Parts | Part name reset | Clear a part that had a custom name | Its name is back to the default for that slot (ONE / TWO / THREE / FOUR) |
+| CLR-19 | Clear Parts | All four at once | Click All on the cross and Execute | All 4 parts are reset |
+| CLR-20 | Clear Parts | Other parts untouched | Clear Part 2 only | Parts 1, 3 and 4 keep their machines and their names |
+| CLR-21 | Clear Parts | Patterns untouched | Clear a part on a bank with trigs | Every pattern keeps its trigs and its part assignment |
+| **Clear Project - Patterns** | | | | |
+| CLR-22 | Clear Patterns | Pattern grid widget | Select the Patterns scope | The Pattern selector is the same grid as Copy Patterns, with a None / All row underneath |
+| CLR-23 | Clear Patterns | Pattern emptied | Clear a pattern holding trigs on several tracks | It has no trigs on any audio or MIDI track, and its scale and chaining settings are back to default |
+| CLR-24 | Clear Patterns | Part assignment reset | Clear a pattern assigned to Part 3 | It is assigned to Part 1 again |
+| CLR-25 | Clear Patterns | Multi-select and All | Shift-click a range, ctrl-click extras, or press All | Exactly the selected patterns are emptied; the others keep their trigs |
+| CLR-26 | Clear Patterns | Parts untouched | Clear patterns on a bank with custom parts | Every part keeps its sound design and its name |
+| **Clear Project - Tracks** | | | | |
+| CLR-27 | Clear Tracks | Field order | Select the Tracks scope | Fields read: Bank, Track, then Part and Clear Mode side by side, then Pattern |
+| CLR-28 | Clear Tracks | Track grid widget | Look at the Track field | Same grid style as Pattern: T1-T8 on one row, M1-M8 below, and a None / All Audio / All MIDI row |
+| CLR-29 | Clear Tracks | Clear Mode choices and order | Look at the Clear Mode field | Three choices in order: Part Parameters, Both, Pattern Triggers |
+| CLR-30 | Clear Tracks | Part Parameters mode | Clear T1 with Part Parameters | T1's machine, params, FX, volume, LFO and recorder setup are default in both saved and unsaved state; every pattern keeps its T1 trigs |
+| CLR-31 | Clear Tracks | Pattern Triggers mode | Clear T1 with Pattern Triggers on selected patterns | Those patterns lose their T1 trigs, trigless trigs and parameter locks; T1's sound design is unchanged |
+| CLR-32 | Clear Tracks | Both mode | Clear T1 with Both | Sound design and the selected patterns' trigs are cleared in one run |
+| CLR-33 | Clear Tracks | Pattern field hidden for sound design | Switch Clear Mode to Part Parameters | The Pattern field disappears - patterns are irrelevant to that mode. Switching back brings it back |
+| CLR-34 | Clear Tracks | Patterns must be chosen | In Both or Pattern Triggers mode with no pattern selected, hover Execute | Execute is disabled with tooltip "Select at least one pattern"; pressing All in the pattern grid enables it |
+| CLR-35 | Clear Tracks | MIDI tracks | Clear M3 with Both | M3's MIDI params, arp and LFO are default and its trigs are gone; audio tracks are untouched |
+| CLR-36 | Clear Tracks | Unselected tracks untouched | Clear T1 only, in any mode | T2-T8 and M1-M8 keep both their sound design and their trigs |
+| CLR-37 | Clear Tracks | All four parts | Press All on the part cross, then Execute | The selected tracks are cleared in all 4 parts of that bank |
+| CLR-38 | Clear Tracks | One part only | Select Part 3 and clear T1 | Only Part 3's T1 is reset; Parts 1, 2 and 4 keep their T1 sound design |
+| **Clear Project - Sample Slots** | | | | |
+| CLR-39 | Clear Slots | Slot Type choices | Select the Sample Slots scope | Three choices in order: Flex, Both, Static |
+| CLR-40 | Clear Slots | Range widget | Look at the Slots field | Same control as Copy Sample Slots: from-to inputs, a live slot count, One / Range buttons and a dual-handle slider. The active One/Range button is highlighted |
+| CLR-41 | Clear Slots | Slot cleared | Clear a range of Flex slots that hold samples | Those slots are empty: no sample assigned and attributes back to default |
+| CLR-42 | Clear Slots | Audio files kept | After CLR-41, look on disk | Every audio file is still there - only the slot assignments were cleared |
+| CLR-43 | Clear Slots | Both pools | Set Slot Type to Both and clear slots 1-8 | Flex slots 1-8 and Static slots 1-8 are both emptied |
+| CLR-44 | Clear Slots | One mode | Press One | The second input disappears, the count reads 1 slot, and only that slot is cleared |
+| CLR-45 | Clear Slots | Slider and inputs agree | Drag either slider handle, then read the number fields (and vice versa) | The two always show the same range; a handle cannot be dragged past the other |
+| CLR-46 | Clear Slots | Inverted range is reordered | Type a "from" larger than the "to" | The range is reordered rather than rejected, and Execute stays available |
+| CLR-47 | Clear Slots | Slots outside the range untouched | Clear slots 3-5 | Slots 1, 2 and 6-128 keep their samples and attributes |
+| CLR-48 | Clear Slots | project.work is backed up | Clear sample slots and look in the project directory | A backups/ entry labelled clear_sample_slots holds the previous project.work |
+| CLR-49 | Clear Slots | Usage reflects the clearing | Clear slots holding Audio Pool files, then look at the Audio Pool Usage column | Those files no longer report usage from this project |
+

@@ -468,10 +468,9 @@ fn rename_file(
     let new_path = rename_file_impl(&old_path, &new_name)?;
 
     let refs = match pool_path {
-        Some(pool) if was_file => project_reader::update_pool_references(
-            &pool,
-            &[(old_path.clone(), new_path.clone())],
-        )?,
+        Some(pool) if was_file => {
+            project_reader::update_pool_references(&pool, &[(old_path.clone(), new_path.clone())])?
+        }
         _ => project_reader::PoolReferenceUpdate {
             projects_updated: vec![],
             slots_updated: 0,
@@ -662,11 +661,7 @@ async fn clear_banks(project: String, bank_indices: Vec<u8>) -> Result<(), Strin
 
 /// Reset Parts of one bank (name included) to the factory default.
 #[tauri::command]
-async fn clear_parts(
-    project: String,
-    bank_index: u8,
-    part_indices: Vec<u8>,
-) -> Result<(), String> {
+async fn clear_parts(project: String, bank_index: u8, part_indices: Vec<u8>) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         project_reader::clear_parts(&project, bank_index, &part_indices)
     })

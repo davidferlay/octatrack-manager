@@ -4394,6 +4394,55 @@ test.describe('Tools Tab - Clear Project', () => {
     expect(calls[0][1]).toMatchObject({ slotType: 'STATIC', slotIndices: [1, 2] })
   })
 
+  test('the Parts scope uses the same part cross as Copy Parts', async ({ page }) => {
+    await opt(page, 'Parts').click()
+    const cross = page.locator(`${panel} .tools-part-cross`)
+    await expect(cross).toBeVisible()
+    // 1 on top, 4 / All / 2 across, 3 below - four parts plus All.
+    await expect(cross.locator('.part-btn')).toHaveCount(5)
+
+    await cross.locator('.part-btn.part-all').click()
+    await execute(page)
+    const calls = await clearCalls(page)
+    expect(calls[0][1]).toMatchObject({ partIndices: [0, 1, 2, 3] })
+  })
+
+  test('the bank None / All row drives the multi-bank selection', async ({ page }) => {
+    const banks = page.locator(`${panel} .tools-multi-btn.bank-btn.tools-select-all`)
+    await banks.filter({ hasText: 'All' }).click()
+    await expect(page.locator('.tools-clear-btn')).toBeEnabled()
+
+    await banks.filter({ hasText: 'None' }).click()
+    await expect(page.locator('.tools-clear-btn')).toBeDisabled()
+  })
+
+  test('the track grid offers All Audio and All MIDI, not a single All', async ({ page }) => {
+    await opt(page, 'Tracks').click()
+    const actions = page.locator(`${panel} .tools-multi-select.tracks-stacked .tools-select-actions`)
+    await expect(actions.locator('button')).toHaveText(['None', 'All Audio', 'All MIDI'])
+
+    await actions.filter({ hasText: 'All MIDI' }).locator('button', { hasText: 'All MIDI' }).click()
+    await page.locator(`${panel} .tools-multi-btn.pattern-btn.tools-select-all`, { hasText: 'All' }).click()
+    await execute(page)
+
+    const calls = await clearCalls(page)
+    expect(calls[0][1]).toMatchObject({ trackIndices: [8, 9, 10, 11, 12, 13, 14, 15], patternIndices: null })
+  })
+
+  test('the confirmation names the exact target', async ({ page }) => {
+    await opt(page, 'Patterns').click()
+    await btn(page, '2').click()
+    await page.locator('.tools-clear-btn').click()
+
+    await expect(page.locator('.modal-body')).toContainText('1 pattern (2) of Bank A')
+    await expect(page.locator('.modal-body')).toContainText('Rewritten files are backed up')
+  })
+
+  test('the summary line states what Execute will clear', async ({ page }) => {
+    await btn(page, 'A').click()
+    await expect(page.locator('.tools-clear-summary')).toHaveText('Clears 1 bank (A)')
+  })
+
   test('Slot Type "Both" clears the Flex and the Static pool', async ({ page }) => {
     await opt(page, 'Sample Slots').click()
     await opt(page, 'Both').click()

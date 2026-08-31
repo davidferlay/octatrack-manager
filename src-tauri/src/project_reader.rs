@@ -7756,11 +7756,7 @@ pub fn clear_parts(project: &str, bank_index: u8, part_indices: &[u8]) -> Result
 
 /// Empty Patterns of a bank: no trigs on any track, default scale/chain settings,
 /// and the Part assignment back to Part 1 (what a fresh pattern carries).
-pub fn clear_patterns(
-    project: &str,
-    bank_index: u8,
-    pattern_indices: &[u8],
-) -> Result<(), String> {
+pub fn clear_patterns(project: &str, bank_index: u8, pattern_indices: &[u8]) -> Result<(), String> {
     if pattern_indices.is_empty() {
         return Err("Select at least one pattern to clear".to_string());
     }
@@ -12727,7 +12723,11 @@ mod tests {
 
             let bank = bank_of(&project.path, 0);
             for p in [0usize, 2, 3] {
-                assert_eq!(bank.parts.unsaved.0[p].audio_track_machine_types[0], 0, "part {}", p);
+                assert_eq!(
+                    bank.parts.unsaved.0[p].audio_track_machine_types[0], 0,
+                    "part {}",
+                    p
+                );
             }
             assert_eq!(bank.parts.unsaved.0[1].audio_track_machine_types[0], 3);
         }
@@ -12751,7 +12751,11 @@ mod tests {
             let bank = bank_of(&project.path, 0);
             assert_eq!(trigs(&bank, 3, 0), 0);
             assert_eq!(trigs(&bank, 5, 0), 0);
-            assert_eq!(trigs(&bank, 4, 0), 0xFF, "untouched pattern keeps its trigs");
+            assert_eq!(
+                trigs(&bank, 4, 0),
+                0xFF,
+                "untouched pattern keeps its trigs"
+            );
         }
 
         #[test]
@@ -12880,6 +12884,127 @@ mod tests {
             assert!(clear_tracks(&project.path, 0, 0, &[0], "both", Some(vec![16])).is_err());
         }
 
+        // -- edge cases shared by every scope ------------------------------
+
+        #[test]
+        fn clear_banks_reports_a_bank_that_is_not_on_disk() {
+            let temp = TempDir::new().unwrap();
+            let project = temp.path().to_string_lossy().to_string();
+            std::fs::write(temp.path().join("project.work"), b"x").unwrap();
+
+            let err = clear_banks(&project, &[0]).unwrap_err();
+            assert!(err.contains("not found"), "got: {}", err);
+        }
+
+        #[test]
+        fn clear_banks_writes_work_for_a_bank_that_only_exists_as_strd() {
+            let temp = TempDir::new().unwrap();
+            let project = temp.path().to_string_lossy().to_string();
+            // A project synced from the device but never opened has .strd only.
+            let strd = temp.path().join("bank01.strd");
+            BankFile::default().to_data_file(&strd).unwrap();
+
+            clear_banks(&project, &[0]).unwrap();
+
+            assert!(
+                temp.path().join("bank01.work").exists(),
+                ".work is what the device loads, so that is what gets written"
+            );
+            assert!(strd.exists(), ".strd left as it was");
+        }
+
+        #[test]
+        fn clear_parts_and_patterns_fail_on_a_missing_bank() {
+            let project = TestProject::new();
+            std::fs::remove_file(Path::new(&project.path).join("bank03.work")).unwrap();
+
+            assert!(clear_parts(&project.path, 2, &[0]).is_err());
+            assert!(clear_patterns(&project.path, 2, &[0]).is_err());
+            assert!(clear_tracks(&project.path, 2, 0, &[0], "both", None).is_err());
+        }
+
+        #[test]
+        fn clear_parts_rejects_an_out_of_range_bank() {
+            let project = TestProject::new();
+            assert!(clear_parts(&project.path, 16, &[0]).is_err());
+            assert!(clear_patterns(&project.path, 16, &[0]).is_err());
+        }
+
+        #[test]
+        fn clear_tracks_clears_midi_tracks_too() {
+            let project = TestProject::new();
+            let path = Path::new(&project.path).join("bank01.work");
+            let mut bank = BankFile::from_data_file(&path).unwrap();
+            bank.parts.unsaved.0[0].midi_track_params_values[0].unknown = [7, 7];
+            bank.patterns.0[0].midi_track_trigs.0[0].trig_masks.trigger[0] = 0xFF;
+            bank.checksum = bank.calculate_checksum().unwrap();
+            bank.to_data_file(&path).unwrap();
+
+            // Track index 8 is MIDI track 1.
+            clear_tracks(&project.path, 0, 0, &[8], "both", None).unwrap();
+
+            let after = bank_of(&project.path, 0);
+            assert_eq!(
+                after.patterns.0[0].midi_track_trigs.0[0].trig_masks.trigger[0], 0,
+                "MIDI trigs cleared"
+            );
+            assert_eq!(
+                after.parts.unsaved.0[0].midi_track_params_values[0].unknown,
+                [0, 0],
+                "MIDI part params cleared"
+            );
+        }
+
+        #[test]
+        fn clear_tracks_only_touches_the_part_it_was_given() {
+            let project = TestProject::new();
+            dirty_bank(&project.path, 0);
+
+            clear_tracks(&project.path, 0, 2, &[0], "part_params", None).unwrap();
+
+            let bank = bank_of(&project.path, 0);
+            assert_eq!(bank.parts.unsaved.0[2].audio_track_machine_types[0], 0);
+            for other in [0usize, 1, 3] {
+                assert_eq!(
+                    bank.parts.unsaved.0[other].audio_track_machine_types[0], 3,
+                    "part {} untouched",
+                    other
+                );
+            }
+        }
+
+        #[test]
+        fn clearing_one_bank_never_touches_another() {
+            let project = TestProject::new();
+            dirty_bank(&project.path, 0);
+            dirty_bank(&project.path, 1);
+
+            clear_parts(&project.path, 0, &[0]).unwrap();
+            clear_patterns(&project.path, 0, &[0]).unwrap();
+            clear_tracks(&project.path, 0, 1, &[0], "both", None).unwrap();
+
+            let untouched = bank_of(&project.path, 1);
+            assert_eq!(trigs(&untouched, 0, 0), 0xFF);
+            assert_eq!(untouched.parts.unsaved.0[0].audio_track_machine_types[0], 3);
+            assert_eq!(
+                untouched.part_names[0],
+                [b'D', b'I', b'R', b'T', b'Y', 0, 0]
+            );
+        }
+
+        #[test]
+        fn a_cleared_bank_reads_back_with_a_valid_checksum() {
+            let project = TestProject::new();
+            dirty_bank(&project.path, 0);
+
+            clear_parts(&project.path, 0, &[0]).unwrap();
+
+            // from_data_file is the same reader the app and the device-facing
+            // round-trip tests use: a bad checksum or length would fail here.
+            let bank = bank_of(&project.path, 0);
+            assert_eq!(bank.checksum, bank.calculate_checksum().unwrap());
+        }
+
         #[test]
         fn with_blank_bank_hands_out_a_default_bank_and_cleans_up_after() {
             let mut scratch = String::new();
@@ -12907,7 +13032,10 @@ mod tests {
             })
             .unwrap_err();
             assert_eq!(err, "boom");
-            assert!(!Path::new(&scratch).exists(), "cleaned up on the error path");
+            assert!(
+                !Path::new(&scratch).exists(),
+                "cleaned up on the error path"
+            );
         }
     }
 
@@ -20790,6 +20918,17 @@ mod tests {
                 2,
                 "PROJ1's trigged machine assignment plus PROJ2's fallback 'assigned' entry"
             );
+            // Every entry carries the project directory it came from, so the UI
+            // can link an entry straight to that project.
+            for entry in entries {
+                let expected = set.join(&entry.project).to_string_lossy().to_string();
+                assert_eq!(
+                    entry.project_path, expected,
+                    "{} should report its own directory",
+                    entry.project
+                );
+                assert!(Path::new(&entry.project_path).is_dir());
+            }
             let proj1 = entries.iter().find(|e| e.project == "PROJ1").unwrap();
             assert_eq!(proj1.kind, "machine");
             assert!(proj1.audible);

@@ -482,3 +482,111 @@ describe('ClearProjectPanel - sample slot widget', () => {
     expect(screen.getByLabelText('Last slot to clear')).toHaveValue('5')
   })
 })
+
+describe('ClearProjectPanel - bank targeting', () => {
+  it('falls back to the first bank that exists, not to Bank A', async () => {
+    const user = userEvent.setup()
+    // A project whose first four banks were never created.
+    renderPanel({ loadedBankIndices: new Set([4, 5]) })
+    await user.click(screen.getByRole('button', { name: 'Patterns' }))
+    await user.click(screen.getByRole('button', { name: '1' }))
+    await confirm(user)
+
+    await waitFor(() => expect(callsTo('clear_patterns')).toHaveLength(1))
+    expect(callsTo('clear_patterns')[0][1]).toMatchObject({ bankIndex: 4 })
+  })
+
+  it('blocks every bank-scoped clear when the project has no banks at all', async () => {
+    const user = userEvent.setup()
+    renderPanel({ loadedBankIndices: new Set() })
+    await user.click(screen.getByRole('button', { name: 'Patterns' }))
+
+    const execute = screen.getByRole('button', { name: /Execute/ })
+    expect(execute).toBeDisabled()
+    expect(execute).toHaveAttribute('title', 'Select a bank')
+  })
+
+  it('clicking the selected bank again deselects it', async () => {
+    const user = userEvent.setup()
+    renderPanel()
+    await user.click(screen.getByRole('button', { name: 'Parts' }))
+    await user.click(screen.getByRole('button', { name: 'C' }))
+    await user.click(screen.getByRole('button', { name: 'C' }))
+    await user.click(screen.getByRole('button', { name: '1' }))
+    await confirm(user)
+
+    // Back to the fallback bank, not stuck on C.
+    await waitFor(() => expect(callsTo('clear_parts')).toHaveLength(1))
+    expect(callsTo('clear_parts')[0][1]).toMatchObject({ bankIndex: 0 })
+  })
+
+  it('backs up only the targeted bank for a scoped clear', async () => {
+    const user = userEvent.setup()
+    renderPanel()
+    await user.click(screen.getByRole('button', { name: 'Patterns' }))
+    await user.click(screen.getByRole('button', { name: 'D' }))
+    await user.click(screen.getByRole('button', { name: '1' }))
+    await confirm(user)
+
+    await waitFor(() => expect(callsTo('backup_project_files')).toHaveLength(1))
+    expect(callsTo('backup_project_files')[0][1]).toEqual({
+      projectPath: '/set/MyProject',
+      files: ['bank04.work'],
+      label: 'clear_patterns',
+    })
+  })
+})
+
+describe('ClearProjectPanel - scope isolation', () => {
+  it('switching scope does not carry the previous selection into the call', async () => {
+    const user = userEvent.setup()
+    renderPanel()
+    await user.click(screen.getByRole('button', { name: 'A' }))
+    await user.click(screen.getByRole('button', { name: 'Parts' }))
+    await user.click(screen.getByRole('button', { name: '1' }))
+    await confirm(user)
+
+    await waitFor(() => expect(callsTo('clear_parts')).toHaveLength(1))
+    // The banks-scope selection must not have leaked into a parts clear.
+    expect(callsTo('clear_banks')).toHaveLength(0)
+    expect(callsTo('clear_parts')[0][1]).toMatchObject({ partIndices: [0] })
+  })
+
+  it('sends exactly one command per Execute', async () => {
+    const user = userEvent.setup()
+    renderPanel()
+    await user.click(screen.getByRole('button', { name: 'A' }))
+    await confirm(user)
+
+    await waitFor(() => expect(callsTo('clear_banks')).toHaveLength(1))
+    const clears = mockInvoke.mock.calls.filter(c => String(c[0]).startsWith('clear_'))
+    expect(clears).toHaveLength(1)
+  })
+
+  it('leaves the selection alone after a run so it can be repeated', async () => {
+    const user = userEvent.setup()
+    renderPanel()
+    await user.click(screen.getByRole('button', { name: 'B' }))
+    await confirm(user)
+    await waitFor(() => expect(callsTo('clear_banks')).toHaveLength(1))
+
+    // Still armed on Bank B: a second Execute clears the same target.
+    await confirm(user)
+    await waitFor(() => expect(callsTo('clear_banks')).toHaveLength(2))
+    expect(callsTo('clear_banks')[1][1]).toMatchObject({ bankIndices: [1] })
+  })
+
+  it('does not run the command when the backup fails', async () => {
+    const user = userEvent.setup()
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'backup_project_files') throw 'disk full'
+      return undefined as never
+    })
+    renderPanel()
+    await user.click(screen.getByRole('button', { name: 'A' }))
+    await confirm(user)
+
+    expect(await screen.findByText(/disk full/)).toBeInTheDocument()
+    expect(callsTo('clear_banks')).toHaveLength(0)
+  })
+})
