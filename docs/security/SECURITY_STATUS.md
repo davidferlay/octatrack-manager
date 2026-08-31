@@ -4,6 +4,8 @@ Audit date: 2026-08-29
 
 Base commit at this recheck: `44554d0` (main after M4-B, UI5, UI6, and PR #28).
 
+Gate B status updated: 2026-08-31 (human sign-off source `a10437f`).
+
 This document tracks the live status of the containment items from
 `docs/CODEX_HANDOFF.md` §3. It does **not** declare the product safe for
 destructive operations against original Octatrack media.
@@ -22,9 +24,13 @@ destructive operations against original Octatrack media.
   is retired or root-bounded.
 - Gate B production recovery is merged (PR #43 / #47). Automated synthetic-disk
   smoke is **PASS on Linux and macOS** at `199114e` (portable script via PR #55;
-  evidence via PR #56, tip reconfirmed); human review of
-  `docs/testing/GATE_B_SMOKE_EVIDENCE.md` and DMG human smoke remain required
-  before Gate B sign-off / M5.
+  evidence via PR #56, tip reconfirmed). Human DMG verification,
+  Octatrack OS 1.40 compatibility, additive-copy invariance, and remount
+  persistence are **PASS** on source `a10437f`; Gate B is signed off for
+  personal/local use and M5 may start.
+- The signed-off DMG is ad-hoc signed and is not approved as a public
+  distribution artifact. Developer ID signing/notarization and release
+  provenance remain a separate public-distribution gate.
 
 ## CODEX_HANDOFF §3 checklist
 
@@ -61,8 +67,8 @@ Write path properties:
 - Write grant: live, non-persistent, 15-minute TTL, requires stable identity
 - Apply: exact displayed `planId` one-shot approval; consumed afterward
 - Recovery: status fail-closed; production recover-execute is available
-  (`v2_change_recover` / PR #43–#47) with journal-bound approval. Human review of
-  Gate B smoke evidence remains required before M5.
+  (`v2_change_recover` / PR #43–#47) with journal-bound approval. Gate B human
+  sign-off is complete for personal/local use on source `a10437f`.
 
 ## Findings from 2026-08-29 recheck
 
@@ -79,10 +85,10 @@ Fixed in this recheck branch:
 
 Still open / deferred:
 
-1. **High (ops / Gate B)** — human review/sign-off of
-   `docs/testing/GATE_B_SMOKE_EVIDENCE.md` (dual-host automated PASS on
-   `199114e`) plus DMG human smoke before declaring Gate B complete / M5.
-2. **High (legacy)** — absolute-path command surface remains fully wired.
+1. **High (legacy)** — absolute-path command surface remains fully wired.
+2. **High (distribution)** — the Gate B DMG is ad-hoc signed and approved only
+   for personal/local use; public distribution still requires its own signing,
+   notarization, provenance, and release-security gate.
 3. **Resolved in follow-up PRs** — frontend toolchain (DEP-2) and React Router
    (DEP-3) production advisories; Tauri DEP-1 and SEC-1 containment CI are
    merged on main.
@@ -91,9 +97,8 @@ Still open / deferred:
 
 1. Legacy command surface can still read/write/delete arbitrary absolute paths
    once the desktop app is running. Do not point it at original media.
-2. Gate B remains unsigned until a human reviews the synthetic-disk smoke
-   evidence (dual-host PASS on `199114e`) and completes DMG human smoke;
-   do not start M5 before that sign-off.
+2. The ad-hoc signed Gate B DMG must not be treated as a public distribution
+   artifact.
 ## Verification performed in this recheck
 
 - Architecture guard pass against the live 15-command v2 surface.

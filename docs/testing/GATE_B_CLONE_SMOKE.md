@@ -144,8 +144,30 @@ absolute paths, volume identifiers, personal filenames, or media fingerprints:
 Gate B remains incomplete until this checklist is executed against an approved
 disposable clone **or** the recorded synthetic-disk evidence in
 `docs/testing/GATE_B_SMOKE_EVIDENCE.md` is reviewed and signed off by a human.
-M5 must not begin before that sign-off.
+M5 must not begin before that sign-off; the completed sign-off is recorded
+below.
 
 Automated synthetic-disk smoke (no original media) is available via
 `scripts/gate-b-synthetic-smoke.sh` and recorded under
+`docs/testing/GATE_B_SMOKE_EVIDENCE.md`.
+
+## Completed sign-off
+
+Gate B was signed off **PASS** on 2026-08-31 for personal/local use only.
+
+- source commit:
+  `a10437f3b32c2c116a8e9133dd21c762843ed36e`
+- macOS DMG SHA-256:
+  `9cc41fe4ba507536027e01e365efb395709e6b8c23294d17f3d21c5921f109ae`
+- DMG verification: PASS
+- Octatrack OS 1.40 compatibility: PASS
+- human additive-copy smoke: PASS
+- source/destination SHA-256 match: PASS
+- existing media unchanged: PASS
+- remount persistence: PASS
+
+The build remains ad-hoc signed. Developer ID signing and notarization were not
+required for this personal/local-use gate, so this result is not approval for
+public distribution. It also does not authorize testing against original
+SD/CF media. The detailed automated evidence is recorded in
 `docs/testing/GATE_B_SMOKE_EVIDENCE.md`.

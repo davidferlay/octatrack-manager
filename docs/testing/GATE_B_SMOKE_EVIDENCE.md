@@ -79,11 +79,35 @@ Both hosts on `199114e`:
 
 - automated synthetic smoke (Linux, `199114e`): **PASS**
 - automated synthetic smoke (macOS, `199114e`): **PASS**
-- human review of this report: **pending**
-- DMG human smoke / Gate B sign-off: **pending**
+- human review of this report: **PASS**
+- compatibility-policy DMG human smoke: **PASS**
+- Gate B sign-off: **PASS** (personal/local-use scope)
+
+## Human Gate B sign-off
+
+- decision: **Gate B PASS**
+- sign-off date: 2026-08-31
+- scope: personal/local use only
+- source commit:
+  `a10437f3b32c2c116a8e9133dd21c762843ed36e`
+- macOS DMG SHA-256:
+  `9cc41fe4ba507536027e01e365efb395709e6b8c23294d17f3d21c5921f109ae`
+- DMG verification: **PASS**
+- Octatrack OS 1.40 compatibility: **PASS**
+- human additive-copy smoke: **PASS**
+- source/destination SHA-256 match: **PASS**
+- existing media unchanged: **PASS**
+- remount persistence: **PASS**
+- M5 may start: **yes**
+
+The tested build is ad-hoc signed. Developer ID signing and notarization are
+not required for this personal/local-use sign-off, but the DMG must not be
+treated as a public distribution artifact. Public distribution remains a
+separate release, signing, notarization, provenance, and security gate.
 
 ## Notes
 
 - No updater, release, deploy, cloud sync, or remote filesystem was involved.
 - Re-run with: `scripts/gate-b-synthetic-smoke.sh`
-- M5 must not begin until a human signs off this evidence.
+- This sign-off does not authorize writes to original SD/CF media and does not
+  relax the RootRegistry or Intent → Plan → Apply safety boundaries.
