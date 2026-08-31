@@ -2119,6 +2119,40 @@ mod tests {
     }
 
     #[test]
+    fn unknown_project_os_still_blocks_write() {
+        let root = TempDir::new().unwrap();
+        let audio_pool = root.path().join("SET_A/AUDIO");
+        fs::create_dir_all(&audio_pool).unwrap();
+        write_test_wav(&audio_pool.join("kick.wav"));
+        let project = root.path().join("SET_A/BaseProject");
+        fs::create_dir(&project).unwrap();
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/real_device_os_1_40/project.work");
+        let source = String::from_utf8(fs::read(fixture).unwrap()).unwrap();
+        fs::write(
+            project.join("project.work"),
+            source.replace("R0173      1.40", "R9999      9.99"),
+        )
+        .unwrap();
+        let registry = registry();
+        let data_directory = TempDir::new().unwrap();
+        let catalog = open_shared_catalog(data_directory.path()).unwrap();
+        let write = open_shared_write_runtime(data_directory.path()).unwrap();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        let snapshot = list_library_sync(&registry, &catalog, &root_id).unwrap();
+        assert!(snapshot.state_documents.iter().any(|document| {
+            document.parse_status == StateDocumentParseStatus::UnsupportedVersion
+        }));
+
+        let error = enable_write_sync(&registry, &catalog, &write, &root_id).unwrap_err();
+
+        assert_eq!(error.code, "WRITE_NOT_SUPPORTED");
+        assert!(!format!("{error:?}").contains(root.path().to_str().unwrap()));
+    }
+
+    #[test]
     fn unsupported_sample_settings_still_block_write() {
         let root = TempDir::new().unwrap();
         let audio_pool = root.path().join("SET_A/AUDIO");
@@ -2758,6 +2792,7 @@ mod tests {
             parser_name: "fixture".into(),
             parser_revision: "1".into(),
             source_version: None,
+            compatibility_evidence: None,
         };
         let snapshot = LibrarySnapshot {
             sets: vec![LibrarySet {

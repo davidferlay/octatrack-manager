@@ -1,14 +1,9 @@
+use ot_domain::ProjectCompatibilityEvidence;
 use ot_tools_io::ProjectFile;
 
 const VERIFIED_PROJECT_VERSION: u32 = 19;
 const VERIFIED_OS_REVISION: &str = "R0173";
 const VERIFIED_OS_RELEASE: &str = "1.40";
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum CompatibilityEvidence {
-    UpstreamLibrary,
-    VerifiedMasterOctaFixture,
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum UpstreamCompatibility {
@@ -19,7 +14,9 @@ pub(crate) enum UpstreamCompatibility {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ProjectCompatibility {
-    Supported { evidence: CompatibilityEvidence },
+    Supported {
+        evidence: ProjectCompatibilityEvidence,
+    },
     UnsupportedVersion,
     Malformed,
 }
@@ -63,7 +60,7 @@ fn evaluate_metadata(
     };
     let compatibility = match upstream {
         UpstreamCompatibility::Supported => ProjectCompatibility::Supported {
-            evidence: CompatibilityEvidence::UpstreamLibrary,
+            evidence: ProjectCompatibilityEvidence::UpstreamLibrary,
         },
         UpstreamCompatibility::Error => ProjectCompatibility::Malformed,
         UpstreamCompatibility::Unsupported
@@ -74,7 +71,7 @@ fn evaluate_metadata(
                 }) =>
         {
             ProjectCompatibility::Supported {
-                evidence: CompatibilityEvidence::VerifiedMasterOctaFixture,
+                evidence: ProjectCompatibilityEvidence::VerifiedMasterOctaFixture,
             }
         }
         UpstreamCompatibility::Unsupported => ProjectCompatibility::UnsupportedVersion,
@@ -239,7 +236,7 @@ mod tests {
         assert_eq!(
             decision.compatibility,
             ProjectCompatibility::Supported {
-                evidence: CompatibilityEvidence::UpstreamLibrary,
+                evidence: ProjectCompatibilityEvidence::UpstreamLibrary,
             }
         );
         assert_eq!(decision.upstream, UpstreamCompatibility::Supported);
@@ -253,7 +250,7 @@ mod tests {
         assert_eq!(
             supported.compatibility,
             ProjectCompatibility::Supported {
-                evidence: CompatibilityEvidence::VerifiedMasterOctaFixture,
+                evidence: ProjectCompatibilityEvidence::VerifiedMasterOctaFixture,
             }
         );
         assert_eq!(supported.upstream, UpstreamCompatibility::Unsupported);
@@ -300,7 +297,7 @@ mod tests {
         assert_eq!(
             decision.compatibility,
             ProjectCompatibility::Supported {
-                evidence: CompatibilityEvidence::VerifiedMasterOctaFixture,
+                evidence: ProjectCompatibilityEvidence::VerifiedMasterOctaFixture,
             }
         );
         assert_eq!(decision.upstream, UpstreamCompatibility::Unsupported);
@@ -332,7 +329,7 @@ mod tests {
         assert_eq!(
             decision.compatibility,
             ProjectCompatibility::Supported {
-                evidence: CompatibilityEvidence::UpstreamLibrary,
+                evidence: ProjectCompatibilityEvidence::UpstreamLibrary,
             }
         );
         assert_eq!(decision.upstream, UpstreamCompatibility::Supported);

@@ -3,11 +3,11 @@ use crate::project_compatibility::{evaluate_project_compatibility, ProjectCompat
 use crate::project_reader::{compute_sample_usage_for_documents, read_raw_sample_fields};
 use ot_domain::{
     AudioAsset, ContentHash, ContentHashFreshness, FileInstance, LibraryProject, LibrarySet,
-    LibrarySnapshot, ParserProvenance, RootId, RootRelativePath, SampleReferenceStatus,
-    SampleSettings, SampleSettingsEvidence, SampleSettingsOwner, SampleSettingsParseStatus,
-    SampleSlice, SampleSlotId, SampleSlotKind, SampleStorageScope, SampleUsageEdge,
-    SampleUsageKind, SlotAssignment, StateDocument, StateDocumentKind, StateDocumentParseStatus,
-    StateDocumentRole,
+    LibrarySnapshot, ParserProvenance, ProjectCompatibilityEvidence, RootId, RootRelativePath,
+    SampleReferenceStatus, SampleSettings, SampleSettingsEvidence, SampleSettingsOwner,
+    SampleSettingsParseStatus, SampleSlice, SampleSlotId, SampleSlotKind, SampleStorageScope,
+    SampleUsageEdge, SampleUsageKind, SlotAssignment, StateDocument, StateDocumentKind,
+    StateDocumentParseStatus, StateDocumentRole,
 };
 use ot_storage_ports::{ReadOnlyLibrary, StorageError};
 use ot_tools_io::banks::BANK_FILE_VERSION;
@@ -766,7 +766,7 @@ fn parse_sidecar_settings(
             let mut settings = empty_sample_settings(
                 SampleSettingsOwner::FileInstanceSidecar,
                 sidecar_relative,
-                parser_provenance(None),
+                parser_provenance(None, None),
                 None,
             );
             settings.file_instance_relative_path = Some(file_instance_relative);
@@ -778,7 +778,7 @@ fn parse_sidecar_settings(
     let mut settings = empty_sample_settings(
         SampleSettingsOwner::FileInstanceSidecar,
         sidecar_relative,
-        parser_provenance(source_version),
+        parser_provenance(source_version, None),
         None,
     );
     settings.file_instance_relative_path = Some(file_instance_relative);
@@ -905,25 +905,30 @@ fn parse_project_state(
         Err(_) => {
             return (
                 StateDocumentParseStatus::Malformed,
-                parser_provenance(None),
+                parser_provenance(None, None),
                 Vec::new(),
             )
         }
     };
     let source_version = Some(parsed.metadata.os_version.clone());
-    match evaluate_project_compatibility(&parsed).compatibility {
+    let decision = evaluate_project_compatibility(&parsed);
+    let compatibility_evidence = match decision.compatibility {
+        ProjectCompatibility::Supported { evidence } => Some(evidence),
+        ProjectCompatibility::UnsupportedVersion | ProjectCompatibility::Malformed => None,
+    };
+    match decision.compatibility {
         ProjectCompatibility::Supported { .. } => {}
         ProjectCompatibility::UnsupportedVersion => {
             return (
                 StateDocumentParseStatus::UnsupportedVersion,
-                parser_provenance(source_version),
+                parser_provenance(source_version, compatibility_evidence),
                 Vec::new(),
             )
         }
         ProjectCompatibility::Malformed => {
             return (
                 StateDocumentParseStatus::Malformed,
-                parser_provenance(source_version),
+                parser_provenance(source_version, compatibility_evidence),
                 Vec::new(),
             )
         }
@@ -933,7 +938,7 @@ fn parse_project_state(
         Err(_) => {
             return (
                 StateDocumentParseStatus::Malformed,
-                parser_provenance(source_version),
+                parser_provenance(source_version, compatibility_evidence),
                 Vec::new(),
             )
         }
@@ -948,7 +953,7 @@ fn parse_project_state(
         let Some(slot_kind) = parse_slot_kind(&slot_type) else {
             return (
                 StateDocumentParseStatus::Malformed,
-                parser_provenance(source_version),
+                parser_provenance(source_version, compatibility_evidence),
                 Vec::new(),
             );
         };
@@ -957,7 +962,7 @@ fn parse_project_state(
             Err(_) => {
                 return (
                     StateDocumentParseStatus::Malformed,
-                    parser_provenance(source_version),
+                    parser_provenance(source_version, compatibility_evidence),
                     Vec::new(),
                 )
             }
@@ -979,7 +984,7 @@ fn parse_project_state(
     }
     (
         StateDocumentParseStatus::Parsed,
-        parser_provenance(source_version),
+        parser_provenance(source_version, compatibility_evidence),
         assignments,
     )
 }
@@ -993,17 +998,24 @@ fn parse_bank_state(source_file: &Path) -> (StateDocumentParseStatus, ParserProv
             } else {
                 StateDocumentParseStatus::UnsupportedVersion
             };
-            (status, parser_provenance(source_version))
+            (status, parser_provenance(source_version, None))
         }
-        Err(_) => (StateDocumentParseStatus::Malformed, parser_provenance(None)),
+        Err(_) => (
+            StateDocumentParseStatus::Malformed,
+            parser_provenance(None, None),
+        ),
     }
 }
 
-fn parser_provenance(source_version: Option<String>) -> ParserProvenance {
+fn parser_provenance(
+    source_version: Option<String>,
+    compatibility_evidence: Option<ProjectCompatibilityEvidence>,
+) -> ParserProvenance {
     ParserProvenance {
         parser_name: STATE_PARSER_NAME.into(),
         parser_revision: STATE_PARSER_REVISION.into(),
         source_version,
+        compatibility_evidence,
     }
 }
 
@@ -1328,7 +1340,7 @@ mod tests {
                 role: StateDocumentRole::Working,
                 bank_index: None,
                 parse_status: StateDocumentParseStatus::Parsed,
-                parser_provenance: parser_provenance(Some("1.40A".into())),
+                parser_provenance: parser_provenance(Some("1.40A".into()), None),
             }],
             slot_assignments: vec![SlotAssignment {
                 project_document_relative_path: source,
@@ -1492,6 +1504,8 @@ mod tests {
                 && document.parser_provenance.parser_name == STATE_PARSER_NAME
                 && document.parser_provenance.parser_revision == STATE_PARSER_REVISION
                 && document.parser_provenance.source_version.as_deref() == Some("R0173      1.40")
+                && document.parser_provenance.compatibility_evidence
+                    == Some(ProjectCompatibilityEvidence::VerifiedMasterOctaFixture)
         }));
         assert!(documents
             .iter()
