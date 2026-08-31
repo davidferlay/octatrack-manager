@@ -274,6 +274,8 @@ pub enum RenameBlockReason {
     IncompleteUsageGraph,
     IncompleteSetProjectCoverage,
     UnresolvedReference,
+    DestinationReferencedByUnresolvedSlot,
+    DestinationAlreadyReferenced,
     IncompleteReferenceUpdateSet,
     ArithmeticOverflow,
 }
@@ -327,6 +329,12 @@ impl fmt::Display for RenameBlockReason {
             Self::IncompleteUsageGraph => "usage graph is incomplete",
             Self::IncompleteSetProjectCoverage => "set project coverage is incomplete",
             Self::UnresolvedReference => "an unresolved sample reference blocks rename planning",
+            Self::DestinationReferencedByUnresolvedSlot => {
+                "a missing or invalid slot already references the rename destination"
+            }
+            Self::DestinationAlreadyReferenced => {
+                "an existing resolved slot already references the rename destination"
+            }
             Self::IncompleteReferenceUpdateSet => "reference update set is incomplete",
             Self::ArithmeticOverflow => "rename byte accounting overflowed",
         })
@@ -390,6 +398,12 @@ pub fn plan_rename_sample(
 
     if !unresolved.is_empty() || !collect_unresolved_usage_edges(facts).is_empty() {
         block_reasons.push(RenameBlockReason::UnresolvedReference);
+    }
+    if has_destination_unresolved_slot_or_edge(facts) {
+        block_reasons.push(RenameBlockReason::DestinationReferencedByUnresolvedSlot);
+    }
+    if has_resolved_destination_assignment(facts) {
+        block_reasons.push(RenameBlockReason::DestinationAlreadyReferenced);
     }
     if has_resolved_slot_assignment(facts) && reference_updates.is_empty() {
         block_reasons.push(RenameBlockReason::IncompleteReferenceUpdateSet);
@@ -680,11 +694,7 @@ fn collect_blockers(
     push_audio_destination_blockers(&facts.destination.state, &mut blockers);
     push_sidecar_destination_blockers(intent, facts, &mut blockers);
 
-    let impacted_documents = impacted_project_documents(facts);
     for document in &facts.state_documents {
-        if !impacted_documents.contains(&document.relative_path) {
-            continue;
-        }
         match document.parse_status {
             StateDocumentParseStatus::Parsed => {}
             StateDocumentParseStatus::UnsupportedVersion => {
@@ -966,15 +976,48 @@ fn references_rename_source(
     assignment.referenced_file_relative_path.as_ref() == Some(&facts.source.live_relative_path)
 }
 
-fn impacted_project_documents(
+fn path_refers_to_rename_destination(
+    path: &RootRelativePath,
     facts: &RenameSamplePlanningFacts,
-) -> std::collections::HashSet<RootRelativePath> {
-    facts
-        .slot_assignments
-        .iter()
-        .filter(|assignment| references_rename_source(assignment, facts))
-        .map(|assignment| assignment.project_document_relative_path.clone())
-        .collect()
+) -> bool {
+    let destination = &facts.destination.intended_relative_path;
+    path == destination || path.as_str().eq_ignore_ascii_case(destination.as_str())
+}
+
+fn is_unresolved_reference_status(status: SampleReferenceStatus) -> bool {
+    matches!(
+        status,
+        SampleReferenceStatus::Missing | SampleReferenceStatus::InvalidPath
+    )
+}
+
+fn has_destination_unresolved_slot_or_edge(facts: &RenameSamplePlanningFacts) -> bool {
+    let slot_hit = facts.slot_assignments.iter().any(|assignment| {
+        assignment.reference_status != SampleReferenceStatus::UnassignedSlot
+            && is_unresolved_reference_status(assignment.reference_status)
+            && assignment
+                .referenced_file_relative_path
+                .as_ref()
+                .is_some_and(|path| path_refers_to_rename_destination(path, facts))
+    });
+    let edge_hit = facts.usage_edges.iter().any(|edge| {
+        is_unresolved_reference_status(edge.reference_status)
+            && edge
+                .referenced_file_relative_path
+                .as_ref()
+                .is_some_and(|path| path_refers_to_rename_destination(path, facts))
+    });
+    slot_hit || edge_hit
+}
+
+fn has_resolved_destination_assignment(facts: &RenameSamplePlanningFacts) -> bool {
+    facts.slot_assignments.iter().any(|assignment| {
+        assignment.reference_status == SampleReferenceStatus::Resolved
+            && assignment
+                .referenced_file_relative_path
+                .as_ref()
+                .is_some_and(|path| path_refers_to_rename_destination(path, facts))
+    })
 }
 
 fn source_owning_sidecars(
@@ -1200,8 +1243,10 @@ fn block_reason_rank(reason: &RenameBlockReason) -> u8 {
         RenameBlockReason::IncompleteUsageGraph => 29,
         RenameBlockReason::IncompleteSetProjectCoverage => 30,
         RenameBlockReason::UnresolvedReference => 31,
-        RenameBlockReason::IncompleteReferenceUpdateSet => 32,
-        RenameBlockReason::ArithmeticOverflow => 33,
+        RenameBlockReason::DestinationReferencedByUnresolvedSlot => 32,
+        RenameBlockReason::DestinationAlreadyReferenced => 33,
+        RenameBlockReason::IncompleteReferenceUpdateSet => 34,
+        RenameBlockReason::ArithmeticOverflow => 35,
     }
 }
 
@@ -1285,6 +1330,23 @@ mod tests {
             role,
             byte_size: 512,
             content_hash: hash(b'p'),
+            parse_status: StateDocumentParseStatus::Parsed,
+            parser_provenance: ParserProvenance {
+                parser_name: "ot-tools-io".into(),
+                parser_revision: "fixture".into(),
+                source_version: Some("1.40A".into()),
+                compatibility_evidence: Some(ProjectCompatibilityEvidence::UpstreamLibrary),
+            },
+        }
+    }
+
+    fn parsed_bank(path: &str, role: StateDocumentRole) -> RenameStateDocumentObservation {
+        RenameStateDocumentObservation {
+            relative_path: RootRelativePath::parse(path).unwrap(),
+            kind: StateDocumentKind::Bank,
+            role,
+            byte_size: 256,
+            content_hash: hash(b'k'),
             parse_status: StateDocumentParseStatus::Parsed,
             parser_provenance: ParserProvenance {
                 parser_name: "ot-tools-io".into(),
@@ -1901,7 +1963,11 @@ mod tests {
         let destination_path = "kick-renamed.wav";
         let facts = base_facts(source_path, destination_path, Vec::new());
         let intent = base_intent(&facts.source, destination_path);
-        assert_blocked(facts, intent, RenameBlockReason::SidecarDestinationUnsafePath);
+        assert_blocked(
+            facts,
+            intent,
+            RenameBlockReason::SidecarDestinationUnsafePath,
+        );
     }
 
     #[test]
@@ -2039,5 +2105,247 @@ mod tests {
             validate_rename_plan_freshness(plan.as_ref(), &stale_coverage),
             Err(reasons) if reasons.contains(&RenameStaleReason::SetProjectCoverageChanged)
         ));
+    }
+
+    fn unused_rename_facts() -> (RenameSampleIntent, RenameSamplePlanningFacts) {
+        let source_path = "SET/AUDIO/kick.wav";
+        let destination_path = "SET/AUDIO/new-kick.wav";
+        let facts = base_facts(source_path, destination_path, Vec::new());
+        let intent = base_intent(&facts.source, destination_path);
+        (intent, facts)
+    }
+
+    #[test]
+    fn unparseable_project_without_assignments_still_blocks_rename() {
+        let (intent, mut facts) = unused_rename_facts();
+        facts.state_documents[0].parse_status = StateDocumentParseStatus::UnsupportedVersion;
+        assert_blocked(
+            facts.clone(),
+            intent.clone(),
+            RenameBlockReason::UnsupportedStateDocument,
+        );
+
+        facts.state_documents[0].parse_status = StateDocumentParseStatus::Parsed;
+        facts.state_documents[1].parse_status = StateDocumentParseStatus::Malformed;
+        assert_blocked(facts, intent, RenameBlockReason::MalformedStateDocument);
+    }
+
+    #[test]
+    fn unparseable_bank_without_assignments_still_blocks_rename() {
+        let (intent, mut facts) = unused_rename_facts();
+        facts.state_documents.push(parsed_bank(
+            "SET/PROJECT/bank01.work",
+            StateDocumentRole::Working,
+        ));
+        facts.state_documents.last_mut().unwrap().parse_status =
+            StateDocumentParseStatus::UnsupportedVersion;
+        assert_blocked(facts, intent, RenameBlockReason::UnsupportedStateDocument);
+    }
+
+    #[test]
+    fn coverage_complete_does_not_excuse_unparseable_state_documents() {
+        let (intent, mut facts) = unused_rename_facts();
+        facts.set_project_coverage_complete = true;
+        facts.state_documents[0].parse_status = StateDocumentParseStatus::Malformed;
+        facts.slot_assignments.clear();
+        assert_blocked(facts, intent, RenameBlockReason::MalformedStateDocument);
+    }
+
+    #[test]
+    fn unrelated_malformed_sidecar_does_not_block_unused_sample() {
+        let (intent, mut facts) = unused_rename_facts();
+        facts.sidecars.push(RenameSidecarObservation {
+            sidecar_relative_path: RootRelativePath::parse("SET/AUDIO/other.ot").unwrap(),
+            owning_audio_relative_path: RootRelativePath::parse("SET/AUDIO/other.wav").unwrap(),
+            byte_size: 8,
+            content_hash: hash(b'o'),
+            parse_status: SampleSettingsParseStatus::Malformed,
+            parser_provenance: ParserProvenance {
+                parser_name: "masterocta-sidecar".into(),
+                parser_revision: "fixture".into(),
+                source_version: None,
+                compatibility_evidence: None,
+            },
+            ownership_is_unique: true,
+        });
+        assert!(matches!(
+            plan_rename_sample(&intent, &facts),
+            RenamePlanningOutcome::Planned(_)
+        ));
+    }
+
+    #[test]
+    fn missing_slot_pointing_at_destination_blocks_rename() {
+        let source_path = "SET/AUDIO/kick.wav";
+        let destination_path = "SET/AUDIO/new-kick.wav";
+        let facts = base_facts(
+            source_path,
+            destination_path,
+            vec![RenameSlotAssignmentObservation {
+                project_document_relative_path: RootRelativePath::parse("SET/PROJECT/project.work")
+                    .unwrap(),
+                slot: SampleSlotId::new(SampleSlotKind::Static, 3).unwrap(),
+                referenced_file_relative_path: Some(
+                    RootRelativePath::parse(destination_path).unwrap(),
+                ),
+                reference_status: SampleReferenceStatus::Missing,
+            }],
+        );
+        let intent = base_intent(&facts.source, destination_path);
+        match plan_rename_sample(&intent, &facts) {
+            RenamePlanningOutcome::Blocked(blocked) => {
+                assert!(blocked
+                    .block_reasons
+                    .contains(&RenameBlockReason::DestinationReferencedByUnresolvedSlot));
+                assert_eq!(blocked.reference_update_count, 0);
+            }
+            RenamePlanningOutcome::Planned(_) => {
+                panic!("destination missing slot must not mint a plan")
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_path_slot_pointing_at_destination_blocks_rename() {
+        let (intent, mut facts) = unused_rename_facts();
+        facts
+            .slot_assignments
+            .push(RenameSlotAssignmentObservation {
+                project_document_relative_path: RootRelativePath::parse("SET/PROJECT/project.work")
+                    .unwrap(),
+                slot: SampleSlotId::new(SampleSlotKind::Flex, 4).unwrap(),
+                referenced_file_relative_path: Some(
+                    RootRelativePath::parse("SET/AUDIO/new-kick.wav").unwrap(),
+                ),
+                reference_status: SampleReferenceStatus::InvalidPath,
+            });
+        assert_blocked(
+            facts,
+            intent,
+            RenameBlockReason::DestinationReferencedByUnresolvedSlot,
+        );
+    }
+
+    #[test]
+    fn case_insensitive_destination_missing_slot_blocks_rename() {
+        let (intent, mut facts) = unused_rename_facts();
+        facts
+            .slot_assignments
+            .push(RenameSlotAssignmentObservation {
+                project_document_relative_path: RootRelativePath::parse("SET/PROJECT/project.work")
+                    .unwrap(),
+                slot: SampleSlotId::new(SampleSlotKind::Static, 5).unwrap(),
+                referenced_file_relative_path: Some(
+                    RootRelativePath::parse("SET/AUDIO/NEW-KICK.WAV").unwrap(),
+                ),
+                reference_status: SampleReferenceStatus::Missing,
+            });
+        assert_blocked(
+            facts,
+            intent,
+            RenameBlockReason::DestinationReferencedByUnresolvedSlot,
+        );
+    }
+
+    #[test]
+    fn source_missing_slot_still_blocks_as_unresolved_reference() {
+        let source_path = "SET/AUDIO/kick.wav";
+        let destination_path = "SET/AUDIO/new-kick.wav";
+        let facts = base_facts(
+            source_path,
+            destination_path,
+            vec![RenameSlotAssignmentObservation {
+                project_document_relative_path: RootRelativePath::parse("SET/PROJECT/project.work")
+                    .unwrap(),
+                slot: SampleSlotId::new(SampleSlotKind::Static, 1).unwrap(),
+                referenced_file_relative_path: Some(RootRelativePath::parse(source_path).unwrap()),
+                reference_status: SampleReferenceStatus::Missing,
+            }],
+        );
+        let intent = base_intent(&facts.source, destination_path);
+        assert_blocked(facts, intent, RenameBlockReason::UnresolvedReference);
+    }
+
+    #[test]
+    fn unrelated_missing_path_does_not_block_usable_rename() {
+        let source_path = "SET/AUDIO/kick.wav";
+        let destination_path = "SET/AUDIO/new-kick.wav";
+        let facts = base_facts(
+            source_path,
+            destination_path,
+            vec![
+                RenameSlotAssignmentObservation {
+                    project_document_relative_path: RootRelativePath::parse(
+                        "SET/PROJECT/project.work",
+                    )
+                    .unwrap(),
+                    slot: SampleSlotId::new(SampleSlotKind::Static, 1).unwrap(),
+                    referenced_file_relative_path: Some(
+                        RootRelativePath::parse(source_path).unwrap(),
+                    ),
+                    reference_status: SampleReferenceStatus::Resolved,
+                },
+                RenameSlotAssignmentObservation {
+                    project_document_relative_path: RootRelativePath::parse(
+                        "SET/PROJECT/project.work",
+                    )
+                    .unwrap(),
+                    slot: SampleSlotId::new(SampleSlotKind::Static, 8).unwrap(),
+                    referenced_file_relative_path: Some(
+                        RootRelativePath::parse("SET/AUDIO/snare.wav").unwrap(),
+                    ),
+                    reference_status: SampleReferenceStatus::Missing,
+                },
+            ],
+        );
+        let intent = base_intent(&facts.source, destination_path);
+        let RenamePlanningOutcome::Planned(plan) = plan_rename_sample(&intent, &facts) else {
+            panic!("unrelated missing path must not block a usable rename");
+        };
+        assert_eq!(plan.reference_update_count, 1);
+        assert!(plan.warnings.is_empty());
+    }
+
+    #[test]
+    fn unassigned_slot_does_not_count_as_destination_reference() {
+        let (intent, mut facts) = unused_rename_facts();
+        facts
+            .slot_assignments
+            .push(RenameSlotAssignmentObservation {
+                project_document_relative_path: RootRelativePath::parse("SET/PROJECT/project.work")
+                    .unwrap(),
+                slot: SampleSlotId::new(SampleSlotKind::Static, 9).unwrap(),
+                referenced_file_relative_path: None,
+                reference_status: SampleReferenceStatus::UnassignedSlot,
+            });
+        let RenamePlanningOutcome::Planned(plan) = plan_rename_sample(&intent, &facts) else {
+            panic!("unassigned slot should not block unused rename");
+        };
+        assert_eq!(plan.reference_update_count, 0);
+        assert!(matches!(
+            plan.warnings.first(),
+            Some(RenamePlanningWarning::UnusedSample { .. })
+        ));
+    }
+
+    #[test]
+    fn resolved_slot_already_pointing_at_absent_destination_blocks() {
+        let (intent, mut facts) = unused_rename_facts();
+        facts
+            .slot_assignments
+            .push(RenameSlotAssignmentObservation {
+                project_document_relative_path: RootRelativePath::parse("SET/PROJECT/project.work")
+                    .unwrap(),
+                slot: SampleSlotId::new(SampleSlotKind::Static, 6).unwrap(),
+                referenced_file_relative_path: Some(
+                    RootRelativePath::parse("SET/AUDIO/new-kick.wav").unwrap(),
+                ),
+                reference_status: SampleReferenceStatus::Resolved,
+            });
+        assert_blocked(
+            facts,
+            intent,
+            RenameBlockReason::DestinationAlreadyReferenced,
+        );
     }
 }

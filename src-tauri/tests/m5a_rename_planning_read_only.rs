@@ -9,7 +9,7 @@ use ot_domain::{
 use ot_plan::derive_file_instance_id;
 use ot_plan::{
     plan_rename_sample, sidecar_destination_for_audio_destination, validate_rename_plan_freshness,
-    BlockedRenameImpact, RenameDestinationObservation, RenameDestinationState,
+    BlockedRenameImpact, RenameBlockReason, RenameDestinationObservation, RenameDestinationState,
     RenamePlanningOutcome, RenameRootObservation, RenameSamplePlanningFacts,
     RenameSidecarObservation, RenameSlotAssignmentObservation, RenameSourceObservation,
     RenameStaleReason, RenameStateDocumentObservation, RenameUsageEdgeObservation,
@@ -336,4 +336,81 @@ fn incomplete_graph_and_coverage_fail_closed_without_media_mutation() {
                 matches!(reason, ot_plan::RenameBlockReason::IncompleteSetProjectCoverage)
             })
     ));
+}
+
+#[test]
+fn unparseable_project_blocks_without_media_mutation() {
+    let temp = TempDir::new().expect("tempdir");
+    let root = temp.path();
+    fs::create_dir_all(root.join("SET/AUDIO")).expect("audio dir");
+    fs::write(root.join("SET/AUDIO/kick.wav"), b"sample-bytes").expect("audio");
+
+    let before = snapshot_directory(root);
+    let root_fingerprint = format!("rootfp:v1:{}", "f".repeat(64));
+    let mut facts = build_fixture_facts(
+        &root_fingerprint,
+        "SET/AUDIO/kick.wav",
+        "SET/AUDIO/new-kick.wav",
+        12,
+    );
+    facts.slot_assignments.clear();
+    facts.state_documents[0].parse_status = StateDocumentParseStatus::UnsupportedVersion;
+    let intent = RenameSampleIntent {
+        root_id: RootId::new("integration-root").unwrap(),
+        source_file_instance_id: facts.source.file_instance_id.clone(),
+        destination_relative_path: RootRelativePath::parse("SET/AUDIO/new-kick.wav").unwrap(),
+    };
+
+    let outcome = plan_rename_sample(&intent, &facts);
+    let after = snapshot_directory(root);
+    assert_eq!(before, after);
+    assert!(matches!(
+        outcome,
+        RenamePlanningOutcome::Blocked(BlockedRenameImpact { block_reasons, .. })
+            if block_reasons.contains(&RenameBlockReason::UnsupportedStateDocument)
+    ));
+}
+
+#[test]
+fn destination_missing_slot_blocks_without_media_mutation() {
+    let temp = TempDir::new().expect("tempdir");
+    let root = temp.path();
+    fs::create_dir_all(root.join("SET/AUDIO")).expect("audio dir");
+    fs::write(root.join("SET/AUDIO/kick.wav"), b"sample-bytes").expect("audio");
+
+    let before = snapshot_directory(root);
+    let root_fingerprint = format!("rootfp:v1:{}", "f".repeat(64));
+    let mut facts = build_fixture_facts(
+        &root_fingerprint,
+        "SET/AUDIO/kick.wav",
+        "SET/AUDIO/new-kick.wav",
+        12,
+    );
+    facts.slot_assignments = vec![RenameSlotAssignmentObservation {
+        project_document_relative_path: RootRelativePath::parse("SET/PROJECT/project.work")
+            .unwrap(),
+        slot: SampleSlotId::new(SampleSlotKind::Static, 3).unwrap(),
+        referenced_file_relative_path: Some(
+            RootRelativePath::parse("SET/AUDIO/new-kick.wav").unwrap(),
+        ),
+        reference_status: SampleReferenceStatus::Missing,
+    }];
+    let intent = RenameSampleIntent {
+        root_id: RootId::new("integration-root").unwrap(),
+        source_file_instance_id: facts.source.file_instance_id.clone(),
+        destination_relative_path: RootRelativePath::parse("SET/AUDIO/new-kick.wav").unwrap(),
+    };
+
+    let outcome = plan_rename_sample(&intent, &facts);
+    let after = snapshot_directory(root);
+    assert_eq!(before, after);
+    match outcome {
+        RenamePlanningOutcome::Blocked(blocked) => {
+            assert!(blocked
+                .block_reasons
+                .contains(&RenameBlockReason::DestinationReferencedByUnresolvedSlot));
+            assert_eq!(blocked.reference_update_count, 0);
+        }
+        RenamePlanningOutcome::Planned(_) => panic!("must not mint a plan"),
+    }
 }

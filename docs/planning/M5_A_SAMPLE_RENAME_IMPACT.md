@@ -110,16 +110,29 @@ Planning refuses to mint a plan when any of the following hold:
 | `SidecarDestinationNormalizationCollision` | Derived sidecar destination NFC/NFD collision |
 | `SidecarDestinationUnsafePath` | Derived sidecar destination path is unsafe |
 | `SidecarDestinationIncomparable` | Derived sidecar destination could not be classified safely |
-| `UnsupportedStateDocument` | Related Project/Bank doc unsupported |
-| `MalformedStateDocument` | Related Project/Bank doc malformed |
+| `UnsupportedStateDocument` | Any observed Project or Bank document is unsupported; parse-incapable documents cannot prove they do not reference the source |
+| `MalformedStateDocument` | Any observed Project or Bank document is malformed, including Working or SavedCheckpoint alone |
 | `UnsupportedSidecar` | Related `.ot` sidecar unsupported |
 | `MalformedSidecar` | Related `.ot` sidecar malformed |
 | `AmbiguousSidecarOwnership` | Same-stem sidecar ownership is ambiguous |
 | `IncompleteUsageGraph` | Usage graph incomplete |
 | `IncompleteSetProjectCoverage` | Set project coverage incomplete |
 | `UnresolvedReference` | Missing/invalid references to the rename source remain |
+| `DestinationReferencedByUnresolvedSlot` | A missing or invalid slot/usage edge already references the destination path (exact or ASCII case-insensitive) |
+| `DestinationAlreadyReferenced` | A resolved slot already references the destination path |
 | `IncompleteReferenceUpdateSet` | Resolved slot references lack update rows |
 | `ArithmeticOverflow` | Byte accounting overflow |
+
+Parse-incapable Project/Bank documents never generate slot assignments. Planner
+therefore treats every `UnsupportedVersion` or `Malformed` state document in the
+supplied facts as a blocker and does not infer “no reference” from
+`set_project_coverage_complete`.
+
+Destination slot comparison is exact `RootRelativePath` equality plus ASCII
+case-insensitive equality. Unicode NFC/NFD slot-path equivalence is not computed
+in `ot-plan`. Collectors must classify live destination NFC/NFD collisions as
+`NormalizationCollision` or `Incomparable`, and must emit catalog slot paths in
+one normalization form.
 
 ## Stale detection
 
