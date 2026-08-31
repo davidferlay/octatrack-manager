@@ -31,7 +31,9 @@ firmware version, the app may be unable to parse it safely.
 
 ### How to update an older project:
 1. Insert your CF card into your Octatrack.
-2. Ensure your Octatrack is running **OS 1.40 or later**.
+2. Update the Octatrack to a firmware version that MasterOCTa recognizes, such as
+   **OS 1.40A**, **1.40B**, or **1.40C**, or resave on the verified **R0173 / 1.40**
+   combination.
 3. Load the older project on the device.
 4. Save the project on the device (press **[FUNC] + [YES]**).
 5. Eject the CF card and scan it again with MasterOCTa.

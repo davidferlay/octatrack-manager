@@ -184,11 +184,18 @@ pub enum StateDocumentParseStatus {
     Malformed,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum ProjectCompatibilityEvidence {
+    UpstreamLibrary,
+    VerifiedMasterOctaFixture,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ParserProvenance {
     pub parser_name: String,
     pub parser_revision: String,
     pub source_version: Option<String>,
+    pub compatibility_evidence: Option<ProjectCompatibilityEvidence>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -741,6 +748,7 @@ mod tests {
                 parser_name: "ot-tools-io".into(),
                 parser_revision: "fixture".into(),
                 source_version: Some("1.40A".into()),
+                compatibility_evidence: Some(ProjectCompatibilityEvidence::UpstreamLibrary),
             },
         };
         let assignment = SlotAssignment {
