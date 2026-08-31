@@ -7672,6 +7672,217 @@ pub fn copy_tracks(
     Ok(())
 }
 
+// ============================================================================
+// Clear Operations
+// ============================================================================
+
+/// Run `f` against a throwaway project directory holding a single factory-default
+/// bank (`bank01.work`, bank index 0).
+///
+/// Every "clear" below is really "copy from an empty bank": reusing the copy
+/// paths means a cleared Part/Pattern/Track is byte-for-byte what a fresh bank
+/// has, and there is no second copy of the per-track field list to drift out of
+/// sync with `copy_tracks`.
+fn with_blank_bank<T>(f: impl FnOnce(&str) -> Result<T, String>) -> Result<T, String> {
+    let dir = std::env::temp_dir().join(format!(
+        "otm-blank-bank-{}-{:?}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create temporary bank directory: {}", e))?;
+
+    let result = (|| {
+        BankFile::default()
+            .to_data_file(&dir.join("bank01.work"))
+            .map_err(|e| format!("Failed to write blank bank: {:?}", e))?;
+        f(&dir.to_string_lossy())
+    })();
+
+    let _ = std::fs::remove_dir_all(&dir);
+    result
+}
+
+/// Reset whole banks to the factory-default state (empty patterns, default
+/// parts, default part names). The bank file is rewritten in place; callers are
+/// expected to have backed it up first, as the copy tools do.
+pub fn clear_banks(project: &str, bank_indices: &[u8]) -> Result<(), String> {
+    if bank_indices.is_empty() {
+        return Err("Select at least one bank to clear".to_string());
+    }
+    if bank_indices.iter().any(|&i| i > 15) {
+        return Err("Bank index must be between 0 and 15".to_string());
+    }
+
+    let project_path = Path::new(project);
+    for &bank_index in bank_indices {
+        let bank_num = bank_index + 1;
+        let work = project_path.join(format!("bank{:02}.work", bank_num));
+        let strd = project_path.join(format!("bank{:02}.strd", bank_num));
+        if !work.exists() && !strd.exists() {
+            return Err(format!("Bank {} not found", bank_num));
+        }
+        // Always write .work: that is the state the device loads, and the copy
+        // tools write there too.
+        BankFile::default()
+            .to_data_file(&work)
+            .map_err(|e| format!("Failed to write bank {}: {:?}", bank_num, e))?;
+    }
+    Ok(())
+}
+
+/// Reset Parts of a bank to the factory default, names included (a cleared Part
+/// is Part "ONE".."FOUR" again, so a leftover name cannot suggest content that
+/// is no longer there).
+pub fn clear_parts(project: &str, bank_index: u8, part_indices: &[u8]) -> Result<(), String> {
+    if part_indices.is_empty() {
+        return Err("Select at least one part to clear".to_string());
+    }
+    if part_indices.iter().any(|&i| i > 3) {
+        return Err("Part indices must be between 0 and 3".to_string());
+    }
+
+    with_blank_bank(|blank| {
+        for &part in part_indices {
+            // Blank part N -> part N, so the default name matches the slot.
+            copy_parts(blank, 0, vec![part], project, bank_index, vec![part])?;
+        }
+        Ok(())
+    })
+}
+
+/// Empty Patterns of a bank: no trigs on any track, default scale/chain settings,
+/// and the Part assignment back to Part 1 (what a fresh pattern carries).
+pub fn clear_patterns(
+    project: &str,
+    bank_index: u8,
+    pattern_indices: &[u8],
+) -> Result<(), String> {
+    if pattern_indices.is_empty() {
+        return Err("Select at least one pattern to clear".to_string());
+    }
+    if pattern_indices.iter().any(|&i| i > 15) {
+        return Err("Pattern indices must be between 0 and 15".to_string());
+    }
+
+    with_blank_bank(|blank| {
+        copy_patterns(
+            blank,
+            0,
+            vec![0],
+            project,
+            bank_index,
+            pattern_indices.to_vec(),
+            "copy_source_part",
+            None,
+            "all",
+            None,
+            "both",
+        )
+    })
+}
+
+/// Clear individual tracks, mirroring Copy Tracks: `mode` is "part_params"
+/// (sound design), "pattern_triggers" (sequencer data) or "both".
+///
+/// `pattern_indices` selects which patterns lose their trigs; `None` means all
+/// 16, matching copy_tracks' own "no pattern chosen" behaviour. It is ignored in
+/// "part_params" mode.
+pub fn clear_tracks(
+    project: &str,
+    bank_index: u8,
+    part_index: u8,
+    track_indices: &[u8],
+    mode: &str,
+    pattern_indices: Option<Vec<u8>>,
+) -> Result<(), String> {
+    if track_indices.is_empty() {
+        return Err("Select at least one track to clear".to_string());
+    }
+    if !matches!(mode, "part_params" | "pattern_triggers" | "both") {
+        return Err(format!("Unknown clear mode: {}", mode));
+    }
+    if let Some(ref pats) = pattern_indices {
+        if pats.is_empty() {
+            return Err("Select at least one pattern to clear".to_string());
+        }
+        if pats.iter().any(|&i| i > 15) {
+            return Err("Pattern indices must be between 0 and 15".to_string());
+        }
+    }
+
+    let tracks = track_indices.to_vec();
+    with_blank_bank(|blank| {
+        match (mode, pattern_indices) {
+            // Sound design only: patterns are irrelevant.
+            ("part_params", _) => copy_tracks(
+                blank,
+                0,
+                part_index,
+                tracks.clone(),
+                project,
+                bank_index,
+                part_index,
+                tracks.clone(),
+                "part_params",
+                None,
+                None,
+            ),
+            // Every pattern: copy_tracks walks all 16 itself.
+            (_, None) => copy_tracks(
+                blank,
+                0,
+                part_index,
+                tracks.clone(),
+                project,
+                bank_index,
+                part_index,
+                tracks.clone(),
+                mode,
+                None,
+                None,
+            ),
+            (_, Some(pats)) => {
+                // Part params are cleared once, not once per pattern.
+                if mode == "both" {
+                    copy_tracks(
+                        blank,
+                        0,
+                        part_index,
+                        tracks.clone(),
+                        project,
+                        bank_index,
+                        part_index,
+                        tracks.clone(),
+                        "part_params",
+                        None,
+                        None,
+                    )?;
+                }
+                for pat in pats {
+                    copy_tracks(
+                        blank,
+                        0,
+                        part_index,
+                        tracks.clone(),
+                        project,
+                        bank_index,
+                        part_index,
+                        tracks.clone(),
+                        "pattern_triggers",
+                        Some(0),
+                        Some(pat),
+                    )?;
+                }
+                Ok(())
+            }
+        }
+    })
+}
+
 /// Result of a copy_sample_slots operation
 /// Resolved Audio Editor attributes for a sample slot, read from .ot file (priority) or
 /// project.work + markers.work (fallback).
@@ -12392,6 +12603,313 @@ mod tests {
     }
 
     // ==================== COPY TRACKS TESTS ====================
+
+    mod clear_tests {
+        use super::*;
+
+        /// Load a bank file the same way the app does.
+        fn bank_of(project: &str, bank_index: u8) -> BankFile {
+            BankFile::from_data_file(
+                &Path::new(project).join(format!("bank{:02}.work", bank_index + 1)),
+            )
+            .expect("bank should read back")
+        }
+
+        /// Put something recognisable in a bank so "cleared" is provable.
+        fn dirty_bank(project: &str, bank_index: u8) {
+            let path = Path::new(project).join(format!("bank{:02}.work", bank_index + 1));
+            let mut bank = BankFile::from_data_file(&path).unwrap();
+            for p in 0..4 {
+                bank.part_names[p] = [b'D', b'I', b'R', b'T', b'Y', 0, 0];
+                bank.parts.unsaved.0[p].audio_track_machine_types[0] = 3;
+                bank.parts.saved.0[p].audio_track_machine_types[0] = 3;
+                bank.parts.unsaved.0[p].audio_track_machine_types[1] = 3;
+            }
+            bank.parts_edited_bitmask = 0b1111;
+            for i in 0..16 {
+                bank.patterns.0[i].audio_track_trigs.0[0].trig_masks.trigger[0] = 0xFF;
+                bank.patterns.0[i].audio_track_trigs.0[1].trig_masks.trigger[0] = 0xFF;
+                bank.patterns.0[i].part_assignment = 2;
+            }
+            bank.checksum = bank.calculate_checksum().unwrap();
+            bank.to_data_file(&path).unwrap();
+        }
+
+        fn trigs(bank: &BankFile, pattern: usize, track: usize) -> u8 {
+            bank.patterns.0[pattern].audio_track_trigs.0[track]
+                .trig_masks
+                .trigger[0]
+        }
+
+        // -- clear_banks --------------------------------------------------
+
+        #[test]
+        fn clear_banks_resets_a_bank_to_the_factory_default() {
+            let project = TestProject::new();
+            dirty_bank(&project.path, 0);
+
+            clear_banks(&project.path, &[0]).unwrap();
+
+            let bank = bank_of(&project.path, 0);
+            let fresh = BankFile::default();
+            assert_eq!(bank.part_names, fresh.part_names, "names reset");
+            assert_eq!(bank.parts_edited_bitmask, 0);
+            assert_eq!(trigs(&bank, 0, 0), 0, "trigs gone");
+            assert_eq!(bank.patterns.0[0].part_assignment, 0);
+        }
+
+        #[test]
+        fn clear_banks_clears_every_selected_bank_and_leaves_the_rest() {
+            let project = TestProject::new();
+            dirty_bank(&project.path, 0);
+            dirty_bank(&project.path, 1);
+            dirty_bank(&project.path, 2);
+
+            clear_banks(&project.path, &[0, 2]).unwrap();
+
+            assert_eq!(trigs(&bank_of(&project.path, 0), 0, 0), 0);
+            assert_eq!(trigs(&bank_of(&project.path, 2), 0, 0), 0);
+            assert_eq!(
+                trigs(&bank_of(&project.path, 1), 0, 0),
+                0xFF,
+                "an unselected bank is untouched"
+            );
+        }
+
+        #[test]
+        fn clear_banks_rejects_an_empty_selection_and_a_bad_index() {
+            let project = TestProject::new();
+            assert!(clear_banks(&project.path, &[])
+                .unwrap_err()
+                .to_lowercase()
+                .contains("at least one"));
+            assert!(clear_banks(&project.path, &[16]).is_err());
+        }
+
+        // -- clear_parts --------------------------------------------------
+
+        #[test]
+        fn clear_parts_resets_the_selected_part_in_both_states_and_its_name() {
+            let project = TestProject::new();
+            dirty_bank(&project.path, 0);
+
+            clear_parts(&project.path, 0, &[1]).unwrap();
+
+            let bank = bank_of(&project.path, 0);
+            assert_eq!(bank.part_names[1], BankFile::default().part_names[1]);
+            assert_eq!(bank.parts.unsaved.0[1].audio_track_machine_types[0], 0);
+            assert_eq!(
+                bank.parts.saved.0[1].audio_track_machine_types[0], 0,
+                "saved state cleared too, not just the working one"
+            );
+            assert_eq!(bank.parts_edited_bitmask & (1 << 1), 0);
+        }
+
+        #[test]
+        fn clear_parts_leaves_other_parts_and_all_patterns_alone() {
+            let project = TestProject::new();
+            dirty_bank(&project.path, 0);
+
+            clear_parts(&project.path, 0, &[0]).unwrap();
+
+            let bank = bank_of(&project.path, 0);
+            assert_eq!(bank.part_names[1], [b'D', b'I', b'R', b'T', b'Y', 0, 0]);
+            assert_eq!(bank.parts.unsaved.0[2].audio_track_machine_types[0], 3);
+            assert_eq!(trigs(&bank, 0, 0), 0xFF, "patterns are a separate scope");
+        }
+
+        #[test]
+        fn clear_parts_can_clear_several_at_once() {
+            let project = TestProject::new();
+            dirty_bank(&project.path, 0);
+
+            clear_parts(&project.path, 0, &[0, 2, 3]).unwrap();
+
+            let bank = bank_of(&project.path, 0);
+            for p in [0usize, 2, 3] {
+                assert_eq!(bank.parts.unsaved.0[p].audio_track_machine_types[0], 0, "part {}", p);
+            }
+            assert_eq!(bank.parts.unsaved.0[1].audio_track_machine_types[0], 3);
+        }
+
+        #[test]
+        fn clear_parts_rejects_an_empty_selection_and_a_bad_index() {
+            let project = TestProject::new();
+            assert!(clear_parts(&project.path, 0, &[]).is_err());
+            assert!(clear_parts(&project.path, 0, &[4]).is_err());
+        }
+
+        // -- clear_patterns -----------------------------------------------
+
+        #[test]
+        fn clear_patterns_empties_only_the_selected_patterns() {
+            let project = TestProject::new();
+            dirty_bank(&project.path, 0);
+
+            clear_patterns(&project.path, 0, &[3, 5]).unwrap();
+
+            let bank = bank_of(&project.path, 0);
+            assert_eq!(trigs(&bank, 3, 0), 0);
+            assert_eq!(trigs(&bank, 5, 0), 0);
+            assert_eq!(trigs(&bank, 4, 0), 0xFF, "untouched pattern keeps its trigs");
+        }
+
+        #[test]
+        fn clear_patterns_clears_every_track_of_the_pattern_and_resets_its_part() {
+            let project = TestProject::new();
+            dirty_bank(&project.path, 0);
+
+            clear_patterns(&project.path, 0, &[0]).unwrap();
+
+            let bank = bank_of(&project.path, 0);
+            assert_eq!(trigs(&bank, 0, 0), 0);
+            assert_eq!(trigs(&bank, 0, 1), 0, "not just the first track");
+            assert_eq!(bank.patterns.0[0].part_assignment, 0, "back to Part 1");
+        }
+
+        #[test]
+        fn clear_patterns_leaves_parts_alone() {
+            let project = TestProject::new();
+            dirty_bank(&project.path, 0);
+
+            clear_patterns(&project.path, 0, &[0]).unwrap();
+
+            let bank = bank_of(&project.path, 0);
+            assert_eq!(bank.parts.unsaved.0[0].audio_track_machine_types[0], 3);
+            assert_eq!(bank.part_names[0], [b'D', b'I', b'R', b'T', b'Y', 0, 0]);
+        }
+
+        #[test]
+        fn clear_patterns_rejects_an_empty_selection_and_a_bad_index() {
+            let project = TestProject::new();
+            assert!(clear_patterns(&project.path, 0, &[]).is_err());
+            assert!(clear_patterns(&project.path, 0, &[16]).is_err());
+        }
+
+        // -- clear_tracks -------------------------------------------------
+
+        #[test]
+        fn clear_tracks_part_params_clears_sound_design_and_keeps_trigs() {
+            let project = TestProject::new();
+            dirty_bank(&project.path, 0);
+
+            clear_tracks(&project.path, 0, 0, &[0], "part_params", None).unwrap();
+
+            let bank = bank_of(&project.path, 0);
+            assert_eq!(bank.parts.unsaved.0[0].audio_track_machine_types[0], 0);
+            assert_eq!(bank.parts.saved.0[0].audio_track_machine_types[0], 0);
+            assert_eq!(trigs(&bank, 0, 0), 0xFF, "trigs untouched in this mode");
+        }
+
+        #[test]
+        fn clear_tracks_pattern_triggers_clears_trigs_and_keeps_sound_design() {
+            let project = TestProject::new();
+            dirty_bank(&project.path, 0);
+
+            clear_tracks(&project.path, 0, 0, &[0], "pattern_triggers", Some(vec![0])).unwrap();
+
+            let bank = bank_of(&project.path, 0);
+            assert_eq!(trigs(&bank, 0, 0), 0);
+            assert_eq!(trigs(&bank, 1, 0), 0xFF, "only the chosen pattern");
+            assert_eq!(
+                bank.parts.unsaved.0[0].audio_track_machine_types[0], 3,
+                "sound design untouched in this mode"
+            );
+        }
+
+        #[test]
+        fn clear_tracks_both_clears_sound_design_once_and_the_chosen_patterns() {
+            let project = TestProject::new();
+            dirty_bank(&project.path, 0);
+
+            clear_tracks(&project.path, 0, 0, &[0], "both", Some(vec![0, 2])).unwrap();
+
+            let bank = bank_of(&project.path, 0);
+            assert_eq!(bank.parts.unsaved.0[0].audio_track_machine_types[0], 0);
+            assert_eq!(trigs(&bank, 0, 0), 0);
+            assert_eq!(trigs(&bank, 2, 0), 0);
+            assert_eq!(trigs(&bank, 1, 0), 0xFF);
+        }
+
+        #[test]
+        fn clear_tracks_with_no_pattern_selection_clears_all_sixteen() {
+            let project = TestProject::new();
+            dirty_bank(&project.path, 0);
+
+            clear_tracks(&project.path, 0, 0, &[0], "pattern_triggers", None).unwrap();
+
+            let bank = bank_of(&project.path, 0);
+            for pattern in 0..16 {
+                assert_eq!(trigs(&bank, pattern, 0), 0, "pattern {}", pattern);
+            }
+        }
+
+        #[test]
+        fn clear_tracks_leaves_the_other_tracks_alone() {
+            let project = TestProject::new();
+            dirty_bank(&project.path, 0);
+
+            clear_tracks(&project.path, 0, 0, &[0], "both", None).unwrap();
+
+            let bank = bank_of(&project.path, 0);
+            assert_eq!(trigs(&bank, 0, 1), 0xFF, "track 2 keeps its trigs");
+            assert_eq!(
+                bank.parts.unsaved.0[0].audio_track_machine_types[1], 3,
+                "track 2 keeps its machine"
+            );
+        }
+
+        #[test]
+        fn clear_tracks_can_clear_several_tracks_at_once() {
+            let project = TestProject::new();
+            dirty_bank(&project.path, 0);
+
+            clear_tracks(&project.path, 0, 0, &[0, 1], "both", None).unwrap();
+
+            let bank = bank_of(&project.path, 0);
+            assert_eq!(trigs(&bank, 0, 0), 0);
+            assert_eq!(trigs(&bank, 0, 1), 0);
+        }
+
+        #[test]
+        fn clear_tracks_rejects_bad_input() {
+            let project = TestProject::new();
+            assert!(clear_tracks(&project.path, 0, 0, &[], "both", None).is_err());
+            assert!(clear_tracks(&project.path, 0, 0, &[0], "nonsense", None).is_err());
+            assert!(clear_tracks(&project.path, 0, 0, &[0], "both", Some(vec![])).is_err());
+            assert!(clear_tracks(&project.path, 0, 0, &[0], "both", Some(vec![16])).is_err());
+        }
+
+        #[test]
+        fn with_blank_bank_hands_out_a_default_bank_and_cleans_up_after() {
+            let mut scratch = String::new();
+            with_blank_bank(|dir| {
+                scratch = dir.to_string();
+                let bank = BankFile::from_data_file(&Path::new(dir).join("bank01.work")).unwrap();
+                assert_eq!(bank.part_names, BankFile::default().part_names);
+                assert_eq!(bank.parts_edited_bitmask, 0);
+                Ok(())
+            })
+            .unwrap();
+            assert!(!scratch.is_empty());
+            assert!(
+                !Path::new(&scratch).exists(),
+                "the blank-bank scratch dir is removed"
+            );
+        }
+
+        #[test]
+        fn with_blank_bank_cleans_up_even_when_the_operation_fails() {
+            let mut scratch = String::new();
+            let err = with_blank_bank(|dir| {
+                scratch = dir.to_string();
+                Err::<(), String>("boom".to_string())
+            })
+            .unwrap_err();
+            assert_eq!(err, "boom");
+            assert!(!Path::new(&scratch).exists(), "cleaned up on the error path");
+        }
+    }
 
     mod copy_tracks_tests {
         use super::*;

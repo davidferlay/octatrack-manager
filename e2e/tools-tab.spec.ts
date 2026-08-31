@@ -245,6 +245,14 @@ async function setupTauriMocks(page: Page, overrides?: { sameSet?: boolean; with
             (window as any).__lastInvokeArgs__ = args
             return { shared_files_kept: 0 }
 
+          case 'clear_banks':
+          case 'clear_parts':
+          case 'clear_patterns':
+          case 'clear_tracks':
+          case 'clear_sample_slots':
+            ((window as any).__clearCalls__ ||= []).push([cmd, args])
+            return { assigned_count: 0, updated_slots: [], flex_ram_free_mb: null, flex_ram_free_bytes: null }
+
           case 'copy_bank':
             (window as any).__lastCopyBankArgs__ = args;
             ((window as any).__copyBankCalls__ ||= []).push(args);
@@ -4290,5 +4298,110 @@ test.describe('Tools Tab - source project selection', () => {
       expect(calls.length, `${op} should have been invoked`).toBeGreaterThan(0)
       expect(calls[0].args.sourceProject).toBe('/test/other-project')
     }
+  })
+})
+
+test.describe('Tools Tab - Clear Project', () => {
+  const panel = '.tools-clear-panel'
+  // Scope / Clear Mode / Slot Type are text toggles; banks, parts, patterns and
+  // tracks are the compact grid buttons.
+  const opt = (page: Page, label: string) =>
+    page.locator(`${panel} .tools-toggle-btn`, { hasText: new RegExp(`^${label}$`) })
+  const btn = (page: Page, label: string) =>
+    page.locator(`${panel} .tools-multi-btn`, { hasText: new RegExp(`^${label}$`) })
+
+  const clearCalls = (page: Page) => page.evaluate(() => (window as any).__clearCalls__ ?? [])
+
+  async function execute(page: Page) {
+    await page.evaluate(() => { (window as any).__clearCalls__ = [] })
+    await page.locator('.tools-clear-btn').click()
+    await page.getByRole('button', { name: 'Clear', exact: true }).click()
+    await page.waitForTimeout(500)
+  }
+
+  test.beforeEach(async ({ page }) => {
+    await openToolsPanel(page, 'clear_project')
+  })
+
+  test('replaces the source/destination panes with a single Target pane', async ({ page }) => {
+    await expect(page.locator(panel)).toBeVisible()
+    await expect(page.locator('.tools-source-panel h3')).toHaveText('Target')
+    await expect(page.locator('.tools-dest-panel')).toHaveCount(0)
+  })
+
+  test('starts blocked until a bank is chosen, then clears it', async ({ page }) => {
+    const execBtn = page.locator('.tools-clear-btn')
+    await expect(execBtn).toBeDisabled()
+
+    await btn(page, 'B').click()
+    await expect(execBtn).toBeEnabled()
+    await execute(page)
+
+    expect(await clearCalls(page)).toEqual([
+      ['clear_banks', { project: '/test/project', bankIndices: [1] }],
+    ])
+  })
+
+  test('confirms before clearing, and cancelling touches nothing', async ({ page }) => {
+    await btn(page, 'A').click()
+    await page.evaluate(() => { (window as any).__clearCalls__ = [] })
+    await page.locator('.tools-clear-btn').click()
+    await expect(page.getByText(/factory-default state/)).toBeVisible()
+
+    await page.getByRole('button', { name: 'Cancel' }).click()
+    expect(await clearCalls(page)).toEqual([])
+  })
+
+  test('switching scope swaps the selectors and the command it sends', async ({ page }) => {
+    await opt(page, 'Patterns').click()
+    await expect(page.locator(`${panel} label`, { hasText: /^Pattern$/ })).toBeVisible()
+
+    await btn(page, '4').click()
+    await execute(page)
+
+    const calls = await clearCalls(page)
+    expect(calls[0][0]).toBe('clear_patterns')
+    expect(calls[0][1]).toMatchObject({ patternIndices: [3] })
+  })
+
+  test('the Tracks scope offers the Copy Tracks modes and hides patterns for part params', async ({ page }) => {
+    const patternLabel = page.locator(`${panel} label`, { hasText: /^Pattern$/ })
+    await opt(page, 'Tracks').click()
+    await expect(opt(page, 'Part Parameters')).toBeVisible()
+    // Trigger modes ask which patterns; sound design does not.
+    await expect(patternLabel).toBeVisible()
+
+    await opt(page, 'Part Parameters').click()
+    await expect(patternLabel).toHaveCount(0)
+
+    await btn(page, 'T2').click()
+    await execute(page)
+
+    const calls = await clearCalls(page)
+    expect(calls[0][0]).toBe('clear_tracks')
+    expect(calls[0][1]).toMatchObject({ trackIndices: [1], mode: 'part_params', patternIndices: null })
+  })
+
+  test('the Sample Slots scope clears a 1-based range of the chosen type', async ({ page }) => {
+    await opt(page, 'Sample Slots').click()
+    await opt(page, 'Static').click()
+    await page.getByLabel('Last slot to clear', { exact: true }).fill('2')
+    await page.getByLabel('Last slot to clear', { exact: true }).press('Enter')
+    await execute(page)
+
+    const calls = await clearCalls(page)
+    expect(calls[0][0]).toBe('clear_sample_slots')
+    expect(calls[0][1]).toMatchObject({ slotType: 'STATIC', slotIndices: [1, 2] })
+  })
+
+  test('Slot Type "Both" clears the Flex and the Static pool', async ({ page }) => {
+    await opt(page, 'Sample Slots').click()
+    await opt(page, 'Both').click()
+    await page.locator('.tools-slot-all-btn', { hasText: 'One' }).click()
+    await execute(page)
+
+    const calls = await clearCalls(page)
+    expect(calls.map((c: [string, { slotType: string }]) => c[1].slotType)).toEqual(['FLEX', 'STATIC'])
+    expect(calls[0][1]).toMatchObject({ slotIndices: [1] })
   })
 })

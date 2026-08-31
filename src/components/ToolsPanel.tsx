@@ -10,6 +10,7 @@ import "../App.css";
 import { FixMissingSamplesModal } from "./FixMissingSamplesModal";
 import { MissingSamplesListModal } from "./MissingSamplesListModal";
 import { CreateProjectModal } from "./CreateProjectModal";
+import { ClearProjectPanel } from "./ClearProjectPanel";
 import { ProjectSelectorModal } from "./ProjectSelectorModal";
 import { ProjectIncompatibleListModal, FixProjectFilesModal } from "./FixProjectFilesModal";
 import type { IncompatibleFile, PoolFixResult } from "./FixPoolFilesModal";
@@ -53,7 +54,7 @@ function compareLocations(a: { name: string; device_type: string }, b: { name: s
 }
 
 // Operation types
-type OperationType = "copy_bank" | "copy_parts" | "copy_patterns" | "copy_tracks" | "copy_sample_slots" | "fix_missing_samples" | "fix_project_samples" | "purge_project_samples";
+type OperationType = "copy_bank" | "copy_parts" | "copy_patterns" | "copy_tracks" | "copy_sample_slots" | "clear_project" | "fix_missing_samples" | "fix_project_samples" | "purge_project_samples";
 
 // Part assignment modes for copy_patterns
 type PartAssignmentMode = "keep_original" | "copy_source_part" | "select_specific";
@@ -1387,13 +1388,24 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           <option value="copy_patterns">Copy Patterns</option>
           <option value="copy_tracks">Copy Tracks</option>
           <option value="copy_sample_slots">Copy Sample Slots</option>
+          <option value="clear_project">Clear Project</option>
           <option value="fix_missing_samples">Fix Missing Samples</option>
           <option value="fix_project_samples">Fix Project Samples</option>
           <option value="purge_project_samples">Purge Project Samples</option>
         </select>
       </div>
 
-      {operation !== "fix_missing_samples" && operation !== "fix_project_samples" && operation !== "purge_project_samples" && (
+      {operation === "clear_project" && (
+        <ClearProjectPanel
+          projectPath={projectPath}
+          banks={banks}
+          loadedBankIndices={loadedBankIndices}
+          onBankUpdated={onBankUpdated}
+          onProjectRefresh={onProjectRefresh}
+        />
+      )}
+
+      {operation !== "fix_missing_samples" && operation !== "fix_project_samples" && operation !== "purge_project_samples" && operation !== "clear_project" && (
       <div className="tools-panels">
         {/* Source Panel */}
         <div className="tools-source-panel">
@@ -3779,7 +3791,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
       )}
 
       {/* Execute Button */}
-      {operation !== "fix_missing_samples" && operation !== "fix_project_samples" && operation !== "purge_project_samples" && (
+      {operation !== "fix_missing_samples" && operation !== "fix_project_samples" && operation !== "purge_project_samples" && operation !== "clear_project" && (
       <div className="tools-actions">
         <button
           className="tools-execute-btn"

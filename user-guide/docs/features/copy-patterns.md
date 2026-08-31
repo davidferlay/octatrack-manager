@@ -77,4 +77,4 @@ Visible when **All Tracks** is selected. Controls which track types are copied:
 - **Multi-pattern Source:** With several source patterns selected, the destination holds the same number of patterns. The Execute button stays disabled while the two counts disagree.
 - **Overlapping Ranges:** Copying patterns onto an overlapping range in the same bank is safe: the whole source bank is read before anything is written, so 1, 2, 3 onto 2, 3, 4 moves each pattern rather than smearing the first one.
 - **Destructive Operation:** Copying a pattern replaces existing sequences at the destination.
-- **Automatic Backup:** The app automatically backs up the destination bank file(s) before executing. See [Quick Start](../getting-started/quick-start.md#11-automatic-backups) for details.
+- **Automatic Backup:** The app automatically backs up the destination bank file(s) before executing. See [Quick Start](../getting-started/quick-start.md#12-automatic-backups) for details.

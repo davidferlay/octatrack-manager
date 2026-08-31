@@ -69,7 +69,7 @@ When enabled, every project of the Set is also scanned - in addition of the shar
 The unused count and preview list combines pool and per-project results together, and the status line reads _"of N scanned in Audio Pool and all Projects of Set"_ rather than _"in Audio Pool directory"_.
 
 :::info
-Clearing a slot assignment backs up the affected project's `project.work` first, under that project's `backups/` directory. See [Quick Start](../getting-started/quick-start.md#11-automatic-backups) for details.
+Clearing a slot assignment backs up the affected project's `project.work` first, under that project's `backups/` directory. See [Quick Start](../getting-started/quick-start.md#12-automatic-backups) for details.
 :::
 
 ### Exclude backups/ directory

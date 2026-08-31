@@ -5228,6 +5228,113 @@ th.col-usage .header-content .sort-indicator {
   transform: translateY(0);
 }
 
+/* ---- Clear Project ---------------------------------------------------- */
+
+/* No source/destination split: one Target pane, centred, with the Execute
+   button under it rather than in a third column. A fixed width keeps the card
+   from resizing as the scope (and therefore the number of rows) changes. */
+.tools-clear-panels {
+  display: block;
+}
+
+.tools-clear-panels .tools-clear-panel {
+  width: 100%;
+  /* Same width as the Fix Missing / Fix Project Samples layouts, so the Tools
+     tab keeps one column width whichever single-pane operation is chosen. */
+  max-width: 520px;
+  margin: 0 auto 1.05rem;
+}
+
+/* Five scopes on one row, each sized to its own label. */
+.tools-clear-scopes .tools-toggle-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  padding: 0.5rem 0.6rem;
+}
+
+/* Tighter vertical rhythm than the copy panes: this pane stacks up to five
+   selectors (bank, track, part, mode, pattern) in one column, so the default
+   spacing pushes the Tracks scope past a 720px-tall window. */
+.tools-clear-panel .tools-field {
+  margin-bottom: 0.55rem;
+}
+
+.tools-clear-panel .tools-field label {
+  margin-bottom: 0.3rem;
+}
+
+.tools-clear-panel .tools-part-cross {
+  gap: 0.25rem;
+}
+
+/* Two selectors on one line, sharing the width evenly. */
+.tools-clear-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.tools-clear-row > .tools-field {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* Stacked so three long labels fit a narrow column without truncating. */
+.tools-toggle-stack {
+  flex-direction: column;
+}
+
+.tools-toggle-stack .tools-toggle-btn {
+  flex: 0 0 auto;
+  width: 100%;
+}
+
+/* Reassurance in the confirmation modal: why this is safe to press. */
+.tools-clear-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--elektron-dark-gray);
+  font-size: 0.95rem;
+  color: var(--elektron-text-secondary);
+}
+
+.tools-clear-note i {
+  color: var(--elektron-orange);
+  opacity: 0.8;
+}
+
+/* What Execute is about to destroy, spelled out above the button. */
+.tools-clear-summary {
+  max-width: 520px;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--elektron-text-secondary);
+  line-height: 1.5;
+}
+
+/* The whole sentence reads as one statement of what is about to happen. */
+.tools-clear-summary-ready {
+  color: var(--elektron-text-primary);
+  font-weight: 600;
+}
+
+/* Destructive, so it reads red instead of the usual orange. */
+.tools-execute-btn.tools-clear-btn {
+  border-color: #e05252;
+  color: #e05252;
+}
+
+.tools-execute-btn.tools-clear-btn:hover:not(:disabled) {
+  background-color: #e05252;
+  border-color: #e05252;
+  color: var(--elektron-black);
+}
+
 /* Modal action rows (Apply Changes, Review changes...): no hover lift */
 .fix-done-actions .tools-execute-btn:hover:not(:disabled),
 .fix-confirm-actions .tools-execute-btn:hover:not(:disabled) {
@@ -5424,6 +5531,21 @@ th.col-usage .header-content .sort-indicator {
   border-color: var(--elektron-orange);
   border-style: solid;
   color: var(--elektron-orange);
+}
+
+/* One / Range already set .selected in both Copy Sample Slots and Clear
+   Project, but nothing styled it - the active mode looked identical to the
+   inactive one. */
+.tools-slot-all-btn.selected {
+  background-color: var(--elektron-orange);
+  border-color: var(--elektron-orange);
+  border-style: solid;
+  color: #000;
+}
+
+.tools-slot-all-btn.selected:hover {
+  background-color: var(--elektron-orange);
+  color: #000;
 }
 
 .tools-slot-sliders {

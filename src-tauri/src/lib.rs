@@ -650,6 +650,69 @@ async fn validate_bank_sample_slots(
     .unwrap()
 }
 
+/// Reset whole banks of the loaded project to the factory-default state.
+#[tauri::command]
+async fn clear_banks(project: String, bank_indices: Vec<u8>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        project_reader::clear_banks(&project, &bank_indices)
+    })
+    .await
+    .unwrap()
+}
+
+/// Reset Parts of one bank (name included) to the factory default.
+#[tauri::command]
+async fn clear_parts(
+    project: String,
+    bank_index: u8,
+    part_indices: Vec<u8>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        project_reader::clear_parts(&project, bank_index, &part_indices)
+    })
+    .await
+    .unwrap()
+}
+
+/// Empty Patterns of one bank (all trigs, default scale/chain, Part 1).
+#[tauri::command]
+async fn clear_patterns(
+    project: String,
+    bank_index: u8,
+    pattern_indices: Vec<u8>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        project_reader::clear_patterns(&project, bank_index, &pattern_indices)
+    })
+    .await
+    .unwrap()
+}
+
+/// Clear individual tracks: sound design ("part_params"), sequencer data
+/// ("pattern_triggers") or "both". `pattern_indices` = None means all 16.
+#[tauri::command]
+async fn clear_tracks(
+    project: String,
+    bank_index: u8,
+    part_index: u8,
+    track_indices: Vec<u8>,
+    mode: String,
+    pattern_indices: Option<Vec<u8>>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        project_reader::clear_tracks(
+            &project,
+            bank_index,
+            part_index,
+            &track_indices,
+            &mode,
+            pattern_indices,
+        )
+    })
+    .await
+    .unwrap()
+}
+
 #[tauri::command]
 async fn copy_parts(
     source_project: String,
@@ -1440,6 +1503,10 @@ pub fn run() {
             validate_bank_sample_slots,
             copy_parts,
             copy_patterns,
+            clear_banks,
+            clear_parts,
+            clear_patterns,
+            clear_tracks,
             copy_tracks,
             copy_sample_slots,
             check_missing_source_files,

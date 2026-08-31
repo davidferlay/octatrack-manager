@@ -157,7 +157,7 @@ When copying samples, the app automatically remaps all slot references in the co
 ## Important Notes
 
 - **Destructive Operation:** Copying a bank replaces all existing data at the destination.
-- **Automatic Backup:** The app automatically backs up destination bank files before executing. See [Quick Start](../getting-started/quick-start.md#11-automatic-backups) for details.
+- **Automatic Backup:** The app automatically backs up destination bank files before executing. See [Quick Start](../getting-started/quick-start.md#12-automatic-backups) for details.
 - **Multi-bank Destination:** With a single source bank, you can select multiple destination banks to copy it to several targets at once.
 - **Multi-bank Source:** With several source banks selected, the destination holds the same number of banks and the copy is one-to-one. The Execute button stays disabled while the two counts disagree.
 - **Cross-project Source:** The source project is only ever read. Backups are taken of the destination, plus the source project's `project.work` when **Move to Pool** rewrites it.

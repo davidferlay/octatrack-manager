@@ -133,7 +133,18 @@ This can be done from either:
 
 ---
 
-## 11. Automatic Backups
+## 11. Clear Parts of a Project
+
+The Tools tab also includes a **[Clear Project](../features/clear-project.md)** operation, the counterpart to the copy operations: it resets parts of the loaded project back to the factory-default state:
+- Banks - whole banks, parts and patterns included
+- Parts - one part or all four, name included
+- Patterns - every trig, plus scale and chaining settings
+- Tracks - per-track sound design, sequencer data, or both
+- Sample Slots - a range of Flex, Static or both
+
+---
+
+## 12. Automatic Backups
 
 Octatrack Manager automatically backs up your project files before any write operation — whether you are enabling Edit mode, saving a Part, or executing a copy operation via Tools.
 
@@ -159,6 +170,7 @@ This means you can always revert changes by copying the backed-up files back int
 | Copy Sample Slots (Move to Pool) | Destination: `project.work`, `markers.work`<br/>Source: `project.work` and audio files (`.wav` + `.ot`) that will be moved/deleted |
 | Fix Missing Samples | `project.work` (and sibling projects' `project.work` when using Move to Pool) |
 | Purge Unused Samples (Clear unused sample slot assignments) | `project.work` - only when the option is enabled and at least one slot is cleared |
+| Clear Project | Targeted bank file(s), or `project.work` when clearing sample slots |
 | Edit mode toggle (in header)| Current bank file |
 
 
