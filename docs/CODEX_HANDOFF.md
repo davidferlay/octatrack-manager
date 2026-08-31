@@ -84,12 +84,14 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - Security recheck R2／v2 error sanitization: #42マージ済み
 - opportunistic `App.css` unused rule cleanup: #45マージ済み
 - M4-B recovery gate／production recovery導線: #43マージ済み（#47含む）
-- Gate B合成ディスクsmoke証拠: #48／#56マージ済み；tip `199114e` で Linux／macOS 両 PASS を再確認
+- Gate B合成ディスクsmoke証拠: #48／#56／#57マージ済み；`199114e` で Linux／macOS 両 PASS
 - DEP-1 Tauri security baseline: #49マージ済み
 - DEP-2 frontend toolchain: #50マージ済み
 - SEC-1 containment CI guard: #51マージ済み
 - Gate B smoke macOS移植: #55マージ済み
-- 現在のmain基準SHA: `199114e`
+- Project compatibility policy: #58／#59マージ済み
+- Gate B human sign-off: **PASS**（personal/local use、source `a10437f`）
+- 現在のmain基準SHA: `a10437f`
 - M2: 完了
 - M3-A: 完了
 - M3-B: 完了
@@ -104,11 +106,13 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - M3: 完了
 - M4-A: 完了
 - M4-B: 完了
+- Gate B: 完了（personal/local use。public distribution承認ではない）
 - Design System Phase A–D: 完了（DS1–DS7 / UI1–UI6）
-- 現在の作業: Gate B合成ディスクsmoke証拠の人間review、および DMG 人間smoke／Gate B署名
+- 現在の作業: Gate B sign-off記録、およびM5着手準備
 - SQLite schema: v5（M3-E1で追加）
-- 次の機能実装: Gate B人間review／署名までM5へ進まない。
-  DEP-1／DEP-2／SEC-1／DEP-3／#55／#56はマージ済み。自動synthetic smokeは Linux／macOS とも PASS（`199114e`）
+- 次の機能実装: **M5へ進行可**。
+  Gate Bはsource `a10437f`のDMG検証、Octatrack OS 1.40互換、human additive copy、
+  source/destination SHA一致、既存media不変、remount persistenceを確認して署名済み
   Appearance theme（classic / MasterOCTa）は design-system token 層の follow-up
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
@@ -352,9 +356,9 @@ session／recovery状態をrefreshし、partial保持のwarningを残す。
 recovery bindingを持たないlegacy未完了状態はmediaとbackupを保持したまま`Abandoned`へ安全終端化して
 root全体のblockだけを解除する。
 
-この補完PRが成功しても、`docs/testing/GATE_B_CLONE_SMOKE.md`のhuman-reviewed smokeは別の残条件で
-ある。由来確認済みの使い捨てcloneによるsign-off前にGate B完了や原本media write対応を宣言せず、
-M5へ進まない。
+この補完PRの成功後も、`docs/testing/GATE_B_CLONE_SMOKE.md`のhuman-reviewed smokeは別の残条件
+として残った。由来確認済みの使い捨てcloneによるsign-off前はGate B完了や原本media write対応を
+宣言せず、M5を開始しなかった。
 
 Project compatibility policy follow-upでは、固定`ot-tools-io`の判定を維持しつつ、同libraryが
 unsupportedとする実機Octatrack MkII由来の`VERSION=19`／`R0173`／`1.40`だけを、追跡済みfixtureの
@@ -364,7 +368,13 @@ exact tokenとして扱い、未知・malformed・別Project VERSIONは従来ど
 backup／journal／recovery境界は変更しない。Projectを全面serializeせず、additive copy時のProject／
 Bank不変をSHA-256で検証する。
 
-このfollow-upがmergeされても既存Gate B sign-offは完了しない。merge後のDMGについて
-`docs/testing/GATE_B_CLONE_SMOKE.md`のcompatibility-policy DMG retestを実施し、DMG検証、全state
-Parsed、Edit／Review Plan／additive copy、Project／Bank SHA不変、再mount／再scan、人間reviewまで
-完了してからGate Bを署名する。署名前にM5へ進まない。
+このfollow-up merge後、source
+`a10437f3b32c2c116a8e9133dd21c762843ed36e`のDMGで
+`docs/testing/GATE_B_CLONE_SMOKE.md`のcompatibility-policy retestを実施した。
+DMG検証、Octatrack OS 1.40互換、human additive copy、source／destination SHA一致、
+既存media不変、remount persistenceはいずれもPASSであり、Gate Bはpersonal/local use scopeで
+human sign-off済み。M5へ進行できる。
+
+検証DMGはad-hoc signedであり、Developer ID signing／notarizationはpersonal/local use scopeには
+要求しない。一方、このDMGをpublic distribution artifactとして扱ってはならない。公開配布には
+別途signing、notarization、provenance、release security gateが必要である。
