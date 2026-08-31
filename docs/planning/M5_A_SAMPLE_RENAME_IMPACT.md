@@ -38,7 +38,8 @@ Raw absolute paths never enter this type.
 AdditiveCopy types and `ChangePlan` remain unchanged. Rename planning lives in
 independent types:
 
-- `RenameSamplePlanningFacts` — root, source, destination, state documents,
+- `RenameSamplePlanningFacts` — root, source, destination, optional derived
+  sidecar destination, state documents,
   slot assignments, usage edges, sidecars, graph/coverage completeness flags
 - `RenameImpactPlan` — read-only canonical impact for an approved rename
 - `BlockedRenameImpact` — observed partial impact plus all block reasons when
@@ -97,21 +98,41 @@ Planning refuses to mint a plan when any of the following hold:
 | `SourceHashMismatch` | Catalog and live source hashes differ |
 | `StaleSourceHashFreshness` | Source hash was reused without live rehash |
 | `SourceEqualsDestination` | No-op rename |
+| `DestinationObservationMismatch` | Intent and observed audio destination differ |
 | `DestinationOccupied` | Destination already exists |
 | `DestinationCaseCollision` | Case-only collision on case-insensitive media |
 | `DestinationNormalizationCollision` | NFC/NFD collision |
 | `DestinationUnsafePath` | Traversal/symlink/invalid destination |
 | `DestinationIncomparable` | Destination could not be classified safely |
-| `UnsupportedStateDocument` | Related Project/Bank doc unsupported |
-| `MalformedStateDocument` | Related Project/Bank doc malformed |
+| `SidecarDestinationObservationMismatch` | Observed sidecar destination does not match derived co-rename path |
+| `SidecarDestinationOccupied` | Derived sidecar destination already exists |
+| `SidecarDestinationCaseCollision` | Derived sidecar destination case-only collision |
+| `SidecarDestinationNormalizationCollision` | Derived sidecar destination NFC/NFD collision |
+| `SidecarDestinationUnsafePath` | Derived sidecar destination path is unsafe |
+| `SidecarDestinationIncomparable` | Derived sidecar destination could not be classified safely |
+| `UnsupportedStateDocument` | Any observed Project or Bank document is unsupported; parse-incapable documents cannot prove they do not reference the source |
+| `MalformedStateDocument` | Any observed Project or Bank document is malformed, including Working or SavedCheckpoint alone |
 | `UnsupportedSidecar` | Related `.ot` sidecar unsupported |
 | `MalformedSidecar` | Related `.ot` sidecar malformed |
 | `AmbiguousSidecarOwnership` | Same-stem sidecar ownership is ambiguous |
 | `IncompleteUsageGraph` | Usage graph incomplete |
 | `IncompleteSetProjectCoverage` | Set project coverage incomplete |
-| `UnresolvedReference` | Missing/invalid/unassigned references remain |
+| `UnresolvedReference` | Missing/invalid references to the rename source remain |
+| `DestinationReferencedByUnresolvedSlot` | A missing or invalid slot/usage edge already references the destination path (exact or ASCII case-insensitive) |
+| `DestinationAlreadyReferenced` | A resolved slot already references the destination path |
 | `IncompleteReferenceUpdateSet` | Resolved slot references lack update rows |
 | `ArithmeticOverflow` | Byte accounting overflow |
+
+Parse-incapable Project/Bank documents never generate slot assignments. Planner
+therefore treats every `UnsupportedVersion` or `Malformed` state document in the
+supplied facts as a blocker and does not infer “no reference” from
+`set_project_coverage_complete`.
+
+Destination slot comparison is exact `RootRelativePath` equality plus ASCII
+case-insensitive equality. Unicode NFC/NFD slot-path equivalence is not computed
+in `ot-plan`. Collectors must classify live destination NFC/NFD collisions as
+`NormalizationCollision` or `Incomparable`, and must emit catalog slot paths in
+one normalization form.
 
 ## Stale detection
 
