@@ -8,11 +8,11 @@ use ot_domain::{
 };
 use ot_plan::derive_file_instance_id;
 use ot_plan::{
-    plan_rename_sample, validate_rename_plan_freshness, BlockedRenameImpact,
-    RenameDestinationObservation, RenameDestinationState, RenamePlanningOutcome,
-    RenameRootObservation, RenameSamplePlanningFacts, RenameSidecarObservation,
-    RenameSlotAssignmentObservation, RenameSourceObservation, RenameStaleReason,
-    RenameStateDocumentObservation, RenameUsageEdgeObservation,
+    plan_rename_sample, sidecar_destination_for_audio_destination, validate_rename_plan_freshness,
+    BlockedRenameImpact, RenameDestinationObservation, RenameDestinationState,
+    RenamePlanningOutcome, RenameRootObservation, RenameSamplePlanningFacts,
+    RenameSidecarObservation, RenameSlotAssignmentObservation, RenameSourceObservation,
+    RenameStaleReason, RenameStateDocumentObservation, RenameUsageEdgeObservation,
 };
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -78,6 +78,7 @@ fn build_fixture_facts(
             intended_relative_path: RootRelativePath::parse(destination_path).unwrap(),
             state: RenameDestinationState::Absent,
         },
+        sidecar_destination: sidecar_destination_for_audio_destination(destination_path),
         state_documents: vec![RenameStateDocumentObservation {
             relative_path: RootRelativePath::parse("SET/PROJECT/project.work").unwrap(),
             kind: StateDocumentKind::Project,
