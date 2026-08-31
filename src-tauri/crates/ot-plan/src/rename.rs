@@ -977,9 +977,9 @@ fn impacted_project_documents(
         .collect()
 }
 
-fn source_owning_sidecars<'a>(
-    facts: &'a RenameSamplePlanningFacts,
-) -> impl Iterator<Item = &'a RenameSidecarObservation> {
+fn source_owning_sidecars(
+    facts: &RenameSamplePlanningFacts,
+) -> impl Iterator<Item = &RenameSidecarObservation> {
     facts
         .sidecars
         .iter()
