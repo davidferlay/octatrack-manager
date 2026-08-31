@@ -26,6 +26,7 @@ const metadata = JSON.parse(
 const dependencyRules = new Map([
   ["ot-domain", []],
   ["ot-codec-ports", ["ot-domain"]],
+  ["ot-codec", ["encoding_rs", "ot-codec-ports", "ot-domain"]],
   ["ot-storage-ports", ["ot-domain"]],
   [
     "ot-catalog",

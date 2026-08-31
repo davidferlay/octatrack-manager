@@ -91,7 +91,7 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - Gate B smoke macOS移植: #55マージ済み
 - Project compatibility policy: #58／#59マージ済み
 - Gate B human sign-off: **PASS**（personal/local use、source `a10437f`）
-- 現在のmain基準SHA: `2d1e538`（Gate B sign-off PR #60 merge後）
+- 現在のmain基準SHA: `9ea9298`（M5-A PR #61 merge後。本作業は M5-B）
 - M2: 完了
 - M3: 完了
 - M4-A: 完了
@@ -99,14 +99,15 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - Gate B: 完了（personal/local use。public distribution承認ではない）
 - Design System Phase A–D: 完了（DS1–DS7 / UI1–UI6）
 - M5-A sample rename impact planning: **完了**（pure domain/planning contract）
-- 現在の作業: M5-B rename codec/apply 準備
-- SQLite schema: v5（M3-E1で追加）
-- 次の機能実装: M5-A完了後 **M5-B**（Project/Bank reference rewrite codec、
-  sidecar apply semantics、executor/backup/journal rename Apply）
+- M5-B lossless Project reference rewrite codec: **このPR**
+- 現在の作業: M5-B codec（メモリ専用 PATH 置換）
+- SQLite schema: v6（compatibility evidence を含む）
+- 次の機能実装: M5-B 完了後 **M5-C**（temporary root 上の recoverable rename transaction）
 - Gate C rename Apply 残条件: codec evidence、clone上 rename→rescan missing 0、
   非対象hash不変、rollback byte復元、実機clone load smoke
 - Developer ID signing / notarization / public distribution は別release gate
 - M5-A contract 正本: `docs/planning/M5_A_SAMPLE_RENAME_IMPACT.md`
+- M5-B contract 正本: `docs/planning/M5_B_REFERENCE_REWRITE.md`
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
 - `ot-tools-io`はコミット

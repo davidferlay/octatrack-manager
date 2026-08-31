@@ -2703,6 +2703,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ot-codec"
+version = "0.1.0"
+dependencies = [
+ "encoding_rs",
+ "ot-codec-ports",
+ "ot-domain",
+]
+
+[[package]]
 name = "ot-codec-ports"
 version = "0.1.0"
 dependencies = [
