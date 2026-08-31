@@ -880,4 +880,6 @@ mod tests {
             Err(ReferenceRewriteError::UnsafePathText)
         );
     }
+
+    mod contract_tests;
 }

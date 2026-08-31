@@ -2709,6 +2709,7 @@ dependencies = [
  "encoding_rs",
  "ot-codec-ports",
  "ot-domain",
+ "ot-tools-io",
 ]
 
 [[package]]
