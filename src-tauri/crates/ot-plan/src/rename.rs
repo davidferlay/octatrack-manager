@@ -1045,7 +1045,10 @@ fn paths_case_only_collision(
 mod tests {
     use super::*;
     use crate::derive_file_instance_id;
-    use ot_domain::{ProjectCompatibilityEvidence, SampleSlotKind};
+    use ot_domain::{
+        FileInstanceId, ProjectCompatibilityEvidence, SampleSettingsParseStatus, SampleSlotKind,
+        StateDocumentParseStatus,
+    };
 
     fn hash(byte: u8) -> ContentHash {
         ContentHash::parse(format!("sha256:{}", format!("{byte:02x}").repeat(32))).unwrap()
@@ -1390,6 +1393,367 @@ mod tests {
                 block_reasons,
                 ..
             }) if block_reasons.contains(&RenameBlockReason::AmbiguousSidecarOwnership)
+        ));
+    }
+
+    fn assert_blocked(
+        facts: RenameSamplePlanningFacts,
+        intent: RenameSampleIntent,
+        expected: RenameBlockReason,
+    ) {
+        match plan_rename_sample(&intent, &facts) {
+            RenamePlanningOutcome::Blocked(blocked) => {
+                assert!(
+                    blocked.block_reasons.contains(&expected),
+                    "expected {expected:?} in {:?}",
+                    blocked.block_reasons
+                );
+            }
+            RenamePlanningOutcome::Planned(plan) => {
+                panic!(
+                    "expected {expected:?} but planning minted {}",
+                    plan.id.as_str()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn fail_closed_blockers_match_the_m5a_contract() {
+        struct Case {
+            label: &'static str,
+            expected: RenameBlockReason,
+            mutate: fn(&mut RenameSamplePlanningFacts, &mut RenameSampleIntent),
+        }
+
+        let cases = [
+            Case {
+                label: "RootMismatch",
+                expected: RenameBlockReason::RootMismatch,
+                mutate: |_, intent| {
+                    intent.root_id = RootId::new("other-root").unwrap();
+                },
+            },
+            Case {
+                label: "UnstableRootIdentity",
+                expected: RenameBlockReason::UnstableRootIdentity,
+                mutate: |facts, _| facts.root.identity_is_stable = false,
+            },
+            Case {
+                label: "InvalidRootFingerprint",
+                expected: RenameBlockReason::InvalidRootFingerprint,
+                mutate: |facts, _| {
+                    facts.root.device_fingerprint = format!("rootfp:v1:{}", "g".repeat(64));
+                },
+            },
+            Case {
+                label: "ScanNotCompleted",
+                expected: RenameBlockReason::ScanNotCompleted,
+                mutate: |facts, _| facts.root.scan_completed = false,
+            },
+            Case {
+                label: "InvalidObservedRevision",
+                expected: RenameBlockReason::InvalidObservedRevision,
+                mutate: |facts, _| {
+                    facts.root.live_observed_revision = 0;
+                    facts.root.base_catalog_scan_revision = 0;
+                },
+            },
+            Case {
+                label: "CatalogRevisionMismatch",
+                expected: RenameBlockReason::CatalogRevisionMismatch,
+                mutate: |facts, _| facts.root.base_catalog_scan_revision = 8,
+            },
+            Case {
+                label: "SourceIdentityMismatch",
+                expected: RenameBlockReason::SourceIdentityMismatch,
+                mutate: |_, intent| {
+                    intent.source_file_instance_id =
+                        FileInstanceId::parse(format!("fileinst:v1:{}", "c".repeat(64))).unwrap();
+                },
+            },
+            Case {
+                label: "destination intent mismatch maps to SourceIdentityMismatch",
+                expected: RenameBlockReason::SourceIdentityMismatch,
+                mutate: |_, intent| {
+                    intent.destination_relative_path =
+                        RootRelativePath::parse("SET/AUDIO/other.wav").unwrap();
+                },
+            },
+            Case {
+                label: "SourcePathMismatch",
+                expected: RenameBlockReason::SourcePathMismatch,
+                mutate: |facts, _| {
+                    facts.source.catalog_relative_path =
+                        RootRelativePath::parse("SET/AUDIO/other.wav").unwrap();
+                },
+            },
+            Case {
+                label: "SourceSizeMismatch",
+                expected: RenameBlockReason::SourceSizeMismatch,
+                mutate: |facts, _| facts.source.catalog_byte_size = 64,
+            },
+            Case {
+                label: "SourceHashMismatch",
+                expected: RenameBlockReason::SourceHashMismatch,
+                mutate: |facts, _| facts.source.catalog_content_hash = hash(b'c'),
+            },
+            Case {
+                label: "SourceEqualsDestination",
+                expected: RenameBlockReason::SourceEqualsDestination,
+                mutate: |facts, intent| {
+                    let source = facts.source.live_relative_path.clone();
+                    facts.destination.intended_relative_path = source.clone();
+                    intent.destination_relative_path = source;
+                },
+            },
+            Case {
+                label: "DestinationOccupied",
+                expected: RenameBlockReason::DestinationOccupied,
+                mutate: |facts, _| {
+                    facts.destination.state = RenameDestinationState::Existing {
+                        relative_path: facts.destination.intended_relative_path.clone(),
+                        byte_size: 1,
+                        content_hash: hash(b'd'),
+                    };
+                },
+            },
+            Case {
+                label: "DestinationNormalizationCollision",
+                expected: RenameBlockReason::DestinationNormalizationCollision,
+                mutate: |facts, _| {
+                    facts.destination.state = RenameDestinationState::NormalizationCollision {
+                        existing_relative_path: facts.destination.intended_relative_path.clone(),
+                        normalization: UnicodeNormalizationForm::Nfc,
+                    };
+                },
+            },
+            Case {
+                label: "DestinationUnsafePath",
+                expected: RenameBlockReason::DestinationUnsafePath,
+                mutate: |facts, _| {
+                    facts.destination.state = RenameDestinationState::UnsafePath {
+                        reason: RenameUnsafePathReason::SymlinkEscape,
+                    };
+                },
+            },
+            Case {
+                label: "DestinationIncomparable",
+                expected: RenameBlockReason::DestinationIncomparable,
+                mutate: |facts, _| facts.destination.state = RenameDestinationState::Incomparable,
+            },
+            Case {
+                label: "UnsupportedStateDocument",
+                expected: RenameBlockReason::UnsupportedStateDocument,
+                mutate: |facts, _| {
+                    facts.state_documents[0].parse_status =
+                        StateDocumentParseStatus::UnsupportedVersion;
+                },
+            },
+            Case {
+                label: "MalformedStateDocument",
+                expected: RenameBlockReason::MalformedStateDocument,
+                mutate: |facts, _| {
+                    facts.state_documents[0].parse_status = StateDocumentParseStatus::Malformed;
+                },
+            },
+            Case {
+                label: "UnsupportedSidecar",
+                expected: RenameBlockReason::UnsupportedSidecar,
+                mutate: |facts, _| {
+                    facts.sidecars[0].parse_status = SampleSettingsParseStatus::UnsupportedVersion;
+                },
+            },
+            Case {
+                label: "MalformedSidecar",
+                expected: RenameBlockReason::MalformedSidecar,
+                mutate: |facts, _| {
+                    facts.sidecars[0].parse_status = SampleSettingsParseStatus::Malformed;
+                },
+            },
+            Case {
+                label: "IncompleteUsageGraph",
+                expected: RenameBlockReason::IncompleteUsageGraph,
+                mutate: |facts, _| facts.usage_graph_complete = false,
+            },
+            Case {
+                label: "IncompleteSetProjectCoverage",
+                expected: RenameBlockReason::IncompleteSetProjectCoverage,
+                mutate: |facts, _| facts.set_project_coverage_complete = false,
+            },
+        ];
+
+        for case in cases {
+            let source_path = "SET/AUDIO/kick.wav";
+            let destination_path = "SET/AUDIO/new-kick.wav";
+            let mut facts = base_facts(source_path, destination_path, Vec::new());
+            let mut intent = base_intent(&facts.source, destination_path);
+            (case.mutate)(&mut facts, &mut intent);
+            match plan_rename_sample(&intent, &facts) {
+                RenamePlanningOutcome::Blocked(blocked) => {
+                    assert!(
+                        blocked.block_reasons.contains(&case.expected),
+                        "{}: expected {:?} in {:?}",
+                        case.label,
+                        case.expected,
+                        blocked.block_reasons
+                    );
+                }
+                RenamePlanningOutcome::Planned(plan) => {
+                    panic!(
+                        "{}: expected {:?} but planning minted {}",
+                        case.label,
+                        case.expected,
+                        plan.id.as_str()
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn project_local_destination_without_parent_is_unsafe_for_sidecar_planning() {
+        let source_path = "SET/AUDIO/kick.wav";
+        let destination_path = "kick-renamed.wav";
+        let facts = base_facts(source_path, destination_path, Vec::new());
+        let intent = base_intent(&facts.source, destination_path);
+        assert_blocked(facts, intent, RenameBlockReason::DestinationUnsafePath);
+    }
+
+    #[test]
+    fn arithmetic_overflow_fails_closed_on_backup_byte_accounting() {
+        let source_path = "SET/AUDIO/kick.wav";
+        let destination_path = "SET/AUDIO/new-kick.wav";
+        let mut facts = base_facts(source_path, destination_path, Vec::new());
+        facts.source.catalog_byte_size = u64::MAX;
+        facts.source.live_byte_size = u64::MAX;
+        let intent = base_intent(&facts.source, destination_path);
+        assert_blocked(facts, intent, RenameBlockReason::ArithmeticOverflow);
+    }
+
+    #[test]
+    fn resolved_source_assignment_always_emits_reference_updates() {
+        let source_path = "SET/AUDIO/kick.wav";
+        let destination_path = "SET/AUDIO/new-kick.wav";
+        let facts = base_facts(
+            source_path,
+            destination_path,
+            vec![RenameSlotAssignmentObservation {
+                project_document_relative_path: RootRelativePath::parse("SET/PROJECT/project.work")
+                    .unwrap(),
+                slot: SampleSlotId::new(SampleSlotKind::Static, 1).unwrap(),
+                referenced_file_relative_path: Some(RootRelativePath::parse(source_path).unwrap()),
+                reference_status: SampleReferenceStatus::Resolved,
+            }],
+        );
+        let intent = base_intent(&facts.source, destination_path);
+        let RenamePlanningOutcome::Planned(plan) = plan_rename_sample(&intent, &facts) else {
+            panic!("resolved source assignment should plan");
+        };
+        assert_eq!(plan.reference_update_count, 1);
+        assert!(!plan.state_document_impacts[0].reference_updates.is_empty());
+    }
+
+    #[test]
+    fn classify_destination_state_distinguishes_occupied_and_case_collision() {
+        let intended = RootRelativePath::parse("SET/AUDIO/kick-2.wav").unwrap();
+        let same = RootRelativePath::parse("SET/AUDIO/kick-2.wav").unwrap();
+        let case_variant = RootRelativePath::parse("SET/AUDIO/KICK-2.WAV").unwrap();
+        let other = RootRelativePath::parse("SET/AUDIO/snare.wav").unwrap();
+
+        assert!(matches!(
+            classify_destination_state(
+                &intended,
+                std::slice::from_ref(&same),
+                PathComparisonMode::CaseSensitive
+            ),
+            RenameDestinationState::Existing { .. }
+        ));
+        assert!(matches!(
+            classify_destination_state(
+                &intended,
+                std::slice::from_ref(&case_variant),
+                PathComparisonMode::CaseInsensitive
+            ),
+            RenameDestinationState::CaseOnlyCollision { .. }
+        ));
+        assert_eq!(
+            classify_destination_state(
+                &intended,
+                std::slice::from_ref(&case_variant),
+                PathComparisonMode::CaseSensitive
+            ),
+            RenameDestinationState::Absent
+        );
+        assert_eq!(
+            classify_destination_state(
+                &intended,
+                std::slice::from_ref(&other),
+                PathComparisonMode::CaseInsensitive
+            ),
+            RenameDestinationState::Absent
+        );
+    }
+
+    #[test]
+    fn freshness_detects_path_hash_reference_set_and_completeness_regressions() {
+        let source_path = "SET/AUDIO/kick.wav";
+        let destination_path = "SET/AUDIO/new-kick.wav";
+        let assignments = vec![RenameSlotAssignmentObservation {
+            project_document_relative_path: RootRelativePath::parse("SET/PROJECT/project.work")
+                .unwrap(),
+            slot: SampleSlotId::new(SampleSlotKind::Static, 1).unwrap(),
+            referenced_file_relative_path: Some(RootRelativePath::parse(source_path).unwrap()),
+            reference_status: SampleReferenceStatus::Resolved,
+        }];
+        let facts = base_facts(source_path, destination_path, assignments);
+        let intent = base_intent(&facts.source, destination_path);
+        let RenamePlanningOutcome::Planned(plan) = plan_rename_sample(&intent, &facts) else {
+            panic!("expected planned rename");
+        };
+
+        let mut stale_path = facts.clone();
+        stale_path.source.live_relative_path =
+            RootRelativePath::parse("SET/AUDIO/moved-kick.wav").unwrap();
+        assert!(matches!(
+            validate_rename_plan_freshness(plan.as_ref(), &stale_path),
+            Err(reasons) if reasons.contains(&RenameStaleReason::SourcePathChanged)
+        ));
+
+        let mut stale_hash = facts.clone();
+        stale_hash.source.live_content_hash = hash(b'z');
+        assert!(matches!(
+            validate_rename_plan_freshness(plan.as_ref(), &stale_hash),
+            Err(reasons) if reasons.contains(&RenameStaleReason::SourceHashChanged)
+        ));
+
+        let mut stale_references = facts.clone();
+        stale_references
+            .slot_assignments
+            .push(RenameSlotAssignmentObservation {
+                project_document_relative_path: RootRelativePath::parse("SET/PROJECT/project.strd")
+                    .unwrap(),
+                slot: SampleSlotId::new(SampleSlotKind::Flex, 2).unwrap(),
+                referenced_file_relative_path: Some(RootRelativePath::parse(source_path).unwrap()),
+                reference_status: SampleReferenceStatus::Resolved,
+            });
+        assert!(matches!(
+            validate_rename_plan_freshness(plan.as_ref(), &stale_references),
+            Err(reasons) if reasons.contains(&RenameStaleReason::ReferenceSetChanged)
+        ));
+
+        let mut stale_graph = facts.clone();
+        stale_graph.usage_graph_complete = false;
+        assert!(matches!(
+            validate_rename_plan_freshness(plan.as_ref(), &stale_graph),
+            Err(reasons) if reasons.contains(&RenameStaleReason::UsageGraphCompletenessChanged)
+        ));
+
+        let mut stale_coverage = facts.clone();
+        stale_coverage.set_project_coverage_complete = false;
+        assert!(matches!(
+            validate_rename_plan_freshness(plan.as_ref(), &stale_coverage),
+            Err(reasons) if reasons.contains(&RenameStaleReason::SetProjectCoverageChanged)
         ));
     }
 }
