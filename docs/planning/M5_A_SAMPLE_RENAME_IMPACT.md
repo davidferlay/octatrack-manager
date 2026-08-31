@@ -135,11 +135,9 @@ M5-A code performs no filesystem mutations. Integration tests use temporary
 synthetic fixtures and assert byte-for-byte media stability before and after
 planning.
 
-## Deferred to M5-B
+## Deferred to M5-B / later
 
-- lossless Project/Bank reference rewrite codec
-- unknown-byte preservation and no-op byte equality evidence
-- checksum/round-trip fixtures for rewritten state documents
+- lossless Project reference rewrite codec → **M5-B** (`docs/planning/M5_B_REFERENCE_REWRITE.md`)
 - `.ot` sidecar rename apply semantics and ordering with audio + state docs
 - executor backup/journal/rollback wiring for rename Apply
 

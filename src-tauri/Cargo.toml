@@ -2,6 +2,7 @@
 members = [
     ".",
     "crates/ot-domain",
+    "crates/ot-codec",
     "crates/ot-codec-ports",
     "crates/ot-storage-ports",
     "crates/ot-application",
