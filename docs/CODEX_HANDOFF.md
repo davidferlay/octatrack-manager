@@ -1,6 +1,6 @@
 # Codex引継ぎ — MasterOCTa
 
-更新日: 2026-08-30
+更新日: 2026-08-31
 
 ## 1. 目的
 
@@ -91,23 +91,31 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - Gate B smoke macOS移植: #55マージ済み
 - Project compatibility policy: #58／#59マージ済み
 - Gate B human sign-off: **PASS**（personal/local use、source `a10437f`）
-- 現在のmain基準SHA: `9ea9298`（M5-A PR #61 merge後。本作業は M5-B）
+- 現在のmain基準SHA: `6d54238`（M5-A P1 planning fixes PR #65 merge後。本作業は M5-C1）
+- M5-A sample rename impact planning: #61 マージ済み
+- M5-A fail-closed blocker tests: #64 マージ済み
+- M5-A P1 planning fixes（unparseable Project / destination unresolved slots）: #65 マージ済み
+- M5-B lossless Project reference rewrite codec: #62 マージ済み
+- M5-B codec fail-closed／contract tests: #63 マージ済み
 - M2: 完了
 - M3: 完了
 - M4-A: 完了
 - M4-B: 完了
 - Gate B: 完了（personal/local use。public distribution承認ではない）
 - Design System Phase A–D: 完了（DS1–DS7 / UI1–UI6）
-- M5-A sample rename impact planning: **完了**（pure domain/planning contract）
-- M5-B lossless Project reference rewrite codec: **このPR**
-- 現在の作業: M5-B codec（メモリ専用 PATH 置換）
+- M5-A: **完了**（pure domain/planning contract + blocker matrix）
+- M5-B: **完了**（メモリ専用 PATH 置換 codec）
+- M5-C1 rename verified multi-file backup: **このPR**
+- 現在の作業: M5-C1（Mac側 immutable rename backup。媒体 write なし）
 - SQLite schema: v6（compatibility evidence を含む）
-- 次の機能実装: M5-B 完了後 **M5-C**（temporary root 上の recoverable rename transaction）
-- Gate C rename Apply 残条件: codec evidence、clone上 rename→rescan missing 0、
+- 次の機能実装: M5-C1 完了後 **M5-C2**（Mac staging: backup再検証、codec rewrite、
+  semantic diff、authorization、未適用 journal 準備）。媒体 mutation は **M5-C3**
+- Gate C rename Apply 残条件: C2/C3、clone上 rename→rescan missing 0、
   非対象hash不変、rollback byte復元、実機clone load smoke
 - Developer ID signing / notarization / public distribution は別release gate
 - M5-A contract 正本: `docs/planning/M5_A_SAMPLE_RENAME_IMPACT.md`
 - M5-B contract 正本: `docs/planning/M5_B_REFERENCE_REWRITE.md`
+- M5-C contract 正本: `docs/planning/M5_C_RENAME_TRANSACTION.md`
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
 - `ot-tools-io`はコミット
