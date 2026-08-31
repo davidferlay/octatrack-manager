@@ -23,9 +23,11 @@ import { OverwriteModal } from "../components/OverwriteModal";
 import { TransferProgressPanel } from "../components/TransferProgressPanel";
 import { useAudioPoolTransfer } from "../hooks/useAudioPoolTransfer";
 import { useAudioPreview, shouldAutoPreview, scrubTarget, volumeStep, isAudioFile } from "../hooks/useAudioPreview";
-import { usePoolUsage, invalidatePoolUsage } from "../hooks/usePoolUsage";
+import { usePoolUsage, invalidatePoolUsage, renamePoolUsage } from "../hooks/usePoolUsage";
 import { SamplePlayerBar } from "../components/SamplePlayerBar";
-import type { AudioFile } from "../types/audioFile";
+import type { AudioFile, RenameResult } from "../types/audioFile";
+import { RenameFileModal } from "../components/RenameFileModal";
+import { readPoolDir, writePoolDir } from "../utils/poolDir";
 import "./AudioPoolPage.css";
 
 // Droppable wrapper for the Audio Pool (destination) pane. Uses @dnd-kit (pointer-based)
@@ -109,7 +111,9 @@ export function AudioPoolPage() {
   const fromTab = searchParams.get("fromTab") || "flex-slots";
 
   const [sourcePath, setSourcePath] = useState("");
-  const [destinationPath, setDestinationPath] = useState(audioPoolPath);
+  // Resume where the pool was last browsed - here or in a project's Audio Pool
+  // pane, which shares this memory (see readPoolDir).
+  const [destinationPath, setDestinationPath] = useState(() => readPoolDir(audioPoolPath));
   const [sourceFiles, setSourceFiles] = useState<AudioFile[]>([]);
   const [destinationFiles, setDestinationFiles] = useState<AudioFile[]>([]);
   const [selectedSourceFiles, setSelectedSourceFiles] = useState<Set<string>>(new Set());
@@ -243,6 +247,8 @@ export function AudioPoolPage() {
 
   // Title interactions: click copies the pool path, right-click opens a small menu (same as project title)
   const [toast, setToast] = useState<string | null>(null);
+  // '' = the default 1.5s toast, 'long' = the ~2s variant (see .toast-notification.long).
+  const [toastClass, setToastClass] = useState<string>('');
   const [titleMenu, setTitleMenu] = useState<{ x: number; y: number } | null>(null);
   useEffect(() => {
     if (!titleMenu) return;
@@ -590,18 +596,11 @@ export function AudioPoolPage() {
 
   const contextMenuRef = useRef<HTMLDivElement>(null);
 
-  // Rename modal state
+  // Rename modal state (the edited name lives in RenameFileModal)
   const [renameModal, setRenameModal] = useState<{
-    isOpen: boolean;
     file: AudioFile | null;
     panel: 'source' | 'dest';
-    newName: string;
-  }>({
-    isOpen: false,
-    file: null,
-    panel: 'dest',
-    newName: '',
-  });
+  }>({ file: null, panel: 'dest' });
 
   // Create folder modal state
   const [createFolderModal, setCreateFolderModal] = useState<{
@@ -733,8 +732,9 @@ export function AudioPoolPage() {
   useEffect(() => {
     if (destinationPath) {
       loadDestinationFiles(destinationPath);
+      writePoolDir(audioPoolPath, destinationPath);
     }
-  }, [destinationPath]);
+  }, [destinationPath, audioPoolPath]);
 
   // Load source files when path changes
   useEffect(() => {
@@ -1168,38 +1168,45 @@ export function AudioPoolPage() {
   // Rename handlers
   function handleRenameClick() {
     if (contextMenu.file) {
-      setRenameModal({
-        isOpen: true,
-        file: contextMenu.file,
-        panel: contextMenu.panel,
-        newName: contextMenu.file.name,
-      });
+      setRenameModal({ file: contextMenu.file, panel: contextMenu.panel });
     }
     closeContextMenu();
   }
 
-  async function handleRenameConfirm() {
-    if (!renameModal.file || !renameModal.newName.trim()) return;
+  async function handleRenameConfirm(newName: string) {
+    const file = renameModal.file;
+    const panel = renameModal.panel;
+    setRenameModal({ file: null, panel: 'dest' });
+    if (!file) return;
 
     try {
-      await invoke("rename_file", {
-        oldPath: renameModal.file.path,
-        newName: renameModal.newName.trim(),
+      // Pool-pane files are referenced by the Set's projects: pass poolPath so
+      // the backend repoints those sample slots instead of leaving them broken.
+      const result = await invoke<RenameResult>("rename_file", {
+        oldPath: file.path,
+        newName,
+        poolPath: panel === 'dest' ? audioPoolPath : undefined,
       });
 
       // Refresh the appropriate panel
-      if (renameModal.panel === 'source') {
+      if (panel === 'source') {
         loadSourceFiles(sourcePath);
       } else {
         loadDestinationFiles(destinationPath);
-        invalidatePoolUsage(audioPoolPath);
+        // A rename moves a file, it does not change who references it - so the
+        // cached usage entries just follow the new path. Re-running the
+        // set-wide scan would blank the Usage badge for no new information.
+        renamePoolUsage(audioPoolPath, file.path, result.new_path);
+        if (result.slots_updated > 0) {
+          setToast(`Renamed - ${result.slots_updated} slot${result.slots_updated > 1 ? 's' : ''} updated in ${result.projects_updated.length} project${result.projects_updated.length > 1 ? 's' : ''}`);
+          setToastClass('long');
+          setTimeout(() => { setToast(null); setToastClass(''); }, 2300);
+        }
       }
     } catch (error) {
       console.error("Error renaming:", error);
       alert(`Error renaming: ${error}`);
     }
-
-    setRenameModal({ isOpen: false, file: null, panel: 'dest', newName: '' });
   }
 
   // Delete handlers
@@ -2106,6 +2113,7 @@ export function AudioPoolPage() {
             justConvertedPaths={justConvertedPaths}
             usageMap={poolUsage}
             usageLoading={poolUsageLoading}
+            usageBackToPool={{ path: audioPoolPath, name: setName }}
             initialColumnVisibility={{ format: false, bitrate: false, samplerate: false }}
             scrollStorageKey={destinationPath ? `pool-dest-scroll:${destinationPath}` : undefined}
             countSuffix={poolScanDone && !poolScanLoading ? (
@@ -2368,38 +2376,12 @@ export function AudioPoolPage() {
       })()}
 
       {/* Rename modal */}
-      {renameModal.isOpen && (
-        <div className="modal-overlay" onClick={() => setRenameModal({ isOpen: false, file: null, panel: 'dest', newName: '' })}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3><i className="fas fa-edit" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>Rename</h3>
-            </div>
-            <div className="modal-body">
-              <p>Enter new name for <strong>"{renameModal.file?.name}"</strong>:</p>
-              <input
-                type="text"
-                className="modal-input"
-                value={renameModal.newName}
-                onChange={(e) => setRenameModal({ ...renameModal, newName: e.target.value })}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleRenameConfirm();
-                  if (e.key === 'Escape') setRenameModal({ isOpen: false, file: null, panel: 'dest', newName: '' });
-                }}
-                autoFocus
-              />
-            </div>
-            <div className="modal-footer">
-              <div className="modal-buttons-row">
-                <button className="modal-button" onClick={() => setRenameModal({ isOpen: false, file: null, panel: 'dest', newName: '' })}>
-                  Cancel
-                </button>
-                <button className="modal-button primary" onClick={handleRenameConfirm} disabled={!renameModal.newName.trim()}>
-                  Rename
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {renameModal.file && (
+        <RenameFileModal
+          name={renameModal.file.name}
+          onCancel={() => setRenameModal({ file: null, panel: 'dest' })}
+          onConfirm={handleRenameConfirm}
+        />
       )}
 
       {/* Delete confirmation modal */}
@@ -2481,7 +2463,7 @@ export function AudioPoolPage() {
       )}
 
       {toast && (
-        <div className="toast-notification">
+        <div className={`toast-notification ${toastClass}`.trim()}>
           <i className="fas fa-check"></i> {toast}
         </div>
       )}

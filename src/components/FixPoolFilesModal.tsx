@@ -2,9 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { getFileFormat, formatFileSize, usageKey, UsagePopoverBox, type PopoverAnchor, type UsagePopoverScope } from './AudioFileTable';
+import { getFileFormat, formatFileSize, usageKey, UsagePopoverBox, UsagePopoverEntry, type PopoverAnchor, type UsagePopoverScope } from './AudioFileTable';
 import type { PoolUsageEntry } from '../types/audioFile';
-import { formatBankRef } from './BankSelector';
 
 export interface IncompatibleFile {
   path: string;
@@ -787,13 +786,7 @@ export function PoolFilesTable({ table, showGoToProject = false }: { table: Retu
                 </div>
                 <div className="usage-popover-list">
                   {scoped.map((entry, idx) => (
-                    <div key={idx} className="usage-popover-entry">
-                      {entry.kind === 'machine'
-                        ? `${entry.project} · ${formatBankRef(entry.bank)} · Part ${(entry.part ?? 0) + 1} · T${entry.track + 1} · Machine`
-                        : entry.kind === 'assigned'
-                        ? `${entry.project} · Slot ${entry.slot}`
-                        : `${entry.project} · ${formatBankRef(entry.bank)} · Pattern ${(entry.pattern ?? 0) + 1} · T${entry.track + 1} · Step ${(entry.step ?? 0) + 1} · Lock`}
-                    </div>
+                    <UsagePopoverEntry key={idx} entry={entry} />
                   ))}
                 </div>
               </>

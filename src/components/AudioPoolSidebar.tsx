@@ -4,8 +4,10 @@ import { listen } from "@tauri-apps/api/event";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { AudioFileTable } from "./AudioFileTable";
 import type { IncompatibleFile, PoolFixResult, CopyProgressEvent } from "./FixPoolFilesModal";
-import type { AudioFile, PoolUsageEntry } from "../types/audioFile";
-import { usePoolUsage, invalidatePoolUsage } from "../hooks/usePoolUsage";
+import type { AudioFile, PoolUsageEntry, RenameResult } from "../types/audioFile";
+import { RenameFileModal } from "./RenameFileModal";
+import { usePoolUsage, invalidatePoolUsage, renamePoolUsage } from "../hooks/usePoolUsage";
+import { readPoolDir, writePoolDir } from "../utils/poolDir";
 import "./AudioPoolSidebar.css";
 
 interface AudioPoolSidebarProps {
@@ -61,14 +63,9 @@ export function parentDir(path: string, root: string): string {
 }
 
 export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndMode = false, refreshKey, onCurrentPathChange, onImport, onAssignToFirstEmpty, hasEmptySlot = true, onAssignToSelected, hasSelectedSlot, onOpenAudioPoolPage, persistKey, onSelect, clearSelectionToken, onActiveFile, onPlayFile, active = false, onPoolFixed, projectName }: AudioPoolSidebarProps) {
-  // Restore the last-browsed directory (only if it still sits under this pool root).
-  const [currentPath, setCurrentPath] = useState(() => {
-    if (persistKey) {
-      const saved = sessionStorage.getItem(`${persistKey}:dir`);
-      if (saved && saved.startsWith(audioPoolPath)) return saved;
-    }
-    return audioPoolPath;
-  });
+  // Restore the last-browsed directory. Keyed by the pool itself, so the pane
+  // and the Audio Pool page pick up where the other left off.
+  const [currentPath, setCurrentPath] = useState(() => readPoolDir(audioPoolPath));
   const [files, setFiles] = useState<AudioFile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   // Cross-project usage (Used/Referenced/Assigned badges), cached per pool path -
@@ -202,8 +199,8 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
   // Report path changes to parent + remember for next visit
   useEffect(() => {
     onCurrentPathChange?.(currentPath);
-    if (persistKey) sessionStorage.setItem(`${persistKey}:dir`, currentPath);
-  }, [currentPath, onCurrentPathChange, persistKey]);
+    writePoolDir(audioPoolPath, currentPath);
+  }, [currentPath, onCurrentPathChange, audioPoolPath]);
 
   // Load files when path changes or refresh is requested
   useEffect(() => {
@@ -382,6 +379,41 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
   // Files to act on: the multi-selection if the right-clicked file is part of it, else just that file.
   function menuTargets(file: AudioFile): string[] {
     return selectedFiles.has(file.path) ? Array.from(selectedFiles) : [file.path];
+  }
+
+  const [renameFile, setRenameFile] = useState<AudioFile | null>(null);
+  // Same confirmation the Audio Pool page shows after a rename. '.long' keeps it
+  // on screen ~2s (the default toast fades out at 1.2s, too fast to read).
+  const [toast, setToast] = useState<string | null>(null);
+
+  async function handleRename(newName: string) {
+    const file = renameFile;
+    setRenameFile(null);
+    if (!file) return;
+    try {
+      // poolPath makes the backend repoint every project of the Set whose
+      // sample slots point at this file, so a rename never orphans a slot.
+      const result = await invoke<RenameResult>('rename_file', {
+        oldPath: file.path,
+        newName,
+        poolPath: audioPoolPath,
+      });
+      await loadFiles(currentPath);
+      // The file moved, its references did not: re-key the cached usage rather
+      // than dropping it, so the Usage badge stays correct without a rescan.
+      renamePoolUsage(audioPoolPath, file.path, result.new_path);
+      // The loaded project's own slots may have just been rewritten on disk.
+      if (result.slots_updated > 0) {
+        onPoolFixed?.();
+        const slots = result.slots_updated;
+        const projects = result.projects_updated.length;
+        setToast(`Renamed - ${slots} slot${slots > 1 ? 's' : ''} updated in ${projects} project${projects > 1 ? 's' : ''}`);
+        setTimeout(() => setToast(null), 2300);
+      }
+    } catch (error) {
+      console.error('Error renaming pool file:', error);
+      alert(`Error renaming: ${error}`);
+    }
   }
 
   // Import dropdown (Files… / Folder…) — mirrors the Audio Pool page.
@@ -565,6 +597,12 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
           )}
           <button
             className="context-menu-item"
+            onClick={() => { setRenameFile(itemMenu.file); setItemMenu(null); }}
+          >
+            <i className="fas fa-edit"></i> Rename…
+          </button>
+          <button
+            className="context-menu-item"
             onClick={() => { invoke('reveal_in_file_manager', { path: itemMenu.file.path }); setItemMenu(null); }}
           >
             <i className="fas fa-folder-open"></i> Open in file explorer
@@ -576,6 +614,18 @@ export function AudioPoolSidebar({ audioPoolPath, isEditMode, toggleButton, dndM
             <i className="fas fa-copy"></i> Copy path to clipboard
           </button>
         </div>
+      )}
+      {toast && (
+        <div className="toast-notification long">
+          <i className="fas fa-check"></i> {toast}
+        </div>
+      )}
+      {renameFile && (
+        <RenameFileModal
+          name={renameFile.name}
+          onCancel={() => setRenameFile(null)}
+          onConfirm={handleRename}
+        />
       )}
     </div>
   );

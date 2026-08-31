@@ -198,6 +198,11 @@ export function ProjectDetail() {
   const navigate = useNavigate();
   const projectPath = searchParams.get("path");
   const projectName = searchParams.get("name");
+  // Set when this project was opened from an Audio Pool page usage link, so the
+  // back button returns there instead of to the project list - the mirror of the
+  // Audio Pool page's own "Back to project" when opened from a Sample Slots pane.
+  const fromPool = searchParams.get("fromPool");
+  const fromSet = searchParams.get("fromSet") || "";
 
   const [metadata, setMetadata] = useState<ProjectMetadata | null>(null);
   const [banks, setBanks] = useState<Bank[]>([]);
@@ -494,9 +499,13 @@ export function ProjectDetail() {
 
   // Leaving to the projects list resets edit mode (unlike the Audio Pool round-trip, which keeps it).
   const leaveToProjectList = useCallback(() => {
+    if (fromPool) {
+      navigate(`/audio-pool?path=${encodeURIComponent(fromPool)}&name=${encodeURIComponent(fromSet)}`);
+      return;
+    }
     if (projectPath) sessionStorage.removeItem(`projEdit:${projectPath}`);
     navigate('/');
-  }, [navigate, projectPath]);
+  }, [navigate, projectPath, fromPool, fromSet]);
 
   // Compute max reserve length in seconds for the given recorder count and format
   const getMaxReserveLength = useCallback((count: number, record24bit: boolean): number => {
@@ -896,8 +905,12 @@ export function ProjectDetail() {
     <main className="container">
       <div className="project-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: '1' }}>
-          <button onClick={leaveToProjectList} className="back-button" title="Back to projects (Esc)">
-            ← Back
+          <button
+            onClick={leaveToProjectList}
+            className="back-button"
+            title={fromPool ? "Back to the Set's Audio Pool (Esc)" : "Back to projects (Esc)"}
+          >
+            {fromPool ? '← Back to Audio Pool' : '← Back'}
           </button>
           <h1 ref={titleRef} className={isTitleTruncated ? 'truncated' : ''} title={projectPath || ''} style={{ cursor: 'pointer' }}
             onClick={() => {

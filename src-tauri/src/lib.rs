@@ -443,9 +443,46 @@ fn get_home_directory() -> Result<String, String> {
         .ok_or_else(|| "Could not determine home directory".to_string())
 }
 
+#[derive(Clone, Debug, Serialize)]
+struct RenameResult {
+    new_path: String,
+    projects_updated: Vec<String>,
+    slots_updated: u32,
+}
+
+/// Rename a file or folder. When `pool_path` is given and the target is a file,
+/// every project of that Audio Pool's Set whose sample slots point at it is
+/// repointed onto the new name (each rewritten project file is backed up first)
+/// - a bare rename would otherwise silently break those slots.
+///
+/// Folders are renamed only: stored slot paths embed the folder name in their
+/// directory part, which `update_pool_references` (basename-only) does not
+/// rewrite.
 #[tauri::command]
-fn rename_file(old_path: String, new_name: String) -> Result<String, String> {
-    rename_file_impl(&old_path, &new_name)
+fn rename_file(
+    old_path: String,
+    new_name: String,
+    pool_path: Option<String>,
+) -> Result<RenameResult, String> {
+    let was_file = std::path::Path::new(&old_path).is_file();
+    let new_path = rename_file_impl(&old_path, &new_name)?;
+
+    let refs = match pool_path {
+        Some(pool) if was_file => project_reader::update_pool_references(
+            &pool,
+            &[(old_path.clone(), new_path.clone())],
+        )?,
+        _ => project_reader::PoolReferenceUpdate {
+            projects_updated: vec![],
+            slots_updated: 0,
+        },
+    };
+
+    Ok(RenameResult {
+        new_path,
+        projects_updated: refs.projects_updated,
+        slots_updated: refs.slots_updated,
+    })
 }
 
 #[tauri::command]
@@ -1453,6 +1490,112 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // =========================================================================
+    // rename_file command tests
+    // =========================================================================
+
+    /// Minimal project.work with one [SAMPLE] block, enough for
+    /// update_pool_references to find and rewrite a PATH= line.
+    fn write_project_work(dir: &std::path::Path, path_value: &str) {
+        std::fs::create_dir_all(dir).unwrap();
+        let content = format!(
+            "[SAMPLE]\r\nTYPE=FLEX\r\nSLOT=1\r\nPATH={}\r\nTRIM_BARSx100=-1\r\n[/SAMPLE]\r\n",
+            path_value
+        );
+        let (encoded, _, _) = encoding_rs::WINDOWS_1258.encode(&content);
+        std::fs::write(dir.join("project.work"), &*encoded).unwrap();
+    }
+
+    fn read_project_work(dir: &std::path::Path) -> String {
+        let raw = std::fs::read(dir.join("project.work")).unwrap();
+        encoding_rs::WINDOWS_1258.decode(&raw).0.to_string()
+    }
+
+    #[test]
+    fn rename_file_repoints_pool_refs_across_the_set() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let set = temp.path();
+        let pool = set.join("AUDIO");
+        std::fs::create_dir(&pool).unwrap();
+        std::fs::write(pool.join("kick.wav"), b"x").unwrap();
+        write_project_work(&set.join("PROJ1"), "../AUDIO/kick.wav");
+        write_project_work(&set.join("PROJ2"), "../AUDIO/other.wav");
+
+        let res = rename_file(
+            pool.join("kick.wav").to_string_lossy().to_string(),
+            "boom.wav".to_string(),
+            Some(pool.to_string_lossy().to_string()),
+        )
+        .unwrap();
+
+        assert!(pool.join("boom.wav").exists(), "file renamed on disk");
+        assert!(!pool.join("kick.wav").exists());
+        assert_eq!(res.slots_updated, 1);
+        assert_eq!(res.projects_updated.len(), 1);
+        assert!(read_project_work(&set.join("PROJ1")).contains("PATH=../AUDIO/boom.wav"));
+        assert!(
+            read_project_work(&set.join("PROJ2")).contains("PATH=../AUDIO/other.wav"),
+            "unrelated slot untouched"
+        );
+    }
+
+    #[test]
+    fn rename_file_without_pool_path_touches_no_project() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let set = temp.path();
+        let pool = set.join("AUDIO");
+        std::fs::create_dir(&pool).unwrap();
+        std::fs::write(pool.join("kick.wav"), b"x").unwrap();
+        write_project_work(&set.join("PROJ1"), "../AUDIO/kick.wav");
+
+        let res = rename_file(
+            pool.join("kick.wav").to_string_lossy().to_string(),
+            "boom.wav".to_string(),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(res.slots_updated, 0);
+        assert!(read_project_work(&set.join("PROJ1")).contains("PATH=../AUDIO/kick.wav"));
+    }
+
+    #[test]
+    fn rename_file_leaves_folder_refs_alone() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let set = temp.path();
+        let pool = set.join("AUDIO");
+        std::fs::create_dir_all(pool.join("kit")).unwrap();
+        std::fs::write(pool.join("kit").join("kick.wav"), b"x").unwrap();
+        write_project_work(&set.join("PROJ1"), "../AUDIO/kit/kick.wav");
+
+        // Renaming the folder must not rewrite the basename of files inside it.
+        let res = rename_file(
+            pool.join("kit").to_string_lossy().to_string(),
+            "drums".to_string(),
+            Some(pool.to_string_lossy().to_string()),
+        )
+        .unwrap();
+
+        assert_eq!(res.slots_updated, 0);
+        assert!(read_project_work(&set.join("PROJ1")).contains("PATH=../AUDIO/kit/kick.wav"));
+    }
+
+    #[test]
+    fn rename_file_refuses_an_existing_name() {
+        let temp = tempfile::TempDir::new().unwrap();
+        std::fs::write(temp.path().join("a.wav"), b"x").unwrap();
+        std::fs::write(temp.path().join("b.wav"), b"x").unwrap();
+
+        let err = rename_file(
+            temp.path().join("a.wav").to_string_lossy().to_string(),
+            "b.wav".to_string(),
+            None,
+        )
+        .unwrap_err();
+        assert!(err.contains("already exists"), "got: {}", err);
+        assert!(temp.path().join("a.wav").exists(), "original left in place");
+    }
 
     // =========================================================================
     // greet function tests

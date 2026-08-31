@@ -172,3 +172,67 @@ describe('AudioPoolSidebar', () => {
     await waitFor(() => expect(screen.getByText('✓ 1')).toBeInTheDocument())
   })
 })
+
+describe('AudioPoolSidebar - rename', () => {
+  async function openRename() {
+    await waitFor(() => expect(screen.getByText('kick.wav')).toBeInTheDocument())
+    fireEvent.contextMenu(screen.getByText('kick.wav').closest('tr')!)
+    await userEvent.click(screen.getByText(/Rename…/))
+  }
+
+  it('renames a pool file and asks the backend to repoint the Set\'s slots', async () => {
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'list_audio_directory') return files
+      if (cmd === 'rename_file') return { new_path: '/set/AUDIO/boom.wav', projects_updated: ['/set/PROJ1'], slots_updated: 2 }
+      return undefined
+    })
+    const onPoolFixed = vi.fn()
+    render(<AudioPoolSidebar audioPoolPath="/set/AUDIO" isEditMode onPoolFixed={onPoolFixed} />)
+    await openRename()
+
+    const input = screen.getByLabelText('New name')
+    expect(input).toHaveValue('kick.wav')
+    const scansBefore = mockInvoke.mock.calls.filter(c => c[0] === 'get_pool_usage').length
+    await userEvent.clear(input)
+    await userEvent.type(input, 'boom.wav{Enter}')
+
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('rename_file', {
+      oldPath: '/set/AUDIO/kick.wav',
+      newName: 'boom.wav',
+      poolPath: '/set/AUDIO',
+    }))
+    // Slots were rewritten on disk, so the loaded project has to reload.
+    await waitFor(() => expect(onPoolFixed).toHaveBeenCalled())
+    // The cached usage is re-keyed onto the new path, not thrown away: no
+    // second set-wide get_pool_usage scan, so the Usage badge never blanks.
+    expect(mockInvoke.mock.calls.filter(c => c[0] === 'get_pool_usage')).toHaveLength(scansBefore)
+    // Same confirmation the Audio Pool page gives for the same operation.
+    expect(await screen.findByText('Renamed - 2 slots updated in 1 project')).toBeInTheDocument()
+  })
+
+  it('leaves the loaded project alone when no slot referenced the file', async () => {
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'list_audio_directory') return files
+      if (cmd === 'rename_file') return { new_path: '/set/AUDIO/boom.wav', projects_updated: [], slots_updated: 0 }
+      return undefined
+    })
+    const onPoolFixed = vi.fn()
+    render(<AudioPoolSidebar audioPoolPath="/set/AUDIO" isEditMode onPoolFixed={onPoolFixed} />)
+    await openRename()
+    await userEvent.type(screen.getByLabelText('New name'), '{Enter}')
+
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('rename_file', expect.anything()))
+    expect(onPoolFixed).not.toHaveBeenCalled()
+    // Nothing referenced the file, so there is nothing to report.
+    expect(screen.queryByText(/slots? updated/)).not.toBeInTheDocument()
+  })
+
+  it('cancels without calling the backend', async () => {
+    render(<AudioPoolSidebar audioPoolPath="/set/AUDIO" isEditMode />)
+    await openRename()
+    await userEvent.click(screen.getByText('Cancel'))
+
+    expect(screen.queryByLabelText('New name')).not.toBeInTheDocument()
+    expect(mockInvoke).not.toHaveBeenCalledWith('rename_file', expect.anything())
+  })
+})

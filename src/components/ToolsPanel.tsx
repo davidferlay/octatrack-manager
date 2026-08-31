@@ -740,7 +740,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         const isAbsolute = slot.path.startsWith('/') || /^[A-Za-z]:/.test(slot.path);
         const resolved = normalizePath(isAbsolute ? slot.path : `${projectPath}/${slot.path}`);
         const key = usageKey(resolved);
-        const tagged = entries.map(e => ({ ...e, project: projectName, slot: null }));
+        const tagged = entries.map(e => ({ ...e, project: projectName, project_path: projectPath, slot: null }));
         out[key] = [...(out[key] ?? []), ...tagged];
       });
     };

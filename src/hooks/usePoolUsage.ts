@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { PoolUsageEntry } from '../types/audioFile'
+import { usageKey } from '../components/AudioFileTable'
 
 type UsageMap = Record<string, PoolUsageEntry[]>
 
@@ -30,6 +31,26 @@ export function invalidatePoolUsage(poolPath?: string) {
     cache.clear()
     paths.forEach(notify)
   }
+}
+
+/**
+ * Move one file's cached usage onto its new path after a rename, instead of
+ * dropping the whole pool's cache: a rename changes where a file lives, never
+ * which projects reference it, so the entries stay valid as-is. Keeps the Usage
+ * badge correct immediately rather than blanking it for the length of a
+ * set-wide rescan.
+ */
+export function renamePoolUsage(poolPath: string, oldPath: string, newPath: string) {
+  const map = cache.get(poolPath)
+  if (!map) return
+  const from = usageKey(oldPath)
+  const to = usageKey(newPath)
+  if (from === to) return
+  const next = { ...map }
+  delete next[from]
+  if (map[from]) next[to] = map[from]
+  cache.set(poolPath, next)
+  notify(poolPath)
 }
 
 function fetchPoolUsage(poolPath: string): Promise<UsageMap> {

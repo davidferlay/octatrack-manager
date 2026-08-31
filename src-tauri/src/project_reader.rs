@@ -1173,6 +1173,9 @@ pub fn compute_sample_usage(project_path: &str) -> Result<SampleSlotUsage, Strin
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PoolUsageEntry {
     pub project: String,
+    /// Absolute path of the project directory `project` names - lets the UI
+    /// turn a usage entry into a link straight to that project.
+    pub project_path: String,
     pub bank: u8,
     pub kind: String,
     pub track: u8,
@@ -1222,6 +1225,7 @@ pub fn compute_pool_usage(
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default();
+        let project_path = project_dir.to_string_lossy().to_string();
 
         let raw_fields = match read_raw_sample_fields(&project_file) {
             Ok(f) => f,
@@ -1263,6 +1267,7 @@ pub fn compute_pool_usage(
                 let prefix = if slot_type_upper == "FLEX" { "F" } else { "S" };
                 result.entry(resolved).or_default().push(PoolUsageEntry {
                     project: project_name.clone(),
+                    project_path: project_path.clone(),
                     bank: 0,
                     kind: "assigned".to_string(),
                     track: 0,
@@ -1278,6 +1283,7 @@ pub fn compute_pool_usage(
             for e in slot_entries {
                 bucket.push(PoolUsageEntry {
                     project: project_name.clone(),
+                    project_path: project_path.clone(),
                     bank: e.bank,
                     kind: e.kind.clone(),
                     track: e.track,

@@ -660,6 +660,12 @@ h1 {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
+/* Longer-lived toast: the default fades out at 1.2s, too fast to read a
+   sentence. Keep the JS clear timer just past this delay + fade. */
+.toast-notification.long {
+  animation: toastIn 0.2s ease, toastOut 0.3s ease 2s forwards;
+}
+
 .toast-notification i {
   color: var(--elektron-text-primary);
 }
@@ -3939,6 +3945,16 @@ th.col-usage .header-content .sort-indicator {
   font-size: 0.9rem;
   color: #cccccc; /* between secondary (#999) and primary (#fff) */
   white-space: nowrap;
+}
+
+/* Project name in a usage entry: a link straight to that project's page. */
+.usage-popover-project {
+  color: var(--elektron-orange);
+  text-decoration: none;
+}
+
+.usage-popover-project:hover {
+  text-decoration: underline;
 }
 
 .legend-item span {

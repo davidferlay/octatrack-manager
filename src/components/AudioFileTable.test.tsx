@@ -159,8 +159,8 @@ describe('AudioFileTable', () => {
   it('shows Usage badges (audible and referenced) and a dash for unreferenced files, only when usageMap is set', () => {
     const usageMap: Record<string, PoolUsageEntry[]> = {
       '/audio/kick.wav': [
-        { project: 'PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: null },
-        { project: 'PROJ2', bank: 1, kind: 'lock', track: 2, part: null, pattern: 3, step: 5, audible: false, slot: null },
+        { project: 'PROJ1', project_path: '/set/PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: null },
+        { project: 'PROJ2', project_path: '/set/PROJ2', bank: 1, kind: 'lock', track: 2, part: null, pattern: 3, step: 5, audible: false, slot: null },
       ],
     }
     renderTable({ poolRoot: '/AUDIO', usageMap })
@@ -175,7 +175,7 @@ describe('AudioFileTable', () => {
   it('shows a dim "assigned" badge for a file loaded into a slot but not referenced by any track or pattern', () => {
     const usageMap: Record<string, PoolUsageEntry[]> = {
       '/audio/kick.wav': [
-        { project: 'PROJ1', bank: 0, kind: 'assigned', track: 0, part: null, pattern: null, step: null, audible: false, slot: 'F5' },
+        { project: 'PROJ1', project_path: '/set/PROJ1', bank: 0, kind: 'assigned', track: 0, part: null, pattern: null, step: null, audible: false, slot: 'F5' },
       ],
     }
     renderTable({ poolRoot: '/AUDIO', usageMap })
@@ -188,12 +188,12 @@ describe('AudioFileTable', () => {
   it('opens an "assigned" popover listing the project and slot label, not bank/track/pattern', async () => {
     const usageMap: Record<string, PoolUsageEntry[]> = {
       '/audio/kick.wav': [
-        { project: 'PROJ1', bank: 0, kind: 'assigned', track: 0, part: null, pattern: null, step: null, audible: false, slot: 'F5' },
+        { project: 'PROJ1', project_path: '/set/PROJ1', bank: 0, kind: 'assigned', track: 0, part: null, pattern: null, step: null, audible: false, slot: 'F5' },
       ],
     }
     renderTable({ poolRoot: '/AUDIO', usageMap })
     await userEvent.click(screen.getByText('· 1'))
-    expect(screen.getByText('PROJ1 · Slot F5')).toBeInTheDocument()
+    expect(document.querySelector('.usage-popover-entry')!.textContent).toBe('PROJ1 · Slot F5')
   })
 
   it('does not show a Usage column when usageMap is absent', () => {
@@ -248,18 +248,45 @@ describe('AudioFileTable', () => {
   it('opens a project-prefixed usage popover when a badge is clicked', async () => {
     const usageMap: Record<string, PoolUsageEntry[]> = {
       '/audio/kick.wav': [
-        { project: 'PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: null },
+        { project: 'PROJ1', project_path: '/set/PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: null },
       ],
     }
     renderTable({ poolRoot: '/AUDIO', usageMap })
     await userEvent.click(screen.getByText('✓ 1'))
-    expect(screen.getByText('PROJ1 · Bank A (1) · Part 1 · T1 · Machine')).toBeInTheDocument()
+    expect(document.querySelector('.usage-popover-entry')!.textContent).toBe('PROJ1 · Bank A (1) · Part 1 · T1 · Machine')
+  })
+
+  it('links each usage entry\'s project name to that project page', async () => {
+    const usageMap: Record<string, PoolUsageEntry[]> = {
+      '/audio/kick.wav': [
+        { project: 'PROJ 1', project_path: '/set/PROJ 1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: null },
+      ],
+    }
+    renderTable({ poolRoot: '/AUDIO', usageMap })
+    await userEvent.click(screen.getByText('✓ 1'))
+    const link = screen.getByRole('link', { name: 'PROJ 1' })
+    // HashRouter: '#/project?path=…&name=…' is exactly what ProjectDetail reads.
+    expect(link).toHaveAttribute('href', '#/project?path=%2Fset%2FPROJ%201&name=PROJ%201')
+  })
+
+  it('adds fromPool/fromSet so the project page offers "Back to Audio Pool"', async () => {
+    const usageMap: Record<string, PoolUsageEntry[]> = {
+      '/audio/kick.wav': [
+        { project: 'PROJ1', project_path: '/set/PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: null },
+      ],
+    }
+    renderTable({ poolRoot: '/AUDIO', usageMap, usageBackToPool: { path: '/set/AUDIO', name: 'MySet' } })
+    await userEvent.click(screen.getByText('✓ 1'))
+    expect(screen.getByRole('link', { name: 'PROJ1' })).toHaveAttribute(
+      'href',
+      '#/project?path=%2Fset%2FPROJ1&name=PROJ1&fromPool=%2Fset%2FAUDIO&fromSet=MySet'
+    )
   })
 
   it('sorts by Usage (audible-weighted total) when the Usage header is clicked', async () => {
     const usageMap: Record<string, PoolUsageEntry[]> = {
       '/audio/kick.wav': [
-        { project: 'PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: null },
+        { project: 'PROJ1', project_path: '/set/PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: null },
       ],
       '/audio/snare.wav': [],
     }
@@ -272,7 +299,7 @@ describe('AudioFileTable', () => {
   it('filters rows via the Usage dropdown (Used / Referenced / Unused)', async () => {
     const usageMap: Record<string, PoolUsageEntry[]> = {
       '/audio/kick.wav': [
-        { project: 'PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: null },
+        { project: 'PROJ1', project_path: '/set/PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: null },
       ],
     }
     renderTable({ poolRoot: '/AUDIO', usageMap })
@@ -296,7 +323,7 @@ describe('AudioFileTable', () => {
 
     const usageMap: Record<string, PoolUsageEntry[]> = {
       '/audio/kick.wav': [
-        { project: 'PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: null },
+        { project: 'PROJ1', project_path: '/set/PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: null },
       ],
     }
     rerender(

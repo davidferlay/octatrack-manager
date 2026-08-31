@@ -31,6 +31,8 @@ async function setupMocks(page: Page) {
             return (args?.destinationDir || '') + '/kick.wav'
           case 'read_audio_file':
             return new ArrayBuffer(8)
+          case 'rename_file':
+            return { new_path: '/test/set/AUDIO/boom.wav', projects_updated: ['/test/set/PROJ1'], slots_updated: 2 }
           default:
             return null
         }
@@ -154,5 +156,40 @@ test.describe('Audio Pool page — sample playback', () => {
         (window as any).__invokeCalls.some(([c, a]: [string, any]) => c === 'reveal_in_file_manager' && a?.path === '/test/set/AUDIO')
       ))
       .toBe(true)
+  })
+})
+
+test.describe('Audio Pool page — rename', () => {
+  test('renaming a pool file repoints the Set\'s sample slots, renaming a Source file does not', async ({ page }) => {
+    await setupMocks(page)
+    await openPage(page)
+
+    // Pool pane: poolPath is passed, so the backend rewrites referencing projects.
+    await page.locator('.dest-panel tr', { hasText: 'kick.wav' }).first().click({ button: 'right' })
+    await page.getByText('Rename', { exact: false }).first().click()
+    const input = page.locator('.modal-input')
+    await input.fill('boom.wav')
+    await page.getByRole('button', { name: 'Rename' }).click()
+
+    await expect.poll(async () => page.evaluate(() =>
+      (window as any).__invokeCalls.filter((c: any[]) => c[0] === 'rename_file').length
+    )).toBe(1)
+    let args = await page.evaluate(() =>
+      (window as any).__invokeCalls.find((c: any[]) => c[0] === 'rename_file')[1])
+    expect(args).toMatchObject({ oldPath: '/test/set/AUDIO/kick.wav', newName: 'boom.wav', poolPath: '/test/set/AUDIO' })
+    await expect(page.locator('.toast-notification')).toContainText('2 slots updated')
+
+    // Source pane: an ordinary filesystem rename, no Set to repoint.
+    await page.locator('.source-panel tr', { hasText: 'snare.wav' }).first().click({ button: 'right' })
+    await page.getByText('Rename', { exact: false }).first().click()
+    await page.locator('.modal-input').fill('clap.wav')
+    await page.getByRole('button', { name: 'Rename' }).click()
+
+    await expect.poll(async () => page.evaluate(() =>
+      (window as any).__invokeCalls.filter((c: any[]) => c[0] === 'rename_file').length
+    )).toBe(2)
+    args = await page.evaluate(() =>
+      (window as any).__invokeCalls.filter((c: any[]) => c[0] === 'rename_file')[1][1])
+    expect(args.poolPath).toBeUndefined()
   })
 })

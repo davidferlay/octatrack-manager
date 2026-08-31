@@ -147,6 +147,12 @@ export interface AudioFileTableProps {
    * Drives the Usage column's header tooltip so the scope is never ambiguous.
    */
   usageScope?: 'set' | 'project';
+  /**
+   * Audio Pool this table belongs to, when a project opened from a usage entry
+   * should offer a way back to it (the Audio Pool page). Omitted inside a
+   * project, where the links point at the project you are already on.
+   */
+  usageBackToPool?: { path: string; name: string };
 }
 
 /** Path relative to the Audio Pool root, prefixed "AUDIO/" — used for hover titles. */
@@ -252,6 +258,39 @@ export function UsagePopoverBox({ anchor, onClose, onClick, children }: {
 }
 
 /**
+ * One line of a usage popover: where a pool file is referenced from. The project
+ * name is a link to that project's page - HashRouter, so a plain <a href="#/…">
+ * navigates without this shared component needing a router hook (it renders in
+ * plain-render tests too).
+ */
+export function UsagePopoverEntry({ entry, backToPool }: {
+  entry: PoolUsageEntry;
+  /** When set, the link tells the project page to offer "Back to Audio Pool". */
+  backToPool?: { path: string; name: string };
+}) {
+  const detail = entry.kind === 'machine'
+    ? ` · ${formatBankRef(entry.bank)} · Part ${(entry.part ?? 0) + 1} · T${entry.track + 1} · Machine`
+    : entry.kind === 'assigned'
+    ? ` · Slot ${entry.slot}`
+    : ` · ${formatBankRef(entry.bank)} · Pattern ${(entry.pattern ?? 0) + 1} · T${entry.track + 1} · Step ${(entry.step ?? 0) + 1} · Lock`;
+  const back = backToPool
+    ? `&fromPool=${encodeURIComponent(backToPool.path)}&fromSet=${encodeURIComponent(backToPool.name)}`
+    : '';
+  return (
+    <div className="usage-popover-entry">
+      <a
+        className="usage-popover-project"
+        href={`#/project?path=${encodeURIComponent(entry.project_path)}&name=${encodeURIComponent(entry.project)}${back}`}
+        title={`Open ${entry.project}`}
+      >
+        {entry.project}
+      </a>
+      {detail}
+    </div>
+  );
+}
+
+/**
  * get_pool_usage keys its map by normalized-lowercase absolute path (Rust side,
  * compute_pool_usage), while file.path here keeps its original OS casing/separators,
  * so every usageMap read goes through this.
@@ -336,6 +375,7 @@ export function AudioFileTable({
   usageMap,
   usageLoading = false,
   usageScope = 'set',
+  usageBackToPool,
 }: AudioFileTableProps) {
   const usageScopeTooltip = usageScope === 'project'
     ? 'How this file is used by the currently loaded project only.\nSee the Audio Pool page for usage across the whole Set.'
@@ -992,13 +1032,7 @@ export function AudioFileTable({
                 </div>
                 <div className="usage-popover-list">
                   {scoped.map((entry, idx) => (
-                    <div key={idx} className="usage-popover-entry">
-                      {entry.kind === 'machine'
-                        ? `${entry.project} · ${formatBankRef(entry.bank)} · Part ${(entry.part ?? 0) + 1} · T${entry.track + 1} · Machine`
-                        : entry.kind === 'assigned'
-                        ? `${entry.project} · Slot ${entry.slot}`
-                        : `${entry.project} · ${formatBankRef(entry.bank)} · Pattern ${(entry.pattern ?? 0) + 1} · T${entry.track + 1} · Step ${(entry.step ?? 0) + 1} · Lock`}
-                    </div>
+                    <UsagePopoverEntry key={idx} entry={entry} backToPool={usageBackToPool} />
                   ))}
                 </div>
               </>

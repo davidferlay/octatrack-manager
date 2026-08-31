@@ -84,6 +84,8 @@ async function setupMocks(page: Page, opts?: { withAudioPool?: boolean }) {
           case 'clear_sample_keep_attributes':
           case 'assign_samples_to_slots':
             return { assigned_count: 1, updated_slots: [], flex_ram_free_mb: 85.5, flex_ram_free_bytes: null }
+          case 'rename_file':
+            return { new_path: '/test/set/AUDIO/boom.wav', projects_updated: ['/test/set/TestProject'], slots_updated: 1 }
           case 'read_audio_file':
             // Bytes for the Web Audio preview. A tiny invalid buffer is enough for the
             // UI assertions (the bar populates from the file name before decoding).
@@ -258,13 +260,84 @@ test.describe('Audio Pool sidebar in Flex slots', () => {
     await expect(page.getByText(/Open in file explorer/i)).toBeVisible()
   })
 
-  test('pool directory context menu shows only "Open in file explorer" (no assign items)', async ({ page }) => {
+  test('pool file context menu renames the file and repoints the Set\'s slots', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    await page.locator('.audio-pool-toggle-btn').first().click()
+    await page.locator('.audio-pool-sidebar tbody tr', { hasText: 'kick.wav' }).click({ button: 'right' })
+    await page.getByText(/Rename/).first().click()
+
+    const input = page.getByLabel('New name')
+    await expect(input).toHaveValue('kick.wav')
+    await input.fill('boom.wav')
+    await page.getByRole('button', { name: 'Rename' }).click()
+
+    await expect.poll(async () => page.evaluate(() =>
+      (window as any).__invokeCalls.filter((c: any[]) => c[0] === 'rename_file').map((c: any[]) => c[1])
+    )).toEqual([{ oldPath: '/test/set/AUDIO/kick.wav', newName: 'boom.wav', poolPath: '/test/set/AUDIO' }])
+    await expect(page.locator('.toast-notification')).toContainText('1 slot updated in 1 project')
+  })
+
+  test('pool directory context menu shows "Rename" but no assign items', async ({ page }) => {
     await setupMocks(page, { withAudioPool: true })
     await openFlexTab(page)
     await page.locator('.audio-pool-toggle-btn').first().click()
     await page.locator('.audio-pool-sidebar tbody tr', { hasText: 'Drums' }).click({ button: 'right' })
     await expect(page.getByText(/Open in file explorer/i)).toBeVisible()
+    await expect(page.getByText(/Rename/)).toBeVisible()
     await expect(page.getByText(/Assign to first empty slot/i)).toHaveCount(0)
+  })
+
+  test('opened from an Audio Pool usage link, Back returns to the Audio Pool page', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await page.goto('/#/project?path=/test/set/TestProject&name=TestProject&fromPool=/test/set/AUDIO&fromSet=TestSet')
+    const back = page.locator('.back-button')
+    await expect(back).toHaveText('← Back to Audio Pool')
+
+    await back.click()
+    await expect.poll(async () => page.evaluate(() => location.hash))
+      .toContain('/audio-pool?path=%2Ftest%2Fset%2FAUDIO&name=TestSet')
+  })
+
+  test('without fromPool the Back button still goes to the project list', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await page.goto('/#/project?path=/test/set/TestProject&name=TestProject')
+    await expect(page.locator('.back-button')).toHaveText('← Back')
+  })
+
+  test('the browsed pool directory survives the project <-> Audio Pool page round trip', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    await page.locator('.audio-pool-toggle-btn').first().click()
+    await page.locator('.audio-pool-sidebar tbody tr', { hasText: 'Drums' }).dblclick()
+    await expect(page.locator('.sidebar-path')).toHaveText('AUDIO/Drums/')
+
+    // Out to the full page: it opens on the same directory, not the pool root.
+    await page.locator('.audio-pool-page-btn').first().click()
+    await expect(page.locator('.pool-title')).toHaveAttribute('title', '/test/set/AUDIO/Drums')
+
+    // And back again.
+    await page.locator('.back-button').click()
+    await expect(page.locator('.sidebar-path')).toHaveText('AUDIO/Drums/')
+  })
+
+  test('the round trip serves pool usage from cache instead of rescanning', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await openFlexTab(page)
+    await page.locator('.audio-pool-toggle-btn').first().click()
+    await expect(page.locator('.audio-pool-sidebar')).toBeVisible()
+    const scans = () => page.evaluate(() =>
+      (window as any).__invokeCalls.filter((c: any[]) => c[0] === 'get_pool_usage').length)
+    await expect.poll(scans).toBe(1)
+
+    await page.locator('.audio-pool-page-btn').first().click()
+    await expect(page.locator('.pool-title')).toBeVisible()
+    await page.locator('.back-button').click()
+    await expect(page.locator('.audio-pool-sidebar')).toBeVisible()
+
+    // Nothing changed, so the set-wide scan must not run again (usePoolUsage's
+    // module-level cache outlives the route change).
+    expect(await scans()).toBe(1)
   })
 
   test("pressing 'a' opens the Audio Pool pane", async ({ page }) => {
