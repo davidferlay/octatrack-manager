@@ -66,6 +66,7 @@ devDependencyRules.set("ot-catalog", ["tempfile"]);
 devDependencyRules.set("ot-audio", ["tempfile"]);
 devDependencyRules.set("ot-backup", ["tempfile"]);
 devDependencyRules.set("ot-executor", ["tempfile"]);
+devDependencyRules.set("ot-codec", ["ot-tools-io"]);
 const allowedCompositionDependencies = new Set([
   "ot-application",
   "ot-audio",

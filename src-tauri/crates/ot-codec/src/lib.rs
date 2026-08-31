@@ -9,6 +9,10 @@ use std::ops::Range;
 
 const SAMPLE_START: &str = "[SAMPLE]";
 const SAMPLE_END: &str = "[/SAMPLE]";
+/// Flex 129–136 appear as recorder buffers with empty PATH on tracked OS 1.40
+/// fixtures. They are preserved but are not `SampleSlotId` rewrite targets.
+const FLEX_RECORDER_MIN: u16 = 129;
+const FLEX_RECORDER_MAX: u16 = 136;
 
 /// Memory-only surgical PATH rewriter for Project `.work` / `.strd` documents.
 ///
@@ -60,6 +64,8 @@ fn apply_path_patches(
     let mut replacements = Vec::new();
     let mut changed_slots = Vec::new();
     for patch in patches {
+        ensure_safe_raw_path(&patch.from_raw_path)?;
+        ensure_safe_raw_path(&patch.to_raw_path)?;
         ensure_same_directory_rewrite(&patch.from_raw_path, &patch.to_raw_path)?;
         let block = blocks
             .iter()
@@ -132,76 +138,152 @@ impl SampleBlock {
 }
 
 fn parse_sample_blocks(text: &str) -> Result<Vec<SampleBlock>, ReferenceRewriteError> {
+    let lines = text_lines(text);
     let mut blocks = Vec::new();
     let mut seen = HashSet::new();
-    let mut search_from = 0;
-    while let Some(rel) = text[search_from..].find(SAMPLE_START) {
-        let start = search_from + rel;
-        let after_start = start + SAMPLE_START.len();
-        let end_rel = text[after_start..]
-            .find(SAMPLE_END)
-            .ok_or(ReferenceRewriteError::UnclosedSampleBlock)?;
-        let end = after_start + end_rel + SAMPLE_END.len();
-        let block = parse_sample_block(text, start..end)?;
-        if !seen.insert((block.kind, block.number)) {
-            return Err(ReferenceRewriteError::DuplicateSlot {
-                kind: slot_kind_token(block.kind).to_owned(),
-                number: block.number,
-            });
+    let mut index = 0;
+    while index < lines.len() {
+        match classify_line(lines[index].content)? {
+            LineKind::Other => {
+                index += 1;
+            }
+            LineKind::Close => return Err(ReferenceRewriteError::UnexpectedSampleCloser),
+            LineKind::Open => {
+                index += 1;
+                let mut slot_type = None;
+                let mut slot_number = None;
+                let mut path = None;
+                loop {
+                    if index >= lines.len() {
+                        return Err(ReferenceRewriteError::UnclosedSampleBlock);
+                    }
+                    match classify_line(lines[index].content)? {
+                        LineKind::Open => return Err(ReferenceRewriteError::NestedSampleBlock),
+                        LineKind::Close => {
+                            index += 1;
+                            break;
+                        }
+                        LineKind::Other => {
+                            let line = &lines[index];
+                            if let Some(value) = field_value(line.content, "TYPE") {
+                                if slot_type.is_some() {
+                                    return Err(ReferenceRewriteError::DuplicateField);
+                                }
+                                slot_type = Some(parse_slot_kind(value)?);
+                            } else if let Some(value) = field_value(line.content, "SLOT") {
+                                if slot_number.is_some() {
+                                    return Err(ReferenceRewriteError::DuplicateField);
+                                }
+                                slot_number = Some(parse_slot_number(value)?);
+                            } else if let Some(value) = field_value(line.content, "PATH") {
+                                if path.is_some() {
+                                    return Err(ReferenceRewriteError::DuplicatePathLine);
+                                }
+                                ensure_safe_raw_path(value)?;
+                                let value_start =
+                                    line.content_start + line.content.len() - value.len();
+                                let value_end = line.content_start + line.content.len();
+                                path = Some((value_start..value_end, value.to_owned()));
+                            }
+                            index += 1;
+                        }
+                    }
+                }
+                let kind = slot_type.ok_or(ReferenceRewriteError::MissingType)?;
+                let number = slot_number.ok_or(ReferenceRewriteError::MissingSlot)?;
+                validate_observed_slot(kind, number)?;
+                let (path_range, raw_path) = path.ok_or(ReferenceRewriteError::MissingPath)?;
+                let block = SampleBlock {
+                    kind,
+                    number,
+                    raw_path,
+                    path_range,
+                };
+                if !seen.insert((block.kind, block.number)) {
+                    return Err(ReferenceRewriteError::DuplicateSlot {
+                        kind: slot_kind_token(block.kind).to_owned(),
+                        number: block.number,
+                    });
+                }
+                blocks.push(block);
+            }
         }
-        blocks.push(block);
-        search_from = end;
     }
     Ok(blocks)
 }
 
-fn parse_sample_block(
-    text: &str,
-    block_range: Range<usize>,
-) -> Result<SampleBlock, ReferenceRewriteError> {
-    let block = &text[block_range.clone()];
-    let mut slot_type = None;
-    let mut slot_number = None;
-    let mut path = None;
-    let mut line_start = 0;
-    while line_start < block.len() {
-        let rest = &block[line_start..];
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LineKind {
+    Open,
+    Close,
+    Other,
+}
+
+struct TextLine<'a> {
+    content: &'a str,
+    content_start: usize,
+}
+
+fn text_lines(text: &str) -> Vec<TextLine<'_>> {
+    let mut lines = Vec::new();
+    let mut pos = 0;
+    while pos < text.len() {
+        let rest = &text[pos..];
         let step = rest.find('\n').map(|index| index + 1).unwrap_or(rest.len());
         let content = rest[..step].trim_end_matches(['\r', '\n']);
-        let absolute = block_range.start + line_start;
-        if let Some(value) = field_value(content, "TYPE") {
-            if slot_type.is_some() {
-                return Err(ReferenceRewriteError::DuplicateField);
-            }
-            slot_type = Some(parse_slot_kind(value)?);
-        } else if let Some(value) = field_value(content, "SLOT") {
-            if slot_number.is_some() {
-                return Err(ReferenceRewriteError::DuplicateField);
-            }
-            slot_number = Some(parse_slot_number(value)?);
-        } else if let Some(value) = field_value(content, "PATH") {
-            if path.is_some() {
-                return Err(ReferenceRewriteError::DuplicatePathLine);
-            }
-            let value_start = absolute + content.len() - value.len();
-            let value_end = absolute + content.len();
-            path = Some((value_start..value_end, value.to_owned()));
-        }
-        line_start += step;
+        lines.push(TextLine {
+            content,
+            content_start: pos,
+        });
+        pos += step;
         if step == rest.len() {
             break;
         }
     }
+    lines
+}
 
-    let kind = slot_type.ok_or(ReferenceRewriteError::MissingType)?;
-    let number = slot_number.ok_or(ReferenceRewriteError::MissingSlot)?;
-    let (path_range, raw_path) = path.ok_or(ReferenceRewriteError::MissingPath)?;
-    Ok(SampleBlock {
-        kind,
-        number,
-        raw_path,
-        path_range,
-    })
+fn classify_line(line: &str) -> Result<LineKind, ReferenceRewriteError> {
+    if line == SAMPLE_START {
+        return Ok(LineKind::Open);
+    }
+    if line == SAMPLE_END {
+        return Ok(LineKind::Close);
+    }
+    if line.eq_ignore_ascii_case(SAMPLE_START) || line.eq_ignore_ascii_case(SAMPLE_END) {
+        return Err(ReferenceRewriteError::NestedSampleBlock);
+    }
+    if line.contains(SAMPLE_START) || line.contains(SAMPLE_END) {
+        return Err(ReferenceRewriteError::NestedSampleBlock);
+    }
+    Ok(LineKind::Other)
+}
+
+fn validate_observed_slot(kind: SampleSlotKind, number: u16) -> Result<(), ReferenceRewriteError> {
+    if SampleSlotId::new(kind, number).is_ok() || is_flex_recorder_buffer(kind, number) {
+        Ok(())
+    } else {
+        Err(ReferenceRewriteError::InvalidSlot)
+    }
+}
+
+fn is_flex_recorder_buffer(kind: SampleSlotKind, number: u16) -> bool {
+    kind == SampleSlotKind::Flex && (FLEX_RECORDER_MIN..=FLEX_RECORDER_MAX).contains(&number)
+}
+
+fn ensure_safe_raw_path(path: &str) -> Result<(), ReferenceRewriteError> {
+    if path.is_empty() {
+        return Ok(());
+    }
+    if path.contains('\0')
+        || path.contains('\n')
+        || path.contains('\r')
+        || path.contains(SAMPLE_START)
+        || path.contains(SAMPLE_END)
+    {
+        return Err(ReferenceRewriteError::UnsafePathText);
+    }
+    Ok(())
 }
 
 fn inspectable_slots(blocks: &[SampleBlock]) -> Vec<SlotPathRef> {
@@ -333,6 +415,9 @@ fn parse_slot_kind(value: &str) -> Result<SampleSlotKind, ReferenceRewriteError>
 }
 
 fn parse_slot_number(value: &str) -> Result<u16, ReferenceRewriteError> {
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(ReferenceRewriteError::InvalidSlot);
+    }
     let number = value
         .parse::<u16>()
         .map_err(|_| ReferenceRewriteError::InvalidSlot)?;
@@ -711,5 +796,90 @@ mod tests {
         );
         let after = read_fixture(&path);
         assert_eq!(after, before);
+        assert_eq!(
+            MemoryProjectReferenceCodec.apply_path_patches(
+                &before,
+                &[SlotPathPatch {
+                    slot: slot(SampleSlotKind::Flex, 1),
+                    from_raw_path: "kick.wav".to_owned(),
+                    to_raw_path: "kick-2.wav".to_owned(),
+                }]
+            ),
+            Err(ReferenceRewriteError::TargetSlotNotFound)
+        );
     }
+
+    #[test]
+    fn path_containing_sample_end_tag_does_not_truncate_the_block() {
+        let bytes = synthetic(
+            "[SAMPLE]\r\nTYPE=FLEX\r\nSLOT=001\r\nPATH=foo[/SAMPLE]/bar.wav\r\n[/SAMPLE]\r\n",
+        );
+        assert_eq!(
+            MemoryProjectReferenceCodec.inspect_sample_paths(&bytes),
+            Err(ReferenceRewriteError::NestedSampleBlock)
+        );
+    }
+
+    #[test]
+    fn leftover_and_nested_sample_tags_fail_closed() {
+        let leftover = synthetic(&format!(
+            "{}\r\n[/SAMPLE]\r\n",
+            sample_block("FLEX", "001", "a.wav")
+        ));
+        assert_eq!(
+            MemoryProjectReferenceCodec.inspect_sample_paths(&leftover),
+            Err(ReferenceRewriteError::UnexpectedSampleCloser)
+        );
+
+        let nested = synthetic(
+            "[SAMPLE]\r\nTYPE=FLEX\r\nSLOT=001\r\nPATH=a.wav\r\n[SAMPLE]\r\n[/SAMPLE]\r\n",
+        );
+        assert_eq!(
+            MemoryProjectReferenceCodec.inspect_sample_paths(&nested),
+            Err(ReferenceRewriteError::NestedSampleBlock)
+        );
+
+        let comment_false_start = synthetic(&format!(
+            "# [SAMPLE]\r\n{}\r\n",
+            sample_block("FLEX", "001", "a.wav")
+        ));
+        assert_eq!(
+            MemoryProjectReferenceCodec.inspect_sample_paths(&comment_false_start),
+            Err(ReferenceRewriteError::NestedSampleBlock)
+        );
+    }
+
+    #[test]
+    fn out_of_range_and_signed_slots_fail_closed() {
+        let static_200 = synthetic(&sample_block("STATIC", "200", "a.wav"));
+        assert_eq!(
+            MemoryProjectReferenceCodec.inspect_sample_paths(&static_200),
+            Err(ReferenceRewriteError::InvalidSlot)
+        );
+
+        let plus_slot =
+            synthetic("[SAMPLE]\r\nTYPE=FLEX\r\nSLOT=+33\r\nPATH=a.wav\r\n[/SAMPLE]\r\n");
+        assert_eq!(
+            MemoryProjectReferenceCodec.inspect_sample_paths(&plus_slot),
+            Err(ReferenceRewriteError::InvalidSlot)
+        );
+    }
+
+    #[test]
+    fn newline_in_destination_path_is_rejected_before_rewrite() {
+        let (bytes, flex, _) = two_slot_document();
+        assert_eq!(
+            MemoryProjectReferenceCodec.apply_path_patches(
+                &bytes,
+                &[SlotPathPatch {
+                    slot: slot(SampleSlotKind::Flex, 1),
+                    from_raw_path: flex,
+                    to_raw_path: "../AUDIO/pool/kick.wav\n# injected".to_owned(),
+                }]
+            ),
+            Err(ReferenceRewriteError::UnsafePathText)
+        );
+    }
+
+    mod contract_tests;
 }

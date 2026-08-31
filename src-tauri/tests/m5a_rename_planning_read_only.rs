@@ -286,3 +286,54 @@ fn blocked_rename_reports_fail_closed_without_media_mutation() {
         RenamePlanningOutcome::Blocked(BlockedRenameImpact { .. })
     ));
 }
+
+#[test]
+fn incomplete_graph_and_coverage_fail_closed_without_media_mutation() {
+    let temp = TempDir::new().expect("tempdir");
+    let root = temp.path();
+    fs::create_dir_all(root.join("SET/AUDIO")).expect("audio dir");
+    fs::write(root.join("SET/AUDIO/kick.wav"), b"sample-bytes").expect("audio");
+
+    let before = snapshot_directory(root);
+    let root_fingerprint = format!("rootfp:v1:{}", "f".repeat(64));
+
+    let mut incomplete_graph = build_fixture_facts(
+        &root_fingerprint,
+        "SET/AUDIO/kick.wav",
+        "SET/AUDIO/new-kick.wav",
+        12,
+    );
+    incomplete_graph.usage_graph_complete = false;
+    let intent = RenameSampleIntent {
+        root_id: RootId::new("integration-root").unwrap(),
+        source_file_instance_id: incomplete_graph.source.file_instance_id.clone(),
+        destination_relative_path: RootRelativePath::parse("SET/AUDIO/new-kick.wav").unwrap(),
+    };
+    let graph_outcome = plan_rename_sample(&intent, &incomplete_graph);
+
+    let mut incomplete_coverage = build_fixture_facts(
+        &root_fingerprint,
+        "SET/AUDIO/kick.wav",
+        "SET/AUDIO/new-kick.wav",
+        12,
+    );
+    incomplete_coverage.set_project_coverage_complete = false;
+    let coverage_outcome = plan_rename_sample(&intent, &incomplete_coverage);
+
+    let after = snapshot_directory(root);
+    assert_eq!(before, after);
+    assert!(matches!(
+        graph_outcome,
+        RenamePlanningOutcome::Blocked(BlockedRenameImpact { block_reasons, .. })
+            if block_reasons.iter().any(|reason| {
+                matches!(reason, ot_plan::RenameBlockReason::IncompleteUsageGraph)
+            })
+    ));
+    assert!(matches!(
+        coverage_outcome,
+        RenamePlanningOutcome::Blocked(BlockedRenameImpact { block_reasons, .. })
+            if block_reasons.iter().any(|reason| {
+                matches!(reason, ot_plan::RenameBlockReason::IncompleteSetProjectCoverage)
+            })
+    ));
+}
