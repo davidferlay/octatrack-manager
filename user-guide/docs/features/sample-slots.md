@@ -136,9 +136,11 @@ When a project belongs to a Set that has an `AUDIO/` pool, an **Audio Pool toggl
 - **Browse:** Double-click a folder to enter it. The bottom path row shows the current path, a **Reset to AUDIO directory** button to jump straight back to the pool root, and the up (↑) button to go back one level at a time.
 - **Search recursively:** Type in the search box to match files and folders in the current directory and all of its subfolders. A small spinner shows up while search is in progress. Clear the box to return to the plain directory listing.
 - **Full path on hover:** Hover any item to see its path relative to the pool root (e.g. `AUDIO/Drums/kick.wav`).
+- **Location is remembered:** The pane and the full [Audio Pool page](audio-pool.md) share the directory you are browsing, so opening one from the other keeps your place.
 - **Import into the pool:** Click the **Import** dropdown button to import and convert files or directories to Audio Pool on the fly Files… or a whole Folder… (recursive) into the directory you are browsing.
 - **Check compatibility:** The **Compat** column shows the Octatrack face icons for each pool file. Right-click an incompatible file and choose **Convert to Octatrack format** to fix it in place - slot references across the Set's projects are updated automatically (after a backup). See [Fixing Incompatible Files](audio-pool.md#fixing-incompatible-files).
 - **See this project's own usage:** The **Usage** column shows the same blue **✓ N** / gray **○ N** badges as the [Audio Pool page](audio-pool.md#browsing-the-pool), but scoped to *this project only* - hover the column header for a reminder of that. Open the full Audio Pool page instead for a Set-wide view of who else uses a file.
+- **Rename an audio file**: Right-click it and choose "Rename...". Sample slots pointing at it are automatically updated across every project of the Set (after a backup).
 - **Open the full page:** Click the second top left icon to nevigate to the complete [Audio Pool](audio-pool.md) page of current Set. Once there, click the **Back to project** button (top left corner) to go back to the project you came from.
 
 <div style={{display: 'flex', gap: '0.75rem', alignItems: 'flex-start', justifyContent: 'center'}}>

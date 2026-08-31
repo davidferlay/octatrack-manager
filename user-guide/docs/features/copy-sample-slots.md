@@ -10,10 +10,14 @@ sidebar_position: 12
 
 ## Workflow
 
-1. **Source:** The current project's sample slots are used as the source. Use `One` mode to select a single slot, or `Range` mode to select a contiguous range (with dual sliders).
+1. **Source:** Choose the source project (the one you are viewing, by default), then use `One` mode to select a single slot or `Range` mode to select a contiguous range (with dual sliders).
 2. **Destination:** Select the destination slot positions in target project.
 3. **Configure Options:** Choose slot type, sample assignments, audio file handling, and sample attributes.
 4. **Execute:** Perform the sample slot copy.
+
+### Choosing the Source Project
+
+The source pane has its own project selector, defaulting to the project you are viewing. Point it at another project to copy out of a project without opening it. It is the same picker as the destination one - see [Copy Banks](./copy-bank.md#choosing-the-source-and-destination-projects) for what it lists and how to browse for a project it does not know about.
 
 <img src={require('@site/static/img/screenshots/tools-copy-sample-slots-source-one.png').default} alt="Copy Sample Slots - One mode" style={{width: '40%'}} /> <img src={require('@site/static/img/screenshots/tools-copy-sample-slots-source-range.png').default} alt="Copy Sample Slots - Range mode" style={{width: '40%'}} />
 

@@ -87,6 +87,8 @@ These control the playback bar at the bottom of the Sample Slots and Audio Pool 
 |----------|---------|
 | <kbd>Tab</kbd> | Cycle through the source and destination selections. |
 | <kbd>Space</kbd> | Toggle the selection of the focused bank, part, or track button. |
+| <kbd>Shift</kbd> + click | Select the range of source banks (Copy Banks) or source patterns (Copy Patterns) between the last click and this one. |
+| <kbd>Ctrl</kbd> + click | Add or remove one source bank or source pattern, keeping the rest. <kbd>Cmd</kbd> on macOS. |
 | <kbd>Enter</kbd> | Execute the copy operation (when the button is focused). |
 
 ---

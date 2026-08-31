@@ -10,9 +10,13 @@ sidebar_position: 9
 
 ## Workflow
 
-1. **Source:** Choose the source bank (A–P) and part (1–4, or All for 1-to-1 copy).
+1. **Source:** Choose the source project (the one you are viewing, by default), the bank (A–P), and the part (1–4, or All for 1-to-1 copy).
 2. **Destination:** Choose the target project, one or more destination banks (A–P), and one or more destination parts.
 3. **Execute:** Perform the part copy.
+
+### Choosing the Source Project
+
+The source pane has its own project selector, defaulting to the project you are viewing. Point it at another project to copy out of a project without opening it. It is the same picker as the destination one - see [Copy Banks](./copy-bank.md#choosing-the-source-and-destination-projects) for what it lists and how to browse for a project it does not know about.
 
 ---
 

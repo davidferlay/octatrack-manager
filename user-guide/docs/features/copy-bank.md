@@ -10,17 +10,39 @@ sidebar_position: 8
 
 ## Workflow
 
-1. **Source:** Select the bank (A–P) to copy from the current project.
-2. **Destination:** Choose the target project and one or more destination banks (A–P).
+1. **Source:** Choose the source project (the one you are viewing, by default) and one or more banks (A–P) to copy from it.
+2. **Destination:** Choose the target project and the destination banks (A–P).
 3. **Options:** Configure sample copying behavior.
 4. **Execute:** Perform the bank copy.
 
-### Choosing the Destination Project
+### Choosing the Source and Destination Projects
 
-The destination selector lists the current project and every project the app already knows about. Two buttons extend the list:
+Both panes have their own project selector, and both open the same picker. The source defaults to the project you are viewing, so leaving it alone gives the familiar behavior; pointing it at another project lets you pull banks out of a project without opening it first.
+
+The picker lists the current project and every project the app already knows about. Two buttons extend the list:
 
 - **Rescan for Projects:** Refreshes the known locations, like the Refresh button on the home page.
 - **Browse...:** Pick any folder — it is scanned recursively for Octatrack projects, exactly like **Browse** on the home page. If the folder is itself a project it is selected directly; otherwise every project found under it appears in a collapsible **Manual Browse** section for you to pick from.
+
+Only the destination picker offers **New Project**, since an empty project is of no use as a source.
+
+When the source is a project other than the one on screen, the source bank grid shows that project's banks: banks it does not have are greyed out, and a selected bank that the new source lacks is dropped from the selection.
+
+### Selecting Several Source Banks
+
+The source bank grid takes a multi-selection, the way a file manager does:
+
+- **Click:** Select one bank. Clicking the only selected bank deselects it.
+- **Shift-click:** Select every bank between the last one you clicked and this one.
+- **Ctrl-click** (Cmd on macOS): Add or remove one bank, keeping the rest.
+
+With **one** source bank selected, nothing changes: it is copied to every destination bank you pick, as before.
+
+With **several** source banks selected, the copy becomes one-to-one and the destination locks to a run of the same length. Clicking a destination bank starts the run there — select A, B, C as the source and click I in the destination and the run becomes I, J, K. A run that would not fit slides back to the end of the list, so a 3-bank source clicked on P becomes N, O, P. The **All** button in the destination is disabled while the run is locked, and a line under the grid shows the pairing.
+
+:::tip
+Copying a range onto an overlapping range in the same project is safe. Copying A, B, C onto B, C, D runs the pairs in the order that preserves each source, so B and C are read before they are overwritten.
+:::
 
 ---
 
@@ -92,7 +114,7 @@ Controls where copied samples are placed in the destination's slot list:
 
 ### Slot Validation
 
-Before executing, the app validates the destination project and shows a status indicator:
+Before executing, the app validates the destination project against every selected source bank at once and shows a status indicator. A sample that two selected banks share is counted once, not once per bank:
 
 - **Green checkmark:** Sufficient free slots and Flex RAM available. Shows the number of slots to copy; when some files already exist in the destination project (same filename) they are counted as "already in destination and reused" instead of being copied again.
 
@@ -136,4 +158,6 @@ When copying samples, the app automatically remaps all slot references in the co
 
 - **Destructive Operation:** Copying a bank replaces all existing data at the destination.
 - **Automatic Backup:** The app automatically backs up destination bank files before executing. See [Quick Start](../getting-started/quick-start.md#11-automatic-backups) for details.
-- **Multi-bank Destination:** You can select multiple destination banks to copy the same source bank to several targets at once.
+- **Multi-bank Destination:** With a single source bank, you can select multiple destination banks to copy it to several targets at once.
+- **Multi-bank Source:** With several source banks selected, the destination holds the same number of banks and the copy is one-to-one. The Execute button stays disabled while the two counts disagree.
+- **Cross-project Source:** The source project is only ever read. Backups are taken of the destination, plus the source project's `project.work` when **Move to Pool** rewrites it.

@@ -24,9 +24,10 @@ This shows the contents of your `AUDIO/` directory. You can:
 - **Create Folders:** Click **+ New Folder** to organize your library.
 - **Inspect Metadata:** Every audio file shows its sample rate, bit depth, and number of channels and size.
 - **Check Compatibility:** The **Compat** column shows the same face icons as the Octatrack's sample browser — a smiley for playable files, a straight face for a wrong sample rate, and **??** for audio formats the device cannot play (MP3, FLAC, OGG, M4A). Non-audio files get no badge. See [Fixing Incompatible Files](#fixing-incompatible-files).
-- **See Cross-Project Usage:** The **Usage** column shows, for each pool file, whether any project in the Set actually uses it — the same blue **✓ N** / gray **○ N** badges as the [Sample Slots Usage column](sample-slots.md#slot-usage). Click a badge to open a popover listing every usage, each prefixed with the project that references it (e.g. "ProjectA · Bank A · Part 1 · T1 · Machine"). The column can be sorted and filtered by Used / Referenced / Unused, just like on the Sample Slots tabs. Hover the column header for a reminder that this view spans **every project of the Set** — the [Audio Pool pane](sample-slots.md#the-audio-pool-pane) inside a project only shows that one project's own usage of a file, not the whole Set's.
+- **See Cross-Project Usage:** The **Usage** column shows, for each pool file, whether any project in the Set actually uses it — the same blue **✓ N** / gray **○ N** badges as the [Sample Slots Usage column](sample-slots.md#slot-usage). Click a badge to open a popover listing every usage, each prefixed with the project that references it (e.g. "ProjectA · Bank A · Part 1 · T1 · Machine"). Each project name in that list is a link - click it to open that project directly. The project page then shows a "Back to Audio Pool" button (top left, also on Escape) to come back here, mirroring the "Back to project" button you get when opening this page from a project's Audio Pool pane. The column can be sorted and filtered by Used / Referenced / Unused, just like on the Sample Slots tabs. Hover the column header for a reminder that this view spans **every project of the Set** — the [Audio Pool pane](sample-slots.md#the-audio-pool-pane) inside a project only shows that one project's own usage of a file, not the whole Set's.
 - **Filter and Sort:** Use the toolbar to filter by name, bit depth, sample rate, or audio format.
 - **Search recursively:** Typing in the search box matches files and folders in the current directory and all of its subfolders (a spinner shows while deep folders are scanned).
+- Location is remembered: the directory you are browsing is shared with a project's [Audio Pool pane](sample-slots.md#the-audio-pool-pane) for the rest of the session, so moving between the two (in either direction) keeps you where you were instead of dropping you back at `AUDIO/`.
 
 ### Left Panel: Your Computer
 - This is a standard file browser that lets you explore your local hard drives to find samples you want to add to your Set.
@@ -96,6 +97,16 @@ See [Fix Incompatible Samples](fix-incompatible-samples.md) for the full walkthr
 Pools tend to accumulate samples that no project references anymore. The **Tools** tab's **Purge Audio Pool Samples** operation finds every unused audio file in the pool — optionally across every project of the Set too — and removes it, either to the OS Trash Bin or moved into a folder of your choice.
 
 See [Purge Unused Samples](purge-unused-samples.md) for the full walkthrough — what counts as unused, directory collapsing, and the move/delete options.
+
+---
+
+## Renaming Samples
+
+Right-click a file in the Audio Pool pane and choose "Rename...". Renaming file would normally break every sample slot pointing at it - so the rename also automatically updates all project's slots where it's used.
+
+The same right-click "Rename" is available in the Audio Pool pane of a project's Flex or Static tab, where it behaves identically (the loaded project reference gets updated).
+
+Note that renaming a directory is not covered by that mechanism: the slots keep pointing at the old folder name and go missing. Use [Fix Missing Samples](fix-missing-samples.md) to fix everything in that case.
 
 ---
 

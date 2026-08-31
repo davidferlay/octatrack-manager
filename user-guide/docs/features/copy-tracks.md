@@ -14,10 +14,14 @@ Tracks aren’t treated as first-class entities in the [Octatrack's architecture
 
 ## Workflow
 
-1. **Source:** Select the bank (A–P), part (1–4), and track (T1–T8 for audio, M1–M8 for MIDI).
+1. **Source:** Choose the source project (the one you are viewing, by default), the bank (A–P), part (1–4), and track (T1–T8 for audio, M1–M8 for MIDI).
 2. **Destination:** Choose the target project, one or more destination banks (A–P), part(s), and track(s).
 3. **Copy Mode:** Choose what data to copy — Part Parameters, Pattern Triggers, or Both.
 4. **Execute:** Perform the track copy.
+
+### Choosing the Source Project
+
+The source pane has its own project selector, defaulting to the project you are viewing. Point it at another project to copy out of a project without opening it. It is the same picker as the destination one - see [Copy Banks](./copy-bank.md#choosing-the-source-and-destination-projects) for what it lists and how to browse for a project it does not know about.
 
 ---
 
