@@ -159,11 +159,23 @@ Unsupported OS versions, ambiguous state roles, unresolved references, and
 unknown sidecar revisions remain read-only. Tests use synthetic or copied
 fixtures; original SD/CF media is never a test target.
 
+Project compatibility is owned by MasterOCTa at the legacy-reader boundary.
+The pinned `ot-tools-io` result remains recorded and accepted when it reports
+support. When it reports unsupported, the only local exception is the
+fixture-verified combination `VERSION=19`, revision `R0173`, release `1.40`.
+For this local exception, revision and release are exact tokens separated only
+by ASCII spaces; unknown or malformed combinations do not qualify and remain
+`UnsupportedVersion` when the upstream library reports unsupported. An
+upstream compatibility-check error remains `Malformed`. This does not relax
+the write gate: any state or sample-settings row that is not `Parsed` still
+blocks write mode.
+
 ## 8. Source provenance and limits
 
 | Source | Type and date | Use in this contract | Limits |
 |---|---|---|---|
 | Current repository code, tracked `real_device` fixtures, differential tests, and pinned `ot-tools-io` revision | Primary implementation evidence; current checkout | Root/Set/Project boundaries, `.work`/`.strd` filename observations, slot assignments, Bank usage coordinates, settings parser revision, raw setting values, and safety invariants | Fixture coverage is finite and does not make undocumented binary layouts a vendor guarantee; parser failures remain explicit. |
+| Reviewed Octatrack MkII BaseProject fixture, `VERSION=19`, `R0173 / 1.40`, 2898 bytes, SHA256 `742b8228026b0d25b6de72e915adcec428b954f3be769e4f4e177cdfab7c7ae6` | Reproduced observation from a disposable disk-image copy | Exact local compatibility exception for Working and SavedCheckpoint roles | Evidence applies only to this exact Project/OS combination. It does not authorize a wider 1.x range or Project serialization. |
 | [Elektron Octatrack MkII manual, OS 1.40A](https://www.elektron.se/wp-content/uploads/2024/09/Octatrack-User-Manual_ENG-OS1.40A_220204.pdf) | Official specification | Project SAVE/RELOAD and per-Bank SAVE/RELOAD semantics; SAVE SAMPLE SETTINGS links trim, slice, and attribute settings to the sample; slice marker operational meaning | The manual does not document on-media `.work`/`.strd` filename mapping, the `.ot` filename convention, or the binary field layout. |
 | OCTATRACK DIARY R13 | Unofficial secondary source; 2016; Octatrack OS 1.25 | Supporting domain terminology and operational distinctions among shared/project samples, working/saved state, slot purge, collect, and export | Not authoritative for MkII OS 1.40+. No unverified numeric or format constraint is promoted to an implementation constant. |
 

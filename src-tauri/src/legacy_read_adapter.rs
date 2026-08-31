@@ -1,4 +1,5 @@
 use crate::device_detection::{scan_directory, OctatrackProject};
+use crate::project_compatibility::{evaluate_project_compatibility, ProjectCompatibility};
 use crate::project_reader::{compute_sample_usage_for_documents, read_raw_sample_fields};
 use ot_domain::{
     AudioAsset, ContentHash, ContentHashFreshness, FileInstance, LibraryProject, LibrarySet,
@@ -910,16 +911,16 @@ fn parse_project_state(
         }
     };
     let source_version = Some(parsed.metadata.os_version.clone());
-    match parsed.check_compatible_os_version() {
-        Ok(true) => {}
-        Ok(false) => {
+    match evaluate_project_compatibility(&parsed).compatibility {
+        ProjectCompatibility::Supported { .. } => {}
+        ProjectCompatibility::UnsupportedVersion => {
             return (
                 StateDocumentParseStatus::UnsupportedVersion,
                 parser_provenance(source_version),
                 Vec::new(),
             )
         }
-        Err(_) => {
+        ProjectCompatibility::Malformed => {
             return (
                 StateDocumentParseStatus::Malformed,
                 parser_provenance(source_version),
@@ -1465,6 +1466,74 @@ mod tests {
             !format!("{documents:?}{assignments:?}{usage_edges:?}{sample_settings:?}")
                 .contains(root.path().to_str().unwrap())
         );
+    }
+
+    #[test]
+    fn verified_1_40_project_roles_are_parsed_without_exposing_or_modifying_paths() {
+        let root = TempDir::new().unwrap();
+        let project_directory = root.path().join("SET/PROJECT");
+        fs::create_dir_all(&project_directory).unwrap();
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/real_device_os_1_40/project.work");
+        fs::copy(&fixture, project_directory.join("project.work")).unwrap();
+        fs::copy(&fixture, project_directory.join("project.strd")).unwrap();
+        let before = snapshot_files(root.path());
+        let canonical = root.path().canonicalize().unwrap();
+        let mut topology = inventory_topology();
+        topology.standalone_projects.clear();
+
+        let (documents, assignments, usage_edges) =
+            scan_state_inventory(&canonical, &topology).unwrap();
+
+        assert_eq!(documents.len(), 2);
+        assert!(documents.iter().all(|document| {
+            document.kind == StateDocumentKind::Project
+                && document.parse_status == StateDocumentParseStatus::Parsed
+                && document.parser_provenance.parser_name == STATE_PARSER_NAME
+                && document.parser_provenance.parser_revision == STATE_PARSER_REVISION
+                && document.parser_provenance.source_version.as_deref() == Some("R0173      1.40")
+        }));
+        assert!(documents
+            .iter()
+            .any(|document| document.role == StateDocumentRole::Working));
+        assert!(documents
+            .iter()
+            .any(|document| document.role == StateDocumentRole::SavedCheckpoint));
+        assert!(assignments.is_empty());
+        assert!(usage_edges.is_empty());
+        assert_eq!(snapshot_files(root.path()), before);
+        assert!(!format!("{documents:?}").contains(root.path().to_str().unwrap()));
+    }
+
+    #[test]
+    fn unknown_project_os_is_unsupported_without_partial_usage() {
+        let root = TempDir::new().unwrap();
+        let project_directory = root.path().join("SET/PROJECT");
+        fs::create_dir_all(&project_directory).unwrap();
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/real_device_os_1_40/project.work");
+        let source = String::from_utf8(fs::read(fixture).unwrap()).unwrap();
+        let unknown = source.replace("R0173      1.40", "R9999      9.99");
+        fs::write(project_directory.join("project.work"), unknown).unwrap();
+        let canonical = root.path().canonicalize().unwrap();
+        let mut topology = inventory_topology();
+        topology.standalone_projects.clear();
+
+        let (documents, assignments, usage_edges) =
+            scan_state_inventory(&canonical, &topology).unwrap();
+
+        assert_eq!(documents.len(), 1);
+        assert_eq!(
+            documents[0].parse_status,
+            StateDocumentParseStatus::UnsupportedVersion
+        );
+        assert_eq!(
+            documents[0].parser_provenance.source_version.as_deref(),
+            Some("R9999      9.99")
+        );
+        assert!(assignments.is_empty());
+        assert!(usage_edges.is_empty());
+        assert!(!format!("{documents:?}").contains(root.path().to_str().unwrap()));
     }
 
     #[test]

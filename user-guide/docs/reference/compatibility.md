@@ -9,10 +9,25 @@ MasterOCTa is designed to work seamlessly with your Elektron Octatrack projects,
 ## Octatrack Firmware Requirement
 
 :::warning
-**Important:** MasterOCTa is only compatible with projects saved on **Octatrack OS version 1.40 or later**.
+**Important:** MasterOCTa supports only Project versions that have been
+explicitly verified or are recognized by its pinned parser. It does not assume
+that every Octatrack OS version newer than 1.40 is compatible.
 :::
 
-The project file format changed significantly in OS 1.40. If you attempt to open a project that was last saved on an older firmware version, the app may misread the data or fail to load the project entirely.
+The verified Project combinations currently include:
+
+- Project `VERSION=19`, OS revision `R0173`, release `1.40`
+- Project versions accepted by the pinned parser, currently OS releases
+  `1.40A`, `1.40B`, and `1.40C`
+
+The `R0173 / 1.40` exception is exact: the Project version must be 19 and both
+the revision and release must match. Other values do not qualify for this local
+exception; combinations not recognized by the pinned parser remain
+unsupported. MasterOCTa may index an unsupported document for diagnosis, but
+it keeps Edit mode unavailable.
+
+If you attempt to open a project that was last saved on an older or unverified
+firmware version, the app may be unable to parse it safely.
 
 ### How to update an older project:
 1. Insert your CF card into your Octatrack.
@@ -62,4 +77,6 @@ The following formats are **not** playable on the Octatrack, but MasterOCTa will
 - **Disk-Based Operation:** MasterOCTa operates directly on the files on your CF card or computer. It does not connect to the Octatrack via USB for "live" control or parameter syncing.
 - **Project Loading:** The app currently focuses on one "active" project at a time in the detail view. However, the **Tools** tab allows you to select any other project on your system as a destination for copy operations.
 - **Hardware Integration:** To see your changes on the Octatrack, you must eject the CF card from your computer, insert it into the Octatrack, and load (or reload) the project on the device.
-- **OS 1.40+ Only:** As noted above, older projects must be updated on the hardware first. The app cannot "up-convert" old project files automatically.
+- **Verified Project Versions Only:** As noted above, unknown combinations
+  remain read-only even if their release number appears newer. The app cannot
+  "up-convert" old project files automatically.
