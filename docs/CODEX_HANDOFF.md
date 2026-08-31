@@ -91,29 +91,22 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - Gate B smoke macOS移植: #55マージ済み
 - Project compatibility policy: #58／#59マージ済み
 - Gate B human sign-off: **PASS**（personal/local use、source `a10437f`）
-- 現在のmain基準SHA: `a10437f`
+- 現在のmain基準SHA: `2d1e538`（Gate B sign-off PR #60 merge後）
 - M2: 完了
-- M3-A: 完了
-- M3-B: 完了
-- M3-C0: 完了
-- M3-C1: 完了
-- M3-C2: 完了
-- M3-C3: 完了
-- M3-D: 完了
-- M3-E1: 完了
-- M3-E2: 完了
-- M3-E3: 完了
 - M3: 完了
 - M4-A: 完了
 - M4-B: 完了
 - Gate B: 完了（personal/local use。public distribution承認ではない）
 - Design System Phase A–D: 完了（DS1–DS7 / UI1–UI6）
-- 現在の作業: Gate B sign-off記録、およびM5着手準備
+- M5-A sample rename impact planning: **完了**（pure domain/planning contract）
+- 現在の作業: M5-B rename codec/apply 準備
 - SQLite schema: v5（M3-E1で追加）
-- 次の機能実装: **M5へ進行可**。
-  Gate Bはsource `a10437f`のDMG検証、Octatrack OS 1.40互換、human additive copy、
-  source/destination SHA一致、既存media不変、remount persistenceを確認して署名済み
-  Appearance theme（classic / MasterOCTa）は design-system token 層の follow-up
+- 次の機能実装: M5-A完了後 **M5-B**（Project/Bank reference rewrite codec、
+  sidecar apply semantics、executor/backup/journal rename Apply）
+- Gate C rename Apply 残条件: codec evidence、clone上 rename→rescan missing 0、
+  非対象hash不変、rollback byte復元、実機clone load smoke
+- Developer ID signing / notarization / public distribution は別release gate
+- M5-A contract 正本: `docs/planning/M5_A_SAMPLE_RENAME_IMPACT.md`
 - Node基準: 22（`>=22.13.0`、`.nvmrc`）
 - package manager: `pnpm@11.24.0`
 - `ot-tools-io`はコミット

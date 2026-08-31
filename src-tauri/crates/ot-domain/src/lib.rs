@@ -2,6 +2,8 @@
 
 use std::fmt;
 
+const FILE_INSTANCE_ID_PREFIX: &str = "fileinst:v1:";
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct RootId(String);
 
@@ -560,6 +562,53 @@ pub struct ProjectDocument {
     pub display_name: String,
 }
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct FileInstanceId(String);
+
+impl FileInstanceId {
+    pub fn parse(value: impl Into<String>) -> Result<Self, InvalidFileInstanceId> {
+        let value = value.into();
+        validate_prefixed_sha256(&value, FILE_INSTANCE_ID_PREFIX)
+            .map_err(|_| InvalidFileInstanceId)?;
+        Ok(Self(value))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+fn validate_prefixed_sha256(value: &str, prefix: &str) -> Result<(), ()> {
+    let digest = value.strip_prefix(prefix).ok_or(())?;
+    if digest.len() == 64
+        && digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        Ok(())
+    } else {
+        Err(())
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InvalidFileInstanceId;
+
+impl fmt::Display for InvalidFileInstanceId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("file instance ID must be a fileinst:v1 SHA-256 identifier")
+    }
+}
+
+impl std::error::Error for InvalidFileInstanceId {}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RenameSampleIntent {
+    pub root_id: RootId,
+    pub source_file_instance_id: FileInstanceId,
+    pub destination_relative_path: RootRelativePath,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -761,5 +810,37 @@ mod tests {
         assert_eq!(document.kind, StateDocumentKind::Project);
         assert_eq!(assignment.slot.number(), 1);
         assert_eq!(assignment.reference_status, SampleReferenceStatus::Resolved);
+    }
+
+    #[test]
+    fn file_instance_ids_accept_only_versioned_opaque_values() {
+        let valid = format!("fileinst:v1:{}", "a".repeat(64));
+        let parsed = FileInstanceId::parse(&valid).unwrap();
+        assert!(parsed.as_str().starts_with(FILE_INSTANCE_ID_PREFIX));
+        assert_eq!(parsed.as_str(), valid);
+
+        assert!(FileInstanceId::parse(
+            "asset:v1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        )
+        .is_err());
+        assert!(FileInstanceId::parse("fileinst:v1:not-a-digest").is_err());
+    }
+
+    #[test]
+    fn rename_sample_intent_keeps_opaque_source_and_validated_destination() {
+        let intent = RenameSampleIntent {
+            root_id: RootId::new("root-session-1").unwrap(),
+            source_file_instance_id: FileInstanceId::parse(format!(
+                "fileinst:v1:{}",
+                "b".repeat(64)
+            ))
+            .unwrap(),
+            destination_relative_path: RootRelativePath::parse("SET/AUDIO/new-kick.wav").unwrap(),
+        };
+        assert_eq!(intent.root_id.as_str(), "root-session-1");
+        assert_eq!(
+            intent.destination_relative_path.as_str(),
+            "SET/AUDIO/new-kick.wav"
+        );
     }
 }

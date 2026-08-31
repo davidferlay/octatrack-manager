@@ -1,11 +1,32 @@
 #![forbid(unsafe_code)]
 
-use ot_domain::{ContentHash, RootId, RootRelativePath};
+use ot_domain::{ContentHash, FileInstanceId, RootId, RootRelativePath};
 use sha2::{Digest, Sha256};
 use std::fmt;
 
-const ROOT_FINGERPRINT_PREFIX: &str = "rootfp:v1:";
+pub(crate) const ROOT_FINGERPRINT_PREFIX: &str = "rootfp:v1:";
 const PLAN_ID_PREFIX: &str = "plan:v1:";
+
+pub mod rename;
+
+pub use rename::*;
+
+/// Derive the opaque catalog file-instance identifier for a root fingerprint
+/// and validated root-relative path.
+pub fn derive_file_instance_id(
+    root_fingerprint: &str,
+    relative_path: &RootRelativePath,
+) -> FileInstanceId {
+    use ot_domain::FileInstanceId;
+
+    let mut hasher = Sha256::new();
+    hasher.update(b"fileinst:v1");
+    for value in [root_fingerprint, relative_path.as_str()] {
+        hasher.update((value.len() as u64).to_be_bytes());
+        hasher.update(value.as_bytes());
+    }
+    FileInstanceId::parse(format!("fileinst:v1:{:x}", hasher.finalize())).expect("derived id")
+}
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct PlanId(String);
@@ -264,13 +285,13 @@ fn derive_plan_id_from_fields(
     PlanId(format!("{PLAN_ID_PREFIX}{digest:x}"))
 }
 
-fn encode_field(hasher: &mut Sha256, tag: u8, bytes: &[u8]) {
+pub(crate) fn encode_field(hasher: &mut Sha256, tag: u8, bytes: &[u8]) {
     hasher.update([tag]);
     hasher.update((bytes.len() as u64).to_be_bytes());
     hasher.update(bytes);
 }
 
-fn validate_prefixed_sha256(value: &str, prefix: &str) -> Result<(), ()> {
+pub(crate) fn validate_prefixed_sha256(value: &str, prefix: &str) -> Result<(), ()> {
     let digest = value.strip_prefix(prefix).ok_or(())?;
     if digest.len() == 64
         && digest
