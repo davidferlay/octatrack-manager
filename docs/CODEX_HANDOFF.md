@@ -355,3 +355,16 @@ root全体のblockだけを解除する。
 この補完PRが成功しても、`docs/testing/GATE_B_CLONE_SMOKE.md`のhuman-reviewed smokeは別の残条件で
 ある。由来確認済みの使い捨てcloneによるsign-off前にGate B完了や原本media write対応を宣言せず、
 M5へ進まない。
+
+Project compatibility policy follow-upでは、固定`ot-tools-io`の判定を維持しつつ、同libraryが
+unsupportedとする実機Octatrack MkII由来の`VERSION=19`／`R0173`／`1.40`だけを、追跡済みfixtureの
+SHA-256とMETAを根拠にMasterOCTa側で限定承認する。revision／releaseはASCII spaceだけで区切る
+exact tokenとして扱い、未知・malformed・別Project VERSIONは従来どおりread-onlyとする。
+`ensure_write_eligible()`、stable identity、traversal／symlink、overwrite禁止、Intent → Plan → Apply、
+backup／journal／recovery境界は変更しない。Projectを全面serializeせず、additive copy時のProject／
+Bank不変をSHA-256で検証する。
+
+このfollow-upがmergeされても既存Gate B sign-offは完了しない。merge後のDMGについて
+`docs/testing/GATE_B_CLONE_SMOKE.md`のcompatibility-policy DMG retestを実施し、DMG検証、全state
+Parsed、Edit／Review Plan／additive copy、Project／Bank SHA不変、再mount／再scan、人間reviewまで
+完了してからGate Bを署名する。署名前にM5へ進まない。

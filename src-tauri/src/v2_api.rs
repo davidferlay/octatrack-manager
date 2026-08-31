@@ -1787,6 +1787,8 @@ mod tests {
     use crate::write_runtime::open_shared_write_runtime;
     use ot_executor::{JournalFileIdentity, JournalStatus, OperationJournal};
     use ot_plan::derive_additive_copy_plan_id;
+    use ot_tools_io::{types::SlotMarkers, OctatrackFileIO, SampleSettingsFile};
+    use std::collections::BTreeMap;
     use std::fs;
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
     use std::path::Path;
@@ -1807,8 +1809,26 @@ mod tests {
         }
     }
 
+    struct UnstableTestIdentity;
+
+    impl DeviceIdentityProvider for UnstableTestIdentity {
+        fn observe(&self, _root: &Path) -> Result<DeviceObservation, RootRegistryError> {
+            Ok(DeviceObservation {
+                stable_key: "fixture-unstable".into(),
+                filesystem_type: Some("fixturefs".into()),
+                total_capacity: Some(4096),
+                mount_token: "fixture-mount".into(),
+                stable: false,
+            })
+        }
+    }
+
     fn registry() -> RootRegistry {
         RootRegistry::new(Arc::new(StableTestIdentity), Duration::from_secs(60))
+    }
+
+    fn unstable_registry() -> RootRegistry {
+        RootRegistry::new(Arc::new(UnstableTestIdentity), Duration::from_secs(60))
     }
 
     fn catalog() -> (TempDir, SharedCatalog) {
@@ -1857,6 +1877,45 @@ mod tests {
         fs::write(path, wav).unwrap();
     }
 
+    fn copy_real_device_1_40_state(root: &Path) -> std::path::PathBuf {
+        let project = root.join("SET_A/BaseProject");
+        fs::create_dir_all(&project).unwrap();
+        let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+        let project_fixture = fixtures.join("real_device_os_1_40/project.work");
+        fs::copy(&project_fixture, project.join("project.work")).unwrap();
+        fs::copy(&project_fixture, project.join("project.strd")).unwrap();
+        for bank_index in 1..=16 {
+            fs::copy(
+                fixtures.join("real_device/bank01.work"),
+                project.join(format!("bank{bank_index:02}.work")),
+            )
+            .unwrap();
+            fs::copy(
+                fixtures.join("real_device/bank01.strd"),
+                project.join(format!("bank{bank_index:02}.strd")),
+            )
+            .unwrap();
+        }
+        project
+    }
+
+    fn state_document_hashes(project: &Path) -> BTreeMap<String, String> {
+        fs::read_dir(project)
+            .unwrap()
+            .map(|entry| entry.unwrap())
+            .filter_map(|entry| {
+                let name = entry.file_name().into_string().ok()?;
+                let is_project = matches!(name.as_str(), "project.work" | "project.strd");
+                let is_bank = name.starts_with("bank")
+                    && (name.ends_with(".work") || name.ends_with(".strd"));
+                (is_project || is_bank).then(|| {
+                    let bytes = fs::read(entry.path()).unwrap();
+                    (name, format!("{:x}", Sha256::digest(bytes)))
+                })
+            })
+            .collect()
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn recovery_binding_fixture(
         plan_id: &str,
@@ -1887,6 +1946,231 @@ mod tests {
         encode(&mut hasher, 9, &1_u64.to_be_bytes());
         encode(&mut hasher, 10, source_relative_path.as_bytes());
         format!("recovery-binding:v1:{:x}", hasher.finalize())
+    }
+
+    #[test]
+    fn verified_1_40_project_allows_only_safe_additive_copy_and_preserves_all_state() {
+        const PROJECT_SHA256: &str =
+            "742b8228026b0d25b6de72e915adcec428b954f3be769e4f4e177cdfab7c7ae6";
+
+        let root = TempDir::new().unwrap();
+        let audio_pool = root.path().join("SET_A/AUDIO");
+        fs::create_dir_all(&audio_pool).unwrap();
+        let source = audio_pool.join("kick.wav");
+        write_test_wav(&source);
+        let source_before = fs::read(&source).unwrap();
+        let project = copy_real_device_1_40_state(root.path());
+        let state_before = state_document_hashes(&project);
+        assert_eq!(state_before.len(), 34);
+        assert_eq!(state_before["project.work"], PROJECT_SHA256);
+        assert_eq!(state_before["project.strd"], PROJECT_SHA256);
+
+        let registry = registry();
+        let data_directory = TempDir::new().unwrap();
+        let catalog = open_shared_catalog(data_directory.path()).unwrap();
+        let write = open_shared_write_runtime(data_directory.path()).unwrap();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        assert!(session.capabilities.stable_device_identity);
+        let root_id = RootId::new(session.root_id.clone()).unwrap();
+        let snapshot = list_library_sync(&registry, &catalog, &root_id).unwrap();
+        assert_eq!(snapshot.state_documents.len(), 34);
+        assert!(snapshot
+            .state_documents
+            .iter()
+            .all(|document| document.parse_status == StateDocumentParseStatus::Parsed));
+        assert!(snapshot.state_documents.iter().any(|document| {
+            document.source_relative_path.as_str() == "SET_A/BaseProject/project.work"
+        }));
+        assert!(snapshot.state_documents.iter().any(|document| {
+            document.source_relative_path.as_str() == "SET_A/BaseProject/project.strd"
+        }));
+        ensure_write_eligible(&snapshot).unwrap();
+
+        let dto = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
+        let source_id = dto
+            .audio_files
+            .iter()
+            .find(|file| file.relative_path == "SET_A/AUDIO/kick.wav")
+            .unwrap()
+            .file_instance_id
+            .clone();
+
+        let traversal = plan_additive_copy_sync(
+            &registry,
+            &catalog,
+            &write,
+            &root_id,
+            &source_id,
+            "../escape.wav",
+        )
+        .unwrap_err();
+        assert_eq!(traversal.code, "INVALID_DESTINATION_PATH");
+
+        let overwrite = plan_additive_copy_sync(
+            &registry,
+            &catalog,
+            &write,
+            &root_id,
+            &source_id,
+            "SET_A/AUDIO/kick.wav",
+        )
+        .unwrap_err();
+        assert_eq!(overwrite.code, "DESTINATION_EXISTS");
+
+        let plan = plan_additive_copy_sync(
+            &registry,
+            &catalog,
+            &write,
+            &root_id,
+            &source_id,
+            "SET_A/AUDIO/kick-copy.wav",
+        )
+        .unwrap();
+        assert!(!plan.overwrite_allowed);
+        assert_eq!(plan.delete_count, 0);
+        assert!(!serde_json::to_string(&plan)
+            .unwrap()
+            .contains(root.path().to_str().unwrap()));
+
+        enable_write_sync(&registry, &catalog, &write, &root_id).unwrap();
+        let status = apply_change_sync(
+            &registry,
+            &catalog,
+            &write,
+            &root_id,
+            &plan.plan_id,
+            &plan.plan_id,
+        )
+        .unwrap();
+        assert_eq!(status.state, "committed");
+
+        let destination = audio_pool.join("kick-copy.wav");
+        let destination_bytes = fs::read(destination).unwrap();
+        assert_eq!(fs::read(&source).unwrap(), source_before);
+        assert_eq!(destination_bytes, source_before);
+        assert_eq!(
+            format!("{:x}", Sha256::digest(&destination_bytes)),
+            format!("{:x}", Sha256::digest(&source_before))
+        );
+        assert_eq!(state_document_hashes(&project), state_before);
+    }
+
+    #[test]
+    fn unstable_identity_still_cannot_enable_write() {
+        let root = TempDir::new().unwrap();
+        let audio_pool = root.path().join("SET_A/AUDIO");
+        fs::create_dir_all(&audio_pool).unwrap();
+        write_test_wav(&audio_pool.join("kick.wav"));
+        let registry = unstable_registry();
+        let data_directory = TempDir::new().unwrap();
+        let catalog = open_shared_catalog(data_directory.path()).unwrap();
+        let write = open_shared_write_runtime(data_directory.path()).unwrap();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        assert!(!session.capabilities.stable_device_identity);
+        let root_id = RootId::new(session.root_id).unwrap();
+
+        let error = enable_write_sync(&registry, &catalog, &write, &root_id).unwrap_err();
+
+        assert_eq!(error.code, "WRITE_NOT_SUPPORTED");
+        assert!(
+            !registry
+                .resolve(&root_id)
+                .unwrap()
+                .session
+                .capabilities
+                .write
+        );
+    }
+
+    #[test]
+    fn unknown_project_format_version_still_blocks_write() {
+        let root = TempDir::new().unwrap();
+        let audio_pool = root.path().join("SET_A/AUDIO");
+        fs::create_dir_all(&audio_pool).unwrap();
+        write_test_wav(&audio_pool.join("kick.wav"));
+        let project = root.path().join("SET_A/BaseProject");
+        fs::create_dir(&project).unwrap();
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/real_device_os_1_40/project.work");
+        let source = String::from_utf8(fs::read(fixture).unwrap()).unwrap();
+        fs::write(
+            project.join("project.work"),
+            source.replace("VERSION=19", "VERSION=20"),
+        )
+        .unwrap();
+        let registry = registry();
+        let data_directory = TempDir::new().unwrap();
+        let catalog = open_shared_catalog(data_directory.path()).unwrap();
+        let write = open_shared_write_runtime(data_directory.path()).unwrap();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        let snapshot = list_library_sync(&registry, &catalog, &root_id).unwrap();
+        assert!(snapshot.state_documents.iter().any(|document| {
+            document.parse_status == StateDocumentParseStatus::UnsupportedVersion
+        }));
+
+        let error = enable_write_sync(&registry, &catalog, &write, &root_id).unwrap_err();
+
+        assert_eq!(error.code, "WRITE_NOT_SUPPORTED");
+        assert!(!format!("{error:?}").contains(root.path().to_str().unwrap()));
+    }
+
+    #[test]
+    fn unsupported_sample_settings_still_block_write() {
+        let root = TempDir::new().unwrap();
+        let audio_pool = root.path().join("SET_A/AUDIO");
+        fs::create_dir_all(&audio_pool).unwrap();
+        let audio = audio_pool.join("kick.wav");
+        write_test_wav(&audio);
+        let sidecar = SampleSettingsFile::new(
+            SlotMarkers {
+                trim_end: 1000,
+                ..Default::default()
+            },
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let sidecar_path = audio.with_extension("ot");
+        sidecar.to_data_file(&sidecar_path).unwrap();
+        let sidecar_before = fs::read(&sidecar_path).unwrap();
+        let registry = registry();
+        let data_directory = TempDir::new().unwrap();
+        let catalog = open_shared_catalog(data_directory.path()).unwrap();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        let mut snapshot = list_library_sync(&registry, &catalog, &root_id).unwrap();
+        assert_eq!(
+            snapshot.sample_settings[0].parse_status,
+            SampleSettingsParseStatus::Parsed
+        );
+        let unsupported = &mut snapshot.sample_settings[0];
+        unsupported.parse_status = SampleSettingsParseStatus::UnsupportedVersion;
+        unsupported.gain = None;
+        unsupported.tempo_x24 = None;
+        unsupported.trim_bars_x100 = None;
+        unsupported.loop_bars_x100 = None;
+        unsupported.stretch_mode = None;
+        unsupported.loop_mode = None;
+        unsupported.trig_quantization = None;
+        unsupported.trim_start = None;
+        unsupported.trim_end = None;
+        unsupported.loop_start = None;
+        unsupported.slices.clear();
+
+        let error = ensure_write_eligible(&snapshot).unwrap_err();
+
+        assert_eq!(error.code, "WRITE_NOT_SUPPORTED");
+        assert_eq!(fs::read(sidecar_path).unwrap(), sidecar_before);
     }
 
     #[test]

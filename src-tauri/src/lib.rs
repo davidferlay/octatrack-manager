@@ -6,6 +6,7 @@ mod audio_runtime;
 mod catalog_runtime;
 mod device_detection;
 mod legacy_read_adapter;
+mod project_compatibility;
 pub mod project_manager;
 mod project_reader;
 mod purge;

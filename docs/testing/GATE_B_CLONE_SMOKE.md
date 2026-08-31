@@ -27,6 +27,36 @@ this cloned-media smoke.
 
 If any precondition cannot be demonstrated, stop without registering the root.
 
+## Compatibility-policy DMG retest
+
+Run this sequence only after the Project compatibility-policy PR has been
+reviewed and merged and a DMG has been built from that merged commit. Use the
+approved disposable `MasterOCTa-GateB` image. Do not record its absolute mount
+path, Root ID, or device fingerprint in repository evidence.
+
+1. Record the DMG filename, merged application commit, byte size, and SHA-256.
+2. Run `hdiutil verify` against the DMG and require success.
+3. Record the output of `codesign --verify --deep --strict --verbose=2` and
+   `spctl --assess --type execute --verbose=4`; report unsigned or ad-hoc state
+   explicitly rather than treating it as signed.
+4. Install or launch from the verified DMG and register `MasterOCTa-GateB`.
+5. Rescan and confirm every expected Project and Bank state document is
+   `Parsed`, including both `project.work` and `project.strd`.
+6. Enable Edit and confirm that the session-limited write grant succeeds.
+7. Open Review Plan for an additive copy and confirm overwrite/delete remain
+   prohibited.
+8. Approve and execute that exact additive-copy plan once.
+9. Confirm the source and destination SHA-256 values are equal.
+10. Confirm the pre/post SHA-256 of `project.work` is unchanged.
+11. Confirm the pre/post SHA-256 of `project.strd` is unchanged.
+12. Confirm the pre/post SHA-256 of every Bank file is unchanged.
+13. Close the root, remount the disposable image, register it again, and
+    confirm a clean rescan with all expected state documents still `Parsed`.
+14. Record human review of the code/CI evidence and the DMG smoke result.
+15. Sign off Gate B only if every preceding step passed without exception.
+
+M5 remains blocked until step 15 is complete.
+
 ## Additive-copy smoke
 
 1. Start MasterOCTa and register the disposable clone. Confirm that the session
