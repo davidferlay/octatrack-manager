@@ -56,8 +56,14 @@ directory / separator change, empty PATH, irreversible encoding, and a reparse
 that does not match the intended PATH set all return `ReferenceRewriteError`
 and produce no patched document.
 
+`[SAMPLE]` / `[/SAMPLE]` are recognized only as exact whole lines. A tag that
+appears mid-line (including inside `PATH=`), a nested opener, a leftover
+closer, or a case-variant tag fails closed. `PATH` values may not contain
+CR / LF / NUL or those tags. `SLOT` must be ASCII digits only.
+
 Recorder buffers (FLEX 129–136 on current fixtures) are preserved and are not
-inspectable `SampleSlotId` values.
+inspectable `SampleSlotId` values. Any other slot number outside 1–128 is
+`InvalidSlot`.
 
 ## Filesystem boundary
 
