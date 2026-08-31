@@ -83,6 +83,9 @@ pub enum ReferenceRewriteError {
     FromPathMismatch,
     DirectoryChangeRejected,
     InvalidBasename,
+    UnsafePathText,
+    NestedSampleBlock,
+    UnexpectedSampleCloser,
     ReparseMismatch,
 }
 
@@ -109,6 +112,11 @@ impl fmt::Display for ReferenceRewriteError {
                 "PATH rewrite must keep the observed directory prefix and separator"
             }
             Self::InvalidBasename => "PATH basename is empty, reserved, or contains a separator",
+            Self::UnsafePathText => {
+                "PATH contains a newline, NUL, or [SAMPLE] tag and cannot be rewritten"
+            }
+            Self::NestedSampleBlock => "malformed project file: nested [SAMPLE] block",
+            Self::UnexpectedSampleCloser => "malformed project file: unexpected [/SAMPLE]",
             Self::ReparseMismatch => "rewritten document did not reparse to the expected PATH set",
         })
     }

@@ -9,5 +9,8 @@ encoding_rs = "0.8"
 ot-codec-ports = { path = "../ot-codec-ports" }
 ot-domain = { path = "../ot-domain" }
 
+[dev-dependencies]
+ot-tools-io = { git = "https://gitlab.com/davidferlay/ot-tools-io.git", rev = "cd246d8a595647364eb4cc78211033b2d1302526" }
+
 [lib]
 path = "src/lib.rs"
