@@ -197,6 +197,8 @@ const expectedV2Commands = [
   "v2_change_recovery_status",
   "v2_change_status",
   "v2_library_list",
+  "v2_rename_get_plan",
+  "v2_rename_plan",
   "v2_root_close",
   "v2_root_disable_write",
   "v2_root_enable_write",
@@ -222,13 +224,13 @@ for (const [, commandName, parameters] of v2Commands) {
     ) {
       failures.push("v2_root_register must be the only raw path boundary");
     }
-  } else if (commandName === "v2_change_plan") {
+  } else if (commandName === "v2_change_plan" || commandName === "v2_rename_plan") {
     if (
       pathParameters.length !== 1 ||
       !pathParameters[0].startsWith("destination_relative_path")
     ) {
       failures.push(
-        "v2_change_plan may accept only one explicitly named root-relative destination path",
+        `${commandName} may accept only one explicitly named root-relative destination path`,
       );
     }
   } else if (pathParameters.length > 0) {
@@ -244,7 +246,7 @@ if (
   )
 ) {
   failures.push(
-    "v2_change_plan destination must cross the RootRelativePath validation boundary",
+    "v2_change_plan and v2_rename_plan destination must cross the RootRelativePath validation boundary",
   );
 }
 

@@ -63,6 +63,7 @@ ot-domain = { path = "crates/ot-domain" }
 ot-executor = { path = "crates/ot-executor" }
 ot-plan = { path = "crates/ot-plan" }
 ot-storage-ports = { path = "crates/ot-storage-ports" }
+unicode-normalization = "0.1.24"
 
 [features]
 test-seams = ["ot-executor/test-seams"]

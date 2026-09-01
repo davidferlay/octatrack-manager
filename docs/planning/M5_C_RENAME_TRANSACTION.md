@@ -238,7 +238,6 @@ violating the file-owner unique index.
 
 ## Deferred
 
-- Gate C controlled operator harness (production Tauri, explicit approval UI,
-  RootRegistry write grant wiring)
-- Gate C real-hardware clone-load human smoke and human sign-off
-- Production recovery UI and Tauri commands
+- Gate C real-hardware clone-load human smoke and human sign-off (after M5-C5
+  Phases 1–3)
+- Production recovery UI polish for rename (beyond minimal status/recover commands)

@@ -1,6 +1,10 @@
 use crate::audio_runtime::{AudioRuntimeError, SharedAudioRuntime};
 use crate::catalog_runtime::SharedCatalog;
 use crate::legacy_read_adapter::RegisteredLegacyLibrary;
+use crate::rename_planning_facts::{
+    build_rename_planning_facts, ensure_same_directory_rename, RenamePlanningFactsError,
+};
+use crate::rename_write_runtime::{RenameWriteRuntimeError, SharedRenameWriteRuntime};
 use crate::root_registry::{ResolvedRoot, RootRegistry, RootRegistryError, RootSession};
 use crate::write_runtime::{
     ChangeOperationState, ChangeOperationStatus, SharedWriteRuntime, WriteRuntimeError,
@@ -12,14 +16,16 @@ use ot_application::{
 use ot_audio::AudioError;
 use ot_domain::{
     ContentHash, FileInstance, InvalidManualMetadata, LibraryProject, LibrarySet, LibrarySnapshot,
-    ManualAssetMetadata, ManualNote, ManualTag, RootId, RootRelativePath, SampleReferenceStatus,
-    SampleSettingsParseStatus, SampleSlotKind, SampleStorageScope, SampleUsageEdge,
-    SampleUsageKind, StateDocumentParseStatus,
+    ManualAssetMetadata, ManualNote, ManualTag, RenameSampleIntent, RootId, RootRelativePath,
+    SampleReferenceStatus, SampleSettingsParseStatus, SampleSlotKind, SampleStorageScope,
+    SampleUsageEdge, SampleUsageKind, StateDocumentParseStatus, StateDocumentRole,
 };
 use ot_executor::OperationId;
 use ot_plan::{
-    plan_additive_copy, AdditiveCopyIntent, AdditiveCopyPlanningFacts, ChangePlan, PlanSeed,
-    RootPlanObservation, SourceFileObservation,
+    plan_additive_copy, plan_rename_sample, AdditiveCopyIntent, AdditiveCopyPlanningFacts,
+    BlockedRenameImpact, ChangePlan, PlanSeed, RenameBlockReason, RenameImpactPlan,
+    RenamePlanningOutcome, RenamePlanningWarning, RenameReferenceUpdate, RenameSidecarImpact,
+    RenameStateDocumentImpact, RenameUsageEdgeImpact, RootPlanObservation, SourceFileObservation,
 };
 use ot_storage_ports::{CatalogError, CatalogRootIdentity, CatalogRootObservation};
 use serde::{Deserialize, Serialize};
@@ -720,6 +726,274 @@ impl From<&ChangePlan> for ChangePlanDto {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RenameBlockReasonDto {
+    code: String,
+    message: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenameReferenceUpdateDto {
+    project_document_relative_path: String,
+    slot_kind: &'static str,
+    slot_number: u16,
+    from_relative_path: String,
+    to_relative_path: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenameStateDocumentImpactDto {
+    relative_path: String,
+    role: &'static str,
+    reference_updates: Vec<RenameReferenceUpdateDto>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenameUsageEdgeImpactDto {
+    bank_document_relative_path: String,
+    project_document_relative_path: String,
+    slot_kind: &'static str,
+    slot_number: u16,
+    usage_kind: &'static str,
+    referenced_file_relative_path: String,
+    reference_status: &'static str,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenameSidecarImpactDto {
+    source_sidecar_relative_path: String,
+    destination_sidecar_relative_path: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenamePlanDto {
+    schema: &'static str,
+    plan_id: String,
+    operation_id: String,
+    operation: &'static str,
+    source_file_instance_id: String,
+    source_relative_path: String,
+    destination_relative_path: String,
+    state_document_impacts: Vec<RenameStateDocumentImpactDto>,
+    usage_edge_impacts: Vec<RenameUsageEdgeImpactDto>,
+    sidecar_impacts: Vec<RenameSidecarImpactDto>,
+    backup_relative_paths: Vec<String>,
+    estimated_media_additional_bytes: u64,
+    estimated_local_staging_bytes: u64,
+    reference_update_count: u64,
+    warnings: Vec<String>,
+    requires_explicit_approval: bool,
+    overwrite_allowed: bool,
+    removes_source_on_apply: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlockedRenamePlanDto {
+    schema: &'static str,
+    source_relative_path: Option<String>,
+    destination_relative_path: String,
+    observed_state_document_count: usize,
+    observed_usage_edge_count: usize,
+    observed_sidecar_count: usize,
+    reference_update_count: u64,
+    block_reasons: Vec<RenameBlockReasonDto>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "outcome", rename_all = "camelCase")]
+pub enum RenamePlanResponseDto {
+    #[serde(rename = "planned")]
+    Planned(RenamePlanDto),
+    #[serde(rename = "blocked")]
+    Blocked(BlockedRenamePlanDto),
+}
+
+fn rename_plan_from_impact(plan: &RenameImpactPlan) -> RenamePlanDto {
+    RenamePlanDto {
+        schema: "rename-plan:v1",
+        plan_id: plan.id.as_str().to_owned(),
+        operation_id: OperationId::for_rename_plan(plan).as_str().to_owned(),
+        operation: "rename_sample",
+        source_file_instance_id: plan.source_file_instance_id.as_str().to_owned(),
+        source_relative_path: plan.source_relative_path.as_str().to_owned(),
+        destination_relative_path: plan.destination_relative_path.as_str().to_owned(),
+        state_document_impacts: plan
+            .state_document_impacts
+            .iter()
+            .map(rename_state_document_impact_dto)
+            .collect(),
+        usage_edge_impacts: plan
+            .usage_edge_impacts
+            .iter()
+            .map(rename_usage_edge_impact_dto)
+            .collect(),
+        sidecar_impacts: plan
+            .sidecar_impacts
+            .iter()
+            .map(rename_sidecar_impact_dto)
+            .collect(),
+        backup_relative_paths: plan
+            .backup_relative_paths
+            .iter()
+            .map(|path| path.as_str().to_owned())
+            .collect(),
+        estimated_media_additional_bytes: plan.estimated_media_additional_bytes,
+        estimated_local_staging_bytes: plan.estimated_local_staging_bytes,
+        reference_update_count: plan.reference_update_count,
+        warnings: plan.warnings.iter().map(rename_warning_message).collect(),
+        requires_explicit_approval: true,
+        overwrite_allowed: false,
+        removes_source_on_apply: true,
+    }
+}
+
+fn blocked_rename_plan_from_impact(blocked: &BlockedRenameImpact) -> BlockedRenamePlanDto {
+    BlockedRenamePlanDto {
+        schema: "rename-blocked:v1",
+        source_relative_path: blocked
+            .source_relative_path
+            .as_ref()
+            .map(|path| path.as_str().to_owned()),
+        destination_relative_path: blocked.destination_relative_path.as_str().to_owned(),
+        observed_state_document_count: blocked.observed_state_document_count,
+        observed_usage_edge_count: blocked.observed_usage_edge_count,
+        observed_sidecar_count: blocked.observed_sidecar_count,
+        reference_update_count: blocked.reference_update_count,
+        block_reasons: blocked
+            .block_reasons
+            .iter()
+            .map(rename_block_reason_dto)
+            .collect(),
+    }
+}
+
+fn rename_state_document_impact_dto(
+    impact: &RenameStateDocumentImpact,
+) -> RenameStateDocumentImpactDto {
+    RenameStateDocumentImpactDto {
+        relative_path: impact.relative_path.as_str().to_owned(),
+        role: state_document_role_name(impact.role),
+        reference_updates: impact
+            .reference_updates
+            .iter()
+            .map(rename_reference_update_dto)
+            .collect(),
+    }
+}
+
+fn rename_reference_update_dto(update: &RenameReferenceUpdate) -> RenameReferenceUpdateDto {
+    RenameReferenceUpdateDto {
+        project_document_relative_path: update.project_document_relative_path.as_str().to_owned(),
+        slot_kind: slot_kind_name(update.slot.kind()),
+        slot_number: update.slot.number(),
+        from_relative_path: update.from_relative_path.as_str().to_owned(),
+        to_relative_path: update.to_relative_path.as_str().to_owned(),
+    }
+}
+
+fn rename_usage_edge_impact_dto(edge: &RenameUsageEdgeImpact) -> RenameUsageEdgeImpactDto {
+    RenameUsageEdgeImpactDto {
+        bank_document_relative_path: edge.bank_document_relative_path.as_str().to_owned(),
+        project_document_relative_path: edge.project_document_relative_path.as_str().to_owned(),
+        slot_kind: slot_kind_name(edge.slot.kind()),
+        slot_number: edge.slot.number(),
+        usage_kind: usage_kind_name(edge.usage_kind),
+        referenced_file_relative_path: edge.referenced_file_relative_path.as_str().to_owned(),
+        reference_status: reference_status_name(edge.reference_status),
+    }
+}
+
+fn rename_sidecar_impact_dto(impact: &RenameSidecarImpact) -> RenameSidecarImpactDto {
+    RenameSidecarImpactDto {
+        source_sidecar_relative_path: impact.source_sidecar_relative_path.as_str().to_owned(),
+        destination_sidecar_relative_path: impact
+            .destination_sidecar_relative_path
+            .as_str()
+            .to_owned(),
+    }
+}
+
+fn rename_warning_message(warning: &RenamePlanningWarning) -> String {
+    match warning {
+        RenamePlanningWarning::UnusedSample {
+            source_relative_path,
+        } => format!(
+            "Sample at {} is not referenced by any resolved slot assignment.",
+            source_relative_path.as_str()
+        ),
+    }
+}
+
+fn rename_block_reason_dto(reason: &RenameBlockReason) -> RenameBlockReasonDto {
+    RenameBlockReasonDto {
+        code: rename_block_reason_code(reason).to_owned(),
+        message: reason.to_string(),
+    }
+}
+
+fn rename_block_reason_code(reason: &RenameBlockReason) -> &'static str {
+    match reason {
+        RenameBlockReason::RootMismatch => "ROOT_MISMATCH",
+        RenameBlockReason::UnstableRootIdentity => "UNSTABLE_ROOT_IDENTITY",
+        RenameBlockReason::InvalidRootFingerprint => "INVALID_ROOT_FINGERPRINT",
+        RenameBlockReason::ScanNotCompleted => "SCAN_NOT_COMPLETED",
+        RenameBlockReason::InvalidObservedRevision => "INVALID_OBSERVED_REVISION",
+        RenameBlockReason::CatalogRevisionMismatch => "CATALOG_REVISION_MISMATCH",
+        RenameBlockReason::SourceIdentityMismatch => "SOURCE_IDENTITY_MISMATCH",
+        RenameBlockReason::SourcePathMismatch => "SOURCE_PATH_MISMATCH",
+        RenameBlockReason::SourceSizeMismatch => "SOURCE_SIZE_MISMATCH",
+        RenameBlockReason::SourceHashMismatch => "SOURCE_HASH_MISMATCH",
+        RenameBlockReason::StaleSourceHashFreshness => "STALE_SOURCE_HASH_FRESHNESS",
+        RenameBlockReason::SourceEqualsDestination => "SOURCE_EQUALS_DESTINATION",
+        RenameBlockReason::DestinationObservationMismatch => "DESTINATION_OBSERVATION_MISMATCH",
+        RenameBlockReason::DestinationOccupied => "DESTINATION_OCCUPIED",
+        RenameBlockReason::DestinationCaseCollision => "DESTINATION_CASE_COLLISION",
+        RenameBlockReason::DestinationNormalizationCollision => {
+            "DESTINATION_NORMALIZATION_COLLISION"
+        }
+        RenameBlockReason::DestinationUnsafePath => "DESTINATION_UNSAFE_PATH",
+        RenameBlockReason::DestinationIncomparable => "DESTINATION_INCOMPARABLE",
+        RenameBlockReason::SidecarDestinationObservationMismatch => {
+            "SIDECAR_DESTINATION_OBSERVATION_MISMATCH"
+        }
+        RenameBlockReason::SidecarDestinationOccupied => "SIDECAR_DESTINATION_OCCUPIED",
+        RenameBlockReason::SidecarDestinationCaseCollision => "SIDECAR_DESTINATION_CASE_COLLISION",
+        RenameBlockReason::SidecarDestinationNormalizationCollision => {
+            "SIDECAR_DESTINATION_NORMALIZATION_COLLISION"
+        }
+        RenameBlockReason::SidecarDestinationUnsafePath => "SIDECAR_DESTINATION_UNSAFE_PATH",
+        RenameBlockReason::SidecarDestinationIncomparable => "SIDECAR_DESTINATION_INCOMPARABLE",
+        RenameBlockReason::UnsupportedStateDocument => "UNSUPPORTED_STATE_DOCUMENT",
+        RenameBlockReason::MalformedStateDocument => "MALFORMED_STATE_DOCUMENT",
+        RenameBlockReason::UnsupportedSidecar => "UNSUPPORTED_SIDECAR",
+        RenameBlockReason::MalformedSidecar => "MALFORMED_SIDECAR",
+        RenameBlockReason::AmbiguousSidecarOwnership => "AMBIGUOUS_SIDECAR_OWNERSHIP",
+        RenameBlockReason::IncompleteUsageGraph => "INCOMPLETE_USAGE_GRAPH",
+        RenameBlockReason::IncompleteSetProjectCoverage => "INCOMPLETE_SET_PROJECT_COVERAGE",
+        RenameBlockReason::UnresolvedReference => "UNRESOLVED_REFERENCE",
+        RenameBlockReason::DestinationReferencedByUnresolvedSlot => {
+            "DESTINATION_REFERENCED_BY_UNRESOLVED_SLOT"
+        }
+        RenameBlockReason::DestinationAlreadyReferenced => "DESTINATION_ALREADY_REFERENCED",
+        RenameBlockReason::IncompleteReferenceUpdateSet => "INCOMPLETE_REFERENCE_UPDATE_SET",
+        RenameBlockReason::ArithmeticOverflow => "ARITHMETIC_OVERFLOW",
+    }
+}
+
+fn state_document_role_name(role: StateDocumentRole) -> &'static str {
+    match role {
+        StateDocumentRole::Working => "working",
+        StateDocumentRole::SavedCheckpoint => "saved_checkpoint",
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ChangeStatusDto {
     schema: &'static str,
     operation_id: String,
@@ -1130,6 +1404,184 @@ fn plan_additive_copy_sync(
     Ok((&plan).into())
 }
 
+fn rename_planning_facts_error(error: RenamePlanningFactsError) -> ApiError {
+    ApiError::new(error.code(), error.to_string(), true)
+}
+
+fn rename_runtime_error(error: RenameWriteRuntimeError) -> ApiError {
+    let recoverable = !matches!(
+        error,
+        RenameWriteRuntimeError::InvalidPlan | RenameWriteRuntimeError::PlanIntegrityMismatch
+    );
+    ApiError::new(error.code(), error.to_string(), recoverable)
+}
+
+fn latest_completed_scan_revision(
+    catalog: &SharedCatalog,
+    fingerprint: &str,
+) -> Result<u64, ApiError> {
+    use ot_storage_ports::{CatalogScanStatus, LibraryCatalog};
+
+    let identity = CatalogRootIdentity::new(fingerprint.to_string()).map_err(catalog_error)?;
+    let catalog = catalog.lock().map_err(|_| catalog_lock_error())?;
+    let scan = catalog
+        .latest_scan(&identity)
+        .map_err(catalog_error)?
+        .ok_or_else(|| {
+            ApiError::new(
+                "CATALOG_NOT_INDEXED",
+                "no successful catalog snapshot is available for this root",
+                true,
+            )
+        })?;
+    if scan.status != CatalogScanStatus::Completed {
+        return Err(ApiError::new(
+            "CATALOG_NOT_INDEXED",
+            "no successful catalog snapshot is available for this root",
+            true,
+        ));
+    }
+    Ok(scan.revision.get())
+}
+
+pub(crate) fn plan_rename_sample_sync(
+    registry: &RootRegistry,
+    catalog: &SharedCatalog,
+    rename_runtime: &SharedRenameWriteRuntime,
+    root_id: &RootId,
+    source_file_instance_id: &str,
+    destination_relative_path: &str,
+) -> Result<RenamePlanResponseDto, ApiError> {
+    let resolved = registry.resolve(root_id)?;
+    let identity = catalog_identity(&resolved.session)?;
+    let snapshot = load_library_snapshot(catalog, &identity)?;
+    let source = file_for_instance_id(&identity, &snapshot, source_file_instance_id)?;
+    if source.storage_scope == SampleStorageScope::Unclassified {
+        return Err(ApiError::new(
+            "WRITE_NOT_SUPPORTED",
+            "unclassified sample locations remain read-only",
+            true,
+        ));
+    }
+    let destination = RootRelativePath::parse(destination_relative_path)
+        .map_err(|error| ApiError::new("INVALID_DESTINATION_PATH", error.to_string(), true))?;
+    ensure_visible_destination(&destination)?;
+    if destination_scope(&snapshot, &destination) == SampleStorageScope::Unclassified {
+        return Err(ApiError::new(
+            "INVALID_DESTINATION_PATH",
+            "destination must be inside an indexed Set Audio Pool or Project",
+            true,
+        ));
+    }
+    ensure_matching_audio_extension(&source.relative_path, &destination)?;
+    ensure_same_directory_rename(&source.relative_path, &destination)
+        .map_err(rename_planning_facts_error)?;
+    if source.relative_path == destination {
+        return Ok(RenamePlanResponseDto::Blocked(
+            blocked_rename_plan_from_impact(&BlockedRenameImpact {
+                source_relative_path: Some(source.relative_path.clone()),
+                destination_relative_path: destination,
+                observed_state_document_count: snapshot.state_documents.len(),
+                observed_usage_edge_count: snapshot.usage_edges.len(),
+                observed_sidecar_count: snapshot
+                    .sample_settings
+                    .iter()
+                    .filter(|settings| {
+                        settings.file_instance_relative_path.as_ref() == Some(&source.relative_path)
+                    })
+                    .count(),
+                reference_update_count: 0,
+                block_reasons: vec![RenameBlockReason::SourceEqualsDestination],
+            }),
+        ));
+    }
+    if destination_exists_live(&resolved, &destination)? {
+        return Ok(RenamePlanResponseDto::Blocked(
+            blocked_rename_plan_from_impact(&BlockedRenameImpact {
+                source_relative_path: Some(source.relative_path.clone()),
+                destination_relative_path: destination,
+                observed_state_document_count: snapshot.state_documents.len(),
+                observed_usage_edge_count: snapshot.usage_edges.len(),
+                observed_sidecar_count: 0,
+                reference_update_count: 0,
+                block_reasons: vec![RenameBlockReason::DestinationOccupied],
+            }),
+        ));
+    }
+
+    let scan_revision =
+        latest_completed_scan_revision(catalog, resolved.session.device_fingerprint.as_str())?;
+    let facts = build_rename_planning_facts(
+        &resolved,
+        &snapshot,
+        scan_revision,
+        &source,
+        destination.clone(),
+    )
+    .map_err(rename_planning_facts_error)?;
+
+    let intent = RenameSampleIntent {
+        root_id: root_id.clone(),
+        source_file_instance_id: facts.source.file_instance_id.clone(),
+        destination_relative_path: destination,
+    };
+
+    match plan_rename_sample(&intent, &facts) {
+        RenamePlanningOutcome::Planned(plan) => {
+            rename_runtime
+                .store_plan(*plan.clone())
+                .map_err(rename_runtime_error)?;
+            Ok(RenamePlanResponseDto::Planned(rename_plan_from_impact(
+                plan.as_ref(),
+            )))
+        }
+        RenamePlanningOutcome::Blocked(blocked) => Ok(RenamePlanResponseDto::Blocked(
+            blocked_rename_plan_from_impact(&blocked),
+        )),
+    }
+}
+
+fn destination_exists_live(
+    resolved: &ResolvedRoot,
+    destination: &RootRelativePath,
+) -> Result<bool, ApiError> {
+    let components = destination.as_str().split('/').collect::<Vec<_>>();
+    let mut candidate = resolved.canonical_path.clone();
+    for (index, component) in components.iter().enumerate() {
+        candidate.push(component);
+        let is_last = index + 1 == components.len();
+        match fs::symlink_metadata(&candidate) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(RootRegistryError::SymlinkEscape.into());
+            }
+            Ok(metadata) if is_last && metadata.is_file() => return Ok(true),
+            Ok(_metadata) if is_last => {
+                return Err(ApiError::new(
+                    "INVALID_DESTINATION_PATH",
+                    "destination parent is not a directory",
+                    true,
+                ));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound && is_last => {
+                return Ok(false)
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Err(ApiError::new(
+                    "INVALID_DESTINATION_PATH",
+                    "destination parent directory does not exist",
+                    true,
+                ));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+                return Err(RootRegistryError::PermissionDenied.into());
+            }
+            Err(_) => return Err(RootRegistryError::Unavailable.into()),
+        }
+    }
+    Ok(false)
+}
+
 fn write_runtime_error(error: WriteRuntimeError) -> ApiError {
     let recoverable = !matches!(
         &error,
@@ -1312,28 +1764,7 @@ pub(crate) fn gate_c_latest_completed_scan_revision(
     catalog: &SharedCatalog,
     fingerprint: &str,
 ) -> Result<u64, ApiError> {
-    use ot_storage_ports::{CatalogScanStatus, LibraryCatalog};
-
-    let identity = CatalogRootIdentity::new(fingerprint.to_string()).map_err(catalog_error)?;
-    let catalog = catalog.lock().map_err(|_| catalog_lock_error())?;
-    let scan = catalog
-        .latest_scan(&identity)
-        .map_err(catalog_error)?
-        .ok_or_else(|| {
-            ApiError::new(
-                "CATALOG_NOT_INDEXED",
-                "no successful catalog snapshot is available for this root",
-                true,
-            )
-        })?;
-    if scan.status != CatalogScanStatus::Completed {
-        return Err(ApiError::new(
-            "CATALOG_NOT_INDEXED",
-            "no successful catalog snapshot is available for this root",
-            true,
-        ));
-    }
-    Ok(scan.revision.get())
+    latest_completed_scan_revision(catalog, fingerprint)
 }
 
 fn catalog_lock_error() -> ApiError {
@@ -1835,6 +2266,54 @@ pub async fn v2_change_recover(
     .map_err(ApiError::task_failed)?
 }
 
+#[tauri::command]
+pub async fn v2_rename_plan(
+    root_id: String,
+    source_file_instance_id: String,
+    destination_relative_path: String,
+    registry: State<'_, Arc<RootRegistry>>,
+    catalog: State<'_, SharedCatalog>,
+    rename_runtime: State<'_, SharedRenameWriteRuntime>,
+) -> Result<RenamePlanResponseDto, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let catalog = Arc::clone(catalog.inner());
+    let rename_runtime = Arc::clone(rename_runtime.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        plan_rename_sample_sync(
+            &registry,
+            &catalog,
+            &rename_runtime,
+            &root_id,
+            &source_file_instance_id,
+            &destination_relative_path,
+        )
+    })
+    .await
+    .map_err(ApiError::task_failed)?
+}
+
+#[tauri::command]
+pub async fn v2_rename_get_plan(
+    root_id: String,
+    plan_id: String,
+    registry: State<'_, Arc<RootRegistry>>,
+    rename_runtime: State<'_, SharedRenameWriteRuntime>,
+) -> Result<RenamePlanDto, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let rename_runtime = Arc::clone(rename_runtime.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        registry.resolve(&root_id)?;
+        rename_runtime
+            .get_plan(&root_id, &plan_id)
+            .map(|plan| rename_plan_from_impact(&plan))
+            .map_err(rename_runtime_error)
+    })
+    .await
+    .map_err(ApiError::task_failed)?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1880,8 +2359,31 @@ mod tests {
         }
     }
 
+    struct PathBasedTestIdentity;
+
+    impl DeviceIdentityProvider for PathBasedTestIdentity {
+        fn observe(&self, root: &Path) -> Result<DeviceObservation, RootRegistryError> {
+            let stable_key = root
+                .canonicalize()
+                .unwrap_or_else(|_| root.to_path_buf())
+                .to_string_lossy()
+                .into_owned();
+            Ok(DeviceObservation {
+                stable_key: format!("fixture-volume:{stable_key}"),
+                filesystem_type: Some("fixturefs".into()),
+                total_capacity: Some(4096),
+                mount_token: format!("fixture-mount:{stable_key}"),
+                stable: true,
+            })
+        }
+    }
+
     fn registry() -> RootRegistry {
         RootRegistry::new(Arc::new(StableTestIdentity), Duration::from_secs(60))
+    }
+
+    fn multi_root_registry() -> RootRegistry {
+        RootRegistry::new(Arc::new(PathBasedTestIdentity), Duration::from_secs(60))
     }
 
     fn unstable_registry() -> RootRegistry {
@@ -3257,5 +3759,270 @@ mod tests {
         assert!(!serde_json::to_string(&error)
             .unwrap()
             .contains(outside.path().to_str().unwrap()));
+    }
+
+    fn collect_fixture_manifest(root: &Path) -> BTreeMap<String, String> {
+        let mut entries = Vec::new();
+        collect_manifest_paths(root, root, &mut entries);
+        entries.sort();
+        entries
+            .into_iter()
+            .map(|(relative, bytes)| (relative, format!("{:x}", Sha256::digest(bytes))))
+            .collect()
+    }
+
+    fn collect_manifest_paths(root: &Path, current: &Path, output: &mut Vec<(String, Vec<u8>)>) {
+        if let Ok(read_dir) = fs::read_dir(current) {
+            for entry in read_dir.flatten() {
+                let path = entry.path();
+                let metadata = fs::symlink_metadata(&path).unwrap();
+                if metadata.file_type().is_symlink() {
+                    continue;
+                }
+                if metadata.is_dir() {
+                    collect_manifest_paths(root, &path, output);
+                } else if metadata.is_file() {
+                    let relative = path
+                        .strip_prefix(root)
+                        .unwrap()
+                        .to_string_lossy()
+                        .replace('\\', "/");
+                    output.push((relative, fs::read(&path).unwrap()));
+                }
+            }
+        }
+    }
+
+    fn build_gate_c_planning_fixture(root: &Path) {
+        let project_dir = root.join("SET/PROJECT");
+        let audio_dir = root.join("SET/AUDIO");
+        fs::create_dir_all(&project_dir).unwrap();
+        fs::create_dir_all(&audio_dir).unwrap();
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/source_project/project.work");
+        fs::copy(&fixture, project_dir.join("project.work")).unwrap();
+        fs::copy(&fixture, project_dir.join("project.strd")).unwrap();
+        fs::write(
+            project_dir.join("bank01.work"),
+            crate::test_fixtures::default_bank_bytes(),
+        )
+        .unwrap();
+        fs::write(
+            project_dir.join("bank01.strd"),
+            crate::test_fixtures::default_bank_bytes(),
+        )
+        .unwrap();
+        write_test_wav(&audio_dir.join("pad.wav"));
+        write_test_wav(&audio_dir.join("unused.wav"));
+    }
+
+    #[test]
+    fn rename_plan_api_is_read_only_and_returns_structured_plan() {
+        let root = TempDir::new().unwrap();
+        build_gate_c_planning_fixture(root.path());
+
+        let registry = registry();
+        let (_catalog_dir, catalog) = catalog();
+        let rename_runtime = crate::rename_write_runtime::open_shared_rename_write_runtime();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        let dto = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
+        let source_id = dto
+            .audio_files
+            .iter()
+            .find(|file| file.relative_path == "SET/AUDIO/pad.wav")
+            .unwrap()
+            .file_instance_id
+            .clone();
+
+        let before = collect_fixture_manifest(root.path());
+        let response = plan_rename_sample_sync(
+            &registry,
+            &catalog,
+            &rename_runtime,
+            &root_id,
+            &source_id,
+            "SET/AUDIO/new-pad.wav",
+        )
+        .unwrap();
+        let after = collect_fixture_manifest(root.path());
+        assert_eq!(before, after);
+
+        let RenamePlanResponseDto::Planned(plan) = response else {
+            panic!("expected planned rename");
+        };
+        assert_eq!(plan.schema, "rename-plan:v1");
+        assert!(plan.requires_explicit_approval);
+        assert!(!plan.overwrite_allowed);
+        assert!(plan.removes_source_on_apply);
+        assert!(plan.reference_update_count > 0);
+        assert!(plan
+            .state_document_impacts
+            .iter()
+            .any(|impact| impact.role == "working"));
+        assert!(plan
+            .state_document_impacts
+            .iter()
+            .any(|impact| impact.role == "saved_checkpoint"));
+        let json = serde_json::to_string(&plan).unwrap();
+        assert!(!json.contains(root.path().to_str().unwrap()));
+        assert!(!json.contains("sha256:"));
+
+        let fetched = rename_runtime.get_plan(&root_id, &plan.plan_id).unwrap();
+        assert_eq!(fetched.id.as_str(), plan.plan_id);
+
+        let replay = plan_rename_sample_sync(
+            &registry,
+            &catalog,
+            &rename_runtime,
+            &root_id,
+            &source_id,
+            "SET/AUDIO/new-pad.wav",
+        )
+        .unwrap();
+        let RenamePlanResponseDto::Planned(replay_plan) = replay else {
+            panic!("expected idempotent planned rename");
+        };
+        assert_eq!(replay_plan.plan_id, plan.plan_id);
+    }
+
+    #[test]
+    fn rename_plan_api_reports_unused_sample_warning() {
+        let root = TempDir::new().unwrap();
+        build_gate_c_planning_fixture(root.path());
+
+        let registry = registry();
+        let (_catalog_dir, catalog) = catalog();
+        let rename_runtime = crate::rename_write_runtime::open_shared_rename_write_runtime();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        let dto = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
+        let source_id = dto
+            .audio_files
+            .iter()
+            .find(|file| file.relative_path == "SET/AUDIO/unused.wav")
+            .unwrap()
+            .file_instance_id
+            .clone();
+
+        let RenamePlanResponseDto::Planned(plan) = plan_rename_sample_sync(
+            &registry,
+            &catalog,
+            &rename_runtime,
+            &root_id,
+            &source_id,
+            "SET/AUDIO/unused-renamed.wav",
+        )
+        .unwrap() else {
+            panic!("expected planned unused-sample rename");
+        };
+        assert_eq!(plan.reference_update_count, 0);
+        assert!(!plan.warnings.is_empty());
+    }
+
+    #[test]
+    fn rename_plan_api_blocks_cross_directory_and_malformed_project() {
+        let root = TempDir::new().unwrap();
+        create_set_project(root.path(), "SET_A", "BaseProject");
+        let source = root.path().join("SET_A/AUDIO/kick.wav");
+        fs::create_dir_all(source.parent().unwrap()).unwrap();
+        write_test_wav(&source);
+        fs::write(
+            root.path().join("SET_A/BaseProject/project.work"),
+            b"broken",
+        )
+        .unwrap();
+
+        let registry = registry();
+        let (_catalog_dir, catalog) = catalog();
+        let rename_runtime = crate::rename_write_runtime::open_shared_rename_write_runtime();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        let dto = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
+        let source_id = dto
+            .audio_files
+            .iter()
+            .find(|file| file.relative_path == "SET_A/AUDIO/kick.wav")
+            .unwrap()
+            .file_instance_id
+            .clone();
+
+        let cross_dir = plan_rename_sample_sync(
+            &registry,
+            &catalog,
+            &rename_runtime,
+            &root_id,
+            &source_id,
+            "SET_A/AUDIO/sub/kick.wav",
+        )
+        .unwrap_err();
+        assert_eq!(cross_dir.code, "INVALID_DESTINATION_PATH");
+
+        let RenamePlanResponseDto::Blocked(blocked) = plan_rename_sample_sync(
+            &registry,
+            &catalog,
+            &rename_runtime,
+            &root_id,
+            &source_id,
+            "SET_A/AUDIO/kick-2.wav",
+        )
+        .unwrap() else {
+            panic!("expected blocked rename for malformed project");
+        };
+        assert_eq!(blocked.schema, "rename-blocked:v1");
+        assert!(blocked
+            .block_reasons
+            .iter()
+            .any(|reason| reason.code == "MALFORMED_STATE_DOCUMENT"));
+        assert!(rename_runtime
+            .get_plan(
+                &root_id,
+                "plan:v1:0000000000000000000000000000000000000000000000000000000000000000"
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn rename_get_plan_rejects_a_different_root_binding() {
+        let first = TempDir::new().unwrap();
+        let second = TempDir::new().unwrap();
+        build_gate_c_planning_fixture(first.path());
+        create_set_project(second.path(), "SET_B", "PROJECT_B");
+        write_test_wav(&second.path().join("SET_B/AUDIO/snare.wav"));
+
+        let registry = multi_root_registry();
+        let (_catalog_dir, catalog) = catalog();
+        let rename_runtime = crate::rename_write_runtime::open_shared_rename_write_runtime();
+        let first_session =
+            register_root_sync(&registry, &catalog, first.path().to_str().unwrap()).unwrap();
+        let second_session =
+            register_root_sync(&registry, &catalog, second.path().to_str().unwrap()).unwrap();
+        let first_root = RootId::new(first_session.root_id).unwrap();
+        let second_root = RootId::new(second_session.root_id).unwrap();
+        let first_dto = list_library_dto_sync(&registry, &catalog, &first_root).unwrap();
+        let source_id = first_dto
+            .audio_files
+            .iter()
+            .find(|file| file.relative_path == "SET/AUDIO/pad.wav")
+            .unwrap()
+            .file_instance_id
+            .clone();
+        let RenamePlanResponseDto::Planned(plan) = plan_rename_sample_sync(
+            &registry,
+            &catalog,
+            &rename_runtime,
+            &first_root,
+            &source_id,
+            "SET/AUDIO/new-pad.wav",
+        )
+        .unwrap() else {
+            panic!("expected planned rename");
+        };
+        assert!(rename_runtime
+            .get_plan(&second_root, &plan.plan_id)
+            .is_err());
     }
 }
