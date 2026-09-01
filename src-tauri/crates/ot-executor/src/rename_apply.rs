@@ -9,14 +9,48 @@ use crate::rename_prepare::{
     RENAME_AUTHORIZATION_DIRECTORY,
 };
 use crate::{
-    acquire_root_lock, open_root_regular_file, prepare_local_directory, ExecutorError, OperationId,
-    WriteAuthority, RENAME_JOURNAL_DIRECTORY,
+    acquire_root_lock, open_root_regular_file, prepare_local_directory, validate_canonical_root,
+    ApprovedExecutionRoot, ApprovedRecoveryRoot, AuthorityError, ExecutorError, OperationId,
+    RecoveryAuthority, RootId, RENAME_JOURNAL_DIRECTORY,
 };
-use ot_backup::{recovery_binding_for_rename_plan, BackupStore};
+use ot_backup::{
+    recovery_binding_for_rename_plan, BackupStore, RenameBackupFileRole, SnapshotId,
+    VerifiedRenameBackup,
+};
 use ot_codec_ports::ProjectReferenceCodec;
 use ot_domain::{ContentHash, RootRelativePath};
 use ot_plan::RenameImpactPlan;
-use rustix::fs::{self as descriptor_fs, AtFlags, Mode, OFlags, RenameFlags};
+use rustix::fs::{self as descriptor_fs, AtFlags, Dir, Mode, OFlags, RenameFlags};
+
+/// Temporary/cloned execution root. Distinct from [`ApprovedExecutionRoot`] so
+/// apply cannot target a live mounted volume through a generic write grant.
+#[derive(Clone, Debug)]
+pub struct VerifiedCloneRoot {
+    inner: ApprovedExecutionRoot,
+}
+
+impl VerifiedCloneRoot {
+    /// Attest that `root` is a temporary copy, not original removable media.
+    ///
+    /// Callers must have copied the original into this tree first. The type
+    /// system is the gate: [`RenameSampleExecutor::apply`] accepts only this
+    /// capability, not a generic [`WriteAuthority`].
+    pub fn attest_temporary_copy(root: ApprovedExecutionRoot) -> Self {
+        Self { inner: root }
+    }
+
+    pub fn as_execution_root(&self) -> &ApprovedExecutionRoot {
+        &self.inner
+    }
+}
+
+/// Write authority that can only mint a [`VerifiedCloneRoot`].
+pub trait CloneWriteAuthority {
+    fn resolve_clone_for_write(
+        &self,
+        root_id: &RootId,
+    ) -> Result<VerifiedCloneRoot, AuthorityError>;
+}
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -61,26 +95,38 @@ impl RenameSampleExecutor {
     ) -> Result<RenameApplyResult, ExecutorError>
     where
         C: ProjectReferenceCodec,
-        A: WriteAuthority,
+        A: CloneWriteAuthority,
     {
         self.apply_internal(plan, codec, authority, None)
     }
 
-    pub fn rollback<A: WriteAuthority>(
+    pub fn rollback<A: RecoveryAuthority>(
         &self,
-        plan: &RenameImpactPlan,
+        live_root_id: &RootId,
+        operation_id: &OperationId,
         authority: &A,
     ) -> Result<RenameOperationJournal, ExecutorError> {
-        validate_rename_plan_shape(plan)?;
-        let operation_id = OperationId::for_rename_plan(plan);
-        let root = validate_rename_authority(plan, authority.resolve_for_write(&plan.root_id)?)?;
-        let journal_directory =
-            prepare_local_directory(&self.local_paths.journal_directory, &root.canonical_path)?;
-        let backup_directory =
-            prepare_local_directory(&self.local_paths.backup_directory, &root.canonical_path)?;
-        let _lock = acquire_root_lock(&journal_directory, &plan.device_fingerprint)?;
+        let initial_root = authority
+            .resolve_for_recovery(live_root_id)
+            .map_err(ExecutorError::Authority)?;
+        let initial_root = validate_rename_recovery_authority(live_root_id, initial_root)?;
+        let journal_directory = prepare_local_directory(
+            &self.local_paths.journal_directory,
+            &initial_root.canonical_path,
+        )?;
+        let backup_directory = prepare_local_directory(
+            &self.local_paths.backup_directory,
+            &initial_root.canonical_path,
+        )?;
+        let _lock = acquire_root_lock(&journal_directory, &initial_root.device_fingerprint)?;
+        let root = revalidate_rename_recovery_authority(live_root_id, &initial_root, authority)?;
         let (journal_path, mut journal, authorization) =
-            load_prepared_artifacts(&journal_directory, plan, &operation_id)?;
+            load_rename_artifacts(&journal_directory, operation_id)?;
+        if journal.root_fingerprint != root.device_fingerprint
+            || authorization.root_fingerprint != root.device_fingerprint
+        {
+            return Err(ExecutorError::RootChanged);
+        }
         match journal.status {
             RenameJournalStatus::Prepared => {
                 journal.status = RenameJournalStatus::RolledBack;
@@ -93,16 +139,19 @@ impl RenameSampleExecutor {
                 return Err(ExecutorError::PlanConsumed);
             }
         }
+        let snapshot_id =
+            SnapshotId::parse(journal.backup_snapshot_id.clone()).map_err(ExecutorError::Backup)?;
         let backup = BackupStore::new(backup_directory)
-            .verify_for_rename_plan(plan)
+            .verify_rename_snapshot(&snapshot_id)
             .map_err(ExecutorError::Backup)?;
-        rollback_clone_root(
-            &root.canonical_path,
-            plan,
-            &authorization,
-            backup.directory(),
-            &operation_id,
-        )?;
+        if backup.manifest().recovery_binding != journal.recovery_binding
+            || backup.manifest().recovery_binding != authorization.recovery_binding
+            || backup.manifest().root_fingerprint != journal.root_fingerprint
+        {
+            return Err(ExecutorError::InvalidJournal);
+        }
+        let root = revalidate_rename_recovery_authority(live_root_id, &root, authority)?;
+        rollback_clone_root(&root.canonical_path, &authorization, &backup, operation_id)?;
         journal.status = RenameJournalStatus::RolledBack;
         journal.failure_code = Some("EXPLICIT_ROLLBACK".into());
         replace_rename_json(&journal_path, &journal)?;
@@ -119,7 +168,7 @@ impl RenameSampleExecutor {
     ) -> Result<RenameApplyResult, ExecutorError>
     where
         C: ProjectReferenceCodec,
-        A: WriteAuthority,
+        A: CloneWriteAuthority,
     {
         self.apply_internal(plan, codec, authority, Some(fault))
     }
@@ -133,18 +182,25 @@ impl RenameSampleExecutor {
     ) -> Result<RenameApplyResult, ExecutorError>
     where
         C: ProjectReferenceCodec,
-        A: WriteAuthority,
+        A: CloneWriteAuthority,
     {
         validate_rename_plan_shape(plan)?;
         let operation_id = OperationId::for_rename_plan(plan);
-        let root = validate_rename_authority(plan, authority.resolve_for_write(&plan.root_id)?)?;
-        let staging_base =
-            prepare_local_directory(&self.local_paths.staging_directory, &root.canonical_path)?;
-        let journal_directory =
-            prepare_local_directory(&self.local_paths.journal_directory, &root.canonical_path)?;
-        let backup_directory =
-            prepare_local_directory(&self.local_paths.backup_directory, &root.canonical_path)?;
+        let initial_clone = resolve_clone_write_authority(plan, authority)?;
+        let staging_base = prepare_local_directory(
+            &self.local_paths.staging_directory,
+            &initial_clone.as_execution_root().canonical_path,
+        )?;
+        let journal_directory = prepare_local_directory(
+            &self.local_paths.journal_directory,
+            &initial_clone.as_execution_root().canonical_path,
+        )?;
+        let backup_directory = prepare_local_directory(
+            &self.local_paths.backup_directory,
+            &initial_clone.as_execution_root().canonical_path,
+        )?;
         let _lock = acquire_root_lock(&journal_directory, &plan.device_fingerprint)?;
+        let clone_root = revalidate_clone_write_authority(plan, &initial_clone, authority)?;
 
         let (journal_path, mut journal, authorization) =
             load_prepared_artifacts(&journal_directory, plan, &operation_id)?;
@@ -178,7 +234,9 @@ impl RenameSampleExecutor {
             &authorization,
         )?;
 
-        if let Err(error) = verify_live_preconditions(&root.canonical_path, plan) {
+        if let Err(error) =
+            verify_live_preconditions(&clone_root.as_execution_root().canonical_path, plan)
+        {
             let _ = remove_orphaned_rename_directory(&verify_root);
             return Err(error);
         }
@@ -190,8 +248,24 @@ impl RenameSampleExecutor {
             return Err(error);
         }
 
+        let clone_root = match revalidate_clone_write_authority(plan, &clone_root, authority) {
+            Ok(root) => root,
+            Err(error) => {
+                let _ = remove_orphaned_rename_directory(&verify_root);
+                return persist_apply_failure(
+                    &journal_path,
+                    journal,
+                    &clone_root.as_execution_root().canonical_path,
+                    &authorization,
+                    &backup,
+                    &operation_id,
+                    error,
+                );
+            }
+        };
+
         let outcome = apply_to_clone(
-            &root.canonical_path,
+            &clone_root.as_execution_root().canonical_path,
             plan,
             &verify_root,
             &authorization,
@@ -204,42 +278,142 @@ impl RenameSampleExecutor {
             Ok(()) => {
                 journal.status = RenameJournalStatus::Committed;
                 journal.failure_code = None;
-                replace_rename_json(&journal_path, &journal)?;
+                if let Err(error) = replace_rename_json(&journal_path, &journal) {
+                    return persist_apply_failure(
+                        &journal_path,
+                        journal,
+                        &clone_root.as_execution_root().canonical_path,
+                        &authorization,
+                        &backup,
+                        &operation_id,
+                        error,
+                    );
+                }
                 Ok(RenameApplyResult {
                     operation_id,
                     journal,
                     authorization,
                 })
             }
-            Err(error) => {
-                match rollback_clone_root(
-                    &root.canonical_path,
-                    plan,
-                    &authorization,
-                    backup.directory(),
-                    &operation_id,
-                ) {
-                    Ok(()) => {
-                        journal.status = RenameJournalStatus::RolledBack;
-                        journal.failure_code = Some(error.code().into());
-                        replace_rename_json(&journal_path, &journal)?;
-                        Err(error)
-                    }
-                    Err(_) => {
-                        journal.status = RenameJournalStatus::RecoveryRequired;
-                        journal.failure_code = Some("ROLLBACK_CLONE_CHANGED".into());
-                        let _ = replace_rename_json(&journal_path, &journal);
-                        Err(ExecutorError::RecoveryRequired)
-                    }
-                }
-            }
+            Err(error) => persist_apply_failure(
+                &journal_path,
+                journal,
+                &clone_root.as_execution_root().canonical_path,
+                &authorization,
+                &backup,
+                &operation_id,
+                error,
+            ),
         }
     }
+}
+
+fn persist_apply_failure(
+    journal_path: &Path,
+    mut journal: RenameOperationJournal,
+    root: &Path,
+    authorization: &RenameRecoveryAuthorization,
+    backup: &VerifiedRenameBackup,
+    operation_id: &OperationId,
+    error: ExecutorError,
+) -> Result<RenameApplyResult, ExecutorError> {
+    match rollback_clone_root(root, authorization, backup, operation_id) {
+        Ok(()) => {
+            journal.status = RenameJournalStatus::RolledBack;
+            journal.failure_code = Some(error.code().into());
+            replace_rename_json(journal_path, &journal)?;
+            Err(error)
+        }
+        Err(_) => {
+            journal.status = RenameJournalStatus::RecoveryRequired;
+            journal.failure_code = Some("ROLLBACK_CLONE_CHANGED".into());
+            let _ = replace_rename_json(journal_path, &journal);
+            Err(ExecutorError::RecoveryRequired)
+        }
+    }
+}
+
+fn resolve_clone_write_authority<A: CloneWriteAuthority>(
+    plan: &RenameImpactPlan,
+    authority: &A,
+) -> Result<VerifiedCloneRoot, ExecutorError> {
+    let clone = authority
+        .resolve_clone_for_write(&plan.root_id)
+        .map_err(ExecutorError::Authority)?;
+    validate_rename_authority(plan, clone.as_execution_root().clone())?;
+    Ok(clone)
+}
+
+fn revalidate_clone_write_authority<A: CloneWriteAuthority>(
+    plan: &RenameImpactPlan,
+    expected: &VerifiedCloneRoot,
+    authority: &A,
+) -> Result<VerifiedCloneRoot, ExecutorError> {
+    let current = resolve_clone_write_authority(plan, authority)?;
+    let expected_root = expected.as_execution_root();
+    let current_root = current.as_execution_root();
+    if current_root.root_id != expected_root.root_id
+        || current_root.device_fingerprint != expected_root.device_fingerprint
+        || current_root.canonical_path != expected_root.canonical_path
+    {
+        return Err(ExecutorError::RootChanged);
+    }
+    Ok(current)
+}
+
+fn validate_rename_recovery_authority(
+    live_root_id: &RootId,
+    root: ApprovedRecoveryRoot,
+) -> Result<ApprovedRecoveryRoot, ExecutorError> {
+    if &root.root_id != live_root_id {
+        return Err(ExecutorError::RootChanged);
+    }
+    if !root.stable_device_identity {
+        return Err(ExecutorError::Authority(AuthorityError::UnstableIdentity));
+    }
+    validate_canonical_root(&root.canonical_path)?;
+    Ok(root)
+}
+
+fn revalidate_rename_recovery_authority<A: RecoveryAuthority>(
+    live_root_id: &RootId,
+    expected: &ApprovedRecoveryRoot,
+    authority: &A,
+) -> Result<ApprovedRecoveryRoot, ExecutorError> {
+    let current = authority
+        .resolve_for_recovery(live_root_id)
+        .map_err(ExecutorError::Authority)?;
+    let current = validate_rename_recovery_authority(live_root_id, current)?;
+    if current.root_id != expected.root_id
+        || current.device_fingerprint != expected.device_fingerprint
+        || current.canonical_path != expected.canonical_path
+    {
+        return Err(ExecutorError::RootChanged);
+    }
+    Ok(current)
 }
 
 fn load_prepared_artifacts(
     journal_directory: &Path,
     plan: &RenameImpactPlan,
+    operation_id: &OperationId,
+) -> Result<(PathBuf, RenameOperationJournal, RenameRecoveryAuthorization), ExecutorError> {
+    let (journal_path, journal, authorization) =
+        load_rename_artifacts(journal_directory, operation_id)?;
+    if journal.plan_id != plan.id.as_str()
+        || journal.source_relative_path != plan.source_relative_path.as_str()
+        || journal.destination_relative_path != plan.destination_relative_path.as_str()
+        || authorization.root_id != plan.root_id.as_str()
+        || authorization.source_relative_path != plan.source_relative_path.as_str()
+        || authorization.source_content_hash != plan.source_content_hash.as_str()
+    {
+        return Err(ExecutorError::InvalidJournal);
+    }
+    Ok((journal_path, journal, authorization))
+}
+
+fn load_rename_artifacts(
+    journal_directory: &Path,
     operation_id: &OperationId,
 ) -> Result<(PathBuf, RenameOperationJournal, RenameRecoveryAuthorization), ExecutorError> {
     let rename_journal_directory =
@@ -257,11 +431,7 @@ fn load_prepared_artifacts(
         }
         Err(error) => return Err(ExecutorError::io(error)),
     };
-    if journal.operation_id != operation_id.as_str()
-        || journal.plan_id != plan.id.as_str()
-        || journal.source_relative_path != plan.source_relative_path.as_str()
-        || journal.destination_relative_path != plan.destination_relative_path.as_str()
-    {
+    if journal.operation_id != operation_id.as_str() {
         return Err(ExecutorError::InvalidJournal);
     }
     let authorization_path =
@@ -273,6 +443,9 @@ fn load_prepared_artifacts(
         || authorization.project_rewrites != journal.project_rewrites
         || authorization.backup_snapshot_id != journal.backup_snapshot_id
         || authorization.recovery_binding != journal.recovery_binding
+        || authorization.source_relative_path != journal.source_relative_path
+        || authorization.destination_relative_path != journal.destination_relative_path
+        || authorization.root_fingerprint != journal.root_fingerprint
     {
         return Err(ExecutorError::InvalidJournal);
     }
@@ -321,9 +494,7 @@ fn verify_live_preconditions(root: &Path, plan: &RenameImpactPlan) -> Result<(),
         &plan.source_content_hash,
         plan.source_byte_size,
     )?;
-    if live_file_exists(root, &plan.destination_relative_path)? {
-        return Err(ExecutorError::DestinationExists);
-    }
+    assert_destination_available(root, &plan.destination_relative_path)?;
     for sidecar in &plan.sidecar_impacts {
         verify_live_hash(
             root,
@@ -331,9 +502,7 @@ fn verify_live_preconditions(root: &Path, plan: &RenameImpactPlan) -> Result<(),
             &sidecar.content_hash,
             sidecar.byte_size,
         )?;
-        if live_file_exists(root, &sidecar.destination_sidecar_relative_path)? {
-            return Err(ExecutorError::DestinationExists);
-        }
+        assert_destination_available(root, &sidecar.destination_sidecar_relative_path)?;
     }
     for document in &plan.state_document_impacts {
         verify_live_hash(
@@ -342,6 +511,38 @@ fn verify_live_preconditions(root: &Path, plan: &RenameImpactPlan) -> Result<(),
             &document.content_hash,
             document.byte_size,
         )?;
+    }
+    Ok(())
+}
+
+fn assert_destination_available(
+    root: &Path,
+    destination: &RootRelativePath,
+) -> Result<(), ExecutorError> {
+    if live_file_exists(root, destination)? {
+        return Err(ExecutorError::DestinationExists);
+    }
+    reject_ascii_case_collision(root, destination)
+}
+
+fn reject_ascii_case_collision(
+    root: &Path,
+    destination: &RootRelativePath,
+) -> Result<(), ExecutorError> {
+    let (parent, dest_name) = open_parent(root, destination)?;
+    let listing = parent.try_clone().map_err(ExecutorError::io)?;
+    let mut entries = Dir::read_from(listing).map_err(rename_open_error)?;
+    while let Some(entry) = entries.read() {
+        let entry = entry.map_err(rename_open_error)?;
+        let Ok(name) = entry.file_name().to_str() else {
+            continue;
+        };
+        if name == "." || name == ".." {
+            continue;
+        }
+        if name.eq_ignore_ascii_case(&dest_name) && name != dest_name {
+            return Err(ExecutorError::DestinationExists);
+        }
     }
     Ok(())
 }
@@ -499,14 +700,135 @@ fn apply_to_clone(
     Ok(())
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RestoreDecision {
+    AlreadyRestored,
+    RestoreFromBackup,
+    RemovePublished,
+    Conflict,
+}
+
 fn rollback_clone_root(
     root: &Path,
-    plan: &RenameImpactPlan,
     authorization: &RenameRecoveryAuthorization,
-    backup_directory: &Path,
+    backup: &VerifiedRenameBackup,
     operation_id: &OperationId,
 ) -> Result<(), ExecutorError> {
-    let backup_files = backup_directory.join("files");
+    let inventory = preflight_rollback(root, authorization, backup, operation_id)?;
+    if inventory
+        .iter()
+        .any(|(_, decision)| *decision == RestoreDecision::Conflict)
+    {
+        return Err(ExecutorError::RecoveryRequired);
+    }
+
+    let backup_files = backup.directory().join("files");
+    for (target, decision) in &inventory {
+        match (target, decision) {
+            (
+                RollbackTarget::Published {
+                    path,
+                    staged_hash,
+                    tag,
+                },
+                RestoreDecision::RemovePublished,
+            ) => {
+                remove_published_if_ours(root, path, staged_hash, operation_id, tag)?;
+            }
+            (
+                RollbackTarget::Existing {
+                    path,
+                    backup_hash,
+                    staged_hash,
+                },
+                RestoreDecision::RestoreFromBackup,
+            ) => {
+                restore_existing_from_backup(
+                    root,
+                    path,
+                    &backup_files,
+                    backup_hash,
+                    staged_hash,
+                    operation_id,
+                )?;
+            }
+            (
+                RollbackTarget::Source {
+                    path,
+                    backup_hash,
+                    tag,
+                },
+                RestoreDecision::RestoreFromBackup,
+            ) => {
+                restore_source_from_backup(
+                    root,
+                    path,
+                    &backup_files,
+                    backup_hash,
+                    operation_id,
+                    tag,
+                )?;
+            }
+            (_, RestoreDecision::AlreadyRestored) => {}
+            (_, RestoreDecision::RemovePublished | RestoreDecision::RestoreFromBackup) => {
+                return Err(ExecutorError::RecoveryRequired);
+            }
+            (_, RestoreDecision::Conflict) => unreachable!("conflicts already rejected"),
+        }
+        cleanup_known_siblings(root, target.relative_path(), operation_id, target.tags())?;
+    }
+    Ok(())
+}
+
+#[derive(Debug)]
+enum RollbackTarget {
+    Published {
+        path: RootRelativePath,
+        staged_hash: ContentHash,
+        tag: &'static str,
+    },
+    Existing {
+        path: RootRelativePath,
+        backup_hash: ContentHash,
+        staged_hash: ContentHash,
+    },
+    Source {
+        path: RootRelativePath,
+        backup_hash: ContentHash,
+        tag: &'static str,
+    },
+}
+
+impl RollbackTarget {
+    fn relative_path(&self) -> &RootRelativePath {
+        match self {
+            Self::Published { path, .. }
+            | Self::Existing { path, .. }
+            | Self::Source { path, .. } => path,
+        }
+    }
+
+    fn tags(&self) -> &'static [&'static str] {
+        match self {
+            Self::Published { tag, .. } | Self::Source { tag, .. } => match *tag {
+                "dest-audio" => &["dest-audio"],
+                "dest-sidecar" => &["dest-sidecar"],
+                "source-audio" => &["source-audio"],
+                "source-sidecar" => &["source-sidecar"],
+                _ => &[],
+            },
+            Self::Existing { .. } => &["project", "project-restore"],
+        }
+    }
+}
+
+fn preflight_rollback(
+    root: &Path,
+    authorization: &RenameRecoveryAuthorization,
+    backup: &VerifiedRenameBackup,
+    operation_id: &OperationId,
+) -> Result<Vec<(RollbackTarget, RestoreDecision)>, ExecutorError> {
+    let mut inventory = Vec::new();
     for record in authorization.staged_files.iter().rev() {
         let path = RootRelativePath::parse(&record.relative_path)
             .map_err(|_| ExecutorError::InvalidJournal)?;
@@ -514,44 +836,161 @@ fn rollback_clone_root(
             RenameStagedFileRole::DestinationAudio | RenameStagedFileRole::DestinationSidecar => {
                 let staged = ContentHash::parse(record.staged_content_hash.clone())
                     .map_err(|_| ExecutorError::InvalidJournal)?;
-                remove_published_if_ours(
-                    root,
-                    &path,
-                    &staged,
-                    operation_id,
-                    role_tag(record.role),
-                )?;
+                let decision =
+                    classify_published(root, &path, &staged, operation_id, role_tag(record.role))?;
+                inventory.push((
+                    RollbackTarget::Published {
+                        path,
+                        staged_hash: staged,
+                        tag: role_tag(record.role),
+                    },
+                    decision,
+                ));
             }
             RenameStagedFileRole::ProjectWorking | RenameStagedFileRole::ProjectSavedCheckpoint => {
                 let backup_hash = ContentHash::parse(record.backup_content_hash.clone())
                     .map_err(|_| ExecutorError::InvalidJournal)?;
-                restore_existing_from_backup(
-                    root,
-                    &path,
-                    &backup_files,
-                    &backup_hash,
-                    operation_id,
-                )?;
+                let staged_hash = ContentHash::parse(record.staged_content_hash.clone())
+                    .map_err(|_| ExecutorError::InvalidJournal)?;
+                let decision = classify_existing(root, &path, &backup_hash, &staged_hash)?;
+                inventory.push((
+                    RollbackTarget::Existing {
+                        path,
+                        backup_hash,
+                        staged_hash,
+                    },
+                    decision,
+                ));
             }
         }
     }
-    restore_source_from_backup(
-        root,
-        &plan.source_relative_path,
-        &backup_files,
-        &plan.source_content_hash,
-        operation_id,
-        "source-audio",
-    )?;
-    for sidecar in &plan.sidecar_impacts {
-        restore_source_from_backup(
-            root,
-            &sidecar.source_sidecar_relative_path,
-            &backup_files,
-            &sidecar.content_hash,
-            operation_id,
-            "source-sidecar",
-        )?;
+    let source = RootRelativePath::parse(&authorization.source_relative_path)
+        .map_err(|_| ExecutorError::InvalidJournal)?;
+    let source_hash = ContentHash::parse(authorization.source_content_hash.clone())
+        .map_err(|_| ExecutorError::InvalidJournal)?;
+    let decision = classify_source(root, &source, &source_hash, operation_id, "source-audio")?;
+    inventory.push((
+        RollbackTarget::Source {
+            path: source,
+            backup_hash: source_hash,
+            tag: "source-audio",
+        },
+        decision,
+    ));
+    for file in &backup.manifest().files {
+        if file.role != RenameBackupFileRole::SampleSidecar {
+            continue;
+        }
+        let path = RootRelativePath::parse(&file.relative_path)
+            .map_err(|_| ExecutorError::InvalidJournal)?;
+        let hash = ContentHash::parse(file.content_hash.clone())
+            .map_err(|_| ExecutorError::InvalidJournal)?;
+        let decision = classify_source(root, &path, &hash, operation_id, "source-sidecar")?;
+        inventory.push((
+            RollbackTarget::Source {
+                path,
+                backup_hash: hash,
+                tag: "source-sidecar",
+            },
+            decision,
+        ));
+    }
+    Ok(inventory)
+}
+
+fn classify_published(
+    root: &Path,
+    relative: &RootRelativePath,
+    staged_hash: &ContentHash,
+    operation_id: &OperationId,
+    tag: &str,
+) -> Result<RestoreDecision, ExecutorError> {
+    match live_hash(root, relative)? {
+        None => {
+            let (parent, _) = open_parent(root, relative)?;
+            let temporary = temp_name(&sibling_stem(operation_id, relative.as_str(), tag));
+            match open_regular_entry(&parent, &temporary)? {
+                Some(mut file) => {
+                    if open_hash(&mut file)? == *staged_hash {
+                        Ok(RestoreDecision::RemovePublished)
+                    } else {
+                        Ok(RestoreDecision::Conflict)
+                    }
+                }
+                None => Ok(RestoreDecision::AlreadyRestored),
+            }
+        }
+        Some(live) if live == *staged_hash => Ok(RestoreDecision::RemovePublished),
+        Some(_) => Ok(RestoreDecision::Conflict),
+    }
+}
+
+fn classify_existing(
+    root: &Path,
+    relative: &RootRelativePath,
+    backup_hash: &ContentHash,
+    staged_hash: &ContentHash,
+) -> Result<RestoreDecision, ExecutorError> {
+    match live_hash(root, relative)? {
+        None => Ok(RestoreDecision::RestoreFromBackup),
+        Some(live) if live == *backup_hash => Ok(RestoreDecision::AlreadyRestored),
+        Some(live) if live == *staged_hash => Ok(RestoreDecision::RestoreFromBackup),
+        Some(_) => Ok(RestoreDecision::Conflict),
+    }
+}
+
+fn classify_source(
+    root: &Path,
+    relative: &RootRelativePath,
+    backup_hash: &ContentHash,
+    _operation_id: &OperationId,
+    _tag: &str,
+) -> Result<RestoreDecision, ExecutorError> {
+    match live_hash(root, relative)? {
+        None => Ok(RestoreDecision::RestoreFromBackup),
+        Some(live) if live == *backup_hash => Ok(RestoreDecision::AlreadyRestored),
+        Some(_) => Ok(RestoreDecision::Conflict),
+    }
+}
+
+fn live_hash(
+    root: &Path,
+    relative: &RootRelativePath,
+) -> Result<Option<ContentHash>, ExecutorError> {
+    if !live_file_exists(root, relative)? {
+        return Ok(None);
+    }
+    let mut file = open_root_regular_file(root, relative)?;
+    Ok(Some(open_hash(&mut file)?))
+}
+
+fn open_hash(file: &mut File) -> Result<ContentHash, ExecutorError> {
+    file.seek(SeekFrom::Start(0)).map_err(ExecutorError::io)?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes).map_err(ExecutorError::io)?;
+    Ok(hash_bytes(&bytes))
+}
+
+fn cleanup_known_siblings(
+    root: &Path,
+    relative: &RootRelativePath,
+    operation_id: &OperationId,
+    tags: &[&str],
+) -> Result<(), ExecutorError> {
+    let (parent, _) = open_parent(root, relative)?;
+    for tag in tags {
+        let stem = sibling_stem(operation_id, relative.as_str(), tag);
+        for name in [temp_name(&stem), quarantine_name(&stem)] {
+            match open_regular_entry(&parent, &name) {
+                Ok(Some(_)) => {
+                    descriptor_fs::unlinkat(&parent, name.as_str(), AtFlags::empty())
+                        .map_err(rename_open_error)?;
+                    parent.sync_all().map_err(ExecutorError::io)?;
+                }
+                Ok(None) => {}
+                Err(error) => return Err(error),
+            }
+        }
     }
     Ok(())
 }
@@ -695,7 +1134,8 @@ fn replace_existing_media_file(
         );
         return Err(rename_publish_error(error));
     }
-    let _ = descriptor_fs::unlinkat(&parent, quarantine.as_str(), AtFlags::empty());
+    descriptor_fs::unlinkat(&parent, quarantine.as_str(), AtFlags::empty())
+        .map_err(rename_open_error)?;
     parent.sync_all().map_err(ExecutorError::io)
 }
 
@@ -778,15 +1218,17 @@ fn restore_existing_from_backup(
     relative: &RootRelativePath,
     backup_files: &Path,
     backup_hash: &ContentHash,
+    staged_hash: &ContentHash,
     operation_id: &OperationId,
 ) -> Result<(), ExecutorError> {
-    if let Ok(mut live) = open_root_regular_file(root, relative) {
-        let mut bytes = Vec::new();
-        live.read_to_end(&mut bytes).map_err(ExecutorError::io)?;
-        if hash_bytes(&bytes) == *backup_hash {
+    match live_hash(root, relative)? {
+        Some(live) if live == *backup_hash => {
             restore_project_quarantine(root, relative, backup_hash, operation_id)?;
             return Ok(());
         }
+        Some(live) if live == *staged_hash => {}
+        Some(_) => return Err(ExecutorError::RecoveryRequired),
+        None => {}
     }
     let backup_bytes = read_verify_bytes(backup_files, relative)?;
     if hash_bytes(&backup_bytes) != *backup_hash {
@@ -797,7 +1239,7 @@ fn restore_existing_from_backup(
             root,
             relative,
             &backup_bytes,
-            &hash_live(root, relative)?,
+            staged_hash,
             backup_hash,
             operation_id,
             "project-restore",
@@ -879,13 +1321,6 @@ fn restore_source_from_backup(
         operation_id,
         tag,
     )
-}
-
-fn hash_live(root: &Path, relative: &RootRelativePath) -> Result<ContentHash, ExecutorError> {
-    let mut file = open_root_regular_file(root, relative)?;
-    let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes).map_err(ExecutorError::io)?;
-    Ok(hash_bytes(&bytes))
 }
 
 fn write_exclusive(
@@ -997,7 +1432,10 @@ fn rename_publish_error(error: rustix::io::Errno) -> ExecutorError {
 mod tests {
     use super::*;
     use crate::rename_prepare::{RenameJournalStatus, RenamePrepareResult};
-    use crate::{ApprovedExecutionRoot, AuthorityError, ExecutorLocalPaths};
+    use crate::{
+        ApprovedExecutionRoot, ApprovedRecoveryRoot, AuthorityError, ExecutorLocalPaths,
+        RecoveryAuthority, WriteAuthority,
+    };
     use ot_backup::BackupStore;
     use ot_codec::MemoryProjectReferenceCodec;
     use ot_domain::{
@@ -1039,6 +1477,35 @@ mod tests {
                 return Err(AuthorityError::NotApproved);
             }
             Ok(root)
+        }
+    }
+
+    impl CloneWriteAuthority for FixtureAuthority {
+        fn resolve_clone_for_write(
+            &self,
+            root_id: &RootId,
+        ) -> Result<VerifiedCloneRoot, AuthorityError> {
+            Ok(VerifiedCloneRoot::attest_temporary_copy(
+                self.resolve_for_write(root_id)?,
+            ))
+        }
+    }
+
+    impl RecoveryAuthority for FixtureAuthority {
+        fn resolve_for_recovery(
+            &self,
+            root_id: &RootId,
+        ) -> Result<ApprovedRecoveryRoot, AuthorityError> {
+            let root = self.root.lock().unwrap().clone();
+            if &root.root_id != root_id {
+                return Err(AuthorityError::NotApproved);
+            }
+            Ok(ApprovedRecoveryRoot {
+                root_id: root.root_id,
+                device_fingerprint: root.device_fingerprint,
+                canonical_path: root.canonical_path,
+                stable_device_identity: root.stable_device_identity,
+            })
         }
     }
 
@@ -1456,7 +1923,11 @@ mod tests {
     fn explicit_rollback_of_a_prepared_journal_does_not_touch_the_clone() {
         let fixture = prepare_clone(false, false, Vec::new());
         let journal = RenameSampleExecutor::new(local_paths(&fixture.local))
-            .rollback(&fixture.plan, &authority_for(&fixture.clone))
+            .rollback(
+                &fixture.plan.root_id,
+                &fixture.prepared.operation_id,
+                &authority_for(&fixture.clone),
+            )
             .unwrap();
         assert_eq!(journal.status, RenameJournalStatus::RolledBack);
         assert_eq!(snapshot_root(&fixture.clone), fixture.clone_before);
@@ -1484,5 +1955,136 @@ mod tests {
             .unwrap_err();
         assert!(matches!(error, ExecutorError::SourceChanged));
         assert_eq!(snapshot_root(&fixture.clone), before);
+    }
+
+    fn mark_journal_applying(local: &Path, operation_id: &OperationId) {
+        let path = local
+            .join("journals/rename")
+            .join(format!("{}.json", operation_id.file_stem()));
+        let mut journal = read_rename_journal(&path).unwrap();
+        journal.status = RenameJournalStatus::Applying;
+        replace_rename_json(&path, &journal).unwrap();
+    }
+
+    #[test]
+    fn ascii_case_collision_fails_before_any_clone_mutation() {
+        let fixture = prepare_clone(false, false, Vec::new());
+        fs::write(
+            fixture.clone.join("SET/AUDIO/NEW-KICK.WAV"),
+            b"case-collision",
+        )
+        .unwrap();
+        let before = snapshot_root(&fixture.clone);
+        let error = RenameSampleExecutor::new(local_paths(&fixture.local))
+            .apply(
+                &fixture.plan,
+                &MemoryProjectReferenceCodec,
+                &authority_for(&fixture.clone),
+            )
+            .unwrap_err();
+        assert!(matches!(error, ExecutorError::DestinationExists));
+        assert_eq!(snapshot_root(&fixture.clone), before);
+    }
+
+    #[test]
+    fn independently_changed_source_blocks_destination_delete() {
+        let fixture = prepare_clone(false, false, Vec::new());
+        fs::write(fixture.clone.join(DESTINATION_PATH), AUDIO_BYTES).unwrap();
+        fs::write(fixture.clone.join(SOURCE_PATH), b"tampered-source").unwrap();
+        mark_journal_applying(&fixture.local, &fixture.prepared.operation_id);
+        let before = snapshot_root(&fixture.clone);
+        let error = RenameSampleExecutor::new(local_paths(&fixture.local))
+            .rollback(
+                &fixture.plan.root_id,
+                &fixture.prepared.operation_id,
+                &authority_for(&fixture.clone),
+            )
+            .unwrap_err();
+        assert!(matches!(error, ExecutorError::RecoveryRequired));
+        assert_eq!(snapshot_root(&fixture.clone), before);
+        assert_eq!(
+            fs::read(fixture.clone.join(DESTINATION_PATH)).unwrap(),
+            AUDIO_BYTES
+        );
+        assert_eq!(
+            fs::read(fixture.clone.join(SOURCE_PATH)).unwrap(),
+            b"tampered-source"
+        );
+        assert_eq!(
+            RenameSampleExecutor::new(local_paths(&fixture.local))
+                .rename_journal(&fixture.prepared.operation_id)
+                .unwrap()
+                .unwrap()
+                .status,
+            RenameJournalStatus::Applying
+        );
+    }
+
+    #[test]
+    fn independently_changed_project_is_not_overwritten() {
+        let fixture = prepare_clone(true, true, vec![assignment(WORK_PATH)]);
+        fs::write(fixture.clone.join(WORK_PATH), b"tampered-project").unwrap();
+        mark_journal_applying(&fixture.local, &fixture.prepared.operation_id);
+        let before = snapshot_root(&fixture.clone);
+        let error = RenameSampleExecutor::new(local_paths(&fixture.local))
+            .rollback(
+                &fixture.plan.root_id,
+                &fixture.prepared.operation_id,
+                &authority_for(&fixture.clone),
+            )
+            .unwrap_err();
+        assert!(matches!(error, ExecutorError::RecoveryRequired));
+        assert_eq!(snapshot_root(&fixture.clone), before);
+        assert_eq!(
+            fs::read(fixture.clone.join(WORK_PATH)).unwrap(),
+            b"tampered-project"
+        );
+    }
+
+    #[test]
+    fn leftover_project_partial_is_removed_on_rollback() {
+        let fixture = prepare_clone(true, true, vec![assignment(WORK_PATH)]);
+        let leftover = fixture.clone.join("SET/PROJECT").join(format!(
+            "{}.partial",
+            sibling_stem(&fixture.prepared.operation_id, WORK_PATH, "project")
+        ));
+        fs::write(&leftover, b"leftover-partial").unwrap();
+        mark_journal_applying(&fixture.local, &fixture.prepared.operation_id);
+        let journal = RenameSampleExecutor::new(local_paths(&fixture.local))
+            .rollback(
+                &fixture.plan.root_id,
+                &fixture.prepared.operation_id,
+                &authority_for(&fixture.clone),
+            )
+            .unwrap();
+        assert_eq!(journal.status, RenameJournalStatus::RolledBack);
+        assert!(!leftover.exists());
+        assert_eq!(snapshot_root(&fixture.clone), fixture.clone_before);
+    }
+
+    #[test]
+    fn rollback_survives_restart_without_a_general_write_grant() {
+        let fixture = prepare_clone(false, false, Vec::new());
+        fs::write(fixture.clone.join(DESTINATION_PATH), AUDIO_BYTES).unwrap();
+        mark_journal_applying(&fixture.local, &fixture.prepared.operation_id);
+        let remounted = RootId::new("root-reopened").unwrap();
+        let authority = authority_for(&fixture.clone);
+        {
+            let mut root = authority.root.lock().unwrap();
+            root.root_id = remounted.clone();
+            root.write_enabled = false;
+            root.observed_revision = 99;
+        }
+        let journal = RenameSampleExecutor::new(local_paths(&fixture.local))
+            .rollback(&remounted, &fixture.prepared.operation_id, &authority)
+            .unwrap();
+        assert_eq!(journal.status, RenameJournalStatus::RolledBack);
+        assert!(!fixture.clone.join(DESTINATION_PATH).exists());
+        assert_eq!(
+            fs::read(fixture.clone.join(SOURCE_PATH)).unwrap(),
+            AUDIO_BYTES
+        );
+        assert_eq!(snapshot_root(&fixture.clone), fixture.clone_before);
+        assert_eq!(snapshot_root(&fixture.original), fixture.original_before);
     }
 }

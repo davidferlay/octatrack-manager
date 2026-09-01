@@ -128,10 +128,22 @@ pub fn verify_for_rename_plan(
 ) -> Result<VerifiedRenameBackup, BackupError> {
     validate_rename_plan(plan)?;
     let expected_snapshot_id = SnapshotId::for_rename_plan(plan);
-    let base_directory = canonical_directory(store.base_directory())?;
-    let directory = base_directory.join(expected_snapshot_id.directory_name());
-    let backup = verify_rename_directory(&directory)?;
+    let backup = verify_rename_snapshot(store, &expected_snapshot_id)?;
     validate_rename_plan_binding(&backup, plan)?;
+    Ok(backup)
+}
+
+pub fn verify_rename_snapshot(
+    store: &BackupStore,
+    snapshot_id: &SnapshotId,
+) -> Result<VerifiedRenameBackup, BackupError> {
+    let base_directory = canonical_directory(store.base_directory())?;
+    let directory = base_directory.join(snapshot_id.directory_name());
+    let backup = verify_rename_directory(&directory)?;
+    if backup.snapshot_id() != snapshot_id || backup.manifest().snapshot_id != snapshot_id.as_str()
+    {
+        return Err(BackupError::InvalidManifest("snapshot_id"));
+    }
     Ok(backup)
 }
 
