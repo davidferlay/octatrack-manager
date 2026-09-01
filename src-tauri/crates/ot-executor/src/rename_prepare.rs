@@ -1949,9 +1949,7 @@ mod tests {
         let prepared = executor
             .prepare(&plan, &MemoryProjectReferenceCodec, &authority_for(&root))
             .unwrap();
-        let journals = executor
-            .rename_journals_for_root(&fingerprint())
-            .unwrap();
+        let journals = executor.rename_journals_for_root(&fingerprint()).unwrap();
         assert_eq!(journals.len(), 1);
         assert_eq!(journals[0].operation_id, prepared.operation_id.as_str());
         assert_eq!(journals[0].status, RenameJournalStatus::Prepared);
