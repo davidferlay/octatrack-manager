@@ -80,11 +80,16 @@ Prepare flow:
 4. Re-verify the C1 snapshot with `BackupStore::verify_for_rename_plan`
 5. Copy backup bytes into Mac staging: destination audio, destination sidecar,
    rewritten Project documents at their original relative paths
-6. Build `SlotPathPatch` from inspect + planned updates; basename of the
-   observed `PATH=` must match the planned `from_relative_path` basename;
-   destination PATH uses `rewrite_same_directory_path`
-7. Write create-once authorization (no absolute paths) and `Prepared` journal
+6. Build `SlotPathPatch` from inspect + planned updates. The observed `PATH=`
+   (after stripping leading `../` or `..\\`) must be a suffix of
+   `from_relative_path`. A same-basename path in a different directory fails
+   closed. Destination PATH uses `rewrite_same_directory_path`
+7. Write create-once authorization (no absolute paths) bound to staged file
+   hashes and project rewrite hashes, then the `Prepared` journal
 8. Return `RenamePrepareResult` + semantic diff; source root stays byte-identical
+9. Staging parent `rename/` is created with `NOFOLLOW` metadata checks.
+   `create_dir_all` is not used, so a symlink there cannot redirect writes
+   onto the source root
 
 C2 never opens the live Octatrack root for write. Staging bytes come only from
 the verified backup. A missing C1 snapshot fails closed. Re-running prepare

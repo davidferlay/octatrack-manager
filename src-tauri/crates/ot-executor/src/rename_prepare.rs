@@ -101,6 +101,8 @@ pub struct RenameRecoveryAuthorization {
     pub source_byte_size: u64,
     pub source_content_hash: String,
     pub reference_update_count: u64,
+    pub staged_files: Vec<RenameStagedFileRecord>,
+    pub project_rewrites: Vec<RenameProjectRewriteRecord>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -156,8 +158,13 @@ impl RenameSampleExecutor {
             prepare_rename_subdirectory(&rename_journal_directory, RENAME_AUTHORIZATION_DIRECTORY)?;
         let journal_path =
             rename_journal_directory.join(format!("{}.json", operation_id.file_stem()));
-        if journal_path.exists() {
-            return Err(ExecutorError::PlanConsumed);
+        match fs::symlink_metadata(&journal_path) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(ExecutorError::UnsafePath);
+            }
+            Ok(_) => return Err(ExecutorError::PlanConsumed),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(ExecutorError::io(error)),
         }
 
         let backup_store = BackupStore::new(backup_directory);
@@ -170,13 +177,17 @@ impl RenameSampleExecutor {
             return Err(ExecutorError::InvalidJournal);
         }
 
-        let staging_root = staging_base
-            .join(RENAME_JOURNAL_DIRECTORY)
-            .join(operation_id.file_stem());
-        if staging_root.exists() {
-            return Err(ExecutorError::PlanConsumed);
+        let staging_rename = prepare_rename_subdirectory(&staging_base, RENAME_JOURNAL_DIRECTORY)?;
+        let staging_root = staging_rename.join(operation_id.file_stem());
+        match fs::symlink_metadata(&staging_root) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(ExecutorError::UnsafePath);
+            }
+            Ok(_) => return Err(ExecutorError::PlanConsumed),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(ExecutorError::io(error)),
         }
-        fs::create_dir_all(&staging_root).map_err(ExecutorError::io)?;
+        fs::create_dir(&staging_root).map_err(ExecutorError::io)?;
         let files_root = staging_root.join("files");
         fs::create_dir(&files_root).map_err(ExecutorError::io)?;
 
@@ -197,6 +208,8 @@ impl RenameSampleExecutor {
             plan,
             &operation_id,
             backup.snapshot_id().as_str(),
+            &staged_files,
+            &project_rewrites,
         ) {
             Ok(authorization) => authorization,
             Err(error) => {
@@ -226,7 +239,10 @@ impl RenameSampleExecutor {
             return Err(error);
         }
 
-        let total_staged_bytes = staged_files.iter().map(|file| file.byte_size).sum();
+        let total_staged_bytes = staged_files
+            .iter()
+            .try_fold(0u64, |total, file| total.checked_add(file.byte_size))
+            .ok_or(ExecutorError::FileTooLarge)?;
         Ok(RenamePrepareResult {
             operation_id,
             backup,
@@ -293,8 +309,15 @@ fn validate_rename_plan_shape(plan: &RenameImpactPlan) -> Result<(), ExecutorErr
         return Err(ExecutorError::InvalidPlan);
     }
     for document in &plan.state_document_impacts {
-        if document.kind != StateDocumentKind::Project {
+        if document.kind != StateDocumentKind::Project || document.reference_updates.is_empty() {
             return Err(ExecutorError::InvalidPlan);
+        }
+        for update in &document.reference_updates {
+            if update.from_relative_path != plan.source_relative_path
+                || update.to_relative_path != plan.destination_relative_path
+            {
+                return Err(ExecutorError::InvalidPlan);
+            }
         }
     }
     Ok(())
@@ -379,6 +402,24 @@ fn populate_rename_staging<C: ProjectReferenceCodec>(
         rewrites.push(rewrite);
     }
 
+    let mut expected = BTreeSet::new();
+    expected.insert(plan.destination_relative_path.as_str().to_owned());
+    for sidecar in &plan.sidecar_impacts {
+        expected.insert(
+            sidecar
+                .destination_sidecar_relative_path
+                .as_str()
+                .to_owned(),
+        );
+    }
+    for document in &plan.state_document_impacts {
+        expected.insert(document.relative_path.as_str().to_owned());
+    }
+    if staged_paths != expected {
+        return Err(ExecutorError::InvalidPlan);
+    }
+    reject_incomparable_paths(&staged_paths)?;
+
     staged.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
     rewrites.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
     Ok((staged, rewrites))
@@ -435,7 +476,10 @@ fn rewrite_project_into_staging<C: ProjectReferenceCodec>(
     let encoded = codec
         .apply_path_patches(&original, &patches)
         .map_err(ExecutorError::ReferenceRewrite)?;
-    if encoded.changed_slots.len() as u64 != plan_nonzero_patch_count(&patches) {
+    if encoded.changed_slots.len() as u64 != plan_nonzero_patch_count(&patches)
+        || encoded.changed_slots.is_empty()
+        || encoded.bytes == original
+    {
         return Err(ExecutorError::InvalidPlan);
     }
     let destination = create_staging_destination(files_root, &document.relative_path)?;
@@ -497,12 +541,8 @@ fn build_slot_path_patches<C: ProjectReferenceCodec>(
             .iter()
             .find(|entry| entry.slot == update.slot)
             .ok_or(ExecutorError::InvalidPlan)?;
-        let from_basename = path_basename(update.from_relative_path.as_str())?;
+        raw_path_matches_relative(&observed.raw_path, update.from_relative_path.as_str())?;
         let to_basename = path_basename(update.to_relative_path.as_str())?;
-        let observed_basename = raw_path_basename(&observed.raw_path)?;
-        if observed_basename != from_basename {
-            return Err(ExecutorError::InvalidPlan);
-        }
         let to_raw_path = rewrite_same_directory_path(&observed.raw_path, to_basename)
             .map_err(ExecutorError::ReferenceRewrite)?;
         patches.push(SlotPathPatch {
@@ -522,18 +562,54 @@ fn path_basename(relative: &str) -> Result<&str, ExecutorError> {
         .ok_or(ExecutorError::InvalidPlan)
 }
 
-fn raw_path_basename(raw_path: &str) -> Result<&str, ExecutorError> {
-    match raw_path.rfind(['/', '\\']) {
-        Some(index) => {
-            let basename = &raw_path[index + 1..];
-            if basename.is_empty() {
-                Err(ExecutorError::InvalidPlan)
-            } else {
-                Ok(basename)
+fn raw_path_matches_relative(raw_path: &str, relative: &str) -> Result<(), ExecutorError> {
+    let raw_parts = normalize_path_components(raw_path, true)?;
+    let relative_parts = normalize_path_components(relative, false)?;
+    if raw_parts.is_empty() || relative_parts.is_empty() || raw_parts.len() > relative_parts.len() {
+        return Err(ExecutorError::InvalidPlan);
+    }
+    if raw_parts[raw_parts.len().saturating_sub(1)]
+        != relative_parts[relative_parts.len().saturating_sub(1)]
+    {
+        return Err(ExecutorError::InvalidPlan);
+    }
+    let suffix = &relative_parts[relative_parts.len() - raw_parts.len()..];
+    if suffix != raw_parts {
+        return Err(ExecutorError::InvalidPlan);
+    }
+    Ok(())
+}
+
+fn normalize_path_components(
+    path: &str,
+    strip_leading_dotdot: bool,
+) -> Result<Vec<&str>, ExecutorError> {
+    let mut parts = Vec::new();
+    for part in path.split(['/', '\\']) {
+        if part.is_empty() || part == "." {
+            continue;
+        }
+        if part == ".." {
+            if strip_leading_dotdot && parts.is_empty() {
+                continue;
+            }
+            return Err(ExecutorError::InvalidPlan);
+        }
+        parts.push(part);
+    }
+    Ok(parts)
+}
+
+fn reject_incomparable_paths(paths: &BTreeSet<String>) -> Result<(), ExecutorError> {
+    let listed = paths.iter().collect::<Vec<_>>();
+    for (index, left) in listed.iter().enumerate() {
+        for right in &listed[index + 1..] {
+            if left.eq_ignore_ascii_case(right) {
+                return Err(ExecutorError::UnsafePath);
             }
         }
-        None => Ok(raw_path),
     }
+    Ok(())
 }
 
 fn slot_kind_token(kind: SampleSlotKind) -> &'static str {
@@ -632,8 +708,16 @@ fn ensure_rename_recovery_authorization(
     plan: &RenameImpactPlan,
     operation_id: &OperationId,
     backup_snapshot_id: &str,
+    staged_files: &[RenameStagedFileRecord],
+    project_rewrites: &[RenameProjectRewriteRecord],
 ) -> Result<RenameRecoveryAuthorization, ExecutorError> {
-    let expected = rename_recovery_authorization(plan, operation_id, backup_snapshot_id)?;
+    let expected = rename_recovery_authorization(
+        plan,
+        operation_id,
+        backup_snapshot_id,
+        staged_files,
+        project_rewrites,
+    )?;
     let path = directory.join(format!("{}.json", operation_id.file_stem()));
     match fs::symlink_metadata(&path) {
         Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
@@ -657,6 +741,8 @@ fn rename_recovery_authorization(
     plan: &RenameImpactPlan,
     operation_id: &OperationId,
     backup_snapshot_id: &str,
+    staged_files: &[RenameStagedFileRecord],
+    project_rewrites: &[RenameProjectRewriteRecord],
 ) -> Result<RenameRecoveryAuthorization, ExecutorError> {
     Ok(RenameRecoveryAuthorization {
         schema: RENAME_RECOVERY_AUTHORIZATION_SCHEMA.to_owned(),
@@ -672,6 +758,8 @@ fn rename_recovery_authorization(
         source_byte_size: plan.source_byte_size,
         source_content_hash: plan.source_content_hash.as_str().to_owned(),
         reference_update_count: plan.reference_update_count,
+        staged_files: staged_files.to_vec(),
+        project_rewrites: project_rewrites.to_vec(),
     })
 }
 
@@ -1037,6 +1125,14 @@ mod tests {
         assert!(!serde_json::to_string(&prepared.authorization)
             .unwrap()
             .contains(root.to_string_lossy().as_ref()));
+        assert_eq!(
+            prepared.authorization.staged_files,
+            prepared.journal.staged_files
+        );
+        assert_eq!(
+            prepared.authorization.project_rewrites,
+            prepared.journal.project_rewrites
+        );
     }
 
     #[test]
@@ -1084,6 +1180,14 @@ mod tests {
         assert!(!root.join(DESTINATION_PATH).exists());
         assert!(!root.join("SET/AUDIO/new-kick.ot").exists());
         assert_eq!(fs::read(root.join(WORK_PATH)).unwrap(), project_bytes());
+        assert_eq!(
+            prepared.authorization.staged_files,
+            prepared.journal.staged_files
+        );
+        assert_eq!(
+            prepared.authorization.project_rewrites,
+            prepared.journal.project_rewrites
+        );
     }
 
     #[test]
@@ -1202,5 +1306,77 @@ mod tests {
             .incomplete_journals_for_root(&fingerprint())
             .unwrap()
             .is_empty());
+    }
+
+    #[test]
+    fn project_path_in_a_different_directory_fails_closed() {
+        let fixture = TempDir::new().unwrap();
+        let root = fixture.path().join("root");
+        let local = fixture.path().join("local");
+        write_tree(&root, false, true, false);
+        fs::write(
+            root.join(WORK_PATH),
+            b"[SAMPLE]\nTYPE=STATIC\nSLOT=1\nPATH=../OTHER/kick.wav\n[/SAMPLE]\n",
+        )
+        .unwrap();
+        let mut planning = facts(vec![assignment(WORK_PATH)], false);
+        planning.state_documents[0].byte_size = fs::metadata(root.join(WORK_PATH)).unwrap().len();
+        planning.state_documents[0].content_hash =
+            hash_of(&fs::read(root.join(WORK_PATH)).unwrap());
+        let plan = plan_from(planning);
+        create_backup(&root, &local, &plan);
+        let before = snapshot_root(&root);
+        assert!(matches!(
+            RenameSampleExecutor::new(local_paths(&local)).prepare(
+                &plan,
+                &MemoryProjectReferenceCodec,
+                &authority_for(&root)
+            ),
+            Err(ExecutorError::InvalidPlan)
+        ));
+        assert_eq!(snapshot_root(&root), before);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn staging_rename_symlink_is_rejected_without_writing_the_target() {
+        use std::os::unix::fs::symlink;
+
+        let fixture = TempDir::new().unwrap();
+        let root = fixture.path().join("root");
+        let local = fixture.path().join("local");
+        let outside = fixture.path().join("outside-media");
+        write_tree(&root, false, false, false);
+        let plan = plan_from(facts(Vec::new(), false));
+        create_backup(&root, &local, &plan);
+        fs::create_dir_all(local.join("staging")).unwrap();
+        fs::create_dir(&outside).unwrap();
+        symlink(
+            &outside,
+            local.join("staging").join(RENAME_JOURNAL_DIRECTORY),
+        )
+        .unwrap();
+        let before_outside = snapshot_root(&outside);
+        let before_root = snapshot_root(&root);
+        assert!(matches!(
+            RenameSampleExecutor::new(local_paths(&local)).prepare(
+                &plan,
+                &MemoryProjectReferenceCodec,
+                &authority_for(&root)
+            ),
+            Err(ExecutorError::UnsafePath)
+        ));
+        assert_eq!(snapshot_root(&outside), before_outside);
+        assert_eq!(snapshot_root(&root), before_root);
+    }
+
+    #[test]
+    fn raw_path_suffix_must_match_the_planned_relative_path() {
+        assert!(raw_path_matches_relative("../AUDIO/kick.wav", SOURCE_PATH).is_ok());
+        assert!(raw_path_matches_relative("..\\AUDIO\\kick.wav", SOURCE_PATH).is_ok());
+        assert!(raw_path_matches_relative("kick.wav", SOURCE_PATH).is_ok());
+        assert!(raw_path_matches_relative("../OTHER/kick.wav", SOURCE_PATH).is_err());
+        assert!(raw_path_matches_relative("../AUDIO/../kick.wav", SOURCE_PATH).is_err());
+        assert!(raw_path_matches_relative("../AUDIO/other.wav", SOURCE_PATH).is_err());
     }
 }
