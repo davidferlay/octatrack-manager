@@ -2729,6 +2729,8 @@ version = "0.1.0"
 dependencies = [
  "fs2",
  "ot-backup",
+ "ot-codec",
+ "ot-codec-ports",
  "ot-domain",
  "ot-plan",
  "rustix",

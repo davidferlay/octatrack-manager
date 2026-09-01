@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use ot_domain::{ProjectDocument, SampleSlotId};
+use ot_domain::{ProjectDocument, RootPathComponent, SampleSlotId};
 use std::fmt;
 
 pub trait ProjectCodec {
@@ -38,6 +38,36 @@ pub struct EncodedPatch {
     pub bytes: Vec<u8>,
     pub changed_slots: Vec<SampleSlotId>,
     pub inspected_after: Vec<SlotPathRef>,
+}
+
+/// Build the same-directory destination PATH by replacing only the final
+/// component of `from_raw_path`. Prefix and separator bytes stay as observed.
+pub fn rewrite_same_directory_path(
+    from_raw_path: &str,
+    new_basename: &str,
+) -> Result<String, ReferenceRewriteError> {
+    let (prefix, _) = split_dir_and_basename(from_raw_path)?;
+    RootPathComponent::parse(new_basename).map_err(|_| ReferenceRewriteError::InvalidBasename)?;
+    Ok(format!("{prefix}{new_basename}"))
+}
+
+fn split_dir_and_basename(raw_path: &str) -> Result<(&str, &str), ReferenceRewriteError> {
+    if raw_path.is_empty() {
+        return Err(ReferenceRewriteError::EmptyPath);
+    }
+    if raw_path.contains('\0') {
+        return Err(ReferenceRewriteError::InvalidBasename);
+    }
+    match raw_path.rfind(['/', '\\']) {
+        Some(index) => {
+            let basename = &raw_path[index + 1..];
+            if basename.is_empty() {
+                return Err(ReferenceRewriteError::EmptyPath);
+            }
+            Ok((&raw_path[..=index], basename))
+        }
+        None => Ok(("", raw_path)),
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

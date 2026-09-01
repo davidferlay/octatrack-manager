@@ -3,6 +3,8 @@
 use ot_codec_ports::{
     EncodedPatch, ProjectReferenceCodec, ReferenceRewriteError, SlotPathPatch, SlotPathRef,
 };
+
+pub use ot_codec_ports::rewrite_same_directory_path;
 use ot_domain::{RootPathComponent, SampleSlotId, SampleSlotKind};
 use std::collections::HashSet;
 use std::ops::Range;
@@ -39,17 +41,6 @@ impl ProjectReferenceCodec for MemoryProjectReferenceCodec {
     ) -> Result<EncodedPatch, ReferenceRewriteError> {
         apply_path_patches(original, patches)
     }
-}
-
-/// Build the same-directory destination PATH by replacing only the final
-/// component of `from_raw_path`. Prefix and separator bytes stay as observed.
-pub fn rewrite_same_directory_path(
-    from_raw_path: &str,
-    new_basename: &str,
-) -> Result<String, ReferenceRewriteError> {
-    let (prefix, _) = split_dir_and_basename(from_raw_path)?;
-    RootPathComponent::parse(new_basename).map_err(|_| ReferenceRewriteError::InvalidBasename)?;
-    Ok(format!("{prefix}{new_basename}"))
 }
 
 fn apply_path_patches(
