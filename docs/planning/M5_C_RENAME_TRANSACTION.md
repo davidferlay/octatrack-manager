@@ -1,13 +1,12 @@
 # M5-C Recoverable Rename Transaction
 
-- Status: C1 verified-backup contract **complete**; C2 Mac staging (this PR);
-  C3 not implemented
-- Scope of C2: re-verify the C1 backup; codec rewrite and semantic diff on
-  Mac-side staging copies; create-once rename authorization and
-  `Prepared` journal. No media writes.
-- Non-scope of this PR: rename/move on media, Project PATH rewrite on media,
-  journal apply/rollback, recovery execution, Tauri, frontend, SQLite
-  migration, cloud, DMG, signing
+- Status: C1 verified-backup contract **complete**; C2 Mac staging **complete**;
+  C3 clone apply / rollback (this PR)
+- Scope of C3: apply a C2 `Prepared` journal to a **temporary/cloned** root;
+  re-verify C1 backup + authorization hashes + codec rebuild from backup
+  before any clone write; roll the clone back from backup on failure
+- Non-scope of this PR: original removable media, Tauri, frontend, SQLite
+  migration, cloud, DMG, signing, Gate C clone-load smoke, catalog rescan
 
 ## Purpose
 
@@ -54,12 +53,47 @@ Existing v2 create/verify/recovery tests remain unchanged and must keep passing.
 | Slice | Allowed | Forbidden |
 |---|---|---|
 | **C1** | Reconstruct the plan backup set; copy those files to a Mac-side snapshot outside the source root; fsync; atomic publish; re-verify size/hash/binding | Media rename/move, PATH rewrite, journal, rollback, recovery apply, Tauri, frontend |
-| **C2** (this PR) | Re-verify the C1 backup; run `ProjectReferenceCodec` on Mac staging copies; semantic diff; authorization; prepare a journal that is not yet applied to media | Media mutation, publishing rewritten Project files onto the Octatrack root |
-| **C3** | Apply the prepared journal to a temporary/cloned root with rollback | Original removable media; cloud; public distribution |
+| **C2** | Re-verify the C1 backup; run `ProjectReferenceCodec` on Mac staging copies; semantic diff; authorization; prepare a journal that is not yet applied to media | Media mutation, publishing rewritten Project files onto the Octatrack root |
+| **C3** (this PR) | Apply the prepared journal to a temporary/cloned root with rollback | Original removable media; cloud; public distribution; Tauri |
 
 C2 must not write codec output with a raw `std::fs::write` onto media, and must
 not route Project rewrite through `ot-tools-io` full serialize or
-`update_project_file_paths_surgical`.
+`update_project_file_paths_surgical`. C3 writes the clone only through
+descriptor-relative `NOFOLLOW` open / `EXCL` create / `renameat` `NOREPLACE`.
+
+## C3 API
+
+- `RenameSampleExecutor::apply(plan, codec, authority)`
+- `RenameSampleExecutor::rollback(plan, authority)`
+- Journal statuses: `Prepared`, `Applying`, `Committed`, `RolledBack`,
+  `RecoveryRequired`
+- Optional `failure_code` on the rename journal (absent on a fresh `Prepared`)
+
+Apply flow:
+
+1. Validate the plan shape and write authority; acquire the per-root lock
+2. Load the create-once authorization (read-only, `NOFOLLOW`) and `Prepared`
+   journal; they must agree on hashes, binding, and plan identity
+3. Re-verify the C1 backup. Do not trust C2 staging bytes
+4. Rebuild dest audio, dest sidecar, and rewritten Projects from **backup**
+   bytes through `ProjectReferenceCodec`. The rebuilt records must equal both
+   the journal and the authorization
+5. Re-read the clone: source / sidecar / Project hashes must still match the
+   plan; destination audio and sidecar must be absent
+6. Persist `Applying`, then write the clone in order:
+   new audio (and dest sidecar) → Project replace → source quarantine
+7. Post-read dest / Project hashes; unlink source quarantines; persist
+   `Committed`
+8. On any apply failure after `Applying`, restore the clone from the C1 backup
+   (and leftover quarantines) and persist `RolledBack`. A rollback that cannot
+   restore expected bytes becomes `RecoveryRequired`
+
+`rollback` on a still-`Prepared` journal only marks `RolledBack` and does not
+touch the clone. `rollback` on `Applying` / `RecoveryRequired` restores the
+clone from backup.
+
+Tests copy a tempfile tree to a clone, apply only the clone, and assert the
+original tree is byte-identical. No original SD/CF media.
 
 ## C2 API
 
@@ -141,11 +175,12 @@ File roles:
 ## Filesystem boundary
 
 - Tests use `tempfile` trees only. No original SD/CF media.
-- Create/verify never write into the Octatrack source root.
-- After a successful or failed create, tests assert the source tree is unchanged.
+- C3 apply / rollback run only against a copied clone inside that tempfile.
+- After a successful or failed C3 apply, tests assert the original tree is unchanged.
 - v2 `BackupStore::verify` rejects a rename snapshot (`schema` / deserialize).
 
 ## Deferred
 
-- C3 media apply, rollback, recovery execution
 - Gate C clone-load smoke and human sign-off
+- Catalog rescan / missing-reference count after apply
+- Production recovery UI and Tauri commands

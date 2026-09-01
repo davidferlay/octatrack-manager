@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 
 const RENAME_JOURNAL_SCHEMA: &str = "masterocta-rename-operation-journal:v1";
 const RENAME_RECOVERY_AUTHORIZATION_SCHEMA: &str = "masterocta-rename-recovery-authorization:v1";
-const RENAME_AUTHORIZATION_DIRECTORY: &str = "authorizations";
+pub(crate) const RENAME_AUTHORIZATION_DIRECTORY: &str = "authorizations";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -34,6 +34,10 @@ pub enum RenameJournalOperationKind {
 #[serde(rename_all = "snake_case")]
 pub enum RenameJournalStatus {
     Prepared,
+    Applying,
+    Committed,
+    RolledBack,
+    RecoveryRequired,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -85,6 +89,8 @@ pub struct RenameOperationJournal {
     pub staged_files: Vec<RenameStagedFileRecord>,
     pub project_rewrites: Vec<RenameProjectRewriteRecord>,
     pub status: RenameJournalStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure_code: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -124,7 +130,7 @@ pub struct RenamePrepareResult {
 }
 
 pub struct RenameSampleExecutor {
-    local_paths: ExecutorLocalPaths,
+    pub(crate) local_paths: ExecutorLocalPaths,
 }
 
 impl RenameSampleExecutor {
@@ -249,6 +255,7 @@ impl RenameSampleExecutor {
             staged_files: staged_files.clone(),
             project_rewrites: project_rewrites.clone(),
             status: RenameJournalStatus::Prepared,
+            failure_code: None,
         };
         if let Err(error) = write_rename_json(&journal_path, &journal, false) {
             let _ = fs::remove_dir_all(&staging_root);
@@ -308,7 +315,7 @@ impl RenameSampleExecutor {
     }
 }
 
-fn validate_rename_plan_shape(plan: &RenameImpactPlan) -> Result<(), ExecutorError> {
+pub(crate) fn validate_rename_plan_shape(plan: &RenameImpactPlan) -> Result<(), ExecutorError> {
     plan.validate_integrity()
         .map_err(|_| ExecutorError::InvalidPlan)?;
     if plan.base_observed_revision == 0
@@ -362,7 +369,7 @@ fn path_parent(relative: &str) -> &str {
         .unwrap_or("")
 }
 
-fn validate_rename_authority(
+pub(crate) fn validate_rename_authority(
     plan: &RenameImpactPlan,
     root: ApprovedExecutionRoot,
 ) -> Result<ApprovedExecutionRoot, ExecutorError> {
@@ -384,7 +391,10 @@ fn validate_rename_authority(
     Ok(root)
 }
 
-fn prepare_rename_subdirectory(parent: &Path, name: &str) -> Result<PathBuf, ExecutorError> {
+pub(crate) fn prepare_rename_subdirectory(
+    parent: &Path,
+    name: &str,
+) -> Result<PathBuf, ExecutorError> {
     let directory = parent.join(name);
     match fs::create_dir(&directory) {
         Ok(()) => sync_directory(parent)?,
@@ -398,7 +408,7 @@ fn prepare_rename_subdirectory(parent: &Path, name: &str) -> Result<PathBuf, Exe
     Ok(directory)
 }
 
-fn remove_orphaned_rename_directory(path: &Path) -> Result<(), ExecutorError> {
+pub(crate) fn remove_orphaned_rename_directory(path: &Path) -> Result<(), ExecutorError> {
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
             Err(ExecutorError::UnsafePath)
@@ -438,7 +448,7 @@ fn promote_rename_directory(
     parent_dir.sync_all().map_err(ExecutorError::io)
 }
 
-fn populate_rename_staging<C: ProjectReferenceCodec>(
+pub(crate) fn populate_rename_staging<C: ProjectReferenceCodec>(
     plan: &RenameImpactPlan,
     codec: &C,
     backup_directory: &Path,
@@ -796,7 +806,7 @@ fn write_new_synced(path: &Path, bytes: &[u8]) -> Result<(), ExecutorError> {
     file.sync_all().map_err(ExecutorError::io)
 }
 
-fn hash_bytes(bytes: &[u8]) -> ContentHash {
+pub(crate) fn hash_bytes(bytes: &[u8]) -> ContentHash {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     content_hash_from_digest(hasher)
@@ -935,6 +945,55 @@ fn write_rename_json<T: Serialize>(
     result
 }
 
+pub(crate) fn replace_rename_json<T: Serialize>(
+    path: &Path,
+    value: &T,
+) -> Result<(), ExecutorError> {
+    let metadata = fs::symlink_metadata(path).map_err(ExecutorError::io)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(ExecutorError::UnsafePath);
+    }
+    let bytes = serde_json::to_vec_pretty(value)
+        .map_err(|error| ExecutorError::Journal(error.to_string()))?;
+    let temporary = path.with_extension("json.tmp");
+    remove_stale_rename_temporary(&temporary)?;
+    let parent_path = path.parent().ok_or(ExecutorError::UnsafePath)?;
+    let parent_metadata = fs::symlink_metadata(parent_path).map_err(ExecutorError::io)?;
+    if parent_metadata.file_type().is_symlink() || !parent_metadata.is_dir() {
+        return Err(ExecutorError::UnsafePath);
+    }
+    let result = (|| {
+        let mut file = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temporary)
+            .map_err(ExecutorError::io)?;
+        file.write_all(&bytes).map_err(ExecutorError::io)?;
+        file.sync_all().map_err(ExecutorError::io)?;
+        let parent = File::open(parent_path).map_err(ExecutorError::io)?;
+        let temporary_name = temporary
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or(ExecutorError::UnsafePath)?;
+        let final_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or(ExecutorError::UnsafePath)?;
+        rustix::fs::renameat(&parent, temporary_name, &parent, final_name).map_err(|error| {
+            if matches!(error, rustix::io::Errno::LOOP | rustix::io::Errno::NOTDIR) {
+                ExecutorError::SymlinkEscape
+            } else {
+                ExecutorError::io(std::io::Error::from(error))
+            }
+        })?;
+        parent.sync_all().map_err(ExecutorError::io)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
+}
+
 fn remove_stale_rename_temporary(path: &Path) -> Result<(), ExecutorError> {
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
@@ -946,7 +1005,7 @@ fn remove_stale_rename_temporary(path: &Path) -> Result<(), ExecutorError> {
     }
 }
 
-fn read_rename_journal(path: &Path) -> Result<RenameOperationJournal, ExecutorError> {
+pub(crate) fn read_rename_journal(path: &Path) -> Result<RenameOperationJournal, ExecutorError> {
     let journal: RenameOperationJournal =
         serde_json::from_reader(open_rename_regular_file(path, false)?)
             .map_err(|error| ExecutorError::Journal(error.to_string()))?;
@@ -954,7 +1013,9 @@ fn read_rename_journal(path: &Path) -> Result<RenameOperationJournal, ExecutorEr
     Ok(journal)
 }
 
-fn read_rename_authorization(path: &Path) -> Result<RenameRecoveryAuthorization, ExecutorError> {
+pub(crate) fn read_rename_authorization(
+    path: &Path,
+) -> Result<RenameRecoveryAuthorization, ExecutorError> {
     let authorization: RenameRecoveryAuthorization =
         serde_json::from_reader(open_rename_regular_file(path, true)?)
             .map_err(|error| ExecutorError::Journal(error.to_string()))?;
@@ -970,7 +1031,6 @@ fn validate_loaded_rename_journal(
         .map_err(|_| ExecutorError::InvalidJournal)?;
     if journal.schema != RENAME_JOURNAL_SCHEMA
         || journal.operation_kind != RenameJournalOperationKind::RenameSample
-        || journal.status != RenameJournalStatus::Prepared
         || path.file_stem().and_then(|stem| stem.to_str()) != Some(operation_id.file_stem())
         || journal.plan_id
             != operation_id
