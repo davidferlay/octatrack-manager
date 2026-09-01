@@ -46,6 +46,7 @@ const dependencyRules = new Map([
     [
       "fs2",
       "ot-backup",
+      "ot-codec-ports",
       "ot-domain",
       "ot-plan",
       "rustix",
@@ -65,7 +66,7 @@ const devDependencyRules = new Map(
 devDependencyRules.set("ot-catalog", ["tempfile"]);
 devDependencyRules.set("ot-audio", ["tempfile"]);
 devDependencyRules.set("ot-backup", ["tempfile"]);
-devDependencyRules.set("ot-executor", ["tempfile"]);
+devDependencyRules.set("ot-executor", ["ot-codec", "tempfile"]);
 devDependencyRules.set("ot-codec", ["ot-tools-io"]);
 const allowedCompositionDependencies = new Set([
   "ot-application",

@@ -1,10 +1,13 @@
 # M5-C Recoverable Rename Transaction
 
-- Status: C1 verified-backup contract (this PR); C2/C3 not implemented
-- Scope of C1: `ot-backup` rename-only snapshot create/verify; no media writes
+- Status: C1 verified-backup contract **complete**; C2 Mac staging (this PR);
+  C3 not implemented
+- Scope of C2: re-verify the C1 backup; codec rewrite and semantic diff on
+  Mac-side staging copies; create-once rename authorization and
+  `Prepared` journal. No media writes.
 - Non-scope of this PR: rename/move on media, Project PATH rewrite on media,
-  journal, rollback, recovery execution, Tauri, frontend, SQLite migration,
-  executor rename mutation, cloud, DMG, signing
+  journal apply/rollback, recovery execution, Tauri, frontend, SQLite
+  migration, cloud, DMG, signing
 
 ## Purpose
 
@@ -50,13 +53,42 @@ Existing v2 create/verify/recovery tests remain unchanged and must keep passing.
 
 | Slice | Allowed | Forbidden |
 |---|---|---|
-| **C1** (this PR) | Reconstruct the plan backup set; copy those files to a Mac-side snapshot outside the source root; fsync; atomic publish; re-verify size/hash/binding | Media rename/move, PATH rewrite, journal, rollback, recovery apply, Tauri, frontend |
-| **C2** | Re-verify the C1 backup; run `MemoryProjectReferenceCodec` on Mac staging copies; semantic diff; authorization; prepare a journal that is not yet applied to media | Media mutation, publishing rewritten Project files onto the Octatrack root |
+| **C1** | Reconstruct the plan backup set; copy those files to a Mac-side snapshot outside the source root; fsync; atomic publish; re-verify size/hash/binding | Media rename/move, PATH rewrite, journal, rollback, recovery apply, Tauri, frontend |
+| **C2** (this PR) | Re-verify the C1 backup; run `ProjectReferenceCodec` on Mac staging copies; semantic diff; authorization; prepare a journal that is not yet applied to media | Media mutation, publishing rewritten Project files onto the Octatrack root |
 | **C3** | Apply the prepared journal to a temporary/cloned root with rollback | Original removable media; cloud; public distribution |
 
 C2 must not write codec output with a raw `std::fs::write` onto media, and must
 not route Project rewrite through `ot-tools-io` full serialize or
 `update_project_file_paths_surgical`.
+
+## C2 API
+
+- `RenameSampleExecutor::prepare(plan, codec, authority)`
+- `RenameSampleExecutor::rename_journal(operation_id)`
+- `OperationId::for_rename_plan`
+- Dedicated journal schema `masterocta-rename-operation-journal:v1`
+- Dedicated authorization schema `masterocta-rename-recovery-authorization:v1`
+- Typed `RenameJournalOperationKind::RenameSample`
+- Journal / authorization / staging live under `journals/rename/` and
+  `staging/rename/` so M4 `masterocta-operation-journal:v3` scanning is unchanged
+
+Prepare flow:
+
+1. Validate `RenameImpactPlan` integrity and rename shape (no unresolved refs)
+2. Resolve write authority; reject local dirs inside the source root
+3. Acquire the same per-root writer lock as additive copy
+4. Re-verify the C1 snapshot with `BackupStore::verify_for_rename_plan`
+5. Copy backup bytes into Mac staging: destination audio, destination sidecar,
+   rewritten Project documents at their original relative paths
+6. Build `SlotPathPatch` from inspect + planned updates; basename of the
+   observed `PATH=` must match the planned `from_relative_path` basename;
+   destination PATH uses `rewrite_same_directory_path`
+7. Write create-once authorization (no absolute paths) and `Prepared` journal
+8. Return `RenamePrepareResult` + semantic diff; source root stays byte-identical
+
+C2 never opens the live Octatrack root for write. Staging bytes come only from
+the verified backup. A missing C1 snapshot fails closed. Re-running prepare
+against an existing rename journal is `PlanConsumed`.
 
 ## C1 API
 
@@ -103,6 +135,5 @@ File roles:
 
 ## Deferred
 
-- C2 Mac staging, codec rewrite, journal preparation
 - C3 media apply, rollback, recovery execution
 - Gate C clone-load smoke and human sign-off

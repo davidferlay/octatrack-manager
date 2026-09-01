@@ -1,9 +1,18 @@
 #![forbid(unsafe_code)]
 
+mod rename_prepare;
+
 use fs2::FileExt;
 use ot_backup::{recovery_binding_for_plan, BackupError, BackupStore, SnapshotId, VerifiedBackup};
+use ot_codec_ports::ReferenceRewriteError;
 use ot_domain::{ContentHash, RootId, RootRelativePath};
-use ot_plan::{derive_additive_copy_plan_id, ChangePlan, PlanId, PlanSeed};
+use ot_plan::{derive_additive_copy_plan_id, ChangePlan, PlanId, PlanSeed, RenameImpactPlan};
+
+pub use rename_prepare::{
+    RenameChangedSlot, RenameJournalOperationKind, RenameJournalStatus, RenameOperationJournal,
+    RenamePrepareResult, RenameProjectRewriteRecord, RenameRecoveryAuthorization,
+    RenameSampleExecutor, RenameSemanticDiff, RenameStagedFileRecord, RenameStagedFileRole,
+};
 use rustix::fs::{self as descriptor_fs, AtFlags, Mode, OFlags, RenameFlags};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -19,6 +28,7 @@ const OPERATION_ID_PREFIX: &str = "operation:v1:";
 const RECOVERY_BINDING_PREFIX: &str = "recovery-binding:v1:";
 const RECOVERY_AUTHORIZATION_SCHEMA: &str = "masterocta-recovery-authorization:v2";
 const RECOVERY_AUTHORIZATION_DIRECTORY: &str = "authorizations";
+pub(crate) const RENAME_JOURNAL_DIRECTORY: &str = "rename";
 const UNIDENTIFIED_PARTIAL_FAILURE: &str = "RECOVERY_PRESERVED_UNIDENTIFIED_PARTIAL";
 const LEGACY_RECOVERY_BINDING: &str = "legacy-recovery-binding:unavailable";
 const LEGACY_RECOVERY_FAILURE: &str = "LEGACY_RECOVERY_UNAUTHENTICATED";
@@ -35,6 +45,15 @@ impl OperationId {
             .as_str()
             .strip_prefix("plan:v1:")
             .expect("ChangePlan contains a validated PlanId");
+        Self(format!("{OPERATION_ID_PREFIX}{digest}"))
+    }
+
+    pub fn for_rename_plan(plan: &RenameImpactPlan) -> Self {
+        let digest = plan
+            .id
+            .as_str()
+            .strip_prefix("plan:v1:")
+            .expect("RenameImpactPlan contains a validated PlanId");
         Self(format!("{OPERATION_ID_PREFIX}{digest}"))
     }
 
@@ -57,7 +76,7 @@ impl OperationId {
         &self.0
     }
 
-    fn file_stem(&self) -> &str {
+    pub(crate) fn file_stem(&self) -> &str {
         self.0
             .strip_prefix(OPERATION_ID_PREFIX)
             .expect("OperationId prefix is generated internally")
@@ -497,7 +516,10 @@ impl AdditiveCopyExecutor {
             let file_type = entry.file_type().map_err(ExecutorError::io)?;
             let name = entry.file_name();
             let name = name.to_str();
-            if name == Some("locks") || name == Some(RECOVERY_AUTHORIZATION_DIRECTORY) {
+            if name == Some("locks")
+                || name == Some(RECOVERY_AUTHORIZATION_DIRECTORY)
+                || name == Some(RENAME_JOURNAL_DIRECTORY)
+            {
                 if file_type.is_symlink() || !file_type.is_dir() {
                     return Err(ExecutorError::UnsafePath);
                 }
@@ -1116,7 +1138,7 @@ fn revalidate_recovery_authority<A: RecoveryAuthority>(
     Ok(current)
 }
 
-fn validate_canonical_root(canonical_path: &Path) -> Result<(), ExecutorError> {
+pub(crate) fn validate_canonical_root(canonical_path: &Path) -> Result<(), ExecutorError> {
     let metadata = fs::symlink_metadata(canonical_path).map_err(ExecutorError::io)?;
     if metadata.file_type().is_symlink() || !metadata.is_dir() {
         return Err(ExecutorError::UnsafePath);
@@ -1128,7 +1150,7 @@ fn validate_canonical_root(canonical_path: &Path) -> Result<(), ExecutorError> {
     Ok(())
 }
 
-fn prepare_local_directory(path: &Path, root: &Path) -> Result<PathBuf, ExecutorError> {
+pub(crate) fn prepare_local_directory(path: &Path, root: &Path) -> Result<PathBuf, ExecutorError> {
     reject_local_target_inside_root(path, root)?;
     fs::create_dir_all(path).map_err(ExecutorError::io)?;
     let metadata = fs::symlink_metadata(path).map_err(ExecutorError::io)?;
@@ -1160,7 +1182,10 @@ fn reject_local_target_inside_root(path: &Path, root: &Path) -> Result<(), Execu
     Ok(())
 }
 
-fn open_root_regular_file(root: &Path, relative: &RootRelativePath) -> Result<File, ExecutorError> {
+pub(crate) fn open_root_regular_file(
+    root: &Path,
+    relative: &RootRelativePath,
+) -> Result<File, ExecutorError> {
     let components = relative.as_str().split('/').collect::<Vec<_>>();
     let root = descriptor_fs::open(
         root,
@@ -1787,7 +1812,10 @@ fn hash_reader(reader: &mut impl Read) -> Result<(u64, ContentHash), ExecutorErr
     ))
 }
 
-fn acquire_root_lock(directory: &Path, fingerprint: &str) -> Result<File, ExecutorError> {
+pub(crate) fn acquire_root_lock(
+    directory: &Path,
+    fingerprint: &str,
+) -> Result<File, ExecutorError> {
     let locks = directory.join("locks");
     match fs::create_dir(&locks) {
         Ok(()) => sync_directory(directory)?,
@@ -2318,7 +2346,7 @@ fn validate_staging_cleanup_target(
     }
 }
 
-fn sync_directory(path: &Path) -> Result<(), ExecutorError> {
+pub(crate) fn sync_directory(path: &Path) -> Result<(), ExecutorError> {
     File::open(path)
         .and_then(|directory| directory.sync_all())
         .map_err(ExecutorError::io)
@@ -2347,12 +2375,13 @@ pub enum ExecutorError {
     PlanConsumed,
     InvalidJournal,
     RecoveryRequired,
+    ReferenceRewrite(ReferenceRewriteError),
     InjectedFault(&'static str),
     SimulatedCrash,
 }
 
 impl ExecutorError {
-    fn io(error: std::io::Error) -> Self {
+    pub(crate) fn io(error: std::io::Error) -> Self {
         Self::Io(error.to_string())
     }
 
@@ -2377,6 +2406,7 @@ impl ExecutorError {
             Self::PostWriteVerificationFailed => "VERIFY_FAILED",
             Self::PlanConsumed => "PLAN_CONSUMED",
             Self::RecoveryRequired => "RECOVERY_REQUIRED",
+            Self::ReferenceRewrite(_) => "REFERENCE_REWRITE_FAILED",
             Self::InjectedFault(_) => "INJECTED_FAULT",
             Self::SimulatedCrash => "SIMULATED_CRASH",
         }
@@ -2396,6 +2426,9 @@ impl fmt::Display for ExecutorError {
             Self::Backup(error) => write!(formatter, "verified backup failed: {error}"),
             Self::Io(message) => write!(formatter, "executor I/O failed: {message}"),
             Self::Journal(message) => write!(formatter, "operation journal failed: {message}"),
+            Self::ReferenceRewrite(error) => {
+                write!(formatter, "project reference rewrite failed: {error}")
+            }
             Self::InjectedFault(point) => write!(formatter, "fault injected at {point}"),
             other => formatter.write_str(match other {
                 Self::RootChanged => "root changed after the plan was created",
@@ -2422,6 +2455,7 @@ impl fmt::Display for ExecutorError {
                 | Self::Backup(_)
                 | Self::Io(_)
                 | Self::Journal(_)
+                | Self::ReferenceRewrite(_)
                 | Self::InjectedFault(_) => unreachable!(),
             }),
         }
