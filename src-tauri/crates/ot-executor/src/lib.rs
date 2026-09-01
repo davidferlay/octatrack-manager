@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod rename_apply;
 mod rename_prepare;
 
 use fs2::FileExt;
@@ -8,6 +9,7 @@ use ot_codec_ports::ReferenceRewriteError;
 use ot_domain::{ContentHash, RootId, RootRelativePath};
 use ot_plan::{derive_additive_copy_plan_id, ChangePlan, PlanId, PlanSeed, RenameImpactPlan};
 
+pub use rename_apply::RenameApplyResult;
 pub use rename_prepare::{
     RenameChangedSlot, RenameJournalOperationKind, RenameJournalStatus, RenameOperationJournal,
     RenamePrepareResult, RenameProjectRewriteRecord, RenameRecoveryAuthorization,

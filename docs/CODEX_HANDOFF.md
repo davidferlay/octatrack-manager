@@ -91,13 +91,14 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - Gate B smoke macOS移植: #55マージ済み
 - Project compatibility policy: #58／#59マージ済み
 - Gate B human sign-off: **PASS**（personal/local use、source `a10437f`）
-- 現在のmain基準SHA: `e2c0379`（M5-C1 PR #66 merge後。本作業は M5-C2）
+- 現在のmain基準SHA: `4e020bf`（M5-C2 PR #67 merge後。本作業は M5-C3）
 - M5-A sample rename impact planning: #61 マージ済み
 - M5-A fail-closed blocker tests: #64 マージ済み
 - M5-A P1 planning fixes（unparseable Project / destination unresolved slots）: #65 マージ済み
 - M5-B lossless Project reference rewrite codec: #62 マージ済み
 - M5-B codec fail-closed／contract tests: #63 マージ済み
 - M5-C1 rename verified multi-file backup: #66 マージ済み
+- M5-C2 rename Mac staging / Prepared journal: #67 マージ済み
 - M2: 完了
 - M3: 完了
 - M4-A: 完了
@@ -107,13 +108,15 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - M5-A: **完了**（pure domain/planning contract + blocker matrix）
 - M5-B: **完了**（メモリ専用 PATH 置換 codec）
 - M5-C1: **完了**（Mac側 immutable rename backup）
-- M5-C2 rename Mac staging: **このPR**
-- 現在の作業: M5-C2（backup再検証、codec rewrite、semantic diff、
-  authorization、未適用 `Prepared` journal。媒体 write なし）
+- M5-C2 rename Mac staging: **完了**
+- M5-C3 rename clone apply / rollback: **このPR**
+- 現在の作業: M5-C3（Prepared journal を temporary/cloned root へ apply。
+  backup + authorization + codec を再検証してから clone write。失敗時は
+  backup から rollback。原本 removable media は使わない）
 - SQLite schema: v6（compatibility evidence を含む）
-- 次の機能実装: M5-C2 完了後 **M5-C3**（temporary/cloned root 上の media apply /
-  rollback）。原本 removable media は使わない
-- Gate C rename Apply 残条件: C3、clone上 rename→rescan missing 0、
+- 次の機能実装: M5-C3 完了後は Gate C 残条件（clone rescan missing 0、
+  実機clone load smoke）。Tauri / frontend は別指示があるまで入れない
+- Gate C rename Apply 残条件: clone上 rename→rescan missing 0、
   非対象hash不変、rollback byte復元、実機clone load smoke
 - Developer ID signing / notarization / public distribution は別release gate
 - M5-A contract 正本: `docs/planning/M5_A_SAMPLE_RENAME_IMPACT.md`
