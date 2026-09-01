@@ -166,12 +166,16 @@ planning.
 
 Before Gate C sign-off for rename Apply:
 
-- codec evidence for reference rewrite
-- M5 executor/backup/journal/rollback on cloned media
-- rename → rescan shows zero missing references
-- unchanged non-target file hashes remain stable
-- rollback restores byte-identical media
-- clone load smoke on real hardware
+- codec evidence for reference rewrite — **done** (M5-B)
+- M5 executor/backup/journal/rollback on cloned media — **done** (M5-C1–C3)
+- rename → rescan shows zero missing references — **automated** (M5-C4 Gate C
+  integration tests + `scripts/gate-c-synthetic-smoke.sh`)
+- unchanged non-target file hashes remain stable — **automated** (M5-C4)
+- rollback restores byte-identical media — **automated** (M5-C4)
+- **remaining:** controlled operator harness (production wiring without bypassing
+  Intent → Plan → Apply)
+- **remaining:** clone load smoke on real hardware (human checklist in
+  `docs/testing/GATE_C_CLONE_SMOKE.md`)
 
 Developer ID signing, notarization, and public distribution remain separate
 release gates.

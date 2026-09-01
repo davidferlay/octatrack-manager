@@ -63,12 +63,24 @@ pub struct RenameApplyResult {
     pub authorization: RenameRecoveryAuthorization,
 }
 
+#[cfg(feature = "test-seams")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RenameApplyFault {
+    DestinationPublished,
+    ProjectReplaced,
+    SourceQuarantined,
+}
+
+#[cfg(not(feature = "test-seams"))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ApplyFault {
     DestinationPublished,
     ProjectReplaced,
     SourceQuarantined,
 }
+
+#[cfg(feature = "test-seams")]
+type ApplyFault = RenameApplyFault;
 
 struct PublishedNewFile {
     relative_path: RootRelativePath,
@@ -158,8 +170,8 @@ impl RenameSampleExecutor {
         Ok(journal)
     }
 
-    #[cfg(test)]
-    fn apply_with_fault<C, A>(
+    #[cfg(feature = "test-seams")]
+    pub fn apply_with_fault<C, A>(
         &self,
         plan: &RenameImpactPlan,
         codec: &C,
@@ -1867,6 +1879,7 @@ mod tests {
         ));
     }
 
+    #[cfg(feature = "test-seams")]
     #[test]
     fn fault_after_destination_publish_rolls_the_clone_back() {
         let fixture = prepare_clone(true, true, vec![assignment(WORK_PATH)]);
@@ -1891,6 +1904,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "test-seams")]
     #[test]
     fn fault_after_project_replace_restores_project_bytes() {
         let fixture = prepare_clone(true, true, vec![assignment(WORK_PATH)]);
@@ -1905,6 +1919,7 @@ mod tests {
         assert_eq!(snapshot_root(&fixture.clone), fixture.clone_before);
     }
 
+    #[cfg(feature = "test-seams")]
     #[test]
     fn fault_after_source_quarantine_restores_the_source_file() {
         let fixture = prepare_clone(false, false, Vec::new());

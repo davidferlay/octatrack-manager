@@ -235,6 +235,10 @@ impl SqliteCatalog {
         )?;
 
         insert_state_projection(&transaction, root_row_id, scan_id, snapshot)?;
+        transaction.execute(
+            "DELETE FROM sample_settings WHERE root_id = ?1",
+            [root_row_id],
+        )?;
         insert_sample_settings(&transaction, root_row_id, scan_id, snapshot)?;
 
         transaction.execute(
@@ -2588,6 +2592,32 @@ mod tests {
             )
             .unwrap();
         assert_eq!(counts, (2, 1));
+    }
+
+    #[test]
+    fn rescan_with_unchanged_file_sidecar_settings_replaces_stale_projection() {
+        let (_directory, _path, mut catalog) = open_temp_catalog();
+        let observation = observation('7', "Rescan sidecar");
+        let snapshot = snapshot_with_sample_settings();
+
+        catalog.store_snapshot(&observation, &snapshot).unwrap();
+        let rescan = catalog.store_snapshot(&observation, &snapshot).unwrap();
+
+        assert_eq!(rescan.revision.get(), 2);
+        assert_eq!(
+            catalog.load_latest_snapshot(&observation.identity).unwrap(),
+            Some(snapshot)
+        );
+        let sidecar_count: i64 = catalog
+            .connection
+            .query_row(
+                "SELECT COUNT(*) FROM sample_settings \
+                 WHERE owner_kind = 'file_instance_sidecar'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(sidecar_count, 1);
     }
 
     #[test]

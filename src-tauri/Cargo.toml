@@ -64,5 +64,10 @@ ot-executor = { path = "crates/ot-executor" }
 ot-plan = { path = "crates/ot-plan" }
 ot-storage-ports = { path = "crates/ot-storage-ports" }
 
+[features]
+test-seams = ["ot-executor/test-seams"]
+
 [dev-dependencies]
+ot-backup = { path = "crates/ot-backup" }
+ot-codec = { path = "crates/ot-codec" }
 tempfile = "3"

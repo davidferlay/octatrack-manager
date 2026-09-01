@@ -77,6 +77,11 @@ const allowedCompositionDependencies = new Set([
   "ot-plan",
   "ot-storage-ports",
 ]);
+const allowedCompositionDevDependencies = new Set([
+  "ot-backup",
+  "ot-codec",
+  "tempfile",
+]);
 const packagesByName = new Map(
   metadata.packages.map((cargoPackage) => [cargoPackage.name, cargoPackage]),
 );
@@ -140,6 +145,7 @@ if (!legacyPackage) {
     );
   }
   const unauthorizedDependencies = legacyPackage.dependencies
+    .filter((dependency) => dependency.kind !== "dev")
     .map((dependency) => dependency.name)
     .filter(
       (name) => nextCoreNames.has(name) && !allowedCompositionDependencies.has(name),
@@ -148,6 +154,23 @@ if (!legacyPackage) {
     failures.push(
       "Tauri composition root has unauthorized next-core dependencies: " +
         unauthorizedDependencies.join(", "),
+    );
+  }
+  const actualCompositionDevDependencies = legacyPackage.dependencies
+    .filter((dependency) => dependency.kind === "dev")
+    .map((dependency) => dependency.name)
+    .sort();
+  const expectedCompositionDevDependencies = [
+    ...allowedCompositionDevDependencies,
+  ].sort();
+  if (
+    JSON.stringify(actualCompositionDevDependencies) !==
+    JSON.stringify(expectedCompositionDevDependencies)
+  ) {
+    failures.push(
+      "Tauri composition root dev dependencies must be [" +
+        expectedCompositionDevDependencies.join(", ") +
+        `], found [${actualCompositionDevDependencies.join(", ")}]`,
     );
   }
 }

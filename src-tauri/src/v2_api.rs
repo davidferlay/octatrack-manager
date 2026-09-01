@@ -1279,6 +1279,63 @@ fn store_library_snapshot(
         .map_err(catalog_error)
 }
 
+#[cfg(test)]
+pub(crate) fn gate_c_register_and_index_root(
+    registry: &RootRegistry,
+    catalog: &SharedCatalog,
+    raw_path: &str,
+) -> Result<(RootSession, LibrarySnapshot), ApiError> {
+    let session = registry.register(raw_path)?;
+    let (resolved, snapshot) = scan_library_sync(registry, catalog, &session.root_id)?;
+    store_library_snapshot(catalog, &resolved, &snapshot)?;
+    Ok((resolved, snapshot))
+}
+
+#[cfg(test)]
+pub(crate) fn gate_c_rescan_and_store(
+    registry: &RootRegistry,
+    catalog: &SharedCatalog,
+    root_id: &RootId,
+) -> Result<(RootSession, LibrarySnapshot), ApiError> {
+    let resolved = registry.resolve(root_id)?;
+    let storage =
+        RegisteredLegacyLibrary::new(root_id.clone(), resolved.canonical_path.clone(), Vec::new());
+    let snapshot = ListLibrary::new(&storage)
+        .execute(root_id)
+        .map_err(|error| storage_error(error.message()))?;
+    store_library_snapshot(catalog, &resolved.session, &snapshot)?;
+    Ok((resolved.session, snapshot))
+}
+
+#[cfg(test)]
+pub(crate) fn gate_c_latest_completed_scan_revision(
+    catalog: &SharedCatalog,
+    fingerprint: &str,
+) -> Result<u64, ApiError> {
+    use ot_storage_ports::{CatalogScanStatus, LibraryCatalog};
+
+    let identity = CatalogRootIdentity::new(fingerprint.to_string()).map_err(catalog_error)?;
+    let catalog = catalog.lock().map_err(|_| catalog_lock_error())?;
+    let scan = catalog
+        .latest_scan(&identity)
+        .map_err(catalog_error)?
+        .ok_or_else(|| {
+            ApiError::new(
+                "CATALOG_NOT_INDEXED",
+                "no successful catalog snapshot is available for this root",
+                true,
+            )
+        })?;
+    if scan.status != CatalogScanStatus::Completed {
+        return Err(ApiError::new(
+            "CATALOG_NOT_INDEXED",
+            "no successful catalog snapshot is available for this root",
+            true,
+        ));
+    }
+    Ok(scan.revision.get())
+}
+
 fn catalog_lock_error() -> ApiError {
     ApiError::new(
         "CATALOG_UNAVAILABLE",
