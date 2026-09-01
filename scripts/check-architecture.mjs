@@ -71,15 +71,15 @@ devDependencyRules.set("ot-codec", ["ot-tools-io"]);
 const allowedCompositionDependencies = new Set([
   "ot-application",
   "ot-audio",
+  "ot-backup",
   "ot-catalog",
+  "ot-codec",
   "ot-domain",
   "ot-executor",
   "ot-plan",
   "ot-storage-ports",
 ]);
 const allowedCompositionDevDependencies = new Set([
-  "ot-backup",
-  "ot-codec",
   "tempfile",
 ]);
 const packagesByName = new Map(
@@ -197,8 +197,13 @@ const expectedV2Commands = [
   "v2_change_recovery_status",
   "v2_change_status",
   "v2_library_list",
+  "v2_rename_authorize",
+  "v2_rename_create_backup",
   "v2_rename_get_plan",
+  "v2_rename_get_status",
   "v2_rename_plan",
+  "v2_rename_prepare",
+  "v2_rename_recovery_status",
   "v2_root_close",
   "v2_root_disable_write",
   "v2_root_enable_write",

@@ -466,6 +466,49 @@ impl RootRegistry {
         Ok(self.lock_state()?.roots.remove(root_id).is_some())
     }
 
+    /// Binds a successfully completed catalog scan revision to the live session.
+    /// Fails closed when the root changed, expired, or the revision would regress.
+    pub fn record_completed_scan_revision(
+        &self,
+        root_id: &RootId,
+        scan_revision: u64,
+    ) -> Result<RootSession, RootRegistryError> {
+        if scan_revision == 0 {
+            return Err(RootRegistryError::Unavailable);
+        }
+
+        let now = Instant::now();
+        let mut state = self.lock_state()?;
+        let Some(entry) = state.roots.get_mut(root_id) else {
+            return Err(RootRegistryError::NotApproved);
+        };
+        if entry.expires_at <= now {
+            state.roots.remove(root_id);
+            return Err(RootRegistryError::Expired);
+        }
+
+        let observation = match self.identity_provider.observe(&entry.canonical_path) {
+            Ok(observation) => observation,
+            Err(error @ RootRegistryError::Removed) => {
+                state.roots.remove(root_id);
+                return Err(error);
+            }
+            Err(error) => return Err(error),
+        };
+        if observation != entry.observation {
+            state.roots.remove(root_id);
+            return Err(RootRegistryError::Changed);
+        }
+        if scan_revision < entry.session.observed_revision {
+            return Err(RootRegistryError::Changed);
+        }
+
+        entry.session.observed_revision = scan_revision;
+        entry.session.expires_in_seconds =
+            entry.expires_at.saturating_duration_since(now).as_secs();
+        Ok(entry.session.clone())
+    }
+
     fn lock_state(&self) -> Result<std::sync::MutexGuard<'_, RegistryState>, RootRegistryError> {
         self.state
             .lock()
@@ -1006,6 +1049,34 @@ mod tests {
         assert_eq!(
             fs::read(outside.path().join("outside.wav")).unwrap(),
             b"private fixture"
+        );
+    }
+
+    #[test]
+    fn completed_scan_revision_advances_monotonically_and_rejects_regression() {
+        let root = TempDir::new().unwrap();
+        let registry = RootRegistry::new(
+            Arc::new(FakeIdentityProvider::new()),
+            Duration::from_secs(60),
+        );
+        let session = registry.register(root.path().to_str().unwrap()).unwrap();
+        assert_eq!(session.observed_revision, 1);
+
+        let updated = registry
+            .record_completed_scan_revision(&session.root_id, 3)
+            .unwrap();
+        assert_eq!(updated.observed_revision, 3);
+
+        let refreshed = registry
+            .record_completed_scan_revision(&session.root_id, 3)
+            .unwrap();
+        assert_eq!(refreshed.observed_revision, 3);
+
+        assert_eq!(
+            registry
+                .record_completed_scan_revision(&session.root_id, 2)
+                .unwrap_err(),
+            RootRegistryError::Changed
         );
     }
 }

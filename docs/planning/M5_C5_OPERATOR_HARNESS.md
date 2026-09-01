@@ -1,6 +1,6 @@
 # M5-C5 — Gate C Controlled Operator Harness
 
-- Status: **in progress** on branch `cursor/m5c5-gate-c-operator-harness`
+- Status: **Phase 1 COMPLETE**；**Phase 2 COMPLETE**；**Phase 3 未着手**
 - Base: `origin/main` at PR #70 merge (`15eef67` / M5-C4 automated clone-rescan proof)
 - Goal: expose rename Apply on a **disposable registered clone** through production
   Tauri + explicit approval UI, without bypassing Intent → Plan → Apply or opening
@@ -54,10 +54,12 @@ Mirror these boundaries; do not extend legacy rename commands.
 |---|---|---|
 | `v2_rename_plan` | 1 | Build `RenameImpactPlan` from catalog + live hash; store with TTL |
 | `v2_rename_get_plan` | 1 | Fetch stored plan for review |
-| `v2_rename_apply` | 2 | Requires write grant + matching `approvedPlanId` + clone attestation |
-| `v2_rename_status` | 2 | Operation/journal status |
+| `v2_rename_authorize` | 2 | Issue session-bound rename authority after write grant + freshness checks |
+| `v2_rename_create_backup` | 2 | C1 verified rename backup (`create_verified_for_rename`) |
+| `v2_rename_prepare` | 2 | C2 Mac-side staging + Prepared journal |
+| `v2_rename_get_status` | 2 | Operation/journal status (restart-safe read) |
 | `v2_rename_recovery_status` | 2 | Incomplete rename operations |
-| `v2_rename_recover` | 2 | Rollback via `RecoveryAuthority` (no reusable write grant) |
+| `v2_rename_apply` | 4 | Requires write grant + matching `approvedPlanId` + clone attestation |
 
 DTOs use a dedicated schema (`rename-plan:v1`, `rename-blocked:v1`) rather than
 overloading `change-plan:v1`.
@@ -69,9 +71,18 @@ overloading `change-plan:v1`.
 
 ## Phased delivery (small PRs)
 
-### Phase 1 — Read-only rename planning API
+### Phase 1 — Read-only rename planning API (**COMPLETE**)
 
-**PR title:** `M5-C5 Phase 1 — Add read-only rename planning API`
+**PR title:** `M5-C5 Phase 1 — Add read-only rename planning API` (+ P1 fix follow-up)
+
+Phase 1 P1 prerequisites resolved:
+
+| P1 | Resolution |
+|---|---|
+| Catalog scan revision vs `RootSession.observed_revision` | Separated in `RenameRootObservation`; session revision synced only after successful catalog store via `RootRegistry::record_completed_scan_revision` |
+| Live Project/Bank reference graph freshness | `verify_catalog_matches_live_scan` compares catalog snapshot to a live rescan before planning |
+| Live source `.ot` sidecar | `collect_sidecar_observations` observes `{stem}.ot` on live filesystem; catalog/live mismatch → `CATALOG_STALE` |
+| Unicode-aware filename case collision | NFC + Unicode lowercase sibling comparison in `rename_planning_facts.rs` |
 
 Deliverables:
 
@@ -120,12 +131,23 @@ Deliverables:
 - Pre/post plan byte-identical hash manifest on synthetic tempfile clone
 - Additive-copy runtime/API regression unchanged
 
-### Phase 2 — Clone attestation + apply/rescan
+### Phase 2 — Authority / backup / prepare API (**COMPLETE**)
 
-- `RegistryCloneWriteAuthority` implementing `CloneWriteAuthority`
-- `v2_rename_apply` orchestrating C1 backup → C2 prepare → C3 apply
-- Post-apply catalog rescan (reuse `scan_library_sync` + `store_library_snapshot`)
-- Tempfile integration tests mirroring Gate C happy path through public API
+Production vertical slice (no Apply, no frontend):
+
+- `v2_rename_authorize` — write grant + live freshness re-check; does **not** call `enable_write`
+- `v2_rename_create_backup` → C1 `create_verified_for_rename` + `verify_for_rename_plan`
+- `v2_rename_prepare` → C2 `RenameSampleExecutor::prepare`
+- `v2_rename_get_status` / `v2_rename_recovery_status` — restart-safe journal read
+- Canonical sequence enforced: `enable_write → plan → authorize → backup → prepare`
+- `plan → enable_write → authorize` fails closed (`CATALOG_REVISION_MISMATCH`)
+- TempDir integration tests: happy path, write-disabled, stale plan after rescan, source byte identity
+
+Explicitly **not** in Phase 2:
+
+- `RenameSampleExecutor::apply` from production Tauri API
+- frontend Rename UI
+- clone Apply / human Gate C smoke
 
 ### Phase 3 — Operator UI
 
@@ -133,7 +155,7 @@ Deliverables:
 - Clone attestation modal/copy in drawer
 - Root panel wiring + e2e smoke on synthetic fixture
 
-### Phase 4 — Human Gate C smoke
+### Phase 4 — Clone Apply + human Gate C smoke
 
 - Execute `docs/testing/GATE_C_CLONE_SMOKE.md` against Phase 3 build
 - Record evidence outside repository; do not commit personal paths/fingerprints
@@ -165,5 +187,26 @@ e2e once drawer exists.
 
 ## Gate C completion
 
-Gate C sign-off requires **both** this harness (Phases 1–3) **and** human clone-load
-smoke (Phase 4). M5-C4 automated proof remains necessary but not sufficient.
+Gate C sign-off requires Phases 1–4 **and** human clone-load smoke. M5-C4 automated proof remains necessary but not sufficient.
+
+## M5-C5 Phase 1 planning freshness (production API)
+
+Before backup/prepare (Phase 2+), production rename planning must prove:
+
+```text
+live bytes
+=
+plan reference graph
+=
+catalog observation
+```
+
+Implementation (`rename_planning_facts.rs`, `v2_api.rs`):
+
+- `base_catalog_scan_revision` comes from the latest completed catalog scan
+- `live_observed_revision` comes from `RootSession.observed_revision`, synced only after successful catalog store
+- A live library rescan is compared to the loaded catalog snapshot (state documents, slot assignments, usage edges, sidecar settings)
+- Source audio, Project/Bank documents, and `{stem}.ot` sidecars are re-hashed from the live filesystem with `NOFOLLOW`
+- Mismatch → `CATALOG_STALE` or structured `rename-blocked:v1`; never proceed to backup/prepare with stale evidence
+
+Phase 2+ must re-run the same freshness checks at authority, backup, and prepare boundaries.

@@ -1364,7 +1364,8 @@ pub fn run() {
             app.manage(audio_runtime);
             let write_runtime = write_runtime::open_shared_write_runtime(&data_directory)?;
             app.manage(write_runtime);
-            let rename_write_runtime = rename_write_runtime::open_shared_rename_write_runtime();
+            let rename_write_runtime =
+                rename_write_runtime::open_shared_rename_write_runtime(&data_directory)?;
             app.manage(rename_write_runtime);
 
             // Clear WebView session storage in the background on app startup
@@ -1398,6 +1399,11 @@ pub fn run() {
             v2_api::v2_change_recovery_status,
             v2_api::v2_rename_plan,
             v2_api::v2_rename_get_plan,
+            v2_api::v2_rename_authorize,
+            v2_api::v2_rename_create_backup,
+            v2_api::v2_rename_prepare,
+            v2_api::v2_rename_get_status,
+            v2_api::v2_rename_recovery_status,
             greet,
             scan_devices,
             scan_custom_directory,

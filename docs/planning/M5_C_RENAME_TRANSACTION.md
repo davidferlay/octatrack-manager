@@ -2,7 +2,8 @@
 
 - Status: C1 verified-backup contract **complete**; C2 Mac staging **complete**;
   C3 clone apply / rollback **complete** (`373a755` / #69); C4 automated
-  clone-rescan proof **in progress** on branch `cursor/m5c4-gate-c-clone-rescan`
+  clone-rescan proof **complete** (`15eef67` / #70); C5 operator harness **Phase 1
+  complete**, **Phase 2 complete**, Phase 3+ in progress
 - Scope of C3: apply a C2 `Prepared` journal to a **temporary/cloned** root;
   re-verify C1 backup + authorization hashes + codec rebuild from backup
   before any clone write; roll the clone back from backup on failure
@@ -235,6 +236,18 @@ SHA-pinned Actions). Generated reports stay under `/tmp` and are not committed.
 `ot-catalog` clears stale `sample_settings` rows before each rescan projection
 so an unchanged file-sidecar path can store a second completed revision without
 violating the file-owner unique index.
+
+## M5-C5 production planning API freshness
+
+The M5-C5 Phase 1 Tauri commands (`v2_rename_plan`, `v2_rename_get_plan`) must not
+advance to C1/C2 until planning evidence is fresh. Production code re-verifies live
+filesystem bytes and compares the catalog snapshot to a live rescan before storing a
+plan. `RootSession.observed_revision` tracks the latest completed catalog scan revision
+and must match `base_catalog_scan_revision` at plan time unless the session is stale
+(`CATALOG_REVISION_MISMATCH`). Phase 2 commands (`v2_rename_authorize`,
+`v2_rename_create_backup`, `v2_rename_prepare`) repeat the same checks at each boundary.
+C1/C2 contracts themselves are unchanged; production `RenameSampleExecutor::apply` remains
+unwired.
 
 ## Deferred
 

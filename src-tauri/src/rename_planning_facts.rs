@@ -1,8 +1,8 @@
 use crate::root_registry::{ResolvedRoot, RootRegistryError};
 use ot_domain::{
     ContentHash, ContentHashFreshness, FileInstance, LibrarySnapshot, RootRelativePath,
-    SampleSettingsOwner, SampleSettingsParseStatus, StateDocument, StateDocumentKind,
-    StateDocumentRole,
+    SampleSettings, SampleSettingsOwner, SampleSettingsParseStatus, SampleUsageEdge,
+    SlotAssignment, StateDocument, StateDocumentKind, StateDocumentRole,
 };
 use ot_plan::{
     classify_destination_state, derive_file_instance_id, PathComparisonMode,
@@ -90,10 +90,36 @@ pub fn ensure_same_directory_rename(
     Ok(())
 }
 
+pub fn verify_catalog_matches_live_scan(
+    catalog: &LibrarySnapshot,
+    live: &LibrarySnapshot,
+) -> Result<(), RenamePlanningFactsError> {
+    if catalog_state_projection_key(catalog) != catalog_state_projection_key(live) {
+        return Err(RenamePlanningFactsError::CatalogStale);
+    }
+    if slot_assignment_projection_key(&catalog.slot_assignments)
+        != slot_assignment_projection_key(&live.slot_assignments)
+    {
+        return Err(RenamePlanningFactsError::CatalogStale);
+    }
+    if usage_edge_projection_key(&catalog.usage_edges)
+        != usage_edge_projection_key(&live.usage_edges)
+    {
+        return Err(RenamePlanningFactsError::CatalogStale);
+    }
+    if sidecar_projection_key(&catalog.sample_settings)
+        != sidecar_projection_key(&live.sample_settings)
+    {
+        return Err(RenamePlanningFactsError::CatalogStale);
+    }
+    Ok(())
+}
+
 pub fn build_rename_planning_facts(
     resolved: &ResolvedRoot,
     snapshot: &LibrarySnapshot,
-    scan_revision: u64,
+    base_catalog_scan_revision: u64,
+    live_observed_revision: u64,
     source: &FileInstance,
     destination: RootRelativePath,
 ) -> Result<RenameSamplePlanningFacts, RenamePlanningFactsError> {
@@ -116,8 +142,8 @@ pub fn build_rename_planning_facts(
         root: RenameRootObservation {
             root_id: resolved.session.root_id.clone(),
             device_fingerprint: resolved.session.device_fingerprint.clone(),
-            live_observed_revision: scan_revision,
-            base_catalog_scan_revision: scan_revision,
+            live_observed_revision,
+            base_catalog_scan_revision,
             scan_completed: true,
             identity_is_stable: resolved.session.capabilities.stable_device_identity,
         },
@@ -167,9 +193,92 @@ pub fn build_rename_planning_facts(
             })
             .collect(),
         sidecars: collect_sidecar_observations(resolved, snapshot, &source.relative_path)?,
-        usage_graph_complete: true,
+        usage_graph_complete: derive_usage_graph_complete(snapshot),
         set_project_coverage_complete: derive_set_project_coverage_complete(snapshot),
     })
+}
+
+fn catalog_state_projection_key(
+    snapshot: &LibrarySnapshot,
+) -> Vec<(String, String, String, String)> {
+    let mut rows = snapshot
+        .state_documents
+        .iter()
+        .map(|document| {
+            (
+                document.source_relative_path.as_str().to_owned(),
+                format!("{:?}", document.kind),
+                format!("{:?}", document.role),
+                format!("{:?}", document.parse_status),
+            )
+        })
+        .collect::<Vec<_>>();
+    rows.sort();
+    rows
+}
+
+fn slot_assignment_projection_key(
+    assignments: &[SlotAssignment],
+) -> Vec<(String, String, String, String)> {
+    let mut rows = assignments
+        .iter()
+        .map(|assignment| {
+            (
+                assignment
+                    .project_document_relative_path
+                    .as_str()
+                    .to_owned(),
+                format!("{:?}", assignment.slot),
+                assignment
+                    .referenced_file_relative_path
+                    .as_ref()
+                    .map(|path| path.as_str().to_owned())
+                    .unwrap_or_default(),
+                format!("{:?}", assignment.reference_status),
+            )
+        })
+        .collect::<Vec<_>>();
+    rows.sort();
+    rows
+}
+
+fn usage_edge_projection_key(edges: &[SampleUsageEdge]) -> Vec<(String, String, String, String)> {
+    let mut rows = edges
+        .iter()
+        .map(|edge| {
+            (
+                edge.bank_document_relative_path.as_str().to_owned(),
+                edge.project_document_relative_path.as_str().to_owned(),
+                format!("{:?}", edge.slot),
+                edge.referenced_file_relative_path
+                    .as_ref()
+                    .map(|path| path.as_str().to_owned())
+                    .unwrap_or_default(),
+            )
+        })
+        .collect::<Vec<_>>();
+    rows.sort();
+    rows
+}
+
+fn sidecar_projection_key(settings: &[SampleSettings]) -> Vec<(String, String, String)> {
+    let mut rows = settings
+        .iter()
+        .filter(|settings| settings.owner == SampleSettingsOwner::FileInstanceSidecar)
+        .map(|settings| {
+            (
+                settings.source_relative_path.as_str().to_owned(),
+                settings
+                    .file_instance_relative_path
+                    .as_ref()
+                    .map(|path| path.as_str().to_owned())
+                    .unwrap_or_default(),
+                format!("{:?}", settings.parse_status),
+            )
+        })
+        .collect::<Vec<_>>();
+    rows.sort();
+    rows
 }
 
 fn derive_set_project_coverage_complete(snapshot: &LibrarySnapshot) -> bool {
@@ -186,6 +295,10 @@ fn derive_set_project_coverage_complete(snapshot: &LibrarySnapshot) -> bool {
                     && document.project_relative_path == project.relative_path
             })
         })
+}
+
+fn derive_usage_graph_complete(snapshot: &LibrarySnapshot) -> bool {
+    derive_set_project_coverage_complete(snapshot)
 }
 
 fn map_state_document(
@@ -207,52 +320,84 @@ fn map_state_document(
     })
 }
 
+fn sidecar_path_for_audio(audio: &RootRelativePath) -> Option<RootRelativePath> {
+    let stem = audio_stem(audio.as_str())?;
+    let parent = path_parent(audio.as_str());
+    let relative = if parent.is_empty() {
+        format!("{stem}.ot")
+    } else {
+        format!("{parent}/{stem}.ot")
+    };
+    RootRelativePath::parse(relative).ok()
+}
+
+fn audio_stem(relative: &str) -> Option<&str> {
+    let basename = path_basename(relative)?;
+    basename.rsplit_once('.').map(|(stem, _)| stem)
+}
+
 fn collect_sidecar_observations(
     resolved: &ResolvedRoot,
     snapshot: &LibrarySnapshot,
     source_relative_path: &RootRelativePath,
 ) -> Result<Vec<RenameSidecarObservation>, RenamePlanningFactsError> {
-    let mut observations = Vec::new();
-    for settings in &snapshot.sample_settings {
-        if settings.owner != SampleSettingsOwner::FileInstanceSidecar {
-            continue;
+    let expected_sidecar = sidecar_path_for_audio(source_relative_path);
+    let live_sidecar = expected_sidecar
+        .as_ref()
+        .and_then(|path| observe_live_sidecar(resolved, path));
+
+    let catalog_sidecars = snapshot
+        .sample_settings
+        .iter()
+        .filter(|settings| {
+            settings.owner == SampleSettingsOwner::FileInstanceSidecar
+                && settings
+                    .file_instance_relative_path
+                    .as_ref()
+                    .is_some_and(|path| path == source_relative_path)
+        })
+        .collect::<Vec<_>>();
+
+    match (live_sidecar.as_ref(), catalog_sidecars.as_slice()) {
+        (None, []) => Ok(Vec::new()),
+        (Some(live), [catalog]) => {
+            if catalog.source_relative_path != live.sidecar_relative_path {
+                return Err(RenamePlanningFactsError::CatalogStale);
+            }
+            let ownership_is_unique = catalog_sidecars.len() == 1;
+            Ok(vec![RenameSidecarObservation {
+                sidecar_relative_path: live.sidecar_relative_path.clone(),
+                owning_audio_relative_path: source_relative_path.clone(),
+                byte_size: live.byte_size,
+                content_hash: live.content_hash.clone(),
+                parse_status: catalog.parse_status,
+                parser_provenance: catalog.parser_provenance.clone(),
+                ownership_is_unique,
+            }])
         }
-        let Some(owner_path) = settings.file_instance_relative_path.as_ref() else {
-            continue;
-        };
-        if owner_path != source_relative_path {
-            continue;
-        }
-        let sidecar_path = resolved
-            .resolve_regular_file(&settings.source_relative_path)
-            .map_err(RenamePlanningFactsError::from)?;
-        if !sidecar_path.exists() {
-            continue;
-        }
-        let (byte_size, content_hash) = hash_live_file(&sidecar_path)?;
-        let ownership_is_unique = snapshot
-            .sample_settings
-            .iter()
-            .filter(|candidate| {
-                candidate.owner == SampleSettingsOwner::FileInstanceSidecar
-                    && candidate
-                        .file_instance_relative_path
-                        .as_ref()
-                        .is_some_and(|path| path == source_relative_path)
-            })
-            .count()
-            == 1;
-        observations.push(RenameSidecarObservation {
-            sidecar_relative_path: settings.source_relative_path.clone(),
-            owning_audio_relative_path: source_relative_path.clone(),
-            byte_size,
-            content_hash,
-            parse_status: settings.parse_status,
-            parser_provenance: settings.parser_provenance.clone(),
-            ownership_is_unique,
-        });
+        (Some(_), []) => Err(RenamePlanningFactsError::CatalogStale),
+        (None, [_]) => Err(RenamePlanningFactsError::CatalogStale),
+        (_, _) => Err(RenamePlanningFactsError::CatalogStale),
     }
-    Ok(observations)
+}
+
+struct LiveSidecarObservation {
+    sidecar_relative_path: RootRelativePath,
+    byte_size: u64,
+    content_hash: ContentHash,
+}
+
+fn observe_live_sidecar(
+    resolved: &ResolvedRoot,
+    sidecar_relative_path: &RootRelativePath,
+) -> Option<LiveSidecarObservation> {
+    let path = resolved.resolve_regular_file(sidecar_relative_path).ok()?;
+    let (byte_size, content_hash) = hash_live_file(&path).ok()?;
+    Some(LiveSidecarObservation {
+        sidecar_relative_path: sidecar_relative_path.clone(),
+        byte_size,
+        content_hash,
+    })
 }
 
 fn observe_sidecar_destination(
@@ -268,15 +413,15 @@ fn observe_sidecar_destination(
                 .as_ref()
                 .is_some_and(|path| path == source_relative_path)
             && settings.parse_status == SampleSettingsParseStatus::Parsed
-    });
+    }) || sidecar_path_for_audio(source_relative_path)
+        .is_some_and(|path| observe_live_sidecar(resolved, &path).is_some());
+
     if !has_sidecar {
         return Ok(None);
     }
-    let Some((prefix, _extension)) = audio_destination.as_str().rsplit_once('.') else {
+    let Some(sidecar_relative) = sidecar_path_for_audio(audio_destination) else {
         return Ok(None);
     };
-    let sidecar_relative = RootRelativePath::parse(format!("{prefix}.ot"))
-        .map_err(|error| RenamePlanningFactsError::InvalidDestinationPath(error.to_string()))?;
     let state = observe_destination_state(resolved, &sidecar_relative, snapshot)?;
     Ok(Some(RenameDestinationObservation {
         intended_relative_path: sidecar_relative,
@@ -326,6 +471,12 @@ fn observe_destination_state(
         return Ok(RenameDestinationState::NormalizationCollision {
             existing_relative_path: existing,
             normalization,
+        });
+    }
+
+    if let Some(existing) = find_unicode_case_collision(intended, &sibling_paths) {
+        return Ok(RenameDestinationState::CaseOnlyCollision {
+            existing_relative_path: existing,
         });
     }
 
@@ -423,6 +574,38 @@ fn find_unicode_normalization_collision(
         }
     }
     None
+}
+
+fn find_unicode_case_collision(
+    intended: &RootRelativePath,
+    siblings: &[RootRelativePath],
+) -> Option<RootRelativePath> {
+    let intended_parent = path_parent(intended.as_str());
+    let intended_name = path_basename(intended.as_str())?;
+    let intended_key = unicode_case_fold(intended_name);
+
+    for sibling in siblings {
+        if path_parent(sibling.as_str()) != intended_parent {
+            continue;
+        }
+        if sibling == intended {
+            continue;
+        }
+        let Some(sibling_name) = path_basename(sibling.as_str()) else {
+            continue;
+        };
+        if sibling_name == intended_name {
+            continue;
+        }
+        if unicode_case_fold(sibling_name) == intended_key {
+            return Some(sibling.clone());
+        }
+    }
+    None
+}
+
+fn unicode_case_fold(name: &str) -> String {
+    name.nfc().collect::<String>().to_lowercase()
 }
 
 pub fn hash_live_file(path: &Path) -> Result<(u64, ContentHash), RenamePlanningFactsError> {
@@ -568,10 +751,70 @@ mod tests {
                 &resolved,
                 &LibrarySnapshot::default(),
                 1,
+                1,
                 &source,
                 destination,
             ),
             Err(RenamePlanningFactsError::CatalogStale)
+        );
+    }
+
+    #[test]
+    fn revision_binding_is_exposed_separately() {
+        let temp = TempDir::new().unwrap();
+        fs::create_dir_all(temp.path().join("SET/AUDIO")).unwrap();
+        let wav = temp.path().join("SET/AUDIO/kick.wav");
+        fs::write(&wav, vec![0_u8; 100]).unwrap();
+        let resolved = resolved(temp.path());
+        let (_, live_hash) = hash_live_file(&wav).unwrap();
+        let mut source = file_instance("SET/AUDIO/kick.wav", 1);
+        source.content_hash = live_hash;
+        let destination = RootRelativePath::parse("SET/AUDIO/kick-2.wav").unwrap();
+        let facts = build_rename_planning_facts(
+            &resolved,
+            &LibrarySnapshot::default(),
+            3,
+            2,
+            &source,
+            destination,
+        )
+        .unwrap();
+        assert_eq!(facts.root.base_catalog_scan_revision, 3);
+        assert_eq!(facts.root.live_observed_revision, 2);
+    }
+
+    #[test]
+    fn live_sidecar_appearance_without_catalog_row_is_stale() {
+        let temp = TempDir::new().unwrap();
+        fs::create_dir_all(temp.path().join("SET/AUDIO")).unwrap();
+        let wav = temp.path().join("SET/AUDIO/kick.wav");
+        fs::write(&wav, vec![0_u8; 100]).unwrap();
+        fs::write(temp.path().join("SET/AUDIO/kick.ot"), b"sidecar").unwrap();
+        let resolved = resolved(temp.path());
+        let (_, live_hash) = hash_live_file(&wav).unwrap();
+        let mut source = file_instance("SET/AUDIO/kick.wav", 1);
+        source.content_hash = live_hash;
+        let destination = RootRelativePath::parse("SET/AUDIO/kick-2.wav").unwrap();
+        assert_eq!(
+            build_rename_planning_facts(
+                &resolved,
+                &LibrarySnapshot::default(),
+                1,
+                1,
+                &source,
+                destination,
+            ),
+            Err(RenamePlanningFactsError::CatalogStale)
+        );
+    }
+
+    #[test]
+    fn unicode_case_collision_is_detected_for_non_ascii_names() {
+        let intended = RootRelativePath::parse("SET/AUDIO/über.wav").unwrap();
+        let sibling = RootRelativePath::parse("SET/AUDIO/ÜBER.wav").unwrap();
+        assert_eq!(
+            find_unicode_case_collision(&intended, &[sibling]),
+            Some(RootRelativePath::parse("SET/AUDIO/ÜBER.wav").unwrap())
         );
     }
 }

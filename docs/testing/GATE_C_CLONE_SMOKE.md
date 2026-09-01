@@ -33,9 +33,9 @@ Before this human smoke, production must expose rename Apply only through:
 - an explicit operator approval surface (not test doubles)
 - `VerifiedCloneRoot` or an equivalently attested temporary copy boundary
 
-Do not sign off Gate C until that harness exists and is used for the steps
-below. M5-C4 intentionally does **not** wire Tauri commands, frontend Rename
-UI, or reusable write grants.
+M5-C5 Phase 2 production API now wires **plan → authorize → backup → prepare** on the
+registered root without mutating source media. Phase 3 UI and Phase 4 clone Apply remain
+outstanding before this checklist can be executed end-to-end.
 
 ## Real-hardware clone-load smoke
 
