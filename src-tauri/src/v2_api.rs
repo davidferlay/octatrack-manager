@@ -5149,7 +5149,7 @@ mod tests {
     fn rename_prepare_rejects_tampered_backup() {
         let fixture = setup_rename_through_backup();
         let manifest_path =
-            backup_snapshot_directory(&fixture.data_directory.path(), &fixture.snapshot_id)
+            backup_snapshot_directory(fixture.data_directory.path(), &fixture.snapshot_id)
                 .join("manifest.json");
         let mut manifest: serde_json::Value =
             serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
@@ -5236,7 +5236,7 @@ mod tests {
         .unwrap();
 
         fs::write(
-            rename_journal_path(&fixture.data_directory.path(), &fixture.operation_id),
+            rename_journal_path(fixture.data_directory.path(), &fixture.operation_id),
             br#"{"schema":"broken"}"#,
         )
         .unwrap();
