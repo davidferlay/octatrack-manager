@@ -198,7 +198,9 @@ test.describe("Rename prepare workflow", () => {
     await expect(page.getByText("PROJECT_A")).toBeVisible({ timeout: 10000 });
     await expect(page.getByRole("button", { name: "Edit" })).toBeEnabled();
     await page.getByRole("button", { name: "Edit" }).click();
-    await expect(page.getByText("EDIT ENABLED")).toBeVisible();
+    await expect(
+      page.getByTestId("app-shell-sources").getByText("EDIT ENABLED", { exact: true }),
+    ).toBeVisible();
     await page.getByRole("button", { name: /KICK\.wav/ }).click();
     await page.getByRole("button", { name: "Rename" }).click();
     await page.getByLabel("New file name").fill("KICK_DEEP.wav");
@@ -309,7 +311,9 @@ test.describe("Rename prepare workflow", () => {
     await expect(page.getByText("PROJECT_A")).toBeVisible({ timeout: 10000 });
     await expect(page.getByRole("button", { name: "Edit" })).toBeEnabled();
     await page.getByRole("button", { name: "Edit" }).click();
-    await expect(page.getByText("EDIT ENABLED")).toBeVisible();
+    await expect(
+      page.getByTestId("app-shell-sources").getByText("EDIT ENABLED", { exact: true }),
+    ).toBeVisible();
     await page.getByRole("button", { name: /KICK\.wav/ }).click();
     await page.getByRole("button", { name: "Rename" }).click();
     await page.getByLabel("New file name").fill("KICK_DEEP.wav");
