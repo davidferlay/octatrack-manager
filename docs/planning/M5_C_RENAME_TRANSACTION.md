@@ -81,9 +81,12 @@ Prepare flow:
 5. Copy backup bytes into Mac staging: destination audio, destination sidecar,
    rewritten Project documents at their original relative paths
 6. Build `SlotPathPatch` from inspect + planned updates. The observed `PATH=`
-   (after stripping leading `../` or `..\\`) must be a suffix of
-   `from_relative_path`. A same-basename path in a different directory fails
-   closed. Destination PATH uses `rewrite_same_directory_path`
+   is resolved from the project directory (parent of the document), using the
+   same algorithm as `legacy_read_adapter::resolve_project_reference`. The
+   resolved root-relative path must equal `from_relative_path`. A basename-only
+   PATH such as `kick.wav` therefore matches only a project-local file, not a
+   pool path like `SET/AUDIO/kick.wav`. Destination PATH uses
+   `rewrite_same_directory_path`
 7. Write create-once authorization (no absolute paths) bound to staged file
    hashes and project rewrite hashes, then the `Prepared` journal
 8. Return `RenamePrepareResult` + semantic diff; source root stays byte-identical
