@@ -1,7 +1,8 @@
 # M5-C Recoverable Rename Transaction
 
 - Status: C1 verified-backup contract **complete**; C2 Mac staging **complete**;
-  C3 clone apply / rollback (this PR)
+  C3 clone apply / rollback **complete** (`3a9778f` / #68); this change hardens
+  the C3 review follow-up (clone-only apply, restart recovery)
 - Scope of C3: apply a C2 `Prepared` journal to a **temporary/cloned** root;
   re-verify C1 backup + authorization hashes + codec rebuild from backup
   before any clone write; roll the clone back from backup on failure
@@ -63,15 +64,23 @@ descriptor-relative `NOFOLLOW` open / `EXCL` create / `renameat` `NOREPLACE`.
 
 ## C3 API
 
-- `RenameSampleExecutor::apply(plan, codec, authority)`
-- `RenameSampleExecutor::rollback(plan, authority)`
+- `RenameSampleExecutor::apply(plan, codec, authority)` where
+  `authority: CloneWriteAuthority` and resolve yields a `VerifiedCloneRoot`
+  (attested temporary copy). A generic `WriteAuthority` cannot call apply.
+- `RenameSampleExecutor::rollback(live_root_id, operation_id, authority)`
+  where `authority: RecoveryAuthority`. After restart the session `RootId`
+  and write grant may be gone; recovery is keyed by the live registered root
+  and operation ID, same as M4 `recover_incomplete_operation`. It does not
+  require `write_enabled` or the original `observed_revision`.
 - Journal statuses: `Prepared`, `Applying`, `Committed`, `RolledBack`,
   `RecoveryRequired`
 - Optional `failure_code` on the rename journal (absent on a fresh `Prepared`)
 
 Apply flow:
 
-1. Validate the plan shape and write authority; acquire the per-root lock
+1. Validate the plan shape and clone write authority; acquire the per-root lock;
+   re-resolve the clone (canonical path + fingerprint) after the lock and again
+   immediately before the first clone write
 2. Load the create-once authorization (read-only, `NOFOLLOW`) and `Prepared`
    journal; they must agree on hashes, binding, and plan identity
 3. Re-verify the C1 backup. Do not trust C2 staging bytes
@@ -79,18 +88,28 @@ Apply flow:
    bytes through `ProjectReferenceCodec`. The rebuilt records must equal both
    the journal and the authorization
 5. Re-read the clone: source / sidecar / Project hashes must still match the
-   plan; destination audio and sidecar must be absent
+   plan; destination audio and sidecar must be absent. Also reject an ASCII
+   case-insensitive name in the destination parent. Unicode NFC/NFD
+   equivalence stays a planner observation; apply does not add a
+   normalization crate
 6. Persist `Applying`, then write the clone in order:
    new audio (and dest sidecar) → Project replace → source quarantine
-7. Post-read dest / Project hashes; unlink source quarantines; persist
-   `Committed`
+7. Post-read dest / Project hashes; unlink source quarantines (unlink failure
+   is propagated); persist `Committed`. A failed `Committed` journal write
+   rolls the clone back
 8. On any apply failure after `Applying`, restore the clone from the C1 backup
-   (and leftover quarantines) and persist `RolledBack`. A rollback that cannot
-   restore expected bytes becomes `RecoveryRequired`
+   (and leftover `.partial` / `.quarantine` siblings) and persist `RolledBack`.
+   A rollback that cannot restore expected bytes becomes `RecoveryRequired`
+
+Rollback preflights every target before mutating. Destinations are removed
+only when the live bytes are the transaction's staged hash. Projects and
+sources are restored only when live bytes are missing, match the backup, or
+match the staged transaction output. Any other live hash leaves the tree
+untouched and returns `RecoveryRequired`.
 
 `rollback` on a still-`Prepared` journal only marks `RolledBack` and does not
 touch the clone. `rollback` on `Applying` / `RecoveryRequired` restores the
-clone from backup.
+clone from the verified rename snapshot (no plan required).
 
 Tests copy a tempfile tree to a clone, apply only the clone, and assert the
 original tree is byte-identical. No original SD/CF media.

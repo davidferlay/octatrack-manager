@@ -167,6 +167,13 @@ impl BackupStore {
         rename_backup::verify_for_rename_plan(self, plan)
     }
 
+    pub fn verify_rename_snapshot(
+        &self,
+        snapshot_id: &SnapshotId,
+    ) -> Result<VerifiedRenameBackup, BackupError> {
+        rename_backup::verify_rename_snapshot(self, snapshot_id)
+    }
+
     pub fn verify(&self, snapshot_id: &SnapshotId) -> Result<VerifiedBackup, BackupError> {
         let base_directory = canonical_directory(&self.base_directory)?;
         let directory = base_directory.join(snapshot_id.directory_name());
