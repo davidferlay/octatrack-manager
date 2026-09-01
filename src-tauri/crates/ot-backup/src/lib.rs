@@ -1,7 +1,14 @@
 #![forbid(unsafe_code)]
 
+mod rename_backup;
+
 use ot_domain::{ContentHash, RootRelativePath};
-use ot_plan::{ChangePlan, PlanId};
+use ot_plan::{ChangePlan, PlanId, RenameImpactPlan};
+
+pub use rename_backup::{
+    recovery_binding_for_rename_plan, RenameBackupFileManifest, RenameBackupFileRole,
+    RenameBackupManifest, RenameBackupOperationKind, VerifiedRenameBackup,
+};
 use rustix::fs::{self as descriptor_fs, Mode, OFlags};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -12,7 +19,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 const MANIFEST_SCHEMA: &str = "masterocta-backup:v2";
-const SNAPSHOT_ID_PREFIX: &str = "snapshot:v1:";
+pub(crate) const SNAPSHOT_ID_PREFIX: &str = "snapshot:v1:";
 const RECOVERY_BINDING_PREFIX: &str = "recovery-binding:v1:";
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -28,6 +35,15 @@ impl SnapshotId {
         Self(format!("{SNAPSHOT_ID_PREFIX}{digest}"))
     }
 
+    pub fn for_rename_plan(plan: &RenameImpactPlan) -> Self {
+        let digest = plan
+            .id
+            .as_str()
+            .strip_prefix("plan:v1:")
+            .expect("RenameImpactPlan contains a validated PlanId");
+        Self(format!("{SNAPSHOT_ID_PREFIX}{digest}"))
+    }
+
     pub fn parse(value: impl Into<String>) -> Result<Self, BackupError> {
         let value = value.into();
         validate_prefixed_digest(&value, SNAPSHOT_ID_PREFIX)
@@ -39,7 +55,7 @@ impl SnapshotId {
         &self.0
     }
 
-    fn directory_name(&self) -> &str {
+    pub(crate) fn directory_name(&self) -> &str {
         self.0
             .strip_prefix(SNAPSHOT_ID_PREFIX)
             .expect("SnapshotId prefix is validated")
@@ -100,6 +116,10 @@ impl BackupStore {
         }
     }
 
+    pub(crate) fn base_directory(&self) -> &Path {
+        &self.base_directory
+    }
+
     pub fn create_verified(
         &self,
         source_root: &Path,
@@ -130,6 +150,21 @@ impl BackupStore {
         let backup = self.verify_directory(&final_directory)?;
         validate_plan_binding(&backup, plan)?;
         Ok(backup)
+    }
+
+    pub fn create_verified_for_rename(
+        &self,
+        source_root: &Path,
+        plan: &RenameImpactPlan,
+    ) -> Result<VerifiedRenameBackup, BackupError> {
+        rename_backup::create_verified_for_rename(self, source_root, plan)
+    }
+
+    pub fn verify_for_rename_plan(
+        &self,
+        plan: &RenameImpactPlan,
+    ) -> Result<VerifiedRenameBackup, BackupError> {
+        rename_backup::verify_for_rename_plan(self, plan)
     }
 
     pub fn verify(&self, snapshot_id: &SnapshotId) -> Result<VerifiedBackup, BackupError> {
@@ -453,7 +488,7 @@ fn verify_manifest_files(directory: &Path, manifest: &BackupManifest) -> Result<
     Ok(())
 }
 
-fn canonical_directory(path: &Path) -> Result<PathBuf, BackupError> {
+pub(crate) fn canonical_directory(path: &Path) -> Result<PathBuf, BackupError> {
     let metadata = fs::symlink_metadata(path).map_err(BackupError::io)?;
     if metadata.file_type().is_symlink() || !metadata.is_dir() {
         return Err(BackupError::UnsafePath);
@@ -461,7 +496,10 @@ fn canonical_directory(path: &Path) -> Result<PathBuf, BackupError> {
     path.canonicalize().map_err(BackupError::io)
 }
 
-fn prepare_local_directory(path: &Path, source_root: &Path) -> Result<PathBuf, BackupError> {
+pub(crate) fn prepare_local_directory(
+    path: &Path,
+    source_root: &Path,
+) -> Result<PathBuf, BackupError> {
     reject_local_target_inside_root(path, source_root)?;
     fs::create_dir_all(path).map_err(BackupError::io)?;
     let canonical = canonical_directory(path)?;
@@ -489,7 +527,7 @@ fn reject_local_target_inside_root(path: &Path, source_root: &Path) -> Result<()
     Ok(())
 }
 
-fn open_root_regular_file(
+pub(crate) fn open_root_regular_file(
     root: &Path,
     relative_path: &RootRelativePath,
 ) -> Result<File, BackupError> {
@@ -536,7 +574,7 @@ fn descriptor_path_error(
     }
 }
 
-fn create_backup_destination(
+pub(crate) fn create_backup_destination(
     files_root: &Path,
     relative_path: &RootRelativePath,
 ) -> Result<PathBuf, BackupError> {
@@ -557,7 +595,10 @@ fn create_backup_destination(
     Ok(destination)
 }
 
-fn copy_and_hash(source: &mut File, destination: &Path) -> Result<(u64, ContentHash), BackupError> {
+pub(crate) fn copy_and_hash(
+    source: &mut File,
+    destination: &Path,
+) -> Result<(u64, ContentHash), BackupError> {
     let mut writer = OpenOptions::new()
         .create_new(true)
         .write(true)
@@ -583,7 +624,7 @@ fn copy_and_hash(source: &mut File, destination: &Path) -> Result<(u64, ContentH
     Ok((byte_size, hash))
 }
 
-fn hash_reader(reader: &mut impl Read) -> Result<(u64, ContentHash), BackupError> {
+pub(crate) fn hash_reader(reader: &mut impl Read) -> Result<(u64, ContentHash), BackupError> {
     let mut hasher = Sha256::new();
     let mut byte_size = 0_u64;
     let mut buffer = [0_u8; 64 * 1024];
@@ -602,7 +643,7 @@ fn hash_reader(reader: &mut impl Read) -> Result<(u64, ContentHash), BackupError
     Ok((byte_size, hash))
 }
 
-fn collect_regular_files(root: &Path) -> Result<BTreeSet<String>, BackupError> {
+pub(crate) fn collect_regular_files(root: &Path) -> Result<BTreeSet<String>, BackupError> {
     fn visit(
         root: &Path,
         directory: &Path,
@@ -642,7 +683,7 @@ fn collect_regular_files(root: &Path) -> Result<BTreeSet<String>, BackupError> {
     Ok(result)
 }
 
-fn write_new_synced(path: &Path, bytes: &[u8]) -> Result<(), BackupError> {
+pub(crate) fn write_new_synced(path: &Path, bytes: &[u8]) -> Result<(), BackupError> {
     let mut file = OpenOptions::new()
         .create_new(true)
         .write(true)
@@ -652,13 +693,13 @@ fn write_new_synced(path: &Path, bytes: &[u8]) -> Result<(), BackupError> {
     file.sync_all().map_err(BackupError::io)
 }
 
-fn sync_directory(path: &Path) -> Result<(), BackupError> {
+pub(crate) fn sync_directory(path: &Path) -> Result<(), BackupError> {
     File::open(path)
         .and_then(|directory| directory.sync_all())
         .map_err(BackupError::io)
 }
 
-fn validate_prefixed_digest(value: &str, prefix: &str) -> Result<(), ()> {
+pub(crate) fn validate_prefixed_digest(value: &str, prefix: &str) -> Result<(), ()> {
     let digest = value.strip_prefix(prefix).ok_or(())?;
     if digest.len() == 64
         && digest
@@ -691,15 +732,15 @@ pub enum BackupError {
 }
 
 impl BackupError {
-    fn io(error: std::io::Error) -> Self {
+    pub(crate) fn io(error: std::io::Error) -> Self {
         Self::Io(error.to_string())
     }
 
-    fn serialize(error: serde_json::Error) -> Self {
+    pub(crate) fn serialize(error: serde_json::Error) -> Self {
         Self::Serialize(error.to_string())
     }
 
-    fn deserialize(error: serde_json::Error) -> Self {
+    pub(crate) fn deserialize(error: serde_json::Error) -> Self {
         Self::Deserialize(error.to_string())
     }
 }
