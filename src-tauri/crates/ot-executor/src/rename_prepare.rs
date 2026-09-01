@@ -313,15 +313,16 @@ impl RenameSampleExecutor {
         for entry in fs::read_dir(&rename_directory).map_err(ExecutorError::io)? {
             let entry = entry.map_err(ExecutorError::io)?;
             let file_type = entry.file_type().map_err(ExecutorError::io)?;
-            if file_type.is_symlink()
-                || !file_type.is_file()
-                || entry
-                    .path()
-                    .extension()
-                    .and_then(|extension| extension.to_str())
-                    != Some("json")
+            if file_type.is_symlink() || !file_type.is_file() {
+                continue;
+            }
+            if entry
+                .path()
+                .extension()
+                .and_then(|extension| extension.to_str())
+                != Some("json")
             {
-                return Err(ExecutorError::InvalidJournal);
+                continue;
             }
             let journal = read_rename_journal(&entry.path())?;
             if journal.root_fingerprint == root_fingerprint {
@@ -1934,6 +1935,26 @@ mod tests {
                 .status,
             RenameJournalStatus::Prepared
         );
+    }
+
+    #[test]
+    fn rename_journals_for_root_ignores_authorization_subdirectory() {
+        let fixture = TempDir::new().unwrap();
+        let root = fixture.path().join("root");
+        let local = fixture.path().join("local");
+        write_tree(&root, false, false, false);
+        let plan = plan_from(facts(Vec::new(), false));
+        create_backup(&root, &local, &plan);
+        let executor = RenameSampleExecutor::new(local_paths(&local));
+        let prepared = executor
+            .prepare(&plan, &MemoryProjectReferenceCodec, &authority_for(&root))
+            .unwrap();
+        let journals = executor
+            .rename_journals_for_root(&fingerprint())
+            .unwrap();
+        assert_eq!(journals.len(), 1);
+        assert_eq!(journals[0].operation_id, prepared.operation_id.as_str());
+        assert_eq!(journals[0].status, RenameJournalStatus::Prepared);
     }
 
     #[test]

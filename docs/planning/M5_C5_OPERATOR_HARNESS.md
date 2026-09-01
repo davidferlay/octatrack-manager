@@ -1,7 +1,7 @@
 # M5-C5 — Gate C Controlled Operator Harness
 
-- Status: **Phase 1 COMPLETE**；**Phase 2 COMPLETE**；**Phase 3 未着手**
-- Base: `origin/main` at PR #70 merge (`15eef67` / M5-C4 automated clone-rescan proof)
+- Status: **Phase 1 COMPLETE**；**Phase 2 COMPLETE**；**Phase 3 COMPLETE**；**Phase 4 未着手**
+- Base: `origin/main` at PR #72 merge (`b661840` / M5-C5 Phase 2 rename APIs)
 - Goal: expose rename Apply on a **disposable registered clone** through production
   Tauri + explicit approval UI, without bypassing Intent → Plan → Apply or opening
   writes on original removable media
@@ -41,8 +41,8 @@ Mirror these boundaries; do not extend legacy rename commands.
 |---|---|---|
 | Plan store | `write_runtime.rs` | `rename_write_runtime.rs` (new) |
 | Tauri | `v2_change_plan` / `apply` / `recover` | `v2_rename_*` (new) |
-| Frontend API | `src/api/changes.ts` | `src/api/rename.ts` (Phase 3) |
-| UI | `AdditiveCopyChangeDrawer` | `RenameSampleChangeDrawer` (Phase 3) |
+| Frontend API | `src/api/changes.ts` | `src/api/rename.ts` |
+| UI | `AdditiveCopyChangeDrawer` | `RenameSampleModal` |
 | Authority | `WriteAuthority` on live root | `CloneWriteAuthority` → `VerifiedCloneRoot` |
 | Catalog refresh | post-apply rescan in `apply_change_sync` | same after rename apply |
 
@@ -149,15 +149,19 @@ Explicitly **not** in Phase 2:
 - frontend Rename UI
 - clone Apply / human Gate C smoke
 
-### Phase 3 — Operator UI
+### Phase 3 — Explicit approval / prepare UI (**COMPLETE**)
 
-- `RenameSampleChangeDrawer` + `src/api/rename.ts`
-- Clone attestation modal/copy in drawer
-- Root panel wiring + e2e smoke on synthetic fixture
+- `RenameSampleModal` + `src/api/rename.ts`
+- Inspector rename entry on selected catalog sample
+- Edit mode gate, basename-only same-directory rename, impact review
+- Explicit `Approve & Prepare` orchestrating `authorize → backup → prepare`
+- Prepared status persistence via `v2_rename_get_status` / recovery read
+- **No** clone Apply, **no** media mutation, **no** Gate C completion claim
 
 ### Phase 4 — Clone Apply + human Gate C smoke
 
-- Execute `docs/testing/GATE_C_CLONE_SMOKE.md` against Phase 3 build
+- `v2_rename_apply` + clone attestation UI
+- Execute `docs/testing/GATE_C_CLONE_SMOKE.md` against Phase 4 build
 - Record evidence outside repository; do not commit personal paths/fingerprints
 
 ## Safety invariants (must not regress)

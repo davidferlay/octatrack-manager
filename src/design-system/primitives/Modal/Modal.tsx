@@ -1,6 +1,8 @@
 import {
   createContext,
   useContext,
+  useEffect,
+  useRef,
   type HTMLAttributes,
   type MouseEvent,
   type ReactNode,
@@ -14,6 +16,47 @@ interface ModalContextValue {
 }
 
 const ModalContext = createContext<ModalContextValue | null>(null)
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+function useModalFocusTrap(open: boolean, locked: boolean, dialogRef: React.RefObject<HTMLDivElement | null>) {
+  const previousFocusRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    previousFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+
+    const dialog = dialogRef.current
+    if (dialog === null) return
+
+    const focusables = dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+    const first = focusables[0]
+    first?.focus()
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== 'Tab' || dialogRef.current === null) return
+      const items = dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+      if (items.length === 0) return
+      const firstItem = items[0]
+      const lastItem = items[items.length - 1]
+      if (event.shiftKey && document.activeElement === firstItem) {
+        event.preventDefault()
+        lastItem.focus()
+      } else if (!event.shiftKey && document.activeElement === lastItem) {
+        event.preventDefault()
+        firstItem.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      previousFocusRef.current?.focus()
+    }
+  }, [open, locked, dialogRef])
+}
 
 function useModalContext(component: string): ModalContextValue {
   const ctx = useContext(ModalContext)
@@ -50,12 +93,14 @@ function ModalRoot({
   overlayClassName,
   manageEscape = true,
 }: ModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null)
   useModalDismiss({
     open: open && manageEscape,
     onClose,
     closeOnEscape,
     locked,
   })
+  useModalFocusTrap(open, locked, dialogRef)
 
   if (!open) return null
 
@@ -83,6 +128,7 @@ function ModalRoot({
         role="presentation"
       >
         <div
+          ref={dialogRef}
           className={contentClass}
           onClick={handleContentClick}
           role="dialog"

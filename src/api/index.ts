@@ -18,6 +18,24 @@ export type {
   ChangeRecoveryStatus,
   ChangeStatus,
 } from "./changes";
+export { createRenameApi, renameApi } from "./rename";
+export type {
+  BlockedRenamePlan,
+  RenameApi,
+  RenameAuthority,
+  RenameBackupStatus,
+  RenameBlockReason,
+  RenameOperationState,
+  RenamePlan,
+  RenamePlanResponse,
+  RenamePrepareStatus,
+  RenameRecoveryStatus,
+  RenameReferenceUpdate,
+  RenameSidecarImpact,
+  RenameStateDocumentImpact,
+  RenameStatus,
+  RenameUsageEdgeImpact,
+} from "./rename";
 export { createRootApi, rootApi } from "./roots";
 export type {
   LibraryAudioFile,

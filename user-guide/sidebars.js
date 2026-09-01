@@ -32,6 +32,7 @@ const sidebars = {
         'features/fix-missing-samples',
         'features/fix-incompatible-samples',
         'features/purge-unused-samples',
+        'features/rename-preparation',
       ],
     },
     {
