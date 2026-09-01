@@ -1899,9 +1899,12 @@ pub(crate) fn rename_recovery_status_sync(
         .into_iter()
         .map(|status| rename_status_dto(&status))
         .collect::<Vec<_>>();
+    let recovery_required = operations
+        .iter()
+        .any(|status| status.state == "applying" || status.state == "recovery_required");
     Ok(RenameRecoveryStatusDto {
         schema: "rename-recovery-status:v1",
-        recovery_required: !operations.is_empty(),
+        recovery_required,
         operations,
     })
 }
@@ -5188,6 +5191,32 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(error.code, "SNAPSHOT_MISMATCH");
+    }
+
+    #[test]
+    fn rename_recovery_status_lists_prepared_without_recovery_required() {
+        let fixture = setup_rename_through_backup();
+        prepare_rename_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.write,
+            &fixture.rename_runtime,
+            &fixture.root_id,
+            &fixture.plan_id,
+            &fixture.authority_id,
+            &fixture.snapshot_id,
+        )
+        .unwrap();
+
+        let data_path = fixture.data_directory.path().to_path_buf();
+        let restarted = rename_runtime(&data_path);
+        let recovery =
+            rename_recovery_status_sync(&fixture.registry, &restarted, &fixture.root_id).unwrap();
+        assert!(!recovery.recovery_required);
+        assert_eq!(recovery.operations.len(), 1);
+        assert_eq!(recovery.operations[0].state, "prepared");
+        assert!(recovery.operations[0].plan_expired);
+        assert!(recovery.operations[0].plan_id.is_none());
     }
 
     #[test]

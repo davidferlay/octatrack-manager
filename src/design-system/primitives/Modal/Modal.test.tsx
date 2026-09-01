@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { Modal } from './Modal'
 
 describe('Modal', () => {
@@ -86,5 +87,24 @@ describe('Modal', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: /close/i }))
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('traps tab focus within the dialog', async () => {
+    const user = userEvent.setup()
+    render(
+      <Modal open onClose={() => {}}>
+        <Modal.Body>
+          <button type="button">First</button>
+          <button type="button">Last</button>
+        </Modal.Body>
+      </Modal>,
+    )
+    const first = screen.getByRole('button', { name: 'First' })
+    const last = screen.getByRole('button', { name: 'Last' })
+    expect(document.activeElement).toBe(first)
+    await user.tab()
+    expect(document.activeElement).toBe(last)
+    await user.tab()
+    expect(document.activeElement).toBe(first)
   })
 })

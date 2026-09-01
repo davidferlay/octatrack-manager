@@ -1,20 +1,28 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   audioApi,
   changeApi,
   metadataApi,
+  renameApi,
   rootApi,
   type AudioApi,
   type ChangeApi,
   type ChangeRecoveryStatus,
   type LibrarySnapshot,
   type MetadataApi,
+  type RenameApi,
+  type RenameRecoveryStatus,
   type RootApi,
   type RootSession,
 } from "../../api";
 import { AppShell } from "../../app/index";
-import { AdditiveCopyChangeDrawer } from "../changes";
+import { Button } from "../../design-system";
+import {
+  AdditiveCopyChangeDrawer,
+  RenamePreparedNotice,
+  RenameSampleModal,
+} from "../changes";
 import { InspectorPane } from "../inspector";
 import {
   CatalogLibraryBrowser,
@@ -29,6 +37,10 @@ import "./RootRegistryPanel.css";
 export type RootDirectoryPicker = () => Promise<string | null>;
 
 async function pickRootDirectory(): Promise<string | null> {
+  const e2eRootPath = (window as Window & { __E2E_ROOT_PATH__?: string }).__E2E_ROOT_PATH__;
+  if (typeof e2eRootPath === "string" && e2eRootPath !== "") {
+    return e2eRootPath;
+  }
   const selected = await open({
     directory: true,
     multiple: false,
@@ -50,6 +62,7 @@ interface RootRegistryPanelProps {
   audioClient?: AudioApi;
   metadataClient?: MetadataApi;
   changeClient?: ChangeApi;
+  renameClient?: RenameApi;
   selectDirectory?: RootDirectoryPicker;
 }
 
@@ -63,6 +76,7 @@ export function RootRegistryPanel({
   audioClient = audioApi,
   metadataClient = metadataApi,
   changeClient = changeApi,
+  renameClient = renameApi,
   selectDirectory = pickRootDirectory,
 }: RootRegistryPanelProps) {
   const [session, setSession] = useState<RootSession | null>(null);
@@ -72,6 +86,29 @@ export function RootRegistryPanel({
   const [error, setError] = useState<string | null>(null);
   const [selectedAsset, setSelectedAsset] = useState<CatalogAssetSelection | null>(null);
   const [recovery, setRecovery] = useState<ChangeRecoveryStatus | null>(null);
+  const [renameRecovery, setRenameRecovery] = useState<RenameRecoveryStatus | null>(null);
+  const [renameModalOpen, setRenameModalOpen] = useState(false);
+  const [renameModalAsset, setRenameModalAsset] = useState<CatalogAssetSelection | null>(null);
+
+  async function refreshRenameRecovery(rootId: string) {
+    try {
+      setRenameRecovery(await renameClient.recoveryStatus(rootId));
+    } catch (reason) {
+      setRenameRecovery(null);
+      setError(`Rename safety status unavailable: ${errorMessage(reason)}`);
+    }
+  }
+
+  useEffect(() => {
+    if (renameModalAsset === null || selectedAsset === null) return;
+    if (
+      renameModalAsset.fileInstanceId !== selectedAsset.fileInstanceId
+      || renameModalAsset.relativePath !== selectedAsset.relativePath
+    ) {
+      setRenameModalOpen(false);
+      setRenameModalAsset(null);
+    }
+  }, [renameModalAsset, selectedAsset]);
 
   async function registerRoot() {
     setBusy(true);
@@ -88,8 +125,10 @@ export function RootRegistryPanel({
       setChangeBusy(false);
       try {
         setRecovery(await changeClient.recoveryStatus(registered.rootId));
+        await refreshRenameRecovery(registered.rootId);
       } catch (reason) {
         setRecovery(null);
+        setRenameRecovery(null);
         setError(`Write safety status unavailable: ${errorMessage(reason)}`);
       }
     } catch (reason) {
@@ -100,6 +139,7 @@ export function RootRegistryPanel({
       setLibrary(null);
       setSelectedAsset(null);
       setRecovery(null);
+      setRenameRecovery(null);
       setChangeBusy(false);
       setError(errorMessage(reason));
     } finally {
@@ -117,6 +157,9 @@ export function RootRegistryPanel({
       setLibrary(null);
       setSelectedAsset(null);
       setRecovery(null);
+      setRenameRecovery(null);
+      setRenameModalOpen(false);
+      setRenameModalAsset(null);
       setChangeBusy(false);
     } catch (reason) {
       setError(errorMessage(reason));
@@ -129,6 +172,8 @@ export function RootRegistryPanel({
     if (session === null || recovery === null || recovery.recoveryRequired) return;
     setBusy(true);
     setError(null);
+    setRenameModalOpen(false);
+    setRenameModalAsset(null);
     try {
       const latestRecovery = await changeClient.recoveryStatus(session.rootId);
       setRecovery(latestRecovery);
@@ -149,6 +194,8 @@ export function RootRegistryPanel({
     if (!(session.mode === "write_enabled" && session.capabilities.write)) return;
     setBusy(true);
     setError(null);
+    setRenameModalOpen(false);
+    setRenameModalAsset(null);
     try {
       setSession(await api.disableWrite(session.rootId));
     } catch (reason) {
@@ -172,7 +219,20 @@ export function RootRegistryPanel({
       setSelectedAsset(null);
     } catch (reason) {
       setRecovery(null);
+      setRenameRecovery(null);
       setError(`${failureMessage}: ${errorMessage(reason)}`);
+    }
+  }
+
+  async function refreshAfterRenamePrepared() {
+    if (session === null) return;
+    try {
+      const latestSession = await api.rootStatus(session.rootId);
+      setSession(latestSession);
+      await refreshRenameRecovery(session.rootId);
+    } catch (reason) {
+      setRenameRecovery(null);
+      setError(`Rename was prepared, but status refresh failed: ${errorMessage(reason)}`);
     }
   }
 
@@ -194,9 +254,21 @@ export function RootRegistryPanel({
   }
 
   const catalogReady = session !== null && library !== null;
+  const writeEnabled = session?.mode === "write_enabled" && session.capabilities.write;
+  const renameBlocked = recovery === null
+    || recovery.recoveryRequired
+    || renameRecovery === null
+    || renameRecovery.recoveryRequired;
+
+  function openRenameModal() {
+    if (selectedAsset === null || renameBlocked) return;
+    setRenameModalAsset(selectedAsset);
+    setRenameModalOpen(true);
+  }
 
   return (
-    <AppShell
+    <>
+      <AppShell
       sources={
         <SourcesPane
           session={session}
@@ -236,6 +308,26 @@ export function RootRegistryPanel({
               <div
                 key={`${session.rootId}:${selectedAsset.assetId}:${selectedAsset.relativePath}`}
               >
+                <RenamePreparedNotice recovery={renameRecovery} />
+                <div className="root-registry-rename-actions">
+                  <Button
+                    variant="secondary"
+                    disabled={busy || changeBusy || renameBlocked}
+                    onClick={openRenameModal}
+                    title={
+                      !writeEnabled
+                        ? "Enable edit mode in Sources before renaming"
+                        : renameBlocked
+                          ? "Resolve recovery before starting another rename"
+                          : "Review and prepare a same-directory sample rename"
+                    }
+                  >
+                    Rename
+                  </Button>
+                  {!writeEnabled && (
+                    <p className="root-registry-rename-hint">Edit mode required</p>
+                  )}
+                </div>
                 <WaveformPreview
                   api={audioClient}
                   rootId={session.rootId}
@@ -274,5 +366,23 @@ export function RootRegistryPanel({
         ) : undefined
       }
     />
+    {catalogReady && renameModalOpen && renameModalAsset !== null && session !== null && (
+      <RenameSampleModal
+        open={renameModalOpen}
+        session={session}
+        selectedAsset={renameModalAsset}
+        changeRecovery={recovery}
+        renameRecovery={renameRecovery}
+        api={renameClient}
+        onClose={() => {
+          setRenameModalOpen(false);
+          setRenameModalAsset(null);
+        }}
+        refreshSession={refreshSessionBeforeApply}
+        onPrepared={refreshAfterRenamePrepared}
+        onRenameRecoveryChange={setRenameRecovery}
+      />
+    )}
+    </>
   );
 }

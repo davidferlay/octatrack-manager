@@ -33,9 +33,10 @@ Before this human smoke, production must expose rename Apply only through:
 - an explicit operator approval surface (not test doubles)
 - `VerifiedCloneRoot` or an equivalently attested temporary copy boundary
 
-M5-C5 Phase 2 production API now wires **plan → authorize → backup → prepare** on the
-registered root without mutating source media. Phase 3 UI and Phase 4 clone Apply remain
-outstanding before this checklist can be executed end-to-end.
+M5-C5 Phase 3 production UI now exposes **plan → review → explicit approval →
+authorize → backup → prepare** on a registered root without mutating Octatrack media.
+Prepared operations survive restart via rename journal read APIs. Phase 4 clone Apply
+and human Gate C smoke remain outstanding before this checklist can be executed end-to-end.
 
 ## Real-hardware clone-load smoke
 
