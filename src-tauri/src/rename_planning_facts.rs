@@ -116,7 +116,7 @@ pub fn build_rename_planning_facts(
         root: RenameRootObservation {
             root_id: resolved.session.root_id.clone(),
             device_fingerprint: resolved.session.device_fingerprint.clone(),
-            live_observed_revision: resolved.session.observed_revision,
+            live_observed_revision: scan_revision,
             base_catalog_scan_revision: scan_revision,
             scan_completed: true,
             identity_is_stable: resolved.session.capabilities.stable_device_identity,

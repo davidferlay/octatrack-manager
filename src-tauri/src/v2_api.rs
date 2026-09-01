@@ -4025,4 +4025,38 @@ mod tests {
             .get_plan(&second_root, &plan.plan_id)
             .is_err());
     }
+
+    #[test]
+    fn rename_plan_succeeds_after_reregister_when_catalog_revision_advances() {
+        let root = TempDir::new().unwrap();
+        build_gate_c_planning_fixture(root.path());
+        let registry = registry();
+        let (_catalog_dir, catalog) = catalog();
+        let rename_runtime = crate::rename_write_runtime::open_shared_rename_write_runtime();
+
+        register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        let dto = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
+        let source_id = dto
+            .audio_files
+            .iter()
+            .find(|file| file.relative_path == "SET/AUDIO/pad.wav")
+            .unwrap()
+            .file_instance_id
+            .clone();
+
+        let response = plan_rename_sample_sync(
+            &registry,
+            &catalog,
+            &rename_runtime,
+            &root_id,
+            &source_id,
+            "SET/AUDIO/new-pad.wav",
+        )
+        .unwrap();
+
+        assert!(matches!(response, RenamePlanResponseDto::Planned(_)));
+    }
 }
