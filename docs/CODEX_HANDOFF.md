@@ -93,7 +93,10 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - Gate B human sign-off: **PASS**（personal/local use、source `a10437f`）
 - 現在のmain基準SHA: `b661840`（M5-C5 Phase 2 PR #72 merge後）
 - M5-C4 Gate C automated clone-rescan proof: **#70 マージ済み**
-- 現在の作業: **M5-C5 Phase 3 — explicit approval Rename UI**
+- 現在の作業: **M5-C5 Phase 4 — clone Apply + human Gate C smoke**（Phase 3 は PR #73 で review 中）
+- M5-C5 Phase 3 — explicit approval Rename UI: **COMPLETE**（PR #73、`RenameSampleModal` + `src/api/rename.ts`）
+  - Inspector 入口、`Approve & Prepare` → `authorize → backup → prepare`
+  - Apply / 媒体 mutation / recovery 実行 UI は Phase 4 まで未接続
 - M5-C5 Phase 2 — rename authority / backup / prepare API: **COMPLETE**（#72）
   - `v2_rename_authorize` / `v2_rename_create_backup` / `v2_rename_prepare`
   - `v2_rename_get_status` / `v2_rename_recovery_status`

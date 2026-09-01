@@ -66,7 +66,7 @@ overloading `change-plan:v1`.
 
 ### Frontend
 
-- Phase 3: `RenameSampleChangeDrawer` + `src/api/rename.ts`
+- Phase 3: `RenameSampleModal` + `src/api/rename.ts`（Inspector 入口）
 - Phase 1: backend-only; no frontend IPC client or UI wiring
 
 ## Phased delivery (small PRs)
@@ -187,7 +187,7 @@ scripts/gate-c-synthetic-smoke.sh
 ```
 
 Phase 1 does not require Gate C smoke (apply not wired). Phase 3+ also run targeted
-e2e once drawer exists.
+e2e (`e2e/rename-prepare.spec.ts`).
 
 ## Gate C completion
 
