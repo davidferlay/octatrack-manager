@@ -130,11 +130,12 @@ impl RenameWriteRuntime {
 
         if let Some(existing) = state.plans.get(&key) {
             if existing.plan == plan {
-                state
-                    .plans
-                    .get_mut(&key)
-                    .expect("plan key exists")
-                    .expires_at = now + self.plan_ttl;
+                let stored = state.plans.get_mut(&key).expect("plan key exists");
+                stored.expires_at = now + self.plan_ttl;
+                stored.phase = RenameOperationPhase::Planned;
+                stored.authority = None;
+                stored.backup = None;
+                stored.prepare = None;
                 return Ok(());
             }
             return Err(RenameWriteRuntimeError::PlanIntegrityMismatch);
@@ -822,6 +823,22 @@ mod tests {
         let plan = sample_plan(&root_id, "a");
         runtime.store_plan(plan.clone()).unwrap();
         runtime.store_plan(plan).unwrap();
+    }
+
+    #[test]
+    fn idempotent_store_resets_session_progress() {
+        let runtime = runtime();
+        let root_id = RootId::new("root-session-1").unwrap();
+        let plan = sample_plan(&root_id, "a");
+        let plan_id = plan.id.as_str().to_owned();
+        runtime.store_plan(plan.clone()).unwrap();
+        let authority = runtime.authorize(&root_id, &plan_id).unwrap();
+        runtime.store_plan(plan).unwrap();
+        assert!(matches!(
+            runtime.verify_authority(&root_id, &plan_id, &authority.authority_id),
+            Err(RenameWriteRuntimeError::AuthorityNotFound)
+        ));
+        runtime.authorize(&root_id, &plan_id).unwrap();
     }
 
     #[test]

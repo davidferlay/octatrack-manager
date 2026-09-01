@@ -2875,6 +2875,7 @@ mod tests {
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
     use std::path::Path;
     use std::sync::Arc;
+    use std::thread;
     use std::time::Duration;
     use tempfile::TempDir;
 
@@ -2945,6 +2946,112 @@ mod tests {
 
     fn rename_runtime(data_directory: &Path) -> SharedRenameWriteRuntime {
         crate::rename_write_runtime::open_shared_rename_write_runtime(data_directory).unwrap()
+    }
+
+    struct RenameThroughBackupFixture {
+        _root: TempDir,
+        data_directory: TempDir,
+        registry: RootRegistry,
+        catalog: SharedCatalog,
+        rename_runtime: SharedRenameWriteRuntime,
+        write: SharedWriteRuntime,
+        root_id: RootId,
+        plan_id: String,
+        operation_id: String,
+        authority_id: String,
+        snapshot_id: String,
+    }
+
+    fn setup_rename_through_backup() -> RenameThroughBackupFixture {
+        let root = TempDir::new().unwrap();
+        build_gate_c_planning_fixture(root.path());
+        let registry = registry();
+        let (data_directory, catalog) = catalog();
+        let rename_runtime = rename_runtime(data_directory.path());
+        let write = write_runtime(data_directory.path());
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        enable_write_sync(&registry, &catalog, &write, &root_id).unwrap();
+
+        let dto = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
+        let source_id = dto
+            .audio_files
+            .iter()
+            .find(|file| file.relative_path == "SET/AUDIO/pad.wav")
+            .unwrap()
+            .file_instance_id
+            .clone();
+
+        let RenamePlanResponseDto::Planned(plan) = plan_rename_sample_sync(
+            &registry,
+            &catalog,
+            &rename_runtime,
+            &root_id,
+            &source_id,
+            "SET/AUDIO/new-pad.wav",
+        )
+        .unwrap() else {
+            panic!("expected planned rename");
+        };
+
+        let authority = authorize_rename_sync(
+            &registry,
+            &catalog,
+            &write,
+            &rename_runtime,
+            &root_id,
+            &plan.plan_id,
+        )
+        .unwrap();
+
+        let backup = create_rename_backup_sync(
+            &registry,
+            &catalog,
+            &write,
+            &rename_runtime,
+            &root_id,
+            &plan.plan_id,
+            &authority.authority_id,
+        )
+        .unwrap();
+
+        RenameThroughBackupFixture {
+            _root: root,
+            data_directory,
+            registry,
+            catalog,
+            rename_runtime,
+            write,
+            root_id,
+            plan_id: plan.plan_id,
+            operation_id: plan.operation_id,
+            authority_id: authority.authority_id,
+            snapshot_id: backup.snapshot_id,
+        }
+    }
+
+    fn backup_snapshot_directory(data_directory: &Path, snapshot_id: &str) -> PathBuf {
+        let stem = snapshot_id
+            .strip_prefix("snapshot:v1:")
+            .expect("snapshot id uses the v1 prefix");
+        data_directory
+            .join("MasterOCTa")
+            .join("write-state")
+            .join("backups")
+            .join(stem)
+    }
+
+    fn rename_journal_path(data_directory: &Path, operation_id: &str) -> PathBuf {
+        let stem = operation_id
+            .strip_prefix("operation:v1:")
+            .expect("operation id uses the v1 prefix");
+        data_directory
+            .join("MasterOCTa")
+            .join("write-state")
+            .join("journals")
+            .join("rename")
+            .join(format!("{stem}.json"))
     }
 
     fn write_runtime(data_directory: &Path) -> SharedWriteRuntime {
@@ -5000,5 +5107,208 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(error.code, "WRITE_NOT_ENABLED");
+    }
+
+    #[test]
+    fn rename_replan_clears_authority_before_backup() {
+        let fixture = setup_rename_through_backup();
+        let dto =
+            list_library_dto_sync(&fixture.registry, &fixture.catalog, &fixture.root_id).unwrap();
+        let source_id = dto
+            .audio_files
+            .iter()
+            .find(|file| file.relative_path == "SET/AUDIO/pad.wav")
+            .unwrap()
+            .file_instance_id
+            .clone();
+
+        plan_rename_sample_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.rename_runtime,
+            &fixture.root_id,
+            &source_id,
+            "SET/AUDIO/new-pad.wav",
+        )
+        .unwrap();
+
+        let error = create_rename_backup_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.write,
+            &fixture.rename_runtime,
+            &fixture.root_id,
+            &fixture.plan_id,
+            &fixture.authority_id,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "AUTHORITY_NOT_FOUND");
+    }
+
+    #[test]
+    fn rename_prepare_rejects_tampered_backup() {
+        let fixture = setup_rename_through_backup();
+        let manifest_path =
+            backup_snapshot_directory(&fixture.data_directory.path(), &fixture.snapshot_id)
+                .join("manifest.json");
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+        manifest["recovery_binding"] =
+            serde_json::Value::String(format!("recovery-binding:rename:v1:{}", "d".repeat(64)));
+        fs::write(manifest_path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
+
+        let error = prepare_rename_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.write,
+            &fixture.rename_runtime,
+            &fixture.root_id,
+            &fixture.plan_id,
+            &fixture.authority_id,
+            &fixture.snapshot_id,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "BACKUP_FAILED");
+    }
+
+    #[test]
+    fn rename_prepare_rejects_snapshot_mismatch() {
+        let fixture = setup_rename_through_backup();
+        let wrong_snapshot = format!("snapshot:v1:{}", "a".repeat(64));
+
+        let error = prepare_rename_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.write,
+            &fixture.rename_runtime,
+            &fixture.root_id,
+            &fixture.plan_id,
+            &fixture.authority_id,
+            &wrong_snapshot,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "SNAPSHOT_MISMATCH");
+    }
+
+    #[test]
+    fn rename_status_survives_runtime_restart_from_journal() {
+        let fixture = setup_rename_through_backup();
+        let prepared = prepare_rename_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.write,
+            &fixture.rename_runtime,
+            &fixture.root_id,
+            &fixture.plan_id,
+            &fixture.authority_id,
+            &fixture.snapshot_id,
+        )
+        .unwrap();
+        assert_eq!(prepared.state, "prepared");
+
+        let data_path = fixture.data_directory.path().to_path_buf();
+        let restarted = rename_runtime(&data_path);
+        let status = rename_status_sync(
+            &fixture.registry,
+            &restarted,
+            &fixture.root_id,
+            &fixture.operation_id,
+        )
+        .unwrap();
+        assert_eq!(status.state, "prepared");
+        assert!(status.plan_expired);
+        assert!(status.plan_id.is_none());
+    }
+
+    #[test]
+    fn rename_status_rejects_tampered_journal_after_restart() {
+        let fixture = setup_rename_through_backup();
+        prepare_rename_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.write,
+            &fixture.rename_runtime,
+            &fixture.root_id,
+            &fixture.plan_id,
+            &fixture.authority_id,
+            &fixture.snapshot_id,
+        )
+        .unwrap();
+
+        fs::write(
+            rename_journal_path(&fixture.data_directory.path(), &fixture.operation_id),
+            br#"{"schema":"broken"}"#,
+        )
+        .unwrap();
+
+        let restarted = rename_runtime(fixture.data_directory.path());
+        let error = rename_status_sync(
+            &fixture.registry,
+            &restarted,
+            &fixture.root_id,
+            &fixture.operation_id,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "JOURNAL_FAILED");
+    }
+
+    #[test]
+    fn rename_concurrent_prepare_calls_are_idempotent() {
+        let fixture = setup_rename_through_backup();
+        let registry = &fixture.registry;
+        let catalog = &fixture.catalog;
+        let write = &fixture.write;
+        let rename_runtime = Arc::clone(&fixture.rename_runtime);
+        let root_id = fixture.root_id.clone();
+        let plan_id = fixture.plan_id.clone();
+        let authority_id = fixture.authority_id.clone();
+        let snapshot_id = fixture.snapshot_id.clone();
+        let expected_operation_id = fixture.operation_id.clone();
+
+        thread::scope(|scope| {
+            let first_handle = scope.spawn(|| {
+                prepare_rename_sync(
+                    registry,
+                    catalog,
+                    write,
+                    &rename_runtime,
+                    &root_id,
+                    &plan_id,
+                    &authority_id,
+                    &snapshot_id,
+                )
+            });
+            let second_handle = scope.spawn(|| {
+                prepare_rename_sync(
+                    registry,
+                    catalog,
+                    write,
+                    &rename_runtime,
+                    &root_id,
+                    &plan_id,
+                    &authority_id,
+                    &snapshot_id,
+                )
+            });
+
+            let first = first_handle.join().unwrap();
+            let second = second_handle.join().unwrap();
+            match (&first, &second) {
+                (Ok(left), Ok(right)) => {
+                    assert_eq!(left.operation_id, expected_operation_id);
+                    assert_eq!(right.operation_id, expected_operation_id);
+                    assert_eq!(left.state, "prepared");
+                    assert_eq!(right.state, "prepared");
+                }
+                (Ok(prepared), Err(error)) | (Err(error), Ok(prepared)) => {
+                    assert_eq!(prepared.operation_id, expected_operation_id);
+                    assert_eq!(prepared.state, "prepared");
+                    assert_eq!(error.code, "ROOT_BUSY");
+                }
+                (Err(left), Err(right)) => {
+                    panic!("unexpected concurrent prepare failures: {left:?}, {right:?}");
+                }
+            }
+        });
     }
 }
