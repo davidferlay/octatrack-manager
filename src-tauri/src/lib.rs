@@ -4,6 +4,7 @@
 mod audio_pool;
 mod audio_runtime;
 mod catalog_runtime;
+mod clone_runtime;
 mod device_detection;
 mod legacy_read_adapter;
 mod project_compatibility;
@@ -1367,6 +1368,8 @@ pub fn run() {
             let rename_write_runtime =
                 rename_write_runtime::open_shared_rename_write_runtime(&data_directory)?;
             app.manage(rename_write_runtime);
+            let clone_runtime = clone_runtime::open_shared_clone_runtime(&data_directory)?;
+            app.manage(clone_runtime);
 
             // Clear WebView session storage in the background on app startup
             let window = app.get_webview_window("main").unwrap();
@@ -1404,6 +1407,12 @@ pub fn run() {
             v2_api::v2_rename_prepare,
             v2_api::v2_rename_get_status,
             v2_api::v2_rename_recovery_status,
+            v2_api::v2_clone_record_source_evidence,
+            v2_api::v2_clone_create_managed,
+            v2_api::v2_clone_verify_external,
+            v2_api::v2_clone_verification_status,
+            v2_api::v2_clone_reverify,
+            v2_api::v2_clone_issue_authority,
             greet,
             scan_devices,
             scan_custom_directory,

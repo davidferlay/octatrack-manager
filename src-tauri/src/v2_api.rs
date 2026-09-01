@@ -1,5 +1,9 @@
 use crate::audio_runtime::{AudioRuntimeError, SharedAudioRuntime};
 use crate::catalog_runtime::SharedCatalog;
+use crate::clone_runtime::{
+    CloneAuthorityRecord, CloneProvenance, CloneRuntimeError, CloneSourceEvidenceRecord,
+    CloneVerificationState, SharedCloneRuntime,
+};
 use crate::legacy_read_adapter::RegisteredLegacyLibrary;
 use crate::rename_planning_facts::{
     build_rename_planning_facts, ensure_same_directory_rename, verify_catalog_matches_live_scan,
@@ -873,6 +877,277 @@ pub struct RenameRecoveryStatusDto {
     operations: Vec<RenameStatusDto>,
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloneSourceEvidenceDto {
+    schema: &'static str,
+    source_evidence_id: String,
+    entry_count: u64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManagedCloneDto {
+    schema: &'static str,
+    clone_root_id: String,
+    clone_verification_id: String,
+    entry_count: u64,
+    source_root_closed: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloneVerificationDto {
+    schema: &'static str,
+    clone_verification_id: String,
+    clone_root_id: String,
+    provenance: String,
+    state: String,
+    entry_count: u64,
+    expires_in_seconds: u64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloneAuthorityDto {
+    schema: &'static str,
+    clone_authority_id: String,
+    clone_verification_id: String,
+    expires_in_seconds: u64,
+}
+
+fn clone_provenance_name(provenance: CloneProvenance) -> &'static str {
+    match provenance {
+        CloneProvenance::AppManaged => "app_managed",
+        CloneProvenance::External => "external",
+    }
+}
+
+fn clone_state_name(state: CloneVerificationState) -> &'static str {
+    match state {
+        CloneVerificationState::Verified => "verified",
+        CloneVerificationState::Tampered => "tampered",
+        CloneVerificationState::Expired => "expired",
+        CloneVerificationState::Revoked => "revoked",
+    }
+}
+
+fn clone_runtime_error(error: CloneRuntimeError) -> ApiError {
+    ApiError::new(
+        error.code(),
+        error.to_string(),
+        matches!(
+            error,
+            CloneRuntimeError::VerificationExpired
+                | CloneRuntimeError::AuthorityExpired
+                | CloneRuntimeError::CloneNotVerified
+        ),
+    )
+}
+
+fn ensure_clone_verified(
+    clone_runtime: &SharedCloneRuntime,
+    resolved: &ResolvedRoot,
+) -> Result<(), ApiError> {
+    clone_runtime
+        .require_verified_root(resolved)
+        .map(|_| ())
+        .map_err(clone_runtime_error)
+}
+
+fn clone_source_evidence_dto(record: &CloneSourceEvidenceRecord) -> CloneSourceEvidenceDto {
+    CloneSourceEvidenceDto {
+        schema: "clone-source-evidence:v1",
+        source_evidence_id: record.source_evidence_id.clone(),
+        entry_count: record.entry_count,
+    }
+}
+
+fn clone_verification_dto(
+    clone_root_id: &str,
+    verification_id: &str,
+    provenance: CloneProvenance,
+    state: CloneVerificationState,
+    entry_count: u64,
+    expires_in_seconds: u64,
+) -> CloneVerificationDto {
+    CloneVerificationDto {
+        schema: "clone-verification:v1",
+        clone_verification_id: verification_id.to_owned(),
+        clone_root_id: clone_root_id.to_owned(),
+        provenance: clone_provenance_name(provenance).to_owned(),
+        state: clone_state_name(state).to_owned(),
+        entry_count,
+        expires_in_seconds,
+    }
+}
+
+fn clone_authority_dto(
+    record: &CloneAuthorityRecord,
+    expires_in_seconds: u64,
+) -> CloneAuthorityDto {
+    CloneAuthorityDto {
+        schema: "clone-authority:v1",
+        clone_authority_id: record.clone_authority_id.clone(),
+        clone_verification_id: record.clone_verification_id.clone(),
+        expires_in_seconds,
+    }
+}
+
+pub(crate) fn record_clone_source_evidence_sync(
+    registry: &RootRegistry,
+    clone_runtime: &SharedCloneRuntime,
+    root_id: &RootId,
+) -> Result<CloneSourceEvidenceDto, ApiError> {
+    let resolved = registry.resolve(root_id)?;
+    let record = clone_runtime
+        .record_source_evidence(&resolved)
+        .map_err(clone_runtime_error)?;
+    Ok(clone_source_evidence_dto(&record))
+}
+
+pub(crate) fn create_managed_clone_sync(
+    registry: &RootRegistry,
+    catalog: &SharedCatalog,
+    clone_runtime: &SharedCloneRuntime,
+    source_root_id: &RootId,
+) -> Result<ManagedCloneDto, ApiError> {
+    let source = registry.resolve(source_root_id)?;
+    let source_snapshot = scan_baseline_before(source.canonical_path.as_path());
+    let (clone_path, entries) = clone_runtime
+        .create_managed_clone(registry, &source)
+        .map_err(clone_runtime_error)?;
+    verify_baseline_unchanged(&source.canonical_path, &source_snapshot)?;
+    let clone_session = register_root_sync(registry, catalog, clone_path.to_str().unwrap())?;
+    let clone_root_id = RootId::new(clone_session.root_id.clone()).map_err(|_| {
+        ApiError::new(
+            "ROOT_NOT_APPROVED",
+            "clone root identifier is invalid",
+            false,
+        )
+    })?;
+    let clone = registry.resolve(&clone_root_id)?;
+    let verification = clone_runtime
+        .verify_managed_clone_registration(registry, &source, &clone, &entries, false)
+        .map_err(clone_runtime_error)?;
+    let _ = registry.close(source_root_id);
+    Ok(ManagedCloneDto {
+        schema: "managed-clone:v1",
+        clone_root_id: clone_root_id.as_str().to_owned(),
+        clone_verification_id: verification.clone_verification_id,
+        entry_count: verification.baseline_entry_count,
+        source_root_closed: true,
+    })
+}
+
+pub(crate) fn verify_external_clone_sync(
+    registry: &RootRegistry,
+    clone_runtime: &SharedCloneRuntime,
+    root_id: &RootId,
+    source_evidence_id: String,
+    acknowledged_disposable_clone: bool,
+) -> Result<CloneVerificationDto, ApiError> {
+    let resolved = registry.resolve(root_id)?;
+    let source_evidence = clone_runtime
+        .load_source_evidence(&source_evidence_id)
+        .map_err(clone_runtime_error)?;
+    let verification = clone_runtime
+        .verify_external_clone(&resolved, &source_evidence, acknowledged_disposable_clone)
+        .map_err(clone_runtime_error)?;
+    Ok(clone_verification_dto(
+        verification.clone_root_id.as_str(),
+        verification.clone_verification_id.as_str(),
+        verification.provenance,
+        verification.state,
+        verification.baseline_entry_count,
+        verification
+            .expires_at_unix
+            .saturating_sub(crate::clone_runtime::current_unix_time()),
+    ))
+}
+
+pub(crate) fn clone_verification_status_sync(
+    registry: &RootRegistry,
+    clone_runtime: &SharedCloneRuntime,
+    root_id: &RootId,
+) -> Result<Option<CloneVerificationDto>, ApiError> {
+    let resolved = registry.resolve(root_id)?;
+    let status = clone_runtime
+        .verification_status(&resolved)
+        .map_err(clone_runtime_error)?;
+    Ok(status.map(|status| {
+        clone_verification_dto(
+            status.clone_root_id.as_str(),
+            status.clone_verification_id.as_str(),
+            status.provenance,
+            status.state,
+            status.entry_count,
+            status.expires_in_seconds,
+        )
+    }))
+}
+
+pub(crate) fn clone_reverify_sync(
+    registry: &RootRegistry,
+    clone_runtime: &SharedCloneRuntime,
+    root_id: &RootId,
+) -> Result<CloneVerificationDto, ApiError> {
+    let resolved = registry.resolve(root_id)?;
+    let verification = clone_runtime
+        .reverify_root(&resolved)
+        .map_err(clone_runtime_error)?;
+    Ok(clone_verification_dto(
+        verification.clone_root_id.as_str(),
+        verification.clone_verification_id.as_str(),
+        verification.provenance,
+        verification.state,
+        verification.baseline_entry_count,
+        verification
+            .expires_at_unix
+            .saturating_sub(crate::clone_runtime::current_unix_time()),
+    ))
+}
+
+pub(crate) fn clone_issue_authority_sync(
+    registry: &RootRegistry,
+    clone_runtime: &SharedCloneRuntime,
+    root_id: &RootId,
+) -> Result<CloneAuthorityDto, ApiError> {
+    let resolved = registry.resolve(root_id)?;
+    let authority = clone_runtime
+        .issue_clone_authority(&resolved)
+        .map_err(clone_runtime_error)?;
+    Ok(clone_authority_dto(
+        &authority,
+        authority
+            .expires_at_unix
+            .saturating_sub(crate::clone_runtime::current_unix_time()),
+    ))
+}
+
+fn scan_baseline_before(path: &Path) -> Vec<(String, u64, String)> {
+    crate::clone_runtime::scan_baseline_entries(path)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|entry| (entry.relative_path, entry.byte_size, entry.content_hash))
+        .collect()
+}
+
+fn verify_baseline_unchanged(
+    path: &Path,
+    before: &[(String, u64, String)],
+) -> Result<(), ApiError> {
+    let after = scan_baseline_before(path);
+    if before != after {
+        return Err(ApiError::new(
+            "CLONE_SOURCE_CHANGED",
+            "source tree changed during managed clone creation",
+            false,
+        ));
+    }
+    Ok(())
+}
+
 fn rename_plan_from_impact(plan: &RenameImpactPlan) -> RenamePlanDto {
     RenamePlanDto {
         schema: "rename-plan:v1",
@@ -1507,12 +1782,14 @@ fn latest_completed_scan_revision(
 pub(crate) fn plan_rename_sample_sync(
     registry: &RootRegistry,
     catalog: &SharedCatalog,
+    clone_runtime: &SharedCloneRuntime,
     rename_runtime: &SharedRenameWriteRuntime,
     root_id: &RootId,
     source_file_instance_id: &str,
     destination_relative_path: &str,
 ) -> Result<RenamePlanResponseDto, ApiError> {
     let resolved = registry.resolve(root_id)?;
+    ensure_clone_verified(clone_runtime, &resolved)?;
     let identity = catalog_identity(&resolved.session)?;
     let snapshot = load_library_snapshot(catalog, &identity)?;
     let source = file_for_instance_id(&identity, &snapshot, source_file_instance_id)?;
@@ -1806,12 +2083,15 @@ fn verify_stored_rename_plan_freshness(
 pub(crate) fn authorize_rename_sync(
     registry: &RootRegistry,
     catalog: &SharedCatalog,
+    clone_runtime: &SharedCloneRuntime,
     write: &SharedWriteRuntime,
     rename_runtime: &SharedRenameWriteRuntime,
     root_id: &RootId,
     plan_id: &str,
 ) -> Result<RenameAuthorityDto, ApiError> {
     ensure_rename_recovery_clear(registry, write, rename_runtime, root_id)?;
+    let resolved = registry.resolve(root_id)?;
+    ensure_clone_verified(clone_runtime, &resolved)?;
     let plan = rename_runtime
         .get_plan(root_id, plan_id)
         .map_err(rename_runtime_error)?;
@@ -1825,6 +2105,7 @@ pub(crate) fn authorize_rename_sync(
 pub(crate) fn create_rename_backup_sync(
     registry: &RootRegistry,
     catalog: &SharedCatalog,
+    clone_runtime: &SharedCloneRuntime,
     write: &SharedWriteRuntime,
     rename_runtime: &SharedRenameWriteRuntime,
     root_id: &RootId,
@@ -1832,6 +2113,8 @@ pub(crate) fn create_rename_backup_sync(
     authority_id: &str,
 ) -> Result<RenameBackupStatusDto, ApiError> {
     ensure_rename_recovery_clear(registry, write, rename_runtime, root_id)?;
+    let resolved = registry.resolve(root_id)?;
+    ensure_clone_verified(clone_runtime, &resolved)?;
     rename_runtime
         .verify_authority(root_id, plan_id, authority_id)
         .map_err(rename_runtime_error)?;
@@ -1849,6 +2132,7 @@ pub(crate) fn create_rename_backup_sync(
 pub(crate) fn prepare_rename_sync(
     registry: &RootRegistry,
     catalog: &SharedCatalog,
+    clone_runtime: &SharedCloneRuntime,
     write: &SharedWriteRuntime,
     rename_runtime: &SharedRenameWriteRuntime,
     root_id: &RootId,
@@ -1857,6 +2141,8 @@ pub(crate) fn prepare_rename_sync(
     snapshot_id: &str,
 ) -> Result<RenamePrepareStatusDto, ApiError> {
     ensure_rename_recovery_clear(registry, write, rename_runtime, root_id)?;
+    let resolved = registry.resolve(root_id)?;
+    ensure_clone_verified(clone_runtime, &resolved)?;
     rename_runtime
         .verify_authority(root_id, plan_id, authority_id)
         .map_err(rename_runtime_error)?;
@@ -2429,8 +2715,10 @@ pub async fn v2_root_disable_write(
 pub async fn v2_root_close(
     root_id: String,
     registry: State<'_, Arc<RootRegistry>>,
+    clone_runtime: State<'_, SharedCloneRuntime>,
 ) -> Result<(), ApiError> {
     let root_id = parse_root_id(root_id)?;
+    clone_runtime.revoke_for_root(&root_id);
     registry.close(&root_id)?;
     Ok(())
 }
@@ -2699,16 +2987,19 @@ pub async fn v2_rename_plan(
     destination_relative_path: String,
     registry: State<'_, Arc<RootRegistry>>,
     catalog: State<'_, SharedCatalog>,
+    clone_runtime: State<'_, SharedCloneRuntime>,
     rename_runtime: State<'_, SharedRenameWriteRuntime>,
 ) -> Result<RenamePlanResponseDto, ApiError> {
     let root_id = parse_root_id(root_id)?;
     let registry = Arc::clone(registry.inner());
     let catalog = Arc::clone(catalog.inner());
+    let clone_runtime = Arc::clone(clone_runtime.inner());
     let rename_runtime = Arc::clone(rename_runtime.inner());
     tauri::async_runtime::spawn_blocking(move || {
         plan_rename_sample_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &rename_runtime,
             &root_id,
             &source_file_instance_id,
@@ -2746,18 +3037,21 @@ pub async fn v2_rename_authorize(
     plan_id: String,
     registry: State<'_, Arc<RootRegistry>>,
     catalog: State<'_, SharedCatalog>,
+    clone_runtime: State<'_, SharedCloneRuntime>,
     write: State<'_, SharedWriteRuntime>,
     rename_runtime: State<'_, SharedRenameWriteRuntime>,
 ) -> Result<RenameAuthorityDto, ApiError> {
     let root_id = parse_root_id(root_id)?;
     let registry = Arc::clone(registry.inner());
     let catalog = Arc::clone(catalog.inner());
+    let clone_runtime = Arc::clone(clone_runtime.inner());
     let write = Arc::clone(write.inner());
     let rename_runtime = Arc::clone(rename_runtime.inner());
     tauri::async_runtime::spawn_blocking(move || {
         authorize_rename_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &write,
             &rename_runtime,
             &root_id,
@@ -2775,18 +3069,21 @@ pub async fn v2_rename_create_backup(
     authority_id: String,
     registry: State<'_, Arc<RootRegistry>>,
     catalog: State<'_, SharedCatalog>,
+    clone_runtime: State<'_, SharedCloneRuntime>,
     write: State<'_, SharedWriteRuntime>,
     rename_runtime: State<'_, SharedRenameWriteRuntime>,
 ) -> Result<RenameBackupStatusDto, ApiError> {
     let root_id = parse_root_id(root_id)?;
     let registry = Arc::clone(registry.inner());
     let catalog = Arc::clone(catalog.inner());
+    let clone_runtime = Arc::clone(clone_runtime.inner());
     let write = Arc::clone(write.inner());
     let rename_runtime = Arc::clone(rename_runtime.inner());
     tauri::async_runtime::spawn_blocking(move || {
         create_rename_backup_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &write,
             &rename_runtime,
             &root_id,
@@ -2806,18 +3103,21 @@ pub async fn v2_rename_prepare(
     snapshot_id: String,
     registry: State<'_, Arc<RootRegistry>>,
     catalog: State<'_, SharedCatalog>,
+    clone_runtime: State<'_, SharedCloneRuntime>,
     write: State<'_, SharedWriteRuntime>,
     rename_runtime: State<'_, SharedRenameWriteRuntime>,
 ) -> Result<RenamePrepareStatusDto, ApiError> {
     let root_id = parse_root_id(root_id)?;
     let registry = Arc::clone(registry.inner());
     let catalog = Arc::clone(catalog.inner());
+    let clone_runtime = Arc::clone(clone_runtime.inner());
     let write = Arc::clone(write.inner());
     let rename_runtime = Arc::clone(rename_runtime.inner());
     tauri::async_runtime::spawn_blocking(move || {
         prepare_rename_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &write,
             &rename_runtime,
             &root_id,
@@ -2863,11 +3163,118 @@ pub async fn v2_rename_recovery_status(
     .map_err(ApiError::task_failed)?
 }
 
+#[tauri::command]
+pub async fn v2_clone_record_source_evidence(
+    root_id: String,
+    registry: State<'_, Arc<RootRegistry>>,
+    clone_runtime: State<'_, SharedCloneRuntime>,
+) -> Result<CloneSourceEvidenceDto, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let clone_runtime = Arc::clone(clone_runtime.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        record_clone_source_evidence_sync(&registry, &clone_runtime, &root_id)
+    })
+    .await
+    .map_err(ApiError::task_failed)?
+}
+
+#[tauri::command]
+pub async fn v2_clone_create_managed(
+    source_root_id: String,
+    registry: State<'_, Arc<RootRegistry>>,
+    catalog: State<'_, SharedCatalog>,
+    clone_runtime: State<'_, SharedCloneRuntime>,
+) -> Result<ManagedCloneDto, ApiError> {
+    let source_root_id = parse_root_id(source_root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let catalog = Arc::clone(catalog.inner());
+    let clone_runtime = Arc::clone(clone_runtime.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        create_managed_clone_sync(&registry, &catalog, &clone_runtime, &source_root_id)
+    })
+    .await
+    .map_err(ApiError::task_failed)?
+}
+
+#[tauri::command]
+pub async fn v2_clone_verify_external(
+    root_id: String,
+    source_evidence_id: String,
+    acknowledged_disposable_clone: bool,
+    registry: State<'_, Arc<RootRegistry>>,
+    clone_runtime: State<'_, SharedCloneRuntime>,
+) -> Result<CloneVerificationDto, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let clone_runtime = Arc::clone(clone_runtime.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        verify_external_clone_sync(
+            &registry,
+            &clone_runtime,
+            &root_id,
+            source_evidence_id,
+            acknowledged_disposable_clone,
+        )
+    })
+    .await
+    .map_err(ApiError::task_failed)?
+}
+
+#[tauri::command]
+pub async fn v2_clone_verification_status(
+    root_id: String,
+    registry: State<'_, Arc<RootRegistry>>,
+    clone_runtime: State<'_, SharedCloneRuntime>,
+) -> Result<Option<CloneVerificationDto>, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let clone_runtime = Arc::clone(clone_runtime.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        clone_verification_status_sync(&registry, &clone_runtime, &root_id)
+    })
+    .await
+    .map_err(ApiError::task_failed)?
+}
+
+#[tauri::command]
+pub async fn v2_clone_reverify(
+    root_id: String,
+    registry: State<'_, Arc<RootRegistry>>,
+    clone_runtime: State<'_, SharedCloneRuntime>,
+) -> Result<CloneVerificationDto, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let clone_runtime = Arc::clone(clone_runtime.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        clone_reverify_sync(&registry, &clone_runtime, &root_id)
+    })
+    .await
+    .map_err(ApiError::task_failed)?
+}
+
+#[tauri::command]
+pub async fn v2_clone_issue_authority(
+    root_id: String,
+    registry: State<'_, Arc<RootRegistry>>,
+    clone_runtime: State<'_, SharedCloneRuntime>,
+) -> Result<CloneAuthorityDto, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let clone_runtime = Arc::clone(clone_runtime.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        clone_issue_authority_sync(&registry, &clone_runtime, &root_id)
+    })
+    .await
+    .map_err(ApiError::task_failed)?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::audio_runtime::open_shared_audio_runtime;
     use crate::catalog_runtime::open_shared_catalog;
+    use crate::clone_runtime::open_shared_clone_runtime;
     use crate::root_registry::{DeviceIdentityProvider, DeviceObservation};
     use crate::write_runtime::open_shared_write_runtime;
     use ot_executor::{JournalFileIdentity, JournalStatus, OperationJournal};
@@ -2951,11 +3358,25 @@ mod tests {
         crate::rename_write_runtime::open_shared_rename_write_runtime(data_directory).unwrap()
     }
 
+    fn open_test_clone_runtime(data_directory: &Path) -> SharedCloneRuntime {
+        open_shared_clone_runtime(data_directory).unwrap()
+    }
+
+    fn install_fixture_clone_verification(
+        clone_runtime: &SharedCloneRuntime,
+        registry: &RootRegistry,
+        root_id: &RootId,
+    ) {
+        let resolved = registry.resolve(root_id).unwrap();
+        clone_runtime.install_test_verification(&resolved).unwrap();
+    }
+
     struct RenameThroughBackupFixture {
         _root: TempDir,
         data_directory: TempDir,
         registry: RootRegistry,
         catalog: SharedCatalog,
+        clone_runtime: SharedCloneRuntime,
         rename_runtime: SharedRenameWriteRuntime,
         write: SharedWriteRuntime,
         root_id: RootId,
@@ -2970,11 +3391,13 @@ mod tests {
         build_gate_c_planning_fixture(root.path());
         let registry = registry();
         let (data_directory, catalog) = catalog();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
         let rename_runtime = rename_runtime(data_directory.path());
         let write = write_runtime(data_directory.path());
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         enable_write_sync(&registry, &catalog, &write, &root_id).unwrap();
 
         let dto = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
@@ -2989,6 +3412,7 @@ mod tests {
         let RenamePlanResponseDto::Planned(plan) = plan_rename_sample_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &rename_runtime,
             &root_id,
             &source_id,
@@ -3001,6 +3425,7 @@ mod tests {
         let authority = authorize_rename_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &write,
             &rename_runtime,
             &root_id,
@@ -3011,6 +3436,7 @@ mod tests {
         let backup = create_rename_backup_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &write,
             &rename_runtime,
             &root_id,
@@ -3024,6 +3450,7 @@ mod tests {
             data_directory,
             registry,
             catalog,
+            clone_runtime,
             rename_runtime,
             write,
             root_id,
@@ -3294,6 +3721,8 @@ mod tests {
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         assert!(!session.capabilities.stable_device_identity);
         let root_id = RootId::new(session.root_id).unwrap();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
 
         let error = enable_write_sync(&registry, &catalog, &write, &root_id).unwrap_err();
 
@@ -3331,6 +3760,8 @@ mod tests {
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         let snapshot = list_library_sync(&registry, &catalog, &root_id).unwrap();
         assert!(snapshot.state_documents.iter().any(|document| {
             document.parse_status == StateDocumentParseStatus::UnsupportedVersion
@@ -3365,6 +3796,8 @@ mod tests {
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         let snapshot = list_library_sync(&registry, &catalog, &root_id).unwrap();
         assert!(snapshot.state_documents.iter().any(|document| {
             document.parse_status == StateDocumentParseStatus::UnsupportedVersion
@@ -3406,6 +3839,8 @@ mod tests {
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         let mut snapshot = list_library_sync(&registry, &catalog, &root_id).unwrap();
         assert_eq!(
             snapshot.sample_settings[0].parse_status,
@@ -3780,6 +4215,8 @@ mod tests {
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
 
         let project = root.path().join("SET_A/PROJECT_A");
         fs::create_dir(&project).unwrap();
@@ -3824,9 +4261,8 @@ mod tests {
         let (_data_directory, catalog) = catalog();
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
-        let root_id = RootId::new(session.root_id).unwrap();
 
-        let snapshot = list_library_sync(&registry, &catalog, &root_id).unwrap();
+        let snapshot = list_library_sync(&registry, &catalog, &RootId::new(session.root_id).unwrap()).unwrap();
 
         assert_eq!(snapshot.sets[0].relative_path.as_str(), "SET_A");
         assert_eq!(
@@ -3864,6 +4300,8 @@ mod tests {
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         drop(catalog);
 
         let reopened_catalog = open_shared_catalog(data_directory.path()).unwrap();
@@ -3925,10 +4363,12 @@ mod tests {
         let root = TempDir::new().unwrap();
         create_set_project(root.path(), "SET_A", "PROJECT_A");
         let registry = registry();
-        let (_data_directory, catalog) = catalog();
+        let (data_directory, catalog) = catalog();
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         registry.close(&root_id).unwrap();
 
         let error = list_library_sync(&registry, &catalog, &root_id).unwrap_err();
@@ -4130,10 +4570,12 @@ mod tests {
         fs::write(&audio, b"read-only audio fixture").unwrap();
         let before = fs::read(&audio).unwrap();
         let registry = registry();
-        let (_data_directory, catalog) = catalog();
+        let (data_directory, catalog) = catalog();
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         let snapshot = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
         let asset_id = snapshot.audio_files[0].asset_id.clone();
 
@@ -4167,10 +4609,12 @@ mod tests {
         create_set_project(root.path(), "SET_A", "PROJECT_A");
         fs::write(root.path().join("SET_A/AUDIO/kick.wav"), b"audio fixture").unwrap();
         let registry = registry();
-        let (_data_directory, catalog) = catalog();
+        let (data_directory, catalog) = catalog();
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         let snapshot = list_library_sync(&registry, &catalog, &root_id).unwrap();
         let raw_content_hash = snapshot.file_instances[0].content_hash.as_str();
 
@@ -4195,10 +4639,12 @@ mod tests {
         create_set_project(root.path(), "SET_A", "PROJECT_A");
         fs::write(root.path().join("SET_A/AUDIO/kick.wav"), b"audio fixture").unwrap();
         let registry = registry();
-        let (_data_directory, catalog) = catalog();
+        let (data_directory, catalog) = catalog();
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         let snapshot = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
         let asset_id = snapshot.audio_files[0].asset_id.clone();
         registry.close(&root_id).unwrap();
@@ -4215,10 +4661,12 @@ mod tests {
         create_set_project(root.path(), "SET_A", "PROJECT_A");
         fs::write(root.path().join("SET_A/AUDIO/kick.wav"), b"audio fixture").unwrap();
         let registry = registry();
-        let (_data_directory, catalog) = catalog();
+        let (data_directory, catalog) = catalog();
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         let snapshot = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
         let asset_id = snapshot.audio_files[0].asset_id.clone();
         let original = replace_manual_asset_metadata_sync(
@@ -4265,6 +4713,8 @@ mod tests {
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         let snapshot = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
         let asset_id = snapshot.audio_files[0].asset_id.clone();
 
@@ -4312,6 +4762,8 @@ mod tests {
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         let snapshot = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
         let asset_id = snapshot
             .audio_files
@@ -4355,6 +4807,8 @@ mod tests {
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         let snapshot = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
         let asset_id = snapshot.audio_files[0].asset_id.clone();
         let ticket =
@@ -4497,10 +4951,12 @@ mod tests {
 
         let registry = registry();
         let (data_directory, catalog) = catalog();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
         let rename_runtime = rename_runtime(data_directory.path());
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         let dto = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
         let source_id = dto
             .audio_files
@@ -4514,6 +4970,7 @@ mod tests {
         let response = plan_rename_sample_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &rename_runtime,
             &root_id,
             &source_id,
@@ -4549,6 +5006,7 @@ mod tests {
         let replay = plan_rename_sample_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &rename_runtime,
             &root_id,
             &source_id,
@@ -4568,10 +5026,12 @@ mod tests {
 
         let registry = registry();
         let (data_directory, catalog) = catalog();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
         let rename_runtime = rename_runtime(data_directory.path());
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         let dto = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
         let source_id = dto
             .audio_files
@@ -4584,6 +5044,7 @@ mod tests {
         let RenamePlanResponseDto::Planned(plan) = plan_rename_sample_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &rename_runtime,
             &root_id,
             &source_id,
@@ -4611,10 +5072,12 @@ mod tests {
 
         let registry = registry();
         let (data_directory, catalog) = catalog();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
         let rename_runtime = rename_runtime(data_directory.path());
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         let dto = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
         let source_id = dto
             .audio_files
@@ -4627,6 +5090,7 @@ mod tests {
         let cross_dir = plan_rename_sample_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &rename_runtime,
             &root_id,
             &source_id,
@@ -4638,6 +5102,7 @@ mod tests {
         let RenamePlanResponseDto::Blocked(blocked) = plan_rename_sample_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &rename_runtime,
             &root_id,
             &source_id,
@@ -4684,9 +5149,12 @@ mod tests {
             .unwrap()
             .file_instance_id
             .clone();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &first_root);
         let RenamePlanResponseDto::Planned(plan) = plan_rename_sample_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &rename_runtime,
             &first_root,
             &source_id,
@@ -4722,9 +5190,12 @@ mod tests {
             .file_instance_id
             .clone();
 
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         let response = plan_rename_sample_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &rename_runtime,
             &root_id,
             &source_id,
@@ -4753,6 +5224,8 @@ mod tests {
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         gate_c_rescan_and_store(&registry, &catalog, &root_id).unwrap();
         let dto = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
         let source_id = dto
@@ -4766,6 +5239,7 @@ mod tests {
         let response = plan_rename_sample_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &rename_runtime,
             &root_id,
             &source_id,
@@ -4782,10 +5256,12 @@ mod tests {
         build_gate_c_planning_fixture(root.path());
         let registry = registry();
         let (data_directory, catalog) = catalog();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
         let rename_runtime = rename_runtime(data_directory.path());
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         let dto = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
         let source_id = dto
             .audio_files
@@ -4800,13 +5276,14 @@ mod tests {
         let error = plan_rename_sample_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &rename_runtime,
             &root_id,
             &source_id,
             "SET/AUDIO/new-pad.wav",
         )
         .unwrap_err();
-        assert_eq!(error.code, "CATALOG_STALE");
+        assert_eq!(error.code, "CLONE_TAMPERED");
     }
 
     #[test]
@@ -4818,10 +5295,12 @@ mod tests {
 
         let registry = registry();
         let (data_directory, catalog) = catalog();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
         let rename_runtime = rename_runtime(data_directory.path());
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         let dto = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
         let source_id = dto
             .audio_files
@@ -4834,6 +5313,7 @@ mod tests {
         let RenamePlanResponseDto::Blocked(blocked) = plan_rename_sample_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &rename_runtime,
             &root_id,
             &source_id,
@@ -4858,10 +5338,12 @@ mod tests {
 
         let registry = registry();
         let (data_directory, catalog) = catalog();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
         let rename_runtime = rename_runtime(data_directory.path());
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         let dto = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
         let source_id = dto
             .audio_files
@@ -4874,6 +5356,7 @@ mod tests {
         let RenamePlanResponseDto::Blocked(blocked) = plan_rename_sample_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &rename_runtime,
             &root_id,
             &source_id,
@@ -4910,6 +5393,8 @@ mod tests {
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         let dto = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
         let source_id = dto
             .audio_files
@@ -4922,6 +5407,7 @@ mod tests {
         let RenamePlanResponseDto::Planned(plan) = plan_rename_sample_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &rename_runtime,
             &root_id,
             &source_id,
@@ -4947,6 +5433,8 @@ mod tests {
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         enable_write_sync(&registry, &catalog, &write, &root_id).unwrap();
 
         let dto = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
@@ -4961,6 +5449,7 @@ mod tests {
         let RenamePlanResponseDto::Planned(plan) = plan_rename_sample_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &rename_runtime,
             &root_id,
             &source_id,
@@ -4973,6 +5462,7 @@ mod tests {
         let authority = authorize_rename_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &write,
             &rename_runtime,
             &root_id,
@@ -4987,6 +5477,7 @@ mod tests {
         let backup = create_rename_backup_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &write,
             &rename_runtime,
             &root_id,
@@ -5000,6 +5491,7 @@ mod tests {
         let prepared = prepare_rename_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &write,
             &rename_runtime,
             &root_id,
@@ -5031,6 +5523,8 @@ mod tests {
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
 
         let dto = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
         let source_id = dto
@@ -5044,6 +5538,7 @@ mod tests {
         let RenamePlanResponseDto::Planned(plan) = plan_rename_sample_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &rename_runtime,
             &root_id,
             &source_id,
@@ -5058,6 +5553,7 @@ mod tests {
         let error = authorize_rename_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &write,
             &rename_runtime,
             &root_id,
@@ -5079,6 +5575,8 @@ mod tests {
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
         let root_id = RootId::new(session.root_id).unwrap();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         let dto = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
         let source_id = dto
             .audio_files
@@ -5091,6 +5589,7 @@ mod tests {
         let RenamePlanResponseDto::Planned(plan) = plan_rename_sample_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &rename_runtime,
             &root_id,
             &source_id,
@@ -5103,6 +5602,7 @@ mod tests {
         let error = authorize_rename_sync(
             &registry,
             &catalog,
+            &clone_runtime,
             &write,
             &rename_runtime,
             &root_id,
@@ -5128,6 +5628,7 @@ mod tests {
         plan_rename_sample_sync(
             &fixture.registry,
             &fixture.catalog,
+            &fixture.clone_runtime,
             &fixture.rename_runtime,
             &fixture.root_id,
             &source_id,
@@ -5138,6 +5639,7 @@ mod tests {
         let error = create_rename_backup_sync(
             &fixture.registry,
             &fixture.catalog,
+            &fixture.clone_runtime,
             &fixture.write,
             &fixture.rename_runtime,
             &fixture.root_id,
@@ -5163,6 +5665,7 @@ mod tests {
         let error = prepare_rename_sync(
             &fixture.registry,
             &fixture.catalog,
+            &fixture.clone_runtime,
             &fixture.write,
             &fixture.rename_runtime,
             &fixture.root_id,
@@ -5182,6 +5685,7 @@ mod tests {
         let error = prepare_rename_sync(
             &fixture.registry,
             &fixture.catalog,
+            &fixture.clone_runtime,
             &fixture.write,
             &fixture.rename_runtime,
             &fixture.root_id,
@@ -5199,6 +5703,7 @@ mod tests {
         prepare_rename_sync(
             &fixture.registry,
             &fixture.catalog,
+            &fixture.clone_runtime,
             &fixture.write,
             &fixture.rename_runtime,
             &fixture.root_id,
@@ -5225,6 +5730,7 @@ mod tests {
         let prepared = prepare_rename_sync(
             &fixture.registry,
             &fixture.catalog,
+            &fixture.clone_runtime,
             &fixture.write,
             &fixture.rename_runtime,
             &fixture.root_id,
@@ -5255,6 +5761,7 @@ mod tests {
         prepare_rename_sync(
             &fixture.registry,
             &fixture.catalog,
+            &fixture.clone_runtime,
             &fixture.write,
             &fixture.rename_runtime,
             &fixture.root_id,
@@ -5287,6 +5794,7 @@ mod tests {
         let registry = &fixture.registry;
         let catalog = &fixture.catalog;
         let write = &fixture.write;
+        let clone_runtime = Arc::clone(&fixture.clone_runtime);
         let rename_runtime = Arc::clone(&fixture.rename_runtime);
         let root_id = fixture.root_id.clone();
         let plan_id = fixture.plan_id.clone();
@@ -5299,6 +5807,7 @@ mod tests {
                 prepare_rename_sync(
                     registry,
                     catalog,
+                    &clone_runtime,
                     write,
                     &rename_runtime,
                     &root_id,
@@ -5311,6 +5820,7 @@ mod tests {
                 prepare_rename_sync(
                     registry,
                     catalog,
+                    &clone_runtime,
                     write,
                     &rename_runtime,
                     &root_id,

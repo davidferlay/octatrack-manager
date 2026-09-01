@@ -1,0 +1,1133 @@
+#![forbid(unsafe_code)]
+
+// Production apply wiring (Phase 4B) consumes the authority adapter and disk helpers below.
+#![allow(dead_code)]
+
+use crate::root_registry::{ResolvedRoot, RootRegistry, RootRegistryError};
+use ot_domain::RootId;
+use ot_executor::{ApprovedExecutionRoot, AuthorityError, CloneWriteAuthority, VerifiedCloneRoot};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
+use std::fs::{self, File, OpenOptions};
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+const CLONE_BASELINE_SCHEMA: &str = "masterocta-clone-baseline:v1";
+const CLONE_SOURCE_EVIDENCE_SCHEMA: &str = "masterocta-clone-source-evidence:v1";
+const CLONE_VERIFICATION_SCHEMA: &str = "masterocta-clone-verification:v1";
+const CLONE_AUTHORITY_SCHEMA: &str = "masterocta-clone-authority:v1";
+const PRODUCT_DIRECTORY: &str = "MasterOCTa";
+const MANAGED_CLONES_DIRECTORY: &str = "managed-clones";
+const CLONE_VERIFICATIONS_DIRECTORY: &str = "clone-verifications";
+const DEFAULT_VERIFICATION_TTL: Duration = Duration::from_secs(8 * 60 * 60);
+
+pub type SharedCloneRuntime = Arc<CloneRuntime>;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CloneProvenance {
+    AppManaged,
+    External,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CloneVerificationState {
+    Verified,
+    Tampered,
+    Expired,
+    Revoked,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct CloneBaselineEntry {
+    pub relative_path: String,
+    pub byte_size: u64,
+    pub content_hash: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct CloneBaselineManifest {
+    pub schema: String,
+    pub provenance: CloneProvenance,
+    pub clone_root_id: String,
+    pub clone_device_fingerprint: String,
+    pub clone_surface_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_device_fingerprint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_surface_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_evidence_id: Option<String>,
+    pub created_at_unix: u64,
+    pub entry_count: u64,
+    pub entries: Vec<CloneBaselineEntry>,
+    pub manifest_binding: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct CloneSourceEvidenceRecord {
+    pub schema: String,
+    pub source_evidence_id: String,
+    pub source_root_id: String,
+    pub source_device_fingerprint: String,
+    pub source_surface_id: String,
+    pub created_at_unix: u64,
+    pub entry_count: u64,
+    pub entries: Vec<CloneBaselineEntry>,
+    pub manifest_binding: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct CloneVerificationRecord {
+    pub schema: String,
+    pub clone_verification_id: String,
+    pub clone_root_id: String,
+    pub clone_device_fingerprint: String,
+    pub clone_surface_id: String,
+    pub provenance: CloneProvenance,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_evidence_id: Option<String>,
+    pub baseline_entry_count: u64,
+    pub baseline_manifest_binding: String,
+    pub state: CloneVerificationState,
+    pub verified_at_unix: u64,
+    pub expires_at_unix: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct CloneAuthorityRecord {
+    pub schema: String,
+    pub clone_authority_id: String,
+    pub clone_verification_id: String,
+    pub clone_root_id: String,
+    pub clone_device_fingerprint: String,
+    pub clone_surface_id: String,
+    pub baseline_manifest_binding: String,
+    pub issued_at_unix: u64,
+    pub expires_at_unix: u64,
+}
+
+#[derive(Clone, Debug)]
+pub struct CloneVerificationStatus {
+    pub clone_verification_id: String,
+    pub clone_root_id: RootId,
+    pub provenance: CloneProvenance,
+    pub state: CloneVerificationState,
+    pub entry_count: u64,
+    pub expires_in_seconds: u64,
+}
+
+#[derive(Clone, Debug)]
+pub struct ManagedCloneResult {
+    pub clone_root_id: RootId,
+    pub clone_verification_id: String,
+    pub entry_count: u64,
+    pub source_root_closed: bool,
+}
+
+#[derive(Default)]
+struct CloneRuntimeState {
+    verifications: BTreeMap<String, CloneVerificationRecord>,
+    authorities: BTreeMap<String, CloneAuthorityRecord>,
+}
+
+pub struct CloneRuntime {
+    storage_root: PathBuf,
+    state: Mutex<CloneRuntimeState>,
+    verification_ttl: Duration,
+}
+
+#[derive(Debug)]
+pub enum CloneRuntimeError {
+    NotApproved,
+    SourceEqualsClone,
+    NestedRoot,
+    SymlinkForbidden,
+    SourceChangedDuringCopy,
+    ManifestMismatch,
+    SourceEvidenceRequired,
+    SourceEvidenceMismatch,
+    VerificationNotFound,
+    VerificationExpired,
+    VerificationTampered,
+    CloneNotVerified,
+    AuthorityNotFound,
+    AuthorityExpired,
+    AmbiguousIdentity,
+    UnstableIdentity,
+    Io(String),
+    Unavailable,
+}
+
+impl CloneRuntimeError {
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::NotApproved => "ROOT_NOT_APPROVED",
+            Self::SourceEqualsClone => "CLONE_SOURCE_EQUALS_CLONE",
+            Self::NestedRoot => "CLONE_NESTED_ROOT",
+            Self::SymlinkForbidden => "CLONE_SYMLINK_FORBIDDEN",
+            Self::SourceChangedDuringCopy => "CLONE_SOURCE_CHANGED",
+            Self::ManifestMismatch => "CLONE_MANIFEST_MISMATCH",
+            Self::SourceEvidenceRequired => "CLONE_SOURCE_EVIDENCE_REQUIRED",
+            Self::SourceEvidenceMismatch => "CLONE_SOURCE_EVIDENCE_MISMATCH",
+            Self::VerificationNotFound => "CLONE_VERIFICATION_NOT_FOUND",
+            Self::VerificationExpired => "CLONE_VERIFICATION_EXPIRED",
+            Self::VerificationTampered => "CLONE_TAMPERED",
+            Self::CloneNotVerified => "CLONE_NOT_VERIFIED",
+            Self::AuthorityNotFound => "CLONE_AUTHORITY_NOT_FOUND",
+            Self::AuthorityExpired => "CLONE_AUTHORITY_EXPIRED",
+            Self::AmbiguousIdentity => "ROOT_IDENTITY_AMBIGUOUS",
+            Self::UnstableIdentity => "UNSTABLE_DEVICE_IDENTITY",
+            Self::Io(_) | Self::Unavailable => "CLONE_RUNTIME_UNAVAILABLE",
+        }
+    }
+}
+
+impl std::fmt::Display for CloneRuntimeError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::NotApproved => "root session is not approved",
+            Self::SourceEqualsClone => "source and clone roots must be distinct",
+            Self::NestedRoot => "clone root cannot be nested inside source or vice versa",
+            Self::SymlinkForbidden => "symlinks are forbidden in clone verification",
+            Self::SourceChangedDuringCopy => "source tree changed during managed clone creation",
+            Self::ManifestMismatch => "clone baseline does not match required manifest",
+            Self::SourceEvidenceRequired => "external clone verification requires source evidence",
+            Self::SourceEvidenceMismatch => "clone manifest does not match source evidence",
+            Self::VerificationNotFound => "clone verification record was not found",
+            Self::VerificationExpired => "clone verification has expired",
+            Self::VerificationTampered => "clone filesystem changed after verification",
+            Self::CloneNotVerified => "clone root is not verified for rename operations",
+            Self::AuthorityNotFound => "clone authority was not found",
+            Self::AuthorityExpired => "clone authority has expired",
+            Self::AmbiguousIdentity => "root identity is ambiguous on this device",
+            Self::UnstableIdentity => "clone operations require a stable device identity",
+            Self::Io(message) => message,
+            Self::Unavailable => "clone runtime is unavailable",
+        })
+    }
+}
+
+impl std::error::Error for CloneRuntimeError {}
+
+impl CloneRuntime {
+    pub fn new(storage_root: PathBuf, verification_ttl: Duration) -> Self {
+        Self {
+            storage_root,
+            state: Mutex::new(CloneRuntimeState::default()),
+            verification_ttl,
+        }
+    }
+
+    pub fn record_source_evidence(
+        &self,
+        resolved: &ResolvedRoot,
+    ) -> Result<CloneSourceEvidenceRecord, CloneRuntimeError> {
+        if !resolved.session.capabilities.stable_device_identity {
+            return Err(CloneRuntimeError::UnstableIdentity);
+        }
+        let surface_id = derive_root_surface_id(&resolved.canonical_path);
+        let entries = scan_baseline_entries(&resolved.canonical_path)?;
+        let manifest_binding = derive_manifest_binding(&entries);
+        let source_evidence_id = derive_source_evidence_id(
+            resolved.session.root_id.as_str(),
+            &resolved.session.device_fingerprint,
+            &surface_id,
+            &manifest_binding,
+        );
+        let record = CloneSourceEvidenceRecord {
+            schema: CLONE_SOURCE_EVIDENCE_SCHEMA.to_owned(),
+            source_evidence_id: source_evidence_id.clone(),
+            source_root_id: resolved.session.root_id.as_str().to_owned(),
+            source_device_fingerprint: resolved.session.device_fingerprint.clone(),
+            source_surface_id: surface_id,
+            created_at_unix: unix_now(),
+            entry_count: entries.len() as u64,
+            entries,
+            manifest_binding,
+        };
+        persist_source_evidence(&self.storage_root, &record)?;
+        Ok(record)
+    }
+
+    pub fn create_managed_clone(
+        &self,
+        _registry: &RootRegistry,
+        source: &ResolvedRoot,
+    ) -> Result<(PathBuf, Vec<CloneBaselineEntry>), CloneRuntimeError> {
+        if !source.session.capabilities.stable_device_identity {
+            return Err(CloneRuntimeError::UnstableIdentity);
+        }
+        let source_surface = derive_root_surface_id(&source.canonical_path);
+        let source_before = scan_baseline_entries(&source.canonical_path)?;
+        let clone_token = derive_managed_clone_token(
+            source.session.root_id.as_str(),
+            &source.session.device_fingerprint,
+            &source_surface,
+        );
+        let managed_root = self
+            .storage_root
+            .join(PRODUCT_DIRECTORY)
+            .join(MANAGED_CLONES_DIRECTORY);
+        ensure_real_directory(&self.storage_root, &managed_root)?;
+        let partial = managed_root.join(format!("{clone_token}.partial"));
+        let final_path = managed_root.join(&clone_token);
+        remove_path_if_exists(&partial)?;
+        remove_path_if_exists(&final_path)?;
+        fs::create_dir(&partial).map_err(map_io_error)?;
+        copy_tree_nofollow(&source.canonical_path, &partial)?;
+        let source_after = scan_baseline_entries(&source.canonical_path)?;
+        if source_before != source_after {
+            let _ = fs::remove_dir_all(&partial);
+            return Err(CloneRuntimeError::SourceChangedDuringCopy);
+        }
+        let clone_entries = scan_baseline_entries(&partial)?;
+        if clone_entries != source_before {
+            let _ = fs::remove_dir_all(&partial);
+            return Err(CloneRuntimeError::ManifestMismatch);
+        }
+        fs::rename(&partial, &final_path).map_err(map_io_error)?;
+        Ok((final_path, clone_entries))
+    }
+
+    pub fn verify_managed_clone_registration(
+        &self,
+        _registry: &RootRegistry,
+        source: &ResolvedRoot,
+        clone: &ResolvedRoot,
+        entries: &[CloneBaselineEntry],
+        _source_root_closed: bool,
+    ) -> Result<CloneVerificationRecord, CloneRuntimeError> {
+        reject_source_clone_relationship(source, clone)?;
+        let live_entries = scan_baseline_entries(&clone.canonical_path)?;
+        let manifest_binding = derive_manifest_binding(&live_entries);
+        if live_entries != entries {
+            return Err(CloneRuntimeError::ManifestMismatch);
+        }
+        let record = build_verification_record(
+            clone,
+            CloneProvenance::AppManaged,
+            None,
+            manifest_binding,
+            live_entries.len() as u64,
+            self.verification_ttl,
+        )?;
+        persist_verification(&self.storage_root, &record)?;
+        self.store_verification(record.clone());
+        Ok(record)
+    }
+
+    pub fn verify_external_clone(
+        &self,
+        clone: &ResolvedRoot,
+        source_evidence: &CloneSourceEvidenceRecord,
+        acknowledged_disposable: bool,
+    ) -> Result<CloneVerificationRecord, CloneRuntimeError> {
+        if !acknowledged_disposable {
+            return Err(CloneRuntimeError::CloneNotVerified);
+        }
+        if !clone.session.capabilities.stable_device_identity {
+            return Err(CloneRuntimeError::UnstableIdentity);
+        }
+        if clone.session.device_fingerprint == source_evidence.source_device_fingerprint {
+            return Err(CloneRuntimeError::SourceEqualsClone);
+        }
+        let clone_surface = derive_root_surface_id(&clone.canonical_path);
+        if clone_surface == source_evidence.source_surface_id {
+            return Err(CloneRuntimeError::SourceEqualsClone);
+        }
+        let live_entries = scan_baseline_entries(&clone.canonical_path)?;
+        let manifest_binding = derive_manifest_binding(&live_entries);
+        if manifest_binding != source_evidence.manifest_binding
+            || live_entries != source_evidence.entries
+        {
+            return Err(CloneRuntimeError::SourceEvidenceMismatch);
+        }
+        let record = build_verification_record(
+            clone,
+            CloneProvenance::External,
+            Some(source_evidence.source_evidence_id.clone()),
+            manifest_binding,
+            live_entries.len() as u64,
+            self.verification_ttl,
+        )?;
+        persist_verification(&self.storage_root, &record)?;
+        self.store_verification(record.clone());
+        Ok(record)
+    }
+
+    pub fn load_source_evidence(
+        &self,
+        source_evidence_id: &str,
+    ) -> Result<CloneSourceEvidenceRecord, CloneRuntimeError> {
+        let path = source_evidence_path(&self.storage_root, source_evidence_id);
+        read_json(&path)
+    }
+
+    pub fn verification_for_root(
+        &self,
+        root_id: &RootId,
+    ) -> Result<Option<CloneVerificationRecord>, CloneRuntimeError> {
+        let mut state = self.lock_state()?;
+        purge_expired(&mut state);
+        Ok(state
+            .verifications
+            .values()
+            .find(|record| record.clone_root_id == root_id.as_str())
+            .cloned())
+    }
+
+    pub fn require_verified_root(
+        &self,
+        resolved: &ResolvedRoot,
+    ) -> Result<CloneVerificationRecord, CloneRuntimeError> {
+        let record = self
+            .verification_for_root(&resolved.session.root_id)?
+            .ok_or(CloneRuntimeError::CloneNotVerified)?;
+        self.validate_verification(resolved, &record)
+    }
+
+    pub fn reverify_root(
+        &self,
+        resolved: &ResolvedRoot,
+    ) -> Result<CloneVerificationRecord, CloneRuntimeError> {
+        let mut record = self.require_verified_root(resolved)?;
+        record.verified_at_unix = unix_now();
+        record.expires_at_unix = unix_now() + self.verification_ttl.as_secs();
+        record.state = CloneVerificationState::Verified;
+        persist_verification(&self.storage_root, &record)?;
+        self.store_verification(record.clone());
+        Ok(record)
+    }
+
+    pub fn issue_clone_authority(
+        &self,
+        resolved: &ResolvedRoot,
+    ) -> Result<CloneAuthorityRecord, CloneRuntimeError> {
+        let verification = self.reverify_root(resolved)?;
+        let authority = CloneAuthorityRecord {
+            schema: CLONE_AUTHORITY_SCHEMA.to_owned(),
+            clone_authority_id: derive_clone_authority_id(
+                &verification.clone_verification_id,
+                resolved.session.root_id.as_str(),
+                &verification.baseline_manifest_binding,
+            ),
+            clone_verification_id: verification.clone_verification_id,
+            clone_root_id: resolved.session.root_id.as_str().to_owned(),
+            clone_device_fingerprint: resolved.session.device_fingerprint.clone(),
+            clone_surface_id: verification.clone_surface_id,
+            baseline_manifest_binding: verification.baseline_manifest_binding,
+            issued_at_unix: unix_now(),
+            expires_at_unix: verification.expires_at_unix,
+        };
+        persist_authority(&self.storage_root, &authority)?;
+        self.store_authority(authority.clone());
+        Ok(authority)
+    }
+
+    pub fn require_clone_authority(
+        &self,
+        resolved: &ResolvedRoot,
+        clone_authority_id: &str,
+    ) -> Result<CloneAuthorityRecord, CloneRuntimeError> {
+        let verification = self.require_verified_root(resolved)?;
+        let authority = self
+            .lock_state()?
+            .authorities
+            .get(clone_authority_id)
+            .cloned()
+            .or_else(|| load_authority_from_disk(&self.storage_root, clone_authority_id).ok())
+            .ok_or(CloneRuntimeError::AuthorityNotFound)?;
+        if authority.expires_at_unix <= unix_now() {
+            return Err(CloneRuntimeError::AuthorityExpired);
+        }
+        if authority.clone_root_id != resolved.session.root_id.as_str()
+            || authority.clone_device_fingerprint != resolved.session.device_fingerprint
+            || authority.clone_verification_id != verification.clone_verification_id
+            || authority.baseline_manifest_binding != verification.baseline_manifest_binding
+        {
+            return Err(CloneRuntimeError::AuthorityNotFound);
+        }
+        Ok(authority)
+    }
+
+    pub fn verification_status(
+        &self,
+        resolved: &ResolvedRoot,
+    ) -> Result<Option<CloneVerificationStatus>, CloneRuntimeError> {
+        let Some(record) = self.verification_for_root(&resolved.session.root_id)? else {
+            return Ok(None);
+        };
+        Ok(Some(CloneVerificationStatus {
+            clone_verification_id: record.clone_verification_id,
+            clone_root_id: resolved.session.root_id.clone(),
+            provenance: record.provenance,
+            state: record.state,
+            entry_count: record.baseline_entry_count,
+            expires_in_seconds: record.expires_at_unix.saturating_sub(unix_now()),
+        }))
+    }
+
+    pub fn revoke_for_root(&self, root_id: &RootId) {
+        if let Ok(mut state) = self.lock_state() {
+            state
+                .verifications
+                .retain(|_, record| record.clone_root_id != root_id.as_str());
+            state
+                .authorities
+                .retain(|_, record| record.clone_root_id != root_id.as_str());
+        }
+    }
+
+    #[cfg(test)]
+    pub fn install_test_verification(
+        &self,
+        resolved: &ResolvedRoot,
+    ) -> Result<CloneVerificationRecord, CloneRuntimeError> {
+        let entries = scan_baseline_entries(&resolved.canonical_path)?;
+        let manifest_binding = derive_manifest_binding(&entries);
+        let record = build_verification_record(
+            resolved,
+            CloneProvenance::External,
+            None,
+            manifest_binding,
+            entries.len() as u64,
+            self.verification_ttl,
+        )?;
+        persist_verification(&self.storage_root, &record)?;
+        self.store_verification(record.clone());
+        Ok(record)
+    }
+
+    fn validate_verification(
+        &self,
+        resolved: &ResolvedRoot,
+        record: &CloneVerificationRecord,
+    ) -> Result<CloneVerificationRecord, CloneRuntimeError> {
+        if record.expires_at_unix <= unix_now() {
+            return Err(CloneRuntimeError::VerificationExpired);
+        }
+        if record.state != CloneVerificationState::Verified {
+            return Err(CloneRuntimeError::VerificationTampered);
+        }
+        if record.clone_root_id != resolved.session.root_id.as_str()
+            || record.clone_device_fingerprint != resolved.session.device_fingerprint
+        {
+            return Err(CloneRuntimeError::VerificationNotFound);
+        }
+        let surface_id = derive_root_surface_id(&resolved.canonical_path);
+        if surface_id != record.clone_surface_id {
+            return Err(CloneRuntimeError::VerificationTampered);
+        }
+        let live_entries = scan_baseline_entries(&resolved.canonical_path)?;
+        let live_binding = derive_manifest_binding(&live_entries);
+        if live_binding != record.baseline_manifest_binding {
+            return Err(CloneRuntimeError::VerificationTampered);
+        }
+        Ok(record.clone())
+    }
+
+    fn store_verification(&self, record: CloneVerificationRecord) {
+        if let Ok(mut state) = self.lock_state() {
+            state
+                .verifications
+                .insert(record.clone_verification_id.clone(), record);
+        }
+    }
+
+    fn store_authority(&self, record: CloneAuthorityRecord) {
+        if let Ok(mut state) = self.lock_state() {
+            state
+                .authorities
+                .insert(record.clone_authority_id.clone(), record);
+        }
+    }
+
+    fn lock_state(
+        &self,
+    ) -> Result<std::sync::MutexGuard<'_, CloneRuntimeState>, CloneRuntimeError> {
+        self.state
+            .lock()
+            .map_err(|_| CloneRuntimeError::Unavailable)
+    }
+}
+
+pub struct RegistryCloneWriteAuthority<'a> {
+    registry: &'a RootRegistry,
+    clone_runtime: &'a CloneRuntime,
+    clone_authority_id: String,
+    plan_root_id: RootId,
+}
+
+impl<'a> RegistryCloneWriteAuthority<'a> {
+    pub fn new(
+        registry: &'a RootRegistry,
+        clone_runtime: &'a CloneRuntime,
+        clone_authority_id: String,
+        plan_root_id: RootId,
+    ) -> Self {
+        Self {
+            registry,
+            clone_runtime,
+            clone_authority_id,
+            plan_root_id,
+        }
+    }
+}
+
+impl CloneWriteAuthority for RegistryCloneWriteAuthority<'_> {
+    fn resolve_clone_for_write(
+        &self,
+        root_id: &RootId,
+    ) -> Result<VerifiedCloneRoot, AuthorityError> {
+        if root_id != &self.plan_root_id {
+            return Err(AuthorityError::NotApproved);
+        }
+        let resolved = self
+            .registry
+            .resolve(root_id)
+            .map_err(map_registry_authority)?;
+        self.clone_runtime
+            .require_clone_authority(&resolved, &self.clone_authority_id)
+            .map_err(|_| AuthorityError::NotApproved)?;
+        if !resolved.session.capabilities.write {
+            return Err(AuthorityError::ReadOnly);
+        }
+        if !resolved.session.capabilities.stable_device_identity {
+            return Err(AuthorityError::UnstableIdentity);
+        }
+        self.clone_runtime
+            .require_verified_root(&resolved)
+            .map_err(|_| AuthorityError::NotApproved)?;
+        Ok(VerifiedCloneRoot::attest_temporary_copy(
+            ApprovedExecutionRoot {
+                root_id: resolved.session.root_id,
+                device_fingerprint: resolved.session.device_fingerprint,
+                observed_revision: resolved.session.observed_revision,
+                canonical_path: resolved.canonical_path,
+                write_enabled: resolved.session.capabilities.write,
+                stable_device_identity: resolved.session.capabilities.stable_device_identity,
+            },
+        ))
+    }
+}
+
+pub fn open_shared_clone_runtime(
+    data_directory: &Path,
+) -> Result<SharedCloneRuntime, CloneRuntimeError> {
+    fs::create_dir_all(data_directory).map_err(map_io_error)?;
+    let canonical = data_directory.canonicalize().map_err(map_io_error)?;
+    let storage_root = canonical.join(PRODUCT_DIRECTORY);
+    ensure_real_directory(&canonical, &storage_root)?;
+    Ok(Arc::new(CloneRuntime::new(
+        storage_root,
+        DEFAULT_VERIFICATION_TTL,
+    )))
+}
+
+fn build_verification_record(
+    clone: &ResolvedRoot,
+    provenance: CloneProvenance,
+    source_evidence_id: Option<String>,
+    manifest_binding: String,
+    entry_count: u64,
+    ttl: Duration,
+) -> Result<CloneVerificationRecord, CloneRuntimeError> {
+    let surface_id = derive_root_surface_id(&clone.canonical_path);
+    let verification_id = derive_clone_verification_id(
+        clone.session.root_id.as_str(),
+        &clone.session.device_fingerprint,
+        &surface_id,
+        &manifest_binding,
+    );
+    let now = unix_now();
+    Ok(CloneVerificationRecord {
+        schema: CLONE_VERIFICATION_SCHEMA.to_owned(),
+        clone_verification_id: verification_id,
+        clone_root_id: clone.session.root_id.as_str().to_owned(),
+        clone_device_fingerprint: clone.session.device_fingerprint.clone(),
+        clone_surface_id: surface_id,
+        provenance,
+        source_evidence_id,
+        baseline_entry_count: entry_count,
+        baseline_manifest_binding: manifest_binding,
+        state: CloneVerificationState::Verified,
+        verified_at_unix: now,
+        expires_at_unix: now + ttl.as_secs(),
+    })
+}
+
+fn reject_source_clone_relationship(
+    source: &ResolvedRoot,
+    clone: &ResolvedRoot,
+) -> Result<(), CloneRuntimeError> {
+    if source.session.root_id == clone.session.root_id {
+        return Err(CloneRuntimeError::SourceEqualsClone);
+    }
+    let source_surface = derive_root_surface_id(&source.canonical_path);
+    let clone_surface = derive_root_surface_id(&clone.canonical_path);
+    if source_surface == clone_surface {
+        return Err(CloneRuntimeError::SourceEqualsClone);
+    }
+    if source.session.device_fingerprint == clone.session.device_fingerprint
+        && source.canonical_path != clone.canonical_path
+    {
+        return Err(CloneRuntimeError::AmbiguousIdentity);
+    }
+    if clone.canonical_path.starts_with(&source.canonical_path)
+        || source.canonical_path.starts_with(&clone.canonical_path)
+    {
+        return Err(CloneRuntimeError::NestedRoot);
+    }
+    Ok(())
+}
+
+pub fn derive_root_surface_id(canonical_path: &Path) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"rootsurface:v1");
+    hasher.update(canonical_path.as_os_str().as_encoded_bytes());
+    format!("rootsurface:v1:{}", hex_digest(&hasher.finalize()))
+}
+
+fn derive_manifest_binding(entries: &[CloneBaselineEntry]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"clone-baseline-binding:v1");
+    hasher.update((entries.len() as u64).to_be_bytes());
+    for entry in entries {
+        hasher.update(entry.relative_path.as_bytes());
+        hasher.update(entry.byte_size.to_be_bytes());
+        hasher.update(entry.content_hash.as_bytes());
+    }
+    format!(
+        "clone-baseline-binding:v1:{}",
+        hex_digest(&hasher.finalize())
+    )
+}
+
+fn derive_source_evidence_id(
+    root_id: &str,
+    fingerprint: &str,
+    surface_id: &str,
+    manifest_binding: &str,
+) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"clone-source-evidence:v1");
+    hasher.update(root_id.as_bytes());
+    hasher.update(fingerprint.as_bytes());
+    hasher.update(surface_id.as_bytes());
+    hasher.update(manifest_binding.as_bytes());
+    format!(
+        "clone-source-evidence:v1:{}",
+        hex_digest(&hasher.finalize())
+    )
+}
+
+fn derive_managed_clone_token(root_id: &str, fingerprint: &str, surface_id: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"managed-clone:v1");
+    hasher.update(root_id.as_bytes());
+    hasher.update(fingerprint.as_bytes());
+    hasher.update(surface_id.as_bytes());
+    hasher.update(unix_now().to_be_bytes());
+    hex_digest(&hasher.finalize())
+}
+
+fn derive_clone_verification_id(
+    root_id: &str,
+    fingerprint: &str,
+    surface_id: &str,
+    manifest_binding: &str,
+) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"clone-verification:v1");
+    hasher.update(root_id.as_bytes());
+    hasher.update(fingerprint.as_bytes());
+    hasher.update(surface_id.as_bytes());
+    hasher.update(manifest_binding.as_bytes());
+    format!("clone-verification:v1:{}", hex_digest(&hasher.finalize()))
+}
+
+fn derive_clone_authority_id(
+    verification_id: &str,
+    root_id: &str,
+    manifest_binding: &str,
+) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"clone-authority:v1");
+    hasher.update(verification_id.as_bytes());
+    hasher.update(root_id.as_bytes());
+    hasher.update(manifest_binding.as_bytes());
+    format!("clone-authority:v1:{}", hex_digest(&hasher.finalize()))
+}
+
+pub(crate) fn scan_baseline_entries(
+    root: &Path,
+) -> Result<Vec<CloneBaselineEntry>, CloneRuntimeError> {
+    let mut entries = Vec::new();
+    collect_baseline_entries(root, root, &mut entries)?;
+    entries.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
+    Ok(entries)
+}
+
+fn collect_baseline_entries(
+    root: &Path,
+    path: &Path,
+    entries: &mut Vec<CloneBaselineEntry>,
+) -> Result<(), CloneRuntimeError> {
+    let metadata = fs::symlink_metadata(path).map_err(map_io_error)?;
+    if metadata.file_type().is_symlink() {
+        return Err(CloneRuntimeError::SymlinkForbidden);
+    }
+    if metadata.is_dir() {
+        for entry in fs::read_dir(path).map_err(map_io_error)? {
+            let entry = entry.map_err(map_io_error)?;
+            collect_baseline_entries(root, &entry.path(), entries)?;
+        }
+        return Ok(());
+    }
+    if !metadata.is_file() {
+        return Ok(());
+    }
+    let relative = path
+        .strip_prefix(root)
+        .map_err(|_| CloneRuntimeError::Unavailable)?
+        .to_string_lossy()
+        .replace('\\', "/");
+    entries.push(CloneBaselineEntry {
+        relative_path: relative,
+        byte_size: metadata.len(),
+        content_hash: hash_file(path)?,
+    });
+    Ok(())
+}
+
+fn copy_tree_nofollow(from: &Path, to: &Path) -> Result<(), CloneRuntimeError> {
+    fs::create_dir_all(to).map_err(map_io_error)?;
+    for entry in fs::read_dir(from).map_err(map_io_error)? {
+        let entry = entry.map_err(map_io_error)?;
+        let metadata = fs::symlink_metadata(entry.path()).map_err(map_io_error)?;
+        if metadata.file_type().is_symlink() {
+            return Err(CloneRuntimeError::SymlinkForbidden);
+        }
+        let dest = to.join(entry.file_name());
+        if metadata.is_dir() {
+            copy_tree_nofollow(&entry.path(), &dest)?;
+        } else if metadata.is_file() {
+            copy_file_nofollow(&entry.path(), &dest)?;
+        }
+    }
+    Ok(())
+}
+
+fn copy_file_nofollow(source: &Path, destination: &Path) -> Result<(), CloneRuntimeError> {
+    let mut input = open_file_nofollow(source)?;
+    let mut output = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(destination)
+        .map_err(map_io_error)?;
+    std::io::copy(&mut input, &mut output).map_err(map_io_error)?;
+    output.sync_all().map_err(map_io_error)?;
+    Ok(())
+}
+
+fn hash_file(path: &Path) -> Result<String, CloneRuntimeError> {
+    let mut file = open_file_nofollow(path)?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 8192];
+    loop {
+        let read = file.read(&mut buffer).map_err(map_io_error)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(format!("sha256:{}", hex_digest(&hasher.finalize())))
+}
+
+fn open_file_nofollow(path: &Path) -> Result<File, CloneRuntimeError> {
+    let metadata = fs::symlink_metadata(path).map_err(map_io_error)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(CloneRuntimeError::SymlinkForbidden);
+    }
+    File::open(path).map_err(map_io_error)
+}
+
+fn ensure_real_directory(parent: &Path, directory: &Path) -> Result<(), CloneRuntimeError> {
+    match fs::symlink_metadata(directory) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            Err(CloneRuntimeError::Unavailable)
+        }
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            fs::create_dir_all(directory).map_err(map_io_error)?;
+            Ok(())
+        }
+        Err(error) => Err(map_io_error(error)),
+    }
+    .and_then(|_| {
+        let canonical = directory.canonicalize().map_err(map_io_error)?;
+        if !canonical.starts_with(parent) {
+            return Err(CloneRuntimeError::Unavailable);
+        }
+        Ok(())
+    })
+}
+
+fn remove_path_if_exists(path: &Path) -> Result<(), CloneRuntimeError> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            Err(CloneRuntimeError::SymlinkForbidden)
+        }
+        Ok(metadata) if metadata.is_dir() => fs::remove_dir_all(path).map_err(map_io_error),
+        Ok(_) => fs::remove_file(path).map_err(map_io_error),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(map_io_error(error)),
+    }
+}
+
+fn persist_source_evidence(
+    storage_root: &Path,
+    record: &CloneSourceEvidenceRecord,
+) -> Result<(), CloneRuntimeError> {
+    let directory = storage_root.join(CLONE_VERIFICATIONS_DIRECTORY);
+    ensure_real_directory(storage_root, &directory)?;
+    let path = source_evidence_path(storage_root, &record.source_evidence_id);
+    if path.exists() {
+        return Ok(());
+    }
+    write_json(&path, record)
+}
+
+fn persist_verification(
+    storage_root: &Path,
+    record: &CloneVerificationRecord,
+) -> Result<(), CloneRuntimeError> {
+    let directory = storage_root.join(CLONE_VERIFICATIONS_DIRECTORY);
+    ensure_real_directory(storage_root, &directory)?;
+    let path = verification_path(storage_root, &record.clone_verification_id);
+    if path.exists() {
+        return Ok(());
+    }
+    write_json(&path, record)
+}
+
+fn persist_authority(
+    storage_root: &Path,
+    record: &CloneAuthorityRecord,
+) -> Result<(), CloneRuntimeError> {
+    let directory = storage_root.join(CLONE_VERIFICATIONS_DIRECTORY);
+    ensure_real_directory(storage_root, &directory)?;
+    let path = authority_path(storage_root, &record.clone_authority_id);
+    write_json(&path, record)
+}
+
+fn load_authority_from_disk(
+    storage_root: &Path,
+    authority_id: &str,
+) -> Result<CloneAuthorityRecord, CloneRuntimeError> {
+    read_json(&authority_path(storage_root, authority_id))
+}
+
+fn source_evidence_path(storage_root: &Path, source_evidence_id: &str) -> PathBuf {
+    storage_root
+        .join(CLONE_VERIFICATIONS_DIRECTORY)
+        .join(format!("{source_evidence_id}.json"))
+}
+
+fn verification_path(storage_root: &Path, verification_id: &str) -> PathBuf {
+    storage_root
+        .join(CLONE_VERIFICATIONS_DIRECTORY)
+        .join(format!("{verification_id}.json"))
+}
+
+fn authority_path(storage_root: &Path, authority_id: &str) -> PathBuf {
+    storage_root
+        .join(CLONE_VERIFICATIONS_DIRECTORY)
+        .join(format!("{authority_id}.json"))
+}
+
+fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), CloneRuntimeError> {
+    let serialized = serde_json::to_vec_pretty(value)
+        .map_err(|error| CloneRuntimeError::Io(error.to_string()))?;
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(map_io_error)?;
+    file.write_all(&serialized).map_err(map_io_error)?;
+    file.sync_all().map_err(map_io_error)?;
+    Ok(())
+}
+
+fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, CloneRuntimeError> {
+    let mut file = OpenOptions::new()
+        .read(true)
+        .open(path)
+        .map_err(map_io_error)?;
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer).map_err(map_io_error)?;
+    serde_json::from_slice(&buffer).map_err(|error| CloneRuntimeError::Io(error.to_string()))
+}
+
+fn purge_expired(state: &mut CloneRuntimeState) {
+    let now = unix_now();
+    state
+        .verifications
+        .retain(|_, record| record.expires_at_unix > now);
+    state
+        .authorities
+        .retain(|_, record| record.expires_at_unix > now);
+}
+
+fn count_entries_for_binding(
+    _binding: &str,
+    _storage_root: &Path,
+) -> Result<u64, CloneRuntimeError> {
+    Ok(0)
+}
+
+pub(crate) fn current_unix_time() -> u64 {
+    unix_now()
+}
+
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
+}
+
+fn hex_digest(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn map_io_error(error: std::io::Error) -> CloneRuntimeError {
+    CloneRuntimeError::Io(error.to_string())
+}
+
+fn map_registry_authority(error: RootRegistryError) -> AuthorityError {
+    match error {
+        RootRegistryError::NotApproved => AuthorityError::NotApproved,
+        RootRegistryError::Expired => AuthorityError::Expired,
+        RootRegistryError::Removed => AuthorityError::Removed,
+        RootRegistryError::Changed => AuthorityError::Changed,
+        RootRegistryError::UnstableIdentity => AuthorityError::UnstableIdentity,
+        other => AuthorityError::Unavailable(other.code().into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::root_registry::{DeviceIdentityProvider, DeviceObservation, RootRegistry};
+    use std::path::Path;
+    use std::sync::Arc;
+    use tempfile::TempDir;
+
+    struct PathStableIdentity;
+
+    impl DeviceIdentityProvider for PathStableIdentity {
+        fn observe(&self, root: &Path) -> Result<DeviceObservation, RootRegistryError> {
+            let stable_key = root.to_string_lossy().into_owned();
+            Ok(DeviceObservation {
+                stable_key: stable_key.clone(),
+                filesystem_type: Some("apfs".into()),
+                total_capacity: Some(1024),
+                mount_token: stable_key,
+                stable: true,
+            })
+        }
+    }
+
+    fn write_fixture_tree(root: &Path) {
+        fs::create_dir_all(root.join("SET/AUDIO")).unwrap();
+        fs::create_dir_all(root.join("SET/UNRELATED")).unwrap();
+        fs::write(root.join("SET/AUDIO/kick.wav"), b"kick-bytes").unwrap();
+        fs::write(root.join("SET/UNRELATED/keep.txt"), b"sentinel\n").unwrap();
+    }
+
+    #[test]
+    fn managed_clone_preserves_source_and_verifies_clone() {
+        let source_dir = TempDir::new().unwrap();
+        write_fixture_tree(source_dir.path());
+        let data_dir = TempDir::new().unwrap();
+        let registry = RootRegistry::new(Arc::new(PathStableIdentity), Duration::from_secs(3600));
+        let clone_runtime = open_shared_clone_runtime(data_dir.path()).unwrap();
+        let source_session = registry
+            .register(source_dir.path().to_str().unwrap())
+            .unwrap();
+        let source = registry.resolve(&source_session.root_id).unwrap();
+        let source_before = fs::read(source_dir.path().join("SET/AUDIO/kick.wav")).unwrap();
+        let (clone_path, entries) = clone_runtime
+            .create_managed_clone(&registry, &source)
+            .unwrap();
+        assert_eq!(
+            source_before,
+            fs::read(source_dir.path().join("SET/AUDIO/kick.wav")).unwrap()
+        );
+        registry.close(&source_session.root_id).unwrap();
+        let clone_session = registry.register(clone_path.to_str().unwrap()).unwrap();
+        let clone = registry.resolve(&clone_session.root_id).unwrap();
+        let verification = clone_runtime
+            .verify_managed_clone_registration(&registry, &source, &clone, &entries, true)
+            .unwrap();
+        assert_eq!(verification.state, CloneVerificationState::Verified);
+        clone_runtime.require_verified_root(&clone).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn managed_clone_rejects_symlink_in_source_tree() {
+        use std::os::unix::fs::symlink;
+
+        let source_dir = TempDir::new().unwrap();
+        write_fixture_tree(source_dir.path());
+        symlink(
+            source_dir.path().join("SET/AUDIO/kick.wav"),
+            source_dir.path().join("SET/AUDIO/link.wav"),
+        )
+        .unwrap();
+        let data_dir = TempDir::new().unwrap();
+        let registry = RootRegistry::new(Arc::new(PathStableIdentity), Duration::from_secs(3600));
+        let clone_runtime = open_shared_clone_runtime(data_dir.path()).unwrap();
+        let source_session = registry
+            .register(source_dir.path().to_str().unwrap())
+            .unwrap();
+        let source = registry.resolve(&source_session.root_id).unwrap();
+        let error = clone_runtime
+            .create_managed_clone(&registry, &source)
+            .unwrap_err();
+        assert!(matches!(error, CloneRuntimeError::SymlinkForbidden));
+    }
+
+    #[test]
+    fn verification_detects_post_verify_tampering() {
+        let root = TempDir::new().unwrap();
+        write_fixture_tree(root.path());
+        let data_dir = TempDir::new().unwrap();
+        let registry = RootRegistry::new(Arc::new(PathStableIdentity), Duration::from_secs(3600));
+        let clone_runtime = open_shared_clone_runtime(data_dir.path()).unwrap();
+        let session = registry.register(root.path().to_str().unwrap()).unwrap();
+        let resolved = registry.resolve(&session.root_id).unwrap();
+        clone_runtime.install_test_verification(&resolved).unwrap();
+        fs::write(root.path().join("SET/AUDIO/kick.wav"), b"tampered").unwrap();
+        let error = clone_runtime.require_verified_root(&resolved).unwrap_err();
+        assert!(matches!(error, CloneRuntimeError::VerificationTampered));
+    }
+
+    #[test]
+    fn source_equals_clone_surface_is_rejected() {
+        let root = TempDir::new().unwrap();
+        write_fixture_tree(root.path());
+        let registry = RootRegistry::default();
+        let session = registry.register(root.path().to_str().unwrap()).unwrap();
+        let resolved = registry.resolve(&session.root_id).unwrap();
+        let error = reject_source_clone_relationship(&resolved, &resolved).unwrap_err();
+        assert!(matches!(error, CloneRuntimeError::SourceEqualsClone));
+    }
+}
