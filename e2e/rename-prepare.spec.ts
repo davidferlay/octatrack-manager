@@ -17,7 +17,7 @@ test.describe("Rename prepare workflow", () => {
             ...((window as any).__E2E_INVOKE_CALLS__ ?? []),
             cmd,
           ];
-          if (cmd === "v2_root_register" || cmd === "v2_root_status") {
+          if (cmd === "v2_root_register") {
             return {
               rootId: "root-opaque",
               displayName: "Fixture Root",
@@ -29,7 +29,7 @@ test.describe("Rename prepare workflow", () => {
               capabilities: { read: true, write: true, stableDeviceIdentity: true },
             };
           }
-          if (cmd === "v2_root_enable_write") {
+          if (cmd === "v2_root_status" || cmd === "v2_root_enable_write") {
             return {
               rootId: "root-opaque",
               displayName: "Fixture Root",
@@ -228,15 +228,27 @@ test.describe("Rename prepare workflow", () => {
       (window as any).__TAURI_INTERNALS__ = {
         transformCallback: () => {},
         invoke: async (cmd: string) => {
-          if (cmd === "v2_root_register" || cmd === "v2_root_status" || cmd === "v2_root_enable_write") {
+          if (cmd === "v2_root_register") {
             return {
               rootId: "root-opaque",
               displayName: "Fixture Root",
               deviceFingerprint: `rootfp:v1:${"f".repeat(64)}`,
-              mode: cmd === "v2_root_enable_write" ? "write_enabled" : "read_only",
+              mode: "read_only",
               observedRevision: 1,
               expiresInSeconds: 3600,
-              writeGrantExpiresInSeconds: cmd === "v2_root_enable_write" ? 600 : null,
+              writeGrantExpiresInSeconds: null,
+              capabilities: { read: true, write: true, stableDeviceIdentity: true },
+            };
+          }
+          if (cmd === "v2_root_status" || cmd === "v2_root_enable_write") {
+            return {
+              rootId: "root-opaque",
+              displayName: "Fixture Root",
+              deviceFingerprint: `rootfp:v1:${"f".repeat(64)}`,
+              mode: "write_enabled",
+              observedRevision: 1,
+              expiresInSeconds: 3600,
+              writeGrantExpiresInSeconds: 600,
               capabilities: { read: true, write: true, stableDeviceIdentity: true },
             };
           }
