@@ -130,7 +130,7 @@ pub struct RenamePrepareResult {
 }
 
 pub struct RenameSampleExecutor {
-    pub(crate) local_paths: ExecutorLocalPaths,
+    pub local_paths: ExecutorLocalPaths,
 }
 
 impl RenameSampleExecutor {
@@ -280,23 +280,10 @@ impl RenameSampleExecutor {
         &self,
         operation_id: &OperationId,
     ) -> Result<Option<RenameOperationJournal>, ExecutorError> {
-        let journal_directory = match fs::symlink_metadata(&self.local_paths.journal_directory) {
-            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
-                return Err(ExecutorError::UnsafePath);
-            }
-            Ok(_) => self.local_paths.journal_directory.clone(),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => return Err(ExecutorError::io(error)),
+        let rename_directory = self.rename_journal_directory()?;
+        let Some(rename_directory) = rename_directory else {
+            return Ok(None);
         };
-        let rename_directory = journal_directory.join(RENAME_JOURNAL_DIRECTORY);
-        match fs::symlink_metadata(&rename_directory) {
-            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
-                return Err(ExecutorError::UnsafePath);
-            }
-            Ok(_) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => return Err(ExecutorError::io(error)),
-        }
         let path = rename_directory.join(format!("{}.json", operation_id.file_stem()));
         match fs::symlink_metadata(&path) {
             Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
@@ -313,6 +300,80 @@ impl RenameSampleExecutor {
             Err(error) => Err(ExecutorError::io(error)),
         }
     }
+
+    pub fn rename_journals_for_root(
+        &self,
+        root_fingerprint: &str,
+    ) -> Result<Vec<RenameOperationJournal>, ExecutorError> {
+        validate_rename_root_fingerprint(root_fingerprint)?;
+        let Some(rename_directory) = self.rename_journal_directory()? else {
+            return Ok(Vec::new());
+        };
+        let mut journals = Vec::new();
+        for entry in fs::read_dir(&rename_directory).map_err(ExecutorError::io)? {
+            let entry = entry.map_err(ExecutorError::io)?;
+            let file_type = entry.file_type().map_err(ExecutorError::io)?;
+            if file_type.is_symlink()
+                || !file_type.is_file()
+                || entry
+                    .path()
+                    .extension()
+                    .and_then(|extension| extension.to_str())
+                    != Some("json")
+            {
+                return Err(ExecutorError::InvalidJournal);
+            }
+            let journal = read_rename_journal(&entry.path())?;
+            if journal.root_fingerprint == root_fingerprint {
+                journals.push(journal);
+            }
+        }
+        journals.sort_by(|left, right| left.operation_id.cmp(&right.operation_id));
+        Ok(journals)
+    }
+
+    pub fn incomplete_rename_journals_for_root(
+        &self,
+        root_fingerprint: &str,
+    ) -> Result<Vec<RenameOperationJournal>, ExecutorError> {
+        Ok(self
+            .rename_journals_for_root(root_fingerprint)?
+            .into_iter()
+            .filter(|journal| {
+                !matches!(
+                    journal.status,
+                    RenameJournalStatus::Committed | RenameJournalStatus::RolledBack
+                )
+            })
+            .collect())
+    }
+
+    fn rename_journal_directory(&self) -> Result<Option<PathBuf>, ExecutorError> {
+        let journal_directory = match fs::symlink_metadata(&self.local_paths.journal_directory) {
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+                return Err(ExecutorError::UnsafePath);
+            }
+            Ok(_) => self.local_paths.journal_directory.clone(),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(ExecutorError::io(error)),
+        };
+        let rename_directory = journal_directory.join(RENAME_JOURNAL_DIRECTORY);
+        match fs::symlink_metadata(&rename_directory) {
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+                Err(ExecutorError::UnsafePath)
+            }
+            Ok(_) => Ok(Some(rename_directory)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(ExecutorError::io(error)),
+        }
+    }
+}
+
+fn validate_rename_root_fingerprint(value: &str) -> Result<(), ExecutorError> {
+    if !prefixed_hex(value, "rootfp:v1:") {
+        return Err(ExecutorError::InvalidJournal);
+    }
+    Ok(())
 }
 
 pub(crate) fn validate_rename_plan_shape(plan: &RenameImpactPlan) -> Result<(), ExecutorError> {

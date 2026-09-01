@@ -91,12 +91,19 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - Gate B smoke macOS移植: #55マージ済み
 - Project compatibility policy: #58／#59マージ済み
 - Gate B human sign-off: **PASS**（personal/local use、source `a10437f`）
-- 現在のmain基準SHA: `15eef67`（M5-C4 PR #70 merge後）
+- 現在のmain基準SHA: `c047658`（M5-C5 Phase 1 PR #71 merge後）
 - M5-C4 Gate C automated clone-rescan proof: **#70 マージ済み**
-- 現在の作業: **M5-C5 Phase 1 — read-only rename planning API**
-  （`cursor/m5c5-gate-c-operator-harness`）。`v2_rename_plan` /
-  `v2_rename_get_plan` + session plan store + structured DTO。Apply・write grant・
-  frontend は Phase 2 以降
+- 現在の作業: **M5-C5 Phase 3 — explicit approval Rename UI**（未着手）
+- M5-C5 Phase 2 — rename authority / backup / prepare API: **COMPLETE**
+  - `v2_rename_authorize` / `v2_rename_create_backup` / `v2_rename_prepare`
+  - `v2_rename_get_status` / `v2_rename_recovery_status`
+  - 正規順序 `enable_write → plan → authorize → backup → prepare`
+  - C1/C2 schema 変更なし、production から `RenameSampleExecutor::apply` 未接続
+- M5-C5 Phase 1 — read-only rename planning API: **COMPLETE**（P1 4件の fail-closed 証拠付き）
+  - `v2_rename_plan` / `v2_rename_get_plan` + session plan store + structured DTO
+  - catalog scan revision と `RootSession.observed_revision` の分離・同期
+  - live Project/Bank graph / source `.ot` sidecar / Unicode collision の再検証
+  - Apply・write grant・frontend は Phase 2 以降
 - Gate C rename Apply 自動検証: **M5-C4 完了**（合成 clone + CI smoke）
 - Gate C rename Apply 人手残件: **M5-C5 operator harness** + 実機 clone load smoke
   （`docs/testing/GATE_C_CLONE_SMOKE.md`）
