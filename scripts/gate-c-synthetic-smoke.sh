@@ -37,11 +37,16 @@ echo "host=$(uname -s) $(uname -r)"
 cd "${ROOT_DIR}/src-tauri"
 
 set +e
-cargo test -p ot-plan -p ot-backup -p ot-executor --locked -- --nocapture \
+cargo test -p ot-plan -p ot-backup --locked -- --nocapture \
   >"$CRATE_LOG" 2>&1
 CRATE_STATUS=$?
+if [[ $CRATE_STATUS -eq 0 ]]; then
+  cargo test -p ot-executor --features test-seams --locked -- --nocapture \
+    >>"$CRATE_LOG" 2>&1
+  CRATE_STATUS=$?
+fi
 
-cargo test -p masterocta gate_c_ --locked -- --nocapture \
+cargo test -p masterocta gate_c_ --features test-seams --locked -- --nocapture \
   >"$GATE_C_LOG" 2>&1
 GATE_C_STATUS=$?
 set -e

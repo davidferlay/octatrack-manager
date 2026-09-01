@@ -1312,7 +1312,7 @@ pub(crate) fn gate_c_latest_completed_scan_revision(
     catalog: &SharedCatalog,
     fingerprint: &str,
 ) -> Result<u64, ApiError> {
-    use ot_storage_ports::LibraryCatalog;
+    use ot_storage_ports::{CatalogScanStatus, LibraryCatalog};
 
     let identity = CatalogRootIdentity::new(fingerprint.to_string()).map_err(catalog_error)?;
     let catalog = catalog.lock().map_err(|_| catalog_lock_error())?;
@@ -1326,6 +1326,13 @@ pub(crate) fn gate_c_latest_completed_scan_revision(
                 true,
             )
         })?;
+    if scan.status != CatalogScanStatus::Completed {
+        return Err(ApiError::new(
+            "CATALOG_NOT_INDEXED",
+            "no successful catalog snapshot is available for this root",
+            true,
+        ));
+    }
     Ok(scan.revision.get())
 }
 

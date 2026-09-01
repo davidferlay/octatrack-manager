@@ -15,9 +15,11 @@ use ot_domain::{
     RootId, RootRelativePath, SampleReferenceStatus, SampleSettingsOwner,
     SampleSettingsParseStatus, StateDocument,
 };
+#[cfg(feature = "test-seams")]
+use ot_executor::RenameApplyFault;
 use ot_executor::{
     ApprovedExecutionRoot, ApprovedRecoveryRoot, AuthorityError, CloneWriteAuthority,
-    ExecutorError, ExecutorLocalPaths, RecoveryAuthority, RenameApplyFault, RenameJournalStatus,
+    ExecutorError, ExecutorLocalPaths, RecoveryAuthority, RenameJournalStatus,
     RenameSampleExecutor, WriteAuthority,
 };
 use ot_plan::{
@@ -660,6 +662,7 @@ fn gate_c_rename_apply_then_fresh_rescan_has_zero_missing_references() {
     assert_post_apply_snapshot(&post_snapshot, &fixture.source_hash);
 }
 
+#[cfg(feature = "test-seams")]
 #[test]
 fn gate_c_apply_fault_rolls_back_clone_and_rescan_restores_source() {
     let fixture = prepare_clone_fixture();

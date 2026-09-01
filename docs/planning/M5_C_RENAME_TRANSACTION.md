@@ -226,8 +226,8 @@ the existing C3 `RecoveryRequired` path without overwriting tampered source
 bytes.
 
 Fault injection is exported only through the empty `test-seams` feature on
-`ot-executor`, enabled from `masterocta` `[dev-dependencies]` for `cargo test`
-/ `clippy --all-targets` only.
+`ot-executor`, forwarded by the matching `masterocta` feature for `cargo test`
+/ CI only (release builds omit it).
 
 Portable CI smoke: `scripts/gate-c-synthetic-smoke.sh` (Linux + macOS matrix job,
 SHA-pinned Actions). Generated reports stay under `/tmp` and are not committed.

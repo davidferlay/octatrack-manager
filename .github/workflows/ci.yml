@@ -107,11 +107,15 @@ jobs:
       # unlinted.
       - name: Run Clippy lints
         working-directory: src-tauri
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: |
+          cargo clippy --workspace --all-targets --exclude masterocta -- -D warnings
+          cargo clippy -p masterocta --all-targets --features test-seams -- -D warnings
 
       - name: Run Rust tests
         working-directory: src-tauri
-        run: cargo test --workspace
+        run: |
+          cargo test --workspace --exclude masterocta
+          cargo test -p masterocta --features test-seams
 
   gate-c-synthetic-smoke:
     name: Gate C Synthetic Smoke

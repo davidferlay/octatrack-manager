@@ -170,7 +170,7 @@ impl RenameSampleExecutor {
         Ok(journal)
     }
 
-    #[cfg(any(test, feature = "test-seams"))]
+    #[cfg(feature = "test-seams")]
     pub fn apply_with_fault<C, A>(
         &self,
         plan: &RenameImpactPlan,
@@ -1879,6 +1879,7 @@ mod tests {
         ));
     }
 
+    #[cfg(feature = "test-seams")]
     #[test]
     fn fault_after_destination_publish_rolls_the_clone_back() {
         let fixture = prepare_clone(true, true, vec![assignment(WORK_PATH)]);
@@ -1903,6 +1904,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "test-seams")]
     #[test]
     fn fault_after_project_replace_restores_project_bytes() {
         let fixture = prepare_clone(true, true, vec![assignment(WORK_PATH)]);
@@ -1917,6 +1919,7 @@ mod tests {
         assert_eq!(snapshot_root(&fixture.clone), fixture.clone_before);
     }
 
+    #[cfg(feature = "test-seams")]
     #[test]
     fn fault_after_source_quarantine_restores_the_source_file() {
         let fixture = prepare_clone(false, false, Vec::new());
