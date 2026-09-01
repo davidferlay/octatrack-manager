@@ -1,13 +1,17 @@
 # M5-C Recoverable Rename Transaction
 
 - Status: C1 verified-backup contract **complete**; C2 Mac staging **complete**;
-  C3 clone apply / rollback **complete** (`3a9778f` / #68); this change hardens
-  the C3 review follow-up (clone-only apply, restart recovery)
+  C3 clone apply / rollback **complete** (`373a755` / #69); C4 automated
+  clone-rescan proof **in progress** on branch `cursor/m5c4-gate-c-clone-rescan`
 - Scope of C3: apply a C2 `Prepared` journal to a **temporary/cloned** root;
   re-verify C1 backup + authorization hashes + codec rebuild from backup
   before any clone write; roll the clone back from backup on failure
+- Scope of C4: compose C1/C2/C3 with catalog baseline scan, fresh filesystem
+  rescan after apply or rollback, and `#[cfg(test)]` fault injection via
+  `ot-executor` feature `test-seams` (production builds unchanged)
 - Non-scope of this PR: original removable media, Tauri, frontend, SQLite
-  migration, cloud, DMG, signing, Gate C clone-load smoke, catalog rescan
+  migration, cloud, DMG, signing, Gate C human clone-load smoke,
+  controlled operator harness
 
 ## Purpose
 
@@ -198,8 +202,43 @@ File roles:
 - After a successful or failed C3 apply, tests assert the original tree is unchanged.
 - v2 `BackupStore::verify` rejects a rename snapshot (`schema` / deserialize).
 
+## C4 automated clone-rescan proof (M5-C4)
+
+Gate C automated evidence lives in `src-tauri/src/gate_c_clone_rescan.rs`
+(`#[cfg(test)]` only). It builds a synthetic original/clone pair under
+`tempfile`, registers the clone read-only through `RootRegistry`, stores a
+baseline `LibrarySnapshot`, maps catalog facts into `RenameSamplePlanningFacts`,
+then runs:
+
+1. `BackupStore::create_verified_for_rename` (C1)
+2. `RenameSampleExecutor::prepare` with a test `WriteAuthority` double (C2)
+3. `RenameSampleExecutor::apply` or `apply_with_fault` through
+   `VerifiedCloneRoot::attest_temporary_copy` only (C3)
+4. A **fresh** filesystem rescan with an empty catalog baseline (in-memory
+   snapshot discarded) and a new completed catalog revision
+
+Assertions cover destination audio hash, optional sidecar co-rename, Working and
+SavedCheckpoint references resolving to the destination with zero
+Missing/Invalid/Unresolved references, sentinel byte identity, and original-tree
+immutability. Rollback proof uses `RenameApplyFault::DestinationPublished`
+injected only after the `Applying` journal checkpoint. Unknown live bytes use
+the existing C3 `RecoveryRequired` path without overwriting tampered source
+bytes.
+
+Fault injection is exported only through the empty `test-seams` feature on
+`ot-executor`, enabled from `masterocta` `[dev-dependencies]` for `cargo test`
+/ `clippy --all-targets` only.
+
+Portable CI smoke: `scripts/gate-c-synthetic-smoke.sh` (Linux + macOS matrix job,
+SHA-pinned Actions). Generated reports stay under `/tmp` and are not committed.
+
+`ot-catalog` clears stale `sample_settings` rows before each rescan projection
+so an unchanged file-sidecar path can store a second completed revision without
+violating the file-owner unique index.
+
 ## Deferred
 
-- Gate C clone-load smoke and human sign-off
-- Catalog rescan / missing-reference count after apply
+- Gate C controlled operator harness (production Tauri, explicit approval UI,
+  RootRegistry write grant wiring)
+- Gate C real-hardware clone-load human smoke and human sign-off
 - Production recovery UI and Tauri commands

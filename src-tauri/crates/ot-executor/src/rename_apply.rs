@@ -63,12 +63,24 @@ pub struct RenameApplyResult {
     pub authorization: RenameRecoveryAuthorization,
 }
 
+#[cfg(feature = "test-seams")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RenameApplyFault {
+    DestinationPublished,
+    ProjectReplaced,
+    SourceQuarantined,
+}
+
+#[cfg(not(feature = "test-seams"))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ApplyFault {
     DestinationPublished,
     ProjectReplaced,
     SourceQuarantined,
 }
+
+#[cfg(feature = "test-seams")]
+type ApplyFault = RenameApplyFault;
 
 struct PublishedNewFile {
     relative_path: RootRelativePath,
@@ -158,8 +170,8 @@ impl RenameSampleExecutor {
         Ok(journal)
     }
 
-    #[cfg(test)]
-    fn apply_with_fault<C, A>(
+    #[cfg(any(test, feature = "test-seams"))]
+    pub fn apply_with_fault<C, A>(
         &self,
         plan: &RenameImpactPlan,
         codec: &C,

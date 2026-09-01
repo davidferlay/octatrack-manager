@@ -14,6 +14,9 @@ mod root_registry;
 mod v2_api;
 mod write_runtime;
 
+#[cfg(test)]
+mod gate_c_clone_rescan;
+
 use audio_pool::{
     cancel_transfer, collect_audio_files_recursive, copy_audio_files_or_use_existing,
     copy_files_with_overwrite, copy_single_file_with_progress, create_directory, delete_files,

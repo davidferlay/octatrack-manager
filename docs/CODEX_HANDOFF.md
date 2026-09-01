@@ -91,7 +91,7 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - Gate B smoke macOS移植: #55マージ済み
 - Project compatibility policy: #58／#59マージ済み
 - Gate B human sign-off: **PASS**（personal/local use、source `a10437f`）
-- 現在のmain基準SHA: `3a9778f`（M5-C3 PR #68 merge後。本作業は C3 review follow-up）
+- 現在のmain基準SHA: `373a755`（M5-C3 review follow-up PR #69 merge後）
 - M5-A sample rename impact planning: #61 マージ済み
 - M5-A fail-closed blocker tests: #64 マージ済み
 - M5-A P1 planning fixes（unparseable Project / destination unresolved slots）: #65 マージ済み
@@ -109,15 +109,18 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - M5-B: **完了**（メモリ専用 PATH 置換 codec）
 - M5-C1: **完了**（Mac側 immutable rename backup）
 - M5-C2 rename Mac staging: **完了**
-- M5-C3 rename clone apply / rollback: **#68 マージ済み**
-- 現在の作業: M5-C3 review follow-up（`apply` は `VerifiedCloneRoot` のみ、
-  `rollback` は期限切れ write grant なしの `RecoveryAuthority`、rollback
-  は全対象を事前検証してから mutate。原本 removable media は使わない）
+- M5-C3 rename clone apply / rollback: **#69 マージ済み**（`373a755`）
+- 現在の作業: **M5-C4 Gate C automated clone-rescan proof**
+  （`cursor/m5c4-gate-c-clone-rescan`）。合成clone上で
+  Plan → Backup → Prepare → Apply → fresh catalog rescan を `#[cfg(test)]`
+  で自動証明。`ot-executor` `test-seams` で `Applying` 後 fault 注入。
+  production Tauri / frontend / RootRegistry write 接続は追加しない
 - SQLite schema: v6（compatibility evidence を含む）
-- 次の機能実装: 本 follow-up の後は Gate C 残条件（clone rescan missing 0、
-  実機clone load smoke）。Tauri / frontend は別指示があるまで入れない
-- Gate C rename Apply 残条件: clone上 rename→rescan missing 0、
-  非対象hash不変、rollback byte復元、実機clone load smoke
+- 次の機能実装: Gate C 残件は controlled operator harness と
+  実機 clone load human smoke（`docs/testing/GATE_C_CLONE_SMOKE.md`）のみ
+- Gate C rename Apply 自動検証: M5-C4（apply→rescan missing 0、sentinel
+  hash不変、rollback byte復元、unknown bytes fail-closed）
+- Gate C rename Apply 人手残件: operator harness + 実機 clone load smoke
 - Developer ID signing / notarization / public distribution は別release gate
 - M5-A contract 正本: `docs/planning/M5_A_SAMPLE_RENAME_IMPACT.md`
 - M5-B contract 正本: `docs/planning/M5_B_REFERENCE_REWRITE.md`

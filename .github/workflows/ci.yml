@@ -113,6 +113,41 @@ jobs:
         working-directory: src-tauri
         run: cargo test --workspace
 
+  gate-c-synthetic-smoke:
+    name: Gate C Synthetic Smoke
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-latest]
+
+    env:
+      CARGO_INCREMENTAL: 0
+      RUSTFLAGS: -C debuginfo=0
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+        with:
+          workspaces: src-tauri
+
+      - name: Install system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libssl-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Run Gate C synthetic smoke
+        run: scripts/gate-c-synthetic-smoke.sh
+
   frontend-checks:
     name: Frontend Checks
     runs-on: ubuntu-latest

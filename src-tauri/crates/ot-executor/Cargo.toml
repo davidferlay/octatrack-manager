@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
+[features]
+test-seams = []
+
 [dependencies]
 fs2 = "0.4"
 ot-backup = { path = "../ot-backup" }

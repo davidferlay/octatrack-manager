@@ -1,0 +1,77 @@
+# Gate C cloned-media rename smoke
+
+## Purpose
+
+This checklist is the human-reviewed evidence for the final Gate C sign-off
+items that automated tests cannot cover: loading a renamed clone on real
+Octatrack hardware and exercising rename Apply through a controlled operator
+harness with explicit approval UI.
+
+Automated proof for catalog rescan, missing-reference counts, sentinel hash
+invariance, rollback byte restoration, and fail-closed unknown-byte handling
+lives in `src-tauri/src/gate_c_clone_rescan.rs` and
+`scripts/gate-c-synthetic-smoke.sh`. Those artifacts do not replace this
+checklist.
+
+## Preconditions
+
+- A human prepares a disposable clone from non-original media. Record provenance
+  outside the repository.
+- The original SD/CF card stays disconnected for the entire smoke.
+- The clone is not the sole copy of personal audio or project data.
+- A restorable image/checksum manifest of the clone exists before rename.
+- The application build under review and its exact commit are recorded.
+- No updater, release, deploy, cloud sync, or remote filesystem is involved.
+
+If any precondition cannot be demonstrated, stop without registering the root.
+
+## Controlled operator harness (remaining work)
+
+Before this human smoke, production must expose rename Apply only through:
+
+- an approved Octatrack root registered in `RootRegistry`
+- an explicit operator approval surface (not test doubles)
+- `VerifiedCloneRoot` or an equivalently attested temporary copy boundary
+
+Do not sign off Gate C until that harness exists and is used for the steps
+below. M5-C4 intentionally does **not** wire Tauri commands, frontend Rename
+UI, or reusable write grants.
+
+## Real-hardware clone-load smoke
+
+1. Build or install the reviewed application from the recorded commit.
+2. Register the disposable clone read-only and confirm baseline catalog scan
+   shows the intended source sample as `Resolved` with zero blocking
+   references.
+3. Plan a sample rename to an unused destination stem in the same Set Audio Pool.
+4. Review backup count, impacted Project documents, sidecars, and destination
+   collision state before approval.
+5. Approve and apply the exact displayed plan once on the **clone** only.
+6. Confirm unrelated files match the pre-smoke manifest (byte-for-byte).
+7. Rescan the clone in MasterOCTa and confirm missing/invalid/unresolved
+   reference counts are zero and affected slots resolve to the destination.
+8. Safely eject the clone, load it on Octatrack MkII hardware, and confirm the
+   renamed sample and Project references behave as expected in a minimal
+   playback/smoke pattern chosen by the operator.
+9. Retain the disposable clone or discard it according to the external test
+   plan; do not use MasterOCTa to mutate the original removable media.
+
+## Evidence record
+
+Record the following in the Pull Request or a follow-up issue without absolute
+paths, volume identifiers, personal filenames, or media fingerprints:
+
+- application commit and host OS
+- clone provenance reviewed: yes/no
+- original media disconnected: yes/no
+- baseline manifest verified: yes/no
+- rename apply + rescan result on clone
+- hardware load result
+- deviations, failures, and whether the disposable clone was retained
+
+Gate C remains incomplete until both the controlled operator harness and this
+human clone-load checklist are executed and signed off.
+
+Automated synthetic-clone smoke (no original media) is available via
+`scripts/gate-c-synthetic-smoke.sh`. Generated reports under `/tmp` are not
+committed to the repository.
