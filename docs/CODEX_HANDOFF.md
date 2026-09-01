@@ -92,7 +92,7 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - Project compatibility policy: #58／#59マージ済み
 - Gate B human sign-off: **PASS**（personal/local use、source `a10437f`）
 - 現在のmain基準SHA: `373a755`（M5-C3 review follow-up PR #69 merge後）
-- M5-C4 作業ブランチ HEAD: `0a20888`（Gate C automated clone-rescan proof）
+- M5-C4 作業ブランチ HEAD: `6d05a88`（Gate C automated clone-rescan proof）
 - M5-A sample rename impact planning: #61 マージ済み
 - M5-A fail-closed blocker tests: #64 マージ済み
 - M5-A P1 planning fixes（unparseable Project / destination unresolved slots）: #65 マージ済み
