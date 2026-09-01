@@ -5,18 +5,19 @@ use crate::{
     validate_canonical_root, ApprovedExecutionRoot, ExecutorError, ExecutorLocalPaths, OperationId,
     WriteAuthority, RENAME_JOURNAL_DIRECTORY,
 };
-use ot_backup::{recovery_binding_for_rename_plan, BackupStore, VerifiedRenameBackup};
+use ot_backup::{recovery_binding_for_rename_plan, BackupStore, SnapshotId, VerifiedRenameBackup};
 use ot_codec_ports::{rewrite_same_directory_path, ProjectReferenceCodec, SlotPathPatch};
 use ot_domain::{
-    ContentHash, RootRelativePath, SampleSlotKind, StateDocumentKind, StateDocumentRole,
+    ContentHash, RootId, RootRelativePath, SampleSlotKind, StateDocumentKind, StateDocumentRole,
 };
 use ot_plan::{PlanId, RenameImpactPlan, RenameReferenceUpdate, RenameStateDocumentImpact};
+use rustix::fs::{Mode, OFlags, RenameFlags};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 const RENAME_JOURNAL_SCHEMA: &str = "masterocta-rename-operation-journal:v1";
@@ -178,28 +179,35 @@ impl RenameSampleExecutor {
         }
 
         let staging_rename = prepare_rename_subdirectory(&staging_base, RENAME_JOURNAL_DIRECTORY)?;
-        let staging_root = staging_rename.join(operation_id.file_stem());
-        match fs::symlink_metadata(&staging_root) {
-            Ok(metadata) if metadata.file_type().is_symlink() => {
-                return Err(ExecutorError::UnsafePath);
-            }
-            Ok(_) => return Err(ExecutorError::PlanConsumed),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(ExecutorError::io(error)),
-        }
-        fs::create_dir(&staging_root).map_err(ExecutorError::io)?;
-        let files_root = staging_root.join("files");
+        let staging_stem = operation_id.file_stem();
+        let staging_root = staging_rename.join(staging_stem);
+        let staging_partial = staging_rename.join(format!("{staging_stem}.partial"));
+        remove_orphaned_rename_directory(&staging_partial)?;
+        remove_orphaned_rename_directory(&staging_root)?;
+        fs::create_dir(&staging_partial).map_err(ExecutorError::io)?;
+        let files_root = staging_partial.join("files");
         fs::create_dir(&files_root).map_err(ExecutorError::io)?;
 
         let populated = populate_rename_staging(plan, codec, backup.directory(), &files_root);
         if let Err(error) = populated {
-            let _ = fs::remove_dir_all(&staging_root);
+            let _ = fs::remove_dir_all(&staging_partial);
             return Err(error);
         }
         let (staged_files, project_rewrites) = populated.expect("staging error already returned");
-        if let Err(error) = sync_directory(&files_root).and_then(|_| sync_directory(&staging_root))
+        let total_staged_bytes = match staged_files
+            .iter()
+            .try_fold(0u64, |total, file| total.checked_add(file.byte_size))
         {
-            let _ = fs::remove_dir_all(&staging_root);
+            Some(total) => total,
+            None => {
+                let _ = fs::remove_dir_all(&staging_partial);
+                return Err(ExecutorError::FileTooLarge);
+            }
+        };
+        if let Err(error) =
+            sync_directory(&files_root).and_then(|_| sync_directory(&staging_partial))
+        {
+            let _ = fs::remove_dir_all(&staging_partial);
             return Err(error);
         }
 
@@ -213,10 +221,18 @@ impl RenameSampleExecutor {
         ) {
             Ok(authorization) => authorization,
             Err(error) => {
-                let _ = fs::remove_dir_all(&staging_root);
+                let _ = fs::remove_dir_all(&staging_partial);
                 return Err(error);
             }
         };
+        if let Err(error) = promote_rename_directory(
+            &staging_rename,
+            &format!("{staging_stem}.partial"),
+            staging_stem,
+        ) {
+            let _ = fs::remove_dir_all(&staging_partial);
+            return Err(error);
+        }
 
         let journal = RenameOperationJournal {
             schema: RENAME_JOURNAL_SCHEMA.to_owned(),
@@ -234,10 +250,6 @@ impl RenameSampleExecutor {
             project_rewrites: project_rewrites.clone(),
             status: RenameJournalStatus::Prepared,
         };
-        let total_staged_bytes = staged_files
-            .iter()
-            .try_fold(0u64, |total, file| total.checked_add(file.byte_size))
-            .ok_or(ExecutorError::FileTooLarge)?;
         if let Err(error) = write_rename_json(&journal_path, &journal, false) {
             let _ = fs::remove_dir_all(&staging_root);
             return Err(error);
@@ -303,6 +315,7 @@ fn validate_rename_plan_shape(plan: &RenameImpactPlan) -> Result<(), ExecutorErr
         || plan.source_relative_path == plan.destination_relative_path
         || !plan.unresolved_references.is_empty()
         || plan.estimated_media_additional_bytes != 0
+        || !same_parent_directory(&plan.source_relative_path, &plan.destination_relative_path)
     {
         return Err(ExecutorError::InvalidPlan);
     }
@@ -327,7 +340,26 @@ fn validate_rename_plan_shape(plan: &RenameImpactPlan) -> Result<(), ExecutorErr
             }
         }
     }
+    for sidecar in &plan.sidecar_impacts {
+        if !same_parent_directory(
+            &sidecar.source_sidecar_relative_path,
+            &sidecar.destination_sidecar_relative_path,
+        ) {
+            return Err(ExecutorError::InvalidPlan);
+        }
+    }
     Ok(())
+}
+
+fn same_parent_directory(left: &RootRelativePath, right: &RootRelativePath) -> bool {
+    path_parent(left.as_str()) == path_parent(right.as_str())
+}
+
+fn path_parent(relative: &str) -> &str {
+    relative
+        .rsplit_once('/')
+        .map(|(parent, _)| parent)
+        .unwrap_or("")
 }
 
 fn validate_rename_authority(
@@ -364,6 +396,46 @@ fn prepare_rename_subdirectory(parent: &Path, name: &str) -> Result<PathBuf, Exe
         return Err(ExecutorError::UnsafePath);
     }
     Ok(directory)
+}
+
+fn remove_orphaned_rename_directory(path: &Path) -> Result<(), ExecutorError> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            Err(ExecutorError::UnsafePath)
+        }
+        Ok(_) => fs::remove_dir_all(path).map_err(ExecutorError::io),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(ExecutorError::io(error)),
+    }
+}
+
+fn promote_rename_directory(
+    parent: &Path,
+    from_name: &str,
+    to_name: &str,
+) -> Result<(), ExecutorError> {
+    let metadata = fs::symlink_metadata(parent).map_err(ExecutorError::io)?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(ExecutorError::UnsafePath);
+    }
+    let parent_dir = File::open(parent).map_err(ExecutorError::io)?;
+    rustix::fs::renameat_with(
+        &parent_dir,
+        from_name,
+        &parent_dir,
+        to_name,
+        RenameFlags::NOREPLACE,
+    )
+    .map_err(|error| {
+        if error == rustix::io::Errno::EXIST {
+            ExecutorError::PlanConsumed
+        } else if matches!(error, rustix::io::Errno::LOOP | rustix::io::Errno::NOTDIR) {
+            ExecutorError::SymlinkEscape
+        } else {
+            ExecutorError::io(std::io::Error::from(error))
+        }
+    })?;
+    parent_dir.sync_all().map_err(ExecutorError::io)
 }
 
 fn populate_rename_staging<C: ProjectReferenceCodec>(
@@ -844,7 +916,7 @@ fn write_rename_json<T: Serialize>(
             temporary_name,
             &parent,
             final_name,
-            rustix::fs::RenameFlags::NOREPLACE,
+            RenameFlags::NOREPLACE,
         )
         .map_err(|error| {
             if error == rustix::io::Errno::EXIST {
@@ -875,34 +947,186 @@ fn remove_stale_rename_temporary(path: &Path) -> Result<(), ExecutorError> {
 }
 
 fn read_rename_journal(path: &Path) -> Result<RenameOperationJournal, ExecutorError> {
-    let journal: RenameOperationJournal = serde_json::from_reader(open_regular_file(path)?)
-        .map_err(|error| ExecutorError::Journal(error.to_string()))?;
-    if journal.schema != RENAME_JOURNAL_SCHEMA
-        || journal.operation_kind != RenameJournalOperationKind::RenameSample
-        || journal.status != RenameJournalStatus::Prepared
-        || PlanId::parse(journal.plan_id.clone()).is_err()
-    {
-        return Err(ExecutorError::InvalidJournal);
-    }
+    let journal: RenameOperationJournal =
+        serde_json::from_reader(open_rename_regular_file(path, false)?)
+            .map_err(|error| ExecutorError::Journal(error.to_string()))?;
+    validate_loaded_rename_journal(&journal, path)?;
     Ok(journal)
 }
 
 fn read_rename_authorization(path: &Path) -> Result<RenameRecoveryAuthorization, ExecutorError> {
     let authorization: RenameRecoveryAuthorization =
-        serde_json::from_reader(open_regular_file(path)?)
+        serde_json::from_reader(open_rename_regular_file(path, true)?)
             .map_err(|error| ExecutorError::Journal(error.to_string()))?;
-    if authorization.schema != RENAME_RECOVERY_AUTHORIZATION_SCHEMA {
-        return Err(ExecutorError::InvalidJournal);
-    }
+    validate_loaded_rename_authorization(&authorization, path)?;
     Ok(authorization)
 }
 
-fn open_regular_file(path: &Path) -> Result<File, ExecutorError> {
-    let metadata = fs::symlink_metadata(path).map_err(ExecutorError::io)?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() {
+fn validate_loaded_rename_journal(
+    journal: &RenameOperationJournal,
+    path: &Path,
+) -> Result<(), ExecutorError> {
+    let operation_id = OperationId::parse(journal.operation_id.clone())
+        .map_err(|_| ExecutorError::InvalidJournal)?;
+    if journal.schema != RENAME_JOURNAL_SCHEMA
+        || journal.operation_kind != RenameJournalOperationKind::RenameSample
+        || journal.status != RenameJournalStatus::Prepared
+        || path.file_stem().and_then(|stem| stem.to_str()) != Some(operation_id.file_stem())
+        || journal.plan_id
+            != operation_id
+                .as_str()
+                .replacen("operation:v1:", "plan:v1:", 1)
+        || journal.backup_snapshot_id
+            != operation_id
+                .as_str()
+                .replacen("operation:v1:", "snapshot:v1:", 1)
+        || PlanId::parse(journal.plan_id.clone()).is_err()
+        || SnapshotId::parse(journal.backup_snapshot_id.clone()).is_err()
+        || journal.base_observed_revision == 0
+        || !prefixed_hex(&journal.root_fingerprint, "rootfp:v1:")
+        || !prefixed_hex(&journal.recovery_binding, "recovery-binding:rename:v1:")
+    {
+        return Err(ExecutorError::InvalidJournal);
+    }
+    let source = RootRelativePath::parse(&journal.source_relative_path)
+        .map_err(|_| ExecutorError::InvalidJournal)?;
+    let destination = RootRelativePath::parse(&journal.destination_relative_path)
+        .map_err(|_| ExecutorError::InvalidJournal)?;
+    if source == destination || !same_parent_directory(&source, &destination) {
+        return Err(ExecutorError::InvalidJournal);
+    }
+    validate_persisted_rewrite_records(
+        &journal.staged_files,
+        &journal.project_rewrites,
+        &destination,
+        journal.reference_update_count,
+    )
+}
+
+fn validate_loaded_rename_authorization(
+    authorization: &RenameRecoveryAuthorization,
+    path: &Path,
+) -> Result<(), ExecutorError> {
+    let operation_id = OperationId::parse(authorization.operation_id.clone())
+        .map_err(|_| ExecutorError::InvalidJournal)?;
+    if authorization.schema != RENAME_RECOVERY_AUTHORIZATION_SCHEMA
+        || path.file_stem().and_then(|stem| stem.to_str()) != Some(operation_id.file_stem())
+        || authorization.plan_id
+            != operation_id
+                .as_str()
+                .replacen("operation:v1:", "plan:v1:", 1)
+        || authorization.backup_snapshot_id
+            != operation_id
+                .as_str()
+                .replacen("operation:v1:", "snapshot:v1:", 1)
+        || PlanId::parse(authorization.plan_id.clone()).is_err()
+        || SnapshotId::parse(authorization.backup_snapshot_id.clone()).is_err()
+        || authorization.base_observed_revision == 0
+        || RootId::new(authorization.root_id.clone()).is_err()
+        || !prefixed_hex(&authorization.root_fingerprint, "rootfp:v1:")
+        || !prefixed_hex(
+            &authorization.recovery_binding,
+            "recovery-binding:rename:v1:",
+        )
+        || ContentHash::parse(authorization.source_content_hash.clone()).is_err()
+    {
+        return Err(ExecutorError::InvalidJournal);
+    }
+    let source = RootRelativePath::parse(&authorization.source_relative_path)
+        .map_err(|_| ExecutorError::InvalidJournal)?;
+    let destination = RootRelativePath::parse(&authorization.destination_relative_path)
+        .map_err(|_| ExecutorError::InvalidJournal)?;
+    if source == destination || !same_parent_directory(&source, &destination) {
+        return Err(ExecutorError::InvalidJournal);
+    }
+    validate_persisted_rewrite_records(
+        &authorization.staged_files,
+        &authorization.project_rewrites,
+        &destination,
+        authorization.reference_update_count,
+    )
+}
+
+fn validate_persisted_rewrite_records(
+    staged_files: &[RenameStagedFileRecord],
+    project_rewrites: &[RenameProjectRewriteRecord],
+    destination: &RootRelativePath,
+    reference_update_count: u64,
+) -> Result<(), ExecutorError> {
+    let mut paths = BTreeSet::new();
+    let mut saw_destination_audio = false;
+    for file in staged_files {
+        if RootRelativePath::parse(&file.relative_path).is_err()
+            || ContentHash::parse(file.backup_content_hash.clone()).is_err()
+            || ContentHash::parse(file.staged_content_hash.clone()).is_err()
+            || !paths.insert(file.relative_path.clone())
+        {
+            return Err(ExecutorError::InvalidJournal);
+        }
+        if file.role == RenameStagedFileRole::DestinationAudio {
+            if saw_destination_audio || file.relative_path != destination.as_str() {
+                return Err(ExecutorError::InvalidJournal);
+            }
+            saw_destination_audio = true;
+        }
+    }
+    if !saw_destination_audio {
+        return Err(ExecutorError::InvalidJournal);
+    }
+    let rewrite_patches = project_rewrites
+        .iter()
+        .try_fold(0u64, |total, rewrite| {
+            total.checked_add(rewrite.patch_count)
+        })
+        .ok_or(ExecutorError::InvalidJournal)?;
+    if rewrite_patches != reference_update_count {
+        return Err(ExecutorError::InvalidJournal);
+    }
+    for rewrite in project_rewrites {
+        if RootRelativePath::parse(&rewrite.relative_path).is_err()
+            || ContentHash::parse(rewrite.backup_content_hash.clone()).is_err()
+            || ContentHash::parse(rewrite.staged_content_hash.clone()).is_err()
+            || rewrite.patch_count == 0
+            || rewrite.changed_slots.is_empty()
+            || rewrite.backup_content_hash == rewrite.staged_content_hash
+            || !paths.contains(&rewrite.relative_path)
+        {
+            return Err(ExecutorError::InvalidJournal);
+        }
+    }
+    Ok(())
+}
+
+fn prefixed_hex(value: &str, prefix: &str) -> bool {
+    value.strip_prefix(prefix).is_some_and(|digest| {
+        digest.len() == 64
+            && digest
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    })
+}
+
+fn open_rename_regular_file(path: &Path, require_read_only: bool) -> Result<File, ExecutorError> {
+    let file = rustix::fs::open(
+        path,
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    )
+    .map_err(rename_open_error)?;
+    let file = File::from(file);
+    let metadata = file.metadata().map_err(ExecutorError::io)?;
+    if !metadata.is_file() || (require_read_only && metadata.mode() & 0o222 != 0) {
         return Err(ExecutorError::UnsafePath);
     }
-    File::open(path).map_err(ExecutorError::io)
+    Ok(file)
+}
+
+fn rename_open_error(error: rustix::io::Errno) -> ExecutorError {
+    if matches!(error, rustix::io::Errno::LOOP | rustix::io::Errno::NOTDIR) {
+        ExecutorError::SymlinkEscape
+    } else {
+        ExecutorError::io(std::io::Error::from(error))
+    }
 }
 
 #[cfg(test)]
@@ -922,6 +1146,7 @@ mod tests {
         RenameRootObservation, RenameSamplePlanningFacts, RenameSidecarObservation,
         RenameSlotAssignmentObservation, RenameSourceObservation, RenameStateDocumentObservation,
     };
+    use std::os::unix::fs::PermissionsExt;
     use std::sync::Mutex;
     use tempfile::TempDir;
 
@@ -1500,5 +1725,159 @@ mod tests {
         ));
         assert_eq!(snapshot_root(&root), before);
         assert!(!root.join(DESTINATION_PATH).exists());
+    }
+
+    #[test]
+    fn cross_directory_destination_is_rejected_before_staging() {
+        let fixture = TempDir::new().unwrap();
+        let root = fixture.path().join("root");
+        let local = fixture.path().join("local");
+        write_tree(&root, false, false, false);
+        let before = snapshot_root(&root);
+        let dest = RootRelativePath::parse("SET/OTHER/new-kick.wav").unwrap();
+        let mut planning = facts(Vec::new(), false);
+        planning.destination.intended_relative_path = dest.clone();
+        let intent = RenameSampleIntent {
+            root_id: planning.root.root_id.clone(),
+            source_file_instance_id: planning.source.file_instance_id.clone(),
+            destination_relative_path: dest,
+        };
+        let plan = match plan_rename_sample(&intent, &planning) {
+            RenamePlanningOutcome::Planned(plan) => *plan,
+            RenamePlanningOutcome::Blocked(blocked) => {
+                panic!(
+                    "expected planned rename, blocked by {:?}",
+                    blocked.block_reasons
+                )
+            }
+        };
+        assert_ne!(
+            path_parent(plan.source_relative_path.as_str()),
+            path_parent(plan.destination_relative_path.as_str())
+        );
+        assert!(matches!(
+            RenameSampleExecutor::new(local_paths(&local)).prepare(
+                &plan,
+                &MemoryProjectReferenceCodec,
+                &authority_for(&root)
+            ),
+            Err(ExecutorError::InvalidPlan)
+        ));
+        assert_eq!(snapshot_root(&root), before);
+        assert!(
+            !local
+                .join("staging")
+                .join(RENAME_JOURNAL_DIRECTORY)
+                .exists()
+                || fs::read_dir(local.join("staging").join(RENAME_JOURNAL_DIRECTORY))
+                    .map(|entries| entries.count())
+                    .unwrap_or(0)
+                    == 0
+        );
+    }
+
+    #[test]
+    fn orphaned_staging_without_a_journal_is_replaced() {
+        let fixture = TempDir::new().unwrap();
+        let root = fixture.path().join("root");
+        let local = fixture.path().join("local");
+        write_tree(&root, false, false, false);
+        let plan = plan_from(facts(Vec::new(), false));
+        create_backup(&root, &local, &plan);
+        let operation_id = OperationId::for_rename_plan(&plan);
+        let orphan = local
+            .join("staging")
+            .join(RENAME_JOURNAL_DIRECTORY)
+            .join(operation_id.file_stem());
+        fs::create_dir_all(&orphan).unwrap();
+        fs::write(orphan.join("stale"), b"orphan").unwrap();
+        let prepared = RenameSampleExecutor::new(local_paths(&local))
+            .prepare(&plan, &MemoryProjectReferenceCodec, &authority_for(&root))
+            .unwrap();
+        assert!(!prepared.staging_directory.join("stale").exists());
+        assert_eq!(
+            fs::read(
+                prepared
+                    .staging_directory
+                    .join("files")
+                    .join(DESTINATION_PATH)
+            )
+            .unwrap(),
+            AUDIO_BYTES
+        );
+        assert_eq!(
+            RenameSampleExecutor::new(local_paths(&local))
+                .rename_journal(&prepared.operation_id)
+                .unwrap()
+                .unwrap()
+                .status,
+            RenameJournalStatus::Prepared
+        );
+    }
+
+    #[test]
+    fn writable_recovery_authorization_is_rejected() {
+        let fixture = TempDir::new().unwrap();
+        let root = fixture.path().join("root");
+        let local = fixture.path().join("local");
+        write_tree(&root, false, false, false);
+        let plan = plan_from(facts(Vec::new(), false));
+        create_backup(&root, &local, &plan);
+        let executor = RenameSampleExecutor::new(local_paths(&local));
+        let prepared = executor
+            .prepare(&plan, &MemoryProjectReferenceCodec, &authority_for(&root))
+            .unwrap();
+        fs::remove_file(
+            local
+                .join("journals")
+                .join(RENAME_JOURNAL_DIRECTORY)
+                .join(format!("{}.json", prepared.operation_id.file_stem())),
+        )
+        .unwrap();
+        fs::remove_dir_all(&prepared.staging_directory).unwrap();
+        let authorization_path = local
+            .join("journals")
+            .join(RENAME_JOURNAL_DIRECTORY)
+            .join("authorizations")
+            .join(format!("{}.json", prepared.operation_id.file_stem()));
+        fs::set_permissions(&authorization_path, fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(matches!(
+            executor.prepare(&plan, &MemoryProjectReferenceCodec, &authority_for(&root)),
+            Err(ExecutorError::UnsafePath)
+        ));
+    }
+
+    #[test]
+    fn persisted_journal_rejects_traversal_and_binding_tampering() {
+        let fixture = TempDir::new().unwrap();
+        let root = fixture.path().join("root");
+        let local = fixture.path().join("local");
+        write_tree(&root, false, false, false);
+        let plan = plan_from(facts(Vec::new(), false));
+        create_backup(&root, &local, &plan);
+        let executor = RenameSampleExecutor::new(local_paths(&local));
+        let prepared = executor
+            .prepare(&plan, &MemoryProjectReferenceCodec, &authority_for(&root))
+            .unwrap();
+        let journal_path = local
+            .join("journals")
+            .join(RENAME_JOURNAL_DIRECTORY)
+            .join(format!("{}.json", prepared.operation_id.file_stem()));
+        let mut journal: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&journal_path).unwrap()).unwrap();
+        journal["source_relative_path"] = serde_json::Value::String("../outside.wav".into());
+        fs::write(&journal_path, serde_json::to_vec_pretty(&journal).unwrap()).unwrap();
+        assert!(matches!(
+            executor.rename_journal(&prepared.operation_id),
+            Err(ExecutorError::InvalidJournal)
+        ));
+        journal["source_relative_path"] = serde_json::Value::String(SOURCE_PATH.into());
+        journal["recovery_binding"] =
+            serde_json::Value::String(format!("recovery-binding:v1:{}", "a".repeat(64)));
+        fs::write(&journal_path, serde_json::to_vec_pretty(&journal).unwrap()).unwrap();
+        assert!(matches!(
+            executor.rename_journal(&prepared.operation_id),
+            Err(ExecutorError::InvalidJournal)
+        ));
     }
 }

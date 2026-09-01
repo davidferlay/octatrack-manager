@@ -86,13 +86,17 @@ Prepare flow:
    resolved root-relative path must equal `from_relative_path`. A basename-only
    PATH such as `kick.wav` therefore matches only a project-local file, not a
    pool path like `SET/AUDIO/kick.wav`. Destination PATH uses
-   `rewrite_same_directory_path`
+   `rewrite_same_directory_path`. Source and destination parents must match;
+   a cross-directory plan is rejected because the codec cannot rewrite PATH
+   into another directory
 7. Write create-once authorization (no absolute paths) bound to staged file
-   hashes and project rewrite hashes, then the `Prepared` journal
+   hashes and project rewrite hashes, then the `Prepared` journal.
+   Authorization files are read-only; a later writable mode is rejected.
+   `rename_journal` validates path, hash, binding, and record-count fields
 8. Return `RenamePrepareResult` + semantic diff; source root stays byte-identical
-9. Staging parent `rename/` is created with `NOFOLLOW` metadata checks.
-   `create_dir_all` is not used, so a symlink there cannot redirect writes
-   onto the source root
+9. Staging is built under `{stem}.partial` and promoted with `renameat`
+   `NOREPLACE`. A leftover staging directory without a journal is treated as
+   an orphan and replaced. Parent `rename/` is created without `create_dir_all`
 
 C2 never opens the live Octatrack root for write. Staging bytes come only from
 the verified backup. A missing C1 snapshot fails closed. Re-running prepare
