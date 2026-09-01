@@ -10,6 +10,8 @@ mod project_compatibility;
 pub mod project_manager;
 mod project_reader;
 mod purge;
+mod rename_planning_facts;
+mod rename_write_runtime;
 mod root_registry;
 mod v2_api;
 mod write_runtime;
@@ -1362,6 +1364,8 @@ pub fn run() {
             app.manage(audio_runtime);
             let write_runtime = write_runtime::open_shared_write_runtime(&data_directory)?;
             app.manage(write_runtime);
+            let rename_write_runtime = rename_write_runtime::open_shared_rename_write_runtime();
+            app.manage(rename_write_runtime);
 
             // Clear WebView session storage in the background on app startup
             let window = app.get_webview_window("main").unwrap();
@@ -1392,6 +1396,8 @@ pub fn run() {
             v2_api::v2_change_status,
             v2_api::v2_change_recover,
             v2_api::v2_change_recovery_status,
+            v2_api::v2_rename_plan,
+            v2_api::v2_rename_get_plan,
             greet,
             scan_devices,
             scan_custom_directory,

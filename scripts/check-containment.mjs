@@ -390,6 +390,8 @@ const expectedV2Commands = [
   "v2_change_recovery_status",
   "v2_change_status",
   "v2_library_list",
+  "v2_rename_get_plan",
+  "v2_rename_plan",
   "v2_root_close",
   "v2_root_disable_write",
   "v2_root_enable_write",

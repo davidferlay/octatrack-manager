@@ -172,8 +172,7 @@ Before Gate C sign-off for rename Apply:
   integration tests + `scripts/gate-c-synthetic-smoke.sh`)
 - unchanged non-target file hashes remain stable — **automated** (M5-C4)
 - rollback restores byte-identical media — **automated** (M5-C4)
-- **remaining:** controlled operator harness (production wiring without bypassing
-  Intent → Plan → Apply)
+- **remaining:** controlled operator harness — **M5-C5** (`docs/planning/M5_C5_OPERATOR_HARNESS.md`)
 - **remaining:** clone load smoke on real hardware (human checklist in
   `docs/testing/GATE_C_CLONE_SMOKE.md`)
 
