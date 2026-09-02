@@ -1,6 +1,6 @@
 # M5-C5 — Gate C Controlled Operator Harness
 
-- Status: **Phase 1 COMPLETE**；**Phase 2 COMPLETE**；**Phase 3 COMPLETE**；**Phase 4A COMPLETE**；**Phase 4B–4D 未着手**
+- Status: **Phase 1 COMPLETE**；**Phase 2 COMPLETE**；**Phase 3 COMPLETE**；**Phase 4A COMPLETE**；**R0–R4 COMPLETE (#82)**；**Phase 4D 未着手**
 - Base: `origin/main` at PR #72 merge (`b661840` / M5-C5 Phase 2 rename APIs)
 - Goal: expose rename Apply on a **disposable registered clone** through production
   Tauri + explicit approval UI, without bypassing Intent → Plan → Apply or opening

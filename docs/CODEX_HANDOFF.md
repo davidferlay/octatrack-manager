@@ -91,7 +91,7 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - Gate B smoke macOS移植: #55マージ済み
 - Project compatibility policy: #58／#59マージ済み
 - Gate B human sign-off: **PASS**（personal/local use、source `a10437f`）
-- 現在のmain基準SHA: `d8142ea`（M5-C5 R4 作業ベース）
+- 現在のmain基準SHA: `87c1368`（M5-C5 R4 #82 merge後）
 - M5-C5 R0 — clone artifact containment hardening: **COMPLETE**（#74）
 - M5-C5 R1 — durable clone evidence / session authority separation: **COMPLETE**（#77）
 - M5-C5 R2 — prepared rename plan snapshot / restart continuation: **COMPLETE**（#79）
@@ -104,12 +104,14 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
   - `v2_rename_verify_committed` read-only post-commit verification
   - planned references、Invalid/Missing/Unresolved、affected documents、sidecar を検証
   - mutation/verification DTO separation on Committed apply
-- M5-C5 R4 — Recovery + cross-domain mutation gate: **COMPLETE**
+- M5-C5 R4 — Recovery + cross-domain mutation gate: **COMPLETE**（#82）
   - `v2_rename_recover` production rollback + fresh rescan + postcondition verification
   - `v2_rename_verify_rolled_back` read-only rollback re-verification
   - `rename_recovery_runtime.rs` coordinator + `VerifiedRecoveryCloneRoot`
   - cross-domain `mutation_gate` on enable_write / rename continue / additive apply
   - RecoveryAuthority（write grant 不要）、Prepared/Committed recovery 拒否
+  - journal 由来 `planId` を restart discovery で返却（in-memory plan 復活なし）
+  - completion criteria 向け production recovery / mutation gate テスト群
 - M5-C5 Phase 4D — Operator UX + Gate C readiness: **NOT STARTED**
 - M5-C5 Phase 4A — verified disposable clone authority: **COMPLETE**（#74 に含む）
 - M5-C5 Phase 3 — explicit approval Rename UI: **COMPLETE**（PR #73、`RenameSampleModal` + `src/api/rename.ts`）

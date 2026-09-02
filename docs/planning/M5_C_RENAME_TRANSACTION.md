@@ -281,7 +281,8 @@ does not require a write grant; it uses `RecoveryAuthority` /
 
 - `v2_rename_recovery_status` discovers `Applying` / `RecoveryRequired`
   operations from durable journal + authorization + backup evidence (no in-memory
-  plan store required).
+  plan store required). Restart discovery still returns the journal-bound opaque
+  `planId` when the in-memory plan store expired.
 - `v2_rename_recover` requires `approvedOperationId == operationId`, rolls back,
   fresh-rescans, and returns `rename-recovery-result:v1` with separate
   `mutationState` / `verificationState`.
