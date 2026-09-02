@@ -8,6 +8,7 @@ mod clone_runtime;
 mod device_detection;
 mod legacy_read_adapter;
 mod local_artifact;
+mod mutation_gate;
 mod project_compatibility;
 pub mod project_manager;
 mod project_reader;
@@ -1406,8 +1407,10 @@ pub fn run() {
             v2_api::v2_rename_authorize,
             v2_api::v2_rename_create_backup,
             v2_api::v2_rename_prepare,
+            v2_api::v2_rename_apply,
             v2_api::v2_rename_get_status,
             v2_api::v2_rename_recovery_status,
+            v2_api::v2_rename_recover,
             v2_api::v2_clone_record_source_evidence,
             v2_api::v2_clone_create_managed,
             v2_api::v2_clone_verify_external,

@@ -10,8 +10,8 @@ use crate::rename_planning_facts::{
     RenamePlanningFactsError,
 };
 use crate::rename_write_runtime::{
-    RenameAuthorityRecord, RenameBackupRecord, RenameOperationPhase, RenamePrepareRecord,
-    RenameSessionStatus, RenameWriteRuntimeError, SharedRenameWriteRuntime,
+    RenameApplyRecord, RenameAuthorityRecord, RenameBackupRecord, RenameOperationPhase,
+    RenamePrepareRecord, RenameSessionStatus, RenameWriteRuntimeError, SharedRenameWriteRuntime,
 };
 use crate::root_registry::{ResolvedRoot, RootRegistry, RootRegistryError, RootSession};
 use crate::write_runtime::{
@@ -72,6 +72,14 @@ impl ApiError {
             details: None,
         }
     }
+}
+
+pub(crate) fn cross_domain_recovery_required_error() -> ApiError {
+    ApiError::new(
+        "RECOVERY_REQUIRED",
+        "an incomplete write operation must be resolved before starting another mutation",
+        false,
+    )
 }
 
 impl From<RootRegistryError> for ApiError {
@@ -855,6 +863,21 @@ pub struct RenamePrepareStatusDto {
     staged_file_count: u64,
     total_staged_bytes: u64,
     project_rewrite_count: u64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenameApplyStatusDto {
+    schema: &'static str,
+    plan_id: String,
+    operation_id: String,
+    snapshot_id: String,
+    mutation_state: String,
+    verification_state: String,
+    verification_code: Option<String>,
+    rescan_completed: bool,
+    observed_file_count: u64,
+    missing_reference_count: u64,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1773,7 +1796,7 @@ fn rename_planning_facts_error(error: RenamePlanningFactsError) -> ApiError {
     ApiError::new(error.code(), error.to_string(), true)
 }
 
-fn rename_runtime_error(error: RenameWriteRuntimeError) -> ApiError {
+pub(crate) fn rename_runtime_error(error: RenameWriteRuntimeError) -> ApiError {
     let recoverable = !matches!(
         error,
         RenameWriteRuntimeError::InvalidPlan | RenameWriteRuntimeError::PlanIntegrityMismatch
@@ -2186,6 +2209,139 @@ pub(crate) fn prepare_rename_sync(
     Ok(rename_prepare_dto(plan_id, &prepared))
 }
 
+fn rename_apply_dto(
+    plan_id: &str,
+    applied: &RenameApplyRecord,
+    mutation_state: &str,
+    verification_state: &str,
+    verification_code: Option<&str>,
+    rescan_completed: bool,
+    observed_file_count: u64,
+    missing_reference_count: u64,
+) -> RenameApplyStatusDto {
+    RenameApplyStatusDto {
+        schema: "rename-apply-status:v1",
+        plan_id: plan_id.to_owned(),
+        operation_id: applied.operation_id.as_str().to_owned(),
+        snapshot_id: applied.snapshot_id.as_str().to_owned(),
+        mutation_state: mutation_state.to_owned(),
+        verification_state: verification_state.to_owned(),
+        verification_code: verification_code.map(str::to_owned),
+        rescan_completed,
+        observed_file_count,
+        missing_reference_count,
+    }
+}
+
+fn count_missing_sample_references(snapshot: &LibrarySnapshot) -> u64 {
+    snapshot
+        .usage_edges
+        .iter()
+        .filter(|edge| edge.reference_status == SampleReferenceStatus::Missing)
+        .count() as u64
+}
+
+pub(crate) fn apply_rename_sync(
+    registry: &RootRegistry,
+    catalog: &SharedCatalog,
+    clone_runtime: &SharedCloneRuntime,
+    write: &SharedWriteRuntime,
+    rename_runtime: &SharedRenameWriteRuntime,
+    root_id: &RootId,
+    plan_id: &str,
+    approved_plan_id: &str,
+    authority_id: &str,
+    snapshot_id: &str,
+    clone_authority_id: &str,
+) -> Result<RenameApplyStatusDto, ApiError> {
+    ensure_rename_recovery_clear(registry, write, rename_runtime, root_id)?;
+    let resolved = registry.resolve(root_id)?;
+    if !resolved.session.capabilities.write {
+        return Err(ApiError::new(
+            "WRITE_GRANT_REQUIRED",
+            "enable the session-limited write grant before applying this rename",
+            true,
+        ));
+    }
+    ensure_clone_verified(clone_runtime, &resolved)?;
+    clone_runtime
+        .require_clone_authority(&resolved, clone_authority_id)
+        .map_err(clone_runtime_error)?;
+    rename_runtime
+        .verify_authority(root_id, plan_id, authority_id)
+        .map_err(rename_runtime_error)?;
+    let plan = rename_runtime
+        .get_plan(root_id, plan_id)
+        .map_err(rename_runtime_error)?;
+    verify_stored_rename_plan_freshness(registry, catalog, root_id, &plan, true)?;
+    let applied = rename_runtime
+        .apply(
+            root_id,
+            plan_id,
+            approved_plan_id,
+            authority_id,
+            snapshot_id,
+            clone_authority_id,
+            registry,
+            clone_runtime,
+        )
+        .map_err(rename_runtime_error)?;
+
+    let mut rescan_completed = false;
+    let mut observed_file_count = 0_u64;
+    let mut missing_reference_count = 0_u64;
+    let mut verification_state = "passed";
+    let mut verification_code = None;
+
+    match scan_library_sync(registry, catalog, root_id) {
+        Ok((session, snapshot)) => {
+            observed_file_count = snapshot.file_instances.len() as u64;
+            missing_reference_count = count_missing_sample_references(&snapshot);
+            match store_library_snapshot(registry, catalog, root_id, &session, &snapshot) {
+                Ok(_) => {
+                    rescan_completed = true;
+                    if missing_reference_count > 0 {
+                        verification_state = "failed";
+                        verification_code = Some("MISSING_REFERENCES");
+                    }
+                }
+                Err(_) => {
+                    verification_state = "failed";
+                    verification_code = Some("CATALOG_STORE_ERROR");
+                }
+            }
+        }
+        Err(_) => {
+            verification_state = "failed";
+            verification_code = Some("RESCAN_FAILED");
+        }
+    }
+
+    Ok(rename_apply_dto(
+        plan_id,
+        &applied,
+        "committed",
+        verification_state,
+        verification_code,
+        rescan_completed,
+        observed_file_count,
+        missing_reference_count,
+    ))
+}
+
+pub(crate) fn recover_rename_sync(
+    registry: &RootRegistry,
+    rename_runtime: &SharedRenameWriteRuntime,
+    root_id: &RootId,
+    operation_id: &str,
+    approved_operation_id: &str,
+) -> Result<RenameStatusDto, ApiError> {
+    let status = rename_runtime
+        .recover(root_id, operation_id, approved_operation_id, registry)
+        .map_err(rename_runtime_error)?;
+    Ok(rename_status_dto(&status))
+}
+
 pub(crate) fn rename_status_sync(
     registry: &RootRegistry,
     rename_runtime: &SharedRenameWriteRuntime,
@@ -2266,7 +2422,7 @@ fn destination_exists_live(
     Ok(false)
 }
 
-fn write_runtime_error(error: WriteRuntimeError) -> ApiError {
+pub(crate) fn write_runtime_error(error: WriteRuntimeError) -> ApiError {
     let recoverable = !matches!(
         &error,
         WriteRuntimeError::UnsafeLocalState
@@ -3161,6 +3317,45 @@ pub async fn v2_rename_prepare(
 }
 
 #[tauri::command]
+pub async fn v2_rename_apply(
+    root_id: String,
+    plan_id: String,
+    approved_plan_id: String,
+    authority_id: String,
+    snapshot_id: String,
+    clone_authority_id: String,
+    registry: State<'_, Arc<RootRegistry>>,
+    catalog: State<'_, SharedCatalog>,
+    clone_runtime: State<'_, SharedCloneRuntime>,
+    write: State<'_, SharedWriteRuntime>,
+    rename_runtime: State<'_, SharedRenameWriteRuntime>,
+) -> Result<RenameApplyStatusDto, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let catalog = Arc::clone(catalog.inner());
+    let clone_runtime = Arc::clone(clone_runtime.inner());
+    let write = Arc::clone(write.inner());
+    let rename_runtime = Arc::clone(rename_runtime.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        apply_rename_sync(
+            &registry,
+            &catalog,
+            &clone_runtime,
+            &write,
+            &rename_runtime,
+            &root_id,
+            &plan_id,
+            &approved_plan_id,
+            &authority_id,
+            &snapshot_id,
+            &clone_authority_id,
+        )
+    })
+    .await
+    .map_err(ApiError::task_failed)?
+}
+
+#[tauri::command]
 pub async fn v2_rename_get_status(
     root_id: String,
     operation_id: String,
@@ -3188,6 +3383,30 @@ pub async fn v2_rename_recovery_status(
     let rename_runtime = Arc::clone(rename_runtime.inner());
     tauri::async_runtime::spawn_blocking(move || {
         rename_recovery_status_sync(&registry, &rename_runtime, &root_id)
+    })
+    .await
+    .map_err(ApiError::task_failed)?
+}
+
+#[tauri::command]
+pub async fn v2_rename_recover(
+    root_id: String,
+    operation_id: String,
+    approved_operation_id: String,
+    registry: State<'_, Arc<RootRegistry>>,
+    rename_runtime: State<'_, SharedRenameWriteRuntime>,
+) -> Result<RenameStatusDto, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let rename_runtime = Arc::clone(rename_runtime.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        recover_rename_sync(
+            &registry,
+            &rename_runtime,
+            &root_id,
+            &operation_id,
+            &approved_operation_id,
+        )
     })
     .await
     .map_err(ApiError::task_failed)?
@@ -5540,6 +5759,112 @@ mod tests {
         assert!(!status.plan_expired);
 
         assert_eq!(before, collect_fixture_manifest(root.path()));
+    }
+
+    #[test]
+    fn rename_apply_happy_path_commits_and_rescans() {
+        let root = TempDir::new().unwrap();
+        build_gate_c_planning_fixture(root.path());
+
+        let registry = registry();
+        let (data_directory, catalog) = catalog();
+        let rename_runtime = rename_runtime(data_directory.path());
+        let write = write_runtime(data_directory.path());
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
+        enable_write_sync(&registry, &catalog, &write, &root_id).unwrap();
+
+        let dto = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
+        let source_id = dto
+            .audio_files
+            .iter()
+            .find(|file| file.relative_path == "SET/AUDIO/pad.wav")
+            .unwrap()
+            .file_instance_id
+            .clone();
+
+        let RenamePlanResponseDto::Planned(plan) = plan_rename_sample_sync(
+            &registry,
+            &catalog,
+            &clone_runtime,
+            &rename_runtime,
+            &root_id,
+            &source_id,
+            "SET/AUDIO/new-pad.wav",
+        )
+        .unwrap() else {
+            panic!("expected planned rename");
+        };
+
+        let authority = authorize_rename_sync(
+            &registry,
+            &catalog,
+            &clone_runtime,
+            &write,
+            &rename_runtime,
+            &root_id,
+            &plan.plan_id,
+        )
+        .unwrap();
+        let backup = create_rename_backup_sync(
+            &registry,
+            &catalog,
+            &clone_runtime,
+            &write,
+            &rename_runtime,
+            &root_id,
+            &plan.plan_id,
+            &authority.authority_id,
+        )
+        .unwrap();
+        prepare_rename_sync(
+            &registry,
+            &catalog,
+            &clone_runtime,
+            &write,
+            &rename_runtime,
+            &root_id,
+            &plan.plan_id,
+            &authority.authority_id,
+            &backup.snapshot_id,
+        )
+        .unwrap();
+
+        let resolved = registry.resolve(&root_id).unwrap();
+        let clone_authority = clone_runtime
+            .issue_clone_authority(&resolved)
+            .expect("clone authority");
+        let applied = apply_rename_sync(
+            &registry,
+            &catalog,
+            &clone_runtime,
+            &write,
+            &rename_runtime,
+            &root_id,
+            &plan.plan_id,
+            &plan.plan_id,
+            &authority.authority_id,
+            &backup.snapshot_id,
+            &clone_authority.clone_authority_id,
+        )
+        .unwrap();
+        assert_eq!(applied.mutation_state, "committed");
+        assert_eq!(applied.verification_state, "passed");
+        assert!(applied.rescan_completed);
+        assert_eq!(applied.missing_reference_count, 0);
+
+        let dto = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
+        assert!(dto
+            .audio_files
+            .iter()
+            .any(|file| file.relative_path == "SET/AUDIO/new-pad.wav"));
+        assert!(!dto
+            .audio_files
+            .iter()
+            .any(|file| file.relative_path == "SET/AUDIO/pad.wav"));
     }
 
     #[test]
