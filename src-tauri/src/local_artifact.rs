@@ -18,32 +18,6 @@ pub enum LocalArtifactError {
     Io,
 }
 
-impl LocalArtifactError {
-    #[cfg(test)]
-    pub fn code(&self) -> &'static str {
-        match self {
-            Self::InvalidArtifactId => "CLONE_INVALID_ARTIFACT_ID",
-            Self::ArtifactTampered => "CLONE_ARTIFACT_TAMPERED",
-            Self::SymlinkForbidden => "CLONE_SYMLINK_FORBIDDEN",
-            Self::NotRegularFile => "CLONE_NOT_REGULAR_FILE",
-            Self::ContainmentViolation => "CLONE_ARTIFACT_UNAVAILABLE",
-            Self::Io => "CLONE_IO_ERROR",
-        }
-    }
-
-    #[cfg(test)]
-    pub fn public_message(&self) -> &'static str {
-        match self {
-            Self::InvalidArtifactId => "clone artifact identifier is invalid",
-            Self::ArtifactTampered => "clone artifact content does not match the expected record",
-            Self::SymlinkForbidden => "clone artifact storage rejected a symlink",
-            Self::NotRegularFile => "clone artifact storage rejected a non-regular file",
-            Self::ContainmentViolation => "clone artifact storage is unavailable",
-            Self::Io => "clone artifact storage failed",
-        }
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CloneSourceEvidenceId(String);
 
