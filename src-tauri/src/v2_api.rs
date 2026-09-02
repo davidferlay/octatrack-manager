@@ -1013,22 +1013,52 @@ pub(crate) fn create_managed_clone_sync(
     source_root_id: &RootId,
 ) -> Result<ManagedCloneDto, ApiError> {
     let source = registry.resolve(source_root_id)?;
+    let host_observation = registry.stored_observation_for_root(source_root_id)?;
     let source_snapshot = scan_baseline_before(source.canonical_path.as_path());
-    let (clone_path, entries) = clone_runtime
+    let (clone_path, managed_token, entries) = clone_runtime
         .create_managed_clone(registry, &source)
         .map_err(clone_runtime_error)?;
     verify_baseline_unchanged(&source.canonical_path, &source_snapshot)?;
-    let clone_session = register_root_sync(registry, catalog, clone_path.to_str().unwrap())?;
-    let clone_root_id = RootId::new(clone_session.root_id.clone()).map_err(|_| {
-        ApiError::new(
-            "ROOT_NOT_APPROVED",
-            "clone root identifier is invalid",
-            false,
+    let clone_surface_id = crate::clone_runtime::derive_root_surface_id(&clone_path);
+    let clone_session = registry
+        .register_managed_clone(
+            clone_path.to_str().unwrap(),
+            &host_observation,
+            &managed_token,
+            &clone_surface_id,
+            &clone_runtime.managed_clones_root(),
+            "",
+            entries.len() as u64,
         )
+        .map_err(ApiError::from)?;
+    let clone_root_id = clone_session.root_id.clone();
+    let (resolved_session, snapshot) = scan_library_sync(registry, catalog, &clone_root_id)
+        .map_err(|error| {
+            let _ = registry.close(&clone_root_id);
+            error
+        })?;
+    if snapshot.sets.is_empty() && snapshot.standalone_projects.is_empty() {
+        let _ = registry.close(&clone_root_id);
+        return Err(ApiError::new(
+            "UNSUPPORTED_FORMAT",
+            "the selected folder does not contain an Octatrack Set or Project",
+            true,
+        ));
+    }
+    store_library_snapshot(
+        registry,
+        catalog,
+        &clone_root_id,
+        &resolved_session,
+        &snapshot,
+    )
+    .map_err(|error| {
+        let _ = registry.close(&clone_root_id);
+        error
     })?;
     let clone = registry.resolve(&clone_root_id)?;
     let verification = clone_runtime
-        .verify_managed_clone_registration(registry, &source, &clone, &entries, false)
+        .verify_managed_clone_registration(&source, &clone, &entries, &managed_token)
         .map_err(clone_runtime_error)?;
     let source_closed = registry.close(source_root_id).is_ok();
     Ok(ManagedCloneDto {
