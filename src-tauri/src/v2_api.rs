@@ -3011,10 +3011,7 @@ pub(crate) fn recover_rename_sync(
         ));
     }
     let plan = prepared_runtime
-        .validate_prepared_for_recovery(
-            &operation_id,
-            resolved.session.device_fingerprint.as_str(),
-        )
+        .validate_prepared_for_recovery(&operation_id, resolved.session.device_fingerprint.as_str())
         .map_err(prepared_rename_runtime_error)?;
     let project_rewrites = rename_runtime
         .journal_project_rewrites(&operation_id, resolved.session.device_fingerprint.as_str())
@@ -3025,7 +3022,13 @@ pub(crate) fn recover_rename_sync(
         plan.device_fingerprint.as_str(),
     );
     crate::rename_recovery_runtime::ensure_recovery_clone_root_binding(&binding).map_err(
-        |error| ApiError::new(error.code(), "recovery evidence is not bound to this root", true),
+        |error| {
+            ApiError::new(
+                error.code(),
+                "recovery evidence is not bound to this root",
+                true,
+            )
+        },
     )?;
     rename_runtime
         .recover(
