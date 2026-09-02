@@ -1056,9 +1056,8 @@ pub(crate) fn create_managed_clone_sync(
         .map_err(ApiError::from)?;
     let clone_root_id = clone_session.root_id.clone();
     let (resolved_session, snapshot) = scan_library_sync(registry, catalog, &clone_root_id)
-        .map_err(|error| {
+        .inspect_err(|_| {
             let _ = registry.close(&clone_root_id);
-            error
         })?;
     if snapshot.sets.is_empty() && snapshot.standalone_projects.is_empty() {
         let _ = registry.close(&clone_root_id);
@@ -1075,9 +1074,8 @@ pub(crate) fn create_managed_clone_sync(
         &resolved_session,
         &snapshot,
     )
-    .map_err(|error| {
+    .inspect_err(|_| {
         let _ = registry.close(&clone_root_id);
-        error
     })?;
     let clone = registry.resolve(&clone_root_id)?;
     let verification = clone_runtime
@@ -2016,36 +2014,13 @@ fn ensure_rename_recovery_clear(
     rename_runtime: &SharedRenameWriteRuntime,
     root_id: &RootId,
 ) -> Result<(), ApiError> {
-    let resolved = registry.resolve(root_id)?;
-    let additive = write
-        .recovery_required(&resolved.session.device_fingerprint)
-        .map_err(write_runtime_error)?;
-    if !additive.is_empty() {
-        return Err(ApiError::new(
-            "RECOVERY_REQUIRED",
-            "an incomplete write operation must be resolved before rename authority",
-            false,
-        ));
-    }
-    let rename = rename_runtime
-        .incomplete_operations(&resolved.session.device_fingerprint)
-        .map_err(rename_runtime_error)?;
-    if rename.iter().any(|status| {
-        status.journal_status.is_some_and(|journal_status| {
-            matches!(
-                journal_status,
-                ot_executor::RenameJournalStatus::Applying
-                    | ot_executor::RenameJournalStatus::RecoveryRequired
-            )
-        })
-    }) {
-        return Err(ApiError::new(
-            "RECOVERY_REQUIRED",
-            "an incomplete rename operation must be resolved before continuing",
-            false,
-        ));
-    }
-    Ok(())
+    crate::mutation_gate::ensure_cross_domain_mutation_allowed(
+        registry,
+        write,
+        rename_runtime,
+        root_id,
+    )
+    .map_err(|blocked| blocked.into_api_error())
 }
 
 fn verify_stored_rename_plan_freshness(
@@ -2209,10 +2184,19 @@ pub(crate) fn prepare_rename_sync(
     Ok(rename_prepare_dto(plan_id, &prepared))
 }
 
+fn rename_mutation_state(status: ot_executor::RenameJournalStatus) -> &'static str {
+    match status {
+        ot_executor::RenameJournalStatus::Prepared => "prepared",
+        ot_executor::RenameJournalStatus::Applying => "applying",
+        ot_executor::RenameJournalStatus::Committed => "committed",
+        ot_executor::RenameJournalStatus::RolledBack => "rolled_back",
+        ot_executor::RenameJournalStatus::RecoveryRequired => "recovery_required",
+    }
+}
+
 fn rename_apply_dto(
     plan_id: &str,
     applied: &RenameApplyRecord,
-    mutation_state: &str,
     verification_state: &str,
     verification_code: Option<&str>,
     rescan_completed: bool,
@@ -2224,7 +2208,7 @@ fn rename_apply_dto(
         plan_id: plan_id.to_owned(),
         operation_id: applied.operation_id.as_str().to_owned(),
         snapshot_id: applied.snapshot_id.as_str().to_owned(),
-        mutation_state: mutation_state.to_owned(),
+        mutation_state: rename_mutation_state(applied.journal_status).to_owned(),
         verification_state: verification_state.to_owned(),
         verification_code: verification_code.map(str::to_owned),
         rescan_completed,
@@ -2320,7 +2304,6 @@ pub(crate) fn apply_rename_sync(
     Ok(rename_apply_dto(
         plan_id,
         &applied,
-        "committed",
         verification_state,
         verification_code,
         rescan_completed,

@@ -6,8 +6,7 @@ use ot_domain::RootId;
 use ot_executor::RecoveryAuthority;
 use ot_executor::{
     ApprovedExecutionRoot, ApprovedRecoveryRoot, AuthorityError, ExecutorError, ExecutorLocalPaths,
-    OperationId, RenameApplyResult, RenameJournalStatus, RenamePrepareResult, RenameSampleExecutor,
-    WriteAuthority,
+    OperationId, RenameJournalStatus, RenamePrepareResult, RenameSampleExecutor, WriteAuthority,
 };
 use ot_plan::{PlanId, RenameImpactPlan};
 use sha2::{Digest, Sha256};
@@ -114,7 +113,9 @@ pub enum RenameWriteRuntimeError {
     SnapshotMismatch,
     InvalidTransition,
     ApprovalMismatch,
+    #[allow(dead_code)] // returned once explicit continuation apply lands in R2
     ContinuationRequired,
+    #[allow(dead_code)] // returned once explicit continuation apply lands in R2
     ContinuationMismatch,
     RecoveryRequired,
     RecoveryApprovalRequired,
