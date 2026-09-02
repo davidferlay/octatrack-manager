@@ -7,7 +7,8 @@ use ot_domain::RootId;
 use ot_executor::RecoveryAuthority;
 use ot_executor::{
     ApprovedExecutionRoot, ApprovedRecoveryRoot, AuthorityError, ExecutorError, ExecutorLocalPaths,
-    OperationId, RenameJournalStatus, RenamePrepareResult, RenameSampleExecutor, WriteAuthority,
+    OperationId, RenameJournalStatus, RenamePrepareResult, RenameProjectRewriteRecord,
+    RenameSampleExecutor, WriteAuthority,
 };
 use ot_plan::{PlanId, RenameImpactPlan};
 use sha2::{Digest, Sha256};
@@ -54,6 +55,7 @@ pub struct RenameApplyRecord {
     pub operation_id: OperationId,
     pub snapshot_id: SnapshotId,
     pub journal_status: RenameJournalStatus,
+    pub project_rewrites: Vec<RenameProjectRewriteRecord>,
 }
 
 #[derive(Clone, Debug)]
@@ -393,7 +395,27 @@ impl RenameWriteRuntime {
             operation_id: apply_result.operation_id,
             snapshot_id,
             journal_status: apply_result.journal.status,
+            project_rewrites: apply_result.journal.project_rewrites,
         })
+    }
+
+    pub fn committed_project_rewrites(
+        &self,
+        operation_id: &OperationId,
+        root_fingerprint: &str,
+    ) -> Result<Vec<RenameProjectRewriteRecord>, RenameWriteRuntimeError> {
+        let journal = self
+            .executor
+            .rename_journal(operation_id)
+            .map_err(RenameWriteRuntimeError::Executor)?
+            .ok_or(RenameWriteRuntimeError::PlanNotFound)?;
+        if journal.root_fingerprint != root_fingerprint {
+            return Err(RenameWriteRuntimeError::PlanNotFound);
+        }
+        if journal.status != RenameJournalStatus::Committed {
+            return Err(RenameWriteRuntimeError::InvalidTransition);
+        }
+        Ok(journal.project_rewrites)
     }
 
     pub fn recover(

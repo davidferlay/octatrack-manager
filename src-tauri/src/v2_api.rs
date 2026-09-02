@@ -32,7 +32,7 @@ use ot_domain::{
     SampleStorageScope, SampleUsageEdge, SampleUsageKind, StateDocumentParseStatus,
     StateDocumentRole,
 };
-use ot_executor::OperationId;
+use ot_executor::{OperationId, RenameProjectRewriteRecord};
 use ot_plan::{
     plan_additive_copy, plan_rename_sample, validate_rename_plan_freshness, AdditiveCopyIntent,
     AdditiveCopyPlanningFacts, BlockedRenameImpact, ChangePlan, PlanSeed, RenameBlockReason,
@@ -2477,6 +2477,38 @@ fn verify_audio_postconditions(
     None
 }
 
+fn verify_project_document_hashes(
+    resolved: &ResolvedRoot,
+    plan: &RenameImpactPlan,
+    project_rewrites: &[RenameProjectRewriteRecord],
+) -> Option<&'static str> {
+    for impact in &plan.state_document_impacts {
+        if impact.reference_updates.is_empty() {
+            continue;
+        }
+        let Some(rewrite) = project_rewrites
+            .iter()
+            .find(|rewrite| rewrite.relative_path == impact.relative_path.as_str())
+        else {
+            return Some("PROJECT_REWRITE_EVIDENCE_MISSING");
+        };
+        let path = match resolved.resolve_regular_file(&impact.relative_path) {
+            Ok(path) => path,
+            Err(RootRegistryError::NotRegularFile) => {
+                return Some("AFFECTED_PROJECT_MISSING");
+            }
+            Err(_) => return Some("AFFECTED_PROJECT_CHECK_FAILED"),
+        };
+        let Ok((_, content_hash)) = hash_live_source(&path) else {
+            return Some("AFFECTED_PROJECT_CHECK_FAILED");
+        };
+        if content_hash.as_str() != rewrite.staged_content_hash {
+            return Some("AFFECTED_PROJECT_HASH_MISMATCH");
+        }
+    }
+    None
+}
+
 fn verify_sidecar_postconditions(
     resolved: &ResolvedRoot,
     snapshot: &LibrarySnapshot,
@@ -2534,6 +2566,7 @@ fn evaluate_rename_committed_verification(
     resolved: &ResolvedRoot,
     snapshot: &LibrarySnapshot,
     plan: &RenameImpactPlan,
+    project_rewrites: &[RenameProjectRewriteRecord],
     rescan_completed: bool,
 ) -> RenameVerificationOutcome {
     let observed_file_count = snapshot.file_instances.len() as u64;
@@ -2544,6 +2577,7 @@ fn evaluate_rename_committed_verification(
     let unresolved_reference_count = count_unresolved_planned_references(snapshot, plan);
     let invalid_affected_document_count = count_invalid_affected_project_documents(snapshot, plan);
     let audio_failure = verify_audio_postconditions(resolved, plan);
+    let project_hash_failure = verify_project_document_hashes(resolved, plan, project_rewrites);
     let sidecar_failure = verify_sidecar_postconditions(resolved, snapshot, plan);
     let source_still_present = snapshot
         .file_instances
@@ -2573,6 +2607,9 @@ fn evaluate_rename_committed_verification(
         if destination.content_hash != plan.source_content_hash {
             verification_state = "failed";
             verification_code = Some("DESTINATION_HASH_MISMATCH");
+        } else if let Some(code) = project_hash_failure {
+            verification_state = "failed";
+            verification_code = Some(code);
         } else if invalid_affected_document_count > 0 {
             verification_state = "failed";
             verification_code = Some("AFFECTED_PROJECT_INVALID");
@@ -2607,6 +2644,7 @@ fn run_rename_committed_rescan(
     catalog: &SharedCatalog,
     root_id: &RootId,
     plan: &RenameImpactPlan,
+    project_rewrites: &[RenameProjectRewriteRecord],
 ) -> RenameVerificationOutcome {
     match scan_library_sync(registry, catalog, root_id) {
         Ok((session, snapshot)) => {
@@ -2624,8 +2662,13 @@ fn run_rename_committed_rescan(
                     };
                 }
             };
-            let evaluation =
-                evaluate_rename_committed_verification(&resolved, &snapshot, plan, true);
+            let evaluation = evaluate_rename_committed_verification(
+                &resolved,
+                &snapshot,
+                plan,
+                project_rewrites,
+                true,
+            );
             match store_library_snapshot(registry, catalog, root_id, &session, &snapshot) {
                 Ok(_) => evaluation,
                 Err(_) => RenameVerificationOutcome {
@@ -2727,7 +2770,7 @@ pub(crate) fn apply_rename_sync(
     let applied = apply_result.map_err(rename_runtime_error)?;
 
     let outcome = if applied.journal_status == ot_executor::RenameJournalStatus::Committed {
-        run_rename_committed_rescan(registry, catalog, root_id, &plan)
+        run_rename_committed_rescan(registry, catalog, root_id, &plan, &applied.project_rewrites)
     } else {
         RenameVerificationOutcome {
             verification_state: "failed",
@@ -2786,7 +2829,10 @@ pub(crate) fn verify_rename_committed_sync(
     let plan = prepared_runtime
         .load_prepared_plan(&operation_id)
         .map_err(prepared_rename_runtime_error)?;
-    let outcome = run_rename_committed_rescan(registry, catalog, root_id, &plan);
+    let project_rewrites = rename_runtime
+        .committed_project_rewrites(&operation_id, &resolved.session.device_fingerprint)
+        .map_err(rename_runtime_error)?;
+    let outcome = run_rename_committed_rescan(registry, catalog, root_id, &plan, &project_rewrites);
     Ok(rename_committed_verification_dto(
         operation_id.as_str(),
         plan.id.as_str(),
@@ -7347,7 +7393,7 @@ mod tests {
     }
 
     #[test]
-    fn rename_committed_verification_rejects_invalid_and_wrong_destination_references() {
+    fn rename_committed_verification_rejects_project_tamper_and_invalid_references() {
         let fixture = setup_rename_through_backup();
         prepare_fixture_rename(&fixture);
         let continuation =
@@ -7373,6 +7419,34 @@ mod tests {
         let (_, snapshot) =
             scan_library_sync(&fixture.registry, &fixture.catalog, &fixture.root_id).unwrap();
         let resolved = fixture.registry.resolve(&fixture.root_id).unwrap();
+        let project_rewrites = fixture
+            .rename_runtime
+            .committed_project_rewrites(
+                &OperationId::parse(fixture.operation_id.clone()).unwrap(),
+                &resolved.session.device_fingerprint,
+            )
+            .unwrap();
+
+        let rewritten_project_path = fixture
+            ._root
+            .path()
+            .join(&project_rewrites[0].relative_path);
+        let rewritten_project_bytes = fs::read(&rewritten_project_path).unwrap();
+        let mut tampered_project_bytes = rewritten_project_bytes.clone();
+        tampered_project_bytes.extend_from_slice(b"tampered");
+        fs::write(&rewritten_project_path, tampered_project_bytes).unwrap();
+        let tampered_project = evaluate_rename_committed_verification(
+            &resolved,
+            &snapshot,
+            &plan,
+            &project_rewrites,
+            true,
+        );
+        assert_eq!(
+            tampered_project.verification_code,
+            Some("AFFECTED_PROJECT_HASH_MISMATCH")
+        );
+        fs::write(&rewritten_project_path, rewritten_project_bytes).unwrap();
 
         let mut invalid_snapshot = snapshot.clone();
         let planned_update = &plan.state_document_impacts[0].reference_updates[0];
@@ -7387,8 +7461,13 @@ mod tests {
             .unwrap();
         invalid_assignment.reference_status = SampleReferenceStatus::InvalidPath;
         invalid_assignment.referenced_file_relative_path = None;
-        let invalid =
-            evaluate_rename_committed_verification(&resolved, &invalid_snapshot, &plan, true);
+        let invalid = evaluate_rename_committed_verification(
+            &resolved,
+            &invalid_snapshot,
+            &plan,
+            &project_rewrites,
+            true,
+        );
         assert_eq!(invalid.verification_code, Some("INVALID_REFERENCES"));
         assert!(invalid.invalid_reference_count > 0);
 
@@ -7409,6 +7488,7 @@ mod tests {
             &resolved,
             &wrong_destination_snapshot,
             &plan,
+            &project_rewrites,
             true,
         );
         assert_eq!(

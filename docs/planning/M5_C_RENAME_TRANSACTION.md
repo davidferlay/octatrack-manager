@@ -268,8 +268,9 @@ the durable prepared snapshot plan, validates journal/backup bindings, and execu
 `ApprovedExecutionRoot`; historical identity is never combined with a current path.
 Committed mutations return success even when post-apply catalog verification fails.
 Read-only `v2_rename_verify_committed` checks audio source/destination, affected
-parsed documents, every planned reference destination, Missing/Invalid/Unresolved
-counts, and co-renamed sidecar bytes/catalog state.
+parsed documents and their journal staged hashes, every planned reference
+destination, Missing/Invalid/Unresolved counts, and co-renamed sidecar
+bytes/catalog state.
 
 ## Deferred
 

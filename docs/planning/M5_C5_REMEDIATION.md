@@ -60,8 +60,9 @@ dedicated branches from `main`.
 - `v2_rename_apply` — Continuation Authority only (`operationId` + `continuationAuthorityId`).
 - Apply DTO: `mutationState` + `verificationState` (verification failure ≠ mutation failure).
 - `v2_rename_verify_committed` — read-only re-verification after Committed; verifies
-  destination/source audio postconditions, affected parsed documents, every planned
-  reference, Missing/Invalid/Unresolved counts, and co-renamed sidecar bytes/catalog state.
+  destination/source audio postconditions, affected parsed documents against journal
+  staged hashes, every planned reference, Missing/Invalid/Unresolved counts, and
+  co-renamed sidecar bytes/catalog state.
 - Apply/verification result schemas are v2 and expose Missing/Invalid/Unresolved counts.
 
 ## R4 — Recovery / mutation gate
