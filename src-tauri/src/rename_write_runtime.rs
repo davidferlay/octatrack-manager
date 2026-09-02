@@ -418,6 +418,38 @@ impl RenameWriteRuntime {
         Ok(journal.project_rewrites)
     }
 
+    pub fn journal_status(
+        &self,
+        operation_id: &OperationId,
+        root_fingerprint: &str,
+    ) -> Result<RenameJournalStatus, RenameWriteRuntimeError> {
+        let journal = self
+            .executor
+            .rename_journal(operation_id)
+            .map_err(RenameWriteRuntimeError::Executor)?
+            .ok_or(RenameWriteRuntimeError::PlanNotFound)?;
+        if journal.root_fingerprint != root_fingerprint {
+            return Err(RenameWriteRuntimeError::PlanNotFound);
+        }
+        Ok(journal.status)
+    }
+
+    pub fn journal_project_rewrites(
+        &self,
+        operation_id: &OperationId,
+        root_fingerprint: &str,
+    ) -> Result<Vec<RenameProjectRewriteRecord>, RenameWriteRuntimeError> {
+        let journal = self
+            .executor
+            .rename_journal(operation_id)
+            .map_err(RenameWriteRuntimeError::Executor)?
+            .ok_or(RenameWriteRuntimeError::PlanNotFound)?;
+        if journal.root_fingerprint != root_fingerprint {
+            return Err(RenameWriteRuntimeError::PlanNotFound);
+        }
+        Ok(journal.project_rewrites)
+    }
+
     pub fn recover(
         &self,
         root_id: &RootId,
@@ -448,6 +480,9 @@ impl RenameWriteRuntime {
             .executor
             .rollback(root_id, &operation_id, &authority)
             .map_err(RenameWriteRuntimeError::Executor)?;
+        if let Ok(mut state) = self.lock_state() {
+            state.plans.remove(journal.plan_id.as_str());
+        }
         let plan_id = PlanId::parse(journal.plan_id.clone())
             .map_err(|_| RenameWriteRuntimeError::InvalidPlanId)?;
         Ok(RenameSessionStatus {

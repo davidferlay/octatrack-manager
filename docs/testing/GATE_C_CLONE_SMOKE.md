@@ -8,10 +8,11 @@ Octatrack hardware and exercising rename Apply through a controlled operator
 harness with explicit approval UI.
 
 Automated proof for catalog rescan, missing-reference counts, sentinel hash
-invariance, rollback byte restoration, and fail-closed unknown-byte handling
-lives in `src-tauri/src/gate_c_clone_rescan.rs` and
-`scripts/gate-c-synthetic-smoke.sh`. Those artifacts do not replace this
-checklist.
+invariance, rollback byte restoration, fail-closed unknown-byte handling, and
+production-route rename recovery (`v2_rename_recover` + restart discovery) lives
+in `src-tauri/src/gate_c_clone_rescan.rs`, `src-tauri/src/v2_api.rs` recovery
+tests, and `scripts/gate-c-synthetic-smoke.sh`. Those artifacts do not replace
+this checklist.
 
 ## Preconditions
 

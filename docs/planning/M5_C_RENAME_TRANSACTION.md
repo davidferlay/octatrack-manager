@@ -272,6 +272,26 @@ parsed documents and their journal staged hashes, every planned reference
 destination, Missing/Invalid/Unresolved counts, and co-renamed sidecar
 bytes/catalog state.
 
+## M5-C5 R4 — restart-safe recovery and mutation gate
+
+Production recovery uses existing `RenameSampleExecutor::rollback` semantics
+(backup reverify, all-target preflight, unknown live bytes fail-closed). Recovery
+does not require a write grant; it uses `RecoveryAuthority` /
+`RegistryRenameRecoveryAuthority` instead.
+
+- `v2_rename_recovery_status` discovers `Applying` / `RecoveryRequired`
+  operations from durable journal + authorization + backup evidence (no in-memory
+  plan store required).
+- `v2_rename_recover` requires `approvedOperationId == operationId`, rolls back,
+  fresh-rescans, and returns `rename-recovery-result:v1` with separate
+  `mutationState` / `verificationState`.
+- `v2_rename_verify_rolled_back` re-verifies rollback postconditions without
+  re-running rollback when verification alone failed.
+- `Prepared` and `Committed` operations are rejected at the production API
+  (`Prepared` discard is a future separate semantic).
+- Cross-domain `mutation_gate` blocks new rename/additive mutations on the same
+  root while rename or additive recovery is required; unrelated roots are unaffected.
+
 ## Deferred
 
 - Gate C real-hardware clone-load human smoke and human sign-off (after M5-C5

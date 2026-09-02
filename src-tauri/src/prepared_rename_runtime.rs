@@ -480,6 +480,31 @@ impl PreparedRenameRuntime {
         snapshot.plan.to_plan()
     }
 
+    pub fn validate_prepared_for_recovery(
+        &self,
+        operation_id: &OperationId,
+        root_fingerprint: &str,
+    ) -> Result<RenameImpactPlan, PreparedRenameRuntimeError> {
+        let snapshot = self.load_prepared_snapshot(operation_id)?;
+        if snapshot.historical_device_fingerprint != root_fingerprint {
+            return Err(PreparedRenameRuntimeError::FingerprintMismatch);
+        }
+        let journal = self
+            .executor
+            .rename_journal(operation_id)
+            .map_err(PreparedRenameRuntimeError::Executor)?
+            .ok_or(PreparedRenameRuntimeError::JournalNotFound)?;
+        if !matches!(
+            journal.status,
+            RenameJournalStatus::Applying | RenameJournalStatus::RecoveryRequired
+        ) {
+            return Err(PreparedRenameRuntimeError::JournalMismatch);
+        }
+        self.validate_journal_binding_for_recovery(&snapshot, &journal)?;
+        self.verify_backup_for_snapshot(&snapshot)?;
+        snapshot.plan.to_plan()
+    }
+
     fn validate_loaded_snapshot(
         &self,
         snapshot: &PreparedRenamePlanSnapshot,
@@ -515,6 +540,26 @@ impl PreparedRenameRuntime {
         snapshot: &PreparedRenamePlanSnapshot,
         journal: &RenameOperationJournal,
     ) -> Result<(), PreparedRenameRuntimeError> {
+        self.validate_journal_evidence_binding(snapshot, journal)?;
+        if journal.status != RenameJournalStatus::Prepared {
+            return Err(PreparedRenameRuntimeError::ContinuationRequired);
+        }
+        Ok(())
+    }
+
+    fn validate_journal_binding_for_recovery(
+        &self,
+        snapshot: &PreparedRenamePlanSnapshot,
+        journal: &RenameOperationJournal,
+    ) -> Result<(), PreparedRenameRuntimeError> {
+        self.validate_journal_evidence_binding(snapshot, journal)
+    }
+
+    fn validate_journal_evidence_binding(
+        &self,
+        snapshot: &PreparedRenamePlanSnapshot,
+        journal: &RenameOperationJournal,
+    ) -> Result<(), PreparedRenameRuntimeError> {
         if journal.operation_id != snapshot.operation_id
             || journal.plan_id != snapshot.plan_id
             || journal.backup_snapshot_id != snapshot.backup_snapshot_id
@@ -526,9 +571,6 @@ impl PreparedRenameRuntime {
             || journal.reference_update_count != snapshot.reference_update_count
         {
             return Err(PreparedRenameRuntimeError::JournalMismatch);
-        }
-        if journal.status != RenameJournalStatus::Prepared {
-            return Err(PreparedRenameRuntimeError::ContinuationRequired);
         }
         Ok(())
     }
