@@ -1,6 +1,6 @@
 # M5-C5 — Gate C Controlled Operator Harness
 
-- Status: **Phase 1 COMPLETE**；**Phase 2 COMPLETE**；**Phase 3 COMPLETE**；**Phase 4 未着手**
+- Status: **Phase 1 COMPLETE**；**Phase 2 COMPLETE**；**Phase 3 COMPLETE**；**Phase 4A COMPLETE**；**Phase 4B–4D 未着手**
 - Base: `origin/main` at PR #72 merge (`b661840` / M5-C5 Phase 2 rename APIs)
 - Goal: expose rename Apply on a **disposable registered clone** through production
   Tauri + explicit approval UI, without bypassing Intent → Plan → Apply or opening
@@ -59,7 +59,13 @@ Mirror these boundaries; do not extend legacy rename commands.
 | `v2_rename_prepare` | 2 | C2 Mac-side staging + Prepared journal |
 | `v2_rename_get_status` | 2 | Operation/journal status (restart-safe read) |
 | `v2_rename_recovery_status` | 2 | Incomplete rename operations |
-| `v2_rename_apply` | 4 | Requires write grant + matching `approvedPlanId` + clone attestation |
+| `v2_clone_create_managed` | 4A | Managed NOFOLLOW clone from registered source |
+| `v2_clone_record_source_evidence` | 4A | Immutable source baseline for external clone verify |
+| `v2_clone_verify_external` | 4A | External clone manifest + evidence match |
+| `v2_clone_verification_status` | 4A | Sanitized verification DTO (no canonical paths) |
+| `v2_clone_reverify` | 4A | Live manifest re-check before authority |
+| `v2_clone_issue_authority` | 4A | Session-bound clone write authority record |
+| `v2_rename_apply` | 4B | Requires write grant + matching `approvedPlanId` + clone authority |
 
 DTOs use a dedicated schema (`rename-plan:v1`, `rename-blocked:v1`) rather than
 overloading `change-plan:v1`.
@@ -158,7 +164,31 @@ Explicitly **not** in Phase 2:
 - Prepared status persistence via `v2_rename_get_status` / recovery read
 - **No** clone Apply, **no** media mutation, **no** Gate C completion claim
 
-### Phase 4 — Clone Apply + human Gate C smoke
+### Phase 4A — Verified disposable clone authority (**COMPLETE**)
+
+- `v2_clone_record_source_evidence` / `v2_clone_create_managed` /
+  `v2_clone_verify_external` / `v2_clone_verification_status` /
+  `v2_clone_reverify` / `v2_clone_issue_authority`
+- App-managed NOFOLLOW copy + baseline manifest + verification records
+- External clone requires immutable source evidence (no attestation-only path)
+- Rename plan/authorize/backup/prepare gated on verified clone root
+- `RegistryCloneWriteAuthority` adapter (Apply wiring deferred to Phase 4B)
+- **No** `v2_rename_apply`, **no** frontend clone UX yet
+
+### Phase 4B — Production rename Apply API
+
+- `masterocta-prepared-rename-plan:v1` snapshot + restart continuation authority
+- `v2_rename_apply` + post-apply fresh rescan
+
+### Phase 4C — Recovery API
+
+- `v2_rename_recover` + cross-domain recovery block
+
+### Phase 4D — Operator UX + Gate C readiness
+
+- Clone-first UI, two-stage approval, e2e coverage
+
+### Phase 4 (legacy heading) — Clone Apply + human Gate C smoke
 
 - `v2_rename_apply` + clone attestation UI
 - Execute `docs/testing/GATE_C_CLONE_SMOKE.md` against Phase 4 build
