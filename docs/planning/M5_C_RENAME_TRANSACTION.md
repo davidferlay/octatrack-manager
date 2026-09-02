@@ -247,7 +247,16 @@ and must match `base_catalog_scan_revision` at plan time unless the session is s
 (`CATALOG_REVISION_MISMATCH`). Phase 2 commands (`v2_rename_authorize`,
 `v2_rename_create_backup`, `v2_rename_prepare`) repeat the same checks at each boundary.
 C1/C2 contracts themselves are unchanged; production `RenameSampleExecutor::apply` remains
-unwired.
+unwired until R3 wires Continuation Authority.
+
+## M5-C5 R2 — prepared rename continuation
+
+After C2 `Prepared`, `masterocta-prepared-rename-plan:v1` persists the validated
+`RenameImpactPlan` plus journal/backup/clone-evidence bindings. Process restart
+invalidates in-memory Rename / Clone / Continuation authority; rediscovery reads
+journal + snapshot only. Explicit operator Continue (`v2_rename_continue`) re-verifies
+backup, journal binding, and live clone manifest before issuing a memory-only
+`rename-continuation:v1` lease. R2 does not apply media mutations.
 
 ## Deferred
 

@@ -10,6 +10,7 @@ pub const CLONE_SOURCE_EVIDENCE_PREFIX: &str = "clone-source-evidence:v1:";
 pub const CLONE_VERIFICATION_PREFIX: &str = "clone-verification:v1:";
 #[allow(dead_code)] // validated in tests; authority leases stay memory-only in R1
 pub const CLONE_AUTHORITY_PREFIX: &str = "clone-authority:v1:";
+pub const PREPARED_RENAME_PLAN_PREFIX: &str = "prepared-rename-plan:v1:";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LocalArtifactError {
@@ -34,6 +35,9 @@ pub struct CloneVerificationId(String);
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[allow(dead_code)]
 pub struct CloneAuthorityId(String);
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PreparedRenamePlanId(String);
 
 impl CloneBaselineEvidenceId {
     pub fn parse(value: &str) -> Result<Self, LocalArtifactError> {
@@ -86,6 +90,19 @@ impl CloneAuthorityId {
         self.0
             .strip_prefix(CLONE_AUTHORITY_PREFIX)
             .expect("validated clone authority id")
+    }
+}
+
+impl PreparedRenamePlanId {
+    pub fn parse(value: &str) -> Result<Self, LocalArtifactError> {
+        validate_prefixed_sha256(value, PREPARED_RENAME_PLAN_PREFIX)?;
+        Ok(Self(value.to_owned()))
+    }
+
+    pub fn file_stem(&self) -> &str {
+        self.0
+            .strip_prefix(PREPARED_RENAME_PLAN_PREFIX)
+            .expect("validated prepared rename plan id")
     }
 }
 
@@ -316,6 +333,12 @@ mod tests {
     #[test]
     fn rejects_traversal_artifact_ids() {
         let err = CloneSourceEvidenceId::parse("../etc/passwd").unwrap_err();
+        assert_eq!(err, LocalArtifactError::InvalidArtifactId);
+    }
+
+    #[test]
+    fn rejects_invalid_prepared_rename_plan_ids() {
+        let err = PreparedRenamePlanId::parse("../etc/passwd").unwrap_err();
         assert_eq!(err, LocalArtifactError::InvalidArtifactId);
     }
 

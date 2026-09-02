@@ -205,6 +205,8 @@ const expectedV2Commands = [
   "v2_library_list",
   "v2_rename_apply",
   "v2_rename_authorize",
+  "v2_rename_continuation_status",
+  "v2_rename_continue",
   "v2_rename_create_backup",
   "v2_rename_get_plan",
   "v2_rename_get_status",
