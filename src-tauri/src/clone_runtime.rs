@@ -8,7 +8,11 @@ use crate::local_artifact::{
 };
 use crate::root_registry::{ResolvedRoot, RootRegistry, RootRegistryError};
 use ot_domain::RootId;
-use ot_executor::{ApprovedExecutionRoot, AuthorityError, CloneWriteAuthority, VerifiedCloneRoot};
+use ot_executor::{
+    ApprovedExecutionRoot, AuthorityError, CloneWriteAuthority, ContinuedCloneWriteAuthority,
+    HistoricalRenamePlanRoot, VerifiedCloneRoot, VerifiedContinuationCloneRoot,
+};
+use ot_plan::PlanId;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -780,6 +784,7 @@ impl CloneWriteAuthority for RegistryCloneWriteAuthority<'_> {
 pub struct ContinuationCloneWriteAuthority<'a> {
     registry: &'a RootRegistry,
     clone_runtime: &'a CloneRuntime,
+    historical_plan_id: PlanId,
     historical_root_id: RootId,
     historical_device_fingerprint: String,
     historical_base_observed_revision: u64,
@@ -791,6 +796,7 @@ impl<'a> ContinuationCloneWriteAuthority<'a> {
     pub fn new(
         registry: &'a RootRegistry,
         clone_runtime: &'a CloneRuntime,
+        historical_plan_id: PlanId,
         historical_root_id: RootId,
         historical_device_fingerprint: String,
         historical_base_observed_revision: u64,
@@ -800,6 +806,7 @@ impl<'a> ContinuationCloneWriteAuthority<'a> {
         Self {
             registry,
             clone_runtime,
+            historical_plan_id,
             historical_root_id,
             historical_device_fingerprint,
             historical_base_observed_revision,
@@ -809,12 +816,13 @@ impl<'a> ContinuationCloneWriteAuthority<'a> {
     }
 }
 
-impl CloneWriteAuthority for ContinuationCloneWriteAuthority<'_> {
-    fn resolve_clone_for_write(
+impl ContinuedCloneWriteAuthority for ContinuationCloneWriteAuthority<'_> {
+    fn resolve_continued_clone_for_write(
         &self,
-        root_id: &RootId,
-    ) -> Result<VerifiedCloneRoot, AuthorityError> {
-        if root_id != &self.historical_root_id {
+        plan_id: &PlanId,
+        historical_root_id: &RootId,
+    ) -> Result<VerifiedContinuationCloneRoot, AuthorityError> {
+        if plan_id != &self.historical_plan_id || historical_root_id != &self.historical_root_id {
             return Err(AuthorityError::NotApproved);
         }
         let resolved = self
@@ -833,11 +841,17 @@ impl CloneWriteAuthority for ContinuationCloneWriteAuthority<'_> {
         self.clone_runtime
             .restore_verification_from_baseline(&resolved, &self.clone_baseline_evidence_id)
             .map_err(|_| AuthorityError::NotApproved)?;
-        Ok(VerifiedCloneRoot::attest_temporary_copy(
+        Ok(VerifiedContinuationCloneRoot::attest_temporary_copy(
+            HistoricalRenamePlanRoot::new(
+                self.historical_plan_id.clone(),
+                self.historical_root_id.clone(),
+                self.historical_device_fingerprint.clone(),
+                self.historical_base_observed_revision,
+            ),
             ApprovedExecutionRoot {
-                root_id: self.historical_root_id.clone(),
-                device_fingerprint: self.historical_device_fingerprint.clone(),
-                observed_revision: self.historical_base_observed_revision,
+                root_id: resolved.session.root_id,
+                device_fingerprint: resolved.session.device_fingerprint,
+                observed_revision: resolved.session.observed_revision,
                 canonical_path: resolved.canonical_path,
                 write_enabled: resolved.session.capabilities.write,
                 stable_device_identity: resolved.session.capabilities.stable_device_identity,

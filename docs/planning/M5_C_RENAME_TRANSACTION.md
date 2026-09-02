@@ -262,11 +262,15 @@ backup, journal binding, and live clone manifest before issuing a memory-only
 
 Production apply requires an issued Continuation Authority. `v2_rename_apply` loads
 the durable prepared snapshot plan, validates journal/backup bindings, and executes
-`RenameSampleExecutor::apply` through `ContinuationCloneWriteAuthority`, which maps
-historical plan identity onto the current registered clone root without relaxing
-executor RootId/revision checks. Committed mutations return success even when
-post-apply catalog verification fails; operators may re-check with read-only
-`v2_rename_verify_committed`.
+`RenameSampleExecutor::apply_continued` through `ContinuationCloneWriteAuthority`.
+`HistoricalRenamePlanRoot` carries the prepared identity while
+`VerifiedContinuationCloneRoot` carries a separate current
+`ApprovedExecutionRoot`; historical identity is never combined with a current path.
+Committed mutations return success even when post-apply catalog verification fails.
+Read-only `v2_rename_verify_committed` checks audio source/destination, affected
+parsed documents and their journal staged hashes, every planned reference
+destination, Missing/Invalid/Unresolved counts, and co-renamed sidecar
+bytes/catalog state.
 
 ## Deferred
 
