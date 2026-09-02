@@ -6,7 +6,9 @@ use std::path::{Path, PathBuf};
 
 pub const CLONE_BASELINE_EVIDENCE_PREFIX: &str = "clone-baseline-evidence:v1:";
 pub const CLONE_SOURCE_EVIDENCE_PREFIX: &str = "clone-source-evidence:v1:";
+#[allow(dead_code)] // validated in tests; verification leases stay memory-only in R1
 pub const CLONE_VERIFICATION_PREFIX: &str = "clone-verification:v1:";
+#[allow(dead_code)] // validated in tests; authority leases stay memory-only in R1
 pub const CLONE_AUTHORITY_PREFIX: &str = "clone-authority:v1:";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -26,9 +28,11 @@ pub struct CloneBaselineEvidenceId(String);
 pub struct CloneSourceEvidenceId(String);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[allow(dead_code)]
 pub struct CloneVerificationId(String);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[allow(dead_code)]
 pub struct CloneAuthorityId(String);
 
 impl CloneBaselineEvidenceId {
@@ -57,6 +61,7 @@ impl CloneSourceEvidenceId {
     }
 }
 
+#[allow(dead_code)]
 impl CloneVerificationId {
     pub fn parse(value: &str) -> Result<Self, LocalArtifactError> {
         validate_prefixed_sha256(value, CLONE_VERIFICATION_PREFIX)?;
@@ -70,6 +75,7 @@ impl CloneVerificationId {
     }
 }
 
+#[allow(dead_code)]
 impl CloneAuthorityId {
     pub fn parse(value: &str) -> Result<Self, LocalArtifactError> {
         validate_prefixed_sha256(value, CLONE_AUTHORITY_PREFIX)?;
@@ -310,6 +316,12 @@ mod tests {
     #[test]
     fn rejects_traversal_artifact_ids() {
         let err = CloneSourceEvidenceId::parse("../etc/passwd").unwrap_err();
+        assert_eq!(err, LocalArtifactError::InvalidArtifactId);
+    }
+
+    #[test]
+    fn rejects_wrong_prefix_for_authority_ids() {
+        let err = CloneAuthorityId::parse("clone-verification:v1:abcd").unwrap_err();
         assert_eq!(err, LocalArtifactError::InvalidArtifactId);
     }
 
