@@ -407,6 +407,7 @@ const expectedV2Commands = [
   "v2_rename_apply",
   "v2_rename_recover",
   "v2_rename_recovery_status",
+  "v2_rename_verify_committed",
   "v2_root_close",
   "v2_root_disable_write",
   "v2_root_enable_write",

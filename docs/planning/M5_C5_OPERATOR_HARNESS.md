@@ -65,7 +65,8 @@ Mirror these boundaries; do not extend legacy rename commands.
 | `v2_clone_verification_status` | 4A | Sanitized verification DTO (no canonical paths) |
 | `v2_clone_reverify` | 4A | Live manifest re-check before authority |
 | `v2_clone_issue_authority` | 4A | Session-bound clone write authority record |
-| `v2_rename_apply` | 4B | Requires write grant + matching `approvedPlanId` + clone authority |
+| `v2_rename_apply` | 4C | Requires Continuation Authority + write grant |
+| `v2_rename_verify_committed` | 4C | Read-only post-commit verification |
 
 DTOs use a dedicated schema (`rename-plan:v1`, `rename-blocked:v1`) rather than
 overloading `change-plan:v1`.
@@ -175,16 +176,16 @@ Explicitly **not** in Phase 2:
 - `RegistryCloneWriteAuthority` adapter (Apply wiring deferred to Phase 4B)
 - **No** `v2_rename_apply`, **no** frontend clone UX yet
 
-### Phase 4B — Prepared rename continuation (R2 **COMPLETE** on branch)
+### Phase 4B — Prepared rename continuation (R2 **COMPLETE**)
 
 - `masterocta-prepared-rename-plan:v1` snapshot persisted after Prepare
 - `v2_rename_continuation_status` / `v2_rename_continue` — explicit restart
   continuation; memory-only `rename-continuation:v1` authority
-- **No** media mutation in R2; Apply wiring uses Continuation Authority in R3
 
-### Phase 4C — Production rename Apply API (R3)
+### Phase 4C — Production rename Apply API (R3 **COMPLETE** on branch)
 
-- `v2_rename_apply` + post-apply fresh rescan + `v2_rename_verify_committed`
+- `v2_rename_apply` requires Continuation Authority + post-apply fresh rescan
+- `v2_rename_verify_committed` read-only committed verification
 
 ### Phase 4D — Recovery API (R4)
 

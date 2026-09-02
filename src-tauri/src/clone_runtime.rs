@@ -773,6 +773,79 @@ impl CloneWriteAuthority for RegistryCloneWriteAuthority<'_> {
     }
 }
 
+/// Apply authority for a restarted rename transaction.
+///
+/// The executor validates against the historical plan identity while writes
+/// target the current registered clone root resolved from continuation.
+pub struct ContinuationCloneWriteAuthority<'a> {
+    registry: &'a RootRegistry,
+    clone_runtime: &'a CloneRuntime,
+    historical_root_id: RootId,
+    historical_device_fingerprint: String,
+    historical_base_observed_revision: u64,
+    current_root_id: RootId,
+    clone_baseline_evidence_id: String,
+}
+
+impl<'a> ContinuationCloneWriteAuthority<'a> {
+    pub fn new(
+        registry: &'a RootRegistry,
+        clone_runtime: &'a CloneRuntime,
+        historical_root_id: RootId,
+        historical_device_fingerprint: String,
+        historical_base_observed_revision: u64,
+        current_root_id: RootId,
+        clone_baseline_evidence_id: String,
+    ) -> Self {
+        Self {
+            registry,
+            clone_runtime,
+            historical_root_id,
+            historical_device_fingerprint,
+            historical_base_observed_revision,
+            current_root_id,
+            clone_baseline_evidence_id,
+        }
+    }
+}
+
+impl CloneWriteAuthority for ContinuationCloneWriteAuthority<'_> {
+    fn resolve_clone_for_write(
+        &self,
+        root_id: &RootId,
+    ) -> Result<VerifiedCloneRoot, AuthorityError> {
+        if root_id != &self.historical_root_id {
+            return Err(AuthorityError::NotApproved);
+        }
+        let resolved = self
+            .registry
+            .resolve(&self.current_root_id)
+            .map_err(map_registry_authority)?;
+        if resolved.session.device_fingerprint != self.historical_device_fingerprint {
+            return Err(AuthorityError::NotApproved);
+        }
+        if !resolved.session.capabilities.write {
+            return Err(AuthorityError::ReadOnly);
+        }
+        if !resolved.session.capabilities.stable_device_identity {
+            return Err(AuthorityError::UnstableIdentity);
+        }
+        self.clone_runtime
+            .restore_verification_from_baseline(&resolved, &self.clone_baseline_evidence_id)
+            .map_err(|_| AuthorityError::NotApproved)?;
+        Ok(VerifiedCloneRoot::attest_temporary_copy(
+            ApprovedExecutionRoot {
+                root_id: self.historical_root_id.clone(),
+                device_fingerprint: self.historical_device_fingerprint.clone(),
+                observed_revision: self.historical_base_observed_revision,
+                canonical_path: resolved.canonical_path,
+                write_enabled: resolved.session.capabilities.write,
+                stable_device_identity: resolved.session.capabilities.stable_device_identity,
+            },
+        ))
+    }
+}
+
 pub fn open_shared_clone_runtime(
     data_directory: &Path,
 ) -> Result<SharedCloneRuntime, CloneRuntimeError> {

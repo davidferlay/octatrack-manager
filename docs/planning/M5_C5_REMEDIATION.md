@@ -47,17 +47,17 @@ dedicated branches from `main`.
 - `RootRegistry::register_managed_clone` — domain-separated fingerprint for
   same-volume managed clones; ordinary `register` + `AmbiguousIdentity` unchanged.
 
-## R2 — Prepared plan snapshot / continuation (**COMPLETE** on branch)
+## R2 — Prepared plan snapshot / continuation (**COMPLETE**)
 
 - `prepared_rename_runtime.rs` — `masterocta-prepared-rename-plan:v1` artifact.
 - Explicit Continue API (`v2_rename_continuation_status`, `v2_rename_continue`);
-  memory-only `rename-continuation:v1` authority; continued-apply boundary is **R3**.
+  memory-only `rename-continuation:v1` authority.
 
-**Status:** implemented on `m5c5-r2-prepared-continuation` (PR pending).
+## R3 — Mutation / verification separation (**COMPLETE** on branch)
 
-## R3 — Mutation / verification separation
-
-- Apply DTO: `mutationState` + `verificationState`.
+- `ContinuationCloneWriteAuthority` — historical plan identity + current clone root.
+- `v2_rename_apply` — Continuation Authority only (`operationId` + `continuationAuthorityId`).
+- Apply DTO: `mutationState` + `verificationState` (verification failure ≠ mutation failure).
 - `v2_rename_verify_committed` — read-only re-verification after Committed.
 
 ## R4 — Recovery / mutation gate

@@ -94,11 +94,14 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - 現在のmain基準SHA: `d814f66`（M5-C5 #78 partial R2–R4 merge後）
 - M5-C5 R0 — clone artifact containment hardening: **COMPLETE**（#74）
 - M5-C5 R1 — durable clone evidence / session authority separation: **COMPLETE**（#77）
-- M5-C5 R2 — prepared rename plan snapshot / restart continuation: **branch `m5c5-r2-prepared-continuation`（PR pending）**
+- M5-C5 R2 — prepared rename plan snapshot / restart continuation: **COMPLETE**（#79）
   - `prepared_rename_runtime.rs` + `masterocta-prepared-rename-plan:v1`
   - `v2_rename_continuation_status` / `v2_rename_continue`
-  - memory-only Continuation Authority; **Apply 未接続（R3）**
-- M5-C5 R3 — Apply + committed verification: **NOT STARTED**
+  - memory-only Continuation Authority
+- M5-C5 R3 — Apply + committed verification: **branch `m5c5-r3-apply-state`（COMPLETE pending PR）**
+  - `ContinuationCloneWriteAuthority` + continuation-only `v2_rename_apply`
+  - `v2_rename_verify_committed` read-only post-commit verification
+  - mutation/verification DTO separation on Committed apply
 - M5-C5 R4 — Recovery + cross-domain mutation gate: **NOT STARTED**
 - M5-C5 Phase 4D — Operator UX + Gate C readiness: **NOT STARTED**
 - M5-C5 Phase 4A — verified disposable clone authority: **COMPLETE**（#74 に含む）

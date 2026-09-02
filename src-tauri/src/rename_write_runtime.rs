@@ -1,4 +1,5 @@
-use crate::clone_runtime::{CloneRuntime, RegistryCloneWriteAuthority};
+use crate::clone_runtime::{CloneRuntime, ContinuationCloneWriteAuthority};
+use crate::prepared_rename_runtime::ContinuationAuthorityRecord;
 use crate::root_registry::{RootRegistry, RootRegistryError};
 use ot_backup::{BackupError, BackupStore, SnapshotId, VerifiedRenameBackup};
 use ot_codec::MemoryProjectReferenceCodec;
@@ -112,10 +113,10 @@ pub enum RenameWriteRuntimeError {
     AuthorityExpired,
     SnapshotMismatch,
     InvalidTransition,
-    ApprovalMismatch,
-    #[allow(dead_code)] // returned once explicit continuation apply lands in R2
+    ApprovalMismatch, // surfaced when explicit operation approval does not match
+    #[allow(dead_code)] // returned when apply is attempted without continuation authority
     ContinuationRequired,
-    #[allow(dead_code)] // returned once explicit continuation apply lands in R2
+    #[allow(dead_code)] // returned when continuation authority does not match this session
     ContinuationMismatch,
     RecoveryRequired,
     RecoveryApprovalRequired,
@@ -341,70 +342,55 @@ impl RenameWriteRuntime {
         Ok(prepared)
     }
 
-    pub fn apply(
+    pub fn apply_with_continuation(
         &self,
-        root_id: &RootId,
-        plan_id: &str,
-        approved_plan_id: &str,
-        authority_id: &str,
-        snapshot_id: &str,
-        clone_authority_id: &str,
+        plan: &RenameImpactPlan,
+        operation_id: &OperationId,
+        approved_operation_id: &str,
+        continuation: &ContinuationAuthorityRecord,
         registry: &RootRegistry,
         clone_runtime: &CloneRuntime,
     ) -> Result<RenameApplyRecord, RenameWriteRuntimeError> {
-        if approved_plan_id != plan_id {
+        if approved_operation_id != operation_id.as_str() {
             return Err(RenameWriteRuntimeError::ApprovalMismatch);
         }
-        self.verify_authority(root_id, plan_id, authority_id)?;
-        let plan_id = PlanId::parse(plan_id).map_err(|_| RenameWriteRuntimeError::InvalidPlanId)?;
-        let expected_snapshot = SnapshotId::parse(snapshot_id.to_owned())
-            .map_err(|_| RenameWriteRuntimeError::InvalidSnapshotId)?;
-        let plan = self.get_plan(root_id, plan_id.as_str())?;
-        if &plan.root_id != root_id {
-            return Err(RenameWriteRuntimeError::PlanNotFound);
-        }
-
-        let now = Instant::now();
-        let mut state = self.lock_state()?;
-        remove_expired_plans(&mut state, now);
-        let stored = state
-            .plans
-            .get(plan_id.as_str())
-            .ok_or(RenameWriteRuntimeError::PlanNotFound)?;
-        if stored.phase != RenameOperationPhase::Prepared {
-            return Err(RenameWriteRuntimeError::InvalidTransition);
-        }
-        let prepare = stored
-            .prepare
-            .as_ref()
+        let journal = self
+            .executor
+            .rename_journal(operation_id)
+            .map_err(RenameWriteRuntimeError::Executor)?
             .ok_or(RenameWriteRuntimeError::InvalidTransition)?;
-        if prepare.snapshot_id != expected_snapshot {
-            return Err(RenameWriteRuntimeError::SnapshotMismatch);
-        }
-        if prepare.journal_status != RenameJournalStatus::Prepared {
+        if journal.status != RenameJournalStatus::Prepared {
             return Err(RenameWriteRuntimeError::InvalidTransition);
         }
-        drop(state);
+        if journal.plan_id != plan.id.as_str() {
+            return Err(RenameWriteRuntimeError::PlanIntegrityMismatch);
+        }
+        let snapshot_id = SnapshotId::parse(journal.backup_snapshot_id.clone())
+            .map_err(|_| RenameWriteRuntimeError::InvalidSnapshotId)?;
 
-        let clone_authority = RegistryCloneWriteAuthority::new(
+        let clone_authority = ContinuationCloneWriteAuthority::new(
             registry,
             clone_runtime,
-            clone_authority_id.to_owned(),
-            root_id.clone(),
+            plan.root_id.clone(),
+            plan.device_fingerprint.clone(),
+            plan.base_observed_revision,
+            continuation.current_root_id.clone(),
+            continuation.clone_baseline_evidence_id.clone(),
         );
         let apply_result = self
             .executor
-            .apply(&plan, &MemoryProjectReferenceCodec, &clone_authority)
+            .apply(plan, &MemoryProjectReferenceCodec, &clone_authority)
             .map_err(RenameWriteRuntimeError::Executor)?;
 
         if apply_result.journal.status == RenameJournalStatus::Committed {
-            let mut state = self.lock_state()?;
-            state.plans.remove(plan_id.as_str());
+            if let Ok(mut state) = self.lock_state() {
+                state.plans.remove(plan.id.as_str());
+            }
         }
 
         Ok(RenameApplyRecord {
             operation_id: apply_result.operation_id,
-            snapshot_id: expected_snapshot,
+            snapshot_id,
             journal_status: apply_result.journal.status,
         })
     }
@@ -749,7 +735,9 @@ impl std::fmt::Display for RenameWriteRuntimeError {
             Self::InvalidSnapshotId => "snapshot ID is not a versioned identifier",
             Self::SnapshotMismatch => "verified backup does not match this plan",
             Self::InvalidTransition => "rename operation is not ready for this step",
-            Self::ApprovalMismatch => "approved plan ID does not match the requested plan",
+            Self::ApprovalMismatch => {
+                "approved operation ID does not match the requested operation"
+            }
             Self::ContinuationRequired => {
                 "process restart requires an explicit continuation authority before apply"
             }
