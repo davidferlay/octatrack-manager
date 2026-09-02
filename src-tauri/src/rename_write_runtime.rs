@@ -371,6 +371,7 @@ impl RenameWriteRuntime {
         let clone_authority = ContinuationCloneWriteAuthority::new(
             registry,
             clone_runtime,
+            plan.id.clone(),
             plan.root_id.clone(),
             plan.device_fingerprint.clone(),
             plan.base_observed_revision,
@@ -379,7 +380,7 @@ impl RenameWriteRuntime {
         );
         let apply_result = self
             .executor
-            .apply(plan, &MemoryProjectReferenceCodec, &clone_authority)
+            .apply_continued(plan, &MemoryProjectReferenceCodec, &clone_authority)
             .map_err(RenameWriteRuntimeError::Executor)?;
 
         if apply_result.journal.status == RenameJournalStatus::Committed {

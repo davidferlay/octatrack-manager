@@ -22,7 +22,7 @@ partial-apply work in PR #75 (closed without merge).
 | merge #74 | — | `main` | Phase 4A + R0 |
 | R1 | `m5c5-r1-clone-evidence` | `main` | Durable baseline evidence; memory leases; `register_managed_clone` |
 | R2 | `m5c5-r2-prepared-continuation` | `main` | Prepared plan snapshot; explicit continuation API |
-| R3 | `m5c5-r3-apply-state` | `main` | Mutation/verification separation; `v2_rename_verify_committed` |
+| R3 | `m5c5-r3-apply-state` | `main` | **Merged #80**; mutation/verification separation; committed verification hardening follows |
 | R4 | `m5c5-r4-recovery` | `main` | `v2_rename_recover`; cross-domain mutation gate |
 | 4D | `m5c5-phase4d-ux` | `main` | Clone-first operator UX + E2E |
 
@@ -53,12 +53,16 @@ dedicated branches from `main`.
 - Explicit Continue API (`v2_rename_continuation_status`, `v2_rename_continue`);
   memory-only `rename-continuation:v1` authority.
 
-## R3 — Mutation / verification separation (**COMPLETE** on branch)
+## R3 — Mutation / verification separation (**COMPLETE**, #80)
 
-- `ContinuationCloneWriteAuthority` — historical plan identity + current clone root.
+- `HistoricalRenamePlanRoot` + `VerifiedContinuationCloneRoot` — historical plan
+  evidence and current root identity/path remain separate.
 - `v2_rename_apply` — Continuation Authority only (`operationId` + `continuationAuthorityId`).
 - Apply DTO: `mutationState` + `verificationState` (verification failure ≠ mutation failure).
-- `v2_rename_verify_committed` — read-only re-verification after Committed.
+- `v2_rename_verify_committed` — read-only re-verification after Committed; verifies
+  destination/source audio postconditions, affected parsed documents, every planned
+  reference, Missing/Invalid/Unresolved counts, and co-renamed sidecar bytes/catalog state.
+- Apply/verification result schemas are v2 and expose Missing/Invalid/Unresolved counts.
 
 ## R4 — Recovery / mutation gate
 

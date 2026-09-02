@@ -11,7 +11,10 @@ use ot_plan::{derive_additive_copy_plan_id, ChangePlan, PlanId, PlanSeed, Rename
 
 #[cfg(feature = "test-seams")]
 pub use rename_apply::RenameApplyFault;
-pub use rename_apply::{CloneWriteAuthority, RenameApplyResult, VerifiedCloneRoot};
+pub use rename_apply::{
+    CloneWriteAuthority, ContinuedCloneWriteAuthority, HistoricalRenamePlanRoot, RenameApplyResult,
+    VerifiedCloneRoot, VerifiedContinuationCloneRoot,
+};
 pub use rename_prepare::{
     RenameChangedSlot, RenameJournalOperationKind, RenameJournalStatus, RenameOperationJournal,
     RenamePrepareResult, RenameProjectRewriteRecord, RenameRecoveryAuthorization,

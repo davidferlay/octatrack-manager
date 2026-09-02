@@ -19,7 +19,7 @@ use ot_backup::{
 };
 use ot_codec_ports::ProjectReferenceCodec;
 use ot_domain::{ContentHash, RootRelativePath};
-use ot_plan::RenameImpactPlan;
+use ot_plan::{PlanId, RenameImpactPlan};
 use rustix::fs::{self as descriptor_fs, AtFlags, Dir, Mode, OFlags, RenameFlags};
 
 /// Temporary/cloned execution root. Distinct from [`ApprovedExecutionRoot`] so
@@ -50,6 +50,64 @@ pub trait CloneWriteAuthority {
         &self,
         root_id: &RootId,
     ) -> Result<VerifiedCloneRoot, AuthorityError>;
+}
+
+/// Historical identity carried by a prepared rename plan.
+///
+/// This stays separate from [`ApprovedExecutionRoot`]: historical identity
+/// must never be combined with a current filesystem path.
+#[derive(Clone, Debug)]
+pub struct HistoricalRenamePlanRoot {
+    plan_id: PlanId,
+    root_id: RootId,
+    device_fingerprint: String,
+    observed_revision: u64,
+}
+
+impl HistoricalRenamePlanRoot {
+    pub fn new(
+        plan_id: PlanId,
+        root_id: RootId,
+        device_fingerprint: String,
+        observed_revision: u64,
+    ) -> Self {
+        Self {
+            plan_id,
+            root_id,
+            device_fingerprint,
+            observed_revision,
+        }
+    }
+}
+
+/// Explicit binding between historical plan evidence and the current,
+/// independently verified clone root.
+#[derive(Clone, Debug)]
+pub struct VerifiedContinuationCloneRoot {
+    historical: HistoricalRenamePlanRoot,
+    current: ApprovedExecutionRoot,
+}
+
+impl VerifiedContinuationCloneRoot {
+    pub fn attest_temporary_copy(
+        historical: HistoricalRenamePlanRoot,
+        current: ApprovedExecutionRoot,
+    ) -> Self {
+        Self {
+            historical,
+            current,
+        }
+    }
+}
+
+/// Continuation authority that resolves historical evidence separately from
+/// the current verified clone root.
+pub trait ContinuedCloneWriteAuthority {
+    fn resolve_continued_clone_for_write(
+        &self,
+        plan_id: &PlanId,
+        historical_root_id: &RootId,
+    ) -> Result<VerifiedContinuationCloneRoot, AuthorityError>;
 }
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
@@ -109,7 +167,30 @@ impl RenameSampleExecutor {
         C: ProjectReferenceCodec,
         A: CloneWriteAuthority,
     {
-        self.apply_internal(plan, codec, authority, None)
+        self.apply_internal(
+            plan,
+            codec,
+            || resolve_clone_write_authority(plan, authority),
+            None,
+        )
+    }
+
+    pub fn apply_continued<C, A>(
+        &self,
+        plan: &RenameImpactPlan,
+        codec: &C,
+        authority: &A,
+    ) -> Result<RenameApplyResult, ExecutorError>
+    where
+        C: ProjectReferenceCodec,
+        A: ContinuedCloneWriteAuthority,
+    {
+        self.apply_internal(
+            plan,
+            codec,
+            || resolve_continued_clone_write_authority(plan, authority),
+            None,
+        )
     }
 
     pub fn rollback<A: RecoveryAuthority>(
@@ -182,37 +263,42 @@ impl RenameSampleExecutor {
         C: ProjectReferenceCodec,
         A: CloneWriteAuthority,
     {
-        self.apply_internal(plan, codec, authority, Some(fault))
+        self.apply_internal(
+            plan,
+            codec,
+            || resolve_clone_write_authority(plan, authority),
+            Some(fault),
+        )
     }
 
-    fn apply_internal<C, A>(
+    fn apply_internal<C, F>(
         &self,
         plan: &RenameImpactPlan,
         codec: &C,
-        authority: &A,
+        mut resolve_root: F,
         fault: Option<ApplyFault>,
     ) -> Result<RenameApplyResult, ExecutorError>
     where
         C: ProjectReferenceCodec,
-        A: CloneWriteAuthority,
+        F: FnMut() -> Result<ApprovedExecutionRoot, ExecutorError>,
     {
         validate_rename_plan_shape(plan)?;
         let operation_id = OperationId::for_rename_plan(plan);
-        let initial_clone = resolve_clone_write_authority(plan, authority)?;
+        let initial_clone = resolve_root()?;
         let staging_base = prepare_local_directory(
             &self.local_paths.staging_directory,
-            &initial_clone.as_execution_root().canonical_path,
+            &initial_clone.canonical_path,
         )?;
         let journal_directory = prepare_local_directory(
             &self.local_paths.journal_directory,
-            &initial_clone.as_execution_root().canonical_path,
+            &initial_clone.canonical_path,
         )?;
         let backup_directory = prepare_local_directory(
             &self.local_paths.backup_directory,
-            &initial_clone.as_execution_root().canonical_path,
+            &initial_clone.canonical_path,
         )?;
         let _lock = acquire_root_lock(&journal_directory, &plan.device_fingerprint)?;
-        let clone_root = revalidate_clone_write_authority(plan, &initial_clone, authority)?;
+        let clone_root = revalidate_apply_root(&initial_clone, &mut resolve_root)?;
 
         let (journal_path, mut journal, authorization) =
             load_prepared_artifacts(&journal_directory, plan, &operation_id)?;
@@ -246,9 +332,7 @@ impl RenameSampleExecutor {
             &authorization,
         )?;
 
-        if let Err(error) =
-            verify_live_preconditions(&clone_root.as_execution_root().canonical_path, plan)
-        {
+        if let Err(error) = verify_live_preconditions(&clone_root.canonical_path, plan) {
             let _ = remove_orphaned_rename_directory(&verify_root);
             return Err(error);
         }
@@ -260,14 +344,14 @@ impl RenameSampleExecutor {
             return Err(error);
         }
 
-        let clone_root = match revalidate_clone_write_authority(plan, &clone_root, authority) {
+        let clone_root = match revalidate_apply_root(&clone_root, &mut resolve_root) {
             Ok(root) => root,
             Err(error) => {
                 let _ = remove_orphaned_rename_directory(&verify_root);
                 return persist_apply_failure(
                     &journal_path,
                     journal,
-                    &clone_root.as_execution_root().canonical_path,
+                    &clone_root.canonical_path,
                     &authorization,
                     &backup,
                     &operation_id,
@@ -277,7 +361,7 @@ impl RenameSampleExecutor {
         };
 
         let outcome = apply_to_clone(
-            &clone_root.as_execution_root().canonical_path,
+            &clone_root.canonical_path,
             plan,
             &verify_root,
             &authorization,
@@ -294,7 +378,7 @@ impl RenameSampleExecutor {
                     return persist_apply_failure(
                         &journal_path,
                         journal,
-                        &clone_root.as_execution_root().canonical_path,
+                        &clone_root.canonical_path,
                         &authorization,
                         &backup,
                         &operation_id,
@@ -310,7 +394,7 @@ impl RenameSampleExecutor {
             Err(error) => persist_apply_failure(
                 &journal_path,
                 journal,
-                &clone_root.as_execution_root().canonical_path,
+                &clone_root.canonical_path,
                 &authorization,
                 &backup,
                 &operation_id,
@@ -348,25 +432,60 @@ fn persist_apply_failure(
 fn resolve_clone_write_authority<A: CloneWriteAuthority>(
     plan: &RenameImpactPlan,
     authority: &A,
-) -> Result<VerifiedCloneRoot, ExecutorError> {
+) -> Result<ApprovedExecutionRoot, ExecutorError> {
     let clone = authority
         .resolve_clone_for_write(&plan.root_id)
         .map_err(ExecutorError::Authority)?;
-    validate_rename_authority(plan, clone.as_execution_root().clone())?;
-    Ok(clone)
+    validate_rename_authority(plan, clone.as_execution_root().clone())
 }
 
-fn revalidate_clone_write_authority<A: CloneWriteAuthority>(
+fn resolve_continued_clone_write_authority<A: ContinuedCloneWriteAuthority>(
     plan: &RenameImpactPlan,
-    expected: &VerifiedCloneRoot,
     authority: &A,
-) -> Result<VerifiedCloneRoot, ExecutorError> {
-    let current = resolve_clone_write_authority(plan, authority)?;
-    let expected_root = expected.as_execution_root();
-    let current_root = current.as_execution_root();
-    if current_root.root_id != expected_root.root_id
-        || current_root.device_fingerprint != expected_root.device_fingerprint
-        || current_root.canonical_path != expected_root.canonical_path
+) -> Result<ApprovedExecutionRoot, ExecutorError> {
+    let continuation = authority
+        .resolve_continued_clone_for_write(&plan.id, &plan.root_id)
+        .map_err(ExecutorError::Authority)?;
+    let historical = &continuation.historical;
+    if historical.plan_id != plan.id
+        || historical.root_id != plan.root_id
+        || historical.device_fingerprint != plan.device_fingerprint
+        || historical.observed_revision != plan.base_observed_revision
+    {
+        return Err(ExecutorError::RootChanged);
+    }
+    let current = continuation.current;
+    if current.device_fingerprint != historical.device_fingerprint {
+        return Err(ExecutorError::RootChanged);
+    }
+    validate_current_clone_root(current)
+}
+
+fn validate_current_clone_root(
+    root: ApprovedExecutionRoot,
+) -> Result<ApprovedExecutionRoot, ExecutorError> {
+    if !root.write_enabled {
+        return Err(ExecutorError::Authority(AuthorityError::ReadOnly));
+    }
+    if !root.stable_device_identity {
+        return Err(ExecutorError::Authority(AuthorityError::UnstableIdentity));
+    }
+    validate_canonical_root(&root.canonical_path)?;
+    Ok(root)
+}
+
+fn revalidate_apply_root<F>(
+    expected: &ApprovedExecutionRoot,
+    resolve_root: &mut F,
+) -> Result<ApprovedExecutionRoot, ExecutorError>
+where
+    F: FnMut() -> Result<ApprovedExecutionRoot, ExecutorError>,
+{
+    let current = resolve_root()?;
+    if current.root_id != expected.root_id
+        || current.device_fingerprint != expected.device_fingerprint
+        || current.observed_revision != expected.observed_revision
+        || current.canonical_path != expected.canonical_path
     {
         return Err(ExecutorError::RootChanged);
     }
@@ -1479,6 +1598,10 @@ mod tests {
         root: Mutex<ApprovedExecutionRoot>,
     }
 
+    struct FixtureContinuedAuthority {
+        continuation: VerifiedContinuationCloneRoot,
+    }
+
     impl WriteAuthority for FixtureAuthority {
         fn resolve_for_write(
             &self,
@@ -1500,6 +1623,16 @@ mod tests {
             Ok(VerifiedCloneRoot::attest_temporary_copy(
                 self.resolve_for_write(root_id)?,
             ))
+        }
+    }
+
+    impl ContinuedCloneWriteAuthority for FixtureContinuedAuthority {
+        fn resolve_continued_clone_for_write(
+            &self,
+            _plan_id: &PlanId,
+            _historical_root_id: &RootId,
+        ) -> Result<VerifiedContinuationCloneRoot, AuthorityError> {
+            Ok(self.continuation.clone())
         }
     }
 
@@ -1716,6 +1849,23 @@ mod tests {
         }
     }
 
+    fn continued_authority_for(
+        plan: &RenameImpactPlan,
+        current_root: ApprovedExecutionRoot,
+    ) -> FixtureContinuedAuthority {
+        FixtureContinuedAuthority {
+            continuation: VerifiedContinuationCloneRoot::attest_temporary_copy(
+                HistoricalRenamePlanRoot::new(
+                    plan.id.clone(),
+                    plan.root_id.clone(),
+                    plan.device_fingerprint.clone(),
+                    plan.base_observed_revision,
+                ),
+                current_root,
+            ),
+        }
+    }
+
     struct CloneFixture {
         _temp: TempDir,
         original: PathBuf,
@@ -1757,6 +1907,44 @@ mod tests {
             original_before,
             clone_before,
         }
+    }
+
+    #[test]
+    fn continuation_root_keeps_current_identity_and_path_together() {
+        let fixture = prepare_clone(false, false, Vec::new());
+        let current_root_id = RootId::new("root-session-2").unwrap();
+        let current_root = ApprovedExecutionRoot {
+            root_id: current_root_id.clone(),
+            device_fingerprint: fixture.plan.device_fingerprint.clone(),
+            observed_revision: 10,
+            canonical_path: fixture.clone.canonicalize().unwrap(),
+            write_enabled: true,
+            stable_device_identity: true,
+        };
+        let authority = continued_authority_for(&fixture.plan, current_root.clone());
+
+        let resolved = resolve_continued_clone_write_authority(&fixture.plan, &authority).unwrap();
+        assert_eq!(resolved.root_id, current_root_id);
+        assert_eq!(resolved.observed_revision, 10);
+        assert_eq!(resolved.canonical_path, current_root.canonical_path);
+        assert_ne!(resolved.root_id, fixture.plan.root_id);
+    }
+
+    #[test]
+    fn continuation_root_rejects_current_fingerprint_mismatch() {
+        let fixture = prepare_clone(false, false, Vec::new());
+        let current_root = ApprovedExecutionRoot {
+            root_id: RootId::new("root-session-2").unwrap(),
+            device_fingerprint: format!("rootfp:v1:{}", "b".repeat(64)),
+            observed_revision: 10,
+            canonical_path: fixture.clone.canonicalize().unwrap(),
+            write_enabled: true,
+            stable_device_identity: true,
+        };
+        let authority = continued_authority_for(&fixture.plan, current_root);
+
+        let error = resolve_continued_clone_write_authority(&fixture.plan, &authority).unwrap_err();
+        assert!(matches!(error, ExecutorError::RootChanged));
     }
 
     #[test]

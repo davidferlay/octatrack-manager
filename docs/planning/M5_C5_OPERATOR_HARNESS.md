@@ -182,10 +182,12 @@ Explicitly **not** in Phase 2:
 - `v2_rename_continuation_status` / `v2_rename_continue` — explicit restart
   continuation; memory-only `rename-continuation:v1` authority
 
-### Phase 4C — Production rename Apply API (R3 **COMPLETE** on branch)
+### Phase 4C — Production rename Apply API (R3 **COMPLETE**, #80)
 
 - `v2_rename_apply` requires Continuation Authority + post-apply fresh rescan
-- `v2_rename_verify_committed` read-only committed verification
+- historical plan evidence is kept separate from the current verified clone root
+- `v2_rename_verify_committed` read-only committed verification covers planned
+  references, Missing/Invalid/Unresolved states, affected documents, and sidecars
 
 ### Phase 4D — Recovery API (R4)
 
