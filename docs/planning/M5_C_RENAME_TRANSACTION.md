@@ -256,7 +256,17 @@ After C2 `Prepared`, `masterocta-prepared-rename-plan:v1` persists the validated
 invalidates in-memory Rename / Clone / Continuation authority; rediscovery reads
 journal + snapshot only. Explicit operator Continue (`v2_rename_continue`) re-verifies
 backup, journal binding, and live clone manifest before issuing a memory-only
-`rename-continuation:v1` lease. R2 does not apply media mutations.
+`rename-continuation:v1` lease.
+
+## M5-C5 R3 — continuation apply and committed verification
+
+Production apply requires an issued Continuation Authority. `v2_rename_apply` loads
+the durable prepared snapshot plan, validates journal/backup bindings, and executes
+`RenameSampleExecutor::apply` through `ContinuationCloneWriteAuthority`, which maps
+historical plan identity onto the current registered clone root without relaxing
+executor RootId/revision checks. Committed mutations return success even when
+post-apply catalog verification fails; operators may re-check with read-only
+`v2_rename_verify_committed`.
 
 ## Deferred
 

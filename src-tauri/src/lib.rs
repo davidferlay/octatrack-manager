@@ -1419,6 +1419,7 @@ pub fn run() {
             v2_api::v2_rename_continuation_status,
             v2_api::v2_rename_continue,
             v2_api::v2_rename_apply,
+            v2_api::v2_rename_verify_committed,
             v2_api::v2_rename_get_status,
             v2_api::v2_rename_recovery_status,
             v2_api::v2_rename_recover,

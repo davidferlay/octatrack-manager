@@ -149,7 +149,6 @@ pub struct PreparedOperationStatus {
 }
 
 #[derive(Clone, Debug)]
-#[allow(dead_code)] // R3 apply path consumes the full binding record
 pub struct ContinuationAuthorityRecord {
     pub continuation_authority_id: String,
     pub operation_id: OperationId,
@@ -415,7 +414,6 @@ impl PreparedRenameRuntime {
         Ok(record)
     }
 
-    #[allow(dead_code)] // R3 apply path validates continuation before media mutation
     pub fn verify_continuation_authority(
         &self,
         resolved: &ResolvedRoot,
@@ -441,7 +439,45 @@ impl PreparedRenameRuntime {
         {
             return Err(PreparedRenameRuntimeError::ContinuationMismatch);
         }
+        let snapshot = self.load_prepared_snapshot(operation_id)?;
+        if record.plan_id.as_str() != snapshot.plan_id
+            || record.backup_snapshot_id.as_str() != snapshot.backup_snapshot_id
+            || record.prepared_plan_id != snapshot.prepared_plan_id
+            || record.content_binding != snapshot.content_binding
+            || record.historical_device_fingerprint != snapshot.historical_device_fingerprint
+        {
+            return Err(PreparedRenameRuntimeError::ContinuationMismatch);
+        }
         Ok(record)
+    }
+
+    pub fn revoke_continuation_authority(&self, continuation_authority_id: &str) {
+        if let Ok(mut state) = self.lock_continuation_state() {
+            state.leases.remove(continuation_authority_id);
+        }
+    }
+
+    pub fn load_prepared_plan(
+        &self,
+        operation_id: &OperationId,
+    ) -> Result<RenameImpactPlan, PreparedRenameRuntimeError> {
+        let snapshot = self.load_prepared_snapshot(operation_id)?;
+        snapshot.plan.to_plan()
+    }
+
+    pub fn validate_prepared_for_apply(
+        &self,
+        operation_id: &OperationId,
+    ) -> Result<RenameImpactPlan, PreparedRenameRuntimeError> {
+        let snapshot = self.load_prepared_snapshot(operation_id)?;
+        let journal = self
+            .executor
+            .rename_journal(operation_id)
+            .map_err(PreparedRenameRuntimeError::Executor)?
+            .ok_or(PreparedRenameRuntimeError::JournalNotFound)?;
+        self.validate_journal_binding(&snapshot, &journal)?;
+        self.verify_backup_for_snapshot(&snapshot)?;
+        snapshot.plan.to_plan()
     }
 
     fn validate_loaded_snapshot(

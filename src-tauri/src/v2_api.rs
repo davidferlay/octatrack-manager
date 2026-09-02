@@ -885,6 +885,20 @@ pub struct RenameApplyStatusDto {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RenameCommittedVerificationDto {
+    schema: &'static str,
+    operation_id: String,
+    plan_id: String,
+    mutation_state: String,
+    verification_state: String,
+    verification_code: Option<String>,
+    rescan_completed: bool,
+    observed_file_count: u64,
+    missing_reference_count: u64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RenameStatusDto {
     schema: &'static str,
     operation_id: String,
@@ -2376,18 +2390,121 @@ fn count_missing_sample_references(snapshot: &LibrarySnapshot) -> u64 {
         .count() as u64
 }
 
+struct RenameVerificationOutcome {
+    verification_state: &'static str,
+    verification_code: Option<&'static str>,
+    rescan_completed: bool,
+    observed_file_count: u64,
+    missing_reference_count: u64,
+}
+
+fn evaluate_rename_committed_verification(
+    snapshot: &LibrarySnapshot,
+    plan: &RenameImpactPlan,
+    rescan_completed: bool,
+) -> RenameVerificationOutcome {
+    let observed_file_count = snapshot.file_instances.len() as u64;
+    let missing_reference_count = count_missing_sample_references(snapshot);
+    let source_still_present = snapshot
+        .file_instances
+        .iter()
+        .any(|file| file.relative_path.as_str() == plan.source_relative_path.as_str());
+    let destination = snapshot
+        .file_instances
+        .iter()
+        .find(|file| file.relative_path.as_str() == plan.destination_relative_path.as_str());
+
+    let mut verification_state = "passed";
+    let mut verification_code = None;
+
+    if !rescan_completed {
+        verification_state = "failed";
+        verification_code = Some("RESCAN_FAILED");
+    } else if source_still_present {
+        verification_state = "failed";
+        verification_code = Some("SOURCE_STILL_PRESENT");
+    } else if destination.is_none() {
+        verification_state = "failed";
+        verification_code = Some("DESTINATION_MISSING");
+    } else if let Some(destination) = destination {
+        if destination.content_hash != plan.source_content_hash {
+            verification_state = "failed";
+            verification_code = Some("DESTINATION_HASH_MISMATCH");
+        } else if missing_reference_count > 0 {
+            verification_state = "failed";
+            verification_code = Some("MISSING_REFERENCES");
+        }
+    }
+
+    RenameVerificationOutcome {
+        verification_state,
+        verification_code,
+        rescan_completed,
+        observed_file_count,
+        missing_reference_count,
+    }
+}
+
+fn run_rename_committed_rescan(
+    registry: &RootRegistry,
+    catalog: &SharedCatalog,
+    root_id: &RootId,
+    plan: &RenameImpactPlan,
+) -> RenameVerificationOutcome {
+    match scan_library_sync(registry, catalog, root_id) {
+        Ok((session, snapshot)) => {
+            let evaluation = evaluate_rename_committed_verification(&snapshot, plan, true);
+            match store_library_snapshot(registry, catalog, root_id, &session, &snapshot) {
+                Ok(_) => evaluation,
+                Err(_) => RenameVerificationOutcome {
+                    verification_state: "failed",
+                    verification_code: Some("CATALOG_STORE_ERROR"),
+                    rescan_completed: false,
+                    observed_file_count: evaluation.observed_file_count,
+                    missing_reference_count: evaluation.missing_reference_count,
+                },
+            }
+        }
+        Err(_) => RenameVerificationOutcome {
+            verification_state: "failed",
+            verification_code: Some("RESCAN_FAILED"),
+            rescan_completed: false,
+            observed_file_count: 0,
+            missing_reference_count: 0,
+        },
+    }
+}
+
+fn rename_committed_verification_dto(
+    operation_id: &str,
+    plan_id: &str,
+    mutation_state: &str,
+    outcome: RenameVerificationOutcome,
+) -> RenameCommittedVerificationDto {
+    RenameCommittedVerificationDto {
+        schema: "rename-committed-verification:v1",
+        operation_id: operation_id.to_owned(),
+        plan_id: plan_id.to_owned(),
+        mutation_state: mutation_state.to_owned(),
+        verification_state: outcome.verification_state.to_owned(),
+        verification_code: outcome.verification_code.map(str::to_owned),
+        rescan_completed: outcome.rescan_completed,
+        observed_file_count: outcome.observed_file_count,
+        missing_reference_count: outcome.missing_reference_count,
+    }
+}
+
 pub(crate) fn apply_rename_sync(
     registry: &RootRegistry,
     catalog: &SharedCatalog,
     clone_runtime: &SharedCloneRuntime,
     write: &SharedWriteRuntime,
     rename_runtime: &SharedRenameWriteRuntime,
+    prepared_runtime: &SharedPreparedRenameRuntime,
     root_id: &RootId,
-    plan_id: &str,
-    approved_plan_id: &str,
-    authority_id: &str,
-    snapshot_id: &str,
-    clone_authority_id: &str,
+    operation_id: &str,
+    approved_operation_id: &str,
+    continuation_authority_id: &str,
 ) -> Result<RenameApplyStatusDto, ApiError> {
     ensure_rename_recovery_clear(registry, write, rename_runtime, root_id)?;
     let resolved = registry.resolve(root_id)?;
@@ -2398,68 +2515,101 @@ pub(crate) fn apply_rename_sync(
             true,
         ));
     }
-    ensure_clone_verified(clone_runtime, &resolved)?;
-    clone_runtime
-        .require_clone_authority(&resolved, clone_authority_id)
-        .map_err(clone_runtime_error)?;
-    rename_runtime
-        .verify_authority(root_id, plan_id, authority_id)
-        .map_err(rename_runtime_error)?;
-    let plan = rename_runtime
-        .get_plan(root_id, plan_id)
-        .map_err(rename_runtime_error)?;
-    verify_stored_rename_plan_freshness(registry, catalog, root_id, &plan, true)?;
-    let applied = rename_runtime
-        .apply(
-            root_id,
-            plan_id,
-            approved_plan_id,
-            authority_id,
-            snapshot_id,
-            clone_authority_id,
-            registry,
-            clone_runtime,
-        )
-        .map_err(rename_runtime_error)?;
-
-    let mut rescan_completed = false;
-    let mut observed_file_count = 0_u64;
-    let mut missing_reference_count = 0_u64;
-    let mut verification_state = "passed";
-    let mut verification_code = None;
-
-    match scan_library_sync(registry, catalog, root_id) {
-        Ok((session, snapshot)) => {
-            observed_file_count = snapshot.file_instances.len() as u64;
-            missing_reference_count = count_missing_sample_references(&snapshot);
-            match store_library_snapshot(registry, catalog, root_id, &session, &snapshot) {
-                Ok(_) => {
-                    rescan_completed = true;
-                    if missing_reference_count > 0 {
-                        verification_state = "failed";
-                        verification_code = Some("MISSING_REFERENCES");
-                    }
-                }
-                Err(_) => {
-                    verification_state = "failed";
-                    verification_code = Some("CATALOG_STORE_ERROR");
-                }
-            }
-        }
-        Err(_) => {
-            verification_state = "failed";
-            verification_code = Some("RESCAN_FAILED");
-        }
+    if approved_operation_id != operation_id {
+        return Err(ApiError::new(
+            "APPROVAL_MISMATCH",
+            "approved operation ID does not match the requested operation",
+            true,
+        ));
     }
+    let operation_id = OperationId::parse(operation_id).map_err(|_| {
+        ApiError::new(
+            "INVALID_OPERATION_ID",
+            "operation ID is not a versioned identifier",
+            true,
+        )
+    })?;
+
+    let continuation = prepared_runtime
+        .verify_continuation_authority(&resolved, &operation_id, continuation_authority_id)
+        .map_err(prepared_rename_runtime_error)?;
+    let plan = prepared_runtime
+        .validate_prepared_for_apply(&operation_id)
+        .map_err(prepared_rename_runtime_error)?;
+
+    let apply_result = rename_runtime.apply_with_continuation(
+        &plan,
+        &operation_id,
+        operation_id.as_str(),
+        &continuation,
+        registry,
+        clone_runtime.as_ref(),
+    );
+    prepared_runtime.revoke_continuation_authority(continuation_authority_id);
+    let applied = apply_result.map_err(rename_runtime_error)?;
+
+    let outcome = if applied.journal_status == ot_executor::RenameJournalStatus::Committed {
+        run_rename_committed_rescan(registry, catalog, root_id, &plan)
+    } else {
+        RenameVerificationOutcome {
+            verification_state: "failed",
+            verification_code: Some("MUTATION_NOT_COMMITTED"),
+            rescan_completed: false,
+            observed_file_count: 0,
+            missing_reference_count: 0,
+        }
+    };
 
     Ok(rename_apply_dto(
-        plan_id,
+        plan.id.as_str(),
         &applied,
-        verification_state,
-        verification_code,
-        rescan_completed,
-        observed_file_count,
-        missing_reference_count,
+        outcome.verification_state,
+        outcome.verification_code,
+        outcome.rescan_completed,
+        outcome.observed_file_count,
+        outcome.missing_reference_count,
+    ))
+}
+
+pub(crate) fn verify_rename_committed_sync(
+    registry: &RootRegistry,
+    catalog: &SharedCatalog,
+    rename_runtime: &SharedRenameWriteRuntime,
+    prepared_runtime: &SharedPreparedRenameRuntime,
+    root_id: &RootId,
+    operation_id: &str,
+) -> Result<RenameCommittedVerificationDto, ApiError> {
+    let resolved = registry.resolve(root_id)?;
+    let operation_id = OperationId::parse(operation_id).map_err(|_| {
+        ApiError::new(
+            "INVALID_OPERATION_ID",
+            "operation ID is not a versioned identifier",
+            true,
+        )
+    })?;
+    let status = rename_runtime
+        .session_status_for_operation(
+            root_id,
+            operation_id.as_str(),
+            resolved.session.device_fingerprint.as_str(),
+        )
+        .map_err(rename_runtime_error)?;
+    if status.journal_status != Some(ot_executor::RenameJournalStatus::Committed) {
+        return Err(ApiError::new(
+            "INVALID_TRANSITION",
+            "rename operation is not in a committed state",
+            true,
+        ));
+    }
+    let plan = prepared_runtime
+        .load_prepared_plan(&operation_id)
+        .map_err(prepared_rename_runtime_error)?;
+    let outcome = run_rename_committed_rescan(registry, catalog, root_id, &plan);
+    Ok(rename_committed_verification_dto(
+        operation_id.as_str(),
+        plan.id.as_str(),
+        "committed",
+        outcome,
     ))
 }
 
@@ -3508,16 +3658,15 @@ pub async fn v2_rename_continue(
 #[tauri::command]
 pub async fn v2_rename_apply(
     root_id: String,
-    plan_id: String,
-    approved_plan_id: String,
-    authority_id: String,
-    snapshot_id: String,
-    clone_authority_id: String,
+    operation_id: String,
+    approved_operation_id: String,
+    continuation_authority_id: String,
     registry: State<'_, Arc<RootRegistry>>,
     catalog: State<'_, SharedCatalog>,
     clone_runtime: State<'_, SharedCloneRuntime>,
     write: State<'_, SharedWriteRuntime>,
     rename_runtime: State<'_, SharedRenameWriteRuntime>,
+    prepared_runtime: State<'_, SharedPreparedRenameRuntime>,
 ) -> Result<RenameApplyStatusDto, ApiError> {
     let root_id = parse_root_id(root_id)?;
     let registry = Arc::clone(registry.inner());
@@ -3525,6 +3674,7 @@ pub async fn v2_rename_apply(
     let clone_runtime = Arc::clone(clone_runtime.inner());
     let write = Arc::clone(write.inner());
     let rename_runtime = Arc::clone(rename_runtime.inner());
+    let prepared_runtime = Arc::clone(prepared_runtime.inner());
     tauri::async_runtime::spawn_blocking(move || {
         apply_rename_sync(
             &registry,
@@ -3532,12 +3682,39 @@ pub async fn v2_rename_apply(
             &clone_runtime,
             &write,
             &rename_runtime,
+            &prepared_runtime,
             &root_id,
-            &plan_id,
-            &approved_plan_id,
-            &authority_id,
-            &snapshot_id,
-            &clone_authority_id,
+            &operation_id,
+            &approved_operation_id,
+            &continuation_authority_id,
+        )
+    })
+    .await
+    .map_err(ApiError::task_failed)?
+}
+
+#[tauri::command]
+pub async fn v2_rename_verify_committed(
+    root_id: String,
+    operation_id: String,
+    registry: State<'_, Arc<RootRegistry>>,
+    catalog: State<'_, SharedCatalog>,
+    rename_runtime: State<'_, SharedRenameWriteRuntime>,
+    prepared_runtime: State<'_, SharedPreparedRenameRuntime>,
+) -> Result<RenameCommittedVerificationDto, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let catalog = Arc::clone(catalog.inner());
+    let rename_runtime = Arc::clone(rename_runtime.inner());
+    let prepared_runtime = Arc::clone(prepared_runtime.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        verify_rename_committed_sync(
+            &registry,
+            &catalog,
+            &rename_runtime,
+            &prepared_runtime,
+            &root_id,
+            &operation_id,
         )
     })
     .await
@@ -3807,6 +3984,23 @@ mod tests {
 
     fn open_test_clone_runtime(data_directory: &Path) -> SharedCloneRuntime {
         open_shared_clone_runtime(data_directory).unwrap()
+    }
+
+    fn restore_fixture_clone_verification_from_prepared(
+        clone_runtime: &SharedCloneRuntime,
+        registry: &RootRegistry,
+        prepared_runtime: &SharedPreparedRenameRuntime,
+        root_id: &RootId,
+        operation_id: &str,
+    ) {
+        let operation_id = OperationId::parse(operation_id).unwrap();
+        let snapshot = prepared_runtime
+            .load_prepared_snapshot(&operation_id)
+            .unwrap();
+        let resolved = registry.resolve(root_id).unwrap();
+        clone_runtime
+            .restore_verification_from_baseline(&resolved, &snapshot.clone_baseline_evidence_id)
+            .unwrap();
     }
 
     fn install_fixture_clone_verification(
@@ -6048,22 +6242,26 @@ mod tests {
         )
         .unwrap();
 
-        let resolved = registry.resolve(&root_id).unwrap();
-        let clone_authority = clone_runtime
-            .issue_clone_authority(&resolved)
-            .expect("clone authority");
+        let continuation = rename_continue_sync(
+            &registry,
+            &clone_runtime,
+            &prepared_runtime,
+            &root_id,
+            &plan.operation_id,
+            &plan.operation_id,
+        )
+        .unwrap();
         let applied = apply_rename_sync(
             &registry,
             &catalog,
             &clone_runtime,
             &write,
             &rename_runtime,
+            &prepared_runtime,
             &root_id,
-            &plan.plan_id,
-            &plan.plan_id,
-            &authority.authority_id,
-            &backup.snapshot_id,
-            &clone_authority.clone_authority_id,
+            &plan.operation_id,
+            &plan.operation_id,
+            &continuation.continuation_authority_id,
         )
         .unwrap();
         assert_eq!(applied.mutation_state, "committed");
@@ -6639,5 +6837,246 @@ mod tests {
                 }
             }
         });
+    }
+
+    fn prepare_fixture_rename(fixture: &RenameThroughBackupFixture) {
+        prepare_rename_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.clone_runtime,
+            &fixture.write,
+            &fixture.rename_runtime,
+            &fixture.prepared_runtime,
+            &fixture.root_id,
+            &fixture.plan_id,
+            &fixture.authority_id,
+            &fixture.snapshot_id,
+        )
+        .unwrap();
+    }
+
+    fn continue_fixture_rename(
+        fixture: &RenameThroughBackupFixture,
+        prepared_runtime: &SharedPreparedRenameRuntime,
+        clone_runtime: &SharedCloneRuntime,
+    ) -> RenameContinuationAuthorityDto {
+        rename_continue_sync(
+            &fixture.registry,
+            clone_runtime,
+            prepared_runtime,
+            &fixture.root_id,
+            &fixture.operation_id,
+            &fixture.operation_id,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn rename_apply_rejects_missing_continuation_authority() {
+        let fixture = setup_rename_through_backup();
+        prepare_fixture_rename(&fixture);
+
+        let error = apply_rename_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.clone_runtime,
+            &fixture.write,
+            &fixture.rename_runtime,
+            &fixture.prepared_runtime,
+            &fixture.root_id,
+            &fixture.operation_id,
+            &fixture.operation_id,
+            "rename-continuation:v1:0000000000000000000000000000000000000000000000000000000000000000",
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "CONTINUATION_NOT_FOUND");
+    }
+
+    #[test]
+    fn rename_restart_apply_commits_with_continuation() {
+        let fixture = setup_rename_through_backup();
+        prepare_fixture_rename(&fixture);
+
+        let data_path = fixture.data_directory.path().to_path_buf();
+        let restarted_prepared = prepared_runtime(&data_path);
+        let restarted_clone = open_test_clone_runtime(&data_path);
+        let restarted_rename = rename_runtime(&data_path);
+
+        let continuation = continue_fixture_rename(&fixture, &restarted_prepared, &restarted_clone);
+        let applied = apply_rename_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &restarted_clone,
+            &fixture.write,
+            &restarted_rename,
+            &restarted_prepared,
+            &fixture.root_id,
+            &fixture.operation_id,
+            &fixture.operation_id,
+            &continuation.continuation_authority_id,
+        )
+        .unwrap();
+        assert_eq!(applied.mutation_state, "committed");
+        assert_eq!(applied.verification_state, "passed");
+        assert!(applied.rescan_completed);
+    }
+
+    #[test]
+    fn rename_restart_apply_after_root_id_rotation() {
+        let fixture = setup_rename_through_backup();
+        let root_path = fixture._root.path().to_path_buf();
+        prepare_fixture_rename(&fixture);
+
+        fixture.registry.close(&fixture.root_id).unwrap();
+        let session = register_root_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            root_path.to_str().unwrap(),
+        )
+        .unwrap();
+        let new_root_id = RootId::new(session.root_id).unwrap();
+        restore_fixture_clone_verification_from_prepared(
+            &fixture.clone_runtime,
+            &fixture.registry,
+            &fixture.prepared_runtime,
+            &new_root_id,
+            &fixture.operation_id,
+        );
+        enable_write_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.write,
+            &new_root_id,
+        )
+        .unwrap();
+
+        let data_path = fixture.data_directory.path().to_path_buf();
+        let restarted_prepared = prepared_runtime(&data_path);
+        let restarted_clone = open_test_clone_runtime(&data_path);
+        let restarted_rename = rename_runtime(&data_path);
+
+        let continuation = rename_continue_sync(
+            &fixture.registry,
+            &restarted_clone,
+            &restarted_prepared,
+            &new_root_id,
+            &fixture.operation_id,
+            &fixture.operation_id,
+        )
+        .unwrap();
+        let applied = apply_rename_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &restarted_clone,
+            &fixture.write,
+            &restarted_rename,
+            &restarted_prepared,
+            &new_root_id,
+            &fixture.operation_id,
+            &fixture.operation_id,
+            &continuation.continuation_authority_id,
+        )
+        .unwrap();
+        assert_eq!(applied.mutation_state, "committed");
+        assert_eq!(applied.verification_state, "passed");
+    }
+
+    #[test]
+    fn rename_apply_rejects_second_apply_after_commit() {
+        let fixture = setup_rename_through_backup();
+        prepare_fixture_rename(&fixture);
+        let continuation =
+            continue_fixture_rename(&fixture, &fixture.prepared_runtime, &fixture.clone_runtime);
+        apply_rename_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.clone_runtime,
+            &fixture.write,
+            &fixture.rename_runtime,
+            &fixture.prepared_runtime,
+            &fixture.root_id,
+            &fixture.operation_id,
+            &fixture.operation_id,
+            &continuation.continuation_authority_id,
+        )
+        .unwrap();
+
+        let error = apply_rename_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.clone_runtime,
+            &fixture.write,
+            &fixture.rename_runtime,
+            &fixture.prepared_runtime,
+            &fixture.root_id,
+            &fixture.operation_id,
+            &fixture.operation_id,
+            &continuation.continuation_authority_id,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "CONTINUATION_NOT_FOUND");
+
+        let continue_error = rename_continue_sync(
+            &fixture.registry,
+            &fixture.clone_runtime,
+            &fixture.prepared_runtime,
+            &fixture.root_id,
+            &fixture.operation_id,
+            &fixture.operation_id,
+        )
+        .unwrap_err();
+        assert_eq!(continue_error.code, "CONTINUATION_REQUIRED");
+    }
+
+    #[test]
+    fn rename_verify_committed_is_read_only_after_apply() {
+        let fixture = setup_rename_through_backup();
+        prepare_fixture_rename(&fixture);
+        let continuation =
+            continue_fixture_rename(&fixture, &fixture.prepared_runtime, &fixture.clone_runtime);
+        apply_rename_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.clone_runtime,
+            &fixture.write,
+            &fixture.rename_runtime,
+            &fixture.prepared_runtime,
+            &fixture.root_id,
+            &fixture.operation_id,
+            &fixture.operation_id,
+            &continuation.continuation_authority_id,
+        )
+        .unwrap();
+
+        let before = collect_fixture_manifest(fixture._root.path());
+        let verified = verify_rename_committed_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.rename_runtime,
+            &fixture.prepared_runtime,
+            &fixture.root_id,
+            &fixture.operation_id,
+        )
+        .unwrap();
+        assert_eq!(verified.mutation_state, "committed");
+        assert_eq!(verified.verification_state, "passed");
+        assert_eq!(before, collect_fixture_manifest(fixture._root.path()));
+    }
+
+    #[test]
+    fn rename_verify_committed_rejects_prepared_operation() {
+        let fixture = setup_rename_through_backup();
+        prepare_fixture_rename(&fixture);
+
+        let error = verify_rename_committed_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.rename_runtime,
+            &fixture.prepared_runtime,
+            &fixture.root_id,
+            &fixture.operation_id,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "INVALID_TRANSITION");
     }
 }
