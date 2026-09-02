@@ -91,11 +91,17 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 - Gate B smoke macOS移植: #55マージ済み
 - Project compatibility policy: #58／#59マージ済み
 - Gate B human sign-off: **PASS**（personal/local use、source `a10437f`）
-- 現在のmain基準SHA: `52d36c3`（M5-C5 Phase 3 PR #73 merge後）
-- M5-C5 Phase 4A — verified disposable clone authority: **COMPLETE**（branch `m5c5-phase4a-clone-authority`、PR pending）
-  - clone runtime + v2 clone API surface + rename gate on verified clone
-  - `RegistryCloneWriteAuthority`（Apply 未接続）
-- 現在の作業: **M5-C5 Phase 4B — production rename Apply API**
+- 現在のmain基準SHA: `d814f66`（M5-C5 #78 partial R2–R4 merge後）
+- M5-C5 R0 — clone artifact containment hardening: **COMPLETE**（#74）
+- M5-C5 R1 — durable clone evidence / session authority separation: **COMPLETE**（#77）
+- M5-C5 R2 — prepared rename plan snapshot / restart continuation: **branch `m5c5-r2-prepared-continuation`（PR pending）**
+  - `prepared_rename_runtime.rs` + `masterocta-prepared-rename-plan:v1`
+  - `v2_rename_continuation_status` / `v2_rename_continue`
+  - memory-only Continuation Authority; **Apply 未接続（R3）**
+- M5-C5 R3 — Apply + committed verification: **NOT STARTED**
+- M5-C5 R4 — Recovery + cross-domain mutation gate: **NOT STARTED**
+- M5-C5 Phase 4D — Operator UX + Gate C readiness: **NOT STARTED**
+- M5-C5 Phase 4A — verified disposable clone authority: **COMPLETE**（#74 に含む）
 - M5-C5 Phase 3 — explicit approval Rename UI: **COMPLETE**（PR #73、`RenameSampleModal` + `src/api/rename.ts`）
   - Inspector 入口、`Approve & Prepare` → `authorize → backup → prepare`
   - Apply / 媒体 mutation / recovery 実行 UI は Phase 4 まで未接続

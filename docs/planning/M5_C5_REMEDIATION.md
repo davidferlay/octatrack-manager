@@ -21,13 +21,14 @@ partial-apply work in PR #75 (closed without merge).
 | R0 | `m5c5-r0-clone-containment` | `m5c5-phase4a-clone-authority` | Typed artifact IDs, NOFOLLOW I/O, error sanitization, special-file fail-closed, storage layout, `sourceRootClosed` accuracy |
 | merge #74 | — | `main` | Phase 4A + R0 |
 | R1 | `m5c5-r1-clone-evidence` | `main` | Durable baseline evidence; memory leases; `register_managed_clone` |
-| R2 | `m5c5-r2-continuation` | `main` | Prepared plan snapshot; explicit continuation API |
+| R2 | `m5c5-r2-prepared-continuation` | `main` | Prepared plan snapshot; explicit continuation API |
 | R3 | `m5c5-r3-apply-state` | `main` | Mutation/verification separation; `v2_rename_verify_committed` |
 | R4 | `m5c5-r4-recovery` | `main` | `v2_rename_recover`; cross-domain mutation gate |
 | 4D | `m5c5-phase4d-ux` | `main` | Clone-first operator UX + E2E |
 
 PR #75 (`m5c5-phase4b-rename-apply`) is **not merged**; partial apply is replaced
-by R2–R4.
+by R2–R4. PR #78 landed partial apply/recover early; R2–R4 completion continues on
+dedicated branches from `main`.
 
 ## R0 — Clone artifact containment (implemented)
 
@@ -39,17 +40,20 @@ by R2–R4.
 - `v2_api.rs` — API messages omit OS paths; `sourceRootClosed` reflects actual
   `registry.close()` result.
 
-## R1 — Durable evidence / ephemeral authority (next)
+## R1 — Durable evidence / ephemeral authority (**COMPLETE**)
 
 - Split `CloneBaselineEvidence` (disk) from `CloneVerificationLease` and
   `CloneWriteAuthorityLease` (memory only).
 - `RootRegistry::register_managed_clone` — domain-separated fingerprint for
   same-volume managed clones; ordinary `register` + `AmbiguousIdentity` unchanged.
 
-## R2 — Prepared plan snapshot / continuation
+## R2 — Prepared plan snapshot / continuation (**COMPLETE** on branch)
 
 - `prepared_rename_runtime.rs` — `masterocta-prepared-rename-plan:v1` artifact.
-- Explicit Continue API; continued-apply boundary in `rename_apply.rs`.
+- Explicit Continue API (`v2_rename_continuation_status`, `v2_rename_continue`);
+  memory-only `rename-continuation:v1` authority; continued-apply boundary is **R3**.
+
+**Status:** implemented on `m5c5-r2-prepared-continuation` (PR pending).
 
 ## R3 — Mutation / verification separation
 

@@ -9,6 +9,7 @@ mod device_detection;
 mod legacy_read_adapter;
 mod local_artifact;
 mod mutation_gate;
+mod prepared_rename_runtime;
 mod project_compatibility;
 pub mod project_manager;
 mod project_reader;
@@ -1367,9 +1368,17 @@ pub fn run() {
             app.manage(audio_runtime);
             let write_runtime = write_runtime::open_shared_write_runtime(&data_directory)?;
             app.manage(write_runtime);
+            let executor_local_paths =
+                rename_write_runtime::executor_local_paths_for_data_directory(&data_directory)?;
             let rename_write_runtime =
                 rename_write_runtime::open_shared_rename_write_runtime(&data_directory)?;
             app.manage(rename_write_runtime);
+            let prepared_rename_runtime =
+                prepared_rename_runtime::open_shared_prepared_rename_runtime(
+                    &data_directory,
+                    executor_local_paths,
+                )?;
+            app.manage(prepared_rename_runtime);
             let clone_runtime = clone_runtime::open_shared_clone_runtime(&data_directory)?;
             app.manage(clone_runtime);
 
@@ -1407,6 +1416,8 @@ pub fn run() {
             v2_api::v2_rename_authorize,
             v2_api::v2_rename_create_backup,
             v2_api::v2_rename_prepare,
+            v2_api::v2_rename_continuation_status,
+            v2_api::v2_rename_continue,
             v2_api::v2_rename_apply,
             v2_api::v2_rename_get_status,
             v2_api::v2_rename_recovery_status,

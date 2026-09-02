@@ -553,6 +553,19 @@ impl CloneRuntime {
         ))
     }
 
+    pub fn baseline_evidence_id_for_root(
+        &self,
+        root_id: &RootId,
+    ) -> Result<String, CloneRuntimeError> {
+        let state = self.lock_state()?;
+        state
+            .verification_leases
+            .values()
+            .find(|lease| lease.root_id == root_id.as_str())
+            .map(|lease| lease.baseline_evidence_id.clone())
+            .ok_or(CloneRuntimeError::CloneNotVerified)
+    }
+
     pub fn verification_status(
         &self,
         resolved: &ResolvedRoot,

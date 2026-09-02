@@ -175,12 +175,18 @@ Explicitly **not** in Phase 2:
 - `RegistryCloneWriteAuthority` adapter (Apply wiring deferred to Phase 4B)
 - **No** `v2_rename_apply`, **no** frontend clone UX yet
 
-### Phase 4B — Production rename Apply API
+### Phase 4B — Prepared rename continuation (R2 **COMPLETE** on branch)
 
-- `masterocta-prepared-rename-plan:v1` snapshot + restart continuation authority
-- `v2_rename_apply` + post-apply fresh rescan
+- `masterocta-prepared-rename-plan:v1` snapshot persisted after Prepare
+- `v2_rename_continuation_status` / `v2_rename_continue` — explicit restart
+  continuation; memory-only `rename-continuation:v1` authority
+- **No** media mutation in R2; Apply wiring uses Continuation Authority in R3
 
-### Phase 4C — Recovery API
+### Phase 4C — Production rename Apply API (R3)
+
+- `v2_rename_apply` + post-apply fresh rescan + `v2_rename_verify_committed`
+
+### Phase 4D — Recovery API (R4)
 
 - `v2_rename_recover` + cross-domain recovery block
 

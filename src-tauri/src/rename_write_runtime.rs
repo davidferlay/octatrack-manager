@@ -767,9 +767,9 @@ impl std::fmt::Display for RenameWriteRuntimeError {
 
 impl std::error::Error for RenameWriteRuntimeError {}
 
-pub fn open_shared_rename_write_runtime(
+pub fn executor_local_paths_for_data_directory(
     data_directory: &Path,
-) -> Result<SharedRenameWriteRuntime, RenameWriteRuntimeError> {
+) -> Result<ExecutorLocalPaths, RenameWriteRuntimeError> {
     fs::create_dir_all(data_directory)
         .map_err(|error| RenameWriteRuntimeError::Executor(ExecutorError::Io(error.to_string())))?;
     let data_directory = canonical_runtime_directory(data_directory)?;
@@ -779,12 +779,18 @@ pub fn open_shared_rename_write_runtime(
     let write_directory = product_directory.join(WRITE_STATE_DIRECTORY);
     ensure_real_directory(&product_directory, &write_directory)?;
     let write_directory = canonical_runtime_directory(&write_directory)?;
+    Ok(ExecutorLocalPaths {
+        staging_directory: write_directory.join("staging"),
+        backup_directory: write_directory.join("backups"),
+        journal_directory: write_directory.join("journals"),
+    })
+}
+
+pub fn open_shared_rename_write_runtime(
+    data_directory: &Path,
+) -> Result<SharedRenameWriteRuntime, RenameWriteRuntimeError> {
     Ok(Arc::new(RenameWriteRuntime::new(
-        ExecutorLocalPaths {
-            staging_directory: write_directory.join("staging"),
-            backup_directory: write_directory.join("backups"),
-            journal_directory: write_directory.join("journals"),
-        },
+        executor_local_paths_for_data_directory(data_directory)?,
         DEFAULT_PLAN_TTL,
     )))
 }
