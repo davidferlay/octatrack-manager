@@ -935,7 +935,7 @@ fn clone_state_name(state: CloneVerificationState) -> &'static str {
 fn clone_runtime_error(error: CloneRuntimeError) -> ApiError {
     ApiError::new(
         error.code(),
-        error.to_string(),
+        error.public_message(),
         matches!(
             error,
             CloneRuntimeError::VerificationExpired
@@ -1030,13 +1030,13 @@ pub(crate) fn create_managed_clone_sync(
     let verification = clone_runtime
         .verify_managed_clone_registration(registry, &source, &clone, &entries, false)
         .map_err(clone_runtime_error)?;
-    let _ = registry.close(source_root_id);
+    let source_closed = registry.close(source_root_id).is_ok();
     Ok(ManagedCloneDto {
         schema: "managed-clone:v1",
         clone_root_id: clone_root_id.as_str().to_owned(),
         clone_verification_id: verification.clone_verification_id,
         entry_count: verification.baseline_entry_count,
-        source_root_closed: true,
+        source_root_closed: source_closed,
     })
 }
 
@@ -4262,7 +4262,8 @@ mod tests {
         let session =
             register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
 
-        let snapshot = list_library_sync(&registry, &catalog, &RootId::new(session.root_id).unwrap()).unwrap();
+        let snapshot =
+            list_library_sync(&registry, &catalog, &RootId::new(session.root_id).unwrap()).unwrap();
 
         assert_eq!(snapshot.sets[0].relative_path.as_str(), "SET_A");
         assert_eq!(

@@ -1,8 +1,11 @@
 #![forbid(unsafe_code)]
-
 // Production apply wiring (Phase 4B) consumes the authority adapter and disk helpers below.
 #![allow(dead_code)]
 
+use crate::local_artifact::{
+    ensure_real_directory, CloneAuthorityId, CloneSourceEvidenceId, CloneVerificationId,
+    LocalArtifactError, LocalArtifactStore,
+};
 use crate::root_registry::{ResolvedRoot, RootRegistry, RootRegistryError};
 use ot_domain::RootId;
 use ot_executor::{ApprovedExecutionRoot, AuthorityError, CloneWriteAuthority, VerifiedCloneRoot};
@@ -10,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -137,6 +140,7 @@ struct CloneRuntimeState {
 
 pub struct CloneRuntime {
     storage_root: PathBuf,
+    artifact_store: LocalArtifactStore,
     state: Mutex<CloneRuntimeState>,
     verification_ttl: Duration,
 }
@@ -159,7 +163,10 @@ pub enum CloneRuntimeError {
     AuthorityExpired,
     AmbiguousIdentity,
     UnstableIdentity,
-    Io(String),
+    InvalidArtifactId,
+    ArtifactTampered,
+    SpecialFileForbidden,
+    Io,
     Unavailable,
 }
 
@@ -182,14 +189,15 @@ impl CloneRuntimeError {
             Self::AuthorityExpired => "CLONE_AUTHORITY_EXPIRED",
             Self::AmbiguousIdentity => "ROOT_IDENTITY_AMBIGUOUS",
             Self::UnstableIdentity => "UNSTABLE_DEVICE_IDENTITY",
-            Self::Io(_) | Self::Unavailable => "CLONE_RUNTIME_UNAVAILABLE",
+            Self::InvalidArtifactId => "CLONE_INVALID_ARTIFACT_ID",
+            Self::ArtifactTampered => "CLONE_ARTIFACT_TAMPERED",
+            Self::SpecialFileForbidden => "CLONE_SPECIAL_FILE_FORBIDDEN",
+            Self::Io | Self::Unavailable => "CLONE_RUNTIME_UNAVAILABLE",
         }
     }
-}
 
-impl std::fmt::Display for CloneRuntimeError {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(match self {
+    pub fn public_message(&self) -> &'static str {
+        match self {
             Self::NotApproved => "root session is not approved",
             Self::SourceEqualsClone => "source and clone roots must be distinct",
             Self::NestedRoot => "clone root cannot be nested inside source or vice versa",
@@ -206,21 +214,37 @@ impl std::fmt::Display for CloneRuntimeError {
             Self::AuthorityExpired => "clone authority has expired",
             Self::AmbiguousIdentity => "root identity is ambiguous on this device",
             Self::UnstableIdentity => "clone operations require a stable device identity",
-            Self::Io(message) => message,
+            Self::InvalidArtifactId => "clone artifact identifier is invalid",
+            Self::ArtifactTampered => "clone artifact content does not match the expected record",
+            Self::SpecialFileForbidden => "special files are forbidden in clone baselines",
+            Self::Io => "clone runtime storage failed",
             Self::Unavailable => "clone runtime is unavailable",
-        })
+        }
+    }
+}
+
+impl std::fmt::Display for CloneRuntimeError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.public_message())
     }
 }
 
 impl std::error::Error for CloneRuntimeError {}
 
 impl CloneRuntime {
-    pub fn new(storage_root: PathBuf, verification_ttl: Duration) -> Self {
-        Self {
+    pub fn new(
+        storage_root: PathBuf,
+        verification_ttl: Duration,
+    ) -> Result<Self, CloneRuntimeError> {
+        let artifact_store =
+            LocalArtifactStore::new(storage_root.clone(), CLONE_VERIFICATIONS_DIRECTORY)
+                .map_err(map_local_artifact_error)?;
+        Ok(Self {
             storage_root,
+            artifact_store,
             state: Mutex::new(CloneRuntimeState::default()),
             verification_ttl,
-        }
+        })
     }
 
     pub fn record_source_evidence(
@@ -250,7 +274,7 @@ impl CloneRuntime {
             entries,
             manifest_binding,
         };
-        persist_source_evidence(&self.storage_root, &record)?;
+        persist_source_evidence(&self.artifact_store, &record)?;
         Ok(record)
     }
 
@@ -269,11 +293,9 @@ impl CloneRuntime {
             &source.session.device_fingerprint,
             &source_surface,
         );
-        let managed_root = self
-            .storage_root
-            .join(PRODUCT_DIRECTORY)
-            .join(MANAGED_CLONES_DIRECTORY);
-        ensure_real_directory(&self.storage_root, &managed_root)?;
+        let managed_root = self.storage_root.join(MANAGED_CLONES_DIRECTORY);
+        ensure_real_directory(&self.storage_root, &managed_root)
+            .map_err(map_local_artifact_error)?;
         let partial = managed_root.join(format!("{clone_token}.partial"));
         let final_path = managed_root.join(&clone_token);
         remove_path_if_exists(&partial)?;
@@ -316,7 +338,7 @@ impl CloneRuntime {
             live_entries.len() as u64,
             self.verification_ttl,
         )?;
-        persist_verification(&self.storage_root, &record)?;
+        persist_verification(&self.artifact_store, &record)?;
         self.store_verification(record.clone());
         Ok(record)
     }
@@ -355,7 +377,7 @@ impl CloneRuntime {
             live_entries.len() as u64,
             self.verification_ttl,
         )?;
-        persist_verification(&self.storage_root, &record)?;
+        persist_verification(&self.artifact_store, &record)?;
         self.store_verification(record.clone());
         Ok(record)
     }
@@ -364,8 +386,11 @@ impl CloneRuntime {
         &self,
         source_evidence_id: &str,
     ) -> Result<CloneSourceEvidenceRecord, CloneRuntimeError> {
-        let path = source_evidence_path(&self.storage_root, source_evidence_id);
-        read_json(&path)
+        let artifact_id = CloneSourceEvidenceId::parse(source_evidence_id)
+            .map_err(|_| CloneRuntimeError::InvalidArtifactId)?;
+        self.artifact_store
+            .read_json(artifact_id.file_stem())
+            .map_err(map_local_artifact_error)
     }
 
     pub fn verification_for_root(
@@ -399,7 +424,7 @@ impl CloneRuntime {
         record.verified_at_unix = unix_now();
         record.expires_at_unix = unix_now() + self.verification_ttl.as_secs();
         record.state = CloneVerificationState::Verified;
-        persist_verification(&self.storage_root, &record)?;
+        persist_verification(&self.artifact_store, &record)?;
         self.store_verification(record.clone());
         Ok(record)
     }
@@ -424,7 +449,7 @@ impl CloneRuntime {
             issued_at_unix: unix_now(),
             expires_at_unix: verification.expires_at_unix,
         };
-        persist_authority(&self.storage_root, &authority)?;
+        persist_authority(&self.artifact_store, &authority)?;
         self.store_authority(authority.clone());
         Ok(authority)
     }
@@ -440,7 +465,15 @@ impl CloneRuntime {
             .authorities
             .get(clone_authority_id)
             .cloned()
-            .or_else(|| load_authority_from_disk(&self.storage_root, clone_authority_id).ok())
+            .or_else(|| {
+                CloneAuthorityId::parse(clone_authority_id)
+                    .ok()
+                    .and_then(|artifact_id| {
+                        self.artifact_store
+                            .read_json::<CloneAuthorityRecord>(artifact_id.file_stem())
+                            .ok()
+                    })
+            })
             .ok_or(CloneRuntimeError::AuthorityNotFound)?;
         if authority.expires_at_unix <= unix_now() {
             return Err(CloneRuntimeError::AuthorityExpired);
@@ -498,7 +531,7 @@ impl CloneRuntime {
             entries.len() as u64,
             self.verification_ttl,
         )?;
-        persist_verification(&self.storage_root, &record)?;
+        persist_verification(&self.artifact_store, &record)?;
         self.store_verification(record.clone());
         Ok(record)
     }
@@ -622,11 +655,8 @@ pub fn open_shared_clone_runtime(
     fs::create_dir_all(data_directory).map_err(map_io_error)?;
     let canonical = data_directory.canonicalize().map_err(map_io_error)?;
     let storage_root = canonical.join(PRODUCT_DIRECTORY);
-    ensure_real_directory(&canonical, &storage_root)?;
-    Ok(Arc::new(CloneRuntime::new(
-        storage_root,
-        DEFAULT_VERIFICATION_TTL,
-    )))
+    ensure_real_directory(&canonical, &storage_root).map_err(map_local_artifact_error)?;
+    CloneRuntime::new(storage_root, DEFAULT_VERIFICATION_TTL).map(Arc::new)
 }
 
 fn build_verification_record(
@@ -790,7 +820,7 @@ fn collect_baseline_entries(
         return Ok(());
     }
     if !metadata.is_file() {
-        return Ok(());
+        return Err(CloneRuntimeError::SpecialFileForbidden);
     }
     let relative = path
         .strip_prefix(root)
@@ -818,6 +848,8 @@ fn copy_tree_nofollow(from: &Path, to: &Path) -> Result<(), CloneRuntimeError> {
             copy_tree_nofollow(&entry.path(), &dest)?;
         } else if metadata.is_file() {
             copy_file_nofollow(&entry.path(), &dest)?;
+        } else {
+            return Err(CloneRuntimeError::SpecialFileForbidden);
         }
     }
     Ok(())
@@ -854,28 +886,52 @@ fn open_file_nofollow(path: &Path) -> Result<File, CloneRuntimeError> {
     if metadata.file_type().is_symlink() || !metadata.is_file() {
         return Err(CloneRuntimeError::SymlinkForbidden);
     }
-    File::open(path).map_err(map_io_error)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(path)
+            .map_err(map_io_error)
+    }
+    #[cfg(not(unix))]
+    {
+        File::open(path).map_err(map_io_error)
+    }
 }
 
-fn ensure_real_directory(parent: &Path, directory: &Path) -> Result<(), CloneRuntimeError> {
-    match fs::symlink_metadata(directory) {
-        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
-            Err(CloneRuntimeError::Unavailable)
-        }
-        Ok(_) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            fs::create_dir_all(directory).map_err(map_io_error)?;
-            Ok(())
-        }
-        Err(error) => Err(map_io_error(error)),
-    }
-    .and_then(|_| {
-        let canonical = directory.canonicalize().map_err(map_io_error)?;
-        if !canonical.starts_with(parent) {
-            return Err(CloneRuntimeError::Unavailable);
-        }
-        Ok(())
-    })
+fn persist_source_evidence(
+    artifact_store: &LocalArtifactStore,
+    record: &CloneSourceEvidenceRecord,
+) -> Result<(), CloneRuntimeError> {
+    let artifact_id = CloneSourceEvidenceId::parse(&record.source_evidence_id)
+        .map_err(|_| CloneRuntimeError::InvalidArtifactId)?;
+    artifact_store
+        .write_json_create_once(artifact_id.file_stem(), record)
+        .map_err(map_local_artifact_error)
+}
+
+fn persist_verification(
+    artifact_store: &LocalArtifactStore,
+    record: &CloneVerificationRecord,
+) -> Result<(), CloneRuntimeError> {
+    let artifact_id = CloneVerificationId::parse(&record.clone_verification_id)
+        .map_err(|_| CloneRuntimeError::InvalidArtifactId)?;
+    artifact_store
+        .write_json_create_once(artifact_id.file_stem(), record)
+        .map_err(map_local_artifact_error)
+}
+
+fn persist_authority(
+    artifact_store: &LocalArtifactStore,
+    record: &CloneAuthorityRecord,
+) -> Result<(), CloneRuntimeError> {
+    let artifact_id = CloneAuthorityId::parse(&record.clone_authority_id)
+        .map_err(|_| CloneRuntimeError::InvalidArtifactId)?;
+    artifact_store
+        .write_json_create_once(artifact_id.file_stem(), record)
+        .map_err(map_local_artifact_error)
 }
 
 fn remove_path_if_exists(path: &Path) -> Result<(), CloneRuntimeError> {
@@ -888,90 +944,6 @@ fn remove_path_if_exists(path: &Path) -> Result<(), CloneRuntimeError> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(map_io_error(error)),
     }
-}
-
-fn persist_source_evidence(
-    storage_root: &Path,
-    record: &CloneSourceEvidenceRecord,
-) -> Result<(), CloneRuntimeError> {
-    let directory = storage_root.join(CLONE_VERIFICATIONS_DIRECTORY);
-    ensure_real_directory(storage_root, &directory)?;
-    let path = source_evidence_path(storage_root, &record.source_evidence_id);
-    if path.exists() {
-        return Ok(());
-    }
-    write_json(&path, record)
-}
-
-fn persist_verification(
-    storage_root: &Path,
-    record: &CloneVerificationRecord,
-) -> Result<(), CloneRuntimeError> {
-    let directory = storage_root.join(CLONE_VERIFICATIONS_DIRECTORY);
-    ensure_real_directory(storage_root, &directory)?;
-    let path = verification_path(storage_root, &record.clone_verification_id);
-    if path.exists() {
-        return Ok(());
-    }
-    write_json(&path, record)
-}
-
-fn persist_authority(
-    storage_root: &Path,
-    record: &CloneAuthorityRecord,
-) -> Result<(), CloneRuntimeError> {
-    let directory = storage_root.join(CLONE_VERIFICATIONS_DIRECTORY);
-    ensure_real_directory(storage_root, &directory)?;
-    let path = authority_path(storage_root, &record.clone_authority_id);
-    write_json(&path, record)
-}
-
-fn load_authority_from_disk(
-    storage_root: &Path,
-    authority_id: &str,
-) -> Result<CloneAuthorityRecord, CloneRuntimeError> {
-    read_json(&authority_path(storage_root, authority_id))
-}
-
-fn source_evidence_path(storage_root: &Path, source_evidence_id: &str) -> PathBuf {
-    storage_root
-        .join(CLONE_VERIFICATIONS_DIRECTORY)
-        .join(format!("{source_evidence_id}.json"))
-}
-
-fn verification_path(storage_root: &Path, verification_id: &str) -> PathBuf {
-    storage_root
-        .join(CLONE_VERIFICATIONS_DIRECTORY)
-        .join(format!("{verification_id}.json"))
-}
-
-fn authority_path(storage_root: &Path, authority_id: &str) -> PathBuf {
-    storage_root
-        .join(CLONE_VERIFICATIONS_DIRECTORY)
-        .join(format!("{authority_id}.json"))
-}
-
-fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), CloneRuntimeError> {
-    let serialized = serde_json::to_vec_pretty(value)
-        .map_err(|error| CloneRuntimeError::Io(error.to_string()))?;
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)
-        .map_err(map_io_error)?;
-    file.write_all(&serialized).map_err(map_io_error)?;
-    file.sync_all().map_err(map_io_error)?;
-    Ok(())
-}
-
-fn read_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, CloneRuntimeError> {
-    let mut file = OpenOptions::new()
-        .read(true)
-        .open(path)
-        .map_err(map_io_error)?;
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer).map_err(map_io_error)?;
-    serde_json::from_slice(&buffer).map_err(|error| CloneRuntimeError::Io(error.to_string()))
 }
 
 fn purge_expired(state: &mut CloneRuntimeState) {
@@ -1006,8 +978,19 @@ fn hex_digest(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-fn map_io_error(error: std::io::Error) -> CloneRuntimeError {
-    CloneRuntimeError::Io(error.to_string())
+fn map_io_error(_error: std::io::Error) -> CloneRuntimeError {
+    CloneRuntimeError::Io
+}
+
+fn map_local_artifact_error(error: LocalArtifactError) -> CloneRuntimeError {
+    match error {
+        LocalArtifactError::InvalidArtifactId => CloneRuntimeError::InvalidArtifactId,
+        LocalArtifactError::ArtifactTampered => CloneRuntimeError::ArtifactTampered,
+        LocalArtifactError::SymlinkForbidden => CloneRuntimeError::SymlinkForbidden,
+        LocalArtifactError::NotRegularFile => CloneRuntimeError::Unavailable,
+        LocalArtifactError::ContainmentViolation => CloneRuntimeError::Unavailable,
+        LocalArtifactError::Io => CloneRuntimeError::Io,
+    }
 }
 
 fn map_registry_authority(error: RootRegistryError) -> AuthorityError {
@@ -1129,5 +1112,55 @@ mod tests {
         let resolved = registry.resolve(&session.root_id).unwrap();
         let error = reject_source_clone_relationship(&resolved, &resolved).unwrap_err();
         assert!(matches!(error, CloneRuntimeError::SourceEqualsClone));
+    }
+
+    #[test]
+    fn managed_clone_storage_avoids_double_product_directory() {
+        let source_dir = TempDir::new().unwrap();
+        write_fixture_tree(source_dir.path());
+        let data_dir = TempDir::new().unwrap();
+        let registry = RootRegistry::new(Arc::new(PathStableIdentity), Duration::from_secs(3600));
+        let clone_runtime = open_shared_clone_runtime(data_dir.path()).unwrap();
+        let source_session = registry
+            .register(source_dir.path().to_str().unwrap())
+            .unwrap();
+        let source = registry.resolve(&source_session.root_id).unwrap();
+        let (clone_path, _) = clone_runtime
+            .create_managed_clone(&registry, &source)
+            .unwrap();
+        let expected_parent = data_dir
+            .path()
+            .join(PRODUCT_DIRECTORY)
+            .join(MANAGED_CLONES_DIRECTORY);
+        assert!(clone_path.starts_with(expected_parent.canonicalize().unwrap()));
+        assert!(!clone_path
+            .to_string_lossy()
+            .contains("MasterOCTa/MasterOCTa"));
+    }
+
+    #[test]
+    fn load_source_evidence_rejects_invalid_artifact_id() {
+        let data_dir = TempDir::new().unwrap();
+        let clone_runtime = open_shared_clone_runtime(data_dir.path()).unwrap();
+        let error = clone_runtime
+            .load_source_evidence("../etc/passwd")
+            .unwrap_err();
+        assert!(matches!(error, CloneRuntimeError::InvalidArtifactId));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn baseline_scan_rejects_special_files() {
+        use std::process::Command;
+
+        let root = TempDir::new().unwrap();
+        write_fixture_tree(root.path());
+        let fifo = root.path().join("SET/AUDIO/pipe.fifo");
+        Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .expect("mkfifo should exist on unix test hosts");
+        let error = scan_baseline_entries(root.path()).unwrap_err();
+        assert!(matches!(error, CloneRuntimeError::SpecialFileForbidden));
     }
 }
