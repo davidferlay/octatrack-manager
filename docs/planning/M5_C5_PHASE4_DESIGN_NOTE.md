@@ -80,7 +80,7 @@ RootId and rescan bumps revision.
 | Cross-domain recovery block | Rename `Applying`/`RecoveryRequired` vs additive write |
 
 Executor rollback is **GO**; production `v2_rename_recover` and cross-domain
-gates are **missing** (Phase 4C).
+mutation gates landed in **R4 (#82)**.
 
 ## Operator flow (clone-first)
 

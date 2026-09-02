@@ -23,7 +23,7 @@ partial-apply work in PR #75 (closed without merge).
 | R1 | `m5c5-r1-clone-evidence` | `main` | Durable baseline evidence; memory leases; `register_managed_clone` |
 | R2 | `m5c5-r2-prepared-continuation` | `main` | Prepared plan snapshot; explicit continuation API |
 | R3 | `m5c5-r3-apply-state` | `main` | **Merged #80**; mutation/verification separation; committed verification hardening follows |
-| R4 | `m5c5-r4-recovery` | `main` | `v2_rename_recover`; cross-domain mutation gate |
+| R4 | `m5c5-r4-recovery` | `main` | **Merged #82** — `v2_rename_recover`; cross-domain mutation gate |
 | 4D | `m5c5-phase4d-ux` | `main` | Clone-first operator UX + E2E |
 
 PR #75 (`m5c5-phase4b-rename-apply`) is **not merged**; partial apply is replaced
@@ -80,6 +80,11 @@ dedicated branches from `main`.
   continue/apply, and additive `v2_change_apply`. Read-only plan APIs remain allowed.
 - Production recovery rejects `Prepared`, `Committed`, double recovery, tampered backup/
   journal/authorization, and unknown live bytes (fail-closed).
+- Restart discovery returns durable journal `planId` even when the in-memory plan
+  store expired.
+- Production-route tests cover RootId rotation recover, RecoveryRequired recover,
+  Committed+VerificationFailed recover block, mutation gate matrix, and rolled-back
+  gate clear.
 
 ## Gate C
 

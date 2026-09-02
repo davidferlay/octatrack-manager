@@ -2044,7 +2044,7 @@ fn rename_status_dto(status: &RenameSessionStatus) -> RenameStatusDto {
     RenameStatusDto {
         schema: "rename-status:v1",
         operation_id: status.operation_id.as_str().to_owned(),
-        plan_id: if status.plan_available {
+        plan_id: if status.plan_available || status.journal_status.is_some() {
             Some(status.plan_id.as_str().to_owned())
         } else {
             None
@@ -4625,6 +4625,19 @@ mod tests {
             .join(format!("{stem}.json"))
     }
 
+    fn rename_authorization_path(data_directory: &Path, operation_id: &str) -> PathBuf {
+        let stem = operation_id
+            .strip_prefix("operation:v1:")
+            .expect("operation id uses the v1 prefix");
+        data_directory
+            .join("MasterOCTa")
+            .join("write-state")
+            .join("journals")
+            .join("rename")
+            .join("authorizations")
+            .join(format!("{stem}.json"))
+    }
+
     fn prepared_snapshot_path(data_directory: &Path, operation_id: &str) -> PathBuf {
         let stem = operation_id
             .strip_prefix("operation:v1:")
@@ -7028,7 +7041,11 @@ mod tests {
         assert_eq!(recovery.operations.len(), 1);
         assert_eq!(recovery.operations[0].state, "prepared");
         assert!(recovery.operations[0].plan_expired);
-        assert!(recovery.operations[0].plan_id.is_none());
+        assert_eq!(
+            recovery.operations[0].plan_id.as_deref(),
+            Some(fixture.plan_id.as_str())
+        );
+        assert!(!recovery.operations[0].recovery_eligible);
     }
 
     #[test]
@@ -7060,7 +7077,7 @@ mod tests {
         .unwrap();
         assert_eq!(status.state, "prepared");
         assert!(status.plan_expired);
-        assert!(status.plan_id.is_none());
+        assert_eq!(status.plan_id.as_deref(), Some(fixture.plan_id.as_str()));
     }
 
     #[test]
@@ -8208,5 +8225,620 @@ mod tests {
         assert_eq!(verified.schema, "rename-rollback-verification:v1");
         assert_eq!(verified.mutation_state, "rolled_back");
         assert_eq!(verified.verification_state, "passed");
+    }
+
+    #[test]
+    fn rename_recover_from_recovery_required_journal_restores_source() {
+        let fixture = setup_rename_through_backup();
+        prepare_fixture_rename(&fixture);
+        simulate_partial_destination_publish(&fixture);
+        set_rename_journal_status(
+            fixture.data_directory.path(),
+            &fixture.operation_id,
+            ot_executor::RenameJournalStatus::RecoveryRequired,
+        );
+
+        let recovered =
+            recover_fixture_rename(&fixture, &fixture.rename_runtime, &fixture.prepared_runtime);
+        assert_eq!(recovered.mutation_state, "rolled_back");
+        assert_eq!(recovered.verification_state, "passed");
+        assert!(fixture._root.path().join("SET/AUDIO/pad.wav").exists());
+        assert!(!fixture._root.path().join("SET/AUDIO/new-pad.wav").exists());
+    }
+
+    #[test]
+    fn rename_recover_rejects_approval_mismatch_without_mutation() {
+        let fixture = setup_rename_through_backup();
+        prepare_fixture_rename(&fixture);
+        simulate_partial_destination_publish(&fixture);
+        let before = collect_fixture_manifest(fixture._root.path());
+        let wrong = format!("operation:v1:{}", "c".repeat(64));
+
+        let error = recover_rename_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.rename_runtime,
+            &fixture.prepared_runtime,
+            &fixture.root_id,
+            &fixture.operation_id,
+            &wrong,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "RECOVERY_APPROVAL_REQUIRED");
+        assert_eq!(before, collect_fixture_manifest(fixture._root.path()));
+    }
+
+    #[test]
+    fn rename_recover_blocks_committed_with_verification_failed() {
+        let fixture = setup_rename_through_backup();
+        prepare_fixture_rename(&fixture);
+        let continuation = continue_fixture_rename(
+            &fixture,
+            &fixture.prepared_runtime,
+            &fixture.clone_runtime,
+            &fixture.rename_runtime,
+        );
+        apply_rename_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.clone_runtime,
+            &fixture.write,
+            &fixture.rename_runtime,
+            &fixture.prepared_runtime,
+            &fixture.root_id,
+            &fixture.operation_id,
+            &fixture.operation_id,
+            &continuation.continuation_authority_id,
+        )
+        .unwrap();
+        let resolved = fixture.registry.resolve(&fixture.root_id).unwrap();
+        let project_rewrites = fixture
+            .rename_runtime
+            .committed_project_rewrites(
+                &OperationId::parse(fixture.operation_id.clone()).unwrap(),
+                &resolved.session.device_fingerprint,
+            )
+            .unwrap();
+        let project_path = fixture
+            ._root
+            .path()
+            .join(&project_rewrites[0].relative_path);
+        fs::write(&project_path, b"tampered-after-commit").unwrap();
+
+        let verified = verify_rename_committed_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.rename_runtime,
+            &fixture.prepared_runtime,
+            &fixture.root_id,
+            &fixture.operation_id,
+        )
+        .unwrap();
+        assert_eq!(verified.mutation_state, "committed");
+        assert_eq!(verified.verification_state, "failed");
+
+        let before = collect_fixture_manifest(fixture._root.path());
+        let error = recover_rename_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.rename_runtime,
+            &fixture.prepared_runtime,
+            &fixture.root_id,
+            &fixture.operation_id,
+            &fixture.operation_id,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "INVALID_TRANSITION");
+        assert_eq!(before, collect_fixture_manifest(fixture._root.path()));
+    }
+
+    #[test]
+    fn rename_restart_recover_after_root_id_rotation() {
+        let fixture = setup_rename_through_backup();
+        let root_path = fixture._root.path().to_path_buf();
+        prepare_fixture_rename(&fixture);
+        simulate_partial_destination_publish(&fixture);
+
+        fixture.registry.close(&fixture.root_id).unwrap();
+        let session = register_root_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            root_path.to_str().unwrap(),
+        )
+        .unwrap();
+        let new_root_id = RootId::new(session.root_id).unwrap();
+
+        let data_path = fixture.data_directory.path().to_path_buf();
+        let restarted_catalog = Arc::clone(&fixture.catalog);
+        let restarted_rename = open_test_rename_runtime(&data_path);
+        let restarted_prepared = prepared_runtime(&data_path);
+
+        let recovery =
+            rename_recovery_status_sync(&fixture.registry, &restarted_rename, &new_root_id)
+                .unwrap();
+        assert!(recovery.recovery_required);
+        assert_eq!(
+            recovery.operations[0].plan_id.as_deref(),
+            Some(fixture.plan_id.as_str())
+        );
+
+        let recovered = recover_rename_sync(
+            &fixture.registry,
+            &restarted_catalog,
+            &restarted_rename,
+            &restarted_prepared,
+            &new_root_id,
+            &fixture.operation_id,
+            &fixture.operation_id,
+        )
+        .unwrap();
+        assert_eq!(recovered.mutation_state, "rolled_back");
+        assert_eq!(recovered.verification_state, "passed");
+        assert!(root_path.join("SET/AUDIO/pad.wav").exists());
+        assert!(!root_path.join("SET/AUDIO/new-pad.wav").exists());
+    }
+
+    #[test]
+    fn rename_recover_blocks_unknown_destination_bytes() {
+        let fixture = setup_rename_through_backup();
+        prepare_fixture_rename(&fixture);
+        simulate_partial_destination_publish(&fixture);
+        fs::write(
+            fixture._root.path().join("SET/AUDIO/new-pad.wav"),
+            b"unknown-destination-bytes",
+        )
+        .unwrap();
+        let before = collect_fixture_manifest(fixture._root.path());
+
+        let error = recover_rename_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.rename_runtime,
+            &fixture.prepared_runtime,
+            &fixture.root_id,
+            &fixture.operation_id,
+            &fixture.operation_id,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "RECOVERY_REQUIRED");
+        assert_eq!(before, collect_fixture_manifest(fixture._root.path()));
+    }
+
+    #[test]
+    fn rename_recover_blocks_unknown_project_bytes() {
+        let fixture = setup_rename_through_backup();
+        prepare_fixture_rename(&fixture);
+        set_rename_journal_status(
+            fixture.data_directory.path(),
+            &fixture.operation_id,
+            ot_executor::RenameJournalStatus::Applying,
+        );
+        fs::write(
+            fixture._root.path().join("SET/PROJECT/project.work"),
+            b"unknown-project-bytes",
+        )
+        .unwrap();
+        let before = collect_fixture_manifest(fixture._root.path());
+
+        let error = recover_rename_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.rename_runtime,
+            &fixture.prepared_runtime,
+            &fixture.root_id,
+            &fixture.operation_id,
+            &fixture.operation_id,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "RECOVERY_REQUIRED");
+        assert_eq!(before, collect_fixture_manifest(fixture._root.path()));
+    }
+
+    #[test]
+    fn rename_recover_blocks_unknown_sidecar_bytes() {
+        let fixture = setup_rename_through_backup();
+        prepare_fixture_rename(&fixture);
+        set_rename_journal_status(
+            fixture.data_directory.path(),
+            &fixture.operation_id,
+            ot_executor::RenameJournalStatus::Applying,
+        );
+        fs::write(
+            fixture._root.path().join("SET/AUDIO/pad.ot"),
+            b"unknown-sidecar-bytes",
+        )
+        .unwrap();
+        let before = collect_fixture_manifest(fixture._root.path());
+
+        let error = recover_rename_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.rename_runtime,
+            &fixture.prepared_runtime,
+            &fixture.root_id,
+            &fixture.operation_id,
+            &fixture.operation_id,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "RECOVERY_REQUIRED");
+        assert_eq!(before, collect_fixture_manifest(fixture._root.path()));
+    }
+
+    #[test]
+    fn rename_recover_rejects_tampered_backup_without_mutation() {
+        let fixture = setup_rename_through_backup();
+        prepare_fixture_rename(&fixture);
+        simulate_partial_destination_publish(&fixture);
+        let before = collect_fixture_manifest(fixture._root.path());
+        let manifest_path =
+            backup_snapshot_directory(fixture.data_directory.path(), &fixture.snapshot_id)
+                .join("manifest.json");
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+        manifest["recovery_binding"] =
+            serde_json::Value::String(format!("recovery-binding:rename:v1:{}", "e".repeat(64)));
+        fs::write(manifest_path, serde_json::to_vec_pretty(&manifest).unwrap()).unwrap();
+
+        let error = recover_rename_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.rename_runtime,
+            &fixture.prepared_runtime,
+            &fixture.root_id,
+            &fixture.operation_id,
+            &fixture.operation_id,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "BACKUP_FAILED");
+        assert_eq!(before, collect_fixture_manifest(fixture._root.path()));
+    }
+
+    #[test]
+    fn rename_recover_rejects_tampered_journal_without_mutation() {
+        let fixture = setup_rename_through_backup();
+        prepare_fixture_rename(&fixture);
+        simulate_partial_destination_publish(&fixture);
+        let before = collect_fixture_manifest(fixture._root.path());
+        let journal_path =
+            rename_journal_path(fixture.data_directory.path(), &fixture.operation_id);
+        let mut journal: ot_executor::RenameOperationJournal =
+            serde_json::from_slice(&fs::read(&journal_path).unwrap()).unwrap();
+        journal.recovery_binding = format!("recovery-binding:rename:v1:{}", "f".repeat(64));
+        fs::write(
+            journal_path,
+            serde_json::to_string_pretty(&journal).unwrap(),
+        )
+        .unwrap();
+
+        let error = recover_rename_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.rename_runtime,
+            &fixture.prepared_runtime,
+            &fixture.root_id,
+            &fixture.operation_id,
+            &fixture.operation_id,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "PREPARED_JOURNAL_MISMATCH");
+        assert_eq!(before, collect_fixture_manifest(fixture._root.path()));
+    }
+
+    #[test]
+    fn rename_recover_rejects_tampered_authorization_without_mutation() {
+        let fixture = setup_rename_through_backup();
+        prepare_fixture_rename(&fixture);
+        simulate_partial_destination_publish(&fixture);
+        let before = collect_fixture_manifest(fixture._root.path());
+        let authorization_path =
+            rename_authorization_path(fixture.data_directory.path(), &fixture.operation_id);
+        fs::set_permissions(&authorization_path, fs::Permissions::from_mode(0o644)).unwrap();
+        let mut authorization: serde_json::Value =
+            serde_json::from_slice(&fs::read(&authorization_path).unwrap()).unwrap();
+        authorization["recovery_binding"] =
+            serde_json::Value::String(format!("recovery-binding:rename:v1:{}", "a".repeat(64)));
+        fs::write(
+            &authorization_path,
+            serde_json::to_vec_pretty(&authorization).unwrap(),
+        )
+        .unwrap();
+        fs::set_permissions(&authorization_path, fs::Permissions::from_mode(0o444)).unwrap();
+
+        let error = recover_rename_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.rename_runtime,
+            &fixture.prepared_runtime,
+            &fixture.root_id,
+            &fixture.operation_id,
+            &fixture.operation_id,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "JOURNAL_FAILED");
+        assert_eq!(before, collect_fixture_manifest(fixture._root.path()));
+    }
+
+    #[test]
+    fn rename_mutation_gate_blocks_new_rename_when_recovery_required() {
+        let fixture = setup_rename_through_backup();
+        prepare_fixture_rename(&fixture);
+        set_rename_journal_status(
+            fixture.data_directory.path(),
+            &fixture.operation_id,
+            ot_executor::RenameJournalStatus::Applying,
+        );
+
+        let dto =
+            list_library_dto_sync(&fixture.registry, &fixture.catalog, &fixture.root_id).unwrap();
+        let source_id = dto
+            .audio_files
+            .iter()
+            .find(|file| file.relative_path == "SET/AUDIO/unused.wav")
+            .unwrap()
+            .file_instance_id
+            .clone();
+        let RenamePlanResponseDto::Planned(new_plan) = plan_rename_sample_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.clone_runtime,
+            &fixture.rename_runtime,
+            &fixture.root_id,
+            &source_id,
+            "SET/AUDIO/gate-unused.wav",
+        )
+        .unwrap() else {
+            panic!("expected planned rename");
+        };
+
+        let error = authorize_rename_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.clone_runtime,
+            &fixture.write,
+            &fixture.rename_runtime,
+            &fixture.root_id,
+            &new_plan.plan_id,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "RECOVERY_REQUIRED");
+    }
+
+    #[test]
+    fn rename_mutation_gate_blocks_rename_when_additive_recovery_required() {
+        let fixture = setup_rename_through_backup();
+        let root_path = fixture._root.path().to_path_buf();
+        let audio_pool = root_path.join("SET/AUDIO");
+        let source = audio_pool.join("unused.wav");
+        let destination = audio_pool.join("additive-gate.wav");
+        fs::copy(&source, &destination).unwrap();
+        let resolved = fixture.registry.resolve(&fixture.root_id).unwrap();
+        let digest = fixture.plan_id.strip_prefix("plan:v1:").unwrap().to_owned();
+        let operation_id = format!("operation:v1:{digest}");
+        let snapshot_id = format!("snapshot:v1:{digest}");
+        let write_state = fixture.data_directory.path().join("MasterOCTa/write-state");
+        let backup_directory = write_state.join("backups").join(&digest);
+        fs::create_dir_all(backup_directory.join("files/SET/AUDIO")).unwrap();
+        fs::copy(&source, backup_directory.join("files/SET/AUDIO/unused.wav")).unwrap();
+        let source_before = fs::read(&source).unwrap();
+        let content_hash = format!("sha256:{:x}", Sha256::digest(&source_before));
+        let recovery_binding = recovery_binding_fixture(
+            &fixture.plan_id,
+            &snapshot_id,
+            &resolved.session.device_fingerprint,
+            resolved.session.observed_revision,
+            "SET/AUDIO/unused.wav",
+            "SET/AUDIO/additive-gate.wav",
+            source_before.len() as u64,
+            &content_hash,
+        );
+        fs::write(
+            backup_directory.join("manifest.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema": "masterocta-backup:v2",
+                "snapshot_id": snapshot_id,
+                "plan_id": fixture.plan_id,
+                "source_fingerprint": resolved.session.device_fingerprint,
+                "base_observed_revision": resolved.session.observed_revision,
+                "source_relative_path": "SET/AUDIO/unused.wav",
+                "destination_relative_path": "SET/AUDIO/additive-gate.wav",
+                "recovery_binding": recovery_binding,
+                "complete": true,
+                "files": [{
+                    "relative_path": "SET/AUDIO/unused.wav",
+                    "byte_size": source_before.len() as u64,
+                    "content_hash": content_hash,
+                }],
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let journal_directory = write_state.join("journals");
+        fs::create_dir_all(&journal_directory).unwrap();
+        fs::write(
+            journal_directory.join(format!("{digest}.json")),
+            serde_json::to_vec_pretty(&OperationJournal {
+                schema: "masterocta-operation-journal:v3".into(),
+                operation_id: operation_id.clone(),
+                plan_id: fixture.plan_id.clone(),
+                root_fingerprint: resolved.session.device_fingerprint.clone(),
+                base_observed_revision: resolved.session.observed_revision,
+                source_relative_path: "SET/AUDIO/unused.wav".into(),
+                destination_relative_path: "SET/AUDIO/additive-gate.wav".into(),
+                backup_snapshot_id: snapshot_id,
+                recovery_binding,
+                destination_file_identity: None,
+                status: JournalStatus::Applying,
+                failure_code: Some("SIMULATED_PROCESS_EXIT".into()),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+        let error = authorize_rename_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.clone_runtime,
+            &fixture.write,
+            &fixture.rename_runtime,
+            &fixture.root_id,
+            &fixture.plan_id,
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "RECOVERY_REQUIRED");
+    }
+
+    #[test]
+    fn rename_mutation_gate_allows_other_root_while_recovery_required() {
+        let root_a = TempDir::new().unwrap();
+        let root_b = TempDir::new().unwrap();
+        build_gate_c_planning_fixture(root_a.path());
+        build_gate_c_planning_fixture(root_b.path());
+
+        let registry = multi_root_registry();
+        let (data_directory, catalog) = catalog();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        let rename_runtime = open_test_rename_runtime(data_directory.path());
+        let prepared_runtime = prepared_runtime(data_directory.path());
+        let write = write_runtime(data_directory.path());
+        let session_a =
+            register_root_sync(&registry, &catalog, root_a.path().to_str().unwrap()).unwrap();
+        let root_a_id = RootId::new(session_a.root_id).unwrap();
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_a_id);
+        enable_write_sync(&registry, &catalog, &write, &rename_runtime, &root_a_id).unwrap();
+
+        let dto = list_library_dto_sync(&registry, &catalog, &root_a_id).unwrap();
+        let source_id = dto
+            .audio_files
+            .iter()
+            .find(|file| file.relative_path == "SET/AUDIO/pad.wav")
+            .unwrap()
+            .file_instance_id
+            .clone();
+        let RenamePlanResponseDto::Planned(plan) = plan_rename_sample_sync(
+            &registry,
+            &catalog,
+            &clone_runtime,
+            &rename_runtime,
+            &root_a_id,
+            &source_id,
+            "SET/AUDIO/new-pad.wav",
+        )
+        .unwrap() else {
+            panic!("expected planned rename");
+        };
+        let authority = authorize_rename_sync(
+            &registry,
+            &catalog,
+            &clone_runtime,
+            &write,
+            &rename_runtime,
+            &root_a_id,
+            &plan.plan_id,
+        )
+        .unwrap();
+        let backup = create_rename_backup_sync(
+            &registry,
+            &catalog,
+            &clone_runtime,
+            &write,
+            &rename_runtime,
+            &root_a_id,
+            &plan.plan_id,
+            &authority.authority_id,
+        )
+        .unwrap();
+        prepare_rename_sync(
+            &registry,
+            &catalog,
+            &clone_runtime,
+            &write,
+            &rename_runtime,
+            &prepared_runtime,
+            &root_a_id,
+            &plan.plan_id,
+            &authority.authority_id,
+            &backup.snapshot_id,
+        )
+        .unwrap();
+        set_rename_journal_status(
+            data_directory.path(),
+            &plan.operation_id,
+            ot_executor::RenameJournalStatus::RecoveryRequired,
+        );
+
+        let session_b =
+            register_root_sync(&registry, &catalog, root_b.path().to_str().unwrap()).unwrap();
+        let root_b_id = RootId::new(session_b.root_id).unwrap();
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_b_id);
+        enable_write_sync(&registry, &catalog, &write, &rename_runtime, &root_b_id).unwrap();
+    }
+
+    #[test]
+    fn rename_mutation_gate_clears_after_rolled_back() {
+        let fixture = setup_rename_through_backup();
+        prepare_fixture_rename(&fixture);
+        simulate_partial_destination_publish(&fixture);
+        recover_fixture_rename(&fixture, &fixture.rename_runtime, &fixture.prepared_runtime);
+
+        enable_write_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.write,
+            &fixture.rename_runtime,
+            &fixture.root_id,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn rename_recovery_status_survives_restart_with_journal_plan_id() {
+        let fixture = setup_rename_through_backup();
+        prepare_fixture_rename(&fixture);
+        set_rename_journal_status(
+            fixture.data_directory.path(),
+            &fixture.operation_id,
+            ot_executor::RenameJournalStatus::Applying,
+        );
+
+        let data_path = fixture.data_directory.path().to_path_buf();
+        let restarted = open_test_rename_runtime(&data_path);
+        let recovery =
+            rename_recovery_status_sync(&fixture.registry, &restarted, &fixture.root_id).unwrap();
+        assert!(recovery.recovery_required);
+        assert_eq!(recovery.operations.len(), 1);
+        assert_eq!(
+            recovery.operations[0].plan_id.as_deref(),
+            Some(fixture.plan_id.as_str())
+        );
+        assert!(recovery.operations[0].plan_expired);
+        assert!(recovery.operations[0].recovery_eligible);
+    }
+
+    #[test]
+    fn rename_verify_rolled_back_reports_failed_verification_without_reapplying_rollback() {
+        let fixture = setup_rename_through_backup();
+        prepare_fixture_rename(&fixture);
+        simulate_partial_destination_publish(&fixture);
+        recover_fixture_rename(&fixture, &fixture.rename_runtime, &fixture.prepared_runtime);
+        let before = collect_fixture_manifest(fixture._root.path());
+
+        fs::write(
+            fixture._root.path().join("SET/AUDIO/pad.wav"),
+            b"tampered-after-rollback",
+        )
+        .unwrap();
+
+        let verified = verify_rename_rolled_back_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            &fixture.rename_runtime,
+            &fixture.prepared_runtime,
+            &fixture.root_id,
+            &fixture.operation_id,
+        )
+        .unwrap();
+        assert_eq!(verified.mutation_state, "rolled_back");
+        assert_eq!(verified.verification_state, "failed");
+        assert_ne!(before, collect_fixture_manifest(fixture._root.path()));
     }
 }
