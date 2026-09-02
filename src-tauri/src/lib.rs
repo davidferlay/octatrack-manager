@@ -7,6 +7,7 @@ mod catalog_runtime;
 mod clone_runtime;
 mod device_detection;
 mod legacy_read_adapter;
+mod local_artifact;
 mod project_compatibility;
 pub mod project_manager;
 mod project_reader;
