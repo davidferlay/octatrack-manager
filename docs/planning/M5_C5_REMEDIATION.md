@@ -65,10 +65,21 @@ dedicated branches from `main`.
   co-renamed sidecar bytes/catalog state.
 - Apply/verification result schemas are v2 and expose Missing/Invalid/Unresolved counts.
 
-## R4 — Recovery / mutation gate
+## R4 — Recovery / mutation gate (**COMPLETE**)
 
-- `mutation_gate.rs` — cross-domain Applying/RecoveryRequired block.
-- `v2_rename_recover` — production rollback path.
+- `rename_recovery_runtime.rs` — `VerifiedRecoveryCloneRoot` separates historical
+  transaction evidence from the current verified clone root.
+- `v2_rename_recover` — explicit approval, `RecoveryAuthority` rollback via existing
+  `RenameSampleExecutor::rollback`, fresh rescan, rollback postcondition verification
+  (`rename-recovery-result:v1` with separate `mutationState` / `verificationState`).
+- `v2_rename_verify_rolled_back` — read-only re-verification after `RolledBack`; does
+  not re-run rollback when rescan alone failed.
+- `v2_rename_recovery_status` — `recoveryEligible` on `rename-status:v1` operations;
+  `recoveryRequired` only for `Applying` / `RecoveryRequired` (not `Prepared`).
+- `mutation_gate.rs` wired to `v2_root_enable_write`, rename authorize/backup/prepare/
+  continue/apply, and additive `v2_change_apply`. Read-only plan APIs remain allowed.
+- Production recovery rejects `Prepared`, `Committed`, double recovery, tampered backup/
+  journal/authorization, and unknown live bytes (fail-closed).
 
 ## Gate C
 

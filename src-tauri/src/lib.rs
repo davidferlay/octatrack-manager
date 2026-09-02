@@ -15,6 +15,7 @@ pub mod project_manager;
 mod project_reader;
 mod purge;
 mod rename_planning_facts;
+mod rename_recovery_runtime;
 mod rename_write_runtime;
 mod root_registry;
 mod v2_api;
@@ -1423,6 +1424,7 @@ pub fn run() {
             v2_api::v2_rename_get_status,
             v2_api::v2_rename_recovery_status,
             v2_api::v2_rename_recover,
+            v2_api::v2_rename_verify_rolled_back,
             v2_api::v2_clone_record_source_evidence,
             v2_api::v2_clone_create_managed,
             v2_api::v2_clone_verify_external,

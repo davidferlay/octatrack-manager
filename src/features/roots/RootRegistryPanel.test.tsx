@@ -366,6 +366,7 @@ describe("RootRegistryPanel", () => {
         backupSnapshotId: `snapshot:v1:${"a".repeat(64)}`,
         failureCode: null,
         planExpired: true,
+        recoveryEligible: false,
       }],
     });
     render(

@@ -123,6 +123,7 @@ function fakeApi(): RenameApi {
       backupSnapshotId: snapshotId,
       failureCode: null,
       planExpired: false,
+      recoveryEligible: false,
     }),
     recoveryStatus: vi.fn().mockResolvedValue(renameRecoveryClear),
   };

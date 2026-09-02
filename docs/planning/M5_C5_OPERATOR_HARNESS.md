@@ -58,7 +58,9 @@ Mirror these boundaries; do not extend legacy rename commands.
 | `v2_rename_create_backup` | 2 | C1 verified rename backup (`create_verified_for_rename`) |
 | `v2_rename_prepare` | 2 | C2 Mac-side staging + Prepared journal |
 | `v2_rename_get_status` | 2 | Operation/journal status (restart-safe read) |
-| `v2_rename_recovery_status` | 2 | Incomplete rename operations |
+| `v2_rename_recovery_status` | 2 | Incomplete rename operations; `recoveryEligible` for Applying/RecoveryRequired |
+| `v2_rename_recover` | 4C | Explicit recovery approval + rollback + rescan + postcondition verification |
+| `v2_rename_verify_rolled_back` | 4C | Read-only rollback postcondition re-verification |
 | `v2_clone_create_managed` | 4A | Managed NOFOLLOW clone from registered source |
 | `v2_clone_record_source_evidence` | 4A | Immutable source baseline for external clone verify |
 | `v2_clone_verify_external` | 4A | External clone manifest + evidence match |

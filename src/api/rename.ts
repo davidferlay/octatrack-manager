@@ -117,6 +117,7 @@ export interface RenameStatus {
   backupSnapshotId: string | null;
   failureCode: string | null;
   planExpired: boolean;
+  recoveryEligible: boolean;
 }
 
 export interface RenameRecoveryStatus {
