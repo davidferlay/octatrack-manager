@@ -23,6 +23,23 @@ pub struct DeviceObservation {
 }
 
 impl DeviceObservation {
+    pub fn managed_clone(
+        host: &DeviceObservation,
+        managed_token: &str,
+        clone_surface_id: &str,
+    ) -> Self {
+        Self {
+            stable_key: format!(
+                "managed-clone:{}:{}:{}",
+                host.stable_key, managed_token, clone_surface_id
+            ),
+            filesystem_type: host.filesystem_type.clone(),
+            total_capacity: host.total_capacity,
+            mount_token: format!("{}:managed:{managed_token}", host.mount_token),
+            stable: true,
+        }
+    }
+
     fn fingerprint(&self) -> String {
         let mut hasher = Sha256::new();
         hasher.update(b"rootfp:v1");
@@ -198,6 +215,12 @@ pub struct RootSession {
     pub capabilities: RootCapabilities,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RootRegistrationKind {
+    UserPath,
+    ManagedClone,
+}
+
 #[derive(Clone)]
 struct RootEntry {
     session: RootSession,
@@ -205,6 +228,8 @@ struct RootEntry {
     observation: DeviceObservation,
     expires_at: Instant,
     write_expires_at: Option<Instant>,
+    registration_kind: RootRegistrationKind,
+    managed_clones_root: Option<PathBuf>,
 }
 
 #[derive(Default)]
@@ -342,9 +367,167 @@ impl RootRegistry {
                 observation,
                 expires_at,
                 write_expires_at: None,
+                registration_kind: RootRegistrationKind::UserPath,
+                managed_clones_root: None,
             },
         );
         Ok(session)
+    }
+
+    pub fn register_managed_clone(
+        &self,
+        raw_path: &str,
+        host_observation: &DeviceObservation,
+        managed_token: &str,
+        clone_surface_id: &str,
+        managed_clones_root: &Path,
+        baseline_manifest_binding: &str,
+        expected_entry_count: u64,
+    ) -> Result<RootSession, RootRegistryError> {
+        let candidate = Path::new(raw_path);
+        if raw_path.trim().is_empty() || !candidate.is_absolute() {
+            return Err(RootRegistryError::InvalidPath);
+        }
+        let canonical_path = candidate.canonicalize().map_err(map_registration_error)?;
+        let metadata = fs::symlink_metadata(&canonical_path).map_err(map_registration_error)?;
+        if !metadata.file_type().is_dir() {
+            return Err(RootRegistryError::NotDirectory);
+        }
+        let managed_root = managed_clones_root
+            .canonicalize()
+            .map_err(map_registration_error)?;
+        if !canonical_path.starts_with(&managed_root) {
+            return Err(RootRegistryError::PathEscape);
+        }
+        let token_component = canonical_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or(RootRegistryError::InvalidPath)?;
+        if token_component != managed_token {
+            return Err(RootRegistryError::InvalidPath);
+        }
+        if !host_observation.stable {
+            return Err(RootRegistryError::UnstableIdentity);
+        }
+        let observation =
+            DeviceObservation::managed_clone(host_observation, managed_token, clone_surface_id);
+        let fingerprint = observation.fingerprint();
+        let now = Instant::now();
+        let expires_at = now + self.ttl;
+        let mut state = self.lock_state()?;
+
+        let expired_ids = state
+            .roots
+            .iter()
+            .filter(|(_, entry)| entry.expires_at <= now)
+            .map(|(root_id, _)| root_id.clone())
+            .collect::<Vec<_>>();
+        for root_id in expired_ids {
+            state.roots.remove(&root_id);
+        }
+
+        if state.roots.values().any(|entry| {
+            entry.canonical_path != canonical_path
+                && entry.session.device_fingerprint == fingerprint
+        }) {
+            return Err(RootRegistryError::AmbiguousIdentity);
+        }
+
+        let existing_root_id = state
+            .roots
+            .iter()
+            .find(|(_, entry)| entry.canonical_path == canonical_path)
+            .map(|(root_id, _)| root_id.clone());
+        if let Some(existing_root_id) = existing_root_id {
+            let entry = state
+                .roots
+                .get(&existing_root_id)
+                .ok_or(RootRegistryError::Unavailable)?;
+            if entry.registration_kind != RootRegistrationKind::ManagedClone
+                || entry.observation != observation
+                || entry.managed_clones_root.as_deref() != Some(managed_root.as_path())
+            {
+                state.roots.remove(&existing_root_id);
+            } else {
+                let entry = state
+                    .roots
+                    .get_mut(&existing_root_id)
+                    .ok_or(RootRegistryError::Unavailable)?;
+                entry.expires_at = expires_at;
+                entry.session.expires_in_seconds = self.ttl.as_secs();
+                entry.write_expires_at = None;
+                entry.session.write_grant_expires_in_seconds = None;
+                entry.session.capabilities.write = false;
+                return Ok(entry.session.clone());
+            }
+        }
+
+        let _ = (baseline_manifest_binding, expected_entry_count);
+        let root_id = self.new_root_id(&canonical_path)?;
+        let display_name = format!("Managed Clone ({managed_token})");
+        let session = RootSession {
+            root_id: root_id.clone(),
+            display_name,
+            device_fingerprint: fingerprint,
+            observed_revision: 1,
+            expires_in_seconds: self.ttl.as_secs(),
+            write_grant_expires_in_seconds: None,
+            capabilities: RootCapabilities {
+                read: true,
+                write: false,
+                stable_device_identity: true,
+            },
+        };
+        state.roots.insert(
+            root_id,
+            RootEntry {
+                session: session.clone(),
+                canonical_path,
+                observation,
+                expires_at,
+                write_expires_at: None,
+                registration_kind: RootRegistrationKind::ManagedClone,
+                managed_clones_root: Some(managed_root),
+            },
+        );
+        Ok(session)
+    }
+
+    fn refresh_observation(
+        &self,
+        entry: &RootEntry,
+    ) -> Result<DeviceObservation, RootRegistryError> {
+        let metadata =
+            fs::symlink_metadata(&entry.canonical_path).map_err(map_observation_error)?;
+        if !metadata.is_dir() {
+            return Err(RootRegistryError::Removed);
+        }
+        if entry.registration_kind == RootRegistrationKind::ManagedClone {
+            if let Some(managed_root) = entry.managed_clones_root.as_ref() {
+                let managed_root = managed_root.canonicalize().map_err(map_observation_error)?;
+                if !entry.canonical_path.starts_with(&managed_root) {
+                    return Err(RootRegistryError::PathEscape);
+                }
+            }
+            return Ok(entry.observation.clone());
+        }
+        let observation = self.identity_provider.observe(&entry.canonical_path)?;
+        if observation != entry.observation {
+            return Err(RootRegistryError::Changed);
+        }
+        Ok(observation)
+    }
+
+    pub fn stored_observation_for_root(
+        &self,
+        root_id: &RootId,
+    ) -> Result<DeviceObservation, RootRegistryError> {
+        let state = self.lock_state()?;
+        state
+            .roots
+            .get(root_id)
+            .map(|entry| entry.observation.clone())
+            .ok_or(RootRegistryError::NotApproved)
     }
 
     pub fn resolve(&self, root_id: &RootId) -> Result<ResolvedRoot, RootRegistryError> {
@@ -368,17 +551,11 @@ impl RootRegistry {
         }
         let entry = entry.clone();
 
-        let observation = match self.identity_provider.observe(&entry.canonical_path) {
-            Ok(observation) => observation,
-            Err(error @ RootRegistryError::Removed) => {
-                state.roots.remove(root_id);
-                return Err(error);
-            }
-            Err(error) => return Err(error),
-        };
-        if observation != entry.observation {
+        if let Err(error @ RootRegistryError::Removed | error @ RootRegistryError::Changed) =
+            self.refresh_observation(&entry)
+        {
             state.roots.remove(root_id);
-            return Err(RootRegistryError::Changed);
+            return Err(error);
         }
 
         let mut session = entry.session;
@@ -404,18 +581,14 @@ impl RootRegistry {
             state.roots.remove(root_id);
             return Err(RootRegistryError::Expired);
         }
-        let observation = match self.identity_provider.observe(&entry.canonical_path) {
+        let observation = match self.refresh_observation(&entry) {
             Ok(observation) => observation,
-            Err(error @ RootRegistryError::Removed) => {
+            Err(error @ RootRegistryError::Removed | error @ RootRegistryError::Changed) => {
                 state.roots.remove(root_id);
                 return Err(error);
             }
             Err(error) => return Err(error),
         };
-        if observation != entry.observation {
-            state.roots.remove(root_id);
-            return Err(RootRegistryError::Changed);
-        }
         if !observation.stable {
             return Err(RootRegistryError::UnstableIdentity);
         }
@@ -487,17 +660,11 @@ impl RootRegistry {
             return Err(RootRegistryError::Expired);
         }
 
-        let observation = match self.identity_provider.observe(&entry.canonical_path) {
-            Ok(observation) => observation,
-            Err(error @ RootRegistryError::Removed) => {
-                state.roots.remove(root_id);
-                return Err(error);
-            }
-            Err(error) => return Err(error),
-        };
-        if observation != entry.observation {
+        if let Err(error @ RootRegistryError::Removed | error @ RootRegistryError::Changed) =
+            self.refresh_observation(entry)
+        {
             state.roots.remove(root_id);
-            return Err(RootRegistryError::Changed);
+            return Err(error);
         }
         if scan_revision < entry.session.observed_revision {
             return Err(RootRegistryError::Changed);

@@ -3,8 +3,8 @@
 #![allow(dead_code)]
 
 use crate::local_artifact::{
-    ensure_real_directory, CloneAuthorityId, CloneSourceEvidenceId, CloneVerificationId,
-    LocalArtifactError, LocalArtifactStore,
+    ensure_real_directory, CloneBaselineEvidenceId, CloneSourceEvidenceId, LocalArtifactError,
+    LocalArtifactStore,
 };
 use crate::root_registry::{ResolvedRoot, RootRegistry, RootRegistryError};
 use ot_domain::RootId;
@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+const CLONE_BASELINE_EVIDENCE_SCHEMA: &str = "masterocta-clone-baseline-evidence:v1";
 const CLONE_BASELINE_SCHEMA: &str = "masterocta-clone-baseline:v1";
 const CLONE_SOURCE_EVIDENCE_SCHEMA: &str = "masterocta-clone-source-evidence:v1";
 const CLONE_VERIFICATION_SCHEMA: &str = "masterocta-clone-verification:v1";
@@ -85,6 +86,50 @@ pub struct CloneSourceEvidenceRecord {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct CloneBaselineEvidence {
+    pub schema: String,
+    pub baseline_evidence_id: String,
+    pub provenance: CloneProvenance,
+    pub clone_surface_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_evidence_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub managed_token: Option<String>,
+    pub manifest_binding: String,
+    pub entry_count: u64,
+    pub entries: Vec<CloneBaselineEntry>,
+    pub format_version: u32,
+    pub created_at_unix: u64,
+}
+
+#[derive(Clone, Debug)]
+struct CloneVerificationLease {
+    clone_verification_id: String,
+    root_id: String,
+    clone_device_fingerprint: String,
+    baseline_evidence_id: String,
+    clone_surface_id: String,
+    provenance: CloneProvenance,
+    source_evidence_id: Option<String>,
+    baseline_manifest_binding: String,
+    baseline_entry_count: u64,
+    state: CloneVerificationState,
+    verified_at_unix: u64,
+    expires_at_unix: u64,
+}
+
+#[derive(Clone, Debug)]
+struct CloneWriteAuthorityLease {
+    clone_authority_id: String,
+    clone_verification_id: String,
+    root_id: String,
+    baseline_evidence_id: String,
+    baseline_manifest_binding: String,
+    issued_at_unix: u64,
+    expires_at_unix: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct CloneVerificationRecord {
     pub schema: String,
     pub clone_verification_id: String,
@@ -134,8 +179,8 @@ pub struct ManagedCloneResult {
 
 #[derive(Default)]
 struct CloneRuntimeState {
-    verifications: BTreeMap<String, CloneVerificationRecord>,
-    authorities: BTreeMap<String, CloneAuthorityRecord>,
+    verification_leases: BTreeMap<String, CloneVerificationLease>,
+    authority_leases: BTreeMap<String, CloneWriteAuthorityLease>,
 }
 
 pub struct CloneRuntime {
@@ -282,7 +327,7 @@ impl CloneRuntime {
         &self,
         _registry: &RootRegistry,
         source: &ResolvedRoot,
-    ) -> Result<(PathBuf, Vec<CloneBaselineEntry>), CloneRuntimeError> {
+    ) -> Result<(PathBuf, String, Vec<CloneBaselineEntry>), CloneRuntimeError> {
         if !source.session.capabilities.stable_device_identity {
             return Err(CloneRuntimeError::UnstableIdentity);
         }
@@ -313,16 +358,30 @@ impl CloneRuntime {
             return Err(CloneRuntimeError::ManifestMismatch);
         }
         fs::rename(&partial, &final_path).map_err(map_io_error)?;
-        Ok((final_path, clone_entries))
+        Ok((final_path, clone_token, clone_entries))
+    }
+
+    pub fn managed_clones_root(&self) -> PathBuf {
+        self.storage_root.join(MANAGED_CLONES_DIRECTORY)
+    }
+
+    pub fn load_baseline_evidence(
+        &self,
+        baseline_evidence_id: &str,
+    ) -> Result<CloneBaselineEvidence, CloneRuntimeError> {
+        let artifact_id = CloneBaselineEvidenceId::parse(baseline_evidence_id)
+            .map_err(|_| CloneRuntimeError::InvalidArtifactId)?;
+        self.artifact_store
+            .read_json(artifact_id.file_stem())
+            .map_err(map_local_artifact_error)
     }
 
     pub fn verify_managed_clone_registration(
         &self,
-        _registry: &RootRegistry,
         source: &ResolvedRoot,
         clone: &ResolvedRoot,
         entries: &[CloneBaselineEntry],
-        _source_root_closed: bool,
+        managed_token: &str,
     ) -> Result<CloneVerificationRecord, CloneRuntimeError> {
         reject_source_clone_relationship(source, clone)?;
         let live_entries = scan_baseline_entries(&clone.canonical_path)?;
@@ -330,17 +389,18 @@ impl CloneRuntime {
         if live_entries != entries {
             return Err(CloneRuntimeError::ManifestMismatch);
         }
-        let record = build_verification_record(
-            clone,
+        let clone_surface = derive_root_surface_id(&clone.canonical_path);
+        let baseline = build_baseline_evidence(
             CloneProvenance::AppManaged,
+            &clone_surface,
             None,
+            Some(managed_token.to_owned()),
             manifest_binding,
-            live_entries.len() as u64,
-            self.verification_ttl,
+            live_entries,
         )?;
-        persist_verification(&self.artifact_store, &record)?;
-        self.store_verification(record.clone());
-        Ok(record)
+        persist_baseline_evidence(&self.artifact_store, &baseline)?;
+        let lease = self.issue_verification_lease(clone, &baseline)?;
+        Ok(verification_record_from_lease(clone, &lease))
     }
 
     pub fn verify_external_clone(
@@ -369,17 +429,17 @@ impl CloneRuntime {
         {
             return Err(CloneRuntimeError::SourceEvidenceMismatch);
         }
-        let record = build_verification_record(
-            clone,
+        let baseline = build_baseline_evidence(
             CloneProvenance::External,
+            &clone_surface,
             Some(source_evidence.source_evidence_id.clone()),
+            None,
             manifest_binding,
-            live_entries.len() as u64,
-            self.verification_ttl,
+            live_entries,
         )?;
-        persist_verification(&self.artifact_store, &record)?;
-        self.store_verification(record.clone());
-        Ok(record)
+        persist_baseline_evidence(&self.artifact_store, &baseline)?;
+        let lease = self.issue_verification_lease(clone, &baseline)?;
+        Ok(verification_record_from_lease(clone, &lease))
     }
 
     pub fn load_source_evidence(
@@ -400,10 +460,10 @@ impl CloneRuntime {
         let mut state = self.lock_state()?;
         purge_expired(&mut state);
         Ok(state
-            .verifications
+            .verification_leases
             .values()
-            .find(|record| record.clone_root_id == root_id.as_str())
-            .cloned())
+            .find(|lease| lease.root_id == root_id.as_str())
+            .map(|lease| verification_record_from_lease_id(root_id, lease)))
     }
 
     pub fn require_verified_root(
@@ -420,12 +480,19 @@ impl CloneRuntime {
         &self,
         resolved: &ResolvedRoot,
     ) -> Result<CloneVerificationRecord, CloneRuntimeError> {
-        let mut record = self.require_verified_root(resolved)?;
-        record.verified_at_unix = unix_now();
-        record.expires_at_unix = unix_now() + self.verification_ttl.as_secs();
-        record.state = CloneVerificationState::Verified;
-        persist_verification(&self.artifact_store, &record)?;
-        self.store_verification(record.clone());
+        let mut lease = self
+            .lock_state()?
+            .verification_leases
+            .values()
+            .find(|lease| lease.root_id == resolved.session.root_id.as_str())
+            .cloned()
+            .ok_or(CloneRuntimeError::CloneNotVerified)?;
+        self.validate_verification(resolved, &verification_record_from_lease(resolved, &lease))?;
+        lease.verified_at_unix = unix_now();
+        lease.expires_at_unix = unix_now() + self.verification_ttl.as_secs();
+        lease.state = CloneVerificationState::Verified;
+        let record = verification_record_from_lease(resolved, &lease);
+        self.store_verification_lease(lease);
         Ok(record)
     }
 
@@ -434,24 +501,28 @@ impl CloneRuntime {
         resolved: &ResolvedRoot,
     ) -> Result<CloneAuthorityRecord, CloneRuntimeError> {
         let verification = self.reverify_root(resolved)?;
-        let authority = CloneAuthorityRecord {
-            schema: CLONE_AUTHORITY_SCHEMA.to_owned(),
+        let authority = CloneWriteAuthorityLease {
             clone_authority_id: derive_clone_authority_id(
                 &verification.clone_verification_id,
                 resolved.session.root_id.as_str(),
                 &verification.baseline_manifest_binding,
             ),
-            clone_verification_id: verification.clone_verification_id,
-            clone_root_id: resolved.session.root_id.as_str().to_owned(),
-            clone_device_fingerprint: resolved.session.device_fingerprint.clone(),
-            clone_surface_id: verification.clone_surface_id,
-            baseline_manifest_binding: verification.baseline_manifest_binding,
+            clone_verification_id: verification.clone_verification_id.clone(),
+            root_id: resolved.session.root_id.as_str().to_owned(),
+            baseline_evidence_id: verification
+                .source_evidence_id
+                .clone()
+                .unwrap_or_else(|| verification.clone_verification_id.clone()),
+            baseline_manifest_binding: verification.baseline_manifest_binding.clone(),
             issued_at_unix: unix_now(),
             expires_at_unix: verification.expires_at_unix,
         };
-        persist_authority(&self.artifact_store, &authority)?;
-        self.store_authority(authority.clone());
-        Ok(authority)
+        self.store_authority_lease(authority.clone());
+        Ok(authority_record_from_lease(
+            resolved,
+            &authority,
+            &verification,
+        ))
     }
 
     pub fn require_clone_authority(
@@ -462,30 +533,24 @@ impl CloneRuntime {
         let verification = self.require_verified_root(resolved)?;
         let authority = self
             .lock_state()?
-            .authorities
+            .authority_leases
             .get(clone_authority_id)
             .cloned()
-            .or_else(|| {
-                CloneAuthorityId::parse(clone_authority_id)
-                    .ok()
-                    .and_then(|artifact_id| {
-                        self.artifact_store
-                            .read_json::<CloneAuthorityRecord>(artifact_id.file_stem())
-                            .ok()
-                    })
-            })
             .ok_or(CloneRuntimeError::AuthorityNotFound)?;
         if authority.expires_at_unix <= unix_now() {
             return Err(CloneRuntimeError::AuthorityExpired);
         }
-        if authority.clone_root_id != resolved.session.root_id.as_str()
-            || authority.clone_device_fingerprint != resolved.session.device_fingerprint
+        if authority.root_id != resolved.session.root_id.as_str()
             || authority.clone_verification_id != verification.clone_verification_id
             || authority.baseline_manifest_binding != verification.baseline_manifest_binding
         {
             return Err(CloneRuntimeError::AuthorityNotFound);
         }
-        Ok(authority)
+        Ok(authority_record_from_lease(
+            resolved,
+            &authority,
+            &verification,
+        ))
     }
 
     pub fn verification_status(
@@ -505,14 +570,30 @@ impl CloneRuntime {
         }))
     }
 
+    pub fn restore_verification_from_baseline(
+        &self,
+        clone: &ResolvedRoot,
+        baseline_evidence_id: &str,
+    ) -> Result<CloneVerificationRecord, CloneRuntimeError> {
+        let baseline = self.load_baseline_evidence(baseline_evidence_id)?;
+        let live_entries = scan_baseline_entries(&clone.canonical_path)?;
+        if derive_manifest_binding(&live_entries) != baseline.manifest_binding
+            || live_entries != baseline.entries
+        {
+            return Err(CloneRuntimeError::VerificationTampered);
+        }
+        let lease = self.issue_verification_lease(clone, &baseline)?;
+        Ok(verification_record_from_lease(clone, &lease))
+    }
+
     pub fn revoke_for_root(&self, root_id: &RootId) {
         if let Ok(mut state) = self.lock_state() {
             state
-                .verifications
-                .retain(|_, record| record.clone_root_id != root_id.as_str());
+                .verification_leases
+                .retain(|_, lease| lease.root_id != root_id.as_str());
             state
-                .authorities
-                .retain(|_, record| record.clone_root_id != root_id.as_str());
+                .authority_leases
+                .retain(|_, lease| lease.root_id != root_id.as_str());
         }
     }
 
@@ -523,17 +604,18 @@ impl CloneRuntime {
     ) -> Result<CloneVerificationRecord, CloneRuntimeError> {
         let entries = scan_baseline_entries(&resolved.canonical_path)?;
         let manifest_binding = derive_manifest_binding(&entries);
-        let record = build_verification_record(
-            resolved,
+        let clone_surface = derive_root_surface_id(&resolved.canonical_path);
+        let baseline = build_baseline_evidence(
             CloneProvenance::External,
+            &clone_surface,
+            None,
             None,
             manifest_binding,
-            entries.len() as u64,
-            self.verification_ttl,
+            entries,
         )?;
-        persist_verification(&self.artifact_store, &record)?;
-        self.store_verification(record.clone());
-        Ok(record)
+        persist_baseline_evidence(&self.artifact_store, &baseline)?;
+        let lease = self.issue_verification_lease(resolved, &baseline)?;
+        Ok(verification_record_from_lease(resolved, &lease))
     }
 
     fn validate_verification(
@@ -564,19 +646,48 @@ impl CloneRuntime {
         Ok(record.clone())
     }
 
-    fn store_verification(&self, record: CloneVerificationRecord) {
+    fn issue_verification_lease(
+        &self,
+        clone: &ResolvedRoot,
+        baseline: &CloneBaselineEvidence,
+    ) -> Result<CloneVerificationLease, CloneRuntimeError> {
+        let now = unix_now();
+        let lease = CloneVerificationLease {
+            clone_verification_id: derive_clone_verification_id(
+                clone.session.root_id.as_str(),
+                &clone.session.device_fingerprint,
+                &baseline.clone_surface_id,
+                &baseline.manifest_binding,
+            ),
+            root_id: clone.session.root_id.as_str().to_owned(),
+            clone_device_fingerprint: clone.session.device_fingerprint.clone(),
+            baseline_evidence_id: baseline.baseline_evidence_id.clone(),
+            clone_surface_id: baseline.clone_surface_id.clone(),
+            provenance: baseline.provenance,
+            source_evidence_id: baseline.source_evidence_id.clone(),
+            baseline_manifest_binding: baseline.manifest_binding.clone(),
+            baseline_entry_count: baseline.entry_count,
+            state: CloneVerificationState::Verified,
+            verified_at_unix: now,
+            expires_at_unix: now + self.verification_ttl.as_secs(),
+        };
+        self.store_verification_lease(lease.clone());
+        Ok(lease)
+    }
+
+    fn store_verification_lease(&self, lease: CloneVerificationLease) {
         if let Ok(mut state) = self.lock_state() {
             state
-                .verifications
-                .insert(record.clone_verification_id.clone(), record);
+                .verification_leases
+                .insert(lease.clone_verification_id.clone(), lease);
         }
     }
 
-    fn store_authority(&self, record: CloneAuthorityRecord) {
+    fn store_authority_lease(&self, lease: CloneWriteAuthorityLease) {
         if let Ok(mut state) = self.lock_state() {
             state
-                .authorities
-                .insert(record.clone_authority_id.clone(), record);
+                .authority_leases
+                .insert(lease.clone_authority_id.clone(), lease);
         }
     }
 
@@ -659,36 +770,130 @@ pub fn open_shared_clone_runtime(
     CloneRuntime::new(storage_root, DEFAULT_VERIFICATION_TTL).map(Arc::new)
 }
 
-fn build_verification_record(
-    clone: &ResolvedRoot,
+fn build_baseline_evidence(
     provenance: CloneProvenance,
+    clone_surface_id: &str,
     source_evidence_id: Option<String>,
+    managed_token: Option<String>,
     manifest_binding: String,
-    entry_count: u64,
-    ttl: Duration,
-) -> Result<CloneVerificationRecord, CloneRuntimeError> {
-    let surface_id = derive_root_surface_id(&clone.canonical_path);
-    let verification_id = derive_clone_verification_id(
-        clone.session.root_id.as_str(),
-        &clone.session.device_fingerprint,
-        &surface_id,
+    entries: Vec<CloneBaselineEntry>,
+) -> Result<CloneBaselineEvidence, CloneRuntimeError> {
+    let baseline_evidence_id = derive_baseline_evidence_id(
+        clone_surface_id,
         &manifest_binding,
-    );
-    let now = unix_now();
-    Ok(CloneVerificationRecord {
-        schema: CLONE_VERIFICATION_SCHEMA.to_owned(),
-        clone_verification_id: verification_id,
-        clone_root_id: clone.session.root_id.as_str().to_owned(),
-        clone_device_fingerprint: clone.session.device_fingerprint.clone(),
-        clone_surface_id: surface_id,
         provenance,
+        managed_token.as_deref(),
+        source_evidence_id.as_deref(),
+    );
+    Ok(CloneBaselineEvidence {
+        schema: CLONE_BASELINE_EVIDENCE_SCHEMA.to_owned(),
+        baseline_evidence_id,
+        provenance,
+        clone_surface_id: clone_surface_id.to_owned(),
         source_evidence_id,
-        baseline_entry_count: entry_count,
-        baseline_manifest_binding: manifest_binding,
-        state: CloneVerificationState::Verified,
-        verified_at_unix: now,
-        expires_at_unix: now + ttl.as_secs(),
+        managed_token,
+        manifest_binding,
+        entry_count: entries.len() as u64,
+        entries,
+        format_version: 1,
+        created_at_unix: unix_now(),
     })
+}
+
+fn verification_record_from_lease(
+    resolved: &ResolvedRoot,
+    lease: &CloneVerificationLease,
+) -> CloneVerificationRecord {
+    CloneVerificationRecord {
+        schema: CLONE_VERIFICATION_SCHEMA.to_owned(),
+        clone_verification_id: lease.clone_verification_id.clone(),
+        clone_root_id: resolved.session.root_id.as_str().to_owned(),
+        clone_device_fingerprint: resolved.session.device_fingerprint.clone(),
+        clone_surface_id: lease.clone_surface_id.clone(),
+        provenance: lease.provenance,
+        source_evidence_id: lease.source_evidence_id.clone(),
+        baseline_entry_count: lease.baseline_entry_count,
+        baseline_manifest_binding: lease.baseline_manifest_binding.clone(),
+        state: lease.state,
+        verified_at_unix: lease.verified_at_unix,
+        expires_at_unix: lease.expires_at_unix,
+    }
+}
+
+fn verification_record_from_lease_id(
+    root_id: &RootId,
+    lease: &CloneVerificationLease,
+) -> CloneVerificationRecord {
+    CloneVerificationRecord {
+        schema: CLONE_VERIFICATION_SCHEMA.to_owned(),
+        clone_verification_id: lease.clone_verification_id.clone(),
+        clone_root_id: root_id.as_str().to_owned(),
+        clone_device_fingerprint: lease.clone_device_fingerprint.clone(),
+        clone_surface_id: lease.clone_surface_id.clone(),
+        provenance: lease.provenance,
+        source_evidence_id: lease.source_evidence_id.clone(),
+        baseline_entry_count: lease.baseline_entry_count,
+        baseline_manifest_binding: lease.baseline_manifest_binding.clone(),
+        state: lease.state,
+        verified_at_unix: lease.verified_at_unix,
+        expires_at_unix: lease.expires_at_unix,
+    }
+}
+
+fn authority_record_from_lease(
+    resolved: &ResolvedRoot,
+    authority: &CloneWriteAuthorityLease,
+    verification: &CloneVerificationRecord,
+) -> CloneAuthorityRecord {
+    CloneAuthorityRecord {
+        schema: CLONE_AUTHORITY_SCHEMA.to_owned(),
+        clone_authority_id: authority.clone_authority_id.clone(),
+        clone_verification_id: authority.clone_verification_id.clone(),
+        clone_root_id: resolved.session.root_id.as_str().to_owned(),
+        clone_device_fingerprint: resolved.session.device_fingerprint.clone(),
+        clone_surface_id: verification.clone_surface_id.clone(),
+        baseline_manifest_binding: authority.baseline_manifest_binding.clone(),
+        issued_at_unix: authority.issued_at_unix,
+        expires_at_unix: authority.expires_at_unix,
+    }
+}
+
+fn derive_baseline_evidence_id(
+    clone_surface_id: &str,
+    manifest_binding: &str,
+    provenance: CloneProvenance,
+    managed_token: Option<&str>,
+    source_evidence_id: Option<&str>,
+) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"clone-baseline-evidence:v1");
+    hasher.update(clone_surface_id.as_bytes());
+    hasher.update(manifest_binding.as_bytes());
+    match provenance {
+        CloneProvenance::AppManaged => hasher.update(b"app-managed"),
+        CloneProvenance::External => hasher.update(b"external"),
+    }
+    if let Some(token) = managed_token {
+        hasher.update(token.as_bytes());
+    }
+    if let Some(source_evidence_id) = source_evidence_id {
+        hasher.update(source_evidence_id.as_bytes());
+    }
+    format!(
+        "clone-baseline-evidence:v1:{}",
+        hex_digest(&hasher.finalize())
+    )
+}
+
+fn persist_baseline_evidence(
+    artifact_store: &LocalArtifactStore,
+    record: &CloneBaselineEvidence,
+) -> Result<(), CloneRuntimeError> {
+    let artifact_id = CloneBaselineEvidenceId::parse(&record.baseline_evidence_id)
+        .map_err(|_| CloneRuntimeError::InvalidArtifactId)?;
+    artifact_store
+        .write_json_create_once(artifact_id.file_stem(), record)
+        .map_err(map_local_artifact_error)
 }
 
 fn reject_source_clone_relationship(
@@ -912,28 +1117,6 @@ fn persist_source_evidence(
         .map_err(map_local_artifact_error)
 }
 
-fn persist_verification(
-    artifact_store: &LocalArtifactStore,
-    record: &CloneVerificationRecord,
-) -> Result<(), CloneRuntimeError> {
-    let artifact_id = CloneVerificationId::parse(&record.clone_verification_id)
-        .map_err(|_| CloneRuntimeError::InvalidArtifactId)?;
-    artifact_store
-        .write_json_create_once(artifact_id.file_stem(), record)
-        .map_err(map_local_artifact_error)
-}
-
-fn persist_authority(
-    artifact_store: &LocalArtifactStore,
-    record: &CloneAuthorityRecord,
-) -> Result<(), CloneRuntimeError> {
-    let artifact_id = CloneAuthorityId::parse(&record.clone_authority_id)
-        .map_err(|_| CloneRuntimeError::InvalidArtifactId)?;
-    artifact_store
-        .write_json_create_once(artifact_id.file_stem(), record)
-        .map_err(map_local_artifact_error)
-}
-
 fn remove_path_if_exists(path: &Path) -> Result<(), CloneRuntimeError> {
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() => {
@@ -949,11 +1132,11 @@ fn remove_path_if_exists(path: &Path) -> Result<(), CloneRuntimeError> {
 fn purge_expired(state: &mut CloneRuntimeState) {
     let now = unix_now();
     state
-        .verifications
-        .retain(|_, record| record.expires_at_unix > now);
+        .verification_leases
+        .retain(|_, lease| lease.expires_at_unix > now);
     state
-        .authorities
-        .retain(|_, record| record.expires_at_unix > now);
+        .authority_leases
+        .retain(|_, lease| lease.expires_at_unix > now);
 }
 
 fn count_entries_for_binding(
@@ -1046,7 +1229,10 @@ mod tests {
             .unwrap();
         let source = registry.resolve(&source_session.root_id).unwrap();
         let source_before = fs::read(source_dir.path().join("SET/AUDIO/kick.wav")).unwrap();
-        let (clone_path, entries) = clone_runtime
+        let host_observation = registry
+            .stored_observation_for_root(&source_session.root_id)
+            .unwrap();
+        let (clone_path, clone_token, entries) = clone_runtime
             .create_managed_clone(&registry, &source)
             .unwrap();
         assert_eq!(
@@ -1054,10 +1240,20 @@ mod tests {
             fs::read(source_dir.path().join("SET/AUDIO/kick.wav")).unwrap()
         );
         registry.close(&source_session.root_id).unwrap();
-        let clone_session = registry.register(clone_path.to_str().unwrap()).unwrap();
+        let clone_session = registry
+            .register_managed_clone(
+                clone_path.to_str().unwrap(),
+                &host_observation,
+                &clone_token,
+                &derive_root_surface_id(&clone_path),
+                &clone_runtime.managed_clones_root(),
+                "",
+                entries.len() as u64,
+            )
+            .unwrap();
         let clone = registry.resolve(&clone_session.root_id).unwrap();
         let verification = clone_runtime
-            .verify_managed_clone_registration(&registry, &source, &clone, &entries, true)
+            .verify_managed_clone_registration(&source, &clone, &entries, &clone_token)
             .unwrap();
         assert_eq!(verification.state, CloneVerificationState::Verified);
         clone_runtime.require_verified_root(&clone).unwrap();
@@ -1125,7 +1321,7 @@ mod tests {
             .register(source_dir.path().to_str().unwrap())
             .unwrap();
         let source = registry.resolve(&source_session.root_id).unwrap();
-        let (clone_path, _) = clone_runtime
+        let (clone_path, _, _) = clone_runtime
             .create_managed_clone(&registry, &source)
             .unwrap();
         let expected_parent = data_dir

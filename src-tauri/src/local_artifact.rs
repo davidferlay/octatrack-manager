@@ -4,6 +4,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
+pub const CLONE_BASELINE_EVIDENCE_PREFIX: &str = "clone-baseline-evidence:v1:";
 pub const CLONE_SOURCE_EVIDENCE_PREFIX: &str = "clone-source-evidence:v1:";
 pub const CLONE_VERIFICATION_PREFIX: &str = "clone-verification:v1:";
 pub const CLONE_AUTHORITY_PREFIX: &str = "clone-authority:v1:";
@@ -19,6 +20,9 @@ pub enum LocalArtifactError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CloneBaselineEvidenceId(String);
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CloneSourceEvidenceId(String);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -26,6 +30,19 @@ pub struct CloneVerificationId(String);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CloneAuthorityId(String);
+
+impl CloneBaselineEvidenceId {
+    pub fn parse(value: &str) -> Result<Self, LocalArtifactError> {
+        validate_prefixed_sha256(value, CLONE_BASELINE_EVIDENCE_PREFIX)?;
+        Ok(Self(value.to_owned()))
+    }
+
+    pub fn file_stem(&self) -> &str {
+        self.0
+            .strip_prefix(CLONE_BASELINE_EVIDENCE_PREFIX)
+            .expect("validated clone baseline evidence id")
+    }
+}
 
 impl CloneSourceEvidenceId {
     pub fn parse(value: &str) -> Result<Self, LocalArtifactError> {
