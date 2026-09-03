@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { AudioApi, ChangeApi, MetadataApi, RenameApi, RootApi, RootSession } from "../../api";
+import type { AudioApi, ChangeApi, CloneApi, MetadataApi, RenameApi, RootApi, RootSession } from "../../api";
 import { RootRegistryPanel } from "./RootRegistryPanel";
 import { renameOperatorApiStubs } from "../../test/renameApiStubs";
 
@@ -69,6 +69,16 @@ function fakeApi(): RootApi {
   };
 }
 
+function fakeCloneApi(): CloneApi {
+  return {
+    recordSourceEvidence: vi.fn(),
+    createManagedClone: vi.fn(),
+    verifyExternal: vi.fn(),
+    verificationStatus: vi.fn().mockResolvedValue(null),
+    reverify: vi.fn(),
+  };
+}
+
 function fakeRenameApi(): RenameApi {
   return {
     plan: vi.fn(),
@@ -105,7 +115,7 @@ describe("RootRegistryPanel", () => {
   it("does nothing when the native picker is cancelled", async () => {
     const api = fakeApi();
     const selectDirectory = vi.fn().mockResolvedValue(null);
-    render(<RootRegistryPanel api={api} changeClient={fakeChangeApi()} renameClient={fakeRenameApi()} selectDirectory={selectDirectory} />);
+    render(<RootRegistryPanel api={api} changeClient={fakeChangeApi()} cloneClient={fakeCloneApi()} renameClient={fakeRenameApi()} selectDirectory={selectDirectory} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Choose root..." }));
 
@@ -117,7 +127,7 @@ describe("RootRegistryPanel", () => {
   it("reports a native picker failure without registering a root", async () => {
     const api = fakeApi();
     const selectDirectory = vi.fn().mockRejectedValue(new Error("picker unavailable"));
-    render(<RootRegistryPanel api={api} changeClient={fakeChangeApi()} renameClient={fakeRenameApi()} selectDirectory={selectDirectory} />);
+    render(<RootRegistryPanel api={api} changeClient={fakeChangeApi()} cloneClient={fakeCloneApi()} renameClient={fakeRenameApi()} selectDirectory={selectDirectory} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Choose root..." }));
 
@@ -131,7 +141,7 @@ describe("RootRegistryPanel", () => {
     render(
       <RootRegistryPanel
         api={api}
-        changeClient={fakeChangeApi()} renameClient={fakeRenameApi()}
+        changeClient={fakeChangeApi()} cloneClient={fakeCloneApi()} renameClient={fakeRenameApi()}
         selectDirectory={vi.fn().mockResolvedValue(rawPath)}
       />,
     );
@@ -174,7 +184,7 @@ describe("RootRegistryPanel", () => {
     render(
       <RootRegistryPanel
         api={api}
-        changeClient={fakeChangeApi()} renameClient={fakeRenameApi()}
+        changeClient={fakeChangeApi()} cloneClient={fakeCloneApi()} renameClient={fakeRenameApi()}
         audioClient={audioClient}
         metadataClient={metadataClient}
         selectDirectory={vi.fn().mockResolvedValue("/tmp/fixture-root")}
@@ -216,6 +226,7 @@ describe("RootRegistryPanel", () => {
       <RootRegistryPanel
         api={api}
         changeClient={changeClient}
+        cloneClient={fakeCloneApi()}
         renameClient={fakeRenameApi()}
         selectDirectory={vi.fn().mockResolvedValue("/tmp/fixture-root")}
       />,
@@ -273,6 +284,7 @@ describe("RootRegistryPanel", () => {
       <RootRegistryPanel
         api={api}
         changeClient={changeClient}
+        cloneClient={fakeCloneApi()}
         renameClient={fakeRenameApi()}
         selectDirectory={vi.fn().mockResolvedValue("/tmp/fixture-root")}
       />,
@@ -319,6 +331,7 @@ describe("RootRegistryPanel", () => {
       <RootRegistryPanel
         api={api}
         changeClient={changeClient}
+        cloneClient={fakeCloneApi()}
         renameClient={fakeRenameApi()}
         audioClient={audioClient}
         metadataClient={metadataClient}
@@ -375,6 +388,7 @@ describe("RootRegistryPanel", () => {
       <RootRegistryPanel
         api={api}
         changeClient={fakeChangeApi()}
+        cloneClient={fakeCloneApi()}
         renameClient={renameClient}
         audioClient={audioClient}
         metadataClient={metadataClient}

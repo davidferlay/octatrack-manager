@@ -101,7 +101,7 @@ export function RootRegistryPanel({
 
   async function refreshCloneVerification(rootId: string) {
     try {
-      setCloneVerification(await cloneClient.verificationStatus(rootId));
+      setCloneVerification((await cloneClient.verificationStatus(rootId)) ?? null);
     } catch {
       setCloneVerification(null);
     }

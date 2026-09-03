@@ -3977,9 +3977,8 @@ pub(crate) fn rename_get_prepared_plan_sync(
             false,
         ));
     }
-    let plan = snapshot
-        .plan
-        .to_plan()
+    let plan = prepared_runtime
+        .load_prepared_plan(&operation_id)
         .map_err(prepared_rename_runtime_error)?;
     Ok(rename_plan_from_impact(&plan))
 }
