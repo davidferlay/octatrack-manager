@@ -1,6 +1,6 @@
 # Rename preparation and operator flow
 
-MasterOCTa supports **review, prepare, continue, and apply** for same-directory sample
+Masta-Octa supports **review, prepare, continue, and apply** for same-directory sample
 renames on a **verified disposable clone**. Preparation creates a verified Mac-side backup
 and a durable prepared rename snapshot. Apply mutates only the verified clone session.
 

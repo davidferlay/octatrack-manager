@@ -29,7 +29,7 @@ pnpm exec docs-to-pdf docusaurus \
   --paginationSelector "a.pagination-nav__link--next" \
   --excludeSelectors ".margin-vert--xl a,[class^='tocCollapsible'],.breadcrumbs,.theme-edit-this-page" \
   --coverImage "http://localhost:3030/masterocta/img/logo-512.png" \
-  --coverTitle "MasterOCTa" \
+  --coverTitle "Masta-Octa" \
   --coverSub "User Guide" \
   --paperFormat "A4" \
   --pdfMargin "60,50,60,50" \

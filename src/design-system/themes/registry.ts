@@ -27,7 +27,7 @@ export const THEME_REGISTRY: readonly ThemeDefinition[] = [
   },
   {
     id: 'masterocta',
-    label: 'MasterOCTa',
+    label: 'Masta-Octa',
     description: 'Cool graphite surfaces with a teal signal accent.',
   },
 ] as const

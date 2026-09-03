@@ -4,8 +4,12 @@
 
 ## 1. 目的
 
-MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントしたOctatrack MkIIの
+Masta-Octaは既存OSSのOctatrack Managerを素体に、macOSでマウントしたOctatrack MkIIの
 ストレージを安全に管理する公開・非商用フォークを開発する。
+
+**Identity split（BRAND-1）:** ユーザー向け表示名は **Masta-Octa**。
+内部互換ID（repo `masterocta`、bundle `jp.d3nousan.masterocta`、
+`Application Support/MasterOCTa`、schema/journal/backup ID）は変更しない。
 
 最終的に狙う機能は次のとおり。
 

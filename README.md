@@ -1,11 +1,11 @@
-# MasterOCTa
+# Masta-Octa
 
-**MasterOCTa** is an independent, unofficial GPL-3.0 desktop application based on the upstream Octatrack Manager project. It simplifies management of Elektron Octatrack projects with tools for browsing, inspecting, and editing projects away from the hardware.
+**Masta-Octa** is an independent, unofficial GPL-3.0 desktop application based on the upstream Octatrack Manager project. It simplifies management of Elektron Octatrack projects with tools for browsing, inspecting, and editing projects away from the hardware.
 
 <p align="center">
   <img
     src="user-guide/static/img/project-discovery.png"
-    alt="MasterOCTa - Project discovery"
+    alt="Masta-Octa - Project discovery"
     style="width:80%; height:auto;"
   />
 </p>
@@ -32,7 +32,7 @@
 
 ## Active Development
 
-MasterOCTa is currently a **work in progress**. New functionalities are being added regularly to expand its capabilities.
+Masta-Octa is currently a **work in progress**. New functionalities are being added regularly to expand its capabilities.
 
 We are constantly working to improve the application and add more power-user features. Your feedback and bug reports are essential to the project's growth.
 
@@ -46,7 +46,7 @@ For detailed instructions, troubleshooting, and feature explanations, please vis
 
 ## Installation
 
-MasterOCTa does not publish signed binary releases yet. Build it from source by following the [Installation Guide](https://kaz4g.github.io/masterocta/docs/getting-started/installation). The upstream updater remains disabled.
+Masta-Octa does not publish signed binary releases yet. Build it from source by following the [Installation Guide](https://kaz4g.github.io/masterocta/docs/getting-started/installation). The upstream updater remains disabled.
 
 
 ## Compatibility

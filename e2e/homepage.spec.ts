@@ -49,7 +49,7 @@ test.describe('HomePage', () => {
   })
 
   test('has title and subtitle', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: 'MasterOCTa' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Masta-Octa' })).toBeVisible()
     await expect(page.getByText('Discover and manage your Elektron Octatrack projects')).toBeVisible()
   })
 
@@ -161,7 +161,7 @@ test.describe('Navigation', () => {
   test('can navigate back to home', async ({ page }) => {
     await page.goto('/#/project?path=test&name=test')
     await page.goto('/')
-    await expect(page.getByRole('heading', { name: 'MasterOCTa' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Masta-Octa' })).toBeVisible()
   })
 })
 

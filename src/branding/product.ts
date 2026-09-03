@@ -1,8 +1,10 @@
 /**
- * User-facing product identity for MasterOCTa.
- * Visual theme swap stays deferred; this module owns rename artifacts only (UI6).
+ * User-facing product identity for Masta-Octa.
+ *
+ * Display name is Masta-Octa. Internal compatibility IDs remain
+ * masterocta / MasterOCTa (repo, bundle, Application Support, schemas).
  */
-export const PRODUCT_NAME = 'MasterOCTa'
+export const PRODUCT_NAME = 'Masta-Octa'
 
 /** Short support line under the product name on Home / legacy scan chrome. */
 export const PRODUCT_TAGLINE =

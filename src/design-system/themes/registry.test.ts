@@ -27,6 +27,6 @@ describe('theme registry', () => {
 
   it('returns definition by id', () => {
     expect(getTheme('classic').label).toBe('Classic')
-    expect(getTheme('masterocta').label).toBe('MasterOCTa')
+    expect(getTheme('masterocta').label).toBe('Masta-Octa')
   })
 })

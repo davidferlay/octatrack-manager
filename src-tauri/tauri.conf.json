@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "MasterOCTa",
+  "productName": "Masta-Octa",
   "version": "0.1.0",
   "identifier": "jp.d3nousan.masterocta",
   "mainBinaryName": "masterocta",
@@ -13,7 +13,7 @@
   "app": {
     "windows": [
       {
-        "title": "MasterOCTa",
+        "title": "Masta-Octa",
         "width": 1300,
         "height": 830,
         "dragDropEnabled": true,

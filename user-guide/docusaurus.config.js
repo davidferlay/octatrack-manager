@@ -3,7 +3,7 @@ import { themes as prismThemes } from 'prism-react-renderer';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: 'MasterOCTa',
+  title: 'Masta-Octa',
   tagline: 'An independent, unofficial desktop application for managing Elektron Octatrack projects',
   favicon: 'img/favicon.ico',
 
@@ -104,9 +104,9 @@ const config = {
     ({
       image: 'img/masterocta-social-card.jpg',
       navbar: {
-        title: 'MasterOCTa',
+        title: 'Masta-Octa',
         logo: {
-          alt: 'MasterOCTa Logo',
+          alt: 'Masta-Octa Logo',
           src: 'img/logo.svg',
         },
         items: [

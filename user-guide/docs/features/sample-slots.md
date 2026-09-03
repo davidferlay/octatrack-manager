@@ -123,7 +123,7 @@ The player is also available from [Audio Pool](audio-pool.md#playback).
 
 All slot-editing actions require **Edit mode** (toggle in the project header, or press <kbd>E</kbd>). In View mode the same controls are visible but disabled, with a tooltip reminding you to switch to Edit mode.
 
-Whenever you enter Edit mode, MasterOCTa first backs up the project files it is about to modify.
+Whenever you enter Edit mode, Masta-Octa first backs up the project files it is about to modify.
 
 <img src={require('@site/static/img/screenshots/sample-slots-edit-mode-toggle.png').default} alt="View / Edit mode toggle" style={{width: '50%', display: 'block', margin: '0 auto'}} />
 

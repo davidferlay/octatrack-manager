@@ -2,10 +2,14 @@
 
 ## Product direction
 
-MasterOCTa is a public, non-commercial GPL-3.0 fork of the upstream Octatrack
+Masta-Octa is a public, non-commercial GPL-3.0 fork of the upstream Octatrack
 Manager project. The goal is to build a safe macOS-first Octatrack MkII library
 and project manager. Preserve compatibility with upstream Octatrack project
 files and keep upstream changes easy to review and merge.
+
+User-facing display name is **Masta-Octa**. Internal compatibility IDs remain
+**masterocta** / **MasterOCTa** (repo, npm/Cargo package, bundle identifier,
+Application Support directory, schemas, journals, backup IDs).
 
 Read `docs/CODEX_HANDOFF.md` before planning or implementing work.
 For new architecture, API boundaries, data ownership, and migration order, also

@@ -7,7 +7,7 @@ sidebar_label: Manage Audio Pool
 
 The Audio Pool is the shared sample library for your Octatrack Set. It is located in the **`AUDIO/`** folder at the top level of your Set. All projects within that Set can make use of samples from this directory and assign them to Static or Flex Sample Slots.
 
-MasterOCTa provides an interface for browsing, managing, importing and converting new samples to your pool.
+Masta-Octa provides an interface for browsing, managing, importing and converting new samples to your pool.
 
 ![Audio Pool interface](/img/screenshots/audio-pool.png)
 
@@ -52,7 +52,7 @@ Samples can be imported to Audio Pool in several ways:
 
 ## Automatic Conversion
 
-The Octatrack hardware is very specific about the audio formats it can play. MasterOCTa converts all files added to Audio Pool automatically.
+The Octatrack hardware is very specific about the audio formats it can play. Masta-Octa converts all files added to Audio Pool automatically.
 
 Conversion uses a **high-quality Sinc interpolation** algorithm (Blackman-Harris windowed) for the best possible audio fidelity.
 
@@ -138,5 +138,5 @@ The player is also available from [Sample Slots](sample-slots.md#playback) withi
 
 ## Tips
 
-- **Batch Processing:** You can select and transfer dozens of folders at once. MasterOCTa will handle the recursive conversion of every audio file within them.
+- **Batch Processing:** You can select and transfer dozens of folders at once. Masta-Octa will handle the recursive conversion of every audio file within them.
 - **External Drives:** You can browse and import samples from any connected external drive or shared network.

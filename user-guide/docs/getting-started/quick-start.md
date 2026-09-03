@@ -4,11 +4,11 @@ sidebar_position: 2
 
 # Quick Start
 
-This guide will get you up and running with MasterOCTa in just a few minutes.
+This guide will get you up and running with Masta-Octa in just a few minutes.
 
 ## 1. Scan for Projects
 
-When you first open MasterOCTa, your first task is to find your work.
+When you first open Masta-Octa, your first task is to find your work.
 
 Click **Scan for Projects** to let the app automatically search for:
 
@@ -64,7 +64,7 @@ In the **Audio Pool** view, you can move samples from your computer into your Se
 1. Browse your computer in the left panel and your Audio Pool in the right panel.
 2. Select the audio files you want to add.
 3. Click **Copy to Pool**.
-4. MasterOCTa will **automatically convert them** as needed - making all audio files compatible with the Octatrack by default (Format, Sampling Rate, Bit Depth).
+4. Masta-Octa will **automatically convert them** as needed - making all audio files compatible with the Octatrack by default (Format, Sampling Rate, Bit Depth).
 
 ![Audio Pool conversion](/img/screenshots/audio-pool-conversion.png)
 
@@ -135,7 +135,7 @@ This can be done from either:
 
 ## 11. Automatic Backups
 
-MasterOCTa automatically backs up your project files before any write operation — whether you are enabling Edit mode, saving a Part, or executing a copy operation via Tools.
+Masta-Octa automatically backs up your project files before any write operation — whether you are enabling Edit mode, saving a Part, or executing a copy operation via Tools.
 
 Backups are stored inside the project directory under:
 

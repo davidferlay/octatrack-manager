@@ -4,7 +4,7 @@ sidebar_position: 11
 
 # Copy Tracks
 
-**Copy Tracks** is the most granular copy operation in MasterOCTa. It copies individual track data (sound design and/or pattern triggers) between parts and patterns, within or across projects.
+**Copy Tracks** is the most granular copy operation in Masta-Octa. It copies individual track data (sound design and/or pattern triggers) between parts and patterns, within or across projects.
 
 ![Tools - Copy Tracks](/img/screenshots/tools-copy-tracks.png)
 
