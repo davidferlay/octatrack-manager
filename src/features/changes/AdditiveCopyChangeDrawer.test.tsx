@@ -551,4 +551,42 @@ describe("AdditiveCopyChangeDrawer", () => {
     expect(onRecovered).toHaveBeenCalledOnce();
     expect(onRecoveryChange).toHaveBeenCalled();
   });
+
+  it("blocks additive apply when rename recovery is required", async () => {
+    const api = fakeApi();
+    render(
+      <AdditiveCopyChangeDrawer
+        session={session(true)}
+        selectedAsset={selectedAsset}
+        recovery={recoveryClear}
+        renameRecovery={{
+          schema: "rename-recovery-status:v1",
+          recoveryRequired: true,
+          operations: [{
+            schema: "rename-status:v1",
+            operationId: `operation:v1:${"x".repeat(64)}`,
+            planId: `plan:v1:${"y".repeat(64)}`,
+            state: "recovery_required",
+            backupSnapshotId: null,
+            failureCode: "INCOMPLETE_RENAME",
+            planExpired: false,
+            recoveryEligible: true,
+          }],
+        }}
+        api={api}
+        refreshSession={vi.fn().mockResolvedValue(session(true))}
+        onCommitted={vi.fn()}
+        onRecovered={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Destination relative path"), {
+      target: { value: "LIVE_SET/PROJECT_A/KICK_COPY.wav" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Review plan" }));
+    expect(await screen.findByLabelText("Additive copy plan")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(screen.getByRole("button", { name: "Apply approved plan" })).toBeDisabled();
+    expect(screen.getByText(/incomplete rename operation exists/i)).toBeInTheDocument();
+  });
 });

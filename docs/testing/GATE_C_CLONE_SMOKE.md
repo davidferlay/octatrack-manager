@@ -26,18 +26,18 @@ this checklist.
 
 If any precondition cannot be demonstrated, stop without registering the root.
 
-## Controlled operator harness (remaining work)
+## Controlled operator harness
 
-Before this human smoke, production must expose rename Apply only through:
+Production now exposes rename Apply through:
 
 - an approved Octatrack root registered in `RootRegistry`
-- an explicit operator approval surface (not test doubles)
-- `VerifiedCloneRoot` or an equivalently attested temporary copy boundary
+- clone-first setup (`Clone operator`) with verified disposable clone attestation
+- explicit two-stage Continue / Apply approvals in `Rename operator`
+- durable prepared plan review after restart (`v2_rename_get_prepared_plan`)
 
-M5-C5 Phase 3 production UI now exposes **plan → review → explicit approval →
-authorize → backup → prepare** on a registered root without mutating Octatrack media.
-Prepared operations survive restart via rename journal read APIs. Phase 4 clone Apply
-and human Gate C smoke remain outstanding before this checklist can be executed end-to-end.
+M5-C5 Phase 4D automated UI/harness coverage is complete on branch
+`m5c5-phase4d-operator-ux`. **Human Gate C clone-load smoke on real Octatrack MkII
+hardware remains outstanding** before this checklist can be signed off end-to-end.
 
 ## Real-hardware clone-load smoke
 

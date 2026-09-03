@@ -24,7 +24,7 @@ partial-apply work in PR #75 (closed without merge).
 | R2 | `m5c5-r2-prepared-continuation` | `main` | Prepared plan snapshot; explicit continuation API |
 | R3 | `m5c5-r3-apply-state` | `main` | **Merged #80**; mutation/verification separation; committed verification hardening follows |
 | R4 | `m5c5-r4-recovery` | `main` | **Merged #82** — `v2_rename_recover`; cross-domain mutation gate |
-| 4D | `m5c5-phase4d-ux` | `main` | Clone-first operator UX + E2E |
+| 4D | `m5c5-phase4d-operator-ux` | `main` | **COMPLETE (local branch)** — Clone-first operator UX, typed clone/rename IPC, `v2_rename_get_prepared_plan`, E2E harness |
 
 PR #75 (`m5c5-phase4b-rename-apply`) is **not merged**; partial apply is replaced
 by R2–R4. PR #78 landed partial apply/recover early; R2–R4 completion continues on

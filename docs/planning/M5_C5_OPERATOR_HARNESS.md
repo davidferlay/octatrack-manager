@@ -191,13 +191,13 @@ Explicitly **not** in Phase 2:
 - `v2_rename_verify_committed` read-only committed verification covers planned
   references, Missing/Invalid/Unresolved states, affected documents, and sidecars
 
-### Phase 4D — Recovery API (R4)
+### Phase 4D — Operator UX + Gate C readiness (**COMPLETE** on branch `m5c5-phase4d-operator-ux`)
 
-- `v2_rename_recover` + cross-domain recovery block
-
-### Phase 4D — Operator UX + Gate C readiness
-
-- Clone-first UI, two-stage approval, e2e coverage
+- `src/api/clones.ts` + extended `src/api/rename.ts`（continue/apply/recover/verify + read-only `v2_rename_get_prepared_plan`）
+- `CloneOperatorPanel`（managed clone first, external verification, reverify）
+- `RenameOperatorPanel`（selection-independent Prepared→Continue→Apply→Verify→Recover）
+- Change Drawer integration, cross-domain visual gates, restart-safe prepared plan review
+- Automated Gate C synthetic smoke remains required in CI; Human Gate C clone-load smoke **PENDING**
 
 ### Phase 4 (legacy heading) — Clone Apply + human Gate C smoke
 

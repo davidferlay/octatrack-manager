@@ -1,0 +1,120 @@
+.mo-rename-operator {
+  display: grid;
+  gap: 0.85rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--mo-border);
+}
+
+.mo-rename-operator__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.mo-rename-operator__eyebrow,
+.mo-rename-operator__empty,
+.mo-rename-operator__blocking,
+.mo-rename-operator__status,
+.mo-rename-operator__error,
+.mo-rename-operator__recovery p {
+  margin: 0;
+}
+
+.mo-rename-operator__eyebrow {
+  color: var(--mo-text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mo-rename-operator__heading h3 {
+  margin: 0.15rem 0 0;
+  font-size: 1rem;
+}
+
+.mo-rename-operator__empty,
+.mo-rename-operator__status {
+  color: var(--mo-text-muted);
+  font-size: 0.85rem;
+}
+
+.mo-rename-operator__blocking,
+.mo-rename-operator__error {
+  color: var(--mo-danger);
+  font-size: 0.85rem;
+}
+
+.mo-rename-operator__card {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--mo-border);
+  border-radius: var(--mo-radius-sm);
+}
+
+.mo-rename-operator__card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.mo-rename-operator__card-header code {
+  display: block;
+  margin-top: 0.2rem;
+  overflow-wrap: anywhere;
+}
+
+.mo-rename-operator__review,
+.mo-rename-operator__continuation,
+.mo-rename-operator__result dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 0;
+}
+
+.mo-rename-operator__review dt,
+.mo-rename-operator__continuation dt,
+.mo-rename-operator__result dt {
+  color: var(--mo-text-muted);
+  font-size: 0.72rem;
+}
+
+.mo-rename-operator__review dd,
+.mo-rename-operator__continuation dd,
+.mo-rename-operator__result dd {
+  margin: 0.15rem 0 0;
+  font-size: 0.85rem;
+}
+
+.mo-rename-operator__approval {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.mo-rename-operator__recovery {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--mo-danger) 55%, var(--mo-border));
+  border-radius: var(--mo-radius-sm);
+  background: color-mix(in srgb, var(--mo-danger) 7%, transparent);
+}
+
+.mo-rename-operator__result {
+  display: grid;
+  gap: 0.65rem;
+}
+
+@media (max-width: 760px) {
+  .mo-rename-operator__review,
+  .mo-rename-operator__continuation,
+  .mo-rename-operator__result dl {
+    grid-template-columns: 1fr;
+  }
+}

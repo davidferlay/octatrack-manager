@@ -3958,6 +3958,49 @@ pub async fn v2_rename_get_plan(
     .map_err(ApiError::task_failed)?
 }
 
+pub(crate) fn rename_get_prepared_plan_sync(
+    registry: &RootRegistry,
+    prepared_runtime: &SharedPreparedRenameRuntime,
+    root_id: &RootId,
+    operation_id: &str,
+) -> Result<RenamePlanDto, ApiError> {
+    let resolved = registry.resolve(root_id)?;
+    let operation_id = OperationId::parse(operation_id)
+        .map_err(|_| ApiError::new("INVALID_OPERATION_ID", "operation ID is invalid", false))?;
+    let snapshot = prepared_runtime
+        .load_prepared_snapshot(&operation_id)
+        .map_err(prepared_rename_runtime_error)?;
+    if snapshot.historical_device_fingerprint != resolved.session.device_fingerprint {
+        return Err(ApiError::new(
+            "FINGERPRINT_MISMATCH",
+            "prepared rename operation is not bound to this root session",
+            false,
+        ));
+    }
+    let plan = snapshot
+        .plan
+        .to_plan()
+        .map_err(prepared_rename_runtime_error)?;
+    Ok(rename_plan_from_impact(&plan))
+}
+
+#[tauri::command]
+pub async fn v2_rename_get_prepared_plan(
+    root_id: String,
+    operation_id: String,
+    registry: State<'_, Arc<RootRegistry>>,
+    prepared_runtime: State<'_, SharedPreparedRenameRuntime>,
+) -> Result<RenamePlanDto, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let prepared_runtime = Arc::clone(prepared_runtime.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        rename_get_prepared_plan_sync(&registry, &prepared_runtime, &root_id, &operation_id)
+    })
+    .await
+    .map_err(ApiError::task_failed)?
+}
+
 #[tauri::command]
 pub async fn v2_rename_authorize(
     root_id: String,
@@ -7552,6 +7595,35 @@ mod tests {
         .unwrap();
         assert_eq!(applied.mutation_state, "committed");
         assert_eq!(applied.verification_state, "passed");
+    }
+
+    #[test]
+    fn rename_get_prepared_plan_after_root_id_rotation() {
+        let fixture = setup_rename_through_backup();
+        let root_path = fixture._root.path().to_path_buf();
+        prepare_fixture_rename(&fixture);
+
+        fixture.registry.close(&fixture.root_id).unwrap();
+        let session = register_root_sync(
+            &fixture.registry,
+            &fixture.catalog,
+            root_path.to_str().unwrap(),
+        )
+        .unwrap();
+        let new_root_id = RootId::new(session.root_id).unwrap();
+
+        let plan = rename_get_prepared_plan_sync(
+            &fixture.registry,
+            &fixture.prepared_runtime,
+            &new_root_id,
+            &fixture.operation_id,
+        )
+        .unwrap();
+        assert_eq!(plan.schema, "rename-plan:v1");
+        assert_eq!(plan.operation_id, fixture.operation_id);
+        assert_eq!(plan.source_relative_path, "SET/AUDIO/pad.wav");
+        assert_eq!(plan.destination_relative_path, "SET/AUDIO/new-pad.wav");
+        assert!(plan.reference_update_count > 0);
     }
 
     #[test]

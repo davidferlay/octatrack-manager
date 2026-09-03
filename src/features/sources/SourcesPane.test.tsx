@@ -104,7 +104,7 @@ describe('SourcesPane', () => {
     )
 
     expect(screen.getByText('EDIT ENABLED')).toBeInTheDocument()
-    expect(screen.getByText('Additive copy only. Use a cloned or test root, never original media.')).toBeInTheDocument()
+    expect(screen.getByText(/Rename apply requires a verified disposable clone/i)).toBeInTheDocument()
     const viewWhenEditing = screen.getByRole('button', { name: 'View' })
     const editWhenEditing = screen.getByRole('button', { name: 'Edit' })
     expect(viewWhenEditing).toHaveAttribute('aria-pressed', 'false')

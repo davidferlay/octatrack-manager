@@ -126,6 +126,94 @@ export interface RenameRecoveryStatus {
   operations: RenameStatus[];
 }
 
+export type RenameContinuationState =
+  | "prepared"
+  | "continuation_required"
+  | "ready_to_continue";
+
+export interface RenameContinuationStatus {
+  schema: "rename-continuation-status:v1";
+  operationId: string;
+  planId: string;
+  state: RenameContinuationState;
+  preparedSnapshotAvailable: boolean;
+  backupVerified: boolean;
+  cloneVerified: boolean;
+}
+
+export interface RenameContinuationAuthority {
+  schema: "rename-continuation-authority:v1";
+  operationId: string;
+  continuationAuthorityId: string;
+  expiresInSeconds: number;
+}
+
+export type RenameMutationState =
+  | "prepared"
+  | "applying"
+  | "committed"
+  | "rolled_back"
+  | "recovery_required";
+
+export type RenameVerificationState = "passed" | "failed";
+
+export interface RenameApplyStatus {
+  schema: "rename-apply-status:v2";
+  planId: string;
+  operationId: string;
+  snapshotId: string;
+  mutationState: RenameMutationState;
+  verificationState: RenameVerificationState;
+  verificationCode: string | null;
+  rescanCompleted: boolean;
+  observedFileCount: number;
+  missingReferenceCount: number;
+  invalidReferenceCount: number;
+  unresolvedReferenceCount: number;
+}
+
+export interface RenameCommittedVerification {
+  schema: "rename-committed-verification:v2";
+  operationId: string;
+  planId: string;
+  mutationState: RenameMutationState;
+  verificationState: RenameVerificationState;
+  verificationCode: string | null;
+  rescanCompleted: boolean;
+  observedFileCount: number;
+  missingReferenceCount: number;
+  invalidReferenceCount: number;
+  unresolvedReferenceCount: number;
+}
+
+export interface RenameRecoveryResult {
+  schema: "rename-recovery-result:v1";
+  operationId: string;
+  planId: string;
+  mutationState: RenameMutationState;
+  verificationState: RenameVerificationState;
+  verificationCode: string | null;
+  rescanCompleted: boolean;
+  restoredReferenceCount: number;
+  missingReferenceCount: number;
+  invalidReferenceCount: number;
+  unresolvedReferenceCount: number;
+}
+
+export interface RenameRollbackVerification {
+  schema: "rename-rollback-verification:v1";
+  operationId: string;
+  planId: string;
+  mutationState: RenameMutationState;
+  verificationState: RenameVerificationState;
+  verificationCode: string | null;
+  rescanCompleted: boolean;
+  restoredReferenceCount: number;
+  missingReferenceCount: number;
+  invalidReferenceCount: number;
+  unresolvedReferenceCount: number;
+}
+
 export interface RenameApi {
   plan(
     rootId: string,
@@ -133,6 +221,7 @@ export interface RenameApi {
     destinationRelativePath: string,
   ): Promise<RenamePlanResponse>;
   getPlan(rootId: string, planId: string): Promise<RenamePlan>;
+  getPreparedPlan(rootId: string, operationId: string): Promise<RenamePlan>;
   authorize(rootId: string, planId: string): Promise<RenameAuthority>;
   createBackup(
     rootId: string,
@@ -147,6 +236,34 @@ export interface RenameApi {
   ): Promise<RenamePrepareStatus>;
   getStatus(rootId: string, operationId: string): Promise<RenameStatus>;
   recoveryStatus(rootId: string): Promise<RenameRecoveryStatus>;
+  continuationStatus(
+    rootId: string,
+    operationId: string,
+  ): Promise<RenameContinuationStatus>;
+  continueOperation(
+    rootId: string,
+    operationId: string,
+    approvedOperationId: string,
+  ): Promise<RenameContinuationAuthority>;
+  apply(
+    rootId: string,
+    operationId: string,
+    approvedOperationId: string,
+    continuationAuthorityId: string,
+  ): Promise<RenameApplyStatus>;
+  verifyCommitted(
+    rootId: string,
+    operationId: string,
+  ): Promise<RenameCommittedVerification>;
+  recover(
+    rootId: string,
+    operationId: string,
+    approvedOperationId: string,
+  ): Promise<RenameRecoveryResult>;
+  verifyRolledBack(
+    rootId: string,
+    operationId: string,
+  ): Promise<RenameRollbackVerification>;
 }
 
 function normalizePlanResponse(raw: unknown): RenamePlanResponse {
@@ -169,6 +286,8 @@ export function createRenameApi(client: IpcClient = ipcClient): RenameApi {
         .then(normalizePlanResponse),
     getPlan: (rootId, planId) =>
       client.request<RenamePlan>("v2_rename_get_plan", { rootId, planId }),
+    getPreparedPlan: (rootId, operationId) =>
+      client.request<RenamePlan>("v2_rename_get_prepared_plan", { rootId, operationId }),
     authorize: (rootId, planId) =>
       client.request<RenameAuthority>("v2_rename_authorize", { rootId, planId }),
     createBackup: (rootId, planId, authorityId) =>
@@ -188,6 +307,40 @@ export function createRenameApi(client: IpcClient = ipcClient): RenameApi {
       client.request<RenameStatus>("v2_rename_get_status", { rootId, operationId }),
     recoveryStatus: (rootId) =>
       client.request<RenameRecoveryStatus>("v2_rename_recovery_status", { rootId }),
+    continuationStatus: (rootId, operationId) =>
+      client.request<RenameContinuationStatus>("v2_rename_continuation_status", {
+        rootId,
+        operationId,
+      }),
+    continueOperation: (rootId, operationId, approvedOperationId) =>
+      client.request<RenameContinuationAuthority>("v2_rename_continue", {
+        rootId,
+        operationId,
+        approvedOperationId,
+      }),
+    apply: (rootId, operationId, approvedOperationId, continuationAuthorityId) =>
+      client.request<RenameApplyStatus>("v2_rename_apply", {
+        rootId,
+        operationId,
+        approvedOperationId,
+        continuationAuthorityId,
+      }),
+    verifyCommitted: (rootId, operationId) =>
+      client.request<RenameCommittedVerification>("v2_rename_verify_committed", {
+        rootId,
+        operationId,
+      }),
+    recover: (rootId, operationId, approvedOperationId) =>
+      client.request<RenameRecoveryResult>("v2_rename_recover", {
+        rootId,
+        operationId,
+        approvedOperationId,
+      }),
+    verifyRolledBack: (rootId, operationId) =>
+      client.request<RenameRollbackVerification>("v2_rename_verify_rolled_back", {
+        rootId,
+        operationId,
+      }),
   };
 }
 

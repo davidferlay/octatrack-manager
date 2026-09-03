@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { AudioApi, ChangeApi, MetadataApi, RenameApi, RootApi, RootSession } from "../../api";
 import { RootRegistryPanel } from "./RootRegistryPanel";
+import { renameOperatorApiStubs } from "../../test/renameApiStubs";
 
 const session: RootSession = {
   rootId: "root-opaque",
@@ -81,6 +82,7 @@ function fakeRenameApi(): RenameApi {
       recoveryRequired: false,
       operations: [],
     }),
+    ...renameOperatorApiStubs(),
   };
 }
 

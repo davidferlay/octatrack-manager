@@ -112,11 +112,16 @@ MasterOCTaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
   - RecoveryAuthority（write grant 不要）、Prepared/Committed recovery 拒否
   - journal 由来 `planId` を restart discovery で返却（in-memory plan 復活なし）
   - completion criteria 向け production recovery / mutation gate テスト群
-- M5-C5 Phase 4D — Operator UX + Gate C readiness: **NOT STARTED**
+- M5-C5 Phase 4D — Operator UX + Gate C readiness: **COMPLETE**（branch `m5c5-phase4d-operator-ux`）
+  - `src/api/clones.ts` + extended `src/api/rename.ts`（continue/apply/recover/verify + `v2_rename_get_prepared_plan`）
+  - `CloneOperatorPanel`（managed/external clone setup + verification）
+  - `RenameOperatorPanel`（selection-independent Prepared→Continue→Apply→Verify→Recover operator）
+  - Change Drawer 統合、cross-domain visual gate、restart-safe prepared plan review
+  - Gate C automated checks: **PASS pending CI** / Human Gate C: **PENDING**
 - M5-C5 Phase 4A — verified disposable clone authority: **COMPLETE**（#74 に含む）
 - M5-C5 Phase 3 — explicit approval Rename UI: **COMPLETE**（PR #73、`RenameSampleModal` + `src/api/rename.ts`）
   - Inspector 入口、`Approve & Prepare` → `authorize → backup → prepare`
-  - Apply / 媒体 mutation / recovery 実行 UI は Phase 4 まで未接続
+  - Continue/Apply/Recover operator UI は Phase 4D `RenameOperatorPanel` へ接続
 - M5-C5 Phase 2 — rename authority / backup / prepare API: **COMPLETE**（#72）
   - `v2_rename_authorize` / `v2_rename_create_backup` / `v2_rename_prepare`
   - `v2_rename_get_status` / `v2_rename_recovery_status`
