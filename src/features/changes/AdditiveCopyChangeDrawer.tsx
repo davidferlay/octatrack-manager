@@ -84,9 +84,10 @@ export function AdditiveCopyChangeDrawer({
     setError(null);
   }, [session.rootId, selectedAsset?.fileInstanceId]);
 
-  const recoveryRequired = (recovery?.recoveryRequired ?? true)
-    || (renameRecovery?.recoveryRequired ?? false)
+  const additiveRecoveryRequired = (recovery?.recoveryRequired ?? true)
     || status?.recoveryRequired === true;
+  const renameRecoveryBlocking = renameRecovery?.recoveryRequired ?? false;
+  const recoveryRequired = additiveRecoveryRequired || renameRecoveryBlocking;
   const writeEnabled = session.mode === "write_enabled" && session.capabilities.write;
   const interactionBusy = busy || disabled;
 
@@ -360,7 +361,7 @@ export function AdditiveCopyChangeDrawer({
           </label>
           <Button
             variant="secondary"
-            disabled={interactionBusy || destination.trim() === "" || recoveryRequired}
+            disabled={interactionBusy || destination.trim() === "" || additiveRecoveryRequired}
             onClick={createPlan}
           >
             {busy ? "Checking..." : "Review plan"}
