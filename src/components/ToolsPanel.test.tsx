@@ -325,3 +325,94 @@ describe('ToolsPanel - initialOperation one-shot consumption', () => {
     expect(onInitialOperationConsumed).not.toHaveBeenCalled()
   })
 })
+
+describe('ToolsPanel - Copy Banks source None / All', () => {
+  const banks = Array.from({ length: 16 }, (_, i) => ({
+    name: `Bank ${String.fromCharCode(65 + i)}`,
+  })) as unknown as React.ComponentProps<typeof ToolsPanel>['banks']
+
+  /** The source panel's bank grid, excluding its None / All row. */
+  const sourceBankButtons = () =>
+    Array.from(document.querySelectorAll(
+      '.tools-source-panel .tools-multi-btn.bank-btn:not(.tools-select-all)'
+    )) as HTMLButtonElement[]
+  const selectedSourceBanks = () =>
+    sourceBankButtons().filter(b => b.className.includes('selected')).map(b => b.textContent)
+  const sourceAction = (label: string) =>
+    Array.from(document.querySelectorAll(
+      '.tools-source-panel .tools-multi-btn.bank-btn.tools-select-all'
+    )).find(b => b.textContent?.trim() === label) as HTMLButtonElement
+
+  async function renderCopyBanks(loaded: number[]) {
+    // Settings are remembered per project in sessionStorage; start clean so the
+    // operation is Copy Banks whatever an earlier test left behind.
+    sessionStorage.clear()
+    const r = renderPanel({ banks, loadedBankIndices: new Set(loaded) })
+    await userEvent.setup().selectOptions(
+      await screen.findByLabelText('Operation'), 'copy_bank'
+    )
+    return r
+  }
+
+  it('offers None and All under the source bank grid', async () => {
+    await renderCopyBanks([0, 1, 2, 3])
+    expect(sourceAction('None')).toBeTruthy()
+    expect(sourceAction('All')).toBeTruthy()
+  })
+
+  it('All selects every bank the source project has, and marks itself selected', async () => {
+    const user = userEvent.setup()
+    await renderCopyBanks([0, 1, 2])
+    await user.click(sourceAction('All'))
+
+    // Only the banks that exist - never a blind A-P.
+    expect(selectedSourceBanks()).toEqual(['A', 'B', 'C'])
+    expect(sourceAction('All').className).toContain('selected')
+  })
+
+  it('All is a toggle', async () => {
+    const user = userEvent.setup()
+    await renderCopyBanks([0, 1, 2])
+    await user.click(sourceAction('All'))
+    await user.click(sourceAction('All'))
+    expect(selectedSourceBanks()).toEqual([])
+  })
+
+  it('None clears whatever was selected', async () => {
+    const user = userEvent.setup()
+    await renderCopyBanks([0, 1, 2, 3])
+    await user.click(sourceAction('All'))
+    expect(selectedSourceBanks().length).toBeGreaterThan(0)
+
+    await user.click(sourceAction('None'))
+    expect(selectedSourceBanks()).toEqual([])
+    expect(sourceAction('All').className).not.toContain('selected')
+  })
+
+  it('All is not marked selected while only some banks are chosen', async () => {
+    await renderCopyBanks([0, 1, 2, 3])
+    // Bank A is selected by default, which is not "all".
+    expect(selectedSourceBanks()).toEqual(['A'])
+    expect(sourceAction('All').className).not.toContain('selected')
+  })
+
+  it('selecting All drives the pairing hint', async () => {
+    const user = userEvent.setup()
+    await renderCopyBanks([0, 1, 2])
+    await user.click(sourceAction('All'))
+    expect(await screen.findByText('3 banks - destination locked to 3 consecutive banks'))
+      .toBeInTheDocument()
+  })
+
+  it('leaves the destination grid alone', async () => {
+    const user = userEvent.setup()
+    await renderCopyBanks([0, 1, 2, 3])
+    await user.click(sourceAction('None'))
+    // The destination has its own None / All row, untouched by the source's.
+    const destActions = document.querySelectorAll(
+      '.tools-dest-panel .tools-multi-btn.bank-btn.tools-select-all'
+    )
+    expect(destActions).toHaveLength(2)
+  })
+})
+

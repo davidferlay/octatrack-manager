@@ -872,6 +872,14 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     setSourceBankIndex((prev) => (prev >= 0 && !loaded.has(prev) ? -1 : prev));
   }, [foreignSource]);
 
+  // "All" means every bank the source project actually has, never a blind 0-15.
+  const selectableSourceBanks = useMemo(
+    () => Array.from({ length: 16 }, (_, i) => i).filter((i) => sourceLoadedBankIndices.has(i)),
+    [sourceLoadedBankIndices]
+  );
+  const sourceAllBanksSelected =
+    selectableSourceBanks.length > 0 && sourceBankIndices.length === selectableSourceBanks.length;
+
   const selectSourceBank = useCallback((idx: number, e: React.MouseEvent) => {
     setSourceBankSelection((prev) => applyItemClick(prev, idx, clickModifiers(e), (i) => sourceLoadedBankIndices.has(i)));
   }, [sourceLoadedBankIndices]);
@@ -1459,6 +1467,26 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     ))}
                   </div>
                 ))}
+                <div className="tools-select-actions">
+                  <button
+                    type="button"
+                    className="tools-multi-btn bank-btn tools-select-all"
+                    onClick={() => setSourceBankSelection({ selection: [], anchor: null })}
+                    title="Deselect all banks"
+                  >
+                    None
+                  </button>
+                  <button
+                    type="button"
+                    className={`tools-multi-btn bank-btn tools-select-all ${sourceAllBanksSelected ? "selected" : ""}`}
+                    onClick={() => setSourceBankSelection(sourceAllBanksSelected
+                      ? { selection: [], anchor: null }
+                      : { selection: selectableSourceBanks, anchor: selectableSourceBanks[0] ?? null })}
+                    title="Select all banks"
+                  >
+                    All
+                  </button>
+                </div>
               </div>
               {sourceBankIndices.length > 1 && (
                 <div className="tools-hint">

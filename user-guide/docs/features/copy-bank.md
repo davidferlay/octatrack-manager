@@ -35,6 +35,7 @@ The source bank grid takes a multi-selection, the way a file manager does:
 - **Click:** Select one bank. Clicking the only selected bank deselects it.
 - **Shift-click:** Select every bank between the last one you clicked and this one.
 - **Ctrl-click** (Cmd on macOS): Add or remove one bank, keeping the rest.
+- **None / All:** The row under the grid clears the selection, or selects all banks.
 
 With **one** source bank selected, nothing changes: it is copied to every destination bank you pick, as before.
 

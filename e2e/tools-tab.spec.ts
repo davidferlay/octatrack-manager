@@ -4301,6 +4301,73 @@ test.describe('Tools Tab - source project selection', () => {
   })
 })
 
+test.describe('Tools Tab - Copy Banks source None / All', () => {
+  const src = '.tools-source-panel'
+  const action = (page: Page, label: string) =>
+    page.locator(`${src} .tools-multi-btn.bank-btn.tools-select-all`, { hasText: new RegExp(`^${label}$`) })
+  const selected = (page: Page) =>
+    page.locator(`${src} .tools-multi-btn.bank-btn.selected:not(.tools-select-all)`).allTextContents()
+
+  test('the source bank grid offers None and All, like the destination', async ({ page }) => {
+    await openToolsPanel(page, 'copy_bank')
+    await expect(action(page, 'None')).toBeVisible()
+    await expect(action(page, 'All')).toBeVisible()
+  })
+
+  test('All selects every bank and None clears the selection', async ({ page }) => {
+    await openToolsPanel(page, 'copy_bank')
+    await action(page, 'All').click()
+    expect(await selected(page)).toHaveLength(16)
+    await expect(action(page, 'All')).toHaveClass(/selected/)
+
+    await action(page, 'None').click()
+    expect(await selected(page)).toHaveLength(0)
+    await expect(page.locator('.tools-execute-btn')).toBeDisabled()
+  })
+
+  test('All is a toggle', async ({ page }) => {
+    await openToolsPanel(page, 'copy_bank')
+    await action(page, 'All').click()
+    await action(page, 'All').click()
+    expect(await selected(page)).toHaveLength(0)
+  })
+
+  test('selecting All locks the destination to the same count', async ({ page }) => {
+    await openToolsPanel(page, 'copy_bank')
+    await action(page, 'All').click()
+    await expect(page.locator(`${src} .tools-hint`).first())
+      .toHaveText('16 banks - destination locked to 16 consecutive banks')
+  })
+
+  test('All only covers banks the source project actually has', async ({ page }) => {
+    // /test/other-project reports just banks A and B.
+    await openToolsPanel(page, 'copy_bank', { withOtherProject: true })
+    await page.locator(`${src} .tools-project-selector-btn`).click()
+    await page.locator('.project-selector-modal .scan-button', { hasText: 'Rescan for Projects' }).click()
+    await page.waitForTimeout(500)
+    await page.evaluate(() => {
+      ;(document.querySelector('.project-selector-modal .location-header') as HTMLElement)?.click()
+    })
+    await page.waitForTimeout(300)
+    await page.evaluate(() => {
+      ;(document.querySelector('.project-selector-modal .set-header') as HTMLElement)?.click()
+    })
+    await page.waitForTimeout(300)
+    await page.evaluate(() => {
+      for (const card of document.querySelectorAll('.project-selector-card')) {
+        if (card.textContent?.includes('OtherProject')) {
+          ;(card as HTMLElement).click()
+          return
+        }
+      }
+    })
+    await page.waitForTimeout(800)
+
+    await action(page, 'All').click()
+    expect(await selected(page)).toEqual(['A', 'B'])
+  })
+})
+
 test.describe('Tools Tab - Clear Project', () => {
   const panel = '.tools-clear-panel'
   // Scope / Clear Mode / Slot Type are text toggles; banks, parts, patterns and

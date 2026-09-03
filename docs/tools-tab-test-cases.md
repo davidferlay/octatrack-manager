@@ -17,6 +17,11 @@
 | SM90 | Destination Modal | Browse a project folder directly | Click "Browse..." and pick a folder that is itself an Octatrack project | The project is selected as destination immediately, modal closes |
 | SM91 | Destination Modal | Browse a folder without projects | Click "Browse..." and pick a folder with no Octatrack project anywhere below it | Error message states no Octatrack project was found in the selected folder |
 | SM67 OK | Copy Parts | Multi-select dest Banks | Copy Part 1 → Banks A, B, C | Part 1 copied to all 3 destination banks |
+| SM92 | Copy Banks | Source None / All row | Look under the source bank grid | A None / All row is present, matching the destination grid's |
+| SM93 | Copy Banks | Source All selects every existing bank | Click All in the source bank row | Every bank the source project has is selected (never one that is not on disk), All lights up, and the hint reads "N banks - destination locked to N consecutive banks" |
+| SM94 | Copy Banks | Source All is a toggle | Click All twice | The selection is emptied again |
+| SM95 | Copy Banks | Source None clears the selection | Select some banks, then click None | Nothing is selected and Execute is disabled |
+| SM96 | Copy Banks | Source All respects a foreign project | Point the source at a project with fewer banks, then click All | Only that project's banks are selected |
 | **Copy Parts** | | | | |
 | SM4 OK | Copy Parts | Copy single part | Copy Part 1 → Part 3 | Part 3 machines, amps, LFOs, FX match Part 1 |
 | SM5 OK | Copy Parts | Copy All parts | Click source "All", execute | All 4 Parts copied including names |
