@@ -4,6 +4,9 @@ import userEvent from '@testing-library/user-event'
 import { invoke } from '@tauri-apps/api/core'
 import { ClearProjectPanel, describeClear } from './ClearProjectPanel'
 
+/** Suffix every multi-select button's tooltip carries. */
+const MULTI_HINT = ' - shift-click for a range, ctrl-click to add'
+
 const mockInvoke = vi.mocked(invoke)
 
 beforeEach(() => {
@@ -638,6 +641,87 @@ describe('ClearProjectPanel - tooltips', () => {
     await user.click(screen.getByRole('button', { name: 'One' }))
     // With one handle the "first" field is simply the slot.
     expect(screen.getByLabelText('First slot to clear')).toHaveAttribute('title', 'Slot to clear')
+  })
+})
+
+describe('ClearProjectPanel - Tracks: what each mode asks for', () => {
+  async function tracks(user: ReturnType<typeof userEvent.setup>, mode?: string) {
+    renderPanel()
+    await user.click(screen.getByRole('button', { name: 'Tracks' }))
+    if (mode) await user.click(screen.getByRole('button', { name: mode }))
+    await user.click(screen.getByRole('button', { name: 'T1' }))
+  }
+
+  it('Part Parameters asks for a part and not a pattern', async () => {
+    const user = userEvent.setup()
+    await tracks(user, 'Part Parameters')
+    expect(screen.getByText('Part')).toBeInTheDocument()
+    expect(screen.queryByText('Pattern')).not.toBeInTheDocument()
+
+    await confirm(user)
+    await waitFor(() => expect(callsTo('clear_tracks')).toHaveLength(1))
+    expect(callsTo('clear_tracks')[0][1]).toMatchObject({ mode: 'part_params', partIndex: 0, patternIndices: null })
+  })
+
+  it('Pattern Triggers asks for a pattern and not a part', async () => {
+    const user = userEvent.setup()
+    await tracks(user, 'Pattern Triggers')
+    expect(screen.queryByText('Part')).not.toBeInTheDocument()
+    expect(screen.getByText('Pattern')).toBeInTheDocument()
+
+    await user.click(screen.getByTitle(`Pattern 3${MULTI_HINT}`))
+    await confirm(user)
+    await waitFor(() => expect(callsTo('clear_tracks')).toHaveLength(1))
+    expect(callsTo('clear_tracks')[0][1]).toMatchObject({ mode: 'pattern_triggers', patternIndices: [2] })
+  })
+
+  it('Pattern Triggers runs once whatever the part selection was', async () => {
+    const user = userEvent.setup()
+    renderPanel()
+    await user.click(screen.getByRole('button', { name: 'Tracks' }))
+    // Pick all four parts first, then switch to a mode that ignores them.
+    await user.click(screen.getAllByRole('button', { name: 'All' })[0])
+    await user.click(screen.getByRole('button', { name: 'Pattern Triggers' }))
+    await user.click(screen.getByRole('button', { name: 'T1' }))
+    await user.click(screen.getByRole('button', { name: 'All' }))
+    await confirm(user)
+
+    // One call, not four: no Part is touched in this mode.
+    await waitFor(() => expect(callsTo('clear_tracks')).toHaveLength(1))
+  })
+
+  it('Both asks for a part and a pattern', async () => {
+    const user = userEvent.setup()
+    await tracks(user, 'Both')
+    expect(screen.getByText('Part')).toBeInTheDocument()
+    expect(screen.getByText('Pattern')).toBeInTheDocument()
+
+    const execute = () => screen.getByRole('button', { name: /Execute/ })
+    expect(execute()).toHaveAttribute('title', 'Select at least one pattern')
+    await user.click(screen.getByTitle(`Pattern 2${MULTI_HINT}`))
+    expect(execute()).toBeEnabled()
+  })
+
+  it('Both blocks while no part is selected', async () => {
+    const user = userEvent.setup()
+    renderPanel()
+    await user.click(screen.getByRole('button', { name: 'Tracks' }))
+    await user.click(screen.getByRole('button', { name: 'T1' }))
+    await user.click(screen.getAllByRole('button', { name: 'All' })[1])
+    // Deselect the default Part 1 (the cross button, not pattern 1).
+    await user.click(screen.getByTitle('Part 1'))
+
+    const execute = screen.getByRole('button', { name: /Execute/ })
+    expect(execute).toBeDisabled()
+    expect(execute).toHaveAttribute('title', 'Select at least one part')
+  })
+
+  it('the summary names a part only when one is used', async () => {
+    const user = userEvent.setup()
+    await tracks(user, 'Pattern Triggers')
+    await user.click(screen.getByTitle(`Pattern 1${MULTI_HINT}`))
+    expect(screen.getByText(/^Clears pattern triggers of 1 track \(T1\) in Bank A, 1 pattern \(1\)$/))
+      .toBeInTheDocument()
   })
 })
 

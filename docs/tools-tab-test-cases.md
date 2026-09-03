@@ -279,6 +279,9 @@
 | CLR-31 | Clear Tracks | Pattern Triggers mode | Clear T1 with Pattern Triggers on selected patterns | Those patterns lose their T1 trigs, trigless trigs and parameter locks; T1's sound design is unchanged |
 | CLR-32 | Clear Tracks | Both mode | Clear T1 with Both | Sound design and the selected patterns' trigs are cleared in one run |
 | CLR-33 | Clear Tracks | Pattern field hidden for sound design | Switch Clear Mode to Part Parameters | The Pattern field disappears - patterns are irrelevant to that mode. Switching back brings it back |
+| CLR-33b | Clear Tracks | Part field hidden for sequencer data | Switch Clear Mode to Pattern Triggers | The Part field disappears - no Part is touched in that mode - and Execute no longer waits for a part. Switching to Part Parameters or Both brings it back |
+| CLR-33c | Clear Tracks | Both asks for a part and a pattern | Select Both with a track selected but no part, then no pattern | Execute stays disabled, with the tooltip naming whichever is still missing; it becomes available once both are chosen |
+| CLR-33d | Clear Tracks | Sequencer-only clear runs once | Select all four parts on the cross, switch to Pattern Triggers, choose tracks and patterns, Execute | The clear runs a single time (not once per part) and the summary line does not mention any Part |
 | CLR-34 | Clear Tracks | Patterns must be chosen | In Both or Pattern Triggers mode with no pattern selected, hover Execute | Execute is disabled with tooltip "Select at least one pattern"; pressing All in the pattern grid enables it |
 | CLR-35 | Clear Tracks | MIDI tracks | Clear M3 with Both | M3's MIDI params, arp and LFO are default and its trigs are gone; audio tracks are untouched |
 | CLR-36 | Clear Tracks | Unselected tracks untouched | Clear T1 only, in any mode | T2-T8 and M1-M8 keep both their sound design and their trigs |

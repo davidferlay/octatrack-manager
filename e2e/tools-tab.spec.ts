@@ -4382,6 +4382,31 @@ test.describe('Tools Tab - Clear Project', () => {
     expect(calls[0][1]).toMatchObject({ trackIndices: [1], mode: 'part_params', patternIndices: null })
   })
 
+  test('each Clear Mode asks only for what it touches', async ({ page }) => {
+    await opt(page, 'Tracks').click()
+    const field = (label: string) => page.locator(`${panel} label`, { hasText: new RegExp(`^${label}$`) })
+
+    // Both (the default) needs a part and a pattern.
+    await expect(field('Part')).toBeVisible()
+    await expect(field('Pattern')).toBeVisible()
+
+    await opt(page, 'Part Parameters').click()
+    await expect(field('Part')).toBeVisible()
+    await expect(field('Pattern')).toHaveCount(0)
+
+    await opt(page, 'Pattern Triggers').click()
+    await expect(field('Part')).toHaveCount(0)
+    await expect(field('Pattern')).toBeVisible()
+
+    await btn(page, 'T1').click()
+    await page.locator(`${panel} .tools-multi-btn.pattern-btn.tools-select-all`, { hasText: 'All' }).click()
+    await execute(page)
+
+    const calls = await clearCalls(page)
+    expect(calls).toHaveLength(1)
+    expect(calls[0][1]).toMatchObject({ mode: 'pattern_triggers', patternIndices: null })
+  })
+
   test('the Sample Slots scope clears a 1-based range of the chosen type', async ({ page }) => {
     await opt(page, 'Sample Slots').click()
     await opt(page, 'Static').click()

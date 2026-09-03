@@ -44,9 +44,9 @@ Sound design lives in Parts, so clearing a Pattern does not touch any machine, F
 
 The most granular scope, mirroring [Copy Tracks](./copy-tracks.md). Choose a bank, one or more tracks (T1-T8 for audio, M1-M8 for MIDI), a part (or All four, on the part cross), and a Clear Mode:
 
-- Part Parameters: the per-track sound design (machine type, params, FX, volumes, LFO, recorder setup), in both the saved and unsaved states. Patterns are untouched, so the mode does not ask for any.
-- Both: sound design and sequencer data.
-- Pattern Triggers: only the sequencer data (trigs, trigless trigs, parameter locks) for the selected tracks.
+- Part Parameters: the per-track sound design (machine type, params, FX, volumes, LFO, recorder setup), in both the saved and unsaved states. Patterns are untouched, so the mode asks only for a Part.
+- Both: sound design and sequencer data. Asks for both a Part and one or more Patterns.
+- Pattern Triggers: only the sequencer data (trigs, trigless trigs, parameter locks) for the selected tracks. Parts are untouched, so the mode asks only for Patterns.
 
 In the two trigger modes a Pattern grid appears under Clear Mode - pick the patterns that lose their trigs, or use its All row for the whole bank. Part Parameters is pattern-independent, so the grid is hidden in that mode.
 

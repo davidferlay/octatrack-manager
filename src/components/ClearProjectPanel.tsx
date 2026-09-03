@@ -139,10 +139,14 @@ export function describeClear(args: {
           : args.patternIndices.length === 16
             ? ", all 16 patterns"
             : `, ${plural(args.patternIndices.length, "pattern")} (${args.patternIndices.map((p) => p + 1).join(", ")})`;
-      const parts = args.trackParts.length === 4
-        ? "all parts"
-        : `Part ${args.trackParts.map((p) => p + 1).join(", ") || "-"}`;
-      return `${what} of ${plural(args.trackIndices.length, "track")} (${args.trackIndices.map(trackLabel).join(", ")}) in ${bank} ${parts}${where}`;
+      // A sequencer-only clear touches no Part, so naming one would be a lie.
+      const parts =
+        args.trackMode === "pattern_triggers"
+          ? ""
+          : args.trackParts.length === 4
+            ? " all parts"
+            : ` Part ${args.trackParts.map((p) => p + 1).join(", ") || "-"}`;
+      return `${what} of ${plural(args.trackIndices.length, "track")} (${args.trackIndices.map(trackLabel).join(", ")}) in ${bank}${parts}${where}`;
     }
     case "sample_slots": {
       const label = args.slotType === "both" ? "Flex and Static sample slot" : `${args.slotType === "flex" ? "Flex" : "Static"} sample slot`;
@@ -203,6 +207,12 @@ export function ClearProjectPanel({
   const toggle = (list: number[], idx: number) =>
     list.includes(idx) ? list.filter((i) => i !== idx) : [...list, idx].sort((a, b) => a - b);
 
+  // Which of the two Tracks selectors the chosen mode actually uses. Sound
+  // design lives in a Part, sequencer data lives in a Pattern, so each mode
+  // asks for only what it touches - and "Both" asks for both.
+  const needsPart = trackMode !== "pattern_triggers";
+  const needsPatterns = trackMode !== "part_params";
+
   // What blocks Execute, as a message (null = ready).
   const blocker = useMemo((): string | null => {
     if (scope === "banks") return bankIndices.length === 0 ? "Select at least one bank to clear" : null;
@@ -210,14 +220,13 @@ export function ClearProjectPanel({
     if (scope === "parts") return partIndices.length === 0 ? "Select at least one part" : null;
     if (scope === "patterns") return patternIndices.length === 0 ? "Select at least one pattern" : null;
     if (scope === "tracks") {
-      if (trackParts.length === 0) return "Select a part";
       if (trackIndices.length === 0) return "Select at least one track";
-      if (trackMode !== "part_params" && patternIndices.length === 0)
-        return "Select at least one pattern";
+      if (needsPart && trackParts.length === 0) return "Select at least one part";
+      if (needsPatterns && patternIndices.length === 0) return "Select at least one pattern";
       return null;
     }
     return null;
-  }, [scope, bankIndices, targetBank, partIndices, patternIndices, trackIndices, trackParts, trackMode, slotFrom, slotTo]);
+  }, [scope, bankIndices, targetBank, partIndices, patternIndices, trackIndices, trackParts, trackMode, needsPart, needsPatterns, slotFrom, slotTo]);
 
   const summary = describeClear({
     scope, bankIndices, bankIndex: targetBank, partIndices, patternIndices,
@@ -261,7 +270,9 @@ export function ClearProjectPanel({
           break;
         case "tracks":
           // The cross allows all four parts; the command takes one at a time.
-          for (const partIndex of trackParts) {
+          // In Pattern Triggers mode no Part is touched, so one call is enough
+          // and the index it carries is irrelevant.
+          for (const partIndex of needsPart ? trackParts : [0]) {
             await invoke("clear_tracks", {
               project: projectPath,
               bankIndex: targetBank,
@@ -270,8 +281,7 @@ export function ClearProjectPanel({
               mode: trackMode,
               // null means "every pattern" on the Rust side - one call instead
               // of sixteen when the whole grid is selected.
-              patternIndices:
-                trackMode === "part_params" || patternIndices.length === 16 ? null : patternIndices,
+              patternIndices: !needsPatterns || patternIndices.length === 16 ? null : patternIndices,
             });
           }
           break;
@@ -511,10 +521,12 @@ export function ClearProjectPanel({
             {/* The Part cross is narrow and tall; Clear Mode sits in the space
                 beside it rather than costing another full row. */}
             <div className="tools-clear-row">
-              <div className="tools-field">
-                <label>Part</label>
-                <PartCross selected={trackParts} onChange={setTrackParts} />
-              </div>
+              {needsPart && (
+                <div className="tools-field">
+                  <label>Part</label>
+                  <PartCross selected={trackParts} onChange={setTrackParts} />
+                </div>
+              )}
 
               <div className="tools-field">
               <label>Clear Mode</label>
@@ -540,7 +552,7 @@ export function ClearProjectPanel({
 
             {/* Which patterns lose their trigs - only meaningful once the mode
                 includes them, so it follows Clear Mode rather than leading it. */}
-            {trackMode !== "part_params" && patternField}
+            {needsPatterns && patternField}
           </>
         )}
 
