@@ -189,7 +189,9 @@ test.describe("Rename operator workflow", () => {
       page.getByTestId("app-shell-sources").getByText("EDIT ENABLED", { exact: true }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Create managed disposable clone" }).click({ timeout: 15000 });
-    await expect(page.getByText("VERIFIED CLONE")).toBeVisible();
+    await expect(
+      page.getByTestId("app-shell-sources").getByText("VERIFIED CLONE", { exact: true }),
+    ).toBeVisible();
     await page.getByRole("checkbox", {
       name: /approve continuing this exact operation/i,
     }).check();
@@ -198,8 +200,9 @@ test.describe("Rename operator workflow", () => {
       name: /approve applying this exact rename/i,
     }).check();
     await page.getByRole("button", { name: "Apply approved rename" }).click();
-    await expect(page.getByText(/COMMITTED/i)).toBeVisible();
-    await expect(page.getByText(/VERIFIED/i)).toBeVisible();
+    const renameResult = page.locator(".mo-rename-operator__result").first();
+    await expect(renameResult).toContainText("COMMITTED");
+    await expect(renameResult).toContainText("VERIFIED");
 
     const calls: string[] = await page.evaluate(() => (window as any).__E2E_INVOKE_CALLS__ ?? []);
     expect(calls.filter((cmd) => cmd === "v2_rename_apply")).toHaveLength(1);
