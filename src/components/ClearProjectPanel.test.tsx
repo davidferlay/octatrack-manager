@@ -116,9 +116,12 @@ describe('ClearProjectPanel - scopes', () => {
     await user.click(screen.getAllByRole('button', { name: 'All' })[1])
     await confirm(user)
 
-    // One call per part - the command takes a single part at a time.
-    await waitFor(() => expect(callsTo('clear_tracks')).toHaveLength(4))
-    expect(callsTo('clear_tracks').map(c => (c[1] as { partIndex: number }).partIndex)).toEqual([0, 1, 2, 3])
+    // Sound design once per part, then the trigs once for the whole run - not
+    // once per part, which would clear the same patterns four times over.
+    await waitFor(() => expect(callsTo('clear_tracks')).toHaveLength(5))
+    const calls = callsTo('clear_tracks').map(c => c[1] as { mode: string; partIndex: number })
+    expect(calls.filter(c => c.mode === 'part_params').map(c => c.partIndex)).toEqual([0, 1, 2, 3])
+    expect(calls.filter(c => c.mode === 'pattern_triggers')).toHaveLength(1)
   })
 
   it('clears tracks in the chosen patterns', async () => {
@@ -130,13 +133,22 @@ describe('ClearProjectPanel - scopes', () => {
     await user.click(screen.getByRole('button', { name: '5' }))
     await confirm(user)
 
-    await waitFor(() => expect(callsTo('clear_tracks')).toHaveLength(1))
+    // "Both" goes out as its two halves.
+    await waitFor(() => expect(callsTo('clear_tracks')).toHaveLength(2))
     expect(callsTo('clear_tracks')[0][1]).toEqual({
       project: '/set/MyProject',
       bankIndex: 0,
       partIndex: 0,
       trackIndices: [0, 10],
-      mode: 'both',
+      mode: 'part_params',
+      patternIndices: null,
+    })
+    expect(callsTo('clear_tracks')[1][1]).toEqual({
+      project: '/set/MyProject',
+      bankIndex: 0,
+      partIndex: 0,
+      trackIndices: [0, 10],
+      mode: 'pattern_triggers',
       patternIndices: [4],
     })
   })
@@ -149,9 +161,11 @@ describe('ClearProjectPanel - scopes', () => {
     await user.click(screen.getAllByRole('button', { name: 'All' })[1])
     await confirm(user)
 
-    await waitFor(() => expect(callsTo('clear_tracks')).toHaveLength(1))
+    await waitFor(() => expect(callsTo('clear_tracks')).toHaveLength(2))
     // One backend call that walks every pattern, not sixteen calls.
-    expect(callsTo('clear_tracks')[0][1]).toMatchObject({ patternIndices: null })
+    expect(callsTo('clear_tracks')[1][1]).toMatchObject({
+      mode: 'pattern_triggers', patternIndices: null,
+    })
   })
 
   it('blocks a trigger-mode clear until patterns are chosen', async () => {
@@ -387,7 +401,7 @@ describe('ClearProjectPanel - select all / none', () => {
     await user.click(screen.getAllByRole('button', { name: 'All' })[1])
     await confirm(user)
 
-    await waitFor(() => expect(callsTo('clear_tracks')).toHaveLength(1))
+    await waitFor(() => expect(callsTo('clear_tracks')).toHaveLength(2))
     expect(callsTo('clear_tracks')[0][1]).toMatchObject({ trackIndices: [0, 1, 2, 3, 4, 5, 6, 7] })
   })
 
@@ -722,6 +736,56 @@ describe('ClearProjectPanel - Tracks: what each mode asks for', () => {
     await user.click(screen.getByTitle(`Pattern 1${MULTI_HINT}`))
     expect(screen.getByText(/^Clears pattern triggers of 1 track \(T1\) in Bank A, 1 pattern \(1\)$/))
       .toBeInTheDocument()
+  })
+})
+
+describe('ClearProjectPanel - Both does not repeat work per part', () => {
+  it('clears the trigs once however many parts are selected', async () => {
+    const user = userEvent.setup()
+    renderPanel()
+    await user.click(screen.getByRole('button', { name: 'Tracks' }))
+    await user.click(screen.getAllByRole('button', { name: 'All' })[0]) // all four parts
+    await user.click(screen.getByRole('button', { name: 'T1' }))
+    await user.click(screen.getByTitle(`Pattern 2${MULTI_HINT}`))
+    // Plain clicks replace; ctrl adds - so patterns 2 and 3 together.
+    await user.keyboard('{Control>}')
+    await user.click(screen.getByTitle(`Pattern 3${MULTI_HINT}`))
+    await user.keyboard('{/Control}')
+    await confirm(user)
+
+    await waitFor(() => expect(callsTo('clear_tracks')).toHaveLength(5))
+    const trigCalls = callsTo('clear_tracks')
+      .map(c => c[1] as { mode: string; patternIndices: number[] | null })
+      .filter(c => c.mode === 'pattern_triggers')
+    // Patterns 2 and 3 are cleared once, not once per part.
+    expect(trigCalls).toHaveLength(1)
+    expect(trigCalls[0].patternIndices).toEqual([1, 2])
+  })
+
+  it('never sends the combined "both" mode, only its two halves', async () => {
+    const user = userEvent.setup()
+    renderPanel()
+    await user.click(screen.getByRole('button', { name: 'Tracks' }))
+    await user.click(screen.getByRole('button', { name: 'T1' }))
+    await user.click(screen.getAllByRole('button', { name: 'All' })[1])
+    await confirm(user)
+
+    await waitFor(() => expect(callsTo('clear_tracks')).toHaveLength(2))
+    expect(callsTo('clear_tracks').map(c => (c[1] as { mode: string }).mode))
+      .toEqual(['part_params', 'pattern_triggers'])
+  })
+
+  it('a single-part Both still clears both halves', async () => {
+    const user = userEvent.setup()
+    renderPanel()
+    await user.click(screen.getByRole('button', { name: 'Tracks' }))
+    await user.click(screen.getByRole('button', { name: 'T4' }))
+    await user.click(screen.getByTitle(`Pattern 1${MULTI_HINT}`))
+    await confirm(user)
+
+    await waitFor(() => expect(callsTo('clear_tracks')).toHaveLength(2))
+    const modes = callsTo('clear_tracks').map(c => (c[1] as { mode: string }).mode)
+    expect(modes).toEqual(['part_params', 'pattern_triggers'])
   })
 })
 

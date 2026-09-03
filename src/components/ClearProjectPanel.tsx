@@ -268,23 +268,34 @@ export function ClearProjectPanel({
         case "patterns":
           await invoke("clear_patterns", { project: projectPath, bankIndex: targetBank, patternIndices });
           break;
-        case "tracks":
-          // The cross allows all four parts; the command takes one at a time.
-          // In Pattern Triggers mode no Part is touched, so one call is enough
-          // and the index it carries is irrelevant.
-          for (const partIndex of needsPart ? trackParts : [0]) {
+        case "tracks": {
+          // Sound design is per Part, sequencer data is not - so "Both" is sent
+          // as its two halves rather than once per Part, which would clear the
+          // same trigs again for every Part selected.
+          const track = { project: projectPath, bankIndex: targetBank, trackIndices };
+          if (needsPart) {
+            for (const partIndex of trackParts) {
+              await invoke("clear_tracks", {
+                ...track,
+                partIndex,
+                mode: "part_params",
+                patternIndices: null,
+              });
+            }
+          }
+          if (needsPatterns) {
             await invoke("clear_tracks", {
-              project: projectPath,
-              bankIndex: targetBank,
-              partIndex,
-              trackIndices,
-              mode: trackMode,
+              ...track,
+              // Unused by this mode; the command still wants a valid index.
+              partIndex: 0,
+              mode: "pattern_triggers",
               // null means "every pattern" on the Rust side - one call instead
               // of sixteen when the whole grid is selected.
-              patternIndices: !needsPatterns || patternIndices.length === 16 ? null : patternIndices,
+              patternIndices: patternIndices.length === 16 ? null : patternIndices,
             });
           }
           break;
+        }
         case "sample_slots": {
           const slotIndices = Array.from({ length: slotTo - slotFrom + 1 }, (_, i) => slotFrom + i);
           // "Both" is two pools of 128, so two calls.

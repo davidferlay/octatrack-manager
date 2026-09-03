@@ -4441,6 +4441,20 @@ test.describe('Tools Tab - Clear Project', () => {
     await expect(page.locator('.tools-clear-btn')).toBeDisabled()
   })
 
+  test('Both clears the trigs once, not once per part', async ({ page }) => {
+    await opt(page, 'Tracks').click()
+    // All four parts, one track, the whole pattern grid.
+    await page.locator(`${panel} .tools-part-cross .part-btn.part-all`).click()
+    await btn(page, 'T1').click()
+    await page.locator(`${panel} .tools-multi-btn.pattern-btn.tools-select-all`, { hasText: 'All' }).click()
+    await execute(page)
+
+    const calls = (await clearCalls(page)).map((c: [string, { mode: string }]) => c[1].mode)
+    // Four part-parameter clears (one per part) plus a single trigger clear.
+    expect(calls.filter((m: string) => m === 'part_params')).toHaveLength(4)
+    expect(calls.filter((m: string) => m === 'pattern_triggers')).toHaveLength(1)
+  })
+
   test('the track grid offers All Audio and All MIDI, not a single All', async ({ page }) => {
     await opt(page, 'Tracks').click()
     const actions = page.locator(`${panel} .tools-multi-select.tracks-stacked .tools-select-actions`)
