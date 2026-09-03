@@ -2,68 +2,20 @@ import { test, expect } from "@playwright/test";
 
 const planId = `plan:v1:${"a".repeat(64)}`;
 const operationId = `operation:v1:${"a".repeat(64)}`;
-const authorityId = `authority:v1:${"b".repeat(64)}`;
 const snapshotId = `snapshot:v1:${"c".repeat(64)}`;
 const continuationAuthorityId = `continuation-authority:v1:${"g".repeat(64)}`;
 const cloneRootId = "clone-root-opaque";
 
-function librarySnapshot() {
-  return {
-    sets: [{
-      displayName: "LIVE_SET",
-      relativePath: "LIVE_SET",
-      hasAudioPool: true,
-      projects: [{
-        displayName: "PROJECT_A",
-        relativePath: "LIVE_SET/PROJECT_A",
-        hasProjectFile: true,
-        hasBanks: true,
-      }],
-    }],
-    standaloneProjects: [],
-    audioFiles: [{
-      fileInstanceId: `fileinst:v1:${"d".repeat(64)}`,
-      assetId: `asset:v1:${"e".repeat(64)}`,
-      displayName: "KICK.wav",
-      relativePath: "LIVE_SET/AUDIO/KICK.wav",
-      byteSize: 2048,
-      storageScope: "set_audio_pool",
-    }],
-    usageEdges: [],
-  };
-}
-
-function preparedPlan() {
-  return {
-    schema: "rename-plan:v1",
-    planId,
-    operationId,
-    operation: "rename_sample",
-    sourceFileInstanceId: `fileinst:v1:${"d".repeat(64)}`,
-    sourceRelativePath: "LIVE_SET/AUDIO/KICK.wav",
-    destinationRelativePath: "LIVE_SET/AUDIO/KICK_DEEP.wav",
-    stateDocumentImpacts: [{
-      relativePath: "LIVE_SET/PROJECT_A/project.work",
-      role: "working",
-      referenceUpdates: [],
-    }],
-    usageEdgeImpacts: [],
-    sidecarImpacts: [],
-    backupRelativePaths: ["LIVE_SET/AUDIO/KICK.wav"],
-    estimatedMediaAdditionalBytes: 2048,
-    estimatedLocalStagingBytes: 4096,
-    referenceUpdateCount: 1,
-    warnings: [],
-    requiresExplicitApproval: true,
-    overwriteAllowed: false,
-    removesSourceOnApply: true,
-  };
+async function chooseRoot(page: import("@playwright/test").Page) {
+  const chooseRootButton = page.getByRole("button", { name: "Choose root..." });
+  await expect(chooseRootButton).toBeVisible({ timeout: 15000 });
+  await chooseRootButton.click();
 }
 
 test.describe("Rename operator workflow", () => {
   test("managed clone then continue and apply prepared rename", async ({ page }) => {
-    let activeRootId = "root-opaque";
-    await page.addInitScript(({ cloneRootId }) => {
+    await page.addInitScript(({ cloneRootId, planId, operationId, snapshotId, continuationAuthorityId }) => {
+      let activeRootId = "root-opaque";
       (window as any).__E2E_ROOT_PATH__ = "/tmp/fixture-root";
       (window as any).__TAURI_INTERNALS__ = {
         transformCallback: () => {},
@@ -72,31 +24,42 @@ test.describe("Rename operator workflow", () => {
             ...((window as any).__E2E_INVOKE_CALLS__ ?? []),
             cmd,
           ];
+          const requestedRootId = typeof args?.rootId === "string" ? args.rootId : activeRootId;
           if (cmd === "v2_root_register") {
+            activeRootId = "root-opaque";
+            return rootSession(activeRootId, "read_only");
+          }
+          if (cmd === "v2_root_status") {
+            return rootSession(requestedRootId, requestedRootId === cloneRootId ? "write_enabled" : "read_only");
+          }
+          if (cmd === "v2_root_enable_write") {
+            return rootSession(requestedRootId, "write_enabled");
+          }
+          if (cmd === "v2_library_list") {
             return {
-              rootId: activeRootId,
-              displayName: "Fixture Root",
-              deviceFingerprint: `rootfp:v1:${"f".repeat(64)}`,
-              mode: "read_only",
-              observedRevision: 1,
-              expiresInSeconds: 3600,
-              writeGrantExpiresInSeconds: null,
-              capabilities: { read: true, write: true, stableDeviceIdentity: true },
+              sets: [{
+                displayName: "LIVE_SET",
+                relativePath: "LIVE_SET",
+                hasAudioPool: true,
+                projects: [{
+                  displayName: "PROJECT_A",
+                  relativePath: "LIVE_SET/PROJECT_A",
+                  hasProjectFile: true,
+                  hasBanks: true,
+                }],
+              }],
+              standaloneProjects: [],
+              audioFiles: [{
+                fileInstanceId: `fileinst:v1:${"d".repeat(64)}`,
+                assetId: `asset:v1:${"e".repeat(64)}`,
+                displayName: "KICK.wav",
+                relativePath: "LIVE_SET/AUDIO/KICK.wav",
+                byteSize: 2048,
+                storageScope: "set_audio_pool",
+              }],
+              usageEdges: [],
             };
           }
-          if (cmd === "v2_root_status" || cmd === "v2_root_enable_write") {
-            return {
-              rootId: activeRootId,
-              displayName: "Fixture Root",
-              deviceFingerprint: `rootfp:v1:${"f".repeat(64)}`,
-              mode: "write_enabled",
-              observedRevision: 1,
-              expiresInSeconds: 3600,
-              writeGrantExpiresInSeconds: 600,
-              capabilities: { read: true, write: true, stableDeviceIdentity: true },
-            };
-          }
-          if (cmd === "v2_library_list") return librarySnapshot();
           if (cmd === "v2_change_recovery_status" || cmd === "v2_rename_recovery_status") {
             return {
               schema: cmd === "v2_change_recovery_status"
@@ -129,7 +92,7 @@ test.describe("Rename operator workflow", () => {
             return {
               schema: "clone-verification:v1",
               cloneVerificationId: `clone-verification:v1:${"h".repeat(64)}`,
-              cloneRootId: activeRootId,
+              cloneRootId: requestedRootId,
               provenance: "app_managed",
               state: "verified",
               entryCount: 12,
@@ -137,7 +100,30 @@ test.describe("Rename operator workflow", () => {
             };
           }
           if (cmd === "v2_rename_get_prepared_plan" || cmd === "v2_rename_get_plan") {
-            return preparedPlan();
+            return {
+              schema: "rename-plan:v1",
+              planId,
+              operationId,
+              operation: "rename_sample",
+              sourceFileInstanceId: `fileinst:v1:${"d".repeat(64)}`,
+              sourceRelativePath: "LIVE_SET/AUDIO/KICK.wav",
+              destinationRelativePath: "LIVE_SET/AUDIO/KICK_DEEP.wav",
+              stateDocumentImpacts: [{
+                relativePath: "LIVE_SET/PROJECT_A/project.work",
+                role: "working",
+                referenceUpdates: [],
+              }],
+              usageEdgeImpacts: [],
+              sidecarImpacts: [],
+              backupRelativePaths: ["LIVE_SET/AUDIO/KICK.wav"],
+              estimatedMediaAdditionalBytes: 2048,
+              estimatedLocalStagingBytes: 4096,
+              referenceUpdateCount: 1,
+              warnings: [],
+              requiresExplicitApproval: true,
+              overwriteAllowed: false,
+              removesSourceOnApply: true,
+            };
           }
           if (cmd === "v2_rename_continuation_status") {
             return {
@@ -174,14 +160,31 @@ test.describe("Rename operator workflow", () => {
               unresolvedReferenceCount: 0,
             };
           }
-          return {};
+          return null;
         },
       };
-    }, { cloneRootId });
+
+      function rootSession(rootId: string, mode: "read_only" | "write_enabled") {
+        return {
+          rootId,
+          displayName: "Fixture Root",
+          deviceFingerprint: `rootfp:v1:${"f".repeat(64)}`,
+          mode,
+          observedRevision: 1,
+          expiresInSeconds: 3600,
+          writeGrantExpiresInSeconds: mode === "write_enabled" ? 600 : null,
+          capabilities: { read: true, write: true, stableDeviceIdentity: true },
+        };
+      }
+    }, { cloneRootId, planId, operationId, snapshotId, continuationAuthorityId });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Choose root..." }).click();
+    await chooseRoot(page);
+    await expect(page.getByText("PROJECT_A")).toBeVisible({ timeout: 10000 });
     await page.getByRole("button", { name: "Edit" }).click();
+    await expect(
+      page.getByTestId("app-shell-sources").getByText("EDIT ENABLED", { exact: true }),
+    ).toBeVisible();
     await page.getByRole("button", { name: "Create managed disposable clone" }).click();
     await expect(page.getByText("VERIFIED CLONE")).toBeVisible();
     await page.getByRole("checkbox", {
@@ -202,17 +205,15 @@ test.describe("Rename operator workflow", () => {
   });
 
   test("redisplays durable prepared plan after reload", async ({ page }) => {
-    await page.addInitScript(() => {
-      const planId = `plan:v1:${"a".repeat(64)}`;
-      const operationId = `operation:v1:${"a".repeat(64)}`;
-      const snapshotId = `snapshot:v1:${"c".repeat(64)}`;
+    await page.addInitScript(({ planId, operationId, snapshotId }) => {
       (window as any).__E2E_ROOT_PATH__ = "/tmp/fixture-root";
       (window as any).__TAURI_INTERNALS__ = {
         transformCallback: () => {},
-        invoke: async (cmd: string) => {
+        invoke: async (cmd: string, args?: Record<string, unknown>) => {
+          const requestedRootId = typeof args?.rootId === "string" ? args.rootId : "root-opaque";
           if (cmd === "v2_root_register" || cmd === "v2_root_status" || cmd === "v2_root_enable_write") {
             return {
-              rootId: "root-opaque",
+              rootId: requestedRootId,
               displayName: "Fixture Root",
               deviceFingerprint: `rootfp:v1:${"f".repeat(64)}`,
               mode: "write_enabled",
@@ -253,7 +254,7 @@ test.describe("Rename operator workflow", () => {
             return {
               schema: "clone-verification:v1",
               cloneVerificationId: `clone-verification:v1:${"h".repeat(64)}`,
-              cloneRootId: "root-opaque",
+              cloneRootId: requestedRootId,
               provenance: "app_managed",
               state: "verified",
               entryCount: 12,
@@ -293,16 +294,17 @@ test.describe("Rename operator workflow", () => {
               cloneVerified: true,
             };
           }
-          return {};
+          return null;
         },
       };
-    });
+    }, { planId, operationId, snapshotId });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Choose root..." }).click();
-    await expect(page.getByText("LIVE_SET/AUDIO/KICK.wav")).toBeVisible();
+    await chooseRoot(page);
+    await expect(page.getByText("LIVE_SET/AUDIO/KICK_DEEP.wav")).toBeVisible({ timeout: 10000 });
     await page.reload();
-    await expect(page.getByText("LIVE_SET/AUDIO/KICK_DEEP.wav")).toBeVisible();
+    await chooseRoot(page);
+    await expect(page.getByText("LIVE_SET/AUDIO/KICK_DEEP.wav")).toBeVisible({ timeout: 10000 });
     await expect(page.getByRole("button", { name: "Continue prepared rename" })).toBeVisible();
   });
 });
