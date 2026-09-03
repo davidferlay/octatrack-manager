@@ -9,6 +9,7 @@ import type {
 } from "../../api";
 import type { CatalogAssetSelection } from "../library/CatalogLibraryBrowser";
 import { RenameSampleModal } from "./RenameSampleModal";
+import { renameOperatorApiStubs } from "../../test/renameApiStubs";
 
 const planId = `plan:v1:${"a".repeat(64)}`;
 const operationId = `operation:v1:${"a".repeat(64)}`;
@@ -126,6 +127,7 @@ function fakeApi(): RenameApi {
       recoveryEligible: false,
     }),
     recoveryStatus: vi.fn().mockResolvedValue(renameRecoveryClear),
+    ...renameOperatorApiStubs(),
   };
 }
 

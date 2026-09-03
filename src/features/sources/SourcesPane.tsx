@@ -79,7 +79,7 @@ export function SourcesPane({
                     ? 'Resolve recovery before enabling Edit mode'
                     : !session.capabilities.stableDeviceIdentity
                       ? 'Stable device identity is required for Edit mode'
-                      : 'Switch to session Edit mode (additive copy only)'
+                      : 'Switch to session Edit mode (session-limited writes)'
                 }
                 onClick={onEnableWrite}
               >
@@ -113,7 +113,7 @@ export function SourcesPane({
           </div>
           <div>
             <dt>Mode</dt>
-            <dd>{writeEnabled ? 'Edit enabled (session only)' : 'Read only'}</dd>
+            <dd>{writeEnabled ? 'Session-limited writes' : 'Read only'}</dd>
           </div>
           {writeEnabled && (
             <div>
@@ -128,7 +128,8 @@ export function SourcesPane({
 
       {writeEnabled && (
         <p className="mo-sources-pane__write-warning">
-          Additive copy only. Use a cloned or test root, never original media.
+          Session-limited writes are enabled on this root. Additive copy uses the Change Drawer.
+          Rename apply requires a verified disposable clone.
         </p>
       )}
 

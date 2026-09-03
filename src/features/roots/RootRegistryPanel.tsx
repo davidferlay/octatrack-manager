@@ -3,12 +3,15 @@ import { open } from "@tauri-apps/plugin-dialog";
 import {
   audioApi,
   changeApi,
+  cloneApi,
   metadataApi,
   renameApi,
   rootApi,
   type AudioApi,
   type ChangeApi,
   type ChangeRecoveryStatus,
+  type CloneApi,
+  type CloneVerification,
   type LibrarySnapshot,
   type MetadataApi,
   type RenameApi,
@@ -20,6 +23,8 @@ import { AppShell } from "../../app/index";
 import { Button } from "../../design-system";
 import {
   AdditiveCopyChangeDrawer,
+  CloneOperatorPanel,
+  RenameOperatorPanel,
   RenamePreparedNotice,
   RenameSampleModal,
 } from "../changes";
@@ -62,6 +67,7 @@ interface RootRegistryPanelProps {
   audioClient?: AudioApi;
   metadataClient?: MetadataApi;
   changeClient?: ChangeApi;
+  cloneClient?: CloneApi;
   renameClient?: RenameApi;
   selectDirectory?: RootDirectoryPicker;
 }
@@ -76,6 +82,7 @@ export function RootRegistryPanel({
   audioClient = audioApi,
   metadataClient = metadataApi,
   changeClient = changeApi,
+  cloneClient = cloneApi,
   renameClient = renameApi,
   selectDirectory = pickRootDirectory,
 }: RootRegistryPanelProps) {
@@ -89,6 +96,16 @@ export function RootRegistryPanel({
   const [renameRecovery, setRenameRecovery] = useState<RenameRecoveryStatus | null>(null);
   const [renameModalOpen, setRenameModalOpen] = useState(false);
   const [renameModalAsset, setRenameModalAsset] = useState<CatalogAssetSelection | null>(null);
+  const [cloneVerification, setCloneVerification] = useState<CloneVerification | null>(null);
+  const [sourceEvidenceId, setSourceEvidenceId] = useState<string | null>(null);
+
+  async function refreshCloneVerification(rootId: string) {
+    try {
+      setCloneVerification((await cloneClient.verificationStatus(rootId)) ?? null);
+    } catch {
+      setCloneVerification(null);
+    }
+  }
 
   async function refreshRenameRecovery(rootId: string) {
     try {
@@ -126,6 +143,7 @@ export function RootRegistryPanel({
       try {
         setRecovery(await changeClient.recoveryStatus(registered.rootId));
         await refreshRenameRecovery(registered.rootId);
+        await refreshCloneVerification(registered.rootId);
       } catch (reason) {
         setRecovery(null);
         setRenameRecovery(null);
@@ -140,6 +158,8 @@ export function RootRegistryPanel({
       setSelectedAsset(null);
       setRecovery(null);
       setRenameRecovery(null);
+      setCloneVerification(null);
+      setSourceEvidenceId(null);
       setChangeBusy(false);
       setError(errorMessage(reason));
     } finally {
@@ -160,6 +180,7 @@ export function RootRegistryPanel({
       setRenameRecovery(null);
       setRenameModalOpen(false);
       setRenameModalAsset(null);
+      setCloneVerification(null);
       setChangeBusy(false);
     } catch (reason) {
       setError(errorMessage(reason));
@@ -169,7 +190,15 @@ export function RootRegistryPanel({
   }
 
   async function enableWrite() {
-    if (session === null || recovery === null || recovery.recoveryRequired) return;
+    if (
+      session === null
+      || recovery === null
+      || recovery.recoveryRequired
+      || renameRecovery === null
+      || renameRecovery.recoveryRequired
+    ) {
+      return;
+    }
     setBusy(true);
     setError(null);
     setRenameModalOpen(false);
@@ -179,6 +208,12 @@ export function RootRegistryPanel({
       setRecovery(latestRecovery);
       if (latestRecovery.recoveryRequired) {
         setError("An incomplete operation must be resolved before edit mode can be enabled.");
+        return;
+      }
+      const latestRenameRecovery = await renameClient.recoveryStatus(session.rootId);
+      setRenameRecovery(latestRenameRecovery);
+      if (latestRenameRecovery.recoveryRequired) {
+        setError("An incomplete rename operation must be resolved before edit mode can be enabled.");
         return;
       }
       setSession(await api.enableWrite(session.rootId));
@@ -217,6 +252,8 @@ export function RootRegistryPanel({
       setLibrary(snapshot);
       setRecovery(latestRecovery);
       setSelectedAsset(null);
+      await refreshRenameRecovery(session.rootId);
+      await refreshCloneVerification(session.rootId);
     } catch (reason) {
       setRecovery(null);
       setRenameRecovery(null);
@@ -244,6 +281,108 @@ export function RootRegistryPanel({
     await refreshAfterWrite("The rollback completed, but refresh failed");
   }
 
+  async function refreshAfterRenameApplied() {
+    await refreshAfterWrite("The rename committed, but refresh failed");
+  }
+
+  async function refreshAfterRenameRecovery() {
+    await refreshAfterWrite("The rename rollback completed, but refresh failed");
+  }
+
+  async function adoptCloneRoot(cloneRootId: string) {
+    const [latestSession, snapshot] = await Promise.all([
+      api.rootStatus(cloneRootId),
+      api.listLibrary(cloneRootId),
+    ]);
+    setSession(latestSession);
+    setLibrary(snapshot);
+    setSelectedAsset(null);
+    setRenameModalOpen(false);
+    setRenameModalAsset(null);
+    setRecovery(await changeClient.recoveryStatus(cloneRootId));
+    await refreshRenameRecovery(cloneRootId);
+    await refreshCloneVerification(cloneRootId);
+  }
+
+  async function handleCreateManagedClone() {
+    if (session === null) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const managed = await cloneClient.createManagedClone(session.rootId);
+      if (!managed.sourceRootClosed) {
+        throw new Error("Managed clone creation did not close the source root.");
+      }
+      await adoptCloneRoot(managed.cloneRootId);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRecordSourceEvidence() {
+    if (session === null) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const evidence = await cloneClient.recordSourceEvidence(session.rootId);
+      setSourceEvidenceId(evidence.sourceEvidenceId);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRegisterExternalClone() {
+    setBusy(true);
+    setError(null);
+    try {
+      const rawPath = await selectDirectory();
+      if (rawPath === null) return;
+      const registered = await api.registerRoot(rawPath);
+      await adoptCloneRoot(registered.rootId);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleVerifyExternalClone(acknowledgedDisposableClone: boolean) {
+    if (session === null || sourceEvidenceId === null) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await cloneClient.verifyExternal(
+        session.rootId,
+        sourceEvidenceId,
+        acknowledgedDisposableClone,
+      );
+      await refreshCloneVerification(session.rootId);
+      setSourceEvidenceId(null);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleReverifyClone() {
+    if (session === null) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await cloneClient.reverify(session.rootId);
+      await refreshCloneVerification(session.rootId);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function refreshSessionBeforeApply(): Promise<RootSession> {
     if (session === null) {
       throw new Error("The root session is no longer available.");
@@ -255,10 +394,11 @@ export function RootRegistryPanel({
 
   const catalogReady = session !== null && library !== null;
   const writeEnabled = session?.mode === "write_enabled" && session.capabilities.write;
-  const renameBlocked = recovery === null
+  const writeBlocked = recovery === null
     || recovery.recoveryRequired
     || renameRecovery === null
     || renameRecovery.recoveryRequired;
+  const renameBlocked = writeBlocked;
 
   function openRenameModal() {
     if (selectedAsset === null || renameBlocked) return;
@@ -278,8 +418,22 @@ export function RootRegistryPanel({
           onClose={closeRoot}
           onEnableWrite={enableWrite}
           onDisableWrite={disableWrite}
-          writeBlocked={recovery === null || recovery.recoveryRequired}
-        />
+          writeBlocked={writeBlocked}
+        >
+          {catalogReady && (
+            <CloneOperatorPanel
+              session={session}
+              cloneVerification={cloneVerification}
+              busy={busy || changeBusy}
+              sourceEvidenceRecorded={sourceEvidenceId !== null}
+              onCreateManagedClone={handleCreateManagedClone}
+              onRecordSourceEvidence={handleRecordSourceEvidence}
+              onRegisterExternalClone={handleRegisterExternalClone}
+              onVerifyExternal={handleVerifyExternalClone}
+              onReverify={handleReverifyClone}
+            />
+          )}
+        </SourcesPane>
       }
       main={
         catalogReady ? (
@@ -351,18 +505,36 @@ export function RootRegistryPanel({
       }
       changeDrawer={
         catalogReady ? (
-          <AdditiveCopyChangeDrawer
-            session={session}
-            selectedAsset={selectedAsset}
-            recovery={recovery}
-            api={changeClient}
-            disabled={busy}
-            refreshSession={refreshSessionBeforeApply}
-            onCommitted={refreshAfterCommit}
-            onRecovered={refreshAfterRecovery}
-            onBusyChange={setChangeBusy}
-            onRecoveryChange={setRecovery}
-          />
+          <>
+            <RenameOperatorPanel
+              session={session}
+              changeRecovery={recovery}
+              renameRecovery={renameRecovery}
+              cloneVerification={cloneVerification}
+              api={renameClient}
+              changeClient={changeClient}
+              disabled={busy}
+              refreshSession={refreshSessionBeforeApply}
+              onApplied={refreshAfterRenameApplied}
+              onRecovered={refreshAfterRenameRecovery}
+              onBusyChange={setChangeBusy}
+              onRenameRecoveryChange={setRenameRecovery}
+              onRecoveryChange={setRecovery}
+            />
+            <AdditiveCopyChangeDrawer
+              session={session}
+              selectedAsset={selectedAsset}
+              recovery={recovery}
+              renameRecovery={renameRecovery}
+              api={changeClient}
+              disabled={busy}
+              refreshSession={refreshSessionBeforeApply}
+              onCommitted={refreshAfterCommit}
+              onRecovered={refreshAfterRecovery}
+              onBusyChange={setChangeBusy}
+              onRecoveryChange={setRecovery}
+            />
+          </>
         ) : undefined
       }
     />

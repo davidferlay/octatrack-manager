@@ -5,6 +5,7 @@ import {
   type ChangePlan,
   type ChangeRecoveryStatus,
   type ChangeStatus,
+  type RenameRecoveryStatus,
   type RootSession,
 } from "../../api";
 import { Button, StatusBadge } from "../../design-system";
@@ -15,6 +16,7 @@ interface AdditiveCopyChangeDrawerProps {
   session: RootSession;
   selectedAsset: CatalogAssetSelection | null;
   recovery: ChangeRecoveryStatus | null;
+  renameRecovery?: RenameRecoveryStatus | null;
   api?: ChangeApi;
   disabled?: boolean;
   refreshSession: () => Promise<RootSession>;
@@ -56,6 +58,7 @@ export function AdditiveCopyChangeDrawer({
   session,
   selectedAsset,
   recovery,
+  renameRecovery = null,
   api = changeApi,
   disabled = false,
   refreshSession,
@@ -81,8 +84,10 @@ export function AdditiveCopyChangeDrawer({
     setError(null);
   }, [session.rootId, selectedAsset?.fileInstanceId]);
 
-  const recoveryRequired = (recovery?.recoveryRequired ?? true)
+  const additiveRecoveryRequired = (recovery?.recoveryRequired ?? true)
     || status?.recoveryRequired === true;
+  const renameRecoveryBlocking = renameRecovery?.recoveryRequired ?? false;
+  const recoveryRequired = additiveRecoveryRequired || renameRecoveryBlocking;
   const writeEnabled = session.mode === "write_enabled" && session.capabilities.write;
   const interactionBusy = busy || disabled;
 
@@ -270,9 +275,15 @@ export function AdditiveCopyChangeDrawer({
           Write safety status is unavailable. Applying changes is disabled.
         </p>
       )}
-      {(recovery?.recoveryRequired || status?.recoveryRequired) && (
+      {(recovery?.recoveryRequired || renameRecovery?.recoveryRequired || status?.recoveryRequired) && (
         <p className="mo-change-drawer__blocking" role="alert">
           An incomplete operation exists. Do not write to this root until recovery is resolved.
+        </p>
+      )}
+
+      {renameRecovery?.recoveryRequired && (
+        <p className="mo-change-drawer__blocking" role="alert">
+          An incomplete rename operation exists. Additive copy apply is disabled until rename recovery is resolved.
         </p>
       )}
 
@@ -350,7 +361,7 @@ export function AdditiveCopyChangeDrawer({
           </label>
           <Button
             variant="secondary"
-            disabled={interactionBusy || destination.trim() === "" || recoveryRequired}
+            disabled={interactionBusy || destination.trim() === "" || additiveRecoveryRequired}
             onClick={createPlan}
           >
             {busy ? "Checking..." : "Review plan"}
