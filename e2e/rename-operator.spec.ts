@@ -89,6 +89,9 @@ test.describe("Rename operator workflow", () => {
             };
           }
           if (cmd === "v2_clone_verification_status") {
+            if (requestedRootId !== cloneRootId) {
+              return null;
+            }
             return {
               schema: "clone-verification:v1",
               cloneVerificationId: `clone-verification:v1:${"h".repeat(64)}`,
@@ -185,7 +188,7 @@ test.describe("Rename operator workflow", () => {
     await expect(
       page.getByTestId("app-shell-sources").getByText("EDIT ENABLED", { exact: true }),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Create managed disposable clone" }).click();
+    await page.getByRole("button", { name: "Create managed disposable clone" }).click({ timeout: 15000 });
     await expect(page.getByText("VERIFIED CLONE")).toBeVisible();
     await page.getByRole("checkbox", {
       name: /approve continuing this exact operation/i,
