@@ -18,7 +18,7 @@ If you’re using the app, your experience matters a lot: Whether everything wor
 
 At this stage, **functional feedback is what matters the most**: correctness, reliability, data integrity, edge cases, and real-world behavior. UI/UX and visual design will be refined later; the current priority is building a solid, reliable foundation of functionalities.
 
-The [Elektronauts thread](https://www.elektronauts.com/t/project-manager-for-octatrack/) is the upstream project's community discussion. Report MasterOCTa issues and feedback through the fork's [GitHub Issues](https://github.com/kaz4g/masterocta/issues).
+The [Elektronauts thread](https://www.elektronauts.com/t/project-manager-for-octatrack/) is the upstream project's community discussion. Report Masta-Octa issues and feedback through the fork's [GitHub Issues](https://github.com/kaz4g/masterocta/issues).
 
 
 ## For macOS Code Signing

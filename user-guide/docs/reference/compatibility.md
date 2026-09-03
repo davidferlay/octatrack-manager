@@ -4,12 +4,12 @@ sidebar_position: 2
 
 # Compatibility
 
-MasterOCTa is designed to work seamlessly with your Elektron Octatrack projects, but there are some critical compatibility requirements you should be aware of.
+Masta-Octa is designed to work seamlessly with your Elektron Octatrack projects, but there are some critical compatibility requirements you should be aware of.
 
 ## Octatrack Firmware Requirement
 
 :::warning
-**Important:** MasterOCTa supports only Project versions that have been
+**Important:** Masta-Octa supports only Project versions that have been
 explicitly verified or are recognized by its pinned parser. It does not assume
 that every Octatrack OS version newer than 1.40 is compatible.
 :::
@@ -23,7 +23,7 @@ The verified Project combinations currently include:
 The `R0173 / 1.40` exception is exact: the Project version must be 19 and both
 the revision and release must match. Other values do not qualify for this local
 exception; combinations not recognized by the pinned parser remain
-unsupported. MasterOCTa may index an unsupported document for diagnosis, but
+unsupported. Masta-Octa may index an unsupported document for diagnosis, but
 it keeps Edit mode unavailable.
 
 If you attempt to open a project that was last saved on an older or unverified
@@ -31,18 +31,18 @@ firmware version, the app may be unable to parse it safely.
 
 ### How to update an older project:
 1. Insert your CF card into your Octatrack.
-2. Update the Octatrack to a firmware version that MasterOCTa recognizes, such as
+2. Update the Octatrack to a firmware version that Masta-Octa recognizes, such as
    **OS 1.40A**, **1.40B**, or **1.40C**, or resave on the verified **R0173 / 1.40**
    combination.
 3. Load the older project on the device.
 4. Save the project on the device (press **[FUNC] + [YES]**).
-5. Eject the CF card and scan it again with MasterOCTa.
+5. Eject the CF card and scan it again with Masta-Octa.
 
 ---
 
 ## Operating Systems
 
-MasterOCTa is a cross-platform desktop application.
+Masta-Octa is a cross-platform desktop application.
 
 | Platform | Supported Versions |
 |----------|--------------------|
@@ -55,7 +55,7 @@ MasterOCTa is a cross-platform desktop application.
 ## Supported File Formats
 
 ### Project Files
-MasterOCTa reads the native binary files found in your project folder:
+Masta-Octa reads the native binary files found in your project folder:
 - **`project.work`**: Contains project-level settings (mixer, MIDI, slots).
 - **`bank01.work` through `bank16.work`**: Contains all bank-specific data (parts, patterns).
 
@@ -68,7 +68,7 @@ These files are copied directly if they meet the Octatrack's specifications:
 - **AIFF:** 16-bit or 24-bit, 44.1 kHz, Mono or Stereo.
 
 #### Automatically Converted on Import
-The following formats are **not** playable on the Octatrack, but MasterOCTa will automatically convert them to **WAV 44.1 kHz** during the import process:
+The following formats are **not** playable on the Octatrack, but Masta-Octa will automatically convert them to **WAV 44.1 kHz** during the import process:
 - **MP3**, **FLAC**, **OGG Vorbis**, **M4A / AAC**.
 - **WAV/AIFF at other sample rates:** (e.g., 48 kHz, 96 kHz) are automatically resampled to 44.1 kHz using high-quality Sinc interpolation.
 
@@ -76,7 +76,7 @@ The following formats are **not** playable on the Octatrack, but MasterOCTa will
 
 ## Technical Limitations
 
-- **Disk-Based Operation:** MasterOCTa operates directly on the files on your CF card or computer. It does not connect to the Octatrack via USB for "live" control or parameter syncing.
+- **Disk-Based Operation:** Masta-Octa operates directly on the files on your CF card or computer. It does not connect to the Octatrack via USB for "live" control or parameter syncing.
 - **Project Loading:** The app currently focuses on one "active" project at a time in the detail view. However, the **Tools** tab allows you to select any other project on your system as a destination for copy operations.
 - **Hardware Integration:** To see your changes on the Octatrack, you must eject the CF card from your computer, insert it into the Octatrack, and load (or reload) the project on the device.
 - **Verified Project Versions Only:** As noted above, unknown combinations

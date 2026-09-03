@@ -54,7 +54,7 @@ describe('ThemeProvider and ThemeSwitcher', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByTestId('theme-probe')).toHaveTextContent('masterocta:MasterOCTa')
+      expect(screen.getByTestId('theme-probe')).toHaveTextContent('masterocta:Masta-Octa')
       expect(document.documentElement.getAttribute(THEME_ATTRIBUTE)).toBe('masterocta')
     })
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe('masterocta')

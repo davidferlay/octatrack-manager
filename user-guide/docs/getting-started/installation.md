@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Installation
 
-MasterOCTa does not publish signed binary releases yet. Build MasterOCTa
+Masta-Octa does not publish signed binary releases yet. Build Masta-Octa
 from source instead of downloading an installer from the upstream project.
 
 ## Prerequisites

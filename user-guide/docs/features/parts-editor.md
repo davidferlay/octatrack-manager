@@ -5,13 +5,13 @@ sidebar_label: Edit Parts
 
 # Edit Parts
 
-The Parts Editor is the heart of sound design in MasterOCTa. It allows to modify the four Parts ("snapshots" or "kits") available in each bank, giving you a powerful interface for tweaking machine parameters, effects, and LFOs.
+The Parts Editor is the heart of sound design in Masta-Octa. It allows to modify the four Parts ("snapshots" or "kits") available in each bank, giving you a powerful interface for tweaking machine parameters, effects, and LFOs.
 
 ![Parts Editor](/img/screenshots/parts-editor.png)
 
 ## Enabling Edit Mode
 
-By default, MasterOCTa is in a safe, read-only mode to prevent accidental changes. To start editing:
+By default, Masta-Octa is in a safe, read-only mode to prevent accidental changes. To start editing:
 
 1. Open a project.
 2. Go to the **Parts** tab.
@@ -81,7 +81,7 @@ The Parts Editor is organized into several pages, mirroring exactly the Octatrac
 
 ## Custom LFO Designer
 
-MasterOCTa features an intuitive **LFO Designer** that allows you to draw custom LFO waveforms - **freely with your mouse**.
+Masta-Octa features an intuitive **LFO Designer** that allows you to draw custom LFO waveforms - **freely with your mouse**.
 
 1. Navigate to a track's LFO page.
 2. Select the **DESIGN** tab.
@@ -97,7 +97,7 @@ MasterOCTa features an intuitive **LFO Designer** that allows you to draw custom
 
 ## Saving and Committing Changes
 
-MasterOCTa follows the same **two-step process** for saving changes, **mirroring exactly** how the Octatrack works.
+Masta-Octa follows the same **two-step process** for saving changes, **mirroring exactly** how the Octatrack works.
 
 ### 1. Live Editing
 As you move a knob or change a setting, the change is **immediately written to project's Part**. Your edits are stored in the Parts's working state and will be persisted.

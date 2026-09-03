@@ -257,9 +257,10 @@ selected catalog asset; inline catalog inspector column is unused in the shell.
 **After UI5:** Inspector also shows the read-only catalog Usage Graph for the
 selected file (relative-path-filtered usage edges).
 
-**After UI6:** User-facing product rename artifacts resolve to MasterOCTa
-(document title, shared branding constants). Full visual brand swap remains
-deferred.
+**After UI6:** User-facing product rename artifacts resolve to Masta-Octa
+(document title, shared branding constants). **BRAND-1** keeps internal IDs
+(`masterocta`, `MasterOCTa` Application Support, theme id `masterocta`) unchanged.
+Full visual brand swap (palette, logo, typography) remains deferred.
 
 **After DS7:** `--elektron-*` compat aliases are gone; call sites use `--mo-*`.
 Shared SplitPane owns `.panel-divider`. `App.css` remains as the legacy

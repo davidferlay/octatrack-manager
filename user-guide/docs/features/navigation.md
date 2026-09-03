@@ -64,7 +64,7 @@ In the **Patterns** tab, you can choose which sequences to inspect.
 ---
 
 :::tip
-MasterOCTa synchronizes your navigation across different tabs. For example:
+Masta-Octa synchronizes your navigation across different tabs. For example:
 - If you select **Bank B** in the Parts tab, the app will stay on **Bank B** when you switch to the Patterns tab.
 - This ensures that your workflow remains fluid as you move between different aspects of your project.
 :::

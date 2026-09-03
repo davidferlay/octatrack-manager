@@ -24,7 +24,7 @@ describe('Version', () => {
     expect(version).not.toHaveAttribute('title');
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('MasterOCTa version 0.1.0')).toBeInTheDocument();
+    expect(screen.getByLabelText('Masta-Octa version 0.1.0')).toBeInTheDocument();
 
     fireEvent.click(version);
     expect(getVersionMock).toHaveBeenCalledTimes(1);

@@ -17,7 +17,7 @@ resolver = "2"
 [package]
 name = "masterocta"
 version = "0.1.0"
-description = "MasterOCTa — a desktop application for safely managing Elektron Octatrack projects"
+description = "Masta-Octa — a desktop application for safely managing Elektron Octatrack projects"
 authors = ["dferlay"]
 edition = "2021"
 
