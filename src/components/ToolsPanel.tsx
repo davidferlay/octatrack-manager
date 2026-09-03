@@ -413,6 +413,21 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     }
   }
 
+  // Create a project outside the Sets the picker knows about: the user chooses
+  // any folder and the project is made directly inside it. create_project only
+  // needs an existing directory as the parent, so a Set is not required.
+  async function handleCreateElsewhere() {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: "Select the Folder to Create the Project In",
+    });
+    if (selected && typeof selected === 'string') {
+      const name = selected.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || selected;
+      setCreateModalTarget({ setPath: selected, setName: name });
+    }
+  }
+
   // Browse for a folder: like the homepage, the selected folder is scanned
   // recursively and every project found under it is offered for selection
   async function handleBrowse() {
@@ -815,7 +830,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     if (browsed) {
       return { name: browsed.name, isCurrentProject: false };
     }
-    return { name: "Unknown", isCurrentProject: false };
+    // Nothing scanned knows this path - e.g. a project just created in a folder
+    // outside every known Set. Its own directory name still names it.
+    const leaf = path.replace(/[\\/]+$/, '').split(/[\\/]/).pop();
+    return { name: leaf || "Unknown", isCurrentProject: false };
   }
 
   const destProjectInfo = getProjectInfo(destProject);
@@ -3937,6 +3955,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           onCreateProject={showProjectSelector === "dest"
             ? (setPath, setName) => setCreateModalTarget({ setPath, setName })
             : undefined}
+          onCreateElsewhere={showProjectSelector === "dest" ? handleCreateElsewhere : undefined}
         />
       )}
 
@@ -3946,6 +3965,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           setPath={createModalTarget.setPath}
           setName={createModalTarget.setName}
           existingNames={
+            // Only known for Sets we have scanned; for a hand-picked folder the
+            // backend's own "already exists" check is the safety net.
             locations
               .flatMap((l) => l.sets)
               .find((s) => s.path === createModalTarget.setPath)?.projects.map((p) => p.name) ?? []
@@ -3953,6 +3974,10 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           onConfirm={async (name) => {
             try {
               const newPath = await invoke<string>('create_project', { setPath: createModalTarget.setPath, name });
+              // A project made outside every known Set is invisible to a rescan,
+              // so list it alongside the manually browsed ones.
+              setBrowsedProjects((prev) =>
+                prev.some((p) => p.path === newPath) ? prev : [...prev, { name, path: newPath }]);
               // Rescan to pick up the new project
               const result = await invoke<ScanResult>("scan_devices");
               const sortedLocations = [...result.locations].sort(compareLocations);

@@ -246,3 +246,42 @@ describe('ProjectSelectorModal - search', () => {
     expect(header.nextElementSibling?.className).toContain('closed')
   })
 })
+
+describe('ProjectSelectorModal - create elsewhere', () => {
+  const actionLabels = () =>
+    Array.from(document.querySelectorAll('.project-selector-actions button')).map(b => b.textContent)
+
+  it('offers "New Project..." beside Rescan and Browse when a creator is supplied', () => {
+    renderModal({ onCreateElsewhere: () => {} })
+    expect(actionLabels()).toEqual(['Rescan for Projects', 'Browse...', 'New Project...'])
+  })
+
+  it('omits it when the picker cannot create anything', () => {
+    renderModal()
+    expect(actionLabels()).toEqual(['Rescan for Projects', 'Browse...'])
+  })
+
+  it('calls back when clicked, without needing a Set', async () => {
+    const user = userEvent.setup()
+    const onCreateElsewhere = vi.fn()
+    renderModal({ onCreateElsewhere })
+    await user.click(screen.getByRole('button', { name: 'New Project...' }))
+    expect(onCreateElsewhere).toHaveBeenCalledTimes(1)
+  })
+
+  it('is independent of the per-Set New Project card', async () => {
+    const user = userEvent.setup()
+    const onCreateProject = vi.fn()
+    const onCreateElsewhere = vi.fn()
+    renderModal({ locations, onCreateProject, onCreateElsewhere })
+
+    await user.click(screen.getByRole('button', { name: 'New Project...' }))
+    expect(onCreateElsewhere).toHaveBeenCalledTimes(1)
+    expect(onCreateProject).not.toHaveBeenCalled()
+
+    await user.click(screen.getByLabelText('New project in Set1'))
+    expect(onCreateProject).toHaveBeenCalledWith('/card/Set1', 'Set1')
+    expect(onCreateElsewhere).toHaveBeenCalledTimes(1)
+  })
+})
+

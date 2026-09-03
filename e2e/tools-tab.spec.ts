@@ -172,6 +172,10 @@ async function setupTauriMocks(page: Page, overrides?: { sameSet?: boolean; with
           case 'scan_custom_directory':
             return (window as any).__scanCustomResult__ ?? { locations: [], standalone_projects: [] }
 
+          case 'create_project':
+            ;(window as any).__createProjectArgs__ = args
+            return `${args?.setPath}/${args?.name}`
+
           case 'check_project_in_set':
             return true
 
@@ -4298,6 +4302,76 @@ test.describe('Tools Tab - source project selection', () => {
       expect(calls.length, `${op} should have been invoked`).toBeGreaterThan(0)
       expect(calls[0].args.sourceProject).toBe('/test/other-project')
     }
+  })
+})
+
+test.describe('Tools Tab - destination picker: create a project anywhere', () => {
+  const destBtn = '.tools-dest-panel .tools-project-selector-btn'
+  const actions = (page: Page) => page.locator('.project-selector-actions button')
+
+  test('the destination picker offers New Project..., the source one does not', async ({ page }) => {
+    await openToolsPanel(page, 'copy_bank')
+    await page.locator(destBtn).click()
+    await expect(actions(page)).toHaveText(['Rescan for Projects', 'Browse...', 'New Project...'])
+
+    // Close without Escape: on the project page Escape navigates back home.
+    await page.locator('.project-selector-modal button', { hasText: '×' }).first().click()
+    await page.locator('.tools-source-panel .tools-project-selector-btn').click()
+    await expect(actions(page)).toHaveText(['Rescan for Projects', 'Browse...'])
+  })
+
+  test('creates the project in the folder the user picks, with no Set involved', async ({ page }) => {
+    await openToolsPanel(page, 'copy_bank')
+    await page.evaluate(() => { (window as any).__browseDialogResult__ = '/somewhere/else' })
+
+    await page.locator(destBtn).click()
+    await page.locator('.project-selector-actions button', { hasText: 'New Project...' }).click()
+
+    // The name modal opens on the chosen folder.
+    const input = page.locator('.modal-input')
+    await expect(input).toBeVisible()
+    await input.fill('FreshProject')
+    await page.locator('.modal-content button', { hasText: /^Create/ }).click()
+    await page.waitForTimeout(600)
+
+    const args = await page.evaluate(() => (window as any).__createProjectArgs__)
+    expect(args).toEqual({ setPath: '/somewhere/else', name: 'FreshProject' })
+
+    // The new project becomes the destination and the picker closes.
+    await expect(page.locator('.project-selector-modal')).toHaveCount(0)
+    await expect(page.locator(`${destBtn} .tools-project-selector-name`))
+      .toContainText('FreshProject')
+  })
+
+  test('the created project stays selectable in the picker afterwards', async ({ page }) => {
+    await openToolsPanel(page, 'copy_bank')
+    await page.evaluate(() => { (window as any).__browseDialogResult__ = '/somewhere/else' })
+
+    await page.locator(destBtn).click()
+    await page.locator('.project-selector-actions button', { hasText: 'New Project...' }).click()
+    await page.locator('.modal-input').fill('FreshProject')
+    await page.locator('.modal-content button', { hasText: /^Create/ }).click()
+    await page.waitForTimeout(600)
+
+    // A rescan cannot find a project outside every known Set, so it is listed
+    // with the manually browsed ones instead of vanishing.
+    await page.locator(destBtn).click()
+    await expect(page.locator('.project-selector-card', { hasText: 'FreshProject' }).first())
+      .toBeVisible()
+  })
+
+  test('cancelling the folder picker creates nothing', async ({ page }) => {
+    await openToolsPanel(page, 'copy_bank')
+    await page.evaluate(() => { (window as any).__browseDialogResult__ = null })
+
+    await page.locator(destBtn).click()
+    await page.locator('.project-selector-actions button', { hasText: 'New Project...' }).click()
+    await page.waitForTimeout(300)
+
+    // No name modal, no backend call, picker still open.
+    await expect(page.locator('.modal-input')).toHaveCount(0)
+    expect(await page.evaluate(() => (window as any).__createProjectArgs__)).toBeUndefined()
+    await expect(page.locator('.project-selector-modal')).toBeVisible()
   })
 })
 

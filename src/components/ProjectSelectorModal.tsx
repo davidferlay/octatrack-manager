@@ -30,6 +30,12 @@ interface ProjectSelectorModalProps {
   isScanning: boolean;
   /** Omitted for the source pane: creating an empty project to read from is pointless. */
   onCreateProject?: (setPath: string, setName: string) => void;
+  /**
+   * Create a project somewhere of the user's choosing, unrelated to any Set
+   * listed here. Offered as an action alongside Rescan / Browse; omitted (like
+   * onCreateProject) when the picker cannot create anything.
+   */
+  onCreateElsewhere?: () => void;
 }
 
 /** The project picker shared by the Tools source and destination panes. */
@@ -49,6 +55,7 @@ export function ProjectSelectorModal({
   onBrowse,
   isScanning,
   onCreateProject,
+  onCreateElsewhere,
 }: ProjectSelectorModalProps) {
   // Open on whatever is most relevant: the set holding the current project if it
   // lives in one, otherwise the locations list, or the individual projects when
@@ -205,6 +212,15 @@ export function ProjectSelectorModal({
                   >
                     Browse...
                   </button>
+                  {onCreateElsewhere && (
+                    <button
+                      onClick={onCreateElsewhere}
+                      className="scan-button browse-button"
+                      title="Create a project in a folder you choose, outside the Sets listed here"
+                    >
+                      New Project...
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

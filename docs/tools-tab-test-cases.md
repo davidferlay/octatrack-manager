@@ -17,6 +17,12 @@
 | SM90 | Destination Modal | Browse a project folder directly | Click "Browse..." and pick a folder that is itself an Octatrack project | The project is selected as destination immediately, modal closes |
 | SM91 | Destination Modal | Browse a folder without projects | Click "Browse..." and pick a folder with no Octatrack project anywhere below it | Error message states no Octatrack project was found in the selected folder |
 | SM67 OK | Copy Parts | Multi-select dest Banks | Copy Part 1 → Banks A, B, C | Part 1 copied to all 3 destination banks |
+| SM97 | Destination Modal | New Project action | Open the destination picker and look at the ACTIONS row | It offers "Rescan for Projects", "Browse..." and "New Project...". The source picker shows only the first two |
+| SM98 | Destination Modal | Create a project in any folder | Click "New Project...", choose a folder that is not a Set, give a name and confirm | The project is created directly inside that folder (project.work, 16 banks, 8 arrangements, markers.work) and becomes the destination |
+| SM99 | Destination Modal | Created project is named, not "Unknown" | After SM98, read the destination button | It shows the new project's name, taken from its folder, even though no scan knows about it |
+| SM100 | Destination Modal | Created project stays selectable | After SM98, reopen the destination picker | The new project is listed (with the manually browsed ones) and can be selected again |
+| SM101 | Destination Modal | Cancelling the folder picker | Click "New Project...", then cancel the folder dialog | No name prompt appears, nothing is created, and the picker stays open |
+| SM102 | Destination Modal | Duplicate name in the chosen folder | Use "New Project..." twice on the same folder with the same name | The second attempt is refused with an "already exists" error and nothing is overwritten |
 | SM92 | Copy Banks | Source None / All row | Look under the source bank grid | A None / All row is present, matching the destination grid's |
 | SM93 | Copy Banks | Source All selects every existing bank | Click All in the source bank row | Every bank the source project has is selected (never one that is not on disk), All lights up, and the hint reads "N banks - destination locked to N consecutive banks" |
 | SM94 | Copy Banks | Source All is a toggle | Click All twice | The selection is emptied again |

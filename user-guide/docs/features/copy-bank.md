@@ -19,12 +19,15 @@ sidebar_position: 8
 
 Both panes have their own project selector, and both open the same picker. The source defaults to the project you are viewing, so leaving it alone gives the familiar behavior; pointing it at another project lets you pull banks out of a project without opening it first.
 
-The picker lists the current project and every project the app already knows about. Two buttons extend the list:
+The picker lists the current project and every project the app already knows about. Three buttons extend the list:
 
 - **Rescan for Projects:** Refreshes the known locations, like the Refresh button on the home page.
 - **Browse...:** Pick any folder — it is scanned recursively for Octatrack projects, exactly like **Browse** on the home page. If the folder is itself a project it is selected directly; otherwise every project found under it appears in a collapsible **Manual Browse** section for you to pick from.
+- **New Project...:** Pick any folder and create a fresh project directly inside it. Unlike the **New Project** card shown on a Set, this one is not tied to any Set the picker lists - use it to create a project wherever you want, including somewhere the app has never scanned. The new project becomes the destination straight away, and stays listed for the rest of the session.
 
-Only the destination picker offers **New Project**, since an empty project is of no use as a source.
+Both **New Project** entries appear only in the destination picker, since an empty project is of no use as a source.
+
+- **Note on the destination name:** a project the app has not scanned is labelled by its folder name.
 
 When the source is a project other than the one on screen, the source bank grid shows that project's banks: banks it does not have are greyed out, and a selected bank that the new source lacks is dropped from the selection.
 
