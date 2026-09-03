@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { applyItemClick, type SelectionState } from "../utils/multiSelect";
 import { invalidatePoolUsage } from "../hooks/usePoolUsage";
+import { formatBankName } from "./BankSelector";
 
 /** What the tool resets. Each scope maps to one backend command. */
 export type ClearScope = "banks" | "parts" | "patterns" | "tracks" | "sample_slots";
@@ -34,12 +35,12 @@ export interface ClearProjectPanelProps {
   onProjectRefresh?: () => void;
 }
 
-const SCOPES: { id: ClearScope; label: string }[] = [
-  { id: "banks", label: "Banks" },
-  { id: "parts", label: "Parts" },
-  { id: "patterns", label: "Patterns" },
-  { id: "tracks", label: "Tracks" },
-  { id: "sample_slots", label: "Sample Slots" },
+const SCOPES: { id: ClearScope; label: string; title: string }[] = [
+  { id: "banks", label: "Banks", title: "Reset whole banks: every Part and Pattern they hold" },
+  { id: "parts", label: "Parts", title: "Reset Parts of one bank: sound design and Part name" },
+  { id: "patterns", label: "Patterns", title: "Empty Patterns of one bank: every trig, scale and chaining" },
+  { id: "tracks", label: "Tracks", title: "Clear individual tracks: sound design, sequencer data, or both" },
+  { id: "sample_slots", label: "Sample Slots", title: "Empty sample slots: assignment and attributes, audio files kept" },
 ];
 
 const bankLetter = (i: number) => String.fromCharCode(65 + i);
@@ -365,7 +366,9 @@ export function ClearProjectPanel({
               className={`tools-multi-btn bank-btn ${selected(idx) ? "selected" : ""} ${!loadedBankIndices.has(idx) ? "disabled" : ""}`}
               disabled={!loadedBankIndices.has(idx)}
               onClick={(e) => onClick(idx, e)}
-              title={loadedBankIndices.has(idx) ? `${banks[idx]?.name || `Bank ${bankLetter(idx)}`}${hint}` : "Bank not loaded"}
+              title={loadedBankIndices.has(idx)
+                ? `${banks[idx] ? formatBankName(banks[idx].name, idx) : `Bank ${bankLetter(idx)}`}${hint}`
+                : "Bank not loaded"}
             >
               {bankLetter(idx)}
             </button>
@@ -409,6 +412,7 @@ export function ClearProjectPanel({
                 type="button"
                 className={`tools-toggle-btn ${scope === s.id ? "selected" : ""}`}
                 onClick={() => { setScope(s.id); setStatus(null); }}
+                title={s.title}
               >
                 {s.label}
               </button>
@@ -571,6 +575,7 @@ export function ClearProjectPanel({
                       inputMode="numeric"
                       className="tools-slot-value-input"
                       aria-label="First slot to clear"
+                      title={slotMode === "one" ? "Slot to clear" : "First slot to clear"}
                       key={`from-${slotFrom}`}
                       defaultValue={slotFrom}
                       onBlur={(e) => setSlotRange(clampSlot(e.target.value, slotFrom), slotTo)}
@@ -584,6 +589,7 @@ export function ClearProjectPanel({
                           inputMode="numeric"
                           className="tools-slot-value-input"
                           aria-label="Last slot to clear"
+                          title="Last slot to clear"
                           key={`to-${slotTo}`}
                           defaultValue={slotTo}
                           onBlur={(e) => setSlotRange(slotFrom, clampSlot(e.target.value, slotTo))}
@@ -619,6 +625,7 @@ export function ClearProjectPanel({
                       type="range"
                       className="tools-dual-range-input"
                       aria-label="Slot to clear"
+                      title="Slot to clear"
                       min="1"
                       max="128"
                       value={slotFrom}
@@ -638,6 +645,7 @@ export function ClearProjectPanel({
                       type="range"
                       className="tools-dual-range-input tools-dual-range-min"
                       aria-label="First slot to clear (slider)"
+                      title="First slot to clear"
                       min="1"
                       max="128"
                       value={slotFrom}
@@ -650,6 +658,7 @@ export function ClearProjectPanel({
                       type="range"
                       className="tools-dual-range-input tools-dual-range-max"
                       aria-label="Last slot to clear (slider)"
+                      title="Last slot to clear"
                       min="1"
                       max="128"
                       value={slotTo}

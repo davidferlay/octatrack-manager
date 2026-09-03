@@ -590,3 +590,54 @@ describe('ClearProjectPanel - scope isolation', () => {
     expect(callsTo('clear_banks')).toHaveLength(0)
   })
 })
+
+describe('ClearProjectPanel - tooltips', () => {
+  it('every scope button explains what it resets', () => {
+    renderPanel()
+    expect(screen.getByRole('button', { name: 'Banks' }))
+      .toHaveAttribute('title', 'Reset whole banks: every Part and Pattern they hold')
+    expect(screen.getByRole('button', { name: 'Sample Slots' }).getAttribute('title'))
+      .toMatch(/audio files kept/)
+  })
+
+  it('bank buttons name the bank the way the copy tools do', () => {
+    renderPanel()
+    // "NAME (n)" plus the multi-select hint, as in Copy Banks.
+    expect(screen.getByRole('button', { name: 'C' }))
+      .toHaveAttribute('title', 'Bank C (3) - shift-click for a range, ctrl-click to add')
+  })
+
+  it('a bank that is not on disk says so', () => {
+    renderPanel({ loadedBankIndices: new Set([0]) })
+    expect(screen.getByRole('button', { name: 'B' })).toHaveAttribute('title', 'Bank not loaded')
+  })
+
+  it('track buttons distinguish audio from MIDI', async () => {
+    const user = userEvent.setup()
+    renderPanel()
+    await user.click(screen.getByRole('button', { name: 'Tracks' }))
+    expect(screen.getByRole('button', { name: 'T2' })).toHaveAttribute('title', 'Audio Track 2')
+    expect(screen.getByRole('button', { name: 'M3' })).toHaveAttribute('title', 'MIDI Track 3')
+  })
+
+  it('pattern buttons carry the multi-select hint', async () => {
+    const user = userEvent.setup()
+    renderPanel()
+    await user.click(screen.getByRole('button', { name: 'Patterns' }))
+    expect(screen.getByRole('button', { name: '4' }).getAttribute('title'))
+      .toBe('Pattern 4 - shift-click for a range, ctrl-click to add')
+  })
+
+  it('the slot fields describe themselves in both modes', async () => {
+    const user = userEvent.setup()
+    renderPanel()
+    await user.click(screen.getByRole('button', { name: 'Sample Slots' }))
+    expect(screen.getByLabelText('First slot to clear')).toHaveAttribute('title', 'First slot to clear')
+    expect(screen.getByLabelText('Last slot to clear')).toHaveAttribute('title', 'Last slot to clear')
+
+    await user.click(screen.getByRole('button', { name: 'One' }))
+    // With one handle the "first" field is simply the slot.
+    expect(screen.getByLabelText('First slot to clear')).toHaveAttribute('title', 'Slot to clear')
+  })
+})
+
