@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 use crate::catalog_runtime::{open_shared_catalog, SharedCatalog};
+use crate::clone_runtime::{open_shared_clone_runtime, CloneRuntimeError, CloneVerificationState};
 use crate::root_registry::{
     DeviceIdentityProvider, DeviceObservation, RootRegistry, RootRegistryError, RootSession,
 };
@@ -53,6 +54,21 @@ impl DeviceIdentityProvider for StableGateCIdentity {
             filesystem_type: Some("fixturefs".into()),
             total_capacity: Some(4096),
             mount_token: "gate-c-mount".into(),
+            stable: true,
+        })
+    }
+}
+
+struct PathStableCloneIdentity;
+
+impl DeviceIdentityProvider for PathStableCloneIdentity {
+    fn observe(&self, root: &Path) -> Result<DeviceObservation, RootRegistryError> {
+        let stable_key = root.to_string_lossy().into_owned();
+        Ok(DeviceObservation {
+            stable_key: stable_key.clone(),
+            filesystem_type: Some("apfs".into()),
+            total_capacity: Some(4096),
+            mount_token: stable_key,
             stable: true,
         })
     }
@@ -744,4 +760,38 @@ fn gate_c_unknown_live_bytes_leave_recovery_required_without_overwrite() {
         snapshot_manifest(&fixture.original),
         fixture.original_manifest
     );
+}
+
+#[test]
+fn gate_c_host_metadata_mutation_does_not_fail_clone_reverify() {
+    let root = TempDir::new().unwrap();
+    fs::create_dir_all(root.path().join("SET/AUDIO")).expect("audio dir");
+    fs::write(root.path().join("SET/AUDIO/pad.wav"), b"pad-bytes").expect("pad wav");
+    fs::create_dir_all(root.path().join(".fseventsd")).expect("fseventsd");
+    fs::write(root.path().join(".fseventsd/initial"), b"initial").expect("fseventsd state");
+
+    let data_dir = TempDir::new().unwrap();
+    let registry = RootRegistry::new(Arc::new(PathStableCloneIdentity), Duration::from_secs(3600));
+    let clone_runtime = open_shared_clone_runtime(data_dir.path()).expect("clone runtime");
+    let session = registry
+        .register(root.path().to_str().expect("root path"))
+        .expect("register root");
+    let resolved = registry.resolve(&session.root_id).expect("resolve root");
+    clone_runtime
+        .install_test_verification(&resolved)
+        .expect("install verification");
+
+    fs::write(root.path().join(".DS_Store"), b"ds-store").expect("ds store");
+    fs::write(root.path().join(".fseventsd/updated"), b"updated").expect("updated fseventsd");
+
+    let verification = clone_runtime
+        .reverify_root(&resolved)
+        .expect("metadata mutation should not fail reverify");
+    assert_eq!(verification.state, CloneVerificationState::Verified);
+
+    fs::write(root.path().join("SET/AUDIO/pad.wav"), b"tampered-pad").expect("tamper pad");
+    let error = clone_runtime
+        .reverify_root(&resolved)
+        .expect_err("tamper reverify");
+    assert!(matches!(error, CloneRuntimeError::VerificationTampered));
 }

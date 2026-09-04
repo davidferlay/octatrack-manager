@@ -1099,9 +1099,9 @@ fn derive_clone_authority_id(
     format!("clone-authority:v1:{}", hex_digest(&hasher.finalize()))
 }
 
-/// macOS volume metadata that is not part of Octatrack user data.
+/// Host OS metadata excluded from Octatrack semantic clone integrity baselines.
 /// Only explicit names are omitted; unknown unreadable paths remain fail-closed.
-pub(crate) fn is_ignored_platform_metadata(path: &Path) -> bool {
+pub(crate) fn is_ignored_clone_host_metadata(path: &Path) -> bool {
     let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
         return false;
     };
@@ -1132,7 +1132,7 @@ fn collect_baseline_entries(
     if metadata.is_dir() {
         for entry in fs::read_dir(path).map_err(map_io_error)? {
             let entry = entry.map_err(map_io_error)?;
-            if is_ignored_platform_metadata(&entry.path()) {
+            if is_ignored_clone_host_metadata(&entry.path()) {
                 continue;
             }
             collect_baseline_entries(root, &entry.path(), entries)?;
@@ -1159,7 +1159,7 @@ fn copy_tree_nofollow(from: &Path, to: &Path) -> Result<(), CloneRuntimeError> {
     fs::create_dir_all(to).map_err(map_io_error)?;
     for entry in fs::read_dir(from).map_err(map_io_error)? {
         let entry = entry.map_err(map_io_error)?;
-        if is_ignored_platform_metadata(&entry.path()) {
+        if is_ignored_clone_host_metadata(&entry.path()) {
             continue;
         }
         let metadata = fs::symlink_metadata(entry.path()).map_err(map_io_error)?;
@@ -1340,6 +1340,23 @@ mod tests {
         fs::write(root.join("Set/AUDIO/test.wav"), b"gate-c-test-bytes").unwrap();
     }
 
+    fn write_semantic_fixture_tree(root: &Path) {
+        fs::create_dir_all(root.join("SET/AUDIO")).unwrap();
+        fs::create_dir_all(root.join("SET/PROJECT")).unwrap();
+        fs::write(root.join("SET/AUDIO/test.wav"), b"semantic-audio-bytes").unwrap();
+        fs::write(
+            root.join("SET/PROJECT/project.work"),
+            b"semantic-project-bytes",
+        )
+        .unwrap();
+    }
+
+    fn open_registry_and_clone_runtime(data_dir: &Path) -> (RootRegistry, SharedCloneRuntime) {
+        let registry = RootRegistry::new(Arc::new(PathStableIdentity), Duration::from_secs(3600));
+        let clone_runtime = open_shared_clone_runtime(data_dir).unwrap();
+        (registry, clone_runtime)
+    }
+
     fn baseline_relative_paths(root: &Path) -> Vec<String> {
         scan_baseline_entries(root)
             .unwrap()
@@ -1349,20 +1366,21 @@ mod tests {
     }
 
     #[test]
-    fn is_ignored_platform_metadata_matches_explicit_allowlist_only() {
-        assert!(is_ignored_platform_metadata(Path::new(".Spotlight-V100")));
-        assert!(is_ignored_platform_metadata(Path::new(".Trashes")));
-        assert!(is_ignored_platform_metadata(Path::new(".fseventsd")));
-        assert!(is_ignored_platform_metadata(Path::new(".DS_Store")));
-        assert!(is_ignored_platform_metadata(Path::new("._test.wav")));
+    fn is_ignored_clone_host_metadata_matches_explicit_allowlist_only() {
+        assert!(is_ignored_clone_host_metadata(Path::new(".Spotlight-V100")));
+        assert!(is_ignored_clone_host_metadata(Path::new(".Trashes")));
+        assert!(is_ignored_clone_host_metadata(Path::new(".fseventsd")));
+        assert!(is_ignored_clone_host_metadata(Path::new(".DS_Store")));
+        assert!(is_ignored_clone_host_metadata(Path::new("._test.wav")));
 
-        assert!(!is_ignored_platform_metadata(Path::new("unexpected.bin")));
-        assert!(!is_ignored_platform_metadata(Path::new(".hidden")));
-        assert!(!is_ignored_platform_metadata(Path::new(
+        assert!(!is_ignored_clone_host_metadata(Path::new("unexpected.bin")));
+        assert!(!is_ignored_clone_host_metadata(Path::new(".hidden")));
+        assert!(!is_ignored_clone_host_metadata(Path::new(
             ".not-macos-metadata"
         )));
-        assert!(!is_ignored_platform_metadata(Path::new("extra")));
-        assert!(!is_ignored_platform_metadata(Path::new("Set")));
+        assert!(!is_ignored_clone_host_metadata(Path::new("extra")));
+        assert!(!is_ignored_clone_host_metadata(Path::new("Set")));
+        assert!(!is_ignored_clone_host_metadata(Path::new(".random-dir")));
     }
 
     #[test]
@@ -1428,7 +1446,18 @@ mod tests {
         write_gate_c_fixture_tree(clone_dir.path());
         fs::create_dir_all(source_dir.path().join(".Spotlight-V100")).unwrap();
         fs::create_dir_all(source_dir.path().join(".fseventsd")).unwrap();
+        fs::write(
+            source_dir.path().join(".fseventsd/source-state"),
+            b"source-fsevents",
+        )
+        .unwrap();
         fs::create_dir_all(clone_dir.path().join(".Trashes")).unwrap();
+        fs::create_dir_all(clone_dir.path().join(".fseventsd")).unwrap();
+        fs::write(
+            clone_dir.path().join(".fseventsd/clone-state"),
+            b"clone-fsevents",
+        )
+        .unwrap();
         fs::write(clone_dir.path().join(".DS_Store"), b"ds-store").unwrap();
 
         let data_dir = TempDir::new().unwrap();
@@ -1454,11 +1483,157 @@ mod tests {
     }
 
     #[test]
+    fn reverify_passes_after_host_metadata_mutation() {
+        let root = TempDir::new().unwrap();
+        write_semantic_fixture_tree(root.path());
+        fs::create_dir_all(root.path().join(".fseventsd")).unwrap();
+        fs::write(root.path().join(".fseventsd/initial"), b"initial").unwrap();
+
+        let data_dir = TempDir::new().unwrap();
+        let (registry, clone_runtime) = open_registry_and_clone_runtime(data_dir.path());
+        let session = registry.register(root.path().to_str().unwrap()).unwrap();
+        let resolved = registry.resolve(&session.root_id).unwrap();
+        clone_runtime.install_test_verification(&resolved).unwrap();
+
+        fs::write(root.path().join(".DS_Store"), b"ds-store").unwrap();
+        fs::write(root.path().join(".fseventsd/updated"), b"updated").unwrap();
+
+        let verification = clone_runtime.reverify_root(&resolved).unwrap();
+        assert_eq!(verification.state, CloneVerificationState::Verified);
+    }
+
+    #[test]
+    fn reverify_passes_after_host_metadata_removal() {
+        let root = TempDir::new().unwrap();
+        write_semantic_fixture_tree(root.path());
+        fs::create_dir_all(root.path().join(".fseventsd")).unwrap();
+        fs::write(root.path().join(".fseventsd/state"), b"state").unwrap();
+        fs::write(root.path().join(".DS_Store"), b"ds-store").unwrap();
+
+        let data_dir = TempDir::new().unwrap();
+        let (registry, clone_runtime) = open_registry_and_clone_runtime(data_dir.path());
+        let session = registry.register(root.path().to_str().unwrap()).unwrap();
+        let resolved = registry.resolve(&session.root_id).unwrap();
+        clone_runtime.install_test_verification(&resolved).unwrap();
+
+        fs::remove_dir_all(root.path().join(".fseventsd")).unwrap();
+        fs::remove_file(root.path().join(".DS_Store")).unwrap();
+
+        let verification = clone_runtime.reverify_root(&resolved).unwrap();
+        assert_eq!(verification.state, CloneVerificationState::Verified);
+    }
+
+    #[test]
+    fn reverify_detects_semantic_audio_tampering() {
+        let root = TempDir::new().unwrap();
+        write_semantic_fixture_tree(root.path());
+        fs::create_dir_all(root.path().join(".fseventsd")).unwrap();
+
+        let data_dir = TempDir::new().unwrap();
+        let (registry, clone_runtime) = open_registry_and_clone_runtime(data_dir.path());
+        let session = registry.register(root.path().to_str().unwrap()).unwrap();
+        let resolved = registry.resolve(&session.root_id).unwrap();
+        clone_runtime.install_test_verification(&resolved).unwrap();
+
+        fs::write(
+            root.path().join("SET/AUDIO/test.wav"),
+            b"tampered-audio-bytes",
+        )
+        .unwrap();
+
+        let error = clone_runtime.reverify_root(&resolved).unwrap_err();
+        assert!(matches!(error, CloneRuntimeError::VerificationTampered));
+    }
+
+    #[test]
+    fn reverify_detects_state_document_tampering() {
+        let root = TempDir::new().unwrap();
+        write_semantic_fixture_tree(root.path());
+
+        let data_dir = TempDir::new().unwrap();
+        let (registry, clone_runtime) = open_registry_and_clone_runtime(data_dir.path());
+        let session = registry.register(root.path().to_str().unwrap()).unwrap();
+        let resolved = registry.resolve(&session.root_id).unwrap();
+        clone_runtime.install_test_verification(&resolved).unwrap();
+
+        fs::write(
+            root.path().join("SET/PROJECT/project.work"),
+            b"tampered-project-bytes",
+        )
+        .unwrap();
+
+        let error = clone_runtime.reverify_root(&resolved).unwrap_err();
+        assert!(matches!(error, CloneRuntimeError::VerificationTampered));
+    }
+
+    #[test]
+    fn reverify_detects_unknown_file_tampering() {
+        let root = TempDir::new().unwrap();
+        write_semantic_fixture_tree(root.path());
+        fs::write(root.path().join("unexpected.bin"), b"unexpected").unwrap();
+
+        let data_dir = TempDir::new().unwrap();
+        let (registry, clone_runtime) = open_registry_and_clone_runtime(data_dir.path());
+        let session = registry.register(root.path().to_str().unwrap()).unwrap();
+        let resolved = registry.resolve(&session.root_id).unwrap();
+        clone_runtime.install_test_verification(&resolved).unwrap();
+
+        fs::write(root.path().join("unexpected.bin"), b"tampered").unwrap();
+
+        let error = clone_runtime.reverify_root(&resolved).unwrap_err();
+        assert!(matches!(error, CloneRuntimeError::VerificationTampered));
+    }
+
+    #[test]
+    fn baseline_scan_includes_random_directory_entries() {
+        let root = TempDir::new().unwrap();
+        write_gate_c_fixture_tree(root.path());
+        fs::create_dir_all(root.path().join(".random-dir")).unwrap();
+        fs::write(root.path().join(".random-dir/sentinel.bin"), b"sentinel").unwrap();
+
+        let paths = baseline_relative_paths(root.path());
+        assert!(paths.contains(&".random-dir/sentinel.bin".to_owned()));
+        assert!(paths.contains(&"Set/AUDIO/test.wav".to_owned()));
+    }
+
+    #[test]
+    fn managed_clone_uses_semantic_projection_excluding_host_metadata() {
+        let source_dir = TempDir::new().unwrap();
+        write_fixture_tree(source_dir.path());
+        fs::create_dir_all(source_dir.path().join(".Spotlight-V100")).unwrap();
+        fs::create_dir_all(source_dir.path().join(".fseventsd")).unwrap();
+        fs::write(source_dir.path().join(".DS_Store"), b"ds-store").unwrap();
+        fs::write(
+            source_dir.path().join("SET/AUDIO/._kick.wav"),
+            b"appledouble",
+        )
+        .unwrap();
+
+        let data_dir = TempDir::new().unwrap();
+        let (registry, clone_runtime) = open_registry_and_clone_runtime(data_dir.path());
+        let source_session = registry
+            .register(source_dir.path().to_str().unwrap())
+            .unwrap();
+        let source = registry.resolve(&source_session.root_id).unwrap();
+        let source_semantic = scan_baseline_entries(source_dir.path()).unwrap();
+        let (clone_path, _, clone_entries) = clone_runtime
+            .create_managed_clone(&registry, &source)
+            .unwrap();
+
+        assert_eq!(source_semantic, clone_entries);
+        assert_eq!(source_semantic, scan_baseline_entries(&clone_path).unwrap());
+        assert!(!clone_path.join(".Spotlight-V100").exists());
+        assert!(!clone_path.join(".fseventsd").exists());
+        assert!(!clone_path.join(".DS_Store").exists());
+        assert!(clone_path.join("SET/AUDIO/kick.wav").exists());
+    }
+
+    #[test]
     fn baseline_scan_fails_closed_on_unreadable_unknown_paths() {
         let missing_root = Path::new("/this/path/does/not/exist/for-clone-baseline-test");
         let error = scan_baseline_entries(missing_root).unwrap_err();
         assert!(matches!(error, CloneRuntimeError::Io));
-        assert!(!is_ignored_platform_metadata(missing_root));
+        assert!(!is_ignored_clone_host_metadata(missing_root));
     }
 
     #[cfg(unix)]

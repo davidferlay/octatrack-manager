@@ -54,6 +54,7 @@ set -e
 CRIT_APPLY_RESCAN=0
 CRIT_ROLLBACK_RESCAN=0
 CRIT_UNKNOWN_BYTES=0
+CRIT_HOST_METADATA_REVERIFY=0
 
 pass_named "$GATE_C_LOG" \
   "gate_c_clone_rescan::gate_c_rename_apply_then_fresh_rescan_has_zero_missing_references" \
@@ -64,11 +65,14 @@ pass_named "$GATE_C_LOG" \
 pass_named "$GATE_C_LOG" \
   "gate_c_clone_rescan::gate_c_unknown_live_bytes_leave_recovery_required_without_overwrite" \
   && CRIT_UNKNOWN_BYTES=1
+pass_named "$GATE_C_LOG" \
+  "gate_c_clone_rescan::gate_c_host_metadata_mutation_does_not_fail_clone_reverify" \
+  && CRIT_HOST_METADATA_REVERIFY=1
 
 OVERALL=FAIL
 if [[ $CRATE_STATUS -eq 0 && $GATE_C_STATUS -eq 0 \
    && $CRIT_APPLY_RESCAN -eq 1 && $CRIT_ROLLBACK_RESCAN -eq 1 \
-   && $CRIT_UNKNOWN_BYTES -eq 1 ]]; then
+   && $CRIT_UNKNOWN_BYTES -eq 1 && $CRIT_HOST_METADATA_REVERIFY -eq 1 ]]; then
   OVERALL=PASS
 fi
 
@@ -90,6 +94,7 @@ cat >"$REPORT" <<EOF
 | apply → fresh catalog rescan → missing 0 / destination resolved | $([[ $CRIT_APPLY_RESCAN -eq 1 ]] && echo PASS || echo FAIL) |
 | apply fault → rollback → rescan restores source references | $([[ $CRIT_ROLLBACK_RESCAN -eq 1 ]] && echo PASS || echo FAIL) |
 | unknown live bytes → RecoveryRequired without overwrite | $([[ $CRIT_UNKNOWN_BYTES -eq 1 ]] && echo PASS || echo FAIL) |
+| host metadata mutation → clone reverify remains valid | $([[ $CRIT_HOST_METADATA_REVERIFY -eq 1 ]] && echo PASS || echo FAIL) |
 | ot-plan / ot-backup / ot-executor regression suite | $([[ $CRATE_STATUS -eq 0 ]] && echo PASS || echo FAIL) |
 | gate_c integration exit | $([[ $GATE_C_STATUS -eq 0 ]] && echo PASS || echo FAIL) |
 
