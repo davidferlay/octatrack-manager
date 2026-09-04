@@ -3444,7 +3444,7 @@ fn catalog_error(error: CatalogError) -> ApiError {
     ApiError::new(code, message, recoverable)
 }
 
-fn register_root_sync(
+pub(crate) fn register_root_sync(
     registry: &RootRegistry,
     catalog: &SharedCatalog,
     raw_path: &str,
@@ -5471,6 +5471,98 @@ mod tests {
             register_root_sync(&registry(), &catalog, root.path().to_str().unwrap()).unwrap_err();
 
         assert_eq!(error.code, "UNSUPPORTED_FORMAT");
+    }
+
+    #[test]
+    fn failed_registered_root_scan_does_not_store_a_partial_catalog() {
+        use crate::device_detection::with_injected_unreadable_paths;
+
+        let root = TempDir::new().unwrap();
+        create_set_project(root.path(), "SET_A", "PROJECT_A");
+        fs::create_dir_all(root.path().join("unknown-dir")).unwrap();
+        let registry = registry();
+        let (data_directory, catalog) = catalog();
+        let write = write_runtime(data_directory.path());
+        let rename_runtime = open_test_rename_runtime(data_directory.path());
+
+        let error = with_injected_unreadable_paths(&["unknown-dir"], || {
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap())
+        })
+        .unwrap_err();
+        assert_eq!(error.code, "LIBRARY_SCAN_FAILED");
+
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        let first_revision = session.observed_revision;
+        assert_eq!(first_revision, 1);
+        let snapshot = list_library_sync(&registry, &catalog, &root_id).unwrap();
+        assert_eq!(snapshot.sets[0].relative_path.as_str(), "SET_A");
+
+        let write_error = with_injected_unreadable_paths(&["unknown-dir"], || {
+            enable_write_sync(&registry, &catalog, &write, &rename_runtime, &root_id)
+        })
+        .unwrap_err();
+        assert_eq!(write_error.code, "LIBRARY_SCAN_FAILED");
+        assert!(
+            !registry
+                .resolve(&root_id)
+                .unwrap()
+                .session
+                .capabilities
+                .write
+        );
+
+        let after_failure = list_library_sync(&registry, &catalog, &root_id).unwrap();
+        assert_eq!(after_failure.sets[0].relative_path.as_str(), "SET_A");
+        assert_eq!(
+            registry
+                .resolve(&root_id)
+                .unwrap()
+                .session
+                .observed_revision,
+            first_revision
+        );
+    }
+
+    #[test]
+    fn incomplete_scan_cannot_reach_rename_planning() {
+        use crate::device_detection::with_injected_unreadable_paths;
+
+        let root = TempDir::new().unwrap();
+        build_gate_c_planning_fixture(root.path());
+        fs::create_dir_all(root.path().join("unknown-dir")).unwrap();
+        let registry = registry();
+        let (data_directory, catalog) = catalog();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        let rename_runtime = open_test_rename_runtime(data_directory.path());
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
+        let dto = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
+        let source_id = dto
+            .audio_files
+            .iter()
+            .find(|file| file.relative_path == "SET/AUDIO/pad.wav")
+            .unwrap()
+            .file_instance_id
+            .clone();
+
+        let error = with_injected_unreadable_paths(&["unknown-dir"], || {
+            plan_rename_sample_sync(
+                &registry,
+                &catalog,
+                &clone_runtime,
+                &rename_runtime,
+                &root_id,
+                &source_id,
+                "SET/AUDIO/new-pad.wav",
+            )
+        })
+        .unwrap_err();
+        assert_eq!(error.code, "LIBRARY_SCAN_FAILED");
+        assert!(!format!("{error:?}").contains(root.path().to_str().unwrap()));
     }
 
     #[test]

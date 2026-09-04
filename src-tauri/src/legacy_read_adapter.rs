@@ -1,4 +1,5 @@
-use crate::device_detection::{scan_directory, OctatrackProject};
+use crate::device_detection::{scan_directory_strict, DeviceScanError, OctatrackProject};
+use crate::host_metadata_policy::is_ignored_host_metadata;
 use crate::project_compatibility::{evaluate_project_compatibility, ProjectCompatibility};
 use crate::project_reader::{compute_sample_usage_for_documents, read_raw_sample_fields};
 use ot_domain::{
@@ -51,10 +52,13 @@ fn scan_registered_root(
     canonical_root: &Path,
     baseline: &[FileInstance],
 ) -> Result<LibrarySnapshot, StorageError> {
-    let root = canonical_root
-        .to_str()
-        .ok_or_else(|| StorageError::new("UNSUPPORTED_FORMAT: root path is not valid UTF-8"))?;
-    let legacy = scan_directory(root);
+    if canonical_root.to_str().is_none() {
+        return Err(StorageError::new(
+            "UNSUPPORTED_FORMAT: root path is not valid UTF-8",
+        ));
+    }
+    let legacy =
+        scan_directory_strict(canonical_root).map_err(DeviceScanError::into_storage_error)?;
     let mut seen_sets = HashSet::new();
     let mut sets = Vec::new();
 
@@ -207,15 +211,23 @@ fn collect_audio_candidates(
     entries.sort_by_key(|entry| entry.file_name());
 
     for entry in entries {
-        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
-            continue;
-        };
-        if name.starts_with('.') {
+        let path = entry.path();
+        if is_ignored_host_metadata(&path) {
             continue;
         }
-        let path = entry.path();
-        let metadata = fs::symlink_metadata(&path)
-            .map_err(|error| StorageError::new(format!("LIBRARY_SCAN_FAILED: {error}")))?;
+        if crate::device_detection::scan_path_injected_unreadable(canonical_root, &path) {
+            return Err(StorageError::new(
+                "LIBRARY_SCAN_FAILED: registered root scan could not be completed",
+            ));
+        }
+        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+            return Err(StorageError::new(
+                "LIBRARY_SCAN_FAILED: registered root contains a non-UTF-8 path",
+            ));
+        };
+        let metadata = fs::symlink_metadata(&path).map_err(|_| {
+            StorageError::new("LIBRARY_SCAN_FAILED: registered root scan could not be completed")
+        })?;
         if metadata.file_type().is_symlink() {
             continue;
         }
@@ -1734,8 +1746,17 @@ mod tests {
                 .iter()
                 .map(|file| file.relative_path.as_str())
                 .collect::<Vec<_>>(),
-            vec!["a.aif", "m.AIFF", "z.WAV"]
+            vec![
+                ".hidden-directory/inside.wav",
+                ".hidden.wav",
+                "a.aif",
+                "m.AIFF",
+                "z.WAV"
+            ]
         );
+        assert!(!files
+            .iter()
+            .any(|file| file.relative_path.as_str() == "._fork.wav"));
         assert!(files
             .iter()
             .all(|file| file.storage_scope == SampleStorageScope::Unclassified));
@@ -1935,5 +1956,120 @@ mod tests {
             fs::read(outside.path().join("outside.wav")).unwrap(),
             b"outside"
         );
+    }
+
+    fn plant_known_host_metadata(root: &Path) {
+        fs::create_dir_all(root.join(".Spotlight-V100")).unwrap();
+        fs::create_dir_all(root.join(".Trashes")).unwrap();
+        fs::create_dir_all(root.join(".fseventsd")).unwrap();
+        fs::write(root.join(".DS_Store"), b"ds-store").unwrap();
+        fs::write(root.join("._appledouble"), b"appledouble").unwrap();
+    }
+
+    #[test]
+    fn registered_root_scan_ignores_known_host_metadata() {
+        let root = TempDir::new().unwrap();
+        fs::create_dir(root.path().join("SET")).unwrap();
+        fs::create_dir(root.path().join("SET/AUDIO")).unwrap();
+        create_project(root.path(), "SET/PROJECT");
+        fs::write(root.path().join("SET/AUDIO/kick.wav"), b"kick").unwrap();
+        plant_known_host_metadata(root.path());
+
+        let canonical_root = root.path().canonicalize().unwrap();
+        let snapshot = scan_registered_root(&canonical_root, &[]).unwrap();
+        assert_eq!(snapshot.sets.len(), 1);
+        assert_eq!(snapshot.sets[0].relative_path.as_str(), "SET");
+        assert!(!snapshot.file_instances.iter().any(|file| file
+            .relative_path
+            .as_str()
+            .contains("Spotlight")
+            || file.relative_path.as_str().contains(".DS_Store")
+            || file.relative_path.as_str().starts_with("._")));
+    }
+
+    #[test]
+    fn hidden_project_like_content_is_not_silently_erased() {
+        let root = TempDir::new().unwrap();
+        fs::create_dir(root.path().join("SET")).unwrap();
+        fs::create_dir(root.path().join("SET/AUDIO")).unwrap();
+        create_project(root.path(), "SET/PROJECT");
+        create_project(root.path(), ".hidden-project");
+        fs::write(root.path().join(".hidden-project/secret.wav"), b"secret").unwrap();
+
+        let canonical_root = root.path().canonicalize().unwrap();
+        let snapshot = scan_registered_root(&canonical_root, &[]).unwrap();
+        assert!(
+            snapshot
+                .standalone_projects
+                .iter()
+                .any(|project| project.relative_path.as_str() == ".hidden-project"),
+            "unknown hidden project-like directories must remain in the snapshot: {snapshot:?}"
+        );
+        assert!(
+            snapshot
+                .file_instances
+                .iter()
+                .any(|file| file.relative_path.as_str() == ".hidden-project/secret.wav"),
+            "hidden audio must not be dropped because the name starts with a dot"
+        );
+    }
+
+    #[test]
+    fn unknown_dot_directory_is_traversed_and_does_not_fail_the_scan() {
+        let root = TempDir::new().unwrap();
+        fs::create_dir(root.path().join("SET")).unwrap();
+        fs::create_dir(root.path().join("SET/AUDIO")).unwrap();
+        create_project(root.path(), "SET/PROJECT");
+        fs::create_dir_all(root.path().join(".custom")).unwrap();
+        fs::write(root.path().join(".custom/sentinel-file"), b"sentinel").unwrap();
+
+        let canonical_root = root.path().canonicalize().unwrap();
+        let snapshot = scan_registered_root(&canonical_root, &[]).unwrap();
+        assert_eq!(snapshot.sets[0].relative_path.as_str(), "SET");
+    }
+
+    #[test]
+    fn registered_root_uses_strict_scan_instead_of_legacy_best_effort() {
+        use crate::device_detection::{scan_directory, with_injected_unreadable_paths};
+
+        let root = TempDir::new().unwrap();
+        fs::create_dir(root.path().join("SET")).unwrap();
+        fs::create_dir(root.path().join("SET/AUDIO")).unwrap();
+        create_project(root.path(), "SET/PROJECT");
+        fs::create_dir_all(root.path().join("unknown-dir")).unwrap();
+
+        let legacy = with_injected_unreadable_paths(&["unknown-dir"], || {
+            scan_directory(&root.path().to_string_lossy())
+        });
+        assert_eq!(legacy.locations[0].sets[0].name, "SET");
+
+        let canonical_root = root.path().canonicalize().unwrap();
+        let error = with_injected_unreadable_paths(&["unknown-dir"], || {
+            scan_registered_root(&canonical_root, &[])
+        })
+        .unwrap_err();
+        assert!(
+            error.message().starts_with("LIBRARY_SCAN_FAILED:"),
+            "{}",
+            error.message()
+        );
+    }
+
+    #[test]
+    fn registered_root_scan_fails_closed_on_unknown_unreadable_directory() {
+        use crate::device_detection::with_injected_unreadable_paths;
+
+        let root = TempDir::new().unwrap();
+        fs::create_dir(root.path().join("SET")).unwrap();
+        fs::create_dir(root.path().join("SET/AUDIO")).unwrap();
+        create_project(root.path(), "SET/PROJECT");
+        fs::create_dir_all(root.path().join("unknown-dir")).unwrap();
+
+        let canonical_root = root.path().canonicalize().unwrap();
+        let error = with_injected_unreadable_paths(&["unknown-dir"], || {
+            scan_registered_root(&canonical_root, &[])
+        })
+        .unwrap_err();
+        assert!(error.message().starts_with("LIBRARY_SCAN_FAILED:"));
     }
 }

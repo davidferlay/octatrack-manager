@@ -8,6 +8,7 @@ use crate::root_registry::{
 use crate::test_fixtures;
 use crate::v2_api::{
     gate_c_latest_completed_scan_revision, gate_c_register_and_index_root, gate_c_rescan_and_store,
+    register_root_sync,
 };
 use ot_backup::BackupStore;
 use ot_codec::MemoryProjectReferenceCodec;
@@ -794,4 +795,67 @@ fn gate_c_host_metadata_mutation_does_not_fail_clone_reverify() {
         .reverify_root(&resolved)
         .expect_err("tamper reverify");
     assert!(matches!(error, CloneRuntimeError::VerificationTampered));
+}
+
+fn plant_registered_root_fixture(root: &Path) {
+    fs::create_dir_all(root.join("SET/AUDIO")).expect("audio dir");
+    fs::create_dir_all(root.join("SET/PROJECT")).expect("project dir");
+    fs::write(root.join("SET/PROJECT/project.work"), b"project fixture").expect("project.work");
+    fs::write(root.join("SET/AUDIO/pad.wav"), b"pad-bytes").expect("pad wav");
+}
+
+#[test]
+fn gate_c_registered_root_scan_ignores_known_host_metadata() {
+    let root = TempDir::new().unwrap();
+    plant_registered_root_fixture(root.path());
+    fs::create_dir_all(root.path().join(".Spotlight-V100")).expect("spotlight");
+    fs::create_dir_all(root.path().join(".Trashes")).expect("trashes");
+    fs::create_dir_all(root.path().join(".fseventsd")).expect("fseventsd");
+    fs::write(root.path().join(".DS_Store"), b"ds-store").expect("ds store");
+    fs::write(root.path().join("._pad.wav"), b"appledouble").expect("appledouble");
+
+    let data_dir = TempDir::new().unwrap();
+    let registry = RootRegistry::new(Arc::new(PathStableCloneIdentity), Duration::from_secs(3600));
+    let catalog = open_shared_catalog(data_dir.path()).expect("catalog");
+    let (session, snapshot) =
+        gate_c_register_and_index_root(&registry, &catalog, root.path().to_str().expect("path"))
+            .expect("registered-root scan with known metadata should pass");
+
+    assert_eq!(snapshot.sets.len(), 1);
+    assert_eq!(snapshot.sets[0].relative_path.as_str(), "SET");
+    assert!(!snapshot.file_instances.iter().any(|file| {
+        let relative = file.relative_path.as_str();
+        relative.contains("Spotlight")
+            || relative.contains(".Trashes")
+            || relative.contains(".fseventsd")
+            || relative.contains(".DS_Store")
+            || relative.contains("._")
+    }));
+    assert_eq!(session.observed_revision, 1);
+}
+
+#[test]
+fn gate_c_registered_root_scan_fails_closed_on_unknown_traversal_failure() {
+    use crate::device_detection::with_injected_unreadable_paths;
+
+    let root = TempDir::new().unwrap();
+    plant_registered_root_fixture(root.path());
+    fs::create_dir_all(root.path().join("unknown-dir")).expect("unknown dir");
+
+    let data_dir = TempDir::new().unwrap();
+    let registry = RootRegistry::new(Arc::new(PathStableCloneIdentity), Duration::from_secs(3600));
+    let catalog = open_shared_catalog(data_dir.path()).expect("catalog");
+
+    let error = with_injected_unreadable_paths(&["unknown-dir"], || {
+        register_root_sync(&registry, &catalog, root.path().to_str().expect("path"))
+    })
+    .expect_err("unknown traversal failure must fail closed");
+    let error_json = serde_json::to_value(&error).expect("serialize api error");
+    assert_eq!(error_json["code"], "LIBRARY_SCAN_FAILED");
+    assert!(!format!("{error:?}").contains(root.path().to_str().expect("path")));
+
+    let session = register_root_sync(&registry, &catalog, root.path().to_str().expect("path"))
+        .expect("a complete scan after the failed attempt should store the first snapshot");
+    let session_json = serde_json::to_value(&session).expect("serialize session");
+    assert_eq!(session_json["observedRevision"], 1);
 }
