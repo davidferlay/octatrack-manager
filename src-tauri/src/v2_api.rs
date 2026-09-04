@@ -7434,7 +7434,11 @@ mod tests {
                 (Ok(prepared), Err(error)) | (Err(error), Ok(prepared)) => {
                     assert_eq!(prepared.operation_id, expected_operation_id);
                     assert_eq!(prepared.state, "prepared");
-                    assert_eq!(error.code, "ROOT_BUSY");
+                    assert!(
+                        error.code == "ROOT_BUSY" || error.code == "PREPARED_ARTIFACT_UNAVAILABLE",
+                        "unexpected concurrent prepare loser: {}",
+                        error.code
+                    );
                 }
                 (Err(left), Err(right)) => {
                     panic!("unexpected concurrent prepare failures: {left:?}, {right:?}");

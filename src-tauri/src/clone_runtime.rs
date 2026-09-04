@@ -1099,6 +1099,18 @@ fn derive_clone_authority_id(
     format!("clone-authority:v1:{}", hex_digest(&hasher.finalize()))
 }
 
+/// macOS volume metadata that is not part of Octatrack user data.
+/// Only explicit names are omitted; unknown unreadable paths remain fail-closed.
+pub(crate) fn is_ignored_platform_metadata(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    matches!(
+        name,
+        ".Spotlight-V100" | ".Trashes" | ".fseventsd" | ".DS_Store"
+    ) || name.starts_with("._")
+}
+
 pub(crate) fn scan_baseline_entries(
     root: &Path,
 ) -> Result<Vec<CloneBaselineEntry>, CloneRuntimeError> {
@@ -1120,6 +1132,9 @@ fn collect_baseline_entries(
     if metadata.is_dir() {
         for entry in fs::read_dir(path).map_err(map_io_error)? {
             let entry = entry.map_err(map_io_error)?;
+            if is_ignored_platform_metadata(&entry.path()) {
+                continue;
+            }
             collect_baseline_entries(root, &entry.path(), entries)?;
         }
         return Ok(());
@@ -1144,6 +1159,9 @@ fn copy_tree_nofollow(from: &Path, to: &Path) -> Result<(), CloneRuntimeError> {
     fs::create_dir_all(to).map_err(map_io_error)?;
     for entry in fs::read_dir(from).map_err(map_io_error)? {
         let entry = entry.map_err(map_io_error)?;
+        if is_ignored_platform_metadata(&entry.path()) {
+            continue;
+        }
         let metadata = fs::symlink_metadata(entry.path()).map_err(map_io_error)?;
         if metadata.file_type().is_symlink() {
             return Err(CloneRuntimeError::SymlinkForbidden);
@@ -1315,6 +1333,177 @@ mod tests {
         fs::create_dir_all(root.join("SET/UNRELATED")).unwrap();
         fs::write(root.join("SET/AUDIO/kick.wav"), b"kick-bytes").unwrap();
         fs::write(root.join("SET/UNRELATED/keep.txt"), b"sentinel\n").unwrap();
+    }
+
+    fn write_gate_c_fixture_tree(root: &Path) {
+        fs::create_dir_all(root.join("Set/AUDIO")).unwrap();
+        fs::write(root.join("Set/AUDIO/test.wav"), b"gate-c-test-bytes").unwrap();
+    }
+
+    fn baseline_relative_paths(root: &Path) -> Vec<String> {
+        scan_baseline_entries(root)
+            .unwrap()
+            .into_iter()
+            .map(|entry| entry.relative_path)
+            .collect()
+    }
+
+    #[test]
+    fn is_ignored_platform_metadata_matches_explicit_allowlist_only() {
+        assert!(is_ignored_platform_metadata(Path::new(".Spotlight-V100")));
+        assert!(is_ignored_platform_metadata(Path::new(".Trashes")));
+        assert!(is_ignored_platform_metadata(Path::new(".fseventsd")));
+        assert!(is_ignored_platform_metadata(Path::new(".DS_Store")));
+        assert!(is_ignored_platform_metadata(Path::new("._test.wav")));
+
+        assert!(!is_ignored_platform_metadata(Path::new("unexpected.bin")));
+        assert!(!is_ignored_platform_metadata(Path::new(".hidden")));
+        assert!(!is_ignored_platform_metadata(Path::new(
+            ".not-macos-metadata"
+        )));
+        assert!(!is_ignored_platform_metadata(Path::new("extra")));
+        assert!(!is_ignored_platform_metadata(Path::new("Set")));
+    }
+
+    #[test]
+    fn baseline_scan_ignores_known_macos_metadata_directories() {
+        let root = TempDir::new().unwrap();
+        write_gate_c_fixture_tree(root.path());
+        fs::create_dir_all(root.path().join(".Spotlight-V100")).unwrap();
+        fs::create_dir_all(root.path().join(".Trashes")).unwrap();
+        fs::create_dir_all(root.path().join(".fseventsd")).unwrap();
+
+        #[cfg(unix)]
+        {
+            use std::process::Command;
+
+            let fifo = root.path().join(".Spotlight-V100/pipe.fifo");
+            Command::new("mkfifo")
+                .arg(&fifo)
+                .status()
+                .expect("mkfifo should exist on unix test hosts");
+        }
+
+        let paths = baseline_relative_paths(root.path());
+        assert_eq!(paths, vec!["Set/AUDIO/test.wav".to_owned()]);
+    }
+
+    #[test]
+    fn baseline_scan_ignores_known_macos_metadata_files() {
+        let root = TempDir::new().unwrap();
+        write_gate_c_fixture_tree(root.path());
+        fs::write(root.path().join(".DS_Store"), b"ds-store").unwrap();
+        fs::write(root.path().join("Set/AUDIO/._test.wav"), b"appledouble").unwrap();
+
+        let paths = baseline_relative_paths(root.path());
+        assert_eq!(paths, vec!["Set/AUDIO/test.wav".to_owned()]);
+    }
+
+    #[test]
+    fn baseline_scan_includes_unknown_files_and_directories() {
+        let root = TempDir::new().unwrap();
+        write_gate_c_fixture_tree(root.path());
+        fs::write(root.path().join("unexpected.bin"), b"unexpected").unwrap();
+        fs::create_dir_all(root.path().join(".not-macos-metadata")).unwrap();
+        fs::write(
+            root.path().join(".not-macos-metadata/inside.txt"),
+            b"inside",
+        )
+        .unwrap();
+        fs::create_dir_all(root.path().join("extra")).unwrap();
+        fs::write(root.path().join("extra/more.bin"), b"more").unwrap();
+
+        let paths = baseline_relative_paths(root.path());
+        assert!(paths.contains(&"unexpected.bin".to_owned()));
+        assert!(paths.contains(&".not-macos-metadata/inside.txt".to_owned()));
+        assert!(paths.contains(&"extra/more.bin".to_owned()));
+        assert!(paths.contains(&"Set/AUDIO/test.wav".to_owned()));
+    }
+
+    #[test]
+    fn external_clone_verification_passes_when_macos_metadata_differs() {
+        let source_dir = TempDir::new().unwrap();
+        let clone_dir = TempDir::new().unwrap();
+        write_gate_c_fixture_tree(source_dir.path());
+        write_gate_c_fixture_tree(clone_dir.path());
+        fs::create_dir_all(source_dir.path().join(".Spotlight-V100")).unwrap();
+        fs::create_dir_all(source_dir.path().join(".fseventsd")).unwrap();
+        fs::create_dir_all(clone_dir.path().join(".Trashes")).unwrap();
+        fs::write(clone_dir.path().join(".DS_Store"), b"ds-store").unwrap();
+
+        let data_dir = TempDir::new().unwrap();
+        let registry = RootRegistry::new(Arc::new(PathStableIdentity), Duration::from_secs(3600));
+        let clone_runtime = open_shared_clone_runtime(data_dir.path()).unwrap();
+
+        let source_session = registry
+            .register(source_dir.path().to_str().unwrap())
+            .unwrap();
+        let source = registry.resolve(&source_session.root_id).unwrap();
+        let source_evidence = clone_runtime.record_source_evidence(&source).unwrap();
+
+        let clone_session = registry
+            .register(clone_dir.path().to_str().unwrap())
+            .unwrap();
+        let clone = registry.resolve(&clone_session.root_id).unwrap();
+        let verification = clone_runtime
+            .verify_external_clone(&clone, &source_evidence, true)
+            .unwrap();
+
+        assert_eq!(verification.state, CloneVerificationState::Verified);
+        assert_eq!(verification.baseline_entry_count, 1);
+    }
+
+    #[test]
+    fn baseline_scan_fails_closed_on_unreadable_unknown_paths() {
+        let missing_root = Path::new("/this/path/does/not/exist/for-clone-baseline-test");
+        let error = scan_baseline_entries(missing_root).unwrap_err();
+        assert!(matches!(error, CloneRuntimeError::Io));
+        assert!(!is_ignored_platform_metadata(missing_root));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn baseline_scan_rejects_symlink_even_when_macos_metadata_present() {
+        use std::os::unix::fs::symlink;
+
+        let source_dir = TempDir::new().unwrap();
+        write_fixture_tree(source_dir.path());
+        fs::create_dir_all(source_dir.path().join(".Spotlight-V100")).unwrap();
+        symlink(
+            source_dir.path().join("SET/AUDIO/kick.wav"),
+            source_dir.path().join("SET/AUDIO/link.wav"),
+        )
+        .unwrap();
+
+        let data_dir = TempDir::new().unwrap();
+        let registry = RootRegistry::new(Arc::new(PathStableIdentity), Duration::from_secs(3600));
+        let clone_runtime = open_shared_clone_runtime(data_dir.path()).unwrap();
+        let source_session = registry
+            .register(source_dir.path().to_str().unwrap())
+            .unwrap();
+        let source = registry.resolve(&source_session.root_id).unwrap();
+        let error = clone_runtime
+            .create_managed_clone(&registry, &source)
+            .unwrap_err();
+        assert!(matches!(error, CloneRuntimeError::SymlinkForbidden));
+    }
+
+    #[test]
+    fn verification_detects_tampering_when_macos_metadata_present() {
+        let root = TempDir::new().unwrap();
+        write_fixture_tree(root.path());
+        fs::create_dir_all(root.path().join(".Spotlight-V100")).unwrap();
+        fs::write(root.path().join(".DS_Store"), b"ds-store").unwrap();
+
+        let data_dir = TempDir::new().unwrap();
+        let registry = RootRegistry::new(Arc::new(PathStableIdentity), Duration::from_secs(3600));
+        let clone_runtime = open_shared_clone_runtime(data_dir.path()).unwrap();
+        let session = registry.register(root.path().to_str().unwrap()).unwrap();
+        let resolved = registry.resolve(&session.root_id).unwrap();
+        clone_runtime.install_test_verification(&resolved).unwrap();
+        fs::write(root.path().join("SET/AUDIO/kick.wav"), b"tampered").unwrap();
+        let error = clone_runtime.require_verified_root(&resolved).unwrap_err();
+        assert!(matches!(error, CloneRuntimeError::VerificationTampered));
     }
 
     #[test]
