@@ -10,6 +10,10 @@ personal sample names here.
 Ambiguous results, missing evidence, or a failed precondition are **STOP**.
 Do not classify those outcomes as `PASS_WITH_NOTES`.
 
+Recording a source SHA next to an artifact SHA256 in this table is not, by
+itself, source-to-artifact binding. Binding requires the provenance chain in
+the RC2 freeze rules below.
+
 ## RC1
 
 | Field | Value |
@@ -25,10 +29,20 @@ Do not classify those outcomes as `PASS_WITH_NOTES`.
 | build environment | `NOT RECORDED IN THIS LEDGER` |
 | codesign verification | `NOT RECORDED IN THIS LEDGER` |
 | DMG verification | `NOT RECORDED IN THIS LEDGER` |
+| workflow name | `NOT RECORDED IN THIS LEDGER` |
+| workflow run ID | `NOT RECORDED IN THIS LEDGER` |
+| workflow run attempt | `NOT RECORDED IN THIS LEDGER` |
+| workflow run URL | `NOT RECORDED IN THIS LEDGER` |
+| workflow checkout SHA | `NOT RECORDED IN THIS LEDGER` |
+| app binary SHA256 | `NOT RECORDED IN THIS LEDGER` |
 
 Local hash re-verification proves only that the existing artifact bytes match
 the historical SHA256. It is not a reproduction of source-to-artifact binding
 and is not a cryptographic proof of that binding.
+
+RC1 source-to-artifact binding is **not proven**. Do not infer, reconstruct, or
+backfill workflow provenance for RC1. Do not reopen RC1 under later identity
+rules.
 
 Failure boundary:
 
@@ -61,9 +75,69 @@ RC1 freeze rules:
 | source tree | `UNSET` |
 | artifact | `UNSET` |
 | artifact SHA256 | `UNSET` |
+| app binary SHA256 | `UNSET` |
+| workflow name | `UNSET` |
+| workflow run ID | `UNSET` |
+| workflow run attempt | `UNSET` |
+| workflow run URL | `UNSET` |
+| workflow checkout SHA | `UNSET` |
+| build environment | `UNSET` |
+| codesign verification | `UNSET` |
+| DMG verification | `UNSET` |
 
 Do not infer these values from the current `main` tip. They stay `UNSET` until
 an explicit RC2 freeze records them together.
+
+### RC2 provenance freeze rules
+
+An RC2 artifact may be frozen only when this chain is recorded and mutually
+consistent:
+
+```text
+frozen source commit/tree
+→ workflow checkout
+→ same workflow runでbuild
+→ artifact hash取得
+→ frozen RC artifactとして保存
+```
+
+Required evidence for that chain:
+
+- frozen `source commit` SHA
+- frozen `source tree` SHA belonging to that commit
+- `workflow name`
+- `workflow run ID`, `workflow run attempt`, and canonical `workflow run URL`
+- `workflow checkout SHA` actually checked out by that run
+- `artifact` filename
+- DMG SHA256
+- app binary SHA256
+- `build environment`
+- `codesign verification` result
+- `DMG verification` result
+
+Consistency required before freeze:
+
+- `workflow checkout SHA` equals frozen `source commit`
+- `source tree` is the tree of that frozen commit
+- the named workflow run produced the recorded DMG in the same run
+- DMG SHA256 and app binary SHA256 were taken from that run's outputs
+- `workflow name` is `RC Release Build`, or a successor that does not overwrite
+  prior RC provenance
+
+STOP. Do not freeze RC2 when any of the following is true:
+
+- workflow checkout SHA and frozen source SHA disagree
+- workflow run provenance is missing
+- the artifact was rebuilt or replaced outside that workflow run
+- the origin of the artifact hash is unknown
+- the same RC number or tag was overwritten
+- a unique source-to-artifact correspondence cannot be proven
+
+Missing, ambiguous, or mismatched provenance is **STOP**, not
+`PASS_WITH_NOTES`. Keep RC2 `NOT_CREATED`.
+
+Parallel SHA256 and source commit values in this table are insufficient without
+the chain above.
 
 ## RC2 start conditions
 
@@ -71,11 +145,16 @@ All of the following must be true before RC2 may be created:
 
 - The RC workflow overwrite behavior is resolved.
 - The Gate C impact of FAT-HASH-1 is assessed, and any blocking finding is
-  resolved before the RC2 source is frozen.
+  resolved before the RC2 source is frozen. See
+  [FAT_HASH_1_ASSESSMENT.md](FAT_HASH_1_ASSESSMENT.md).
+- If FAT-HASH-1 remains `ASSESSMENT_REQUIRED` or `BLOCKED`, keep RC2
+  `NOT_CREATED`.
 - All CI checks for the intended `main` source commit are green.
 - No open Pull Request or required fix remains that belongs in the RC2 source.
-- The RC number, source commit SHA, tree SHA, and artifact SHA256 can be
-  recorded as a unique, immutable tuple.
+- The RC number, source commit SHA, tree SHA, artifact SHA256, app binary
+  SHA256, workflow name, run ID, run attempt, canonical run URL, and workflow
+  checkout SHA can be recorded as a unique, immutable tuple with provenance
+  consistency.
 
 If any condition is unmet, keep RC2 `NOT_CREATED`.
 
@@ -96,7 +175,11 @@ root and without applying a rename.
 
 Gate C is PASS only when every item below is demonstrated:
 
-- Artifact identity is verified against the frozen RC filename and SHA256.
+- Artifact identity is verified against the frozen RC filename, DMG SHA256, and
+  app binary SHA256.
+- Source-to-artifact provenance is verified: workflow name, run ID, run
+  attempt, canonical URL, and workflow checkout SHA bind the frozen source
+  commit/tree to that artifact through the freeze chain above.
 - Automated Gate C is PASS.
 - External clone verification is PASS.
 - Rename Plan → Prepare → restart → Continue → Apply completes on the
