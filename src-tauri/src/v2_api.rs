@@ -7435,8 +7435,7 @@ mod tests {
                     assert_eq!(prepared.operation_id, expected_operation_id);
                     assert_eq!(prepared.state, "prepared");
                     assert!(
-                        error.code == "ROOT_BUSY"
-                            || error.code == "PREPARED_ARTIFACT_UNAVAILABLE",
+                        error.code == "ROOT_BUSY" || error.code == "PREPARED_ARTIFACT_UNAVAILABLE",
                         "unexpected concurrent prepare loser: {}",
                         error.code
                     );
