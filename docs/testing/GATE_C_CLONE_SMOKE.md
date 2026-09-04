@@ -28,7 +28,12 @@ are ignored.
 - The original SD/CF card stays disconnected for the entire smoke.
 - The clone is not the sole copy of personal audio or project data.
 - A restorable image/checksum manifest of the clone exists before rename.
-- The application build under review and its exact commit are recorded.
+- Human Gate C uses the frozen RC candidate recorded in
+  `GATE_C_RC_LEDGER.md`. Install or launch from that verified DMG only.
+- Do not rebuild the application from source for this smoke, even from the
+  frozen commit.
+- Confirm the launched executable SHA256 matches the recorded inner app binary
+  SHA256.
 - No updater, release, deploy, cloud sync, or remote filesystem is involved.
 
 If any precondition cannot be demonstrated, stop without registering the root.
@@ -48,7 +53,10 @@ hardware remains outstanding** before this checklist can be signed off end-to-en
 
 ## Real-hardware clone-load smoke
 
-1. Build or install the reviewed application from the recorded commit.
+1. Verify the frozen RC DMG (`hdiutil verify` must succeed), record the
+   codesign/`spctl` outcome, install or launch from that DMG, and confirm the
+   launched executable SHA256 matches the recorded inner app binary SHA256.
+   Rebuilding from the recorded commit is STOP.
 2. Register the disposable clone read-only and confirm baseline catalog scan
    shows the intended source sample as `Resolved` with zero blocking
    references.
@@ -70,7 +78,7 @@ hardware remains outstanding** before this checklist can be signed off end-to-en
 Record the following in the Pull Request or a follow-up issue without absolute
 paths, volume identifiers, personal filenames, or media fingerprints:
 
-- application commit and host OS
+- frozen RC identity, DMG SHA256, launched executable SHA256 match, and host OS
 - clone provenance reviewed: yes/no
 - original media disconnected: yes/no
 - baseline manifest verified: yes/no
