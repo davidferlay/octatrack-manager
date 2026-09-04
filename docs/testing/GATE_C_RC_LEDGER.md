@@ -324,9 +324,11 @@ C.
 - Original CF/SD media stay disconnected for the entire Gate C run.
 - Sole-copy media are forbidden.
 - Only a verified disposable clone may receive writes.
-- A pre-run manifest of the clone is required before root registration and
-  rename. That capture is Human Gate C execution evidence, not a pre-freeze
-  FAT-HASH required item.
+- A pre-run per-file byte manifest of the clone is required before root
+  registration and rename. Capture and compare with
+  `scripts/gate-c-byte-manifest.mjs`. That capture is Human Gate C execution
+  evidence, not a pre-freeze FAT-HASH required item. Whole-image checksums
+  are not a substitute.
 - Updater, cloud sync, remote filesystems, public release, and public
   distribution are out of scope.
 - After a code change, do not reuse the same RC. Advance to the next RC
@@ -358,7 +360,9 @@ Gate C is PASS only when every item below is demonstrated:
   verified disposable clone, using the launched frozen candidate.
 - The operation ends `COMMITTED` / `VERIFIED`.
 - Missing / Invalid / Unresolved reference counts are 0.
-- Unrelated bytes are unchanged versus the pre-run manifest.
+- Unrelated bytes are unchanged versus the pre-run per-file byte manifest.
+  Compare with `scripts/gate-c-byte-manifest.mjs` must report `PASS` and
+  `unrelated_entries_unchanged: true`.
 - Octatrack MkII can load the Set and Project from the clone.
 - The renamed sample can be played on that hardware.
 - Original media remained disconnected for the entire run.

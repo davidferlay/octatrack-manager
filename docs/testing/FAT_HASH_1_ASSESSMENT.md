@@ -55,12 +55,12 @@ Transition:
 | verdict | `UNSET` |
 | assessed SHA | `UNSET` |
 | assessed scope | Gate C rename Apply, committed verification, post-apply rescan, Missing / Invalid / Unresolved counts, unrelated-byte proof |
-| this docs-only update | does **not** complete the assessment |
+| this update | adds `scripts/gate-c-byte-manifest.mjs` and tests; does **not** complete the assessment |
 
-This read-only investigation records code evidence. It does not run Gate C, does
-not access removable media, and does not add tests. Unrun tests are `NOT_RUN`.
+This investigation records code evidence. It does not run Human Gate C and
+does not access removable media. Unrun FAT-HASH tests remain `NOT_RUN`.
 Unconfirmed items are `UNKNOWN`. Do not record `ASSESSED` or
-`ACCEPTED_WITH_EVIDENCE` from this document alone.
+`ACCEPTED_WITH_EVIDENCE` from this update alone.
 
 While status is `ASSESSMENT_REQUIRED` / `UNSET`, or `ASSESSED` / `BLOCKED`, RC2
 stays `NOT_CREATED`.
@@ -122,7 +122,7 @@ remaining uncertainty.
 | Committed verification of sidecar | Live sidecar bytes vs plan sidecar hash | No. Direct hash | `verify_sidecar_postconditions()` → `hash_live_source()` | CONFIRMED | Protects sidecar identity for `COMMITTED` / `VERIFIED`. |
 | Catalog destination hash compared after rescan | Post-scan `file_instances` hash vs `plan.source_content_hash` | Uses the post-scan catalog hash, which may be reused if a baseline dest entry existed | `evaluate_rename_committed_verification()` `DESTINATION_HASH_MISMATCH` | CONFIRMED as an extra catalog check after live audio hash. A stale dest catalog hash would fail this check, not skip the live hash. | Not shown to create a false `COMMITTED` / `VERIFIED` pass. Residual if dest baseline reuse exists remains `UNKNOWN`. |
 | Missing / Invalid / Unresolved | Live Project/Bank path resolution against current inventory **paths** | No content-hash comparison | `scan_state_inventory()` uses `inventory_paths` from `file_instances` relative paths; `resolve_project_reference()`; `count_sample_reference_status()` / `count_unresolved_planned_references()` | CONFIRMED path-based. Whether a same-path stale file with different bytes can still be `Resolved` is expected (`UNKNOWN` as a byte-identity question, but that identity is covered by live destination hash). | Counts do not consume reused content hashes. Gate C still requires counts = 0 **and** live destination/project/sidecar hashes. |
-| Unrelated-byte invariance | Pre/post clone manifest of file path, size, and content hash | Independent of catalog reuse | `src-tauri/src/clone_runtime.rs` `scan_baseline_entries()` hashes files directly; `src-tauri/src/gate_c_clone_rescan.rs` `snapshot_manifest()` / `sentinel_unchanged()`; `GATE_C_CLONE_SMOKE.md` defines the Human Gate C compare step | CONFIRMED that the defined procedure hashes file bytes independently of catalog reuse. Actual Human Gate C clone pre-run/post-run manifests are execution evidence, not pre-freeze required evidence. | Catalog reuse does not supply unrelated-byte proof. Human Gate C still must compare manifests after freeze. |
+| Unrelated-byte invariance | Pre/post clone per-file path, type, size, and SHA-256 | Independent of catalog reuse | `scripts/gate-c-byte-manifest.mjs`; tests `scripts/gate-c-byte-manifest.test.mjs`; also `clone_runtime.rs` `scan_baseline_entries()` and `gate_c_clone_rescan.rs` `snapshot_manifest()` | CONFIRMED procedure and unit tests. Actual Human Gate C clone capture is post-freeze execution evidence. | Catalog reuse does not supply unrelated-byte proof. |
 | Rename source planning | Live source bytes | No. Direct hash | `build_rename_planning_facts()` `hash_live_file()`; `ot-plan` `StaleSourceHashFreshness` | CONFIRMED | Source planning does not reuse catalog hash. |
 | Catalog vs live projection before plan | State documents, slots, usage edges, sidecars | Does not compare `file_instances` hashes | `verify_catalog_matches_live_scan()` | CONFIRMED | Not a content-hash reuse path. |
 
@@ -178,6 +178,14 @@ evaluates those checks, then stores the new snapshot.
 Clone baseline entries and Gate C synthetic manifests hash file bytes
 directly. They do not call `can_reuse_hash()`.
 
+Human Gate C now has a dedicated per-file tool,
+`scripts/gate-c-byte-manifest.mjs`, with tests in
+`scripts/gate-c-byte-manifest.test.mjs`. Capture records root-relative path,
+entry type, byte size, and `sha256:<hex>` from file bytes. Compare uses those
+fields only; mtime is not content identity. The same-size / same-mtime /
+different-content case is detected. Actual disposable-clone capture remains
+post-freeze Human Gate C execution evidence.
+
 ## Required evidence before FAT-HASH can become `ASSESSED`
 
 Map each required item to a Gate C condition. Do not demand tests that only
@@ -188,7 +196,7 @@ hashed.
 |---|---|---|
 | Code confirmation that committed dest/project/sidecar checks live-hash | `COMMITTED` / `VERIFIED` audio, Project, sidecar identity | CONFIRMED in this investigation |
 | Code confirmation that Missing / Invalid / Unresolved use inventory paths | counts = 0 | CONFIRMED in this investigation |
-| Code and procedure confirmation that unrelated-byte verification does not use catalog hash reuse, and that an independent content-hash manifest generate/compare procedure is defined | independence of unrelated-byte proof from catalog reuse | CONFIRMED for clone baseline hashing, Gate C synthetic `snapshot_manifest()` / `sentinel_unchanged()`, and the defined Human Gate C compare step. Actual disposable-clone pre-run manifest capture is not required here. |
+| Code and procedure confirmation that unrelated-byte verification does not use catalog hash reuse, and that an independent content-hash manifest generate/compare procedure is defined | independence of unrelated-byte proof from catalog reuse | CONFIRMED: `scripts/gate-c-byte-manifest.mjs` hashes file bytes with SHA-256, never catalog reuse; tests in `scripts/gate-c-byte-manifest.test.mjs` cover deterministic capture, same-size/same-mtime content change, expected-only PASS, and unexpected STOP. Actual Human Gate C clone capture remains post-freeze execution evidence and is not required here. |
 | Code confirmation that reuse is path-keyed | first post-rename destination scan | CONFIRMED |
 | Automated test: successful unused-destination plan implies no destination baseline path, so first dest scan hashes | destination content at first post-rename scan | `NOT_RUN` |
 | Recorded residual risk and implementation policy | assessment completeness | incomplete; status remains `ASSESSMENT_REQUIRED` |
@@ -208,9 +216,10 @@ invariance. The unused-destination baseline-path test above remains `NOT_RUN`.
 Human Gate C runs after RC2 freeze and artifact-identity confirmation. It is
 not a pre-freeze FAT-HASH completion condition.
 
-- Capture and verify the actual disposable clone's pre-run manifest as a Human
-  Gate C precondition, before root registration and before rename, as already
-  required by `GATE_C_CLONE_SMOKE.md`. Do not relax those safety boundaries.
+- Capture and verify the actual disposable clone's pre-run manifest with
+  `scripts/gate-c-byte-manifest.mjs` as a Human Gate C precondition, before root
+  registration and before rename, as required by `GATE_C_CLONE_SMOKE.md`. Do
+  not relax those safety boundaries.
 - Post-run manifest comparison and unrelated-bytes invariance remain required
   for Gate C PASS.
 - Those execution items remaining `NOT_RUN` before freeze do not, by
@@ -240,7 +249,7 @@ Do **not** freeze-block RC2 solely because general catalog reuse can occur or
 can be reproduced on coarse-timestamp media, while Gate C dest/project/sidecar
 identity and unrelated-byte proof remain independently hashed.
 
-Do **not** treat this docs-only update as `ACCEPTED_WITH_EVIDENCE`.
+Do **not** treat this update as `ACCEPTED_WITH_EVIDENCE`.
 
 ## Remaining general hardening
 

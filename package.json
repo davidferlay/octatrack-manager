@@ -19,6 +19,7 @@
     "prepare": "husky",
     "test": "pnpm run typecheck && pnpm run test:frontend && pnpm run test:rust",
     "test:frontend": "vitest run",
+    "test:gate-c-manifest": "node --test scripts/gate-c-byte-manifest.test.mjs",
     "test:e2e": "playwright test",
     "test:rust": "cd src-tauri && cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace",
     "docs:watch": "pnpm --dir user-guide run start",
