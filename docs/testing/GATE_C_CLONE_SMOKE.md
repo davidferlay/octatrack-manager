@@ -14,6 +14,13 @@ in `src-tauri/src/gate_c_clone_rescan.rs`, `src-tauri/src/v2_api.rs` recovery
 tests, and `scripts/gate-c-synthetic-smoke.sh`. Those artifacts do not replace
 this checklist.
 
+Clone integrity excludes explicitly-known host OS metadata (for example
+`.Spotlight-V100`, `.Trashes`, `.fseventsd`, `.DS_Store`, and AppleDouble
+`._*` sidecars). Unknown files and unreadable unknown paths remain fail-closed.
+This policy applies to source evidence, managed clone creation, external clone
+verification, and re-verification semantics; it does not mean all macOS dotfiles
+are ignored.
+
 ## Preconditions
 
 - A human prepares a disposable clone from non-original media. Record provenance
