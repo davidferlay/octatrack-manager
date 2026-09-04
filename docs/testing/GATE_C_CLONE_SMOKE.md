@@ -14,6 +14,10 @@ in `src-tauri/src/gate_c_clone_rescan.rs`, `src-tauri/src/v2_api.rs` recovery
 tests, and `scripts/gate-c-synthetic-smoke.sh`. Those artifacts do not replace
 this checklist.
 
+This checklist runs after the frozen RC candidate is recorded in
+`GATE_C_RC_LEDGER.md`. Executing it is not required to complete FAT-HASH
+assessment or to freeze RC2. Missing evidence here is STOP for Human Gate C.
+
 Clone integrity excludes explicitly-known host OS metadata (for example
 `.Spotlight-V100`, `.Trashes`, `.fseventsd`, `.DS_Store`, and AppleDouble
 `._*` sidecars). Unknown files and unreadable unknown paths remain fail-closed.

@@ -313,12 +313,20 @@ All of the following must be true before RC2 may be created:
 
 If any condition is unmet, keep RC2 `NOT_CREATED`.
 
+Human Gate C, including disposable-clone pre-run manifest capture, runs after
+RC2 freeze and artifact-identity confirmation. An unrun Human Gate C
+execution item does not, by itself, keep FAT-HASH `ASSESSMENT_REQUIRED` or RC2
+`NOT_CREATED`. Missing that evidence at execution time is STOP for Human Gate
+C.
+
 ## Gate C safety boundary
 
 - Original CF/SD media stay disconnected for the entire Gate C run.
 - Sole-copy media are forbidden.
 - Only a verified disposable clone may receive writes.
-- A pre-run manifest of the clone is required.
+- A pre-run manifest of the clone is required before root registration and
+  rename. That capture is Human Gate C execution evidence, not a pre-freeze
+  FAT-HASH required item.
 - Updater, cloud sync, remote filesystems, public release, and public
   distribution are out of scope.
 - After a code change, do not reuse the same RC. Advance to the next RC
