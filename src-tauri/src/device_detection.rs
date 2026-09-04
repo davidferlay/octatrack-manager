@@ -1,5 +1,7 @@
+use crate::host_metadata_policy::is_ignored_host_metadata;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::ErrorKind;
 use std::path::Path;
 use sysinfo::Disks;
 use walkdir::WalkDir;
@@ -412,6 +414,335 @@ pub fn scan_directory(path: &str) -> ScanResult {
         locations,
         standalone_projects,
     }
+}
+
+/// Fail-closed error for next-generation registered-root scans.
+/// Messages never include filesystem paths.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub(crate) enum DeviceScanError {
+    PermissionDenied,
+    EntryUnreadable,
+    RootRemoved,
+    Io,
+}
+
+impl DeviceScanError {
+    pub(crate) fn into_storage_error(self) -> ot_storage_ports::StorageError {
+        let message = match self {
+            DeviceScanError::RootRemoved => {
+                "ROOT_REMOVED: the registered root is no longer available"
+            }
+            DeviceScanError::PermissionDenied
+            | DeviceScanError::EntryUnreadable
+            | DeviceScanError::Io => {
+                "LIBRARY_SCAN_FAILED: registered root scan could not be completed"
+            }
+        };
+        ot_storage_ports::StorageError::new(message)
+    }
+}
+
+fn map_io_to_scan_error(error: std::io::Error) -> DeviceScanError {
+    match error.kind() {
+        ErrorKind::NotFound => DeviceScanError::RootRemoved,
+        ErrorKind::PermissionDenied => DeviceScanError::PermissionDenied,
+        _ => DeviceScanError::EntryUnreadable,
+    }
+}
+
+fn map_walkdir_error(error: walkdir::Error) -> DeviceScanError {
+    match error.io_error() {
+        Some(io_error) => map_io_to_scan_error(std::io::Error::from(io_error.kind())),
+        None => DeviceScanError::Io,
+    }
+}
+
+#[cfg(test)]
+fn relative_scan_path(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .map(|relative| relative.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+thread_local! {
+    static INJECTED_UNREADABLE_RELATIVE_PATHS: std::cell::RefCell<Vec<String>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
+pub(crate) fn with_injected_unreadable_paths<F, T>(relative_paths: &[&str], f: F) -> T
+where
+    F: FnOnce() -> T,
+{
+    struct Guard;
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            INJECTED_UNREADABLE_RELATIVE_PATHS.with(|cell| cell.borrow_mut().clear());
+        }
+    }
+    INJECTED_UNREADABLE_RELATIVE_PATHS.with(|cell| {
+        *cell.borrow_mut() = relative_paths
+            .iter()
+            .map(|path| (*path).to_string())
+            .collect();
+    });
+    let _guard = Guard;
+    f()
+}
+
+pub(crate) fn scan_path_injected_unreadable(root: &Path, path: &Path) -> bool {
+    #[cfg(test)]
+    {
+        let relative = relative_scan_path(root, path);
+        if relative.is_empty() {
+            return false;
+        }
+        INJECTED_UNREADABLE_RELATIVE_PATHS.with(|cell| {
+            cell.borrow().iter().any(|injected| {
+                relative == *injected || relative.starts_with(&format!("{injected}/"))
+            })
+        })
+    }
+    #[cfg(not(test))]
+    {
+        let _ = (root, path);
+        false
+    }
+}
+
+fn fail_if_injected_unreadable(root: &Path, path: &Path) -> Result<(), DeviceScanError> {
+    if scan_path_injected_unreadable(root, path) {
+        Err(DeviceScanError::EntryUnreadable)
+    } else {
+        Ok(())
+    }
+}
+
+fn skip_strict_entry(path: &Path) -> bool {
+    is_backups_dir(path) || is_ignored_host_metadata(path)
+}
+
+fn is_real_directory_strict(path: &Path) -> Result<bool, DeviceScanError> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => Ok(!metadata.file_type().is_symlink() && metadata.file_type().is_dir()),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(map_io_to_scan_error(error)),
+    }
+}
+
+fn is_real_file_strict(path: &Path) -> Result<bool, DeviceScanError> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => Ok(!metadata.file_type().is_symlink() && metadata.file_type().is_file()),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(map_io_to_scan_error(error)),
+    }
+}
+
+fn is_octatrack_set_strict(root: &Path, path: &Path) -> Result<bool, DeviceScanError> {
+    fail_if_injected_unreadable(root, path)?;
+    if !is_real_directory_strict(path)? {
+        return Ok(false);
+    }
+    let entries = fs::read_dir(path).map_err(map_io_to_scan_error)?;
+    for entry in entries {
+        let entry = entry.map_err(map_io_to_scan_error)?;
+        fail_if_injected_unreadable(root, &entry.path())?;
+        if is_ignored_host_metadata(&entry.path()) {
+            continue;
+        }
+        let is_audio_dir = entry.file_name() == "AUDIO"
+            && entry.file_type().map_err(map_io_to_scan_error)?.is_dir();
+        if is_audio_dir {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn is_octatrack_project_strict(root: &Path, path: &Path) -> Result<bool, DeviceScanError> {
+    fail_if_injected_unreadable(root, path)?;
+    if !is_real_directory_strict(path)? {
+        return Ok(false);
+    }
+    let entries = fs::read_dir(path).map_err(map_io_to_scan_error)?;
+    for entry in entries {
+        let entry = entry.map_err(map_io_to_scan_error)?;
+        fail_if_injected_unreadable(root, &entry.path())?;
+        if is_ignored_host_metadata(&entry.path()) {
+            continue;
+        }
+        if !entry.file_type().map_err(map_io_to_scan_error)?.is_file() {
+            continue;
+        }
+        if entry.path().extension().is_some_and(|ext| ext == "work") {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn has_valid_audio_pool_strict(root: &Path, audio_path: &Path) -> Result<bool, DeviceScanError> {
+    fail_if_injected_unreadable(root, audio_path)?;
+    if !is_real_directory_strict(audio_path)? {
+        return Ok(false);
+    }
+    for entry in WalkDir::new(audio_path)
+        .follow_links(false)
+        .max_depth(2)
+        .into_iter()
+        .filter_entry(|entry| !skip_strict_entry(entry.path()))
+    {
+        let entry = entry.map_err(map_walkdir_error)?;
+        fail_if_injected_unreadable(root, entry.path())?;
+        if skip_strict_entry(entry.path()) {
+            continue;
+        }
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        if let Some(ext) = entry.path().extension() {
+            let ext_str = ext.to_string_lossy().to_lowercase();
+            if ext_str == "wav" || ext_str == "aif" || ext_str == "aiff" {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
+fn scan_for_projects_strict(
+    root: &Path,
+    set_path: &Path,
+) -> Result<Vec<OctatrackProject>, DeviceScanError> {
+    let mut projects = Vec::new();
+    let entries = fs::read_dir(set_path).map_err(map_io_to_scan_error)?;
+    for entry in entries {
+        let entry = entry.map_err(map_io_to_scan_error)?;
+        let path = entry.path();
+        fail_if_injected_unreadable(root, &path)?;
+        if skip_strict_entry(&path) {
+            continue;
+        }
+        if path.file_name().and_then(|name| name.to_str()) == Some("AUDIO") {
+            continue;
+        }
+        if is_real_directory_strict(&path)? && is_octatrack_project_strict(root, &path)? {
+            projects.push(OctatrackProject {
+                name: path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("Unknown")
+                    .to_string(),
+                path: path.to_string_lossy().to_string(),
+                has_project_file: is_real_file_strict(&path.join("project.work"))?,
+                has_banks: is_real_file_strict(&path.join("bank01.work"))?,
+            });
+        }
+    }
+    Ok(projects)
+}
+
+fn scan_for_sets_strict(
+    location_path: &Path,
+    max_depth: usize,
+) -> Result<(Vec<OctatrackSet>, Vec<OctatrackProject>), DeviceScanError> {
+    let mut sets = Vec::new();
+    let mut standalone_projects = Vec::new();
+    let mut set_paths = std::collections::HashSet::new();
+
+    for entry in WalkDir::new(location_path)
+        .follow_links(false)
+        .max_depth(max_depth)
+        .into_iter()
+        .filter_entry(|entry| !skip_strict_entry(entry.path()))
+    {
+        let entry = entry.map_err(map_walkdir_error)?;
+        let path = entry.path();
+        fail_if_injected_unreadable(location_path, path)?;
+        if skip_strict_entry(path) {
+            continue;
+        }
+        if is_octatrack_set_strict(location_path, path)? {
+            let audio_pool = path.join("AUDIO");
+            let projects = scan_for_projects_strict(location_path, path)?;
+            let has_audio_pool = is_real_directory_strict(&audio_pool)?
+                && has_valid_audio_pool_strict(location_path, &audio_pool)?;
+            if let Ok(canonical_path) = path.canonicalize() {
+                set_paths.insert(canonical_path);
+            }
+            sets.push(OctatrackSet {
+                name: path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("Unknown")
+                    .to_string(),
+                path: path.to_string_lossy().to_string(),
+                has_audio_pool,
+                projects,
+            });
+        }
+    }
+
+    for entry in WalkDir::new(location_path)
+        .follow_links(false)
+        .max_depth(max_depth)
+        .into_iter()
+        .filter_entry(|entry| !skip_strict_entry(entry.path()))
+    {
+        let entry = entry.map_err(map_walkdir_error)?;
+        let path = entry.path();
+        fail_if_injected_unreadable(location_path, path)?;
+        if skip_strict_entry(path) {
+            continue;
+        }
+        if is_octatrack_project_strict(location_path, path)? {
+            let is_set_or_part_of_set = if let Ok(canonical_path) = path.canonicalize() {
+                set_paths
+                    .iter()
+                    .any(|set_path| canonical_path.starts_with(set_path))
+            } else {
+                return Err(DeviceScanError::Io);
+            };
+            if !is_set_or_part_of_set {
+                standalone_projects.push(OctatrackProject {
+                    name: path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or("Unknown")
+                        .to_string(),
+                    path: path.to_string_lossy().to_string(),
+                    has_project_file: is_real_file_strict(&path.join("project.work"))?,
+                    has_banks: is_real_file_strict(&path.join("bank01.work"))?,
+                });
+            }
+        }
+    }
+
+    Ok((sets, standalone_projects))
+}
+
+/// Fail-closed scan used by next-generation registered roots.
+/// Known host metadata is ignored before descent; unknown I/O errors abort.
+pub(crate) fn scan_directory_strict(path: &Path) -> Result<ScanResult, DeviceScanError> {
+    fail_if_injected_unreadable(path, path)?;
+    let metadata = fs::symlink_metadata(path).map_err(map_io_to_scan_error)?;
+    if metadata.file_type().is_symlink() || !metadata.file_type().is_dir() {
+        return Err(DeviceScanError::RootRemoved);
+    }
+
+    let (sets, standalone_projects) = scan_for_sets_strict(path, 3)?;
+    if sets.is_empty() && standalone_projects.is_empty() {
+        return Ok(ScanResult {
+            locations: Vec::new(),
+            standalone_projects: Vec::new(),
+        });
+    }
+    let (locations, standalone_projects) = group_sets_by_parent(sets, standalone_projects);
+    Ok(ScanResult {
+        locations,
+        standalone_projects,
+    })
 }
 
 /// Mount points we never walk.
@@ -1021,5 +1352,141 @@ mod tests {
 
         let result = scan_directory(&temp_dir.path().to_string_lossy());
         let _ = result; // Verify no crash
+    }
+
+    fn plant_known_host_metadata(root: &Path) {
+        fs::create_dir_all(root.join(".Spotlight-V100")).unwrap();
+        fs::create_dir_all(root.join(".Trashes")).unwrap();
+        fs::create_dir_all(root.join(".fseventsd")).unwrap();
+        fs::write(root.join(".DS_Store"), b"ds-store").unwrap();
+        fs::write(root.join("._appledouble"), b"appledouble").unwrap();
+    }
+
+    fn fixture_set_with_project(root: &Path) {
+        let set_path = create_set(root, "SET", false);
+        create_project(&set_path, "PROJECT");
+    }
+
+    #[test]
+    fn strict_scan_ignores_known_host_metadata() {
+        let temp = TempDir::new().unwrap();
+        fixture_set_with_project(temp.path());
+        plant_known_host_metadata(temp.path());
+
+        let result = scan_directory_strict(temp.path()).unwrap();
+        assert_eq!(result.locations.len(), 1);
+        assert_eq!(result.locations[0].sets.len(), 1);
+        assert_eq!(result.locations[0].sets[0].name, "SET");
+        assert!(result
+            .locations
+            .iter()
+            .flat_map(|location| location.sets.iter())
+            .all(|set| set.name != ".Spotlight-V100"
+                && set.name != ".Trashes"
+                && set.name != ".fseventsd"));
+        assert!(result
+            .standalone_projects
+            .iter()
+            .all(|project| !project.name.starts_with('.')));
+    }
+
+    #[test]
+    fn strict_scan_fails_closed_on_unknown_unreadable_directory() {
+        let temp = TempDir::new().unwrap();
+        fixture_set_with_project(temp.path());
+        fs::create_dir_all(temp.path().join("unknown-dir")).unwrap();
+
+        let error =
+            with_injected_unreadable_paths(&["unknown-dir"], || scan_directory_strict(temp.path()))
+                .unwrap_err();
+        assert_eq!(error, DeviceScanError::EntryUnreadable);
+    }
+
+    #[test]
+    fn strict_scan_fails_closed_on_unknown_entry_error() {
+        let temp = TempDir::new().unwrap();
+        fixture_set_with_project(temp.path());
+        fs::write(temp.path().join("SET/broken-entry"), b"entry").unwrap();
+
+        let error = with_injected_unreadable_paths(&["SET/broken-entry"], || {
+            scan_directory_strict(temp.path())
+        })
+        .unwrap_err();
+        assert_eq!(error, DeviceScanError::EntryUnreadable);
+    }
+
+    #[test]
+    fn strict_scan_does_not_ignore_unknown_dot_directory() {
+        let temp = TempDir::new().unwrap();
+        fixture_set_with_project(temp.path());
+        fs::create_dir_all(temp.path().join(".custom")).unwrap();
+        fs::write(temp.path().join(".custom/sentinel-file"), b"sentinel").unwrap();
+
+        let result = scan_directory_strict(temp.path()).unwrap();
+        assert_eq!(result.locations[0].sets[0].name, "SET");
+    }
+
+    #[test]
+    fn strict_scan_treats_known_metadata_differently_from_unknown_dot_data() {
+        let temp = TempDir::new().unwrap();
+        fixture_set_with_project(temp.path());
+        fs::create_dir_all(temp.path().join(".Spotlight-V100")).unwrap();
+        create_project(temp.path(), ".custom");
+
+        let result = scan_directory_strict(temp.path()).unwrap();
+        assert!(result
+            .standalone_projects
+            .iter()
+            .any(|project| project.name == ".custom"));
+        assert!(!result
+            .standalone_projects
+            .iter()
+            .any(|project| project.name == ".Spotlight-V100"));
+        assert!(!result
+            .locations
+            .iter()
+            .flat_map(|location| location.sets.iter())
+            .any(|set| set.name == ".Spotlight-V100"));
+    }
+
+    #[test]
+    fn strict_scan_of_normal_fixture_matches_legacy_scan_directory() {
+        let temp = TempDir::new().unwrap();
+        fixture_set_with_project(temp.path());
+
+        let legacy = scan_directory(&temp.path().to_string_lossy());
+        let strict = scan_directory_strict(temp.path()).unwrap();
+        assert_eq!(legacy.locations.len(), strict.locations.len());
+        assert_eq!(
+            legacy.locations[0].sets[0].name,
+            strict.locations[0].sets[0].name
+        );
+        assert_eq!(
+            legacy.locations[0].sets[0].projects.len(),
+            strict.locations[0].sets[0].projects.len()
+        );
+        assert_eq!(
+            legacy.locations[0].sets[0].projects[0].name,
+            strict.locations[0].sets[0].projects[0].name
+        );
+        assert_eq!(
+            legacy.standalone_projects.len(),
+            strict.standalone_projects.len()
+        );
+    }
+
+    #[test]
+    fn legacy_scan_directory_still_succeeds_when_strict_scan_is_injected_to_fail() {
+        let temp = TempDir::new().unwrap();
+        fixture_set_with_project(temp.path());
+        fs::create_dir_all(temp.path().join("unknown-dir")).unwrap();
+
+        let legacy = with_injected_unreadable_paths(&["unknown-dir"], || {
+            scan_directory(&temp.path().to_string_lossy())
+        });
+        assert_eq!(legacy.locations[0].sets[0].name, "SET");
+        let strict =
+            with_injected_unreadable_paths(&["unknown-dir"], || scan_directory_strict(temp.path()));
+        assert!(strict.is_err());
     }
 }

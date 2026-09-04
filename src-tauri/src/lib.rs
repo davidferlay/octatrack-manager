@@ -6,6 +6,7 @@ mod audio_runtime;
 mod catalog_runtime;
 mod clone_runtime;
 mod device_detection;
+mod host_metadata_policy;
 mod legacy_read_adapter;
 mod local_artifact;
 mod mutation_gate;

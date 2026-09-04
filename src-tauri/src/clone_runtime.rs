@@ -1100,15 +1100,9 @@ fn derive_clone_authority_id(
 }
 
 /// Host OS metadata excluded from Octatrack semantic clone integrity baselines.
-/// Only explicit names are omitted; unknown unreadable paths remain fail-closed.
+/// Delegates to the shared allowlist; clone semantics stay unchanged.
 pub(crate) fn is_ignored_clone_host_metadata(path: &Path) -> bool {
-    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
-        return false;
-    };
-    matches!(
-        name,
-        ".Spotlight-V100" | ".Trashes" | ".fseventsd" | ".DS_Store"
-    ) || name.starts_with("._")
+    crate::host_metadata_policy::is_ignored_host_metadata(path)
 }
 
 pub(crate) fn scan_baseline_entries(
