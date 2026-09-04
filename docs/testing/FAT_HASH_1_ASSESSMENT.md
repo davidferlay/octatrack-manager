@@ -7,8 +7,10 @@ gatekeeping in [GATE_C_RC_LEDGER.md](GATE_C_RC_LEDGER.md).
 Do not record local absolute paths, volume UUIDs, media fingerprints, or
 personal sample names here.
 
-Ambiguous results, missing evidence, or an unrun required test are **STOP**.
-Do not classify those outcomes as `PASS_WITH_NOTES`.
+Ambiguous results, missing Gate C required evidence, or an unrun **Gate C
+required** test are **STOP**. Unrun general-hardening tests are not STOP for
+this assessment unless a required Gate C judgment is found to consume a reused
+hash. Do not classify those outcomes as `PASS_WITH_NOTES`.
 
 ## Status and verdict contract
 
@@ -187,13 +189,17 @@ hashed.
 | Code confirmation that unrelated-byte proof uses an independent manifest | unrelated bytes unchanged | CONFIRMED for clone baseline and Gate C synthetic manifest; human pre-run manifest `NOT_RUN` |
 | Code confirmation that reuse is path-keyed | first post-rename destination scan | CONFIRMED |
 | Automated test: successful unused-destination plan implies no destination baseline path, so first dest scan hashes | destination content at first post-rename scan | `NOT_RUN` |
-| Automated test: same-size / same-mtime / different-content catalog reuse | general catalog hardening; only becomes a Gate C blocker if a Gate C judgment uses that reused hash | `NOT_RUN` |
-| Coarse-timestamp regression | general catalog hardening; Gate C blocker only if a required Gate C judgment depends on reused hashes | `NOT_RUN` |
 | Recorded residual risk and implementation policy | assessment completeness | incomplete; status remains `ASSESSMENT_REQUIRED` |
 
-New tests are needed only for the `NOT_RUN` rows. Existing tests already cover
-ordinary reuse-on-unchanged-metadata, destination occupancy, Project tamper
-rejection, and synthetic unrelated-sentinel invariance.
+Same-size / same-mtime / different-content catalog reuse and coarse-timestamp
+regressions are **not** Gate C required evidence while dest/project/sidecar
+identity and unrelated-byte proof remain independently hashed. They become
+required for `ASSESSED` only if a later finding shows a required Gate C
+judgment consumes a reused catalog hash.
+
+Existing tests already cover ordinary reuse-on-unchanged-metadata, destination
+occupancy, Project tamper rejection, and synthetic unrelated-sentinel
+invariance. The unused-destination baseline-path test above remains `NOT_RUN`.
 
 ## RC2 blocking conditions
 
@@ -203,7 +209,9 @@ Keep RC2 `NOT_CREATED` when any of the following is true:
 - status/verdict is `ASSESSED` / `BLOCKED`
 - a required Gate C judgment depends on reused catalog hashes
 - the Gate C impact of reuse remains `UNKNOWN`
-- required evidence in the table above is still missing
+- required Gate C evidence in the table above is still missing
+- a required Gate C judgment is found to consume reused hashes, and the
+  corresponding conditional catalog-reuse regression is still missing
 
 Do **not** freeze-block RC2 solely because general catalog reuse can occur or
 can be reproduced on coarse-timestamp media, while Gate C dest/project/sidecar
@@ -218,9 +226,12 @@ These remain open outside the Gate C blocker decision:
 - catalog inventory can reuse a hash on same path + same size + same mtime
 - no filesystem-type or FAT granularity handling
 - no located regression for same-size / same-mtime / different-content
-- no located coarse-timestamp regression
+  (`NOT_RUN`; not required for `ASSESSED` unless a Gate C judgment consumes
+  reused hashes)
+- no located coarse-timestamp regression (`NOT_RUN`; same condition)
 
-Do not describe these as resolved.
+Do not describe these as resolved. Do not treat their `NOT_RUN` state as a
+Gate C required-test STOP.
 
 ## Assessment record template
 
@@ -232,6 +243,8 @@ or media identifiers:
 - assessed scope
 - filesystem type exercised, or `NOT_RUN`
 - evidence references for each Gate C condition in the required-evidence table
+- general-hardening tests remaining, recorded as not required unless a Gate C
+  reuse dependency is found
 - `NOT_RUN` / `UNKNOWN` items remaining
 - residual general-hardening risk
 - status after this record (`ASSESSED` only if evidence and verdict are

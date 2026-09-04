@@ -206,11 +206,33 @@ Required evidence for that chain:
   packaging, or any other byte-changing step has finished
 - proof that the hashed binary is the binary enclosed in that DMG
 - `build environment`
-- `codesign verification` result
-- `DMG verification` result
+- `codesign verification` result that matches an acceptable outcome below
+- `DMG verification` result that matches an acceptable outcome below
 - in-run checksum manifest or equivalent attestation identity, storage
   location, and retrieval path
 - candidate storage location and confirmed access boundary
+
+Acceptable artifact-verification outcomes for RC2 freeze and Gate C PASS
+follow the Gate B personal/local procedure in `GATE_B_CLONE_SMOKE.md`:
+
+- `DMG verification` must be `PASS`: `hdiutil verify` against the frozen DMG
+  succeeds.
+- `codesign verification` must record `codesign --verify --deep --strict
+  --verbose=2` and `spctl --assess --type execute --verbose=4`.
+- Expected unsigned or ad-hoc state for a personal/local candidate is
+  acceptable. Record it explicitly. Do not treat it as signed, and do not
+  treat it as public-distribution approval.
+- A valid Developer ID signature may be recorded, but still does not
+  authorize public distribution without the separate public-distribution gate.
+
+All other codesign or DMG outcomes are **STOP**, including:
+
+- `hdiutil verify` failure, skip, or ambiguous output
+- codesign or `spctl` not run
+- signature integrity failure, including a claimed signature that does not
+  verify
+- recording unsigned or ad-hoc as `signed` or as public-distribution approval
+- `FAIL` recorded as freeze evidence without treating it as STOP
 
 In-run digest rules:
 
@@ -245,6 +267,9 @@ STOP. Do not freeze RC2 when any of the following is true:
 - the same RC number or tag was overwritten
 - candidate storage would publish, distribute, or feed an updater
 - candidate storage or access boundary is undetermined
+- `DMG verification` is not `PASS`
+- `codesign verification` is missing, integrity-failed, or recorded as signed
+  when the candidate is unsigned or ad-hoc
 - a unique source-to-artifact correspondence cannot be proven
 
 Missing, ambiguous, or mismatched provenance is **STOP**, not
@@ -272,6 +297,8 @@ All of the following must be true before RC2 may be created:
 - Candidate storage and its access boundary are recorded and confirmed.
 - The Gate C candidate workflow generates an in-run checksum manifest or
   equivalent attestation of the final packaged bytes.
+- `DMG verification` of that candidate is `PASS`, and `codesign verification`
+  is an acceptable recorded outcome as defined in the freeze rules.
 - The Gate C impact of FAT-HASH-1 is recorded as `ASSESSED` /
   `ACCEPTED_WITH_EVIDENCE`. See
   [FAT_HASH_1_ASSESSMENT.md](FAT_HASH_1_ASSESSMENT.md).
@@ -306,6 +333,12 @@ Gate C is PASS only when every item below is demonstrated:
 
 - Artifact identity is verified against the frozen RC filename, DMG SHA256, and
   app binary SHA256.
+- Human Gate C installs or launches only from that verified frozen DMG. A
+  rebuild from the frozen source commit is **STOP**.
+- The launched executable SHA256 matches the recorded inner app binary SHA256
+  of that DMG.
+- `DMG verification` is `PASS` and `codesign verification` is an acceptable
+  recorded outcome as defined in the freeze rules.
 - Source-to-artifact provenance is verified against the in-run checksum
   manifest or equivalent attestation from the recorded workflow run/attempt,
   including workflow name, run ID, run attempt, canonical URL, workflow
@@ -314,7 +347,7 @@ Gate C is PASS only when every item below is demonstrated:
 - Automated Gate C is PASS.
 - External clone verification is PASS.
 - Rename Plan → Prepare → restart → Continue → Apply completes on the
-  verified disposable clone.
+  verified disposable clone, using the launched frozen candidate.
 - The operation ends `COMMITTED` / `VERIFIED`.
 - Missing / Invalid / Unresolved reference counts are 0.
 - Unrelated bytes are unchanged versus the pre-run manifest.
