@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { AudioApi, ChangeApi, CloneApi, MetadataApi, RenameApi, RootApi, RootSession } from "../../api";
 import { RootRegistryPanel } from "./RootRegistryPanel";
@@ -292,10 +293,15 @@ describe("RootRegistryPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Choose root..." }));
     expect(await screen.findByText("Rollback required")).toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText(
-      "I approve rollback of this exact incomplete additive-copy operation.",
-    ));
-    fireEvent.click(screen.getByRole("button", { name: "Roll back incomplete copy" }));
+    const approvalLabel = "I approve rollback of this exact incomplete additive-copy operation.";
+    await waitFor(() => {
+      expect(screen.getByLabelText(approvalLabel)).not.toBeDisabled();
+    });
+    const user = userEvent.setup();
+    await user.click(screen.getByLabelText(approvalLabel));
+    const recoverButton = screen.getByRole("button", { name: "Roll back incomplete copy" });
+    await waitFor(() => expect(recoverButton).not.toBeDisabled());
+    await user.click(recoverButton);
 
     await waitFor(() => expect(changeClient.recoverChange).toHaveBeenCalledWith(
       "root-opaque",
