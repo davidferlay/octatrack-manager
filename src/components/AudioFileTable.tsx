@@ -276,12 +276,18 @@ export function UsagePopoverEntry({ entry, backToPool }: {
   const back = backToPool
     ? `&fromPool=${encodeURIComponent(backToPool.path)}&fromSet=${encodeURIComponent(backToPool.name)}`
     : '';
+  // Every entry comes from one slot, so the link lands on that slot's tab with the
+  // row selected rather than dropping the user on the project Overview to hunt for it.
+  const m = /^([FS])(\d+)$/.exec(entry.slot ?? '');
+  const target = m
+    ? `&tab=${m[1] === 'F' ? 'flex-slots' : 'static-slots'}&slot=${m[2]}`
+    : '';
   return (
     <div className="usage-popover-entry">
       <a
         className="usage-popover-project"
-        href={`#/project?path=${encodeURIComponent(entry.project_path)}&name=${encodeURIComponent(entry.project)}${back}`}
-        title={`Open ${entry.project}`}
+        href={`#/project?path=${encodeURIComponent(entry.project_path)}&name=${encodeURIComponent(entry.project)}${target}${back}`}
+        title={m ? `Open ${entry.project} on slot ${entry.slot}` : `Open ${entry.project}`}
       >
         {entry.project}
       </a>

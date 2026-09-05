@@ -118,6 +118,9 @@ interface SampleSlotsTableProps {
   onDragStateChange?: (active: boolean) => void;
   // Per-slot usage lists (indexed by 0-based slot id); undefined while still computing.
   slotUsage?: SlotUsageEntry[][];
+  // Slot id to select and scroll to on mount, e.g. when an Audio Pool usage link
+  // opened this tab to show where a sample sits.
+  focusSlotId?: number | null;
 }
 
 type SortColumn = 'slot' | 'sample' | 'status' | 'used' | 'source' | 'gain' | 'timestretch' | 'loop' | 'compatibility' | 'format' | 'bitdepth' | 'samplerate' | 'size';
@@ -173,7 +176,7 @@ function getSetRelativePath(projectPath: string | null): string {
   return projectPath;
 }
 
-export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, projectName, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated, onFlexRamUpdated, onImportToAudioPool, onImportToProject, sidebarRefreshTrigger, onPoolFixed, onOpenFixProjectSamples, transfersOpen, transferCount, transfersActive, transfersSucceeded, transfersFailed, onToggleTransfers, onDragStateChange, slotUsage }: SampleSlotsTableProps) {
+export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, projectName, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated, onFlexRamUpdated, onImportToAudioPool, onImportToProject, sidebarRefreshTrigger, onPoolFixed, onOpenFixProjectSamples, transfersOpen, transferCount, transfersActive, transfersSucceeded, transfersFailed, onToggleTransfers, onDragStateChange, slotUsage, focusSlotId }: SampleSlotsTableProps) {
   const navigate = useNavigate();
   const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const [dndDragFiles, setDndDragFiles] = useState<string[]>([]);
@@ -191,6 +194,13 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   // Row selection (same interaction model as the Audio Pool tables)
   const [selectedSlots, setSelectedSlots] = useState<Set<number>>(new Set());
   const [lastClickedSlotId, setLastClickedSlotId] = useState<number | null>(null);
+  // Arriving from an Audio Pool usage link: select that slot so the effect below
+  // scrolls it into view. No preview is started - the user asked to see it, not hear it.
+  useEffect(() => {
+    if (focusSlotId == null) return;
+    setSelectedSlots(new Set([focusSlotId]));
+    setLastClickedSlotId(focusSlotId);
+  }, [focusSlotId]);
   // Bumped to clear the Audio Pool pane's selection (slot and pane selections are exclusive).
   const [clearSidebarToken, setClearSidebarToken] = useState(0);
   // Which pane keyboard arrows act on. Forced to 'slots' whenever the sidebar is hidden.

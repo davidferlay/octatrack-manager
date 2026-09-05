@@ -283,6 +283,59 @@ describe('AudioFileTable', () => {
     )
   })
 
+  it('opens the project on the slot the usage entry came from', async () => {
+    const usageMap: Record<string, PoolUsageEntry[]> = {
+      '/audio/kick.wav': [
+        { project: 'PROJ1', project_path: '/set/PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: 'F6' },
+      ],
+    }
+    renderTable({ poolRoot: '/AUDIO', usageMap })
+    await userEvent.click(screen.getByText('\u2713 1'))
+    const link = screen.getByRole('link', { name: 'PROJ1' })
+    expect(link).toHaveAttribute('href', '#/project?path=%2Fset%2FPROJ1&name=PROJ1&tab=flex-slots&slot=6')
+    expect(link).toHaveAttribute('title', 'Open PROJ1 on slot F6')
+  })
+
+  it('sends a static slot to the Static tab', async () => {
+    const usageMap: Record<string, PoolUsageEntry[]> = {
+      '/audio/kick.wav': [
+        { project: 'PROJ1', project_path: '/set/PROJ1', bank: 0, kind: 'assigned', track: 0, part: null, pattern: null, step: null, audible: false, slot: 'S128' },
+      ],
+    }
+    renderTable({ poolRoot: '/AUDIO', usageMap })
+    await userEvent.click(screen.getByText('\u00b7 1'))
+    expect(screen.getByRole('link', { name: 'PROJ1' })).toHaveAttribute(
+      'href', '#/project?path=%2Fset%2FPROJ1&name=PROJ1&tab=static-slots&slot=128'
+    )
+  })
+
+  it('keeps the slot target alongside fromPool/fromSet', async () => {
+    const usageMap: Record<string, PoolUsageEntry[]> = {
+      '/audio/kick.wav': [
+        { project: 'PROJ1', project_path: '/set/PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: 'F2' },
+      ],
+    }
+    renderTable({ poolRoot: '/AUDIO', usageMap, usageBackToPool: { path: '/set/AUDIO', name: 'MySet' } })
+    await userEvent.click(screen.getByText('\u2713 1'))
+    expect(screen.getByRole('link', { name: 'PROJ1' })).toHaveAttribute(
+      'href',
+      '#/project?path=%2Fset%2FPROJ1&name=PROJ1&tab=flex-slots&slot=2&fromPool=%2Fset%2FAUDIO&fromSet=MySet'
+    )
+  })
+
+  it('falls back to the plain project link when the entry names no slot', async () => {
+    const usageMap: Record<string, PoolUsageEntry[]> = {
+      '/audio/kick.wav': [
+        { project: 'PROJ1', project_path: '/set/PROJ1', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: null },
+      ],
+    }
+    renderTable({ poolRoot: '/AUDIO', usageMap })
+    await userEvent.click(screen.getByText('\u2713 1'))
+    const link = screen.getByRole('link', { name: 'PROJ1' })
+    expect(link).toHaveAttribute('href', '#/project?path=%2Fset%2FPROJ1&name=PROJ1')
+    expect(link).toHaveAttribute('title', 'Open PROJ1')
+  })
+
   it('sorts by Usage (audible-weighted total) when the Usage header is clicked', async () => {
     const usageMap: Record<string, PoolUsageEntry[]> = {
       '/audio/kick.wav': [

@@ -84,6 +84,31 @@ describe('SampleSlotsTable', () => {
     expect(screen.getByText('snare.wav')).toBeInTheDocument()
   })
 
+  it('selects and scrolls to the slot named by focusSlotId (Audio Pool usage link)', () => {
+    const scrollIntoView = vi.fn()
+    const orig = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = scrollIntoView
+    try {
+      renderWithProvider(
+        <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" focusSlotId={3} />
+      )
+      const row = screen.getByText('snare.wav').closest('tr')!
+      expect(row).toHaveClass('selected')
+      expect(row).toHaveClass('cursor')
+      expect(screen.getByText('kick.wav').closest('tr')).not.toHaveClass('selected')
+      expect(scrollIntoView).toHaveBeenCalled()
+    } finally {
+      Element.prototype.scrollIntoView = orig
+    }
+  })
+
+  it('selects nothing when no focusSlotId is given', () => {
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" />
+    )
+    expect(document.querySelectorAll('.slots-table tr.selected')).toHaveLength(0)
+  })
+
   it('renders table with slot and sample columns', () => {
     renderWithProvider(
       <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" />

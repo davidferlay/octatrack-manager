@@ -1,9 +1,12 @@
 import { test, expect, Page } from '@playwright/test'
 
 // Mocks just enough backend for the Flex slots tab + Audio Pool sidebar.
-async function setupMocks(page: Page, opts?: { withAudioPool?: boolean }) {
+async function setupMocks(page: Page, opts?: { withAudioPool?: boolean; withUsage?: boolean }) {
   const withAudioPool = opts?.withAudioPool ?? true
-  await page.addInitScript((withAudioPool: boolean) => {
+  // Off by default: a usage map makes the Usage column appear, which the other
+  // tests here do not expect.
+  const withUsage = opts?.withUsage ?? false
+  await page.addInitScript(({ withAudioPool, withUsage }: { withAudioPool: boolean; withUsage: boolean }) => {
     ;(window as any).__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} }
     ;(window as any).__invokeCalls = []
     ;(window as any).__TAURI_INTERNALS__ = {
@@ -21,6 +24,16 @@ async function setupMocks(page: Page, opts?: { withAudioPool?: boolean }) {
               : { exists: false, path: null, set_path: '/test/set' }
           case 'get_system_resources':
             return { cpu_cores: 4, available_memory_mb: 8000, recommended_concurrency: 4 }
+          case 'get_pool_usage':
+            // kick.wav sits in flex slot 90 of TestProject - far enough down the
+            // 128-row table to prove the row is scrolled to, not just selected.
+            return withUsage
+              ? {
+                  '/test/set/audio/kick.wav': [
+                    { project: 'TestProject', project_path: '/test/set/TestProject', bank: 0, kind: 'machine', track: 0, part: 0, pattern: null, step: null, audible: true, slot: 'F90' },
+                  ],
+                }
+              : null
           case 'list_audio_directory':
             return [
               { name: 'Drums', size: 0, channels: 0, bit_rate: 0, sample_rate: 0, is_directory: true, path: '/test/set/AUDIO/Drums' },
@@ -95,7 +108,7 @@ async function setupMocks(page: Page, opts?: { withAudioPool?: boolean }) {
         }
       },
     }
-  }, withAudioPool)
+  }, { withAudioPool, withUsage })
 }
 
 async function openFlexTab(page: Page) {
@@ -297,6 +310,59 @@ test.describe('Audio Pool sidebar in Flex slots', () => {
     await back.click()
     await expect.poll(async () => page.evaluate(() => location.hash))
       .toContain('/audio-pool?path=%2Ftest%2Fset%2FAUDIO&name=TestSet')
+  })
+
+  test('a usage link with ?tab=&slot= opens that slot tab with the row selected', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await page.goto('/#/project?path=/test/set/TestProject&name=TestProject&tab=flex-slots&slot=3')
+    await expect(page.locator('.header-tab.active')).toHaveText(/Flex/)
+    const selected = page.locator('.slots-table tbody tr.selected')
+    await expect(selected).toHaveCount(1)
+    await expect(selected).toHaveClass(/cursor/)
+    await expect(selected.locator('td').first()).toHaveText('F3')
+  })
+
+  test('a static usage link lands on the Static tab', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await page.goto('/#/project?path=/test/set/TestProject&name=TestProject&tab=static-slots&slot=7')
+    await expect(page.locator('.header-tab.active')).toHaveText(/Static/)
+    const selected = page.locator('.slots-table tbody tr.selected')
+    await expect(selected).toHaveCount(1)
+    await expect(selected.locator('td').first()).toHaveText('S7')
+  })
+
+  test('the focused slot belongs to its own tab, so the other pool selects nothing', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await page.goto('/#/project?path=/test/set/TestProject&name=TestProject&tab=flex-slots&slot=3')
+    await expect(page.locator('.slots-table tbody tr.selected')).toHaveCount(1)
+    await page.locator('.header-tab', { hasText: 'Static' }).click()
+    await expect(page.locator('.slots-table tbody tr.selected')).toHaveCount(0)
+  })
+
+  test('clicking a usage link on the Audio Pool page lands on the slot, scrolled into view', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true, withUsage: true })
+    await page.goto('/#/audio-pool?path=/test/set/AUDIO&name=TestSet')
+    await page.locator('.dest-panel .usage-badge').first().click()
+    const link = page.locator('.usage-popover-project')
+    await expect(link).toHaveText('TestProject')
+    await link.click()
+
+    await expect(page.locator('.header-tab.active')).toHaveText(/Flex/)
+    const selected = page.locator('.slots-table tbody tr.selected')
+    await expect(selected).toHaveCount(1)
+    await expect(selected.locator('td').first()).toHaveText('F90')
+    // The point of the feature: no manual scrolling needed to see it.
+    await expect(selected).toBeInViewport()
+  })
+
+  test('a slot tab opened without ?slot= selects nothing', async ({ page }) => {
+    await setupMocks(page, { withAudioPool: true })
+    await page.goto('/#/project?path=/test/set/TestProject&name=TestProject&tab=flex-slots')
+    await expect(page.locator('.slots-table tbody tr').first()).toBeVisible()
+    await expect(page.locator('.slots-table tbody tr.selected')).toHaveCount(0)
+    // Baseline for the scroll assertion above: without ?slot= that row is off-screen,
+    // so "in viewport" there really is the feature and not a short table.
+    await expect(page.locator('.slots-table tbody tr', { hasText: 'F90' })).not.toBeInViewport()
   })
 
   test('without fromPool the Back button still goes to the project list', async ({ page }) => {

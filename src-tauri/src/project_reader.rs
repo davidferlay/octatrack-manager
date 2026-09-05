@@ -1183,10 +1183,12 @@ pub struct PoolUsageEntry {
     pub pattern: Option<u8>,
     pub step: Option<u8>,
     pub audible: bool,
-    /// Slot label (e.g. "F46", "S16"), set only for `kind == "assigned"`:
-    /// the slot has this pool file loaded but no machine assignment or p-lock
-    /// anywhere references it - distinct from "machine"/"lock" kinds (already
-    /// identified by bank/track/part/pattern/step) and from no usage at all.
+    /// Slot label (e.g. "F46", "S16") this entry comes from - every entry is
+    /// derived from one project slot, so it is always set. `kind == "assigned"`
+    /// additionally means the slot holds the file but no machine assignment or
+    /// p-lock references it, so the label is all there is to show for it; the
+    /// "machine"/"lock" kinds carry bank/track/part/pattern/step as well, and
+    /// use the label to link straight to the slot.
     pub slot: Option<String>,
 }
 
@@ -1250,6 +1252,11 @@ pub fn compute_pool_usage(
                 continue;
             }
             let slot_type_upper = slot_type.to_uppercase();
+            let slot_label = Some(format!(
+                "{}{}",
+                if slot_type_upper == "FLEX" { "F" } else { "S" },
+                slot_id
+            ));
             let idx = (*slot_id as usize).saturating_sub(1);
             let slot_entries = match slot_type_upper.as_str() {
                 "STATIC" => usage.static_usage.get(idx),
@@ -1264,7 +1271,6 @@ pub fn compute_pool_usage(
                 // assignment, no p-lock) ever references it - still real usage
                 // (renaming/deleting the file would break the slot), just not
                 // audible or even referenced by a pattern.
-                let prefix = if slot_type_upper == "FLEX" { "F" } else { "S" };
                 result.entry(resolved).or_default().push(PoolUsageEntry {
                     project: project_name.clone(),
                     project_path: project_path.clone(),
@@ -1275,7 +1281,7 @@ pub fn compute_pool_usage(
                     pattern: None,
                     step: None,
                     audible: false,
-                    slot: Some(format!("{}{}", prefix, slot_id)),
+                    slot: slot_label,
                 });
                 continue;
             }
@@ -1291,7 +1297,7 @@ pub fn compute_pool_usage(
                     pattern: e.pattern,
                     step: e.step,
                     audible: e.audible,
-                    slot: None,
+                    slot: slot_label.clone(),
                 });
             }
         }
@@ -20933,6 +20939,9 @@ mod tests {
             assert_eq!(proj1.kind, "machine");
             assert!(proj1.audible);
             assert_eq!(proj1.track, 0);
+            // A "machine" entry names its slot too, not just the "assigned" kind:
+            // the UI links a usage line straight to the slot it came from.
+            assert_eq!(proj1.slot.as_deref(), Some("F6"));
 
             let proj2 = entries.iter().find(|e| e.project == "PROJ2").unwrap();
             assert_eq!(proj2.kind, "assigned");
@@ -21116,6 +21125,8 @@ mod tests {
             assert_eq!(lock.pattern, Some(1));
             assert_eq!(lock.step, Some(4));
             assert!(lock.audible);
+            // The locked slot, so the UI can open the project on it.
+            assert_eq!(lock.slot.as_deref(), Some("F9"));
         }
     }
 

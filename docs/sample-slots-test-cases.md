@@ -248,6 +248,12 @@ go to the **Flex** (or **Static**) tab.
 | AP166 | Usage | Project name is a link | On the Audio Pool page, click a Usage badge on a file used by another project | Each entry's project name is rendered as a link |
 | AP167 | Usage | Link opens that project | Click the project name inside a usage popover | The app navigates to that project's page |
 | AP168 | Usage | Back returns to the Audio Pool | After following a usage link, look at the top-left button on the project page | It reads "Back to Audio Pool" and returns to the Audio Pool page of that Set; Escape does the same. Opening the same project from the home page instead shows the normal "Back" |
+| AP172 | Usage | Link lands on the slot tab | Click the project name of a usage entry whose file sits in a Flex slot | The project opens on the Flex Sample Slots tab, not the Overview |
+| AP173 | Usage | The slot row is selected and visible | Continue from AP172 with a file in a high slot number (e.g. F90) | The row for that slot is highlighted as selected and is scrolled into view without any manual scrolling |
+| AP174 | Usage | Static files open the Static tab | Click the project name of a usage entry for a file loaded in a Static slot | The project opens on the Static Sample Slots tab with that slot selected |
+| AP175 | Usage | Each entry targets its own slot | For a file loaded into two different slots of one project, click the project name on each popover line in turn | Each line opens the slot that line came from, not always the same one |
+| AP176 | Usage | The other pool selects nothing | After following a Flex usage link, switch to the Static Sample Slots tab | No slot is selected there, even if a Static slot shares the number |
+| AP177 | Usage | Normal navigation selects nothing | Open a project from the home page and go to a Sample Slots tab | No slot is pre-selected |
 | **Audio Pool location memory** | | | | |
 | AP169 | Browse | Pane to page keeps the folder | In a project's Audio Pool pane, browse into a subfolder, then click the open-Audio-Pool-page button | The Audio Pool page opens on that same subfolder, not at the AUDIO/ root |
 | AP170 | Browse | Page back to pane keeps the folder | From AP169, click "Back to project" | The pane is still showing the same subfolder |

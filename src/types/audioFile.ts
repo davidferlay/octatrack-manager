@@ -20,7 +20,7 @@ export interface PoolUsageEntry {
   pattern: number | null;
   step: number | null;
   audible: boolean;
-  /** Slot label (e.g. "F46", "S16"), set only when kind === "assigned". */
+  /** Slot label (e.g. "F46", "S16") this entry comes from - always set. */
   slot: string | null;
 }
 

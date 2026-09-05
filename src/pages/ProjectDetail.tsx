@@ -203,6 +203,13 @@ export function ProjectDetail() {
   // Audio Pool page's own "Back to project" when opened from a Sample Slots pane.
   const fromPool = searchParams.get("fromPool");
   const fromSet = searchParams.get("fromSet") || "";
+  // ?slot= from the same link: the slot tab named by ?tab= opens with this row
+  // selected and scrolled to, so the sample the user clicked is right there. It is
+  // tied to that one tab, so switching to the other pool does not select a slot
+  // that merely shares the number.
+  const slotParam = Number(searchParams.get("slot")) || null;
+  const focusFlexSlotId = searchParams.get("tab") === "flex-slots" ? slotParam : null;
+  const focusStaticSlotId = searchParams.get("tab") === "static-slots" ? slotParam : null;
 
   const [metadata, setMetadata] = useState<ProjectMetadata | null>(null);
   const [banks, setBanks] = useState<Bank[]>([]);
@@ -2208,6 +2215,7 @@ export function ProjectDetail() {
                 slotPrefix="F"
                 tableType="flex"
                 slotUsage={slotUsage?.flex_usage}
+                focusSlotId={focusFlexSlotId}
                 projectPath={projectPath}
                 projectName={projectName}
                 memorySettings={metadata.memory_settings}
@@ -2266,6 +2274,7 @@ export function ProjectDetail() {
                 slotPrefix="S"
                 tableType="static"
                 slotUsage={slotUsage?.static_usage}
+                focusSlotId={focusStaticSlotId}
                 projectPath={projectPath}
                 projectName={projectName}
                 isEditMode={isEditMode}
