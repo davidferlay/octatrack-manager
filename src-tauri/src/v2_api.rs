@@ -7456,7 +7456,7 @@ mod tests {
     #[cfg(feature = "test-seams")]
     #[test]
     fn gate_c_r2_t2_upstream_verify_io_failure_untrusts_root_and_blocks_stale_catalog() {
-        use crate::legacy_read_adapter::set_upstream_verify_temp_dir_fail;
+        use crate::legacy_read_adapter::UpstreamVerifyTempDirFailScope;
 
         let root = TempDir::new().unwrap();
         build_gate_c_planning_fixture(root.path());
@@ -7483,10 +7483,9 @@ mod tests {
             StateDocumentParseStatus::Parsed
         );
 
-        set_upstream_verify_temp_dir_fail(true);
+        let _verify_fail = UpstreamVerifyTempDirFailScope::enable();
         let scan_error = scan_library_sync(&registry, &catalog, &root_id).unwrap_err();
         assert_eq!(scan_error.code, "LIBRARY_SCAN_FAILED");
-        set_upstream_verify_temp_dir_fail(false);
 
         let catalog_guard = catalog.lock().unwrap();
         assert!(catalog_guard
