@@ -42,7 +42,7 @@ pub struct AudioRuntime {
     waveform_cache_v2: WaveformCacheV2,
     previews: Mutex<PreviewState>,
     preview_generation: Mutex<()>,
-    waveform_query_epoch: AtomicU64,
+    waveform_query_epochs: Mutex<HashMap<String, Arc<AtomicU64>>>,
     preview_ttl: Duration,
     nonce: [u8; 32],
     next_token: AtomicU64,
@@ -73,7 +73,7 @@ impl AudioRuntime {
             waveform_cache_v2,
             previews: Mutex::new(PreviewState::default()),
             preview_generation: Mutex::new(()),
-            waveform_query_epoch: AtomicU64::new(0),
+            waveform_query_epochs: Mutex::new(HashMap::new()),
             preview_ttl,
             nonce,
             next_token: AtomicU64::new(1),
@@ -92,16 +92,42 @@ impl AudioRuntime {
             .map_err(AudioRuntimeError::Audio)
     }
 
-    pub fn begin_waveform_query(&self) -> u64 {
-        self.waveform_query_epoch.fetch_add(1, Ordering::SeqCst) + 1
+    fn waveform_epoch_for_root(&self, root_id: &RootId) -> Arc<AtomicU64> {
+        let mut epochs = self
+            .waveform_query_epochs
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        epochs
+            .entry(root_id.as_str().to_string())
+            .or_insert_with(|| Arc::new(AtomicU64::new(0)))
+            .clone()
     }
 
-    pub fn invalidate_waveform_queries(&self) {
-        self.waveform_query_epoch.fetch_add(1, Ordering::SeqCst);
+    pub fn begin_waveform_query(&self, root_id: &RootId) -> u64 {
+        self.waveform_epoch_for_root(root_id)
+            .fetch_add(1, Ordering::SeqCst)
+            + 1
     }
 
-    fn assert_waveform_query_epoch(&self, epoch: u64) -> Result<(), AudioRuntimeError> {
-        if self.waveform_query_epoch.load(Ordering::SeqCst) != epoch {
+    pub fn invalidate_waveform_queries_for_root(&self, root_id: &RootId) {
+        self.waveform_epoch_for_root(root_id)
+            .fetch_add(1, Ordering::SeqCst);
+    }
+
+    pub fn assert_waveform_query_epoch(
+        &self,
+        root_id: &RootId,
+        epoch: u64,
+    ) -> Result<(), AudioRuntimeError> {
+        let epochs = self
+            .waveform_query_epochs
+            .lock()
+            .map_err(|_| AudioRuntimeError::Unavailable)?;
+        let current = epochs
+            .get(root_id.as_str())
+            .map(|entry| entry.load(Ordering::SeqCst))
+            .unwrap_or(0);
+        if current != epoch {
             return Err(AudioRuntimeError::RequestCancelled);
         }
         Ok(())
@@ -109,6 +135,7 @@ impl AudioRuntime {
 
     pub fn waveform_query(
         &self,
+        root_id: &RootId,
         epoch: u64,
         asset_id: &str,
         expected_hash: &ContentHash,
@@ -116,12 +143,36 @@ impl AudioRuntime {
         range: Option<(&str, &str)>,
         target_points: usize,
     ) -> Result<WaveformQueryResult, AudioRuntimeError> {
-        self.assert_waveform_query_epoch(epoch)?;
+        self.assert_waveform_query_epoch(root_id, epoch)?;
+        let epoch_cell = self.waveform_epoch_for_root(root_id);
+        let expected_epoch = epoch;
+        let mut check_cancel = || {
+            if epoch_cell.load(Ordering::SeqCst) != expected_epoch {
+                Err(AudioError::Cancelled)
+            } else {
+                Ok(())
+            }
+        };
+        check_cancel().map_err(AudioRuntimeError::Audio)?;
         let result = self
             .waveform_cache_v2
-            .query(asset_id, expected_hash, source_path, range, target_points)
-            .map_err(AudioRuntimeError::Audio)?;
-        self.assert_waveform_query_epoch(epoch)?;
+            .query(
+                asset_id,
+                expected_hash,
+                source_path,
+                range,
+                target_points,
+                &mut check_cancel,
+            )
+            .map_err(|error| match error {
+                AudioError::Cancelled => AudioRuntimeError::RequestCancelled,
+                other => AudioRuntimeError::Audio(other),
+            })?;
+        check_cancel().map_err(|error| match error {
+            AudioError::Cancelled => AudioRuntimeError::RequestCancelled,
+            other => AudioRuntimeError::Audio(other),
+        })?;
+        self.assert_waveform_query_epoch(root_id, epoch)?;
         Ok(result)
     }
 
@@ -408,6 +459,23 @@ mod tests {
         assert!(matches!(
             runtime.read_preview(&root, &token),
             Err(AudioRuntimeError::ExpiredPreviewToken)
+        ));
+    }
+
+    #[test]
+    fn waveform_epochs_are_independent_per_root() {
+        let (_data, runtime) = runtime(Duration::from_secs(60));
+        let root_a = RootId::new("root-a").unwrap();
+        let root_b = RootId::new("root-b").unwrap();
+        let epoch_a = runtime.begin_waveform_query(&root_a);
+        runtime.invalidate_waveform_queries_for_root(&root_b);
+        runtime
+            .assert_waveform_query_epoch(&root_a, epoch_a)
+            .unwrap();
+        runtime.invalidate_waveform_queries_for_root(&root_a);
+        assert!(matches!(
+            runtime.assert_waveform_query_epoch(&root_a, epoch_a),
+            Err(AudioRuntimeError::RequestCancelled)
         ));
     }
 

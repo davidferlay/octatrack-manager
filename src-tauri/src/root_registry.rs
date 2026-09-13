@@ -13,6 +13,89 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 const DEFAULT_SESSION_TTL: Duration = Duration::from_secs(8 * 60 * 60);
 const DEFAULT_WRITE_GRANT_TTL: Duration = Duration::from_secs(15 * 60);
 
+fn tail_components(full: &Path, prefix: &Path) -> Vec<String> {
+    full.strip_prefix(prefix)
+        .unwrap_or_else(|_| Path::new(""))
+        .components()
+        .filter_map(|component| component.as_os_str().to_str().map(str::to_owned))
+        .collect()
+}
+
+fn legacy_tail_under_root(
+    raw: &Path,
+    registered: &Path,
+) -> Result<Option<Vec<String>>, RootRegistryError> {
+    if raw.starts_with(registered) {
+        return Ok(Some(tail_components(raw, registered)));
+    }
+
+    let mut probe = PathBuf::new();
+    for component in raw.components() {
+        probe.push(component);
+        if probe.starts_with(registered) {
+            return Ok(Some(tail_components(raw, &probe)));
+        }
+        let Ok(canonical) = probe.canonicalize() else {
+            continue;
+        };
+        if canonical == registered {
+            return Ok(Some(tail_components(raw, &probe)));
+        }
+        if canonical.starts_with(registered) {
+            return Ok(Some(tail_components(raw, &probe)));
+        }
+    }
+    Ok(None)
+}
+
+fn walk_legacy_under_root(
+    registered: &Path,
+    tail: &[String],
+    require_regular_file: bool,
+) -> Result<PathBuf, RootRegistryError> {
+    let mut current = registered.to_path_buf();
+    for part in tail {
+        match part.as_str() {
+            ".." => {
+                if current == registered {
+                    return Err(RootRegistryError::PathEscape);
+                }
+                if !current.pop() {
+                    return Err(RootRegistryError::PathEscape);
+                }
+                if !current.starts_with(registered) {
+                    return Err(RootRegistryError::PathEscape);
+                }
+            }
+            "." | "" => return Err(RootRegistryError::PathEscape),
+            name => {
+                current.push(name);
+                let metadata = fs::symlink_metadata(&current).map_err(map_resolve_file_error)?;
+                if metadata.file_type().is_symlink() {
+                    return Err(RootRegistryError::SymlinkEscape);
+                }
+            }
+        }
+    }
+
+    let metadata = fs::symlink_metadata(&current).map_err(map_resolve_file_error)?;
+    if metadata.file_type().is_symlink() {
+        return Err(RootRegistryError::SymlinkEscape);
+    }
+    if (!metadata.is_dir() && !metadata.is_file())
+        || (require_regular_file && !metadata.is_file())
+        || (!require_regular_file && !metadata.is_file() && !metadata.is_dir())
+    {
+        return Err(RootRegistryError::NotRegularFile);
+    }
+
+    let canonical = current.canonicalize().map_err(map_resolve_file_error)?;
+    if !canonical.starts_with(registered) {
+        return Err(RootRegistryError::PathEscape);
+    }
+    Ok(canonical)
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DeviceObservation {
     pub stable_key: String,
@@ -560,19 +643,25 @@ impl RootRegistry {
         if raw_path.trim().is_empty() || !candidate.is_absolute() {
             return Err(RootRegistryError::InvalidPath);
         }
-        let canonical = candidate.canonicalize().map_err(map_resolve_file_error)?;
 
         let mut candidates = {
             let state = self.lock_state()?;
             state
                 .roots
                 .iter()
-                .filter(|(_, entry)| canonical.starts_with(&entry.canonical_path))
                 .map(|(root_id, entry)| (root_id.clone(), entry.canonical_path.clone()))
                 .collect::<Vec<_>>()
         };
         candidates.sort_by_key(|(_, path)| std::cmp::Reverse(path.components().count()));
-        let Some((root_id, registered_path)) = candidates.into_iter().next() else {
+
+        let mut binding = None;
+        for (root_id, registered_path) in candidates {
+            if let Some(tail) = legacy_tail_under_root(candidate, &registered_path)? {
+                binding = Some((root_id, registered_path, tail));
+                break;
+            }
+        }
+        let Some((root_id, registered_path, tail)) = binding else {
             return Err(RootRegistryError::NotApproved);
         };
 
@@ -580,22 +669,20 @@ impl RootRegistry {
         if require_write && !resolved.session.capabilities.write {
             return Err(RootRegistryError::WriteGrantRequired);
         }
-        let relative = canonical
-            .strip_prefix(&registered_path)
-            .map_err(|_| RootRegistryError::PathEscape)?;
-        let components = relative
-            .components()
-            .map(|component| {
-                component
-                    .as_os_str()
-                    .to_str()
-                    .ok_or(RootRegistryError::InvalidPath)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let relative = RootRelativePath::from_components(components)
-            .map_err(|_| RootRegistryError::PathEscape)?;
 
-        resolved.resolve_existing_path(&relative, require_regular_file)
+        if tail.is_empty() {
+            let metadata =
+                fs::symlink_metadata(&registered_path).map_err(map_resolve_file_error)?;
+            if metadata.file_type().is_symlink() {
+                return Err(RootRegistryError::SymlinkEscape);
+            }
+            if !metadata.is_dir() {
+                return Err(RootRegistryError::NotRegularFile);
+            }
+            return Ok(registered_path);
+        }
+
+        walk_legacy_under_root(&registered_path, &tail, require_regular_file)
     }
 
     pub fn resolve(&self, root_id: &RootId) -> Result<ResolvedRoot, RootRegistryError> {
@@ -1356,7 +1443,7 @@ mod tests {
             registry
                 .authorize_legacy_path(link.to_str().unwrap(), false, true)
                 .unwrap_err(),
-            RootRegistryError::NotApproved
+            RootRegistryError::SymlinkEscape
         );
     }
 

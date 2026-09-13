@@ -698,6 +698,7 @@ fn get_audio_waveform_query_sync(
     });
     let window = with_live_audio_source(registry, catalog, root_id, asset_id, |source| {
         audio.waveform_query(
+            root_id,
             epoch,
             asset_id,
             &source.content_hash,
@@ -707,6 +708,9 @@ fn get_audio_waveform_query_sync(
         )
     })?;
     registry.resolve(root_id)?;
+    audio
+        .assert_waveform_query_epoch(root_id, epoch)
+        .map_err(ApiError::from)?;
     Ok(AudioWaveformWindowDto {
         analyzer_version: WAVEFORM_V2_ANALYZER_VERSION,
         sample_rate: window.sample_rate,
@@ -4145,9 +4149,11 @@ pub async fn v2_root_close(
     audio: State<'_, SharedAudioRuntime>,
 ) -> Result<(), ApiError> {
     let root_id = parse_root_id(root_id)?;
-    audio.invalidate_waveform_queries();
     clone_runtime.revoke_for_root(&root_id);
-    registry.close(&root_id)?;
+    let closed = registry.close(&root_id)?;
+    if closed {
+        audio.invalidate_waveform_queries_for_root(&root_id);
+    }
     Ok(())
 }
 
@@ -4459,7 +4465,7 @@ pub async fn v2_audio_waveform_query(
     let registry = Arc::clone(registry.inner());
     let catalog = Arc::clone(catalog.inner());
     let audio = Arc::clone(audio.inner());
-    let epoch = audio.begin_waveform_query();
+    let epoch = audio.begin_waveform_query(&root_id);
     tauri::async_runtime::spawn_blocking(move || {
         get_audio_waveform_query_sync(
             &registry, &catalog, &audio, &root_id, &asset_id, epoch, query,
@@ -6844,7 +6850,7 @@ mod tests {
         install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         let snapshot = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
         let asset_id = snapshot.audio_files[0].asset_id.clone();
-        let epoch = audio.begin_waveform_query();
+        let epoch = audio.begin_waveform_query(&root_id);
 
         let window = get_audio_waveform_query_sync(
             &registry,
@@ -6891,8 +6897,8 @@ mod tests {
         install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         let snapshot = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
         let asset_id = snapshot.audio_files[0].asset_id.clone();
-        let stale_epoch = audio.begin_waveform_query();
-        let _current_epoch = audio.begin_waveform_query();
+        let stale_epoch = audio.begin_waveform_query(&root_id);
+        let _current_epoch = audio.begin_waveform_query(&root_id);
 
         let error = get_audio_waveform_query_sync(
             &registry,
@@ -6927,7 +6933,7 @@ mod tests {
         let snapshot = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
         let asset_id = snapshot.audio_files[0].asset_id.clone();
         registry.close(&root_id).unwrap();
-        let epoch = audio.begin_waveform_query();
+        let epoch = audio.begin_waveform_query(&root_id);
 
         let error = get_audio_waveform_query_sync(
             &registry,
@@ -6961,8 +6967,8 @@ mod tests {
         install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         let snapshot = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
         let asset_id = snapshot.audio_files[0].asset_id.clone();
-        let stale_epoch = audio.begin_waveform_query();
-        audio.invalidate_waveform_queries();
+        let stale_epoch = audio.begin_waveform_query(&root_id);
+        audio.invalidate_waveform_queries_for_root(&root_id);
 
         let error = get_audio_waveform_query_sync(
             &registry,
@@ -6980,7 +6986,7 @@ mod tests {
 
         assert_eq!(error.code, "AUDIO_REQUEST_CANCELLED");
 
-        audio.invalidate_waveform_queries();
+        audio.invalidate_waveform_queries_for_root(&root_id);
         registry.close(&root_id).unwrap();
         let error = get_audio_waveform_query_sync(
             &registry,
@@ -6988,7 +6994,7 @@ mod tests {
             &audio,
             &root_id,
             &asset_id,
-            audio.begin_waveform_query(),
+            audio.begin_waveform_query(&root_id),
             AudioWaveformQueryDto {
                 range: None,
                 target_points: 128,
@@ -6997,6 +7003,43 @@ mod tests {
         .unwrap_err();
 
         assert_eq!(error.code, "ROOT_NOT_APPROVED");
+    }
+
+    #[test]
+    fn closing_unknown_root_does_not_cancel_other_waveform_queries() {
+        let root = TempDir::new().unwrap();
+        create_set_project(root.path(), "SET_A", "PROJECT_A");
+        write_test_wav(&root.path().join("SET_A/AUDIO/kick.wav"));
+        let registry = registry();
+        let (data_directory, catalog) = catalog();
+        let audio = open_shared_audio_runtime(data_directory.path()).unwrap();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        let ghost = RootId::new("00000000-0000-4000-8000-000000000001").unwrap();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
+        let asset_id = list_library_dto_sync(&registry, &catalog, &root_id)
+            .unwrap()
+            .audio_files[0]
+            .asset_id
+            .clone();
+        let epoch = audio.begin_waveform_query(&root_id);
+        registry.close(&ghost).unwrap();
+
+        get_audio_waveform_query_sync(
+            &registry,
+            &catalog,
+            &audio,
+            &root_id,
+            &asset_id,
+            epoch,
+            AudioWaveformQueryDto {
+                range: None,
+                target_points: 128,
+            },
+        )
+        .unwrap();
     }
 
     #[test]
@@ -7014,10 +7057,11 @@ mod tests {
         install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
         let snapshot = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
         let asset_id = snapshot.audio_files[0].asset_id.clone();
-        let epoch = audio.begin_waveform_query();
+        let epoch = audio.begin_waveform_query(&root_id);
         let sources = resolve_live_audio_sources(&registry, &catalog, &root_id, &asset_id).unwrap();
         audio
             .waveform_query(
+                &root_id,
                 epoch,
                 &asset_id,
                 &sources[0].content_hash,
