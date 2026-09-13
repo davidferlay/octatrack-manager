@@ -24,7 +24,7 @@ use ot_application::{
     ListLibrary, LoadLibrarySnapshot, LoadManualAssetMetadata, ReplaceManualAssetMetadata,
     StoreLibrarySnapshot,
 };
-use ot_audio::{AudioError, WAVEFORM_V2_ANALYZER_VERSION};
+use ot_audio::{verify_source_unchanged, AudioError, WAVEFORM_V2_ANALYZER_VERSION};
 use ot_domain::{
     ContentHash, FileInstance, InvalidManualMetadata, LibraryProject, LibrarySet, LibrarySnapshot,
     ManualAssetMetadata, ManualNote, ManualTag, RenameSampleIntent, RootId, RootRelativePath,
@@ -670,6 +670,19 @@ pub struct AudioPreviewTokenDto {
     truncated: bool,
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioPreviewRangeTokenDto {
+    preview_token: String,
+    expires_in_seconds: u64,
+    mime_type: &'static str,
+    byte_length: usize,
+    duration_millis: u64,
+    truncated: bool,
+    sample_rate: u32,
+    range: AudioFrameRangeResponseDto,
+}
+
 fn frame_count_string(value: u64) -> String {
     value.to_string()
 }
@@ -798,14 +811,61 @@ fn create_audio_preview_sync(
 
 fn read_audio_preview_sync(
     registry: &RootRegistry,
+    catalog: &SharedCatalog,
     audio: &SharedAudioRuntime,
     root_id: &RootId,
     preview_token: &str,
 ) -> Result<Vec<u8>, ApiError> {
     registry.resolve(root_id)?;
+    let binding = audio
+        .preview_token_binding(root_id, preview_token)
+        .map_err(ApiError::from)?;
+    with_live_audio_source(registry, catalog, root_id, &binding.asset_id, |source| {
+        if source.content_hash != binding.content_hash {
+            audio.revoke_preview_token(preview_token);
+            return Err(AudioRuntimeError::Audio(AudioError::SourceChanged));
+        }
+        verify_source_unchanged(&binding.content_hash, &source.absolute_path).map_err(|error| {
+            audio.revoke_preview_token(preview_token);
+            AudioRuntimeError::Audio(error)
+        })
+    })?;
     audio
         .read_preview(root_id, preview_token)
-        .map_err(Into::into)
+        .map_err(ApiError::from)
+}
+
+fn create_audio_preview_range_sync(
+    registry: &RootRegistry,
+    catalog: &SharedCatalog,
+    audio: &SharedAudioRuntime,
+    root_id: &RootId,
+    asset_id: &str,
+    range: AudioFrameRangeDto,
+) -> Result<AudioPreviewRangeTokenDto, ApiError> {
+    let ticket = with_live_audio_source(registry, catalog, root_id, asset_id, |source| {
+        audio.create_preview_range_token(
+            root_id,
+            asset_id,
+            &source.content_hash,
+            &source.absolute_path,
+            &range.start_frame,
+            &range.end_frame_exclusive,
+        )
+    })?;
+    Ok(AudioPreviewRangeTokenDto {
+        preview_token: ticket.token,
+        expires_in_seconds: ticket.expires_in_seconds,
+        mime_type: "audio/wav",
+        byte_length: ticket.byte_length,
+        duration_millis: ticket.duration_millis,
+        truncated: false,
+        sample_rate: ticket.sample_rate,
+        range: AudioFrameRangeResponseDto {
+            start_frame: frame_count_string(ticket.start_frame),
+            end_frame_exclusive: frame_count_string(ticket.end_frame_exclusive),
+        },
+    })
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -4495,17 +4555,39 @@ pub async fn v2_audio_preview_create(
 }
 
 #[tauri::command]
+pub async fn v2_audio_preview_range_create(
+    root_id: String,
+    asset_id: String,
+    range: AudioFrameRangeDto,
+    registry: State<'_, Arc<RootRegistry>>,
+    catalog: State<'_, SharedCatalog>,
+    audio: State<'_, SharedAudioRuntime>,
+) -> Result<AudioPreviewRangeTokenDto, ApiError> {
+    let root_id = parse_root_id(root_id)?;
+    let registry = Arc::clone(registry.inner());
+    let catalog = Arc::clone(catalog.inner());
+    let audio = Arc::clone(audio.inner());
+    tauri::async_runtime::spawn_blocking(move || {
+        create_audio_preview_range_sync(&registry, &catalog, &audio, &root_id, &asset_id, range)
+    })
+    .await
+    .map_err(ApiError::task_failed)?
+}
+
+#[tauri::command]
 pub async fn v2_audio_preview_read(
     root_id: String,
     preview_token: String,
     registry: State<'_, Arc<RootRegistry>>,
+    catalog: State<'_, SharedCatalog>,
     audio: State<'_, SharedAudioRuntime>,
 ) -> Result<tauri::ipc::Response, ApiError> {
     let root_id = parse_root_id(root_id)?;
     let registry = Arc::clone(registry.inner());
+    let catalog = Arc::clone(catalog.inner());
     let audio = Arc::clone(audio.inner());
     let bytes = tauri::async_runtime::spawn_blocking(move || {
-        read_audio_preview_sync(&registry, &audio, &root_id, &preview_token)
+        read_audio_preview_sync(&registry, &catalog, &audio, &root_id, &preview_token)
     })
     .await
     .map_err(ApiError::task_failed)??;
@@ -6810,7 +6892,8 @@ mod tests {
         let ticket =
             create_audio_preview_sync(&registry, &catalog, &audio, &root_id, &asset_id).unwrap();
         let preview =
-            read_audio_preview_sync(&registry, &audio, &root_id, &ticket.preview_token).unwrap();
+            read_audio_preview_sync(&registry, &catalog, &audio, &root_id, &ticket.preview_token)
+                .unwrap();
 
         assert_eq!(waveform.analyzer_version, "waveform:v1");
         assert_eq!(waveform.sample_rate, 8_000);
@@ -7131,7 +7214,8 @@ mod tests {
         let ticket =
             create_audio_preview_sync(&registry, &catalog, &audio, &root_id, &asset_id).unwrap();
         let preview =
-            read_audio_preview_sync(&registry, &audio, &root_id, &ticket.preview_token).unwrap();
+            read_audio_preview_sync(&registry, &catalog, &audio, &root_id, &ticket.preview_token)
+                .unwrap();
 
         assert!(!waveform.peaks.is_empty());
         assert_eq!(&preview[0..4], b"RIFF");
@@ -7171,9 +7255,115 @@ mod tests {
         assert_eq!(missing.code, "AUDIO_SOURCE_UNAVAILABLE");
 
         registry.close(&root_id).unwrap();
-        let closed = read_audio_preview_sync(&registry, &audio, &root_id, &ticket.preview_token)
-            .unwrap_err();
+        let closed =
+            read_audio_preview_sync(&registry, &catalog, &audio, &root_id, &ticket.preview_token)
+                .unwrap_err();
         assert_eq!(closed.code, "ROOT_NOT_APPROVED");
+    }
+
+    #[test]
+    fn range_preview_api_round_trip_without_exposing_paths_or_hashes() {
+        let root = TempDir::new().unwrap();
+        create_set_project(root.path(), "SET_A", "PROJECT_A");
+        let audio_path = root.path().join("SET_A/AUDIO/kick.wav");
+        write_test_wav(&audio_path);
+        let registry = registry();
+        let data_directory = TempDir::new().unwrap();
+        let catalog = open_shared_catalog(data_directory.path()).unwrap();
+        let audio = open_shared_audio_runtime(data_directory.path()).unwrap();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
+        let asset_id = list_library_dto_sync(&registry, &catalog, &root_id)
+            .unwrap()
+            .audio_files[0]
+            .asset_id
+            .clone();
+
+        let ticket = create_audio_preview_range_sync(
+            &registry,
+            &catalog,
+            &audio,
+            &root_id,
+            &asset_id,
+            AudioFrameRangeDto {
+                start_frame: "1000".into(),
+                end_frame_exclusive: "1500".into(),
+            },
+        )
+        .unwrap();
+        let preview =
+            read_audio_preview_sync(&registry, &catalog, &audio, &root_id, &ticket.preview_token)
+                .unwrap();
+
+        assert_eq!(ticket.sample_rate, 8_000);
+        assert_eq!(ticket.range.start_frame, "1000");
+        assert_eq!(ticket.range.end_frame_exclusive, "1500");
+        assert!(!ticket.truncated);
+        assert_eq!(preview.len(), ticket.byte_length);
+        assert_eq!(&preview[0..4], b"RIFF");
+
+        let json = serde_json::to_string(&ticket).unwrap();
+        assert!(!json.contains("sha256:"));
+        assert!(!json.contains(root.path().to_str().unwrap()));
+
+        assert!(matches!(
+            read_audio_preview_sync(
+                &registry,
+                &catalog,
+                &audio,
+                &root_id,
+                &ticket.preview_token,
+            ),
+            Err(ApiError { code, .. }) if code == "PREVIEW_TOKEN_INVALID"
+        ));
+    }
+
+    #[test]
+    fn range_preview_read_rejects_changed_source_and_revokes_token() {
+        let root = TempDir::new().unwrap();
+        create_set_project(root.path(), "SET_A", "PROJECT_A");
+        let audio_path = root.path().join("SET_A/AUDIO/kick.wav");
+        write_test_wav(&audio_path);
+        let registry = registry();
+        let data_directory = TempDir::new().unwrap();
+        let catalog = open_shared_catalog(data_directory.path()).unwrap();
+        let audio = open_shared_audio_runtime(data_directory.path()).unwrap();
+        let session =
+            register_root_sync(&registry, &catalog, root.path().to_str().unwrap()).unwrap();
+        let root_id = RootId::new(session.root_id).unwrap();
+        let clone_runtime = open_test_clone_runtime(data_directory.path());
+        install_fixture_clone_verification(&clone_runtime, &registry, &root_id);
+        let asset_id = list_library_dto_sync(&registry, &catalog, &root_id)
+            .unwrap()
+            .audio_files[0]
+            .asset_id
+            .clone();
+        let ticket = create_audio_preview_range_sync(
+            &registry,
+            &catalog,
+            &audio,
+            &root_id,
+            &asset_id,
+            AudioFrameRangeDto {
+                start_frame: "0".into(),
+                end_frame_exclusive: "500".into(),
+            },
+        )
+        .unwrap();
+
+        fs::write(&audio_path, b"changed after preview token was issued").unwrap();
+        let changed =
+            read_audio_preview_sync(&registry, &catalog, &audio, &root_id, &ticket.preview_token)
+                .unwrap_err();
+        assert_eq!(changed.code, "AUDIO_SOURCE_CHANGED");
+
+        let reused =
+            read_audio_preview_sync(&registry, &catalog, &audio, &root_id, &ticket.preview_token)
+                .unwrap_err();
+        assert_eq!(reused.code, "PREVIEW_TOKEN_INVALID");
     }
 
     #[test]

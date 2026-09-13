@@ -182,6 +182,7 @@ describe("RootRegistryPanel", () => {
         channelPeaks: [[{ min: -0.2, max: 0.4 }]],
       }),
       createPreviewToken: vi.fn(),
+      createRangePreviewToken: vi.fn(),
       readPreview: vi.fn(),
     };
     const metadataClient: MetadataApi = {
@@ -338,6 +339,7 @@ describe("RootRegistryPanel", () => {
         channelPeaks: [[{ min: -0.2, max: 0.4 }]],
       }),
       createPreviewToken: vi.fn(),
+      createRangePreviewToken: vi.fn(),
       readPreview: vi.fn(),
     };
     const metadataClient: MetadataApi = {
@@ -388,6 +390,7 @@ describe("RootRegistryPanel", () => {
         channelPeaks: [[{ min: -0.2, max: 0.4 }]],
       }),
       createPreviewToken: vi.fn(),
+      createRangePreviewToken: vi.fn(),
       readPreview: vi.fn(),
     };
     const metadataClient: MetadataApi = {

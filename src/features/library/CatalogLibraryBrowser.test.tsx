@@ -139,6 +139,7 @@ describe("CatalogLibraryBrowser", () => {
         channelPeaks: [[{ min: -0.5, max: 0.5 }]],
       }),
       createPreviewToken: vi.fn(),
+      createRangePreviewToken: vi.fn(),
       readPreview: vi.fn(),
     };
     const metadataClient: MetadataApi = {
@@ -180,6 +181,7 @@ describe("CatalogLibraryBrowser", () => {
         channelPeaks: [[{ min: -0.5, max: 0.5 }]],
       }),
       createPreviewToken: vi.fn(),
+      createRangePreviewToken: vi.fn(),
       readPreview: vi.fn(),
     };
     const metadataClient: MetadataApi = {
@@ -406,6 +408,7 @@ describe("CatalogLibraryBrowser", () => {
         channelPeaks: [[{ min: -0.5, max: 0.5 }]],
       }),
       createPreviewToken: vi.fn(),
+      createRangePreviewToken: vi.fn(),
       readPreview: vi.fn(),
     };
     const metadataClient: MetadataApi = {

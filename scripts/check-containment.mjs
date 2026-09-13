@@ -382,6 +382,7 @@ const expectedV2Commands = [
   "v2_asset_metadata_get",
   "v2_asset_metadata_replace",
   "v2_audio_preview_create",
+  "v2_audio_preview_range_create",
   "v2_audio_preview_read",
   // AUTO-SLICE-1: read-only analysis and local SQLite draft edits; no media Apply.
   "v2_audio_onsets_start",

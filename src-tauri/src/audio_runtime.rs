@@ -1,5 +1,6 @@
 use ot_audio::{
-    create_preview, AudioError, WaveformCache, WaveformCacheV2, WaveformQueryResult, WaveformSlice,
+    create_preview, create_preview_range, AudioError, WaveformCache, WaveformCacheV2,
+    WaveformQueryResult, WaveformSlice,
 };
 use ot_domain::{ContentHash, RootId};
 use sha2::{Digest, Sha256};
@@ -26,8 +27,27 @@ pub struct PreviewTicket {
     pub truncated: bool,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PreviewRangeTicket {
+    pub token: String,
+    pub expires_in_seconds: u64,
+    pub byte_length: usize,
+    pub duration_millis: u64,
+    pub sample_rate: u32,
+    pub start_frame: u64,
+    pub end_frame_exclusive: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PreviewTokenBinding {
+    pub asset_id: String,
+    pub content_hash: ContentHash,
+}
+
 struct PreviewRecord {
     root_id: RootId,
+    asset_id: String,
+    content_hash: ContentHash,
     bytes: Vec<u8>,
     expires_at: Instant,
 }
@@ -191,7 +211,7 @@ impl AudioRuntime {
             create_preview(expected_hash, source_path).map_err(AudioRuntimeError::Audio)?;
         let now = Instant::now();
         let expires_at = now + self.preview_ttl;
-        let token = self.new_token(root_id, asset_id);
+        let token = self.new_token(root_id, asset_id, None);
         let ticket = PreviewTicket {
             token: token.clone(),
             expires_in_seconds: self.preview_ttl.as_secs(),
@@ -199,6 +219,66 @@ impl AudioRuntime {
             duration_millis: preview.duration_millis,
             truncated: preview.truncated,
         };
+        self.store_preview_record(
+            token,
+            PreviewRecord {
+                root_id: root_id.clone(),
+                asset_id: asset_id.to_string(),
+                content_hash: expected_hash.clone(),
+                bytes: preview.bytes,
+                expires_at,
+            },
+        )?;
+        Ok(ticket)
+    }
+
+    pub fn create_preview_range_token(
+        &self,
+        root_id: &RootId,
+        asset_id: &str,
+        expected_hash: &ContentHash,
+        source_path: &Path,
+        start_frame: &str,
+        end_frame_exclusive: &str,
+    ) -> Result<PreviewRangeTicket, AudioRuntimeError> {
+        let _generation = self
+            .preview_generation
+            .lock()
+            .map_err(|_| AudioRuntimeError::Unavailable)?;
+        let (preview, sample_rate, range) =
+            create_preview_range(expected_hash, source_path, start_frame, end_frame_exclusive)
+                .map_err(AudioRuntimeError::Audio)?;
+        let now = Instant::now();
+        let expires_at = now + self.preview_ttl;
+        let token = self.new_token(root_id, asset_id, Some((range.start, range.end_exclusive)));
+        let ticket = PreviewRangeTicket {
+            token: token.clone(),
+            expires_in_seconds: self.preview_ttl.as_secs(),
+            byte_length: preview.bytes.len(),
+            duration_millis: preview.duration_millis,
+            sample_rate,
+            start_frame: range.start,
+            end_frame_exclusive: range.end_exclusive,
+        };
+        self.store_preview_record(
+            token,
+            PreviewRecord {
+                root_id: root_id.clone(),
+                asset_id: asset_id.to_string(),
+                content_hash: expected_hash.clone(),
+                bytes: preview.bytes,
+                expires_at,
+            },
+        )?;
+        Ok(ticket)
+    }
+
+    fn store_preview_record(
+        &self,
+        token: String,
+        record: PreviewRecord,
+    ) -> Result<(), AudioRuntimeError> {
+        let now = Instant::now();
         let mut state = self.lock_previews()?;
         state.records.retain(|_, record| record.expires_at > now);
         if state.records.len() >= MAX_PREVIEW_TOKENS {
@@ -211,15 +291,38 @@ impl AudioRuntime {
                 state.records.remove(&oldest);
             }
         }
-        state.records.insert(
-            token,
-            PreviewRecord {
-                root_id: root_id.clone(),
-                bytes: preview.bytes,
-                expires_at,
-            },
-        );
-        Ok(ticket)
+        state.records.insert(token, record);
+        Ok(())
+    }
+
+    pub fn preview_token_binding(
+        &self,
+        root_id: &RootId,
+        token: &str,
+    ) -> Result<PreviewTokenBinding, AudioRuntimeError> {
+        validate_preview_token(token)?;
+        let now = Instant::now();
+        let mut state = self.lock_previews()?;
+        let Some(record) = state.records.get(token) else {
+            return Err(AudioRuntimeError::InvalidPreviewToken);
+        };
+        if record.expires_at <= now {
+            state.records.remove(token);
+            return Err(AudioRuntimeError::ExpiredPreviewToken);
+        }
+        if &record.root_id != root_id {
+            return Err(AudioRuntimeError::InvalidPreviewToken);
+        }
+        Ok(PreviewTokenBinding {
+            asset_id: record.asset_id.clone(),
+            content_hash: record.content_hash.clone(),
+        })
+    }
+
+    pub fn revoke_preview_token(&self, token: &str) {
+        if let Ok(mut state) = self.lock_previews() {
+            state.records.remove(token);
+        }
     }
 
     pub fn read_preview(
@@ -251,7 +354,7 @@ impl AudioRuntime {
         Ok(record.bytes)
     }
 
-    fn new_token(&self, root_id: &RootId, asset_id: &str) -> String {
+    fn new_token(&self, root_id: &RootId, asset_id: &str, range: Option<(u64, u64)>) -> String {
         let sequence = self.next_token.fetch_add(1, Ordering::Relaxed);
         let mut hasher = Sha256::new();
         hasher.update(b"preview:v1");
@@ -261,6 +364,11 @@ impl AudioRuntime {
         hasher.update(root_id.as_str().as_bytes());
         hasher.update((asset_id.len() as u64).to_be_bytes());
         hasher.update(asset_id.as_bytes());
+        if let Some((start, end_exclusive)) = range {
+            hasher.update(b"range");
+            hasher.update(start.to_be_bytes());
+            hasher.update(end_exclusive.to_be_bytes());
+        }
         format!("preview:v1:{:x}", hasher.finalize())
     }
 
@@ -419,11 +527,16 @@ mod tests {
         let (_data, runtime) = runtime(Duration::from_secs(60));
         let root = RootId::new("root-one").unwrap();
         let other = RootId::new("root-two").unwrap();
-        let token = runtime.new_token(&root, "asset:v1:opaque");
+        let token = runtime.new_token(&root, "asset:v1:opaque", None);
         runtime.previews.lock().unwrap().records.insert(
             token.clone(),
             PreviewRecord {
                 root_id: root.clone(),
+                asset_id: "asset:v1:opaque".into(),
+                content_hash: ContentHash::parse(
+                    "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                )
+                .unwrap(),
                 bytes: b"preview".to_vec(),
                 expires_at: Instant::now() + Duration::from_secs(60),
             },
@@ -446,11 +559,16 @@ mod tests {
     fn expired_preview_tokens_fail_closed() {
         let (_data, runtime) = runtime(Duration::ZERO);
         let root = RootId::new("root-one").unwrap();
-        let token = runtime.new_token(&root, "asset:v1:opaque");
+        let token = runtime.new_token(&root, "asset:v1:opaque", None);
         runtime.previews.lock().unwrap().records.insert(
             token.clone(),
             PreviewRecord {
                 root_id: root.clone(),
+                asset_id: "asset:v1:opaque".into(),
+                content_hash: ContentHash::parse(
+                    "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                )
+                .unwrap(),
                 bytes: b"preview".to_vec(),
                 expires_at: Instant::now(),
             },

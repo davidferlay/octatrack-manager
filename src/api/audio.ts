@@ -44,6 +44,11 @@ export interface AudioPreviewToken {
   truncated: boolean;
 }
 
+export interface AudioPreviewRangeToken extends AudioPreviewToken {
+  sampleRate: number;
+  range: AudioFrameRange;
+}
+
 export type AudioPreviewBytes = ArrayBuffer | number[];
 
 export interface AudioApi {
@@ -58,6 +63,11 @@ export interface AudioApi {
     query: AudioWaveformQuery,
   ): Promise<AudioWaveformWindow>;
   createPreviewToken(rootId: string, assetId: string): Promise<AudioPreviewToken>;
+  createRangePreviewToken(
+    rootId: string,
+    assetId: string,
+    range: AudioFrameRange,
+  ): Promise<AudioPreviewRangeToken>;
   readPreview(rootId: string, previewToken: string): Promise<AudioPreviewBytes>;
 }
 
@@ -79,6 +89,12 @@ export function createAudioApi(client: IpcClient = ipcClient): AudioApi {
       client.request<AudioPreviewToken>("v2_audio_preview_create", {
         rootId,
         assetId,
+      }),
+    createRangePreviewToken: (rootId, assetId, range) =>
+      client.request<AudioPreviewRangeToken>("v2_audio_preview_range_create", {
+        rootId,
+        assetId,
+        range,
       }),
     readPreview: (rootId, previewToken) =>
       client.request<AudioPreviewBytes>("v2_audio_preview_read", {

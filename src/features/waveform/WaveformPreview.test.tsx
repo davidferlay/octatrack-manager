@@ -34,6 +34,16 @@ function api(overrides: Partial<AudioApi> = {}): AudioApi {
       durationMillis: 1000,
       truncated: false,
     }),
+    createRangePreviewToken: vi.fn().mockResolvedValue({
+      previewToken: "preview:v1:range",
+      expiresInSeconds: 120,
+      mimeType: "audio/wav",
+      byteLength: 4,
+      durationMillis: 500,
+      truncated: false,
+      sampleRate: 44100,
+      range: { startFrame: "0", endFrameExclusive: "44100" },
+    }),
     readPreview: vi.fn().mockResolvedValue(new Uint8Array([82, 73, 70, 70]).buffer),
     ...overrides,
   };
@@ -45,6 +55,7 @@ describe("WaveformPreview", () => {
       createObjectURL: vi.fn(() => "blob:preview"),
       revokeObjectURL: vi.fn(),
     });
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -218,5 +229,94 @@ describe("WaveformPreview", () => {
     const path = waveformPath(waveformWindow);
     expect(path).toContain("M");
     expect(path).toBe(waveformChannelPath(waveformWindow.channelPeaks[0], 2));
+  });
+
+  it("plays a validated frame range through the range preview API", async () => {
+    const client = api();
+    render(
+      <WaveformPreview
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+      />,
+    );
+    await screen.findByRole("img", { name: "Audio waveform" });
+
+    fireEvent.change(screen.getByLabelText("Start frame"), { target: { value: "1000" } });
+    fireEvent.change(screen.getByLabelText("End frame (exclusive)"), {
+      target: { value: "2000" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
+
+    await waitFor(() => expect(client.createRangePreviewToken).toHaveBeenCalledWith(
+      "root-opaque",
+      "asset:v1:opaque",
+      { startFrame: "1000", endFrameExclusive: "2000" },
+    ));
+    expect(client.readPreview).toHaveBeenCalledWith("root-opaque", "preview:v1:range");
+  });
+
+  it("shows invalid range feedback without calling the range preview API", async () => {
+    const client = api();
+    render(
+      <WaveformPreview
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+      />,
+    );
+    await screen.findByRole("img", { name: "Audio waveform" });
+
+    fireEvent.change(screen.getByLabelText("End frame (exclusive)"), {
+      target: { value: "0" },
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("empty or inverted");
+    expect(client.createRangePreviewToken).not.toHaveBeenCalled();
+  });
+
+  it("discards stale range preview results after a fast asset switch", async () => {
+    const client = api();
+    let resolveRange: (() => void) | undefined;
+    vi.mocked(client.createRangePreviewToken).mockImplementation(
+      () => new Promise((resolve) => {
+        resolveRange = () => resolve({
+          previewToken: "preview:v1:late",
+          expiresInSeconds: 120,
+          mimeType: "audio/wav",
+          byteLength: 4,
+          durationMillis: 500,
+          truncated: false,
+          sampleRate: 44100,
+          range: { startFrame: "0", endFrameExclusive: "44100" },
+        });
+      }),
+    );
+
+    const view = render(
+      <WaveformPreview
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:first"
+        displayName="first.wav"
+      />,
+    );
+    await screen.findByRole("img", { name: "Audio waveform" });
+    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
+
+    view.rerender(
+      <WaveformPreview
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:second"
+        displayName="second.wav"
+      />,
+    );
+
+    resolveRange?.();
+    await Promise.resolve();
+    expect(client.readPreview).not.toHaveBeenCalled();
   });
 });

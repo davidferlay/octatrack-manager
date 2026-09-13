@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   audioApi,
   type AudioApi,
@@ -7,7 +7,11 @@ import {
   type WaveformPeak,
 } from "../../api";
 import { Button } from "../../design-system";
-import { durationSeconds } from "./frameMath";
+import {
+  durationLabelForFrame,
+  durationSeconds,
+  validateFrameRange,
+} from "./frameMath";
 import "./WaveformPreview.css";
 
 const TARGET_POINTS = 640;
@@ -72,8 +76,33 @@ export function WaveformPreview({
   const [previewing, setPreviewing] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [truncated, setTruncated] = useState(false);
+  const [rangeStartFrame, setRangeStartFrame] = useState("0");
+  const [rangeEndFrameExclusive, setRangeEndFrameExclusive] = useState("");
+  const [rangeInvalid, setRangeInvalid] = useState<string | null>(null);
+  const [rangeLoading, setRangeLoading] = useState(false);
+  const [rangePlaying, setRangePlaying] = useState(false);
+  const [rangeError, setRangeError] = useState<string | null>(null);
   const previewRequest = useRef(0);
+  const rangeRequest = useRef(0);
   const waveformRequest = useRef(0);
+  const rangeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const rangeObjectUrl = useRef<string | null>(null);
+  const selectionRef = useRef({ rootId, assetId });
+  selectionRef.current = { rootId, assetId };
+
+  const stopRangePlayback = useCallback(() => {
+    const element = rangeAudioRef.current;
+    if (element !== null) {
+      element.pause();
+      element.removeAttribute("src");
+      element.load();
+    }
+    if (rangeObjectUrl.current !== null) {
+      URL.revokeObjectURL(rangeObjectUrl.current);
+      rangeObjectUrl.current = null;
+    }
+    setRangePlaying(false);
+  }, []);
 
   useEffect(() => {
     const request = waveformRequest.current + 1;
@@ -84,7 +113,12 @@ export function WaveformPreview({
       .queryWaveform(rootId, assetId, { range: null, targetPoints: TARGET_POINTS })
       .then(
         (nextWaveform) => {
-          if (waveformRequest.current === request) setWaveform(nextWaveform);
+          if (waveformRequest.current === request) {
+            setWaveform(nextWaveform);
+            setRangeStartFrame("0");
+            setRangeEndFrameExclusive(nextWaveform.frameCount);
+            setRangeInvalid(null);
+          }
         },
         (error) => {
           if (waveformRequest.current === request) setWaveformError(errorMessage(error));
@@ -101,14 +135,32 @@ export function WaveformPreview({
 
   useEffect(() => () => {
     previewRequest.current += 1;
-  }, []);
+    rangeRequest.current += 1;
+    stopRangePlayback();
+  }, [stopRangePlayback]);
 
   useEffect(() => {
     previewRequest.current += 1;
+    rangeRequest.current += 1;
     setPreviewUrl(null);
     setPreviewError(null);
     setTruncated(false);
-  }, [assetId, rootId]);
+    setRangeStartFrame("0");
+    setRangeEndFrameExclusive("");
+    setRangeInvalid(null);
+    setRangeError(null);
+    stopRangePlayback();
+  }, [assetId, rootId, stopRangePlayback]);
+
+  useEffect(() => {
+    if (waveform === null) return;
+    try {
+      validateFrameRange(rangeStartFrame, rangeEndFrameExclusive, waveform.frameCount);
+      setRangeInvalid(null);
+    } catch (error) {
+      setRangeInvalid(errorMessage(error));
+    }
+  }, [rangeEndFrameExclusive, rangeStartFrame, waveform]);
 
   const channelPaths = useMemo(() => {
     if (waveform === null) return [];
@@ -121,6 +173,19 @@ export function WaveformPreview({
     if (waveform === null) return null;
     return formatDuration(durationSeconds(waveform.frameCount, waveform.sampleRate));
   }, [waveform]);
+
+  const rangeDurationHint = useMemo(() => {
+    if (waveform === null || rangeInvalid !== null) return null;
+    try {
+      validateFrameRange(rangeStartFrame, rangeEndFrameExclusive, waveform.frameCount);
+    } catch {
+      return null;
+    }
+    const span = (
+      BigInt(rangeEndFrameExclusive) - BigInt(rangeStartFrame)
+    ).toString();
+    return durationLabelForFrame(span, waveform.sampleRate);
+  }, [rangeEndFrameExclusive, rangeInvalid, rangeStartFrame, waveform]);
 
   async function loadPreview() {
     const request = previewRequest.current + 1;
@@ -149,6 +214,93 @@ export function WaveformPreview({
     }
   }
 
+  async function playSelectedRange() {
+    if (waveform === null) return;
+    try {
+      validateFrameRange(rangeStartFrame, rangeEndFrameExclusive, waveform.frameCount);
+    } catch (error) {
+      setRangeInvalid(errorMessage(error));
+      return;
+    }
+    const request = rangeRequest.current + 1;
+    rangeRequest.current = request;
+    stopRangePlayback();
+    setRangeLoading(true);
+    setRangeError(null);
+    const range = {
+      startFrame: rangeStartFrame,
+      endFrameExclusive: rangeEndFrameExclusive,
+    };
+    const target = { rootId, assetId };
+    try {
+      const ticket = await api.createRangePreviewToken(rootId, assetId, range);
+      if (
+        rangeRequest.current !== request
+        || selectionRef.current.rootId !== target.rootId
+        || selectionRef.current.assetId !== target.assetId
+      ) {
+        return;
+      }
+      const bytes = await api.readPreview(rootId, ticket.previewToken);
+      if (
+        rangeRequest.current !== request
+        || selectionRef.current.rootId !== target.rootId
+        || selectionRef.current.assetId !== target.assetId
+      ) {
+        return;
+      }
+      const buffer = toArrayBuffer(bytes);
+      if (
+        ticket.mimeType !== "audio/wav"
+        || buffer.byteLength !== ticket.byteLength
+        || ticket.range.startFrame !== range.startFrame
+        || ticket.range.endFrameExclusive !== range.endFrameExclusive
+      ) {
+        throw new Error("Range preview response failed validation.");
+      }
+      const url = URL.createObjectURL(new Blob([buffer], { type: "audio/wav" }));
+      rangeObjectUrl.current = url;
+      const element = rangeAudioRef.current;
+      if (element === null) {
+        URL.revokeObjectURL(url);
+        rangeObjectUrl.current = null;
+        return;
+      }
+      const onEnded = () => {
+        setRangePlaying(false);
+        element.removeEventListener("ended", onEnded);
+        element.removeEventListener("error", onError);
+      };
+      const onError = () => {
+        if (rangeRequest.current === request) {
+          setRangeError("Range preview playback failed.");
+          setRangePlaying(false);
+        }
+        element.removeEventListener("ended", onEnded);
+        element.removeEventListener("error", onError);
+      };
+      element.addEventListener("ended", onEnded);
+      element.addEventListener("error", onError);
+      element.src = url;
+      await element.play();
+      if (rangeRequest.current === request) setRangePlaying(true);
+    } catch (error) {
+      if (rangeRequest.current === request) setRangeError(errorMessage(error));
+      stopRangePlayback();
+    } finally {
+      if (rangeRequest.current === request) setRangeLoading(false);
+    }
+  }
+
+  function stopSelectedRange() {
+    rangeRequest.current += 1;
+    stopRangePlayback();
+    setRangeLoading(false);
+    setRangeError(null);
+  }
+
+  const rangeControlsDisabled = waveform === null || rangeLoading;
+
   return (
     <section className="waveform-preview" aria-label={`Waveform preview for ${displayName}`}>
       <div className="waveform-preview-heading">
@@ -175,6 +327,67 @@ export function WaveformPreview({
       {waveformError !== null && (
         <p className="waveform-preview-error" role="alert">{waveformError}</p>
       )}
+
+      <div className="waveform-preview-range" aria-label="Preview range">
+        <p className="waveform-preview-range-label">Range preview</p>
+        <div className="waveform-preview-range-fields">
+          <label className="waveform-preview-range-field">
+            <span>Start frame</span>
+            <input
+              aria-invalid={rangeInvalid !== null}
+              disabled={rangeControlsDisabled}
+              inputMode="numeric"
+              onChange={(event) => setRangeStartFrame(event.target.value)}
+              value={rangeStartFrame}
+            />
+          </label>
+          <label className="waveform-preview-range-field">
+            <span>End frame (exclusive)</span>
+            <input
+              aria-invalid={rangeInvalid !== null}
+              disabled={rangeControlsDisabled}
+              inputMode="numeric"
+              onChange={(event) => setRangeEndFrameExclusive(event.target.value)}
+              value={rangeEndFrameExclusive}
+            />
+          </label>
+        </div>
+        {rangeDurationHint !== null && (
+          <p className="waveform-preview-notice" role="status">
+            Selected span: {rangeDurationHint}
+          </p>
+        )}
+        {rangeInvalid !== null && (
+          <p className="waveform-preview-error" role="alert">{rangeInvalid}</p>
+        )}
+        <div className="waveform-preview-actions waveform-preview-range-actions">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={rangeControlsDisabled || rangeInvalid !== null || rangePlaying}
+            onClick={() => void playSelectedRange()}
+          >
+            {rangeLoading ? "Preparing range..." : "Play selected range"}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={!rangePlaying && !rangeLoading}
+            onClick={stopSelectedRange}
+          >
+            Stop
+          </Button>
+        </div>
+        {rangeError !== null && (
+          <p className="waveform-preview-error" role="alert">{rangeError}</p>
+        )}
+        <audio
+          ref={rangeAudioRef}
+          aria-label={`Range preview ${displayName}`}
+          className="waveform-preview-range-audio"
+          preload="none"
+        />
+      </div>
 
       <div className="waveform-preview-actions">
         <Button type="button" variant="secondary" disabled={previewing} onClick={loadPreview}>

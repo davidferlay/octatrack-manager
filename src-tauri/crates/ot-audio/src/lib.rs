@@ -21,7 +21,10 @@ use symphonia::core::probe::Hint;
 
 pub mod waveform_v2;
 
-pub use waveform_v2::{WaveformCacheV2, WaveformQueryResult, WAVEFORM_V2_ANALYZER_VERSION};
+pub use waveform_v2::{
+    parse_decimal_frame, FrameRange, WaveformCacheV2, WaveformQueryResult,
+    WAVEFORM_V2_ANALYZER_VERSION,
+};
 
 pub const WAVEFORM_ANALYZER_VERSION: &str = "waveform:v1";
 pub const MIN_TARGET_POINTS: usize = 32;
@@ -181,6 +184,13 @@ impl WaveformCache {
     }
 }
 
+pub fn verify_source_unchanged(
+    expected_hash: &ContentHash,
+    source_path: &Path,
+) -> Result<(), AudioError> {
+    open_verified_source(source_path, expected_hash).map(|_| ())
+}
+
 pub fn create_preview(
     expected_hash: &ContentHash,
     source_path: &Path,
@@ -264,6 +274,132 @@ pub fn create_preview(
         duration_millis: frame_count.saturating_mul(1000) / u64::from(sample_rate),
         truncated,
     })
+}
+
+/// Frame-exact PCM WAV for a half-open `[start, end)` range. Does not truncate; rejects
+/// inverted, empty, out-of-bounds, or over-limit ranges before emitting partial output.
+pub fn create_preview_range(
+    expected_hash: &ContentHash,
+    source_path: &Path,
+    start_frame: &str,
+    end_frame_exclusive: &str,
+) -> Result<(PreviewAudio, u32, FrameRange), AudioError> {
+    let start = parse_decimal_frame(start_frame)?;
+    let end_exclusive = parse_decimal_frame(end_frame_exclusive)?;
+    if start >= end_exclusive {
+        return Err(AudioError::InvalidRequest(
+            "frame range is empty or inverted",
+        ));
+    }
+    let range_len = end_exclusive - start;
+
+    let source = open_verified_source(source_path, expected_hash)?;
+    let mut decoded = open_decoder(source, source_path)?;
+    let mut pcm = Vec::new();
+    let mut frame_index = 0_u64;
+    let mut output_frames = 0_u64;
+    let mut sample_rate = 0_u32;
+    let mut output_channels = 0_usize;
+    let mut limits_checked = false;
+
+    while let Some(packet) = decoded.next_packet()? {
+        let audio = decoded
+            .decoder
+            .decode(&packet)
+            .map_err(|error| AudioError::DecodeFailed(error.to_string()))?;
+        let spec = *audio.spec();
+        let input_channels = spec.channels.count();
+        if input_channels == 0 || spec.rate == 0 {
+            return Err(AudioError::DecodeFailed(
+                "decoded audio has no channels or sample rate".into(),
+            ));
+        }
+        if sample_rate == 0 {
+            sample_rate = spec.rate;
+            output_channels = input_channels.min(2);
+            let max_frames_by_duration = u64::from(sample_rate) * MAX_PREVIEW_SECONDS;
+            let max_frames_by_bytes =
+                ((MAX_PREVIEW_BYTES.saturating_sub(44)) / (output_channels * 2)) as u64;
+            let max_frames = max_frames_by_duration.min(max_frames_by_bytes);
+            if range_len > max_frames {
+                return Err(AudioError::InvalidRequest(
+                    "preview range exceeds 60 seconds or 32 MiB",
+                ));
+            }
+            limits_checked = true;
+        } else if sample_rate != spec.rate || output_channels != input_channels.min(2) {
+            return Err(AudioError::DecodeFailed(
+                "audio parameters changed during decoding".into(),
+            ));
+        }
+
+        let mut samples = SampleBuffer::<f32>::new(audio.capacity() as u64, spec);
+        samples.copy_interleaved_ref(audio);
+        let values = samples.samples();
+        if !values.len().is_multiple_of(input_channels) {
+            return Err(AudioError::DecodeFailed(
+                "decoded sample buffer is not frame aligned".into(),
+            ));
+        }
+
+        for frame in values.chunks_exact(input_channels) {
+            if frame_index >= end_exclusive {
+                break;
+            }
+            if frame_index >= start {
+                for sample in frame.iter().take(output_channels) {
+                    if !sample.is_finite() {
+                        return Err(AudioError::DecodeFailed(
+                            "decoded audio contains a non-finite sample".into(),
+                        ));
+                    }
+                    let clamped = sample.clamp(-1.0, 1.0);
+                    let encoded = if clamped < 0.0 {
+                        (clamped * 32768.0) as i16
+                    } else {
+                        (clamped * 32767.0) as i16
+                    };
+                    pcm.extend_from_slice(&encoded.to_le_bytes());
+                }
+                output_frames += 1;
+            }
+            frame_index += 1;
+        }
+        if frame_index >= end_exclusive {
+            break;
+        }
+    }
+
+    if !limits_checked || sample_rate == 0 || output_channels == 0 {
+        return Err(AudioError::DecodeFailed(
+            "audio source contains no decodable samples".into(),
+        ));
+    }
+    if frame_index < end_exclusive {
+        return Err(AudioError::InvalidRequest(
+            "frame range extends beyond the source length",
+        ));
+    }
+    if output_frames != range_len {
+        return Err(AudioError::DecodeFailed(
+            "preview range decode did not produce the expected frame count".into(),
+        ));
+    }
+
+    let range = FrameRange {
+        start,
+        end_exclusive,
+    };
+    let bytes = encode_pcm_wav(&pcm, sample_rate, output_channels as u16)?;
+    Ok((
+        PreviewAudio {
+            bytes,
+            duration_millis: output_frames.saturating_mul(1000) / u64::from(sample_rate),
+            truncated: false,
+        },
+        sample_rate,
+        range,
+    ))
 }
 
 fn analyze(source: File, source_path: &Path, asset_id: &str) -> Result<CachedWaveform, AudioError> {
@@ -844,6 +980,75 @@ mod tests {
         assert_eq!(preview.duration_millis, 1000);
         assert!(!preview.truncated);
         assert_eq!(fs::read(&audio_path).unwrap(), before);
+    }
+
+    #[test]
+    fn range_preview_extracts_exact_frame_window_from_non_zero_start() {
+        let fixture = TempDir::new().unwrap();
+        let audio_path = fixture.path().join("tone.wav");
+        write_wav(&audio_path, 2_000);
+        let hash = content_hash(&audio_path);
+
+        let (preview, sample_rate, range) =
+            create_preview_range(&hash, &audio_path, "500", "750").unwrap();
+
+        assert_eq!(sample_rate, 44_100);
+        assert_eq!(range.start, 500);
+        assert_eq!(range.end_exclusive, 750);
+        assert_eq!(preview.duration_millis, 250 * 1000 / 44_100);
+        assert!(!preview.truncated);
+        let pcm_bytes = preview.bytes.len() - 44;
+        assert_eq!(pcm_bytes, 250 * 2 * 2);
+    }
+
+    #[test]
+    fn range_preview_rejects_inverted_empty_and_out_of_bounds_ranges() {
+        let fixture = TempDir::new().unwrap();
+        let audio_path = fixture.path().join("tone.wav");
+        write_wav(&audio_path, 128);
+        let hash = content_hash(&audio_path);
+
+        assert!(matches!(
+            create_preview_range(&hash, &audio_path, "64", "64"),
+            Err(AudioError::InvalidRequest(_))
+        ));
+        assert!(matches!(
+            create_preview_range(&hash, &audio_path, "80", "40"),
+            Err(AudioError::InvalidRequest(_))
+        ));
+        assert!(matches!(
+            create_preview_range(&hash, &audio_path, "0", "129"),
+            Err(AudioError::InvalidRequest(_))
+        ));
+    }
+
+    #[test]
+    fn range_preview_rejects_non_canonical_decimal_frames() {
+        let fixture = TempDir::new().unwrap();
+        let audio_path = fixture.path().join("tone.wav");
+        write_wav(&audio_path, 64);
+        let hash = content_hash(&audio_path);
+
+        for (start, end) in [("01", "10"), ("", "10"), ("-1", "10"), ("10", "01")] {
+            assert!(matches!(
+                create_preview_range(&hash, &audio_path, start, end),
+                Err(AudioError::InvalidRequest(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn range_preview_rejects_ranges_over_library_preview_limits() {
+        let fixture = TempDir::new().unwrap();
+        let audio_path = fixture.path().join("tone.wav");
+        write_wav(&audio_path, 44_100 * 90);
+        let hash = content_hash(&audio_path);
+
+        let over_duration_end = (44_100_u64 * MAX_PREVIEW_SECONDS + 1).to_string();
+        assert!(matches!(
+            create_preview_range(&hash, &audio_path, "0", over_duration_end.as_str()),
+            Err(AudioError::InvalidRequest(_))
+        ));
     }
 
     #[test]

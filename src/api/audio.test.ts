@@ -27,7 +27,12 @@ describe("audioApi", () => {
       truncated: false,
     };
     const calls: Array<[string, IpcCommandArgs | undefined]> = [];
-    const responses: unknown[] = [waveform, ticket, new ArrayBuffer(4)];
+    const rangeTicket = {
+      ...ticket,
+      sampleRate: 44100,
+      range: { startFrame: "0", endFrameExclusive: "44100" },
+    };
+    const responses: unknown[] = [waveform, ticket, rangeTicket, new ArrayBuffer(4)];
     const transport: IpcTransport = async <Response>(
       command: string,
       args?: IpcCommandArgs,
@@ -54,6 +59,10 @@ describe("audioApi", () => {
     });
     await api.getWaveform("root-opaque", "asset:v1:opaque", 640);
     await api.createPreviewToken("root-opaque", "asset:v1:opaque");
+    await api.createRangePreviewToken("root-opaque", "asset:v1:opaque", {
+      startFrame: "0",
+      endFrameExclusive: "44100",
+    });
     await api.readPreview("root-opaque", "preview:v1:opaque");
 
     expect(calls).toEqual([
@@ -70,6 +79,11 @@ describe("audioApi", () => {
       ["v2_audio_preview_create", {
         rootId: "root-opaque",
         assetId: "asset:v1:opaque",
+      }],
+      ["v2_audio_preview_range_create", {
+        rootId: "root-opaque",
+        assetId: "asset:v1:opaque",
+        range: { startFrame: "0", endFrameExclusive: "44100" },
       }],
       ["v2_audio_preview_read", {
         rootId: "root-opaque",
