@@ -49,6 +49,13 @@ const repositoryRoot = path.resolve(
 );
 const workflowPath = path.join(repositoryRoot, ".github/workflows/gate-c-candidate.yml");
 const workflowContent = readFileSync(workflowPath, "utf8");
+const releaseWorkflowContent = readFileSync(
+  path.join(repositoryRoot, ".github/workflows/release.yml"),
+  "utf8",
+);
+const disabledLegacyReleaseWorkflows = ["dev-release.yml", "rc-release.yml"].map((name) =>
+  readFileSync(path.join(repositoryRoot, ".github/workflows", name), "utf8"),
+);
 
 const sourceSha = "cc6523fc34ccd69e8242188f74d9df59a3102e1f";
 const sourceTree = "3078a03a3a047c9aa8764e40c5a80de5823381d3";
@@ -218,6 +225,36 @@ describe("workflow yaml contract", () => {
   it("does not use mapfile or readarray", () => {
     assert.doesNotMatch(workflowContent, /\bmapfile\b/);
     assert.doesNotMatch(workflowContent, /\breadarray\b/);
+  });
+
+  it("rejects direct confirmation interpolation in shell conditions", () => {
+    const unsafeWorkflow = workflowContent.replace(
+      'if [[ "$CONFIRMATION" != "FREEZE_NON_PUBLIC_GATE_C_CANDIDATE" ]]; then',
+      'if [[ "${{ inputs.confirmation }}" != "FREEZE_NON_PUBLIC_GATE_C_CANDIDATE" ]]; then',
+    );
+    assert.throws(
+      () => validateWorkflowYaml(unsafeWorkflow),
+      /direct confirmation interpolation in shell/,
+    );
+  });
+});
+
+describe("release workflow security", () => {
+  it("passes manual versions through env and validates SemVer before mutation", () => {
+    assert.match(releaseWorkflowContent, /INPUT_VERSION:\s*\$\{\{\s*inputs\.version\s*\}\}/);
+    assert.match(releaseWorkflowContent, /if \[\[ ! "\$VERSION" =~ \^\[0-9\]\+/);
+    assert.doesNotMatch(
+      releaseWorkflowContent,
+      /VERSION="\$\{\{\s*inputs\.version\s*\}\}"/,
+    );
+  });
+
+  it("keeps legacy dev and RC publication workflows inert and draft-only", () => {
+    for (const content of disabledLegacyReleaseWorkflows) {
+      assert.match(content, /create-release:\s*\n(?:.*\n)*?\s+if:\s*\$\{\{\s*false\s*\}\}/);
+      assert.doesNotMatch(content, /draft:\s*false/);
+      assert.doesNotMatch(content, /updateRelease\([\s\S]*draft:\s*false/);
+    }
   });
 });
 

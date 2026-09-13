@@ -30,7 +30,7 @@ mod gate_c_clone_rescan;
 use audio_pool::{
     cancel_transfer, collect_audio_files_recursive, copy_audio_files_or_use_existing,
     copy_files_with_overwrite, copy_single_file_with_progress, create_directory, delete_files,
-    get_parent_directory, list_directory, move_files, register_cancellation_token,
+    get_parent_directory, is_audio_file, list_directory, move_files, register_cancellation_token,
     remove_cancellation_token, rename_file as rename_file_impl, AudioFileInfo,
 };
 use device_detection::{discover_devices, scan_directory, ScanResult};
@@ -450,11 +450,26 @@ async fn move_audio_files(
 }
 
 #[tauri::command]
-async fn delete_audio_files(file_paths: Vec<String>) -> Result<usize, String> {
+async fn delete_audio_files(
+    file_paths: Vec<String>,
+    registry: tauri::State<'_, Arc<root_registry::RootRegistry>>,
+) -> Result<usize, String> {
+    let registry = Arc::clone(registry.inner());
     // Run on a blocking thread pool to avoid blocking the main event loop
-    tauri::async_runtime::spawn_blocking(move || delete_files(file_paths))
-        .await
-        .unwrap()
+    tauri::async_runtime::spawn_blocking(move || {
+        let authorized = file_paths
+            .iter()
+            .map(|path| {
+                registry
+                    .authorize_legacy_path(path, true, false)
+                    .map(|path| path.to_string_lossy().into_owned())
+                    .map_err(|error| error.to_string())
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        delete_files(authorized)
+    })
+    .await
+    .unwrap()
 }
 
 #[tauri::command]
@@ -465,13 +480,31 @@ fn get_home_directory() -> Result<String, String> {
 }
 
 #[tauri::command]
-fn rename_file(old_path: String, new_name: String) -> Result<String, String> {
-    rename_file_impl(&old_path, &new_name)
+fn rename_file(
+    old_path: String,
+    new_name: String,
+    registry: tauri::State<'_, Arc<root_registry::RootRegistry>>,
+) -> Result<String, String> {
+    let authorized = registry
+        .authorize_legacy_path(&old_path, true, false)
+        .map_err(|error| error.to_string())?;
+    rename_file_impl(
+        authorized
+            .to_str()
+            .ok_or_else(|| "Authorized path is not valid UTF-8".to_string())?,
+        &new_name,
+    )
 }
 
 #[tauri::command]
-fn delete_file(path: String) -> Result<usize, String> {
-    delete_files(vec![path])
+fn delete_file(
+    path: String,
+    registry: tauri::State<'_, Arc<root_registry::RootRegistry>>,
+) -> Result<usize, String> {
+    let authorized = registry
+        .authorize_legacy_path(&path, true, false)
+        .map_err(|error| error.to_string())?;
+    delete_files(vec![authorized.to_string_lossy().into_owned()])
 }
 
 #[tauri::command]
@@ -502,15 +535,29 @@ fn reveal_in_file_manager(app: tauri::AppHandle, path: String) -> Result<(), Str
 /// the asset:// custom-scheme handler, so we hand the bytes to the webview directly.
 /// Canonicalize to resolve `..` (slot paths are stored relative to the project dir).
 #[tauri::command]
-fn read_audio_file(path: String) -> Result<tauri::ipc::Response, String> {
-    Ok(tauri::ipc::Response::new(read_audio_bytes(&path)?))
+fn read_audio_file(
+    path: String,
+    registry: tauri::State<'_, Arc<root_registry::RootRegistry>>,
+) -> Result<tauri::ipc::Response, String> {
+    Ok(tauri::ipc::Response::new(read_audio_bytes(
+        &registry, &path,
+    )?))
 }
 
-/// Read + canonicalize an audio file's bytes. Extracted from the command so it is
-/// testable without constructing a `tauri::ipc::Response`.
-fn read_audio_bytes(path: &str) -> Result<Vec<u8>, String> {
-    let canonical = std::fs::canonicalize(path).map_err(|e| e.to_string())?;
-    std::fs::read(&canonical).map_err(|e| e.to_string())
+/// Authorize and read a supported audio file. Extracted from the command so it
+/// is testable without constructing a `tauri::ipc::Response`.
+fn read_audio_bytes(registry: &root_registry::RootRegistry, path: &str) -> Result<Vec<u8>, String> {
+    let authorized = registry
+        .authorize_legacy_path(path, false, true)
+        .map_err(|error| error.to_string())?;
+    let name = authorized
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| "Audio file name is unavailable".to_string())?;
+    if !is_audio_file(name) {
+        return Err("Unsupported audio file type".to_string());
+    }
+    std::fs::read(&authorized).map_err(|error| error.to_string())
 }
 
 /// Calculate recommended concurrency based on CPU cores and available memory.
@@ -1812,8 +1859,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("kick.wav");
         std::fs::write(&file, b"RIFFsomePCMbytes").unwrap();
+        let registry = root_registry::RootRegistry::default();
+        registry.register(dir.path().to_str().unwrap()).unwrap();
 
-        let bytes = read_audio_bytes(file.to_str().unwrap()).unwrap();
+        let bytes = read_audio_bytes(&registry, file.to_str().unwrap()).unwrap();
         assert_eq!(bytes, b"RIFFsomePCMbytes");
     }
 
@@ -1827,9 +1876,11 @@ mod tests {
         std::fs::create_dir_all(&audio).unwrap();
         std::fs::create_dir_all(&proj).unwrap();
         std::fs::write(audio.join("snare.wav"), b"snaredata").unwrap();
+        let registry = root_registry::RootRegistry::default();
+        registry.register(dir.path().to_str().unwrap()).unwrap();
 
         let traversal = proj.join("../AUDIO/snare.wav");
-        let bytes = read_audio_bytes(traversal.to_str().unwrap()).unwrap();
+        let bytes = read_audio_bytes(&registry, traversal.to_str().unwrap()).unwrap();
         assert_eq!(bytes, b"snaredata");
     }
 
@@ -1837,7 +1888,29 @@ mod tests {
     fn test_read_audio_bytes_errors_when_missing() {
         let dir = tempfile::tempdir().unwrap();
         let missing = dir.path().join("does-not-exist.wav");
-        assert!(read_audio_bytes(missing.to_str().unwrap()).is_err());
+        let registry = root_registry::RootRegistry::default();
+        registry.register(dir.path().to_str().unwrap()).unwrap();
+        assert!(read_audio_bytes(&registry, missing.to_str().unwrap()).is_err());
+    }
+
+    #[test]
+    fn test_read_audio_bytes_rejects_unregistered_and_non_audio_files() {
+        let approved = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let text = approved.path().join("notes.txt");
+        let outside_audio = outside.path().join("outside.wav");
+        std::fs::write(&text, b"not audio").unwrap();
+        std::fs::write(&outside_audio, b"RIFFprivate").unwrap();
+        let registry = root_registry::RootRegistry::default();
+        registry
+            .register(approved.path().to_str().unwrap())
+            .unwrap();
+
+        assert_eq!(
+            read_audio_bytes(&registry, text.to_str().unwrap()).unwrap_err(),
+            "Unsupported audio file type"
+        );
+        assert!(read_audio_bytes(&registry, outside_audio.to_str().unwrap()).is_err());
     }
 }
 

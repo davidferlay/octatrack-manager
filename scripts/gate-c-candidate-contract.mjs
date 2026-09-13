@@ -1148,6 +1148,10 @@ export function validateWorkflowYaml(content, options = {}) {
     [/\bmapfile\b/, "Bash 4 mapfile builtin"],
     [/\breadarray\b/, "Bash 4 readarray builtin"],
     [/gh run rerun/i, "failed run rerun"],
+    [
+      /\[\[[^\n]*\$\{\{\s*inputs\.confirmation\s*\}\}/,
+      "direct confirmation interpolation in shell",
+    ],
   ];
   for (const [pattern, label] of forbiddenPatterns) {
     if (pattern.test(content)) {

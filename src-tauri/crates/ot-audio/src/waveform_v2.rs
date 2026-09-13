@@ -7,11 +7,12 @@ use crate::{
 };
 use ot_domain::ContentHash;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
-use std::io::{BufReader, BufWriter, Write};
+use std::io::{BufReader, BufWriter, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use symphonia::core::audio::SampleBuffer;
 
 pub const WAVEFORM_V2_ANALYZER_VERSION: &str = "waveform:v2";
@@ -112,7 +113,7 @@ struct CachedWaveformLevelV2 {
 
 pub struct WaveformCacheV2 {
     directory: PathBuf,
-    operation: Mutex<()>,
+    digest_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
 }
 
 impl WaveformCacheV2 {
@@ -121,49 +122,76 @@ impl WaveformCacheV2 {
         ensure_real_directory(&directory)?;
         Ok(Self {
             directory,
-            operation: Mutex::new(()),
+            digest_locks: Mutex::new(HashMap::new()),
         })
     }
 
-    pub fn query(
+    fn lock_digest(&self, digest: &str) -> Result<Arc<Mutex<()>>, AudioError> {
+        let mut locks = self
+            .digest_locks
+            .lock()
+            .map_err(|_| AudioError::CacheUnavailable("waveform cache lock was poisoned".into()))?;
+        Ok(locks
+            .entry(digest.to_string())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone())
+    }
+
+    pub fn query<F>(
         &self,
         asset_id: &str,
         expected_hash: &ContentHash,
         source_path: &Path,
         range: Option<(&str, &str)>,
         target_points: usize,
-    ) -> Result<WaveformQueryResult, AudioError> {
+        check_cancel: &mut F,
+    ) -> Result<WaveformQueryResult, AudioError>
+    where
+        F: FnMut() -> Result<(), AudioError>,
+    {
         if !(MIN_TARGET_POINTS..=MAX_TARGET_POINTS).contains(&target_points) {
             return Err(AudioError::InvalidRequest(
                 "target points must be between 32 and 4096",
             ));
         }
         let _digest = validate_asset_id(asset_id, expected_hash)?;
-        let source = open_verified_source(source_path, expected_hash)?;
-        let _operation = self
-            .operation
-            .lock()
-            .map_err(|_| AudioError::CacheUnavailable("waveform cache lock was poisoned".into()))?;
+        check_cancel()?;
+        let mut source = open_verified_source(source_path, expected_hash)?;
+        check_cancel()?;
         let digest = asset_id
             .strip_prefix("asset:v1:")
             .expect("validated asset id");
         let cache_path = self.directory.join(format!("waveform-v2-{digest}.json"));
         reject_unsafe_cache_entry(&cache_path)?;
 
+        let digest_lock = self.lock_digest(digest)?;
+        let _guard = digest_lock
+            .lock()
+            .map_err(|_| AudioError::CacheUnavailable("waveform cache lock was poisoned".into()))?;
+
         let (cached, cache_hit) = if let Some(cached) = load_cache(&cache_path, asset_id)? {
             (cached, true)
         } else {
-            let cached = analyze(source, source_path, asset_id)?;
+            check_cancel()?;
+            let cached = analyze(&mut source, source_path, asset_id, check_cancel)?;
             write_cache(&cache_path, &cached)?;
             (cached, false)
         };
+        drop(_guard);
 
         let frame_count = cached.frame_count;
         let range = match range {
             Some((start, end_exclusive)) => FrameRange::parse(start, end_exclusive, frame_count)?,
             None => FrameRange::full(frame_count)?,
         };
-        let channel_peaks = select_range_peaks(&cached, &range, target_points)?;
+        let channel_peaks = aggregate_range_peaks(
+            &mut source,
+            source_path,
+            &cached,
+            &range,
+            target_points,
+            check_cancel,
+        )?;
         let frames_per_peak = range.len().div_ceil(target_points as u64).max(1);
 
         Ok(WaveformQueryResult {
@@ -178,70 +206,262 @@ impl WaveformCacheV2 {
     }
 }
 
-fn select_range_peaks(
+fn select_waveform_level(
+    cached: &CachedWaveformV2,
+    frames_per_output_bucket: u64,
+) -> Result<&CachedWaveformLevelV2, AudioError> {
+    validate_cached_waveform(cached)?;
+    if let Some(level) = cached
+        .levels
+        .iter()
+        .rev()
+        .find(|level| level.samples_per_peak <= frames_per_output_bucket)
+    {
+        return Ok(level);
+    }
+    cached
+        .levels
+        .first()
+        .ok_or_else(|| AudioError::CacheUnavailable("waveform cache has no levels".into()))
+}
+
+fn merge_peak(into: &mut WaveformPeak, from: WaveformPeak) {
+    into.min = into.min.min(from.min);
+    into.max = into.max.max(from.max);
+}
+
+fn merge_intervals(mut spans: Vec<(u64, u64)>) -> Vec<(u64, u64)> {
+    if spans.is_empty() {
+        return spans;
+    }
+    spans.sort_unstable_by_key(|span| span.0);
+    let mut merged = vec![spans[0]];
+    for (start, end) in spans.into_iter().skip(1) {
+        let last = merged.last_mut().expect("merged spans");
+        if start <= last.1 {
+            last.1 = last.1.max(end);
+        } else {
+            merged.push((start, end));
+        }
+    }
+    merged
+}
+
+#[allow(clippy::needless_range_loop)]
+fn aggregate_range_peaks<F>(
+    source: &mut File,
+    source_path: &Path,
     cached: &CachedWaveformV2,
     range: &FrameRange,
     target_points: usize,
-) -> Result<Vec<Vec<WaveformPeak>>, AudioError> {
+    check_cancel: &mut F,
+) -> Result<Vec<Vec<WaveformPeak>>, AudioError>
+where
+    F: FnMut() -> Result<(), AudioError>,
+{
     validate_cached_waveform(cached)?;
-    let base = cached
-        .levels
-        .first()
-        .ok_or_else(|| AudioError::CacheUnavailable("waveform has no levels".into()))?;
-    let samples_per_peak = base.samples_per_peak;
-    let channel_count = usize::from(cached.channels);
+    let channels = usize::from(cached.channels);
+    let range_len = range.len();
+    if range_len == 0 {
+        return Err(AudioError::InvalidRequest(
+            "frame range is empty or inverted",
+        ));
+    }
 
-    let mut buckets = vec![vec![Vec::new(); target_points]; channel_count];
+    let frames_per_bucket = range_len.div_ceil(target_points as u64).max(1);
+    let level = select_waveform_level(cached, frames_per_bucket)?;
+    let samples_per_peak = level.samples_per_peak;
 
-    for bucket in 0..target_points {
-        let bucket_start = range.start + range.len() * bucket as u64 / target_points as u64;
-        let bucket_end = range.start + range.len() * (bucket as u64 + 1) / target_points as u64;
-        if bucket_end <= bucket_start {
-            continue;
+    let mut channel_buckets: Vec<Vec<WaveformPeak>> = (0..channels)
+        .map(|_| {
+            (0..target_points)
+                .map(|_| WaveformPeak {
+                    min: f32::INFINITY,
+                    max: f32::NEG_INFINITY,
+                })
+                .collect()
+        })
+        .collect();
+
+    let mut residual_spans = Vec::new();
+
+    for bucket_index in 0..target_points {
+        let bucket_start = range.start + bucket_index as u64 * frames_per_bucket;
+        if bucket_start >= range.end_exclusive {
+            break;
         }
-        let first_peak = bucket_start / samples_per_peak;
+        let bucket_end = (bucket_start + frames_per_bucket).min(range.end_exclusive);
+        let mut cursor = bucket_start;
+
+        let first_peak = bucket_start.div_ceil(samples_per_peak);
         let last_peak = bucket_end.saturating_sub(1) / samples_per_peak;
-        for (channel_row, peaks) in buckets.iter_mut().zip(base.channels.iter()) {
-            let bucket_peaks = &mut channel_row[bucket];
-            for peak_index in first_peak..=last_peak.min(peaks.len().saturating_sub(1) as u64) {
-                bucket_peaks.push(peaks[peak_index as usize]);
+        for peak_index in first_peak..=last_peak {
+            let peak_start = peak_index * samples_per_peak;
+            let peak_end = (peak_index + 1) * samples_per_peak;
+            if peak_start >= bucket_start && peak_end <= bucket_end {
+                if cursor < peak_start {
+                    residual_spans.push((cursor, peak_start));
+                }
+                for channel_index in 0..channels {
+                    let peak = level.channels[channel_index][peak_index as usize];
+                    merge_peak(&mut channel_buckets[channel_index][bucket_index], peak);
+                }
+                cursor = peak_end;
             }
+        }
+
+        if cursor < bucket_end {
+            residual_spans.push((cursor, bucket_end));
         }
     }
 
-    let mut channel_peaks = Vec::with_capacity(channel_count);
-    for channel_buckets in buckets {
-        let mut peaks = Vec::with_capacity(target_points);
-        for bucket_peaks in channel_buckets {
-            if bucket_peaks.is_empty() {
-                peaks.push(WaveformPeak { min: 0.0, max: 0.0 });
-            } else {
-                peaks.push(WaveformPeak {
-                    min: bucket_peaks.iter().map(|peak| peak.min).fold(1.0, f32::min),
-                    max: bucket_peaks
-                        .iter()
-                        .map(|peak| peak.max)
-                        .fold(-1.0, f32::max),
-                });
+    let residual_spans = merge_intervals(residual_spans);
+    if !residual_spans.is_empty() {
+        source.rewind().map_err(|error| {
+            AudioError::SourceUnavailable(format!("could not rewind audio source: {error}"))
+        })?;
+        decode_residual_spans(
+            source,
+            source_path,
+            channels,
+            range,
+            target_points,
+            &residual_spans,
+            &mut channel_buckets,
+            check_cancel,
+        )?;
+    }
+
+    for channel in &mut channel_buckets {
+        for peak in channel.iter_mut() {
+            if !peak.min.is_finite() {
+                *peak = WaveformPeak { min: 0.0, max: 0.0 };
             }
         }
-        channel_peaks.push(peaks);
     }
-    Ok(channel_peaks)
+    Ok(channel_buckets)
 }
 
-fn analyze(
-    source: File,
+#[allow(clippy::too_many_arguments)]
+fn decode_residual_spans<F>(
+    source: &mut File,
+    source_path: &Path,
+    channels: usize,
+    range: &FrameRange,
+    target_points: usize,
+    spans: &[(u64, u64)],
+    channel_buckets: &mut [Vec<WaveformPeak>],
+    check_cancel: &mut F,
+) -> Result<(), AudioError>
+where
+    F: FnMut() -> Result<(), AudioError>,
+{
+    let range_len = range.len();
+    let max_frame = spans.iter().map(|span| span.1).max().unwrap_or(range.start);
+    let mut decoded = open_decoder(
+        source.try_clone().map_err(|error| {
+            AudioError::SourceUnavailable(format!("could not clone audio source: {error}"))
+        })?,
+        source_path,
+    )?;
+    let mut frame_index = 0_u64;
+    let mut sample_rate = 0_u32;
+    let mut decoded_channels = 0_usize;
+
+    'decode: while frame_index < max_frame {
+        check_cancel()?;
+        let Some(packet) = decoded.next_packet()? else {
+            break;
+        };
+        let audio = decoded
+            .decoder
+            .decode(&packet)
+            .map_err(|error| AudioError::DecodeFailed(error.to_string()))?;
+        let spec = *audio.spec();
+        let packet_channels = spec.channels.count();
+        if packet_channels == 0 || spec.rate == 0 {
+            return Err(AudioError::DecodeFailed(
+                "decoded audio has no channels or sample rate".into(),
+            ));
+        }
+        if sample_rate == 0 {
+            sample_rate = spec.rate;
+            decoded_channels = packet_channels;
+        } else if sample_rate != spec.rate || decoded_channels != packet_channels {
+            return Err(AudioError::DecodeFailed(
+                "audio parameters changed during decoding".into(),
+            ));
+        }
+        if decoded_channels != channels {
+            return Err(AudioError::DecodeFailed(
+                "decoded channel count does not match cached waveform".into(),
+            ));
+        }
+
+        let mut samples = SampleBuffer::<f32>::new(audio.capacity() as u64, spec);
+        samples.copy_interleaved_ref(audio);
+        let values = samples.samples();
+        if !values.len().is_multiple_of(decoded_channels) {
+            return Err(AudioError::DecodeFailed(
+                "decoded sample buffer is not frame aligned".into(),
+            ));
+        }
+        for frame in values.chunks_exact(decoded_channels) {
+            if spans
+                .iter()
+                .any(|(start, end)| frame_index >= *start && frame_index < *end)
+                && frame_index >= range.start
+                && frame_index < range.end_exclusive
+            {
+                let offset = frame_index - range.start;
+                let bucket = (offset * target_points as u64 / range_len) as usize;
+                let bucket = bucket.min(target_points - 1);
+                for (channel_index, sample) in frame.iter().enumerate() {
+                    if !sample.is_finite() {
+                        return Err(AudioError::DecodeFailed(
+                            "decoded audio contains a non-finite sample".into(),
+                        ));
+                    }
+                    let sample = sample.clamp(-1.0, 1.0);
+                    let peak = &mut channel_buckets[channel_index][bucket];
+                    peak.min = peak.min.min(sample);
+                    peak.max = peak.max.max(sample);
+                }
+            }
+            frame_index += 1;
+            if frame_index >= max_frame {
+                break 'decode;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn analyze<F>(
+    source: &mut File,
     source_path: &Path,
     asset_id: &str,
-) -> Result<CachedWaveformV2, AudioError> {
-    let mut decoded = open_decoder(source, source_path)?;
+    check_cancel: &mut F,
+) -> Result<CachedWaveformV2, AudioError>
+where
+    F: FnMut() -> Result<(), AudioError>,
+{
+    source.rewind().map_err(|error| {
+        AudioError::SourceUnavailable(format!("could not rewind audio source: {error}"))
+    })?;
+    let mut decoded = open_decoder(
+        source.try_clone().map_err(|error| {
+            AudioError::SourceUnavailable(format!("could not clone audio source: {error}"))
+        })?,
+        source_path,
+    )?;
     let mut frame_count = 0_u64;
     let mut sample_rate = 0_u32;
     let mut channels = 0_usize;
     let mut accumulators: Vec<ChannelPeakAccumulator> = Vec::new();
 
     while let Some(packet) = decoded.next_packet()? {
+        check_cancel()?;
         let audio = decoded
             .decoder
             .decode(&packet)
@@ -517,6 +737,17 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
+    fn write_impulse_wav(path: &Path, frames: usize) {
+        let sample_rate = 44_100_u32;
+        let channels = 1_u16;
+        let mut pcm = Vec::with_capacity(frames * 2);
+        for frame in 0..frames {
+            let sample = if frame == 0 { i16::MAX / 2 } else { 0 };
+            pcm.extend_from_slice(&sample.to_le_bytes());
+        }
+        fs::write(path, encode_pcm_wav(&pcm, sample_rate, channels)).unwrap();
+    }
+
     fn write_wav(path: &Path, frames: usize) {
         let sample_rate = 44_100_u32;
         let channels = 2_u16;
@@ -571,6 +802,69 @@ mod tests {
         format!("asset:v1:{:x}", hasher.finalize())
     }
 
+    fn direct_range_decode(
+        source_path: &Path,
+        expected_hash: &ContentHash,
+        channels: usize,
+        range: &FrameRange,
+        target_points: usize,
+    ) -> Vec<Vec<WaveformPeak>> {
+        let range_len = range.len();
+        let mut channel_buckets: Vec<Vec<WaveformPeak>> = (0..channels)
+            .map(|_| {
+                (0..target_points)
+                    .map(|_| WaveformPeak {
+                        min: f32::INFINITY,
+                        max: f32::NEG_INFINITY,
+                    })
+                    .collect()
+            })
+            .collect();
+        let source = open_verified_source(source_path, expected_hash).unwrap();
+        let mut decoded = open_decoder(source, source_path).unwrap();
+        let mut frame_index = 0_u64;
+        let mut decoded_channels = 0_usize;
+
+        'decode: while frame_index < range.end_exclusive {
+            let Some(packet) = decoded.next_packet().unwrap() else {
+                break;
+            };
+            let audio = decoded.decoder.decode(&packet).unwrap();
+            let spec = *audio.spec();
+            let packet_channels = spec.channels.count();
+            if decoded_channels == 0 {
+                decoded_channels = packet_channels;
+            }
+            let mut samples = SampleBuffer::<f32>::new(audio.capacity() as u64, spec);
+            samples.copy_interleaved_ref(audio);
+            for frame in samples.samples().chunks_exact(decoded_channels) {
+                if frame_index >= range.start && frame_index < range.end_exclusive {
+                    let offset = frame_index - range.start;
+                    let bucket = ((offset * target_points as u64 / range_len) as usize)
+                        .min(target_points - 1);
+                    for (channel_index, sample) in frame.iter().enumerate() {
+                        let sample = sample.clamp(-1.0, 1.0);
+                        let peak = &mut channel_buckets[channel_index][bucket];
+                        peak.min = peak.min.min(sample);
+                        peak.max = peak.max.max(sample);
+                    }
+                }
+                frame_index += 1;
+                if frame_index >= range.end_exclusive {
+                    break 'decode;
+                }
+            }
+        }
+        for channel in &mut channel_buckets {
+            for peak in channel.iter_mut() {
+                if !peak.min.is_finite() {
+                    *peak = WaveformPeak { min: 0.0, max: 0.0 };
+                }
+            }
+        }
+        channel_buckets
+    }
+
     #[test]
     fn parses_decimal_frames_and_rejects_invalid_values() {
         assert_eq!(parse_decimal_frame("0").unwrap(), 0);
@@ -596,10 +890,20 @@ mod tests {
         let hash = content_hash(&audio_path);
         let id = asset_id(&hash);
         let cache = WaveformCacheV2::open(cache.path()).unwrap();
+        let mut cancel = || Ok(());
 
-        cache.query(&id, &hash, &audio_path, None, 128).unwrap();
+        cache
+            .query(&id, &hash, &audio_path, None, 128, &mut cancel)
+            .unwrap();
         let partial = cache
-            .query(&id, &hash, &audio_path, Some(("256", "512")), 32)
+            .query(
+                &id,
+                &hash,
+                &audio_path,
+                Some(("256", "512")),
+                32,
+                &mut cancel,
+            )
             .unwrap();
 
         assert_eq!(partial.channels, 2);
@@ -611,6 +915,65 @@ mod tests {
     }
 
     #[test]
+    fn range_query_does_not_bleed_cached_peak_energy_outside_requested_frames() {
+        let fixture = TempDir::new().unwrap();
+        let cache = TempDir::new().unwrap();
+        let audio_path = fixture.path().join("impulse.wav");
+        write_impulse_wav(&audio_path, 512);
+        let hash = content_hash(&audio_path);
+        let id = asset_id(&hash);
+        let cache = WaveformCacheV2::open(cache.path()).unwrap();
+        let mut cancel = || Ok(());
+
+        cache
+            .query(&id, &hash, &audio_path, None, 128, &mut cancel)
+            .unwrap();
+        let partial = cache
+            .query(
+                &id,
+                &hash,
+                &audio_path,
+                Some(("64", "128")),
+                32,
+                &mut cancel,
+            )
+            .unwrap();
+
+        assert_eq!(partial.frames_per_peak, 2);
+        assert_eq!(partial.channel_peaks[0].len(), 32);
+        for peak in &partial.channel_peaks[0] {
+            assert!(peak.min.abs() < f32::EPSILON);
+            assert!(peak.max.abs() < f32::EPSILON);
+        }
+    }
+
+    #[test]
+    fn full_range_query_keeps_impulse_in_early_buckets_only() {
+        let fixture = TempDir::new().unwrap();
+        let cache = TempDir::new().unwrap();
+        let audio_path = fixture.path().join("impulse.wav");
+        write_impulse_wav(&audio_path, 512);
+        let hash = content_hash(&audio_path);
+        let id = asset_id(&hash);
+        let cache = WaveformCacheV2::open(cache.path()).unwrap();
+        let mut cancel = || Ok(());
+
+        let window = cache
+            .query(&id, &hash, &audio_path, None, 640, &mut cancel)
+            .unwrap();
+        assert_eq!(window.channel_peaks[0].len(), 640);
+        let silent_tail = window.channel_peaks[0]
+            .iter()
+            .skip(128)
+            .all(|peak| peak.min.abs() < f32::EPSILON && peak.max.abs() < f32::EPSILON);
+        assert!(silent_tail);
+        assert!(
+            window.channel_peaks[0][0].max.abs() > f32::EPSILON
+                || window.channel_peaks[0][0].min.abs() > f32::EPSILON
+        );
+    }
+
+    #[test]
     fn rejects_changed_source_after_cache_hit() {
         let fixture = TempDir::new().unwrap();
         let cache = TempDir::new().unwrap();
@@ -619,10 +982,15 @@ mod tests {
         let hash = content_hash(&audio_path);
         let id = asset_id(&hash);
         let cache = WaveformCacheV2::open(cache.path()).unwrap();
-        cache.query(&id, &hash, &audio_path, None, 128).unwrap();
+        let mut cancel = || Ok(());
+        cache
+            .query(&id, &hash, &audio_path, None, 128, &mut cancel)
+            .unwrap();
         fs::write(&audio_path, b"changed").unwrap();
 
-        let error = cache.query(&id, &hash, &audio_path, None, 128).unwrap_err();
+        let error = cache
+            .query(&id, &hash, &audio_path, None, 128, &mut cancel)
+            .unwrap_err();
 
         assert!(matches!(error, AudioError::SourceChanged));
     }
@@ -638,6 +1006,41 @@ mod tests {
     }
 
     #[test]
+    fn cached_pyramid_matches_direct_decode_for_ranges() {
+        let fixture = TempDir::new().unwrap();
+        let cache_dir = TempDir::new().unwrap();
+        let audio_path = fixture.path().join("tone.wav");
+        write_wav(&audio_path, 4096);
+        let hash = content_hash(&audio_path);
+        let id = asset_id(&hash);
+        let cache = WaveformCacheV2::open(cache_dir.path()).unwrap();
+        let mut cancel = || Ok(());
+        cache
+            .query(&id, &hash, &audio_path, None, 128, &mut cancel)
+            .unwrap();
+
+        for (start, end, points) in [
+            ("0", "4096", 128_usize),
+            ("256", "512", 32),
+            ("10", "99", 64),
+        ] {
+            let range = FrameRange::parse(start, end, 4096).unwrap();
+            let window = cache
+                .query(
+                    &id,
+                    &hash,
+                    &audio_path,
+                    Some((start, end)),
+                    points,
+                    &mut cancel,
+                )
+                .unwrap();
+            let direct = direct_range_decode(&audio_path, &hash, 2, &range, points);
+            assert_eq!(window.channel_peaks, direct);
+        }
+    }
+
+    #[test]
     fn v1_preview_still_works_alongside_v2_cache() {
         let fixture = TempDir::new().unwrap();
         let cache = TempDir::new().unwrap();
@@ -647,7 +1050,9 @@ mod tests {
         let id = asset_id(&hash);
         let v2 = WaveformCacheV2::open(cache.path()).unwrap();
         let v1 = WaveformCache::open(cache.path()).unwrap();
-        v2.query(&id, &hash, &audio_path, None, 64).unwrap();
+        let mut cancel = || Ok(());
+        v2.query(&id, &hash, &audio_path, None, 64, &mut cancel)
+            .unwrap();
         v1.waveform(&id, &hash, &audio_path, 64).unwrap();
         create_preview(&hash, &audio_path).unwrap();
     }

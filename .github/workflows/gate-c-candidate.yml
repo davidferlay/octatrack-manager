@@ -41,17 +41,19 @@ jobs:
 
     steps:
       - name: Validate dispatch ref and attempt
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
         run: |
           set -euo pipefail
-          if [[ "${{ github.ref }}" != "refs/heads/main" ]]; then
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
             echo "STOP: workflow must run on refs/heads/main"
             exit 1
           fi
-          if [[ "${{ github.run_attempt }}" != "1" ]]; then
+          if [[ "$GITHUB_RUN_ATTEMPT" != "1" ]]; then
             echo "STOP: run_attempt must be 1"
             exit 1
           fi
-          if [[ "${{ inputs.confirmation }}" != "FREEZE_NON_PUBLIC_GATE_C_CANDIDATE" ]]; then
+          if [[ "$CONFIRMATION" != "FREEZE_NON_PUBLIC_GATE_C_CANDIDATE" ]]; then
             echo "STOP: confirmation phrase mismatch"
             exit 1
           fi

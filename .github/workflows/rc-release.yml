@@ -1,4 +1,4 @@
-name: RC Release Build
+name: RC Release Build (disabled)
 
 on:
   workflow_dispatch:
@@ -8,6 +8,9 @@ env:
 
 jobs:
   create-release:
+    # Public distribution is not authorized. Keep this legacy workflow inert;
+    # Gate C candidates use gate-c-candidate.yml and remain draft/non-public.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -70,7 +73,7 @@ jobs:
             - Built: `${{ github.event.repository.updated_at }}`
 
             > This build may be unstable. Please report any issues you find.
-          draft: false
+          draft: true
           prerelease: true
           make_latest: false
         env:
@@ -197,11 +200,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # The release is created non-draft, but ends up drafted by the time every matrix
-  # build has uploaded its assets. This final job force-publishes it so the release
-  # is always public once the build finishes - no manual/local step needed.
+  # Retained only as inert history. Public release publication is disabled.
   publish-release:
     needs: [create-release, build-tauri]
+    if: ${{ false }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -214,6 +216,6 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               release_id: ${{ needs.create-release.outputs.release_id }},
-              draft: false,
+              draft: true,
             });
-            core.info('Release published (draft=false)');
+            core.info('Legacy RC release publishing is disabled');

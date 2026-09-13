@@ -72,6 +72,7 @@ pub enum AudioError {
     DecodeFailed(String),
     UnsafeCachePath(&'static str),
     CacheUnavailable(String),
+    Cancelled,
 }
 
 impl AudioError {
@@ -84,6 +85,7 @@ impl AudioError {
             Self::DecodeFailed(_) => "CORRUPT_SOURCE",
             Self::UnsafeCachePath(_) => "AUDIO_CACHE_UNSAFE",
             Self::CacheUnavailable(_) => "AUDIO_CACHE_UNAVAILABLE",
+            Self::Cancelled => "AUDIO_REQUEST_CANCELLED",
         }
     }
 
@@ -107,6 +109,9 @@ impl std::fmt::Display for AudioError {
             Self::UnsafeCachePath(message) => write!(formatter, "unsafe waveform cache: {message}"),
             Self::CacheUnavailable(message) => {
                 write!(formatter, "waveform cache is unavailable: {message}")
+            }
+            Self::Cancelled => {
+                formatter.write_str("a newer waveform query superseded this request")
             }
         }
     }

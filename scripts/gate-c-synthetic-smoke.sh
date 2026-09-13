@@ -127,6 +127,13 @@ echo
 echo "REPORT=${REPORT}"
 echo "OVERALL=${OVERALL}"
 
+if [[ "$OVERALL" != "PASS" ]]; then
+  echo
+  echo "----- GATE_C_SMOKE_REPORT (failure evidence) -----"
+  cat "$REPORT"
+  echo "----- end GATE_C_SMOKE_REPORT -----"
+fi
+
 if [[ -d /opt/cursor/artifacts ]]; then
   cp "$REPORT" "/opt/cursor/artifacts/GATE_C_SMOKE_REPORT-${SHORT_COMMIT}.md"
 fi

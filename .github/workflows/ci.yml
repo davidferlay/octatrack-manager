@@ -156,7 +156,18 @@ jobs:
             libayatana-appindicator3-dev librsvg2-dev
 
       - name: Run Gate C synthetic smoke
+        env:
+          GATE_C_WORK_DIR: ${{ runner.temp }}/gate-c-synthetic-smoke
         run: scripts/gate-c-synthetic-smoke.sh
+
+      - name: Upload Gate C synthetic smoke evidence on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: gate-c-synthetic-smoke-${{ matrix.os }}
+          path: ${{ runner.temp }}/gate-c-synthetic-smoke/evidence/
+          if-no-files-found: error
+          retention-days: 14
 
   frontend-checks:
     name: Frontend Checks

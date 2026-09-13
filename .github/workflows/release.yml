@@ -70,12 +70,19 @@ jobs:
 
       - name: Update version
         shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
+          set -euo pipefail
           # Use input version for workflow_dispatch, or extract from tag for release events
-          if [[ -n "${{ inputs.version }}" ]]; then
-            VERSION="${{ inputs.version }}"
+          if [[ -n "$INPUT_VERSION" ]]; then
+            VERSION="$INPUT_VERSION"
           else
             VERSION=${GITHUB_REF_NAME#v}
+          fi
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?(\+[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo "STOP: version must be a valid SemVer value"
+            exit 1
           fi
           echo "Setting version to $VERSION"
 
