@@ -82,6 +82,9 @@ jobs:
       - name: Check containment guards
         run: node scripts/check-containment.mjs
 
+      - name: Legacy command containment regression tests
+        run: node --test scripts/legacy-command-containment.test.mjs
+
       # Needs no build, so a bad format fails in seconds instead of after the
       # compile.
       - name: Check Rust formatting

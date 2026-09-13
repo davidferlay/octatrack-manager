@@ -5795,7 +5795,7 @@ fn update_references_in_set(
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default();
-            crate::backup_project_files_impl(
+            crate::backup_project_files_internal(
                 &project_dir.to_string_lossy(),
                 &[file_name],
                 backup_label,

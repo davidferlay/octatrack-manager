@@ -19,18 +19,19 @@ use ot_tools_io::{
     ProjectFile, SampleSettingsFile,
 };
 use sha2::{Digest, Sha256};
+#[cfg(feature = "test-seams")]
+use std::cell::Cell;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::io::{BufReader, Read};
 use std::path::{Component, Path, PathBuf};
-#[cfg(feature = "test-seams")]
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::UNIX_EPOCH;
 
 #[cfg(feature = "test-seams")]
-static UPSTREAM_VERIFY_TEMP_DIR_FAIL: AtomicBool = AtomicBool::new(false);
-#[cfg(feature = "test-seams")]
-static UPSTREAM_VERIFY_WRITE_FAIL: AtomicBool = AtomicBool::new(false);
+thread_local! {
+    static UPSTREAM_VERIFY_TEMP_DIR_FAIL: Cell<bool> = const { Cell::new(false) };
+    static UPSTREAM_VERIFY_WRITE_FAIL: Cell<bool> = const { Cell::new(false) };
+}
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 enum UpstreamProjectVerify {
@@ -43,23 +44,43 @@ enum UpstreamProjectVerify {
 #[cfg(feature = "test-seams")]
 #[allow(dead_code)]
 pub fn set_upstream_verify_temp_dir_fail(fail: bool) {
-    UPSTREAM_VERIFY_TEMP_DIR_FAIL.store(fail, Ordering::SeqCst);
+    UPSTREAM_VERIFY_TEMP_DIR_FAIL.with(|cell| cell.set(fail));
 }
 
 #[cfg(feature = "test-seams")]
 #[allow(dead_code)]
 pub fn set_upstream_verify_write_fail(fail: bool) {
-    UPSTREAM_VERIFY_WRITE_FAIL.store(fail, Ordering::SeqCst);
+    UPSTREAM_VERIFY_WRITE_FAIL.with(|cell| cell.set(fail));
+}
+
+#[cfg(feature = "test-seams")]
+#[allow(dead_code)]
+pub struct UpstreamVerifyTempDirFailScope;
+
+#[cfg(feature = "test-seams")]
+#[allow(dead_code)]
+impl UpstreamVerifyTempDirFailScope {
+    pub fn enable() -> Self {
+        set_upstream_verify_temp_dir_fail(true);
+        Self
+    }
+}
+
+#[cfg(feature = "test-seams")]
+impl Drop for UpstreamVerifyTempDirFailScope {
+    fn drop(&mut self) {
+        set_upstream_verify_temp_dir_fail(false);
+    }
 }
 
 #[cfg(feature = "test-seams")]
 fn upstream_verify_temp_dir_fail_enabled() -> bool {
-    UPSTREAM_VERIFY_TEMP_DIR_FAIL.load(Ordering::SeqCst)
+    UPSTREAM_VERIFY_TEMP_DIR_FAIL.with(|cell| cell.get())
 }
 
 #[cfg(feature = "test-seams")]
 fn upstream_verify_write_fail_enabled() -> bool {
-    UPSTREAM_VERIFY_WRITE_FAIL.load(Ordering::SeqCst)
+    UPSTREAM_VERIFY_WRITE_FAIL.with(|cell| cell.get())
 }
 
 #[cfg(not(feature = "test-seams"))]
@@ -2442,6 +2463,34 @@ mod tests {
             verify_upstream_project_compatibility(&bytes, &parsed),
             UpstreamProjectVerify::Confirmed
         );
+    }
+
+    #[cfg(feature = "test-seams")]
+    #[test]
+    fn upstream_verify_fail_injection_does_not_leak_across_threads() {
+        use std::sync::{Arc, Barrier};
+        use std::thread;
+
+        let barrier = Arc::new(Barrier::new(2));
+        let on_mutator = barrier.clone();
+        let on_waiter = barrier.clone();
+
+        let handle = thread::spawn(move || {
+            let _verify_fail = UpstreamVerifyTempDirFailScope::enable();
+            on_mutator.wait();
+            on_mutator.wait();
+        });
+
+        on_waiter.wait();
+        let enabled_on_waiter = super::upstream_verify_temp_dir_fail_enabled();
+        on_waiter.wait();
+        handle.join().expect("mutator thread");
+
+        assert!(
+            !enabled_on_waiter,
+            "upstream verify temp-dir fail injection must not leak across test threads"
+        );
+        assert!(!super::upstream_verify_temp_dir_fail_enabled());
     }
 
     #[test]

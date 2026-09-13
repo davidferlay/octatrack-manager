@@ -6,6 +6,11 @@ import { ALL_MIDI_TRACKS } from './TrackSelector';
 import { WriteStatus, writeStatus } from '../types/writeStatus';
 import { RotaryKnob } from './RotaryKnob';
 import './PartsPanel.css';
+import {
+  formatInvokeErrorForToast,
+  isLegacyWriteDisabledError,
+  legacyWriteDisabledToastMessage,
+} from '../utils/legacyWriteRestriction';
 
 interface PartsPanelProps {
   projectPath: string;
@@ -161,8 +166,14 @@ export default function PartsPanel({
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
     } catch (err) {
       console.error('Failed to commit part:', err);
-      setError(`Failed to save: ${err}`);
-      onWriteStatusChange?.(writeStatus.error(`Failed to save part ${partName}`));
+      setError(formatInvokeErrorForToast(err, 'Failed to save'));
+      onWriteStatusChange?.(
+        writeStatus.error(
+          isLegacyWriteDisabledError(err)
+            ? legacyWriteDisabledToastMessage()
+            : `Failed to save part ${partName}`,
+        ),
+      );
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
     } finally {
       setIsCommitting(false);
@@ -193,8 +204,14 @@ export default function PartsPanel({
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
     } catch (err) {
       console.error('Failed to commit all parts:', err);
-      setError(`Failed to save all: ${err}`);
-      onWriteStatusChange?.(writeStatus.error('Failed to save all'));
+      setError(formatInvokeErrorForToast(err, 'Failed to save all'));
+      onWriteStatusChange?.(
+        writeStatus.error(
+          isLegacyWriteDisabledError(err)
+            ? legacyWriteDisabledToastMessage()
+            : 'Failed to save all',
+        ),
+      );
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
     } finally {
       setIsCommitting(false);
@@ -236,8 +253,14 @@ export default function PartsPanel({
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
     } catch (err) {
       console.error('Failed to reload part:', err);
-      setError(`Failed to reload: ${err}`);
-      onWriteStatusChange?.(writeStatus.error(`Failed to reload part ${partName}`));
+      setError(formatInvokeErrorForToast(err, 'Failed to reload'));
+      onWriteStatusChange?.(
+        writeStatus.error(
+          isLegacyWriteDisabledError(err)
+            ? legacyWriteDisabledToastMessage()
+            : `Failed to reload part ${partName}`,
+        ),
+      );
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
     } finally {
       setIsReloading(false);

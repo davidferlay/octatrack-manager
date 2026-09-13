@@ -16,6 +16,12 @@ import { PathContextMenu, PurgeFilesModal, purgeAudioFileCount, purgeNonAudioFil
 import { audioKind, usageKey } from "./AudioFileTable";
 import { normalizePath } from "./SampleSlotsTable";
 import { isUnderBackupsDir } from "../utils/purgeBackups";
+import { LegacyWriteRestrictionNotice } from "./LegacyWriteRestrictionNotice";
+import {
+  formatInvokeErrorForToast,
+  isLegacyWriteDisabledError,
+  legacyWriteDisabledToastMessage,
+} from "../utils/legacyWriteRestriction";
 
 const TOOLS_STORAGE_KEY_PREFIX = "octatrack-tools-settings-";
 
@@ -1172,7 +1178,11 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
       }
       setStatusType("success");
     } catch (err) {
-      setStatusMessage(String(err));
+      setStatusMessage(
+        isLegacyWriteDisabledError(err)
+          ? legacyWriteDisabledToastMessage()
+          : formatInvokeErrorForToast(err, "Operation failed"),
+      );
       setStatusType("error");
     } finally {
       setIsExecuting(false);
@@ -1189,6 +1199,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
 
   return (
     <div className="tools-panel">
+      <LegacyWriteRestrictionNotice />
       {/* Operation Selector */}
       <div className="tools-section">
         <label className="tools-label" htmlFor="tools-operation-select">Operation</label>

@@ -247,7 +247,10 @@ pub(crate) fn create_project_sync(set: &Path, name: &str) -> Result<String, Stri
 /// Runs on the blocking thread pool so the Tauri async runtime stays
 /// responsive while the 17 file writes hit (potentially slow) SD media.
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 pub async fn create_project(set_path: String, name: String) -> Result<String, String> {
+    crate::deny_legacy_write!();
+
     tauri::async_runtime::spawn_blocking(move || create_project_sync(Path::new(&set_path), &name))
         .await
         .map_err(|e| format!("Background task failed: {}", e))?
@@ -418,7 +421,10 @@ pub(crate) fn copy_project_sync(src: &Path, dest_set: &Path) -> Result<String, S
 /// Copies `src_path` into `dest_set_path` with an auto-generated `_N` suffix.
 /// Runs on the blocking thread pool.
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 pub async fn copy_project(src_path: String, dest_set_path: String) -> Result<String, String> {
+    crate::deny_legacy_write!();
+
     tauri::async_runtime::spawn_blocking(move || {
         copy_project_sync(Path::new(&src_path), Path::new(&dest_set_path))
     })
@@ -428,12 +434,15 @@ pub async fn copy_project(src_path: String, dest_set_path: String) -> Result<Str
 
 /// Copies a project with progress events and cancel support.
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 pub async fn copy_project_with_progress(
     app: AppHandle,
     src_path: String,
     dest_set_path: String,
     transfer_id: String,
 ) -> Result<String, String> {
+    crate::deny_legacy_write!();
+
     let cancel_token = register_cancellation_token(&transfer_id);
     let tid = transfer_id.clone();
 
@@ -545,12 +554,15 @@ fn next_available_set_name(base: &str, dest_location: &Path) -> String {
 
 /// Copies an entire Set folder to a destination location with progress and cancel.
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 pub async fn copy_set(
     app: AppHandle,
     src_path: String,
     dest_location_path: String,
     transfer_id: String,
 ) -> Result<String, String> {
+    crate::deny_legacy_write!();
+
     let cancel_token = register_cancellation_token(&transfer_id);
     let tid = transfer_id.clone();
 
@@ -645,6 +657,7 @@ pub async fn copy_set(
 
 /// Cancel a running copy operation.
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 pub fn cancel_copy_operation(transfer_id: String) -> bool {
     cancel_transfer(&transfer_id)
 }
@@ -684,7 +697,10 @@ pub(crate) fn rename_project_sync(src: &Path, new_name: &str) -> Result<String, 
 /// Renames an existing project directory in place (same parent Set).
 /// Runs on the blocking thread pool.
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 pub async fn rename_project(project_path: String, new_name: String) -> Result<String, String> {
+    crate::deny_legacy_write!();
+
     tauri::async_runtime::spawn_blocking(move || {
         rename_project_sync(Path::new(&project_path), &new_name)
     })
@@ -813,7 +829,10 @@ fn walk_count_size(p: &Path) -> std::io::Result<(usize, u64)> {
 /// Moves a project directory into a different Set.
 /// Runs on the blocking thread pool.
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 pub async fn move_project(src_path: String, dest_set_path: String) -> Result<String, String> {
+    crate::deny_legacy_write!();
+
     tauri::async_runtime::spawn_blocking(move || {
         move_project_sync(Path::new(&src_path), Path::new(&dest_set_path))
     })
@@ -860,7 +879,10 @@ pub(crate) fn move_set_sync(src: &Path, dest_location: &Path) -> Result<String, 
 /// Moves a Set directory into a different location.
 /// Runs on the blocking thread pool.
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 pub async fn move_set(src_path: String, dest_location_path: String) -> Result<String, String> {
+    crate::deny_legacy_write!();
+
     tauri::async_runtime::spawn_blocking(move || {
         move_set_sync(Path::new(&src_path), Path::new(&dest_location_path))
     })
@@ -872,12 +894,15 @@ pub async fn move_set(src_path: String, dest_location_path: String) -> Result<St
 /// Same-filesystem: instant atomic rename + single "complete" event.
 /// Cross-filesystem: copy with progress → verify → delete source.
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 pub async fn move_project_with_progress(
     app: AppHandle,
     src_path: String,
     dest_set_path: String,
     transfer_id: String,
 ) -> Result<String, String> {
+    crate::deny_legacy_write!();
+
     let cancel_token = register_cancellation_token(&transfer_id);
     let tid = transfer_id.clone();
 
@@ -1026,12 +1051,15 @@ pub async fn move_project_with_progress(
 /// Same-filesystem: instant atomic rename + single "complete" event.
 /// Cross-filesystem: copy with progress → verify → delete source.
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 pub async fn move_set_with_progress(
     app: AppHandle,
     src_path: String,
     dest_location_path: String,
     transfer_id: String,
 ) -> Result<String, String> {
+    crate::deny_legacy_write!();
+
     let cancel_token = register_cancellation_token(&transfer_id);
     let tid = transfer_id.clone();
 
@@ -1203,7 +1231,10 @@ pub(crate) fn delete_project_sync(p: &Path) -> Result<(), String> {
 /// Recursively deletes a project directory.
 /// Runs on the blocking thread pool.
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 pub async fn delete_project(project_path: String) -> Result<(), String> {
+    crate::deny_legacy_write!();
+
     tauri::async_runtime::spawn_blocking(move || delete_project_sync(Path::new(&project_path)))
         .await
         .map_err(|e| format!("Background task failed: {}", e))?
@@ -1287,7 +1318,10 @@ pub(crate) fn create_set_sync(location: &Path, name: &str) -> Result<String, Str
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 pub async fn create_set(location_path: String, name: String) -> Result<String, String> {
+    crate::deny_legacy_write!();
+
     tauri::async_runtime::spawn_blocking(move || create_set_sync(Path::new(&location_path), &name))
         .await
         .map_err(|e| format!("Background task failed: {}", e))?
@@ -1326,7 +1360,10 @@ pub(crate) fn rename_set_sync(src: &Path, new_name: &str) -> Result<String, Stri
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 pub async fn rename_set(set_path: String, new_name: String) -> Result<String, String> {
+    crate::deny_legacy_write!();
+
     tauri::async_runtime::spawn_blocking(move || rename_set_sync(Path::new(&set_path), &new_name))
         .await
         .map_err(|e| format!("Background task failed: {}", e))?
@@ -1348,7 +1385,10 @@ pub(crate) fn delete_set_sync(p: &Path) -> Result<(), String> {
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 pub async fn delete_set(set_path: String) -> Result<(), String> {
+    crate::deny_legacy_write!();
+
     tauri::async_runtime::spawn_blocking(move || delete_set_sync(Path::new(&set_path)))
         .await
         .map_err(|e| format!("Background task failed: {}", e))?

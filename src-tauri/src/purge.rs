@@ -566,7 +566,7 @@ pub fn clear_unused_slot_assignments(project_path: &str) -> Result<u32, String> 
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
 
-    crate::backup_project_files_impl(project_path, &[file_name], "purge_unused_samples")?;
+    crate::backup_project_files_internal(project_path, &[file_name], "purge_unused_samples")?;
 
     if !static_to_clear.is_empty() {
         crate::project_reader::clear_sample_slots(project_path, "STATIC", static_to_clear)?;
@@ -864,7 +864,7 @@ pub fn trash_purge_units(
                     if origin != "Audio Pool" {
                         if let Some(root) = origin_roots.get(origin) {
                             if let Ok(rel) = ot_path.strip_prefix(std::path::Path::new(root)) {
-                                if let Err(e) = crate::backup_project_files_impl(
+                                if let Err(e) = crate::backup_project_files_internal(
                                     root,
                                     &[rel.to_string_lossy().to_string()],
                                     "purge_unused_samples",
@@ -1001,7 +1001,7 @@ pub fn move_purge_units(
                     let ot_target = unique_destination(target.with_extension("ot"));
                     if origin != "Audio Pool" {
                         if let Ok(rel) = ot_source.strip_prefix(Path::new(root)) {
-                            if let Err(e) = crate::backup_project_files_impl(
+                            if let Err(e) = crate::backup_project_files_internal(
                                 root,
                                 &[rel.to_string_lossy().to_string()],
                                 "purge_unused_samples",

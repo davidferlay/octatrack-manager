@@ -19,6 +19,7 @@ import { Version } from "../components/Version";
 import { formatMixerLevel, formatMetronomePitch } from "../utils/format";
 import { Button, IconButton, Toolbar } from "../design-system";
 import "../App.css";
+import { LegacyWriteRestrictionNotice } from "../components/LegacyWriteRestrictionNotice";
 
 // Most type definitions are now imported from ProjectsContext via Bank and ProjectMetadata types
 
@@ -895,6 +896,7 @@ export function ProjectDetail() {
 
   return (
     <main className="container">
+      <LegacyWriteRestrictionNotice />
       <div className="project-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: '1' }}>
           <IconButton variant="back" onClick={leaveToProjectList} title="Back to projects (Esc)">

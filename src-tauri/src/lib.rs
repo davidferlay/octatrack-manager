@@ -8,6 +8,7 @@ mod catalog_runtime;
 mod clone_runtime;
 mod device_detection;
 mod host_metadata_policy;
+mod legacy_command_gate;
 mod legacy_read_adapter;
 mod local_artifact;
 mod mutation_gate;
@@ -195,11 +196,14 @@ async fn load_parts_data(path: String, bank_id: String) -> Result<PartsDataRespo
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn save_parts(
     path: String,
     bank_id: String,
     parts_data: Vec<PartData>,
 ) -> Result<(), String> {
+    crate::deny_legacy_write!();
+
     // Run on a blocking thread pool to avoid blocking the main event loop
     tauri::async_runtime::spawn_blocking(move || save_parts_data(&path, &bank_id, parts_data))
         .await
@@ -207,18 +211,24 @@ async fn save_parts(
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn save_memory_settings(path: String, settings: MemorySettings) -> Result<f64, String> {
+    crate::deny_legacy_write!();
+
     tauri::async_runtime::spawn_blocking(move || save_memory_settings_data(&path, settings))
         .await
         .unwrap()
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn assign_samples_to_slots(
     path: String,
     slot_type: String,
     assignments: Vec<SlotAssignment>,
 ) -> Result<AssignSamplesResult, String> {
+    crate::deny_legacy_write!();
+
     tauri::async_runtime::spawn_blocking(move || {
         assign_samples_to_slots_impl(&path, &slot_type, assignments)
     })
@@ -227,11 +237,14 @@ async fn assign_samples_to_slots(
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn clear_sample_slots(
     path: String,
     slot_type: String,
     slot_indices: Vec<u16>,
 ) -> Result<AssignSamplesResult, String> {
+    crate::deny_legacy_write!();
+
     tauri::async_runtime::spawn_blocking(move || {
         project_reader::clear_sample_slots(&path, &slot_type, slot_indices)
     })
@@ -240,11 +253,14 @@ async fn clear_sample_slots(
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn clear_sample_keep_attributes(
     path: String,
     slot_type: String,
     slot_indices: Vec<u16>,
 ) -> Result<AssignSamplesResult, String> {
+    crate::deny_legacy_write!();
+
     tauri::async_runtime::spawn_blocking(move || {
         project_reader::clear_sample_keep_attributes(&path, &slot_type, slot_indices)
     })
@@ -253,11 +269,14 @@ async fn clear_sample_keep_attributes(
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn reset_slot_attributes(
     path: String,
     slot_type: String,
     slot_indices: Vec<u16>,
 ) -> Result<AssignSamplesResult, String> {
+    crate::deny_legacy_write!();
+
     tauri::async_runtime::spawn_blocking(move || {
         project_reader::reset_slot_attributes(&path, &slot_type, slot_indices)
     })
@@ -266,7 +285,10 @@ async fn reset_slot_attributes(
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn commit_part(path: String, bank_id: String, part_id: u8) -> Result<(), String> {
+    crate::deny_legacy_write!();
+
     // Commit a part: copy parts.unsaved to parts.saved (like Octatrack's "SAVE" command)
     tauri::async_runtime::spawn_blocking(move || commit_part_data(&path, &bank_id, part_id))
         .await
@@ -274,7 +296,10 @@ async fn commit_part(path: String, bank_id: String, part_id: u8) -> Result<(), S
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn commit_all_parts(path: String, bank_id: String) -> Result<(), String> {
+    crate::deny_legacy_write!();
+
     // Commit all parts: copy all parts.unsaved to parts.saved (like Octatrack's "SAVE ALL" command)
     tauri::async_runtime::spawn_blocking(move || commit_all_parts_data(&path, &bank_id))
         .await
@@ -282,7 +307,10 @@ async fn commit_all_parts(path: String, bank_id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn reload_part(path: String, bank_id: String, part_id: u8) -> Result<PartData, String> {
+    crate::deny_legacy_write!();
+
     // Reload a part: copy parts.saved back to parts.unsaved (like Octatrack's "RELOAD" command)
     tauri::async_runtime::spawn_blocking(move || reload_part_data(&path, &bank_id, part_id))
         .await
@@ -330,6 +358,7 @@ async fn expand_audio_paths(paths: Vec<String>) -> Result<Vec<String>, String> {
 
 /// Inspect audio files (OT PCM size + compatibility) so the UI can validate slot drops.
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn inspect_audio_files(
     paths: Vec<String>,
 ) -> Result<Vec<project_reader::AudioFileCheck>, String> {
@@ -344,26 +373,34 @@ async fn inspect_audio_files(
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 fn navigate_to_parent(path: String) -> Result<String, String> {
     get_parent_directory(&path)
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 fn create_new_directory(path: String, name: String) -> Result<String, String> {
+    crate::deny_legacy_write!();
+
     create_directory(&path, &name)
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 fn resolve_default_purge_destination(guaranteed_fallback: String) -> String {
     purge::resolve_default_purge_destination(&guaranteed_fallback)
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn copy_audio_files(
     source_paths: Vec<String>,
     destination_dir: String,
     overwrite: Option<bool>,
 ) -> Result<Vec<String>, String> {
+    crate::deny_legacy_write!();
+
     let should_overwrite = overwrite.unwrap_or(false);
     // Run on a blocking thread pool to avoid blocking the main event loop
     tauri::async_runtime::spawn_blocking(move || {
@@ -374,10 +411,13 @@ async fn copy_audio_files(
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn copy_audio_files_to_project(
     source_paths: Vec<String>,
     destination_dir: String,
 ) -> Result<Vec<String>, String> {
+    crate::deny_legacy_write!();
+
     tauri::async_runtime::spawn_blocking(move || {
         copy_audio_files_or_use_existing(source_paths, &destination_dir)
     })
@@ -386,6 +426,7 @@ async fn copy_audio_files_to_project(
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn copy_audio_file_with_progress(
     app: AppHandle,
     source_path: String,
@@ -393,6 +434,8 @@ async fn copy_audio_file_with_progress(
     transfer_id: String,
     overwrite: Option<bool>,
 ) -> Result<String, String> {
+    crate::deny_legacy_write!();
+
     let should_overwrite = overwrite.unwrap_or(false);
     let source_path_clone = source_path.clone();
     let transfer_id_for_callback = transfer_id.clone();
@@ -434,15 +477,19 @@ async fn copy_audio_file_with_progress(
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 fn cancel_audio_transfer(transfer_id: String) -> bool {
     cancel_transfer(&transfer_id)
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn move_audio_files(
     source_paths: Vec<String>,
     destination_dir: String,
 ) -> Result<Vec<String>, String> {
+    crate::deny_legacy_write!();
+
     // Run on a blocking thread pool to avoid blocking the main event loop
     tauri::async_runtime::spawn_blocking(move || move_files(source_paths, &destination_dir))
         .await
@@ -507,27 +554,38 @@ fn delete_file(
     delete_files(vec![authorized.to_string_lossy().into_owned()])
 }
 
-#[tauri::command]
-fn open_in_file_manager(path: String) -> Result<(), String> {
-    open::that(&path).map_err(|e| format!("Failed to open file manager: {}", e))
+fn reveal_authorized_legacy_path(
+    app: &tauri::AppHandle,
+    registry: &root_registry::RootRegistry,
+    path: &str,
+) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let canonical = registry
+        .authorize_legacy_path(path, false, false)
+        .map_err(|error| error.to_string())?;
+    app.opener()
+        .reveal_item_in_dir(canonical.to_string_lossy().to_string())
+        .map_err(|e| format!("Failed to reveal in file manager: {}", e))
 }
 
-/// Reveal a path in the OS file explorer. Resolves `..` (sample paths are stored relative
-/// to the project dir), then opens a directory's contents or highlights a file in its folder.
+/// Legacy alias for [`reveal_in_file_manager`]. Never launches arbitrary targets.
 #[tauri::command]
-fn reveal_in_file_manager(app: tauri::AppHandle, path: String) -> Result<(), String> {
-    use tauri_plugin_opener::OpenerExt;
-    let p = std::path::Path::new(&path);
-    let canonical = std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
-    if canonical.is_dir() {
-        app.opener()
-            .open_path(canonical.to_string_lossy().to_string(), None::<&str>)
-            .map_err(|e| format!("Failed to open in file manager: {}", e))
-    } else {
-        app.opener()
-            .reveal_item_in_dir(&canonical)
-            .map_err(|e| format!("Failed to reveal in file manager: {}", e))
-    }
+fn open_in_file_manager(
+    app: tauri::AppHandle,
+    path: String,
+    registry: tauri::State<'_, Arc<root_registry::RootRegistry>>,
+) -> Result<(), String> {
+    reveal_authorized_legacy_path(&app, registry.inner(), &path)
+}
+
+/// Reveal a registered path in the OS file explorer (selection highlight only).
+#[tauri::command]
+fn reveal_in_file_manager(
+    app: tauri::AppHandle,
+    path: String,
+    registry: tauri::State<'_, Arc<root_registry::RootRegistry>>,
+) -> Result<(), String> {
+    reveal_authorized_legacy_path(&app, registry.inner(), &path)
 }
 
 /// Read an audio file's raw bytes so the frontend can play it via a Blob URL.
@@ -619,7 +677,10 @@ async fn get_audio_pool_status(project_path: String) -> Result<AudioPoolStatus, 
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn create_audio_pool(project_path: String) -> Result<String, String> {
+    crate::deny_legacy_write!();
+
     tauri::async_runtime::spawn_blocking(move || create_audio_pool_impl(&project_path))
         .await
         .unwrap()
@@ -630,6 +691,7 @@ async fn create_audio_pool(project_path: String) -> Result<String, String> {
 // ============================================================================
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn copy_bank(
     source_project: String,
     source_bank_index: u8,
@@ -642,6 +704,8 @@ async fn copy_bank(
     copy_attributes: Option<bool>,
     attribute_selection: Option<Vec<String>>,
 ) -> Result<project_reader::CopyBankResult, String> {
+    crate::deny_legacy_write!();
+
     tauri::async_runtime::spawn_blocking(move || {
         copy_bank_impl(
             &source_project,
@@ -682,6 +746,7 @@ async fn validate_bank_sample_slots(
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn copy_parts(
     source_project: String,
     source_bank_index: u8,
@@ -690,6 +755,8 @@ async fn copy_parts(
     dest_bank_index: u8,
     dest_part_indices: Vec<u8>,
 ) -> Result<(), String> {
+    crate::deny_legacy_write!();
+
     tauri::async_runtime::spawn_blocking(move || {
         copy_parts_impl(
             &source_project,
@@ -705,6 +772,7 @@ async fn copy_parts(
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn copy_patterns(
     source_project: String,
     source_bank_index: u8,
@@ -718,6 +786,8 @@ async fn copy_patterns(
     track_indices: Option<Vec<u8>>,
     mode_scope: Option<String>,
 ) -> Result<(), String> {
+    crate::deny_legacy_write!();
+
     tauri::async_runtime::spawn_blocking(move || {
         copy_patterns_impl(
             &source_project,
@@ -738,6 +808,7 @@ async fn copy_patterns(
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn copy_tracks(
     source_project: String,
     source_bank_index: u8,
@@ -751,6 +822,8 @@ async fn copy_tracks(
     source_pattern_index: Option<u8>, // None = all 16 patterns, Some(0-15) = specific
     dest_pattern_indices: Option<Vec<u8>>, // None = all 16 patterns, Some = specific (1-to-many)
 ) -> Result<(), String> {
+    crate::deny_legacy_write!();
+
     tauri::async_runtime::spawn_blocking(move || {
         // Build the list of (src_pattern, dest_pattern) pairs to process
         let pattern_pairs: Vec<(Option<u8>, Option<u8>)> = match (&source_pattern_index, &dest_pattern_indices) {
@@ -816,6 +889,7 @@ async fn copy_tracks(
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn copy_sample_slots(
     source_project: String,
     dest_project: String,
@@ -827,6 +901,8 @@ async fn copy_sample_slots(
     copy_attributes: bool,
     attribute_selection: Vec<String>,
 ) -> Result<project_reader::CopySlotsResult, String> {
+    crate::deny_legacy_write!();
+
     tauri::async_runtime::spawn_blocking(move || {
         copy_sample_slots_impl(
             &source_project,
@@ -871,49 +947,82 @@ async fn get_slot_audio_paths(
     .unwrap()
 }
 
-/// Back up specific files from a project before modifying them.
-/// Creates a timestamped subdirectory under `<project_path>/backups/` and copies the listed files.
-fn backup_project_files_impl(
-    project_path: &str,
+fn validate_backup_label(label: &str) -> Result<(), String> {
+    if label.is_empty() || label.len() > 32 {
+        return Err("Backup label must be 1-32 characters".to_string());
+    }
+    if !label
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
+    {
+        return Err("Backup label contains unsupported characters".to_string());
+    }
+    Ok(())
+}
+
+fn validate_backup_relative_file(path: &str) -> Result<ot_domain::RootRelativePath, String> {
+    ot_domain::RootRelativePath::parse(path)
+        .map_err(|error| format!("Invalid backup path: {error}"))
+}
+
+fn backup_project_files_in_dir(
+    project_dir: &std::path::Path,
     files: &[String],
     label: &str,
 ) -> Result<String, String> {
-    use std::path::Path;
-
-    let project_dir = Path::new(project_path);
-    if !project_dir.exists() {
-        return Err(format!("Project path does not exist: {}", project_path));
+    let mut existing_files = Vec::new();
+    for file in files {
+        let relative = validate_backup_relative_file(file)?;
+        let src = project_dir.join(relative.as_str());
+        if !src.exists() {
+            continue;
+        }
+        let metadata = std::fs::symlink_metadata(&src)
+            .map_err(|error| format!("Failed to inspect backup source: {error}"))?;
+        if metadata.file_type().is_symlink() {
+            return Err("Backup source paths cannot be symbolic links".to_string());
+        }
+        existing_files.push(relative);
     }
-
-    // Build timestamp directory name: YYYY-MM-DD_HH-MM-SS_label
-    let now = chrono::Local::now();
-    let dir_name = format!("{}_{}", now.format("%Y-%m-%d_%H-%M-%S"), label);
-    let backup_dir = project_dir.join("backups").join(&dir_name);
-
-    // Only create the backup dir if at least one source file actually exists
-    let existing_files: Vec<_> = files
-        .iter()
-        .filter(|f| project_dir.join(f).exists())
-        .collect();
 
     if existing_files.is_empty() {
         return Ok("No files to back up".to_string());
+    }
+
+    let now = chrono::Local::now();
+    let dir_name = format!("{}_{}", now.format("%Y-%m-%d_%H-%M-%S"), label);
+    let backup_dir = project_dir.join("backups").join(&dir_name);
+    if backup_dir.exists() {
+        return Err("Backup destination already exists".to_string());
     }
 
     std::fs::create_dir_all(&backup_dir)
         .map_err(|e| format!("Failed to create backup directory: {}", e))?;
 
     let mut copied = 0u32;
-    for file in &existing_files {
-        let src = project_dir.join(file);
-        let dest = backup_dir.join(file);
-        // Preserve subdirectory structure (e.g. AUDIO/sample.wav)
+    for relative in &existing_files {
+        let src = project_dir.join(relative.as_str());
+        let dest = backup_dir.join(relative.as_str());
+        if dest.exists() {
+            return Err(format!(
+                "Backup destination already exists: {}",
+                dest.display()
+            ));
+        }
         if let Some(parent) = dest.parent() {
-            let _ = std::fs::create_dir_all(parent);
+            std::fs::create_dir_all(parent)
+                .map_err(|error| format!("Failed to create backup subdirectory: {error}"))?;
+            if parent
+                .symlink_metadata()
+                .map(|metadata| metadata.file_type().is_symlink())
+                .unwrap_or(true)
+            {
+                return Err("Backup destination traverses a symbolic link".to_string());
+            }
         }
-        if std::fs::copy(&src, &dest).is_ok() {
-            copied += 1;
-        }
+        std::fs::copy(&src, &dest)
+            .map_err(|error| format!("Failed to copy backup source {}: {error}", src.display()))?;
+        copied += 1;
     }
 
     println!(
@@ -924,14 +1033,63 @@ fn backup_project_files_impl(
     Ok(format!("{} file(s) backed up", copied))
 }
 
+/// Legacy internal backup for disabled write paths (purge, project save helpers).
+/// IPC `backup_project_files` must use [`backup_project_files_impl`] with a registered root.
+pub(crate) fn backup_project_files_internal(
+    project_path: &str,
+    files: &[String],
+    label: &str,
+) -> Result<String, String> {
+    validate_backup_label(label)?;
+    for file in files {
+        validate_backup_relative_file(file)?;
+    }
+    let project_dir = std::path::Path::new(project_path);
+    if !project_dir.is_dir() {
+        return Err(format!("Project path does not exist: {project_path}"));
+    }
+    let metadata = std::fs::symlink_metadata(project_dir)
+        .map_err(|error| format!("Failed to inspect project path: {error}"))?;
+    if metadata.file_type().is_symlink() {
+        return Err("Project path cannot be a symbolic link".to_string());
+    }
+    backup_project_files_in_dir(project_dir, files, label)
+}
+
+/// Back up specific files from a project before modifying them.
+/// Creates a timestamped subdirectory under `<project_path>/backups/` and copies the listed files.
+pub(crate) fn backup_project_files_impl(
+    registry: Option<&root_registry::RootRegistry>,
+    project_path: &str,
+    files: &[String],
+    label: &str,
+) -> Result<String, String> {
+    let Some(registry) = registry else {
+        return Err(legacy_command_gate::legacy_write_disabled_message());
+    };
+
+    validate_backup_label(label)?;
+    for file in files {
+        validate_backup_relative_file(file)?;
+    }
+
+    let (_, project_dir) = registry
+        .authorize_legacy_project_dir(project_path, true)
+        .map_err(|error| error.to_string())?;
+
+    backup_project_files_in_dir(&project_dir, files, label)
+}
+
 #[tauri::command]
 async fn backup_project_files(
     project_path: String,
     files: Vec<String>,
     label: String,
+    registry: tauri::State<'_, Arc<root_registry::RootRegistry>>,
 ) -> Result<String, String> {
+    let registry = Arc::clone(registry.inner());
     tauri::async_runtime::spawn_blocking(move || {
-        backup_project_files_impl(&project_path, &files, &label)
+        backup_project_files_impl(Some(&registry), &project_path, &files, &label)
     })
     .await
     .unwrap()
@@ -1019,12 +1177,15 @@ struct PoolFixResult {
 /// replaced), then repoint sample-slot references across every project of the set.
 /// Emits "copy-progress" events per file; cancellable via cancel_audio_transfer.
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn fix_pool_files(
     app: AppHandle,
     pool_path: String,
     file_paths: Vec<String>,
     transfer_id: String,
 ) -> Result<PoolFixResult, String> {
+    crate::deny_legacy_write!();
+
     let cancel_token = register_cancellation_token(&transfer_id);
     let transfer_id_for_cleanup = transfer_id.clone();
 
@@ -1108,12 +1269,15 @@ async fn fix_pool_files(
 /// then repoint sample-slot references across every project of the set.
 /// Emits "copy-progress" events per file; cancellable via cancel_audio_transfer.
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn fix_project_samples(
     app: AppHandle,
     project_path: String,
     file_paths: Vec<String>,
     transfer_id: String,
 ) -> Result<PoolFixResult, String> {
+    crate::deny_legacy_write!();
+
     let cancel_token = register_cancellation_token(&transfer_id);
     let transfer_id_for_cleanup = transfer_id.clone();
 
@@ -1193,10 +1357,13 @@ async fn fix_project_samples(
 }
 
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn fix_missing_samples(
     project_path: String,
     resolutions: Vec<project_reader::SampleResolution>,
 ) -> Result<project_reader::FixResult, String> {
+    crate::deny_legacy_write!();
+
     tauri::async_runtime::spawn_blocking(move || {
         project_reader::fix_missing_samples(&project_path, resolutions)
     })
@@ -1294,6 +1461,7 @@ impl PurgeReporter {
 /// first so the plan's already-simulated orphaned files are consistent with
 /// what actually happens on disk.
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn purge_project_files(
     app: AppHandle,
     project_path: String,
@@ -1302,6 +1470,8 @@ async fn purge_project_files(
     destination_dir: Option<String>,
     transfer_id: Option<String>,
 ) -> Result<purge::PurgeResult, String> {
+    crate::deny_legacy_write!();
+
     let reporter = PurgeReporter::new(app, transfer_id);
     tauri::async_runtime::spawn_blocking(move || {
         let mut origin_roots = std::collections::HashMap::new();
@@ -1339,6 +1509,7 @@ async fn purge_project_files(
 /// (populated by the frontend only when "Include all projects of set" and
 /// "Clear unused sample slot assignments" are both on).
 #[tauri::command]
+#[allow(unreachable_code, unused_variables)]
 async fn purge_pool_files(
     app: AppHandle,
     pool_path: String,
@@ -1348,6 +1519,8 @@ async fn purge_pool_files(
     destination_dir: Option<String>,
     transfer_id: Option<String>,
 ) -> Result<purge::PurgeResult, String> {
+    crate::deny_legacy_write!();
+
     let reporter = PurgeReporter::new(app, transfer_id);
     tauri::async_runtime::spawn_blocking(move || {
         let mut origin_roots = std::collections::HashMap::new();
@@ -1741,6 +1914,34 @@ mod tests {
     // backup_project_files_impl tests
     // =========================================================================
 
+    fn backup_test_registry(project_root: &std::path::Path) -> root_registry::RootRegistry {
+        struct StableTestIdentity;
+
+        impl root_registry::DeviceIdentityProvider for StableTestIdentity {
+            fn observe(
+                &self,
+                _root: &std::path::Path,
+            ) -> Result<root_registry::DeviceObservation, root_registry::RootRegistryError>
+            {
+                Ok(root_registry::DeviceObservation {
+                    stable_key: "test-volume".into(),
+                    filesystem_type: Some("apfs".into()),
+                    total_capacity: Some(1024),
+                    mount_token: "test-mount".into(),
+                    stable: true,
+                })
+            }
+        }
+
+        let registry = root_registry::RootRegistry::new(
+            std::sync::Arc::new(StableTestIdentity),
+            std::time::Duration::from_secs(60),
+        );
+        let session = registry.register(project_root.to_str().unwrap()).unwrap();
+        registry.enable_write(&session.root_id).unwrap();
+        registry
+    }
+
     #[test]
     fn test_backup_copies_existing_files() {
         let dir = tempfile::tempdir().unwrap();
@@ -1749,7 +1950,13 @@ mod tests {
         std::fs::write(project.join("bank02.work"), b"bank2data").unwrap();
 
         let files = vec!["bank01.work".to_string(), "bank02.work".to_string()];
-        let result = backup_project_files_impl(project.to_str().unwrap(), &files, "copy_bank");
+        let registry = backup_test_registry(dir.path());
+        let result = backup_project_files_impl(
+            Some(&registry),
+            project.to_str().unwrap(),
+            &files,
+            "copy_bank",
+        );
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "2 file(s) backed up");
 
@@ -1781,7 +1988,9 @@ mod tests {
             "bank01.work".to_string(),
             "bank99.work".to_string(), // does not exist
         ];
-        let result = backup_project_files_impl(project.to_str().unwrap(), &files, "test");
+        let registry = backup_test_registry(dir.path());
+        let result =
+            backup_project_files_impl(Some(&registry), project.to_str().unwrap(), &files, "test");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "1 file(s) backed up");
     }
@@ -1792,7 +2001,9 @@ mod tests {
         let project = dir.path();
 
         let files = vec!["nonexistent.work".to_string()];
-        let result = backup_project_files_impl(project.to_str().unwrap(), &files, "test");
+        let registry = backup_test_registry(dir.path());
+        let result =
+            backup_project_files_impl(Some(&registry), project.to_str().unwrap(), &files, "test");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "No files to back up");
         assert!(!project.join("backups").exists());
@@ -1800,13 +2011,37 @@ mod tests {
 
     #[test]
     fn test_backup_invalid_project_path() {
+        let registry = root_registry::RootRegistry::default();
         let result = backup_project_files_impl(
+            Some(&registry),
             "/nonexistent/path/to/project",
             &["bank01.work".to_string()],
             "test",
         );
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("does not exist"));
+    }
+
+    #[test]
+    fn test_backup_rejects_unsafe_label_and_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let registry = backup_test_registry(dir.path());
+        let err = backup_project_files_impl(
+            Some(&registry),
+            dir.path().to_str().unwrap(),
+            &["../escape.work".to_string()],
+            "safe",
+        )
+        .unwrap_err();
+        assert!(err.contains("Invalid backup path"));
+
+        let err = backup_project_files_impl(
+            Some(&registry),
+            dir.path().to_str().unwrap(),
+            &["bank01.work".to_string()],
+            "../bad",
+        )
+        .unwrap_err();
+        assert!(err.contains("Backup label"));
     }
 
     #[test]
@@ -1817,8 +2052,13 @@ mod tests {
         std::fs::write(project.join("AUDIO/sample.wav"), b"wavdata").unwrap();
 
         let files = vec!["AUDIO/sample.wav".to_string()];
-        let result =
-            backup_project_files_impl(project.to_str().unwrap(), &files, "copy_sample_slots");
+        let registry = backup_test_registry(dir.path());
+        let result = backup_project_files_impl(
+            Some(&registry),
+            project.to_str().unwrap(),
+            &files,
+            "copy_sample_slots",
+        );
         assert!(result.is_ok());
 
         let backups_dir = project.join("backups");
@@ -1837,7 +2077,13 @@ mod tests {
         std::fs::write(project.join("bank01.work"), b"data").unwrap();
 
         let files = vec!["bank01.work".to_string()];
-        let _ = backup_project_files_impl(project.to_str().unwrap(), &files, "edit_mode");
+        let registry = backup_test_registry(dir.path());
+        let _ = backup_project_files_impl(
+            Some(&registry),
+            project.to_str().unwrap(),
+            &files,
+            "edit_mode",
+        );
 
         let backups_dir = project.join("backups");
         let entries: Vec<_> = std::fs::read_dir(&backups_dir).unwrap().collect();
@@ -1848,6 +2094,44 @@ mod tests {
             "Backup dir name '{}' should end with '_edit_mode'",
             dir_name_str
         );
+    }
+
+    #[test]
+    fn test_backup_without_registry_returns_legacy_write_disabled() {
+        let err =
+            backup_project_files_impl(None, "/tmp/project", &["bank01.work".to_string()], "test")
+                .unwrap_err();
+        assert!(err.contains(legacy_command_gate::LEGACY_WRITE_DISABLED));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_backup_rejects_symlink_source_file() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path();
+        let real = dir.path().join("real.work");
+        std::fs::write(&real, b"data").unwrap();
+        let link = project.join("bank01.work");
+        symlink(&real, &link).unwrap();
+
+        let registry = backup_test_registry(project);
+        let err = backup_project_files_impl(
+            Some(&registry),
+            project.to_str().unwrap(),
+            &["bank01.work".to_string()],
+            "test",
+        )
+        .unwrap_err();
+        assert!(err.contains("symbolic links"));
+    }
+
+    #[test]
+    fn test_disabled_legacy_save_parts_rejects_immediately() {
+        let err = tauri::async_runtime::block_on(save_parts(String::new(), String::new(), vec![]))
+            .unwrap_err();
+        assert!(err.contains(legacy_command_gate::LEGACY_WRITE_DISABLED));
     }
 
     // =========================================================================

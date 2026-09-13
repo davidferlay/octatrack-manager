@@ -15,6 +15,7 @@
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { validateLegacyCommandContainment } from "./legacy-command-gate.mjs";
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -496,6 +497,28 @@ if (!handlerMatch) {
     );
     for (const name of unexpected) {
       fail(`v2_api:: handler entry must be an approved v2_* command: ${name}`);
+    }
+  }
+}
+
+// --- Legacy command gate: 39 read + 7 authorized + 38 disabled = 84 handler entries ---
+{
+  const gatePath = path.join(repositoryRoot, "src-tauri", "src", "legacy_command_gate.rs");
+  const projectManagerRs = readFileSync(
+    path.join(repositoryRoot, "src-tauri", "src", "project_manager.rs"),
+    "utf8",
+  );
+  if (!existsSync(gatePath)) {
+    fail("src-tauri/src/legacy_command_gate.rs is required for legacy write containment");
+  } else {
+    const gateRs = readFileSync(gatePath, "utf8");
+    const { errors: gateErrors } = validateLegacyCommandContainment({
+      gateRs,
+      libRs,
+      projectManagerRs,
+    });
+    for (const message of gateErrors) {
+      fail(message);
     }
   }
 }
