@@ -42,7 +42,9 @@ fn legacy_tail_under_root(
             return Ok(Some(tail_components(raw, &probe)));
         }
         if canonical.starts_with(registered) {
-            return Ok(Some(tail_components(raw, &probe)));
+            let mut tail = tail_components(&canonical, registered);
+            tail.extend(tail_components(raw, &probe));
+            return Ok(Some(tail));
         }
     }
     Ok(None)
@@ -671,6 +673,9 @@ impl RootRegistry {
         }
 
         if tail.is_empty() {
+            if require_write {
+                return Err(RootRegistryError::RootProtected);
+            }
             let metadata =
                 fs::symlink_metadata(&registered_path).map_err(map_resolve_file_error)?;
             if metadata.file_type().is_symlink() {
@@ -683,6 +688,37 @@ impl RootRegistry {
         }
 
         walk_legacy_under_root(&registered_path, &tail, require_regular_file)
+    }
+
+    /// Authorizes a registered project directory for legacy backup writes.
+    pub fn authorize_legacy_project_dir(
+        &self,
+        raw_project_path: &str,
+        require_write: bool,
+    ) -> Result<(PathBuf, PathBuf), RootRegistryError> {
+        let project_dir = self.authorize_legacy_path(raw_project_path, false, false)?;
+        let metadata = fs::symlink_metadata(&project_dir).map_err(map_resolve_file_error)?;
+        if !metadata.is_dir() {
+            return Err(RootRegistryError::NotRegularFile);
+        }
+        let (registered_root, root_id) = {
+            let state = self.lock_state()?;
+            let mut match_entry = None;
+            for (root_id, entry) in &state.roots {
+                if project_dir.starts_with(&entry.canonical_path) {
+                    match_entry = Some((entry.canonical_path.clone(), root_id.clone()));
+                    break;
+                }
+            }
+            match_entry.ok_or(RootRegistryError::NotApproved)?
+        };
+        if require_write {
+            let resolved = self.resolve(&root_id)?;
+            if !resolved.session.capabilities.write {
+                return Err(RootRegistryError::WriteGrantRequired);
+            }
+        }
+        Ok((registered_root, project_dir))
     }
 
     pub fn resolve(&self, root_id: &RootId) -> Result<ResolvedRoot, RootRegistryError> {
@@ -915,6 +951,7 @@ pub enum RootRegistryError {
     SymlinkEscape,
     NotRegularFile,
     WriteGrantRequired,
+    RootProtected,
     Io(String),
     Unavailable,
 }
@@ -935,6 +972,7 @@ impl RootRegistryError {
             Self::SymlinkEscape => "SYMLINK_ESCAPE",
             Self::NotRegularFile => "AUDIO_SOURCE_UNAVAILABLE",
             Self::WriteGrantRequired => "WRITE_GRANT_REQUIRED",
+            Self::RootProtected => "ROOT_PROTECTED",
             Self::Io(_) | Self::Unavailable => "ROOT_UNAVAILABLE",
         }
     }
@@ -969,6 +1007,8 @@ impl std::fmt::Display for RootRegistryError {
             Self::WriteGrantRequired => {
                 formatter.write_str("write access has not been enabled for this root")
             }
+            Self::RootProtected => formatter
+                .write_str("the registered root itself cannot be mutated through legacy APIs"),
             Self::Io(message) => {
                 write!(
                     formatter,
@@ -1444,6 +1484,78 @@ mod tests {
                 .authorize_legacy_path(link.to_str().unwrap(), false, true)
                 .unwrap_err(),
             RootRegistryError::SymlinkEscape
+        );
+    }
+
+    #[test]
+    fn legacy_path_allows_registered_root_reveal_but_blocks_root_mutation() {
+        let root = TempDir::new().unwrap();
+        let registry = RootRegistry::new(
+            Arc::new(FakeIdentityProvider::new()),
+            Duration::from_secs(60),
+        );
+        let session = registry.register(root.path().to_str().unwrap()).unwrap();
+        registry.enable_write(&session.root_id).unwrap();
+
+        assert_eq!(
+            registry
+                .authorize_legacy_path(root.path().to_str().unwrap(), false, false)
+                .unwrap(),
+            root.path().canonicalize().unwrap()
+        );
+        assert_eq!(
+            registry
+                .authorize_legacy_path(root.path().to_str().unwrap(), true, false)
+                .unwrap_err(),
+            RootRegistryError::RootProtected
+        );
+    }
+
+    #[test]
+    fn legacy_path_resolves_project_relative_parent_segments() {
+        let root = TempDir::new().unwrap();
+        fs::create_dir_all(root.path().join("SET/PROJECT")).unwrap();
+        fs::create_dir_all(root.path().join("SET/AUDIO")).unwrap();
+        let file = root.path().join("SET/AUDIO/kick.wav");
+        fs::write(&file, b"fixture").unwrap();
+        let registry = RootRegistry::new(
+            Arc::new(FakeIdentityProvider::new()),
+            Duration::from_secs(60),
+        );
+        registry.register(root.path().to_str().unwrap()).unwrap();
+        let traversal = root.path().join("SET/PROJECT/../AUDIO/kick.wav");
+
+        assert_eq!(
+            registry
+                .authorize_legacy_path(traversal.to_str().unwrap(), false, true)
+                .unwrap(),
+            file.canonicalize().unwrap()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn legacy_path_authorizes_external_symlink_alias_to_subdirectory() {
+        use std::os::unix::fs::symlink;
+
+        let root = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        fs::create_dir_all(root.path().join("sub")).unwrap();
+        let file = root.path().join("sub/kick.wav");
+        fs::write(&file, b"fixture").unwrap();
+        symlink(root.path().join("sub"), outside.path().join("alias")).unwrap();
+        let registry = RootRegistry::new(
+            Arc::new(FakeIdentityProvider::new()),
+            Duration::from_secs(60),
+        );
+        registry.register(root.path().to_str().unwrap()).unwrap();
+        let via_alias = outside.path().join("alias/kick.wav");
+
+        assert_eq!(
+            registry
+                .authorize_legacy_path(via_alias.to_str().unwrap(), false, true)
+                .unwrap(),
+            file.canonicalize().unwrap()
         );
     }
 

@@ -28,6 +28,7 @@ import { SamplePlayerBar } from "../components/SamplePlayerBar";
 import type { AudioFile } from "../types/audioFile";
 import { Button, IconButton, Toolbar, SplitPane } from "../design-system";
 import "./AudioPoolPage.css";
+import { LegacyWriteRestrictionNotice } from "../components/LegacyWriteRestrictionNotice";
 
 // Droppable wrapper for the Audio Pool (destination) pane. Uses @dnd-kit (pointer-based)
 // so in-app drag from the Source pane works on macOS WebKit, which does not fire HTML5
@@ -1542,6 +1543,7 @@ export function AudioPoolPage() {
 
   return (
     <main className="container audio-pool-page">
+      <LegacyWriteRestrictionNotice />
       <div className="project-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: '1' }}>
           {fromPath ? (

@@ -28,6 +28,8 @@ import { RenameProjectModal } from "../components/RenameProjectModal";
 import { ProjectContextMenu } from "../components/ProjectContextMenu";
 import { CopyProgressModal } from "../components/CopyProgressModal";
 import { RootRegistryPanel } from "../features/roots/RootRegistryPanel";
+import { LegacyWriteRestrictionNotice } from "../components/LegacyWriteRestrictionNotice";
+import { formatInvokeErrorForToast } from "../utils/legacyWriteRestriction";
 import { Button, ThemeSwitcher, Toolbar } from "../design-system";
 import type {
   ClipboardState,
@@ -456,6 +458,7 @@ export function HomePage() {
 
   return (
     <main className="container" ref={pageRef}>
+      <LegacyWriteRestrictionNotice />
       <div className="project-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: '1' }}>
           <h1>{PRODUCT_NAME}</h1>
@@ -1309,7 +1312,11 @@ export function HomePage() {
           onError={(err) => {
             const isMove = copyProgress?.isMove;
             setCopyProgress(null);
-            setToast({ message: `${isMove ? 'Move' : 'Copy'} failed: ${err}`, icon: 'fa-exclamation-triangle', type: 'warning' });
+            setToast({
+              message: formatInvokeErrorForToast(err, `${isMove ? 'Move' : 'Copy'} failed`),
+              icon: 'fa-exclamation-triangle',
+              type: 'warning',
+            });
             setTimeout(() => setToast(null), 3000);
           }}
         />
