@@ -535,4 +535,68 @@ describe("WaveformPreview", () => {
     await waitFor(() => expect(client.createRangePreviewToken).toHaveBeenCalled());
     expect(pauseSpy).toHaveBeenCalled();
   });
+
+  it("initializes the range end within the Library preview limit", async () => {
+    const client = api({
+      queryWaveform: vi.fn().mockResolvedValue({
+        ...waveformWindow,
+        frameCount: "3969000",
+      }),
+    });
+    render(
+      <WaveformPreview
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="long.wav"
+      />,
+    );
+    await screen.findByRole("img", { name: "Audio waveform" });
+    expect(screen.getByLabelText("End frame (exclusive)")).toHaveValue("2646000");
+    expect(screen.getByRole("button", { name: "Play selected range" })).toBeEnabled();
+  });
+
+  it("shows preview-limit feedback without calling the range preview API", async () => {
+    const client = api({
+      queryWaveform: vi.fn().mockResolvedValue({
+        ...waveformWindow,
+        frameCount: "3969000",
+      }),
+    });
+    render(
+      <WaveformPreview
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="long.wav"
+      />,
+    );
+    await screen.findByRole("img", { name: "Audio waveform" });
+    fireEvent.change(screen.getByLabelText("End frame (exclusive)"), {
+      target: { value: "2646001" },
+    });
+    expect(await screen.findByRole("alert")).toHaveTextContent("60 second or 32 MiB");
+    expect(screen.getByRole("button", { name: "Play selected range" })).toBeDisabled();
+    expect(client.createRangePreviewToken).not.toHaveBeenCalled();
+  });
+
+  it("stops range playback when the head preview player starts", async () => {
+    const client = api();
+    render(
+      <WaveformPreview
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+      />,
+    );
+    await screen.findByRole("img", { name: "Audio waveform" });
+    fireEvent.click(screen.getByRole("button", { name: "Load preview" }));
+    const head = await screen.findByLabelText("Preview kick.wav");
+    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Stop" })).toBeEnabled());
+
+    fireEvent.play(head);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Stop" })).toBeDisabled());
+  });
 });

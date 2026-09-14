@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  defaultLibraryPreviewEndFrame,
   durationLabelForFrame,
   durationSeconds,
   frame,
   frameFitsJsNumber,
+  maxLibraryPreviewFrames,
   validateFrameRange,
 } from "./frameMath";
 
@@ -34,8 +36,42 @@ describe("frameMath", () => {
   });
 
   it("validates half-open frame ranges against the file frame count", () => {
-    expect(() => validateFrameRange("0", "100", "100")).not.toThrow();
-    expect(() => validateFrameRange("10", "10", "100")).toThrow(/empty or inverted/);
-    expect(() => validateFrameRange("0", "101", "100")).toThrow(/beyond the file length/);
+    expect(() => validateFrameRange("0", "100", "100", 44100, 2)).not.toThrow();
+    expect(() => validateFrameRange("10", "10", "100", 44100, 2)).toThrow(/empty or inverted/);
+    expect(() => validateFrameRange("0", "101", "100", 44100, 2)).toThrow(/beyond the file length/);
+  });
+
+  it("rejects ranges over the Library 60s / 32 MiB preview limit", () => {
+    const sixtySeconds = maxLibraryPreviewFrames(44100, 2);
+    expect(() => validateFrameRange(
+      "0",
+      sixtySeconds.toString(),
+      (sixtySeconds + 1n).toString(),
+      44100,
+      2,
+    )).not.toThrow();
+    expect(() => validateFrameRange(
+      "0",
+      (sixtySeconds + 1n).toString(),
+      (sixtySeconds + 1n).toString(),
+      44100,
+      2,
+    )).toThrow(/60 second or 32 MiB/);
+
+    const maxByBytes = maxLibraryPreviewFrames(192000, 2);
+    expect(maxByBytes).toBe(8388597n);
+    expect(() => validateFrameRange("0", maxByBytes.toString(), "20000000", 192000, 2)).not.toThrow();
+    expect(() => validateFrameRange(
+      "0",
+      (maxByBytes + 1n).toString(),
+      "20000000",
+      192000,
+      2,
+    )).toThrow(/60 second or 32 MiB/);
+  });
+
+  it("clamps the default range end to the Library preview limit", () => {
+    expect(defaultLibraryPreviewEndFrame("44100", 44100, 2)).toBe("44100");
+    expect(defaultLibraryPreviewEndFrame("3969000", 44100, 2)).toBe("2646000");
   });
 });

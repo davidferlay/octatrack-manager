@@ -8,6 +8,7 @@ import {
 } from "../../api";
 import { Button } from "../../design-system";
 import {
+  defaultLibraryPreviewEndFrame,
   durationLabelForFrame,
   durationSeconds,
   validateFrameRange,
@@ -146,7 +147,11 @@ export function WaveformPreview({
           if (waveformRequest.current === request) {
             setWaveform(nextWaveform);
             setRangeStartFrame("0");
-            setRangeEndFrameExclusive(nextWaveform.frameCount);
+            setRangeEndFrameExclusive(defaultLibraryPreviewEndFrame(
+              nextWaveform.frameCount,
+              nextWaveform.sampleRate,
+              nextWaveform.channels,
+            ));
             setRangeInvalid(null);
           }
         },
@@ -187,7 +192,13 @@ export function WaveformPreview({
   useEffect(() => {
     if (waveform === null) return;
     try {
-      validateFrameRange(rangeStartFrame, rangeEndFrameExclusive, waveform.frameCount);
+      validateFrameRange(
+        rangeStartFrame,
+        rangeEndFrameExclusive,
+        waveform.frameCount,
+        waveform.sampleRate,
+        waveform.channels,
+      );
       setRangeInvalid(null);
     } catch (error) {
       setRangeInvalid(errorMessage(error));
@@ -209,7 +220,13 @@ export function WaveformPreview({
   const rangeDurationHint = useMemo(() => {
     if (waveform === null || rangeInvalid !== null) return null;
     try {
-      validateFrameRange(rangeStartFrame, rangeEndFrameExclusive, waveform.frameCount);
+      validateFrameRange(
+        rangeStartFrame,
+        rangeEndFrameExclusive,
+        waveform.frameCount,
+        waveform.sampleRate,
+        waveform.channels,
+      );
     } catch {
       return null;
     }
@@ -250,7 +267,13 @@ export function WaveformPreview({
   async function playSelectedRange() {
     if (waveform === null) return;
     try {
-      validateFrameRange(rangeStartFrame, rangeEndFrameExclusive, waveform.frameCount);
+      validateFrameRange(
+        rangeStartFrame,
+        rangeEndFrameExclusive,
+        waveform.frameCount,
+        waveform.sampleRate,
+        waveform.channels,
+      );
     } catch (error) {
       setRangeInvalid(errorMessage(error));
       return;
@@ -444,6 +467,7 @@ export function WaveformPreview({
           ref={headAudioRef}
           aria-label={`Preview ${displayName}`}
           controls
+          onPlay={stopSelectedRange}
           preload="metadata"
           src={previewUrl}
         />

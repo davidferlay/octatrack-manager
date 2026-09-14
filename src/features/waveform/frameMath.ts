@@ -29,10 +29,38 @@ export function durationLabelForFrame(frameCount: string, sampleRate: number): s
   return `${minutes}:${remaining.toString().padStart(2, "0")}`;
 }
 
+/** Library preview policy, matching ot-audio `create_preview_range`. */
+export const LIBRARY_PREVIEW_MAX_SECONDS = 60;
+export const LIBRARY_PREVIEW_MAX_BYTES = 32 * 1024 * 1024;
+
+export function maxLibraryPreviewFrames(sampleRate: number, channels: number): bigint {
+  const rate = Math.trunc(sampleRate);
+  const outputChannels = Math.min(2, Math.trunc(channels));
+  if (!Number.isFinite(rate) || rate <= 0 || outputChannels <= 0) {
+    return 0n;
+  }
+  const maxByDuration = BigInt(rate) * BigInt(LIBRARY_PREVIEW_MAX_SECONDS);
+  const bytesPerFrame = BigInt(outputChannels * 2);
+  const maxByBytes = BigInt(LIBRARY_PREVIEW_MAX_BYTES - 44) / bytesPerFrame;
+  return maxByDuration < maxByBytes ? maxByDuration : maxByBytes;
+}
+
+export function defaultLibraryPreviewEndFrame(
+  fileFrameCount: string,
+  sampleRate: number,
+  channels: number,
+): string {
+  const total = frame(fileFrameCount);
+  const limit = maxLibraryPreviewFrames(sampleRate, channels);
+  return (total < limit ? total : limit).toString();
+}
+
 export function validateFrameRange(
   startFrame: string,
   endFrameExclusive: string,
   fileFrameCount: string,
+  sampleRate: number,
+  channels: number,
 ): void {
   const start = frame(startFrame);
   const end = frame(endFrameExclusive);
@@ -42,6 +70,9 @@ export function validateFrameRange(
   }
   if (end > total) {
     throw new Error("Range extends beyond the file length.");
+  }
+  if (end - start > maxLibraryPreviewFrames(sampleRate, channels)) {
+    throw new Error("Range exceeds the 60 second or 32 MiB preview limit.");
   }
 }
 
