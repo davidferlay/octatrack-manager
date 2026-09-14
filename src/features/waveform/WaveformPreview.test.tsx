@@ -319,4 +319,220 @@ describe("WaveformPreview", () => {
     await Promise.resolve();
     expect(client.readPreview).not.toHaveBeenCalled();
   });
+
+  it("does not play after Stop when a delayed range create completes", async () => {
+    const client = api();
+    let resolveCreate: (() => void) | undefined;
+    vi.mocked(client.createRangePreviewToken).mockImplementation(
+      () => new Promise((resolve) => {
+        resolveCreate = () => resolve({
+          previewToken: "preview:v1:range",
+          expiresInSeconds: 120,
+          mimeType: "audio/wav",
+          byteLength: 4,
+          durationMillis: 500,
+          truncated: false,
+          sampleRate: 44100,
+          range: { startFrame: "0", endFrameExclusive: "44100" },
+        });
+      }),
+    );
+    const playSpy = vi.spyOn(HTMLMediaElement.prototype, "play");
+    const createObjectUrl = vi.mocked(URL.createObjectURL);
+
+    render(
+      <WaveformPreview
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+      />,
+    );
+    await screen.findByRole("img", { name: "Audio waveform" });
+    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+
+    resolveCreate?.();
+    await waitFor(() => expect(client.createRangePreviewToken).toHaveBeenCalled());
+    expect(client.readPreview).not.toHaveBeenCalled();
+    expect(createObjectUrl).not.toHaveBeenCalled();
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not play stale range A after range B finishes preparing", async () => {
+    const client = api();
+    let resolveA: (() => void) | undefined;
+    let call = 0;
+    vi.mocked(client.createRangePreviewToken).mockImplementation(
+      () => new Promise((resolve) => {
+        call += 1;
+        if (call === 1) {
+          resolveA = () => resolve({
+            previewToken: "preview:v1:range-a",
+            expiresInSeconds: 120,
+            mimeType: "audio/wav",
+            byteLength: 4,
+            durationMillis: 500,
+            truncated: false,
+            sampleRate: 44100,
+            range: { startFrame: "0", endFrameExclusive: "44100" },
+          });
+          return;
+        }
+        resolve({
+          previewToken: "preview:v1:range-b",
+          expiresInSeconds: 120,
+          mimeType: "audio/wav",
+          byteLength: 4,
+          durationMillis: 500,
+          truncated: false,
+          sampleRate: 44100,
+          range: { startFrame: "0", endFrameExclusive: "44100" },
+        });
+      }),
+    );
+    const playSpy = vi.spyOn(HTMLMediaElement.prototype, "play");
+
+    render(
+      <WaveformPreview
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+      />,
+    );
+    await screen.findByRole("img", { name: "Audio waveform" });
+    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
+
+    await waitFor(() => expect(client.readPreview).toHaveBeenCalledWith(
+      "root-opaque",
+      "preview:v1:range-b",
+    ));
+    expect(playSpy).toHaveBeenCalledTimes(1);
+
+    resolveA?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(client.readPreview).not.toHaveBeenCalledWith(
+      "root-opaque",
+      "preview:v1:range-a",
+    );
+    expect(playSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not clear range loading when a stale range request finally completes", async () => {
+    const client = api();
+    let resolveSlow: (() => void) | undefined;
+    let call = 0;
+    vi.mocked(client.createRangePreviewToken).mockImplementation(
+      () => new Promise((resolve) => {
+        call += 1;
+        if (call === 1) {
+          resolveSlow = () => resolve({
+            previewToken: "preview:v1:slow",
+            expiresInSeconds: 120,
+            mimeType: "audio/wav",
+            byteLength: 4,
+            durationMillis: 500,
+            truncated: false,
+            sampleRate: 44100,
+            range: { startFrame: "0", endFrameExclusive: "44100" },
+          });
+          return;
+        }
+        resolve({
+          previewToken: "preview:v1:fast",
+          expiresInSeconds: 120,
+          mimeType: "audio/wav",
+          byteLength: 4,
+          durationMillis: 500,
+          truncated: false,
+          sampleRate: 44100,
+          range: { startFrame: "0", endFrameExclusive: "44100" },
+        });
+      }),
+    );
+
+    render(
+      <WaveformPreview
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+      />,
+    );
+    await screen.findByRole("img", { name: "Audio waveform" });
+    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
+    expect(screen.getByRole("button", { name: "Preparing range..." })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Preparing range..." })).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+
+    resolveSlow?.();
+    await Promise.resolve();
+    expect(screen.queryByRole("button", { name: "Preparing range..." })).not.toBeInTheDocument();
+  });
+
+  it("does not play after asset switch when a delayed range read completes", async () => {
+    const client = api();
+    let resolveRead: (() => void) | undefined;
+    vi.mocked(client.readPreview).mockImplementation(
+      () => new Promise((resolve) => {
+        resolveRead = () => resolve(new Uint8Array([82, 73, 70, 70]).buffer);
+      }),
+    );
+    const playSpy = vi.spyOn(HTMLMediaElement.prototype, "play");
+
+    const view = render(
+      <WaveformPreview
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:first"
+        displayName="first.wav"
+      />,
+    );
+    await screen.findByRole("img", { name: "Audio waveform" });
+    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
+    await waitFor(() => expect(client.createRangePreviewToken).toHaveBeenCalled());
+
+    view.rerender(
+      <WaveformPreview
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:second"
+        displayName="second.wav"
+      />,
+    );
+    await waitFor(() => expect(screen.getByLabelText("End frame (exclusive)")).toHaveValue("44100"));
+    playSpy.mockClear();
+
+    resolveRead?.();
+    await waitFor(() => expect(playSpy).not.toHaveBeenCalled());
+  });
+
+  it("pauses head preview audio when range playback starts", async () => {
+    const client = api();
+    const pauseSpy = vi.spyOn(HTMLMediaElement.prototype, "pause");
+
+    render(
+      <WaveformPreview
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+      />,
+    );
+    await screen.findByRole("img", { name: "Audio waveform" });
+    fireEvent.click(screen.getByRole("button", { name: "Load preview" }));
+    await screen.findByLabelText("Preview kick.wav");
+
+    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
+    await waitFor(() => expect(client.createRangePreviewToken).toHaveBeenCalled());
+    expect(pauseSpy).toHaveBeenCalled();
+  });
 });

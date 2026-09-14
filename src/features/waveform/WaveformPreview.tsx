@@ -86,11 +86,37 @@ export function WaveformPreview({
   const rangeRequest = useRef(0);
   const waveformRequest = useRef(0);
   const rangeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const headAudioRef = useRef<HTMLAudioElement | null>(null);
   const rangeObjectUrl = useRef<string | null>(null);
+  const rangeListenersRef = useRef<{
+    element: HTMLAudioElement;
+    onEnded: () => void;
+    onError: () => void;
+  } | null>(null);
   const selectionRef = useRef({ rootId, assetId });
   selectionRef.current = { rootId, assetId };
 
+  function isCurrentRangeRequest(
+    request: number,
+    target: { rootId: string; assetId: string },
+  ): boolean {
+    return (
+      rangeRequest.current === request
+      && selectionRef.current.rootId === target.rootId
+      && selectionRef.current.assetId === target.assetId
+    );
+  }
+
+  const detachRangeListeners = useCallback(() => {
+    const attached = rangeListenersRef.current;
+    if (attached === null) return;
+    attached.element.removeEventListener("ended", attached.onEnded);
+    attached.element.removeEventListener("error", attached.onError);
+    rangeListenersRef.current = null;
+  }, []);
+
   const stopRangePlayback = useCallback(() => {
+    detachRangeListeners();
     const element = rangeAudioRef.current;
     if (element !== null) {
       element.pause();
@@ -102,6 +128,10 @@ export function WaveformPreview({
       rangeObjectUrl.current = null;
     }
     setRangePlaying(false);
+  }, [detachRangeListeners]);
+
+  const pauseHeadPreview = useCallback(() => {
+    headAudioRef.current?.pause();
   }, []);
 
   useEffect(() => {
@@ -149,6 +179,8 @@ export function WaveformPreview({
     setRangeEndFrameExclusive("");
     setRangeInvalid(null);
     setRangeError(null);
+    setRangeLoading(false);
+    setPreviewing(false);
     stopRangePlayback();
   }, [assetId, rootId, stopRangePlayback]);
 
@@ -190,6 +222,7 @@ export function WaveformPreview({
   async function loadPreview() {
     const request = previewRequest.current + 1;
     previewRequest.current = request;
+    stopSelectedRange();
     setPreviewing(true);
     setPreviewError(null);
     setPreviewUrl(null);
@@ -225,6 +258,7 @@ export function WaveformPreview({
     const request = rangeRequest.current + 1;
     rangeRequest.current = request;
     stopRangePlayback();
+    pauseHeadPreview();
     setRangeLoading(true);
     setRangeError(null);
     const range = {
@@ -234,19 +268,11 @@ export function WaveformPreview({
     const target = { rootId, assetId };
     try {
       const ticket = await api.createRangePreviewToken(rootId, assetId, range);
-      if (
-        rangeRequest.current !== request
-        || selectionRef.current.rootId !== target.rootId
-        || selectionRef.current.assetId !== target.assetId
-      ) {
+      if (!isCurrentRangeRequest(request, target)) {
         return;
       }
       const bytes = await api.readPreview(rootId, ticket.previewToken);
-      if (
-        rangeRequest.current !== request
-        || selectionRef.current.rootId !== target.rootId
-        || selectionRef.current.assetId !== target.assetId
-      ) {
+      if (!isCurrentRangeRequest(request, target)) {
         return;
       }
       const buffer = toArrayBuffer(bytes);
@@ -258,7 +284,14 @@ export function WaveformPreview({
       ) {
         throw new Error("Range preview response failed validation.");
       }
+      if (!isCurrentRangeRequest(request, target)) {
+        return;
+      }
       const url = URL.createObjectURL(new Blob([buffer], { type: "audio/wav" }));
+      if (!isCurrentRangeRequest(request, target)) {
+        URL.revokeObjectURL(url);
+        return;
+      }
       rangeObjectUrl.current = url;
       const element = rangeAudioRef.current;
       if (element === null) {
@@ -266,27 +299,39 @@ export function WaveformPreview({
         rangeObjectUrl.current = null;
         return;
       }
+      detachRangeListeners();
       const onEnded = () => {
+        if (!isCurrentRangeRequest(request, target)) return;
         setRangePlaying(false);
-        element.removeEventListener("ended", onEnded);
-        element.removeEventListener("error", onError);
+        detachRangeListeners();
       };
       const onError = () => {
-        if (rangeRequest.current === request) {
-          setRangeError("Range preview playback failed.");
-          setRangePlaying(false);
-        }
-        element.removeEventListener("ended", onEnded);
-        element.removeEventListener("error", onError);
+        if (!isCurrentRangeRequest(request, target)) return;
+        setRangeError("Range preview playback failed.");
+        setRangePlaying(false);
+        detachRangeListeners();
       };
+      rangeListenersRef.current = { element, onEnded, onError };
       element.addEventListener("ended", onEnded);
       element.addEventListener("error", onError);
       element.src = url;
+      if (!isCurrentRangeRequest(request, target)) {
+        URL.revokeObjectURL(url);
+        rangeObjectUrl.current = null;
+        detachRangeListeners();
+        element.removeAttribute("src");
+        element.load();
+        return;
+      }
       await element.play();
-      if (rangeRequest.current === request) setRangePlaying(true);
+      if (isCurrentRangeRequest(request, target)) {
+        setRangePlaying(true);
+      }
     } catch (error) {
-      if (rangeRequest.current === request) setRangeError(errorMessage(error));
-      stopRangePlayback();
+      if (isCurrentRangeRequest(request, target)) {
+        setRangeError(errorMessage(error));
+        stopRangePlayback();
+      }
     } finally {
       if (rangeRequest.current === request) setRangeLoading(false);
     }
@@ -395,7 +440,13 @@ export function WaveformPreview({
         </Button>
       </div>
       {previewUrl !== null && (
-        <audio aria-label={`Preview ${displayName}`} controls preload="metadata" src={previewUrl} />
+        <audio
+          ref={headAudioRef}
+          aria-label={`Preview ${displayName}`}
+          controls
+          preload="metadata"
+          src={previewUrl}
+        />
       )}
       {truncated && (
         <p className="waveform-preview-notice">Preview is limited to the first 60 seconds.</p>
