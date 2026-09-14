@@ -197,10 +197,10 @@ test.describe("Rename prepare workflow", () => {
     await page.goto("/");
     await page.getByRole("button", { name: uiText("ja", "sources.chooseRoot") }).click();
     await expect(page.getByText("PROJECT_A")).toBeVisible({ timeout: 10000 });
-    await expect(page.getByRole("button", { name: "Edit" })).toBeEnabled();
-    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("button", { name: uiText("ja", "sources.editMode") })).toBeEnabled();
+    await page.getByRole("button", { name: uiText("ja", "sources.editMode") }).click();
     await expect(
-      page.getByTestId("app-shell-sources").getByText("EDIT ENABLED", { exact: true }),
+      page.getByTestId("app-shell-sources").getByText(uiText("ja", "sources.editEnabledBadge"), { exact: true }),
     ).toBeVisible();
     await page.getByRole("button", { name: /KICK\.wav/ }).click();
     await page.getByRole("button", { name: "Rename" }).click();
@@ -322,10 +322,10 @@ test.describe("Rename prepare workflow", () => {
     await page.goto("/");
     await page.getByRole("button", { name: uiText("ja", "sources.chooseRoot") }).click();
     await expect(page.getByText("PROJECT_A")).toBeVisible({ timeout: 10000 });
-    await expect(page.getByRole("button", { name: "Edit" })).toBeEnabled();
-    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("button", { name: uiText("ja", "sources.editMode") })).toBeEnabled();
+    await page.getByRole("button", { name: uiText("ja", "sources.editMode") }).click();
     await expect(
-      page.getByTestId("app-shell-sources").getByText("EDIT ENABLED", { exact: true }),
+      page.getByTestId("app-shell-sources").getByText(uiText("ja", "sources.editEnabledBadge"), { exact: true }),
     ).toBeVisible();
     await page.getByRole("button", { name: /KICK\.wav/ }).click();
     await page.getByRole("button", { name: "Rename" }).click();
