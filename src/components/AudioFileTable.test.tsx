@@ -192,8 +192,9 @@ describe('AudioFileTable', () => {
       ],
     }
     renderTable({ poolRoot: '/AUDIO', usageMap })
-    await userEvent.click(screen.getByText('· 1'))
-    expect(screen.getByText('PROJ1 · Slot F5')).toBeInTheDocument()
+    const badge = screen.getByText('· 1')
+    await userEvent.click(badge)
+    expect(await screen.findByText('PROJ1 · Slot F5')).toBeInTheDocument()
   })
 
   it('does not show a Usage column when usageMap is absent', () => {

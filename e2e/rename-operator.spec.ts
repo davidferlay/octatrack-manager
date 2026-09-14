@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { uiText } from "./i18n";
 
 const planId = `plan:v1:${"a".repeat(64)}`;
 const operationId = `operation:v1:${"a".repeat(64)}`;
@@ -7,7 +8,7 @@ const continuationAuthorityId = `continuation-authority:v1:${"g".repeat(64)}`;
 const cloneRootId = "clone-root-opaque";
 
 async function chooseRoot(page: import("@playwright/test").Page) {
-  const chooseRootButton = page.getByRole("button", { name: "Choose root..." });
+  const chooseRootButton = page.getByRole("button", { name: uiText("ja", "sources.chooseRoot") });
   await expect(chooseRootButton).toBeVisible({ timeout: 15000 });
   await chooseRootButton.click();
 }
@@ -184,9 +185,9 @@ test.describe("Rename operator workflow", () => {
     await page.goto("/");
     await chooseRoot(page);
     await expect(page.getByText("PROJECT_A")).toBeVisible({ timeout: 10000 });
-    await page.getByRole("button", { name: "Edit" }).click();
+    await page.getByRole("button", { name: uiText("ja", "sources.editMode") }).click();
     await expect(
-      page.getByTestId("app-shell-sources").getByText("EDIT ENABLED", { exact: true }),
+      page.getByTestId("app-shell-sources").getByText(uiText("ja", "sources.editEnabledBadge"), { exact: true }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Create managed disposable clone" }).click({ timeout: 15000 });
     await expect(

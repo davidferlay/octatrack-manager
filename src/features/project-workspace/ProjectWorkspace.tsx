@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { LibraryProject } from '../../api'
+import { useTranslate } from '../../i18n'
 import './ProjectWorkspace.css'
 
 export interface ProjectWorkspaceProps {
@@ -18,6 +19,12 @@ export function ProjectWorkspace({
   localSampleCount,
   children,
 }: ProjectWorkspaceProps) {
+  const t = useTranslate()
+  const localSamplesLabel =
+    localSampleCount === 1
+      ? t('projectWorkspace.localSamples', { count: localSampleCount })
+      : t('projectWorkspace.localSamplesPlural', { count: localSampleCount })
+
   return (
     <section
       className="mo-project-workspace"
@@ -25,22 +32,22 @@ export function ProjectWorkspace({
     >
       <header className="mo-project-workspace__header">
         <div>
-          <p className="mo-project-workspace__kicker">Project workspace</p>
+          <p className="mo-project-workspace__kicker">{t('projectWorkspace.kicker')}</p>
           <h3 id="mo-project-workspace-title" className="mo-project-workspace__title">
             {project.displayName}
           </h3>
           <code className="mo-project-workspace__path">{project.relativePath}</code>
         </div>
-        <ul className="mo-project-workspace__meta" aria-label="Project catalog flags">
+        <ul className="mo-project-workspace__meta" aria-label={t('projectWorkspace.flagsAria')}>
           <li data-present={project.hasProjectFile}>
-            {project.hasProjectFile ? 'Project file' : 'No project file'}
+            {project.hasProjectFile
+              ? t('projectWorkspace.hasProjectFile')
+              : t('projectWorkspace.noProjectFile')}
           </li>
           <li data-present={project.hasBanks}>
-            {project.hasBanks ? 'Banks present' : 'No banks'}
+            {project.hasBanks ? t('projectWorkspace.hasBanks') : t('projectWorkspace.noBanks')}
           </li>
-          <li data-present={localSampleCount > 0}>
-            {localSampleCount} local sample{localSampleCount === 1 ? '' : 's'}
-          </li>
+          <li data-present={localSampleCount > 0}>{localSamplesLabel}</li>
         </ul>
       </header>
       {children != null && (

@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { LibraryProject } from '../../api'
+import { tJa } from '../../i18n/testStrings'
 import { ProjectWorkspace } from './ProjectWorkspace'
 
 const project: LibraryProject = {
@@ -20,9 +21,9 @@ describe('ProjectWorkspace', () => {
 
     expect(screen.getByRole('heading', { name: 'PROJECT_A' })).toBeInTheDocument()
     expect(screen.getByText('LIVE_SET/PROJECT_A')).toBeInTheDocument()
-    expect(screen.getByText('Project file')).toBeInTheDocument()
-    expect(screen.getByText('Banks present')).toBeInTheDocument()
-    expect(screen.getByText('2 local samples')).toBeInTheDocument()
+    expect(screen.getByText(tJa('projectWorkspace.hasProjectFile'))).toBeInTheDocument()
+    expect(screen.getByText(tJa('projectWorkspace.hasBanks'))).toBeInTheDocument()
+    expect(screen.getByText(tJa('projectWorkspace.localSamplesPlural', { count: 2 }))).toBeInTheDocument()
     expect(screen.getByText('Workspace body')).toBeInTheDocument()
     expect(screen.queryByText('/private/')).not.toBeInTheDocument()
   })
@@ -39,8 +40,8 @@ describe('ProjectWorkspace', () => {
       />,
     )
 
-    expect(screen.getByText('No project file')).toBeInTheDocument()
-    expect(screen.getByText('No banks')).toBeInTheDocument()
-    expect(screen.getByText('0 local samples')).toBeInTheDocument()
+    expect(screen.getByText(tJa('projectWorkspace.noProjectFile'))).toBeInTheDocument()
+    expect(screen.getByText(tJa('projectWorkspace.noBanks'))).toBeInTheDocument()
+    expect(screen.getByText(tJa('projectWorkspace.localSamplesPlural', { count: 0 }))).toBeInTheDocument()
   })
 })

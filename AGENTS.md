@@ -12,6 +12,7 @@ User-facing display name is **Masta-Octa**. Internal compatibility IDs remain
 Application Support directory, schemas, journals, backup IDs).
 
 Read `docs/CODEX_HANDOFF.md` before planning or implementing work.
+For UI copy and locales, read `docs/I18N.md` and add ja/en keys together.
 For new architecture, API boundaries, data ownership, and migration order, also
 read `docs/NEXT_GENERATION_ARCHITECTURE.md`. New code must not bypass its
 Intent -> Plan -> Apply write boundary.

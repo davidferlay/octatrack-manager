@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useTranslate } from '../../i18n'
 import './InspectorPane.css'
 
 export interface InspectorPaneProps {
@@ -17,16 +18,18 @@ export interface InspectorPaneProps {
 export function InspectorPane({
   assetLabel = null,
   relativePath = null,
-        emptyMessage = 'Select an audio file to inspect waveform, usage, and notes.',
+  emptyMessage,
   children,
 }: InspectorPaneProps) {
+  const t = useTranslate()
   const hasAsset = assetLabel != null && assetLabel !== ''
+  const resolvedEmpty = emptyMessage ?? t('inspector.empty')
 
   return (
-    <aside className="mo-inspector-pane" aria-label="Inspector">
+    <aside className="mo-inspector-pane" aria-label={t('inspector.aria')}>
       <header className="mo-inspector-pane__header">
-        <p className="mo-inspector-pane__kicker">Inspector</p>
-        <h2 className="mo-inspector-pane__title">Notes & details</h2>
+        <p className="mo-inspector-pane__kicker">{t('inspector.kicker')}</p>
+        <h2 className="mo-inspector-pane__title">{t('inspector.title')}</h2>
         {hasAsset ? (
           <>
             <p className="mo-inspector-pane__asset">{assetLabel}</p>
@@ -35,7 +38,7 @@ export function InspectorPane({
             )}
           </>
         ) : (
-          <p className="mo-inspector-pane__empty">{emptyMessage}</p>
+          <p className="mo-inspector-pane__empty">{resolvedEmpty}</p>
         )}
       </header>
       {hasAsset && children != null && (

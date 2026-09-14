@@ -1,4 +1,6 @@
 import { test, expect } from "@playwright/test";
+import { uiText } from "./i18n";
+import { LOCALE_STORAGE_KEY } from "../src/i18n/registry";
 
 function installLibraryMocks(page: import("@playwright/test").Page) {
   return page.addInitScript(() => {
@@ -72,15 +74,28 @@ function installLibraryMocks(page: import("@playwright/test").Page) {
   });
 }
 
-async function exerciseRangePreview(page: import("@playwright/test").Page) {
+async function installLocale(page: import("@playwright/test").Page, locale: "ja" | "en") {
+  await page.addInitScript(
+    ([storageKey, localeId]) => {
+      localStorage.setItem(storageKey, localeId);
+    },
+    [LOCALE_STORAGE_KEY, locale] as const,
+  );
+}
+
+async function exerciseRangePreview(
+  page: import("@playwright/test").Page,
+  locale: "ja" | "en",
+) {
+  await installLocale(page, locale);
   await installLibraryMocks(page);
   await page.goto("/");
-  await page.getByRole("button", { name: "Choose root..." }).click();
+  await page.getByRole("button", { name: uiText(locale, "sources.chooseRoot") }).click();
   await page.getByRole("button", { name: /LOOP\.wav/ }).click();
-  await expect(page.getByRole("img", { name: "Audio waveform" })).toBeVisible();
-  await page.getByLabel("Start frame").fill("1000");
-  await page.getByLabel("End frame (exclusive)").fill("2000");
-  await page.getByRole("button", { name: "Play selected range" }).click();
+  await expect(page.getByRole("img", { name: uiText(locale, "waveform.plotAria") })).toBeVisible();
+  await page.getByLabel(uiText(locale, "waveform.startFrame")).fill("1000");
+  await page.getByLabel(uiText(locale, "waveform.endFrame")).fill("2000");
+  await page.getByRole("button", { name: uiText(locale, "waveform.playRange") }).click();
   await expect.poll(async () => page.evaluate(() => {
     const calls = (window as any).__E2E_RANGE_CALLS__ ?? [];
     return calls.some((entry: any) => entry.cmd === "v2_audio_preview_range_create");
@@ -95,12 +110,14 @@ async function exerciseRangePreview(page: import("@playwright/test").Page) {
   expect(calls.some((entry) => entry.cmd === "v2_audio_preview_read")).toBe(true);
 }
 
-test("keeps selection and calls range preview IPC at 1280px", async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await exerciseRangePreview(page);
-});
+for (const locale of ["ja", "en"] as const) {
+  test(`[${locale}] keeps selection and calls range preview IPC at 1280px`, async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await exerciseRangePreview(page, locale);
+  });
 
-test("keeps selection and calls range preview IPC at 840px", async ({ page }) => {
-  await page.setViewportSize({ width: 840, height: 900 });
-  await exerciseRangePreview(page);
-});
+  test(`[${locale}] keeps selection and calls range preview IPC at 840px`, async ({ page }) => {
+    await page.setViewportSize({ width: 840, height: 900 });
+    await exerciseRangePreview(page, locale);
+  });
+}

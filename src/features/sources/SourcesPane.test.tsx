@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { RootSession } from '../../api'
+import { tJa } from '../../i18n/testStrings'
 import { SourcesPane } from './SourcesPane'
 
 const session: RootSession = {
@@ -29,10 +30,10 @@ describe('SourcesPane', () => {
         onDisableWrite={vi.fn()}
       />,
     )
-    expect(screen.getByRole('heading', { name: 'Sources' })).toBeInTheDocument()
-    expect(screen.getByText('READ ONLY')).toHaveClass('root-mode-badge')
-    expect(screen.getByText('No root registered for this session.')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Choose root...' }))
+    expect(screen.getByRole('heading', { name: tJa('sources.title') })).toBeInTheDocument()
+    expect(screen.getByText(tJa('sources.readOnlyBadge'))).toBeInTheDocument()
+    expect(screen.getByText(tJa('sources.empty'))).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: tJa('sources.chooseRoot') }))
     expect(onRegister).toHaveBeenCalledOnce()
   })
 
@@ -50,7 +51,7 @@ describe('SourcesPane', () => {
     expect(screen.getByText('Fixture Root')).toBeInTheDocument()
     expect(screen.getByText('0123456789ab')).toBeInTheDocument()
     expect(screen.queryByText(session.rootId)).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Close root' }))
+    fireEvent.click(screen.getByRole('button', { name: tJa('sources.closeRoot') }))
     expect(onClose).toHaveBeenCalledOnce()
   })
 
@@ -81,8 +82,8 @@ describe('SourcesPane', () => {
       />,
     )
 
-    const viewButton = screen.getByRole('button', { name: 'View' })
-    const editButton = screen.getByRole('button', { name: 'Edit' })
+    const viewButton = screen.getByRole('button', { name: tJa('sources.viewMode') })
+    const editButton = screen.getByRole('button', { name: tJa('sources.editMode') })
     expect(viewButton).toHaveAttribute('aria-pressed', 'true')
     expect(editButton).toHaveAttribute('aria-pressed', 'false')
     fireEvent.click(editButton)
@@ -103,10 +104,10 @@ describe('SourcesPane', () => {
       />,
     )
 
-    expect(screen.getByText('EDIT ENABLED')).toBeInTheDocument()
-    expect(screen.getByText(/Rename apply requires a verified disposable clone/i)).toBeInTheDocument()
-    const viewWhenEditing = screen.getByRole('button', { name: 'View' })
-    const editWhenEditing = screen.getByRole('button', { name: 'Edit' })
+    expect(screen.getByText(tJa('sources.editEnabledBadge'))).toBeInTheDocument()
+    expect(screen.getByText(/使い捨てクローン/)).toBeInTheDocument()
+    const viewWhenEditing = screen.getByRole('button', { name: tJa('sources.viewMode') })
+    const editWhenEditing = screen.getByRole('button', { name: tJa('sources.editMode') })
     expect(viewWhenEditing).toHaveAttribute('aria-pressed', 'false')
     expect(editWhenEditing).toHaveAttribute('aria-pressed', 'true')
     fireEvent.click(viewWhenEditing)

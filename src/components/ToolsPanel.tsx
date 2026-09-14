@@ -22,6 +22,7 @@ import {
   isLegacyWriteDisabledError,
   legacyWriteDisabledToastMessage,
 } from "../utils/legacyWriteRestriction";
+import { useTranslate } from "../i18n";
 
 const TOOLS_STORAGE_KEY_PREFIX = "octatrack-tools-settings-";
 
@@ -174,6 +175,7 @@ interface OctatrackLocation {
 }
 
 export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices, onBankUpdated, onProjectRefresh, sampleSlots = { flex_slots: [], static_slots: [] }, slotUsage = null, initialOperation, onInitialOperationConsumed }: ToolsPanelProps) {
+  const t = useTranslate();
   const { locations, standaloneProjects, setLocations, setStandaloneProjects, setHasScanned } = useProjects();
 
   // Load saved settings (per-project, session-only)
@@ -1180,8 +1182,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
     } catch (err) {
       setStatusMessage(
         isLegacyWriteDisabledError(err)
-          ? legacyWriteDisabledToastMessage()
-          : formatInvokeErrorForToast(err, "Operation failed"),
+          ? legacyWriteDisabledToastMessage(t)
+          : formatInvokeErrorForToast(err, "Operation failed", t),
       );
       setStatusType("error");
     } finally {

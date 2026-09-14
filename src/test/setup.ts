@@ -1,5 +1,33 @@
 import '@testing-library/jest-dom'
 import { vi } from 'vitest'
+import React from 'react'
+import { type RenderOptions } from '@testing-library/react'
+import { LocaleProvider } from '../i18n/LocaleProvider'
+
+vi.mock('@testing-library/react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@testing-library/react')>()
+  function LocaleTestWrapper({ children }: { children: React.ReactNode }) {
+    return React.createElement(LocaleProvider, {
+      initialLocaleId: 'ja',
+      children,
+    })
+  }
+  return {
+    ...actual,
+    render: (ui: React.ReactElement, options?: RenderOptions) => {
+      const UserWrapper = options?.wrapper
+      return actual.render(ui, {
+        ...options,
+        wrapper: ({ children }) => {
+          const inner = UserWrapper
+            ? React.createElement(UserWrapper, null, children)
+            : children
+          return React.createElement(LocaleTestWrapper, null, inner)
+        },
+      })
+    },
+  }
+})
 
 // Mock Tauri APIs
 vi.mock('@tauri-apps/api/core', () => ({

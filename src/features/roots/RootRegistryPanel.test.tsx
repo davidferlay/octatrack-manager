@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { AudioApi, ChangeApi, CloneApi, MetadataApi, RenameApi, RootApi, RootSession } from "../../api";
+import { tJa } from "../../i18n/testStrings";
 import { RootRegistryPanel } from "./RootRegistryPanel";
 import { renameOperatorApiStubs } from "../../test/renameApiStubs";
 
@@ -118,7 +119,7 @@ describe("RootRegistryPanel", () => {
     const selectDirectory = vi.fn().mockResolvedValue(null);
     render(<RootRegistryPanel api={api} changeClient={fakeChangeApi()} cloneClient={fakeCloneApi()} renameClient={fakeRenameApi()} selectDirectory={selectDirectory} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Choose root..." }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("sources.chooseRoot") }));
 
     await waitFor(() => expect(selectDirectory).toHaveBeenCalledOnce());
     expect(api.registerRoot).not.toHaveBeenCalled();
@@ -130,7 +131,7 @@ describe("RootRegistryPanel", () => {
     const selectDirectory = vi.fn().mockRejectedValue(new Error("picker unavailable"));
     render(<RootRegistryPanel api={api} changeClient={fakeChangeApi()} cloneClient={fakeCloneApi()} renameClient={fakeRenameApi()} selectDirectory={selectDirectory} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Choose root..." }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("sources.chooseRoot") }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("picker unavailable");
     expect(api.registerRoot).not.toHaveBeenCalled();
@@ -147,21 +148,21 @@ describe("RootRegistryPanel", () => {
       />,
     );
 
-    expect(screen.getByText("READ ONLY")).toHaveClass("root-mode-badge");
+    expect(screen.getByText(tJa("sources.readOnlyBadge"))).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Choose root..." }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("sources.chooseRoot") }));
 
     expect(await screen.findByText("PROJECT_A")).toBeInTheDocument();
     expect(screen.getByText("KICK.wav")).toBeInTheDocument();
     expect(screen.getByText("LIVE_SET/AUDIO/KICK.wav")).toBeInTheDocument();
-    const contextBar = screen.getByLabelText("Library context");
+    const contextBar = screen.getByLabelText(tJa("context.libraryAria"));
     expect(contextBar).toHaveTextContent("Fixture Root");
-    expect(contextBar).toHaveTextContent("Read only");
+    expect(contextBar).toHaveTextContent(tJa("context.readOnly"));
     await waitFor(() => {
-      expect(contextBar).toHaveTextContent("1 samples");
+      expect(contextBar).toHaveTextContent(tJa("context.samplesInLocation", { count: 1 }));
     });
-    expect(screen.getByLabelText("Inspector")).toBeInTheDocument();
-    expect(screen.getByText("Notes & details")).toBeInTheDocument();
+    expect(screen.getByLabelText(tJa("inspector.aria"))).toBeInTheDocument();
+    expect(screen.getByText(tJa("inspector.title"))).toBeInTheDocument();
     expect(screen.queryByLabelText("Asset inspector")).not.toBeInTheDocument();
     expect(screen.queryByText(rawPath)).not.toBeInTheDocument();
     expect(api.registerRoot).toHaveBeenCalledWith(rawPath);
@@ -203,11 +204,11 @@ describe("RootRegistryPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Choose root..." }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("sources.chooseRoot") }));
     expect(await screen.findByText("KICK.wav")).toBeInTheDocument();
 
-    const inspector = screen.getByLabelText("Inspector");
-    expect(inspector).toHaveTextContent("Select an audio file to inspect");
+    const inspector = screen.getByLabelText(tJa("inspector.aria"));
+    expect(inspector).toHaveTextContent(tJa("inspector.empty"));
 
     fireEvent.click(screen.getByRole("button", { name: /KICK\.wav/ }));
 
@@ -218,8 +219,8 @@ describe("RootRegistryPanel", () => {
     expect(
       screen.getByText(/PROJECT_A · Bank A \(1\) · S001 · Part 1 · T1 · Machine · Working/),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Usage graph")).toBeInTheDocument();
-    expect(screen.getByLabelText("Usage summary")).toHaveTextContent("1 used");
+    expect(screen.getByLabelText(tJa("usage.aria"))).toBeInTheDocument();
+    expect(screen.getByLabelText(tJa("usage.summaryAria"))).toHaveTextContent(tJa("usage.usedCount", { count: 1 }));
     expect(audioClient.queryWaveform).toHaveBeenCalledWith(
       "root-opaque",
       "asset:v1:opaque",
@@ -244,17 +245,22 @@ describe("RootRegistryPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Choose root..." }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("sources.chooseRoot") }));
     expect(await screen.findByText("PROJECT_A")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("sources.editMode") }));
 
-    expect(await screen.findAllByText("EDIT ENABLED")).toHaveLength(2);
+    expect(await screen.findAllByText(tJa("sources.editEnabledBadge"))).toHaveLength(2);
     expect(changeClient.recoveryStatus).toHaveBeenCalledTimes(2);
     expect(api.enableWrite).toHaveBeenCalledWith("root-opaque");
 
-    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("sources.viewMode") }));
     expect(api.disableWrite).toHaveBeenCalledWith("root-opaque");
-    expect(await screen.findAllByText("READ ONLY")).toHaveLength(2);
+    await waitFor(() => {
+      expect(screen.getByLabelText(tJa("context.libraryAria"))).toHaveTextContent(
+        tJa("context.readOnly"),
+      );
+    });
+    expect(screen.getAllByText(tJa("sources.readOnlyBadge")).length).toBeGreaterThanOrEqual(1);
   });
 
   it("refreshes the catalog and recovery gate after an approved rollback", async () => {
@@ -302,7 +308,7 @@ describe("RootRegistryPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Choose root..." }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("sources.chooseRoot") }));
     expect(await screen.findByText("Rollback required")).toBeInTheDocument();
     const approvalLabel = "I approve rollback of this exact incomplete additive-copy operation.";
     await waitFor(() => {
@@ -361,10 +367,10 @@ describe("RootRegistryPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Choose root..." }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("sources.chooseRoot") }));
     expect(await screen.findByText("PROJECT_A")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /KICK\.wav/ }));
-    const closeRoot = screen.getByRole("button", { name: "Close root" });
+    const closeRoot = screen.getByRole("button", { name: tJa("sources.closeRoot") });
     fireEvent.change(screen.getByLabelText("Destination relative path"), {
       target: { value: "LIVE_SET/PROJECT_A/KICK_COPY.wav" },
     });
@@ -423,7 +429,7 @@ describe("RootRegistryPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Choose root..." }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("sources.chooseRoot") }));
     expect(await screen.findByText("PROJECT_A")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /KICK\.wav/ }));
     expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();

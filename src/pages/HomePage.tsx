@@ -31,6 +31,7 @@ import { RootRegistryPanel } from "../features/roots/RootRegistryPanel";
 import { LegacyWriteRestrictionNotice } from "../components/LegacyWriteRestrictionNotice";
 import { formatInvokeErrorForToast } from "../utils/legacyWriteRestriction";
 import { Button, ThemeSwitcher, Toolbar } from "../design-system";
+import { LanguageSwitcher, useTranslate } from "../i18n";
 import type {
   ClipboardState,
   ContextMenuState,
@@ -103,6 +104,7 @@ function DroppableSetCard({ setPath, set, locationPath, onContextMenu, disabled,
 }
 
 export function HomePage() {
+  const t = useTranslate();
   const {
     locations,
     standaloneProjects,
@@ -494,6 +496,7 @@ export function HomePage() {
               <i className="fas fa-sync-alt"></i>
             </Button>
           </Toolbar>
+          <LanguageSwitcher />
           <ThemeSwitcher />
           <Version />
         </div>
@@ -1313,7 +1316,11 @@ export function HomePage() {
             const isMove = copyProgress?.isMove;
             setCopyProgress(null);
             setToast({
-              message: formatInvokeErrorForToast(err, `${isMove ? 'Move' : 'Copy'} failed`),
+              message: formatInvokeErrorForToast(
+                err,
+                `${isMove ? 'Move' : 'Copy'} failed`,
+                t,
+              ),
               icon: 'fa-exclamation-triangle',
               type: 'warning',
             });

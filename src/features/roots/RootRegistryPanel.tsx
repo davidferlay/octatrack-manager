@@ -21,6 +21,7 @@ import {
 } from "../../api";
 import { AppShell } from "../../app/index";
 import { Button } from "../../design-system";
+import { createTranslate, readStoredLocaleId, useTranslate } from "../../i18n";
 import {
   AdditiveCopyChangeDrawer,
   CloneOperatorPanel,
@@ -51,7 +52,7 @@ async function pickRootDirectory(): Promise<string | null> {
   const selected = await open({
     directory: true,
     multiple: false,
-    title: "Select a read-only Octatrack root",
+    title: createTranslate(readStoredLocaleId())("roots.pickRootDialogTitle"),
   });
   return typeof selected === "string" ? selected : null;
 }
@@ -88,6 +89,7 @@ export function RootRegistryPanel({
   renameClient = renameApi,
   selectDirectory = pickRootDirectory,
 }: RootRegistryPanelProps) {
+  const t = useTranslate();
   const [session, setSession] = useState<RootSession | null>(null);
   const [library, setLibrary] = useState<LibrarySnapshot | null>(null);
   const [busy, setBusy] = useState(false);
@@ -413,10 +415,10 @@ export function RootRegistryPanel({
   }
 
   const contextBar = catalogReady && session !== null ? (
-    <div className="root-registry-context-bar" aria-label="Library context">
+    <div className="root-registry-context-bar" aria-label={t("context.libraryAria")}>
       <span className="root-registry-context-bar__root">{session.displayName}</span>
       <span className="root-registry-context-bar__mode">
-        {writeEnabled ? "Edit enabled" : "Read only"}
+        {writeEnabled ? t("context.editEnabled") : t("context.readOnly")}
       </span>
       {browseContext !== null && (
         <>
@@ -425,9 +427,11 @@ export function RootRegistryPanel({
           </span>
           <span className="root-registry-context-bar__counts">
             {browseContext.hasSearch
-              ? `${browseContext.matchingCount} matching`
-              : `${browseContext.locationCount} samples`}
-            {" · this location"}
+              ? t("context.matchingInLocation", {
+                  matching: browseContext.matchingCount,
+                  total: browseContext.locationCount,
+                })
+              : t("context.samplesInLocation", { count: browseContext.locationCount })}
           </span>
         </>
       )}
@@ -477,9 +481,7 @@ export function RootRegistryPanel({
             onBrowseContextChange={setBrowseContext}
           />
         ) : (
-          <p className="root-registry-main-empty">
-            Choose a read-only root to browse the catalog library.
-          </p>
+          <p className="root-registry-main-empty">{t("roots.mainEmpty")}</p>
         )
       }
       inspector={

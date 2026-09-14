@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { PRODUCT_WORKSPACE_LABEL } from '../branding'
+import { tJa } from '../i18n/testStrings'
 import { AppShell } from './AppShell'
 
 describe('AppShell', () => {
@@ -11,7 +11,7 @@ describe('AppShell', () => {
         main={<div>Main content</div>}
       />,
     )
-    expect(screen.getByLabelText(PRODUCT_WORKSPACE_LABEL)).toHaveClass('mo-app-shell')
+    expect(screen.getByLabelText(tJa("app.workspaceAria"))).toHaveClass('mo-app-shell')
     expect(screen.getByText('Sources content')).toBeInTheDocument()
     expect(screen.getByText('Main content')).toBeInTheDocument()
     expect(screen.queryByText('Inspector content')).not.toBeInTheDocument()
@@ -64,7 +64,7 @@ describe('AppShell', () => {
     const sources = screen.getByTestId('app-shell-sources')
     expect(sources).toHaveStyle({ width: '30%' })
 
-    const shell = screen.getByLabelText(PRODUCT_WORKSPACE_LABEL)
+    const shell = screen.getByLabelText(tJa("app.workspaceAria"))
     const split = shell.querySelector('.mo-split-pane') as HTMLElement
     vi.spyOn(split, 'getBoundingClientRect').mockReturnValue({
       left: 0,

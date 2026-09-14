@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { uiText } from "./i18n";
 
 const planId = `plan:v1:${"a".repeat(64)}`;
 const operationId = `operation:v1:${"a".repeat(64)}`;
@@ -194,7 +195,7 @@ test.describe("Rename prepare workflow", () => {
     }, { planId, operationId, authorityId, snapshotId });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Choose root..." }).click();
+    await page.getByRole("button", { name: uiText("ja", "sources.chooseRoot") }).click();
     await expect(page.getByText("PROJECT_A")).toBeVisible({ timeout: 10000 });
     await expect(page.getByRole("button", { name: "Edit" })).toBeEnabled();
     await page.getByRole("button", { name: "Edit" }).click();
@@ -319,7 +320,7 @@ test.describe("Rename prepare workflow", () => {
     });
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Choose root..." }).click();
+    await page.getByRole("button", { name: uiText("ja", "sources.chooseRoot") }).click();
     await expect(page.getByText("PROJECT_A")).toBeVisible({ timeout: 10000 });
     await expect(page.getByRole("button", { name: "Edit" })).toBeEnabled();
     await page.getByRole("button", { name: "Edit" }).click();

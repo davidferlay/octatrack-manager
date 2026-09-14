@@ -11,6 +11,7 @@ import {
   isLegacyWriteDisabledError,
   legacyWriteDisabledToastMessage,
 } from '../utils/legacyWriteRestriction';
+import { useTranslate } from '../i18n';
 
 interface PartsPanelProps {
   projectPath: string;
@@ -49,6 +50,7 @@ export default function PartsPanel({
   onSharedActivePartChange,
   onWriteStatusChange
 }: PartsPanelProps) {
+  const t = useTranslate();
   const [partsData, setPartsData] = useState<PartData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -166,11 +168,11 @@ export default function PartsPanel({
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
     } catch (err) {
       console.error('Failed to commit part:', err);
-      setError(formatInvokeErrorForToast(err, 'Failed to save'));
+      setError(formatInvokeErrorForToast(err, 'Failed to save', t));
       onWriteStatusChange?.(
         writeStatus.error(
           isLegacyWriteDisabledError(err)
-            ? legacyWriteDisabledToastMessage()
+            ? legacyWriteDisabledToastMessage(t)
             : `Failed to save part ${partName}`,
         ),
       );
@@ -204,11 +206,11 @@ export default function PartsPanel({
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
     } catch (err) {
       console.error('Failed to commit all parts:', err);
-      setError(formatInvokeErrorForToast(err, 'Failed to save all'));
+      setError(formatInvokeErrorForToast(err, 'Failed to save all', t));
       onWriteStatusChange?.(
         writeStatus.error(
           isLegacyWriteDisabledError(err)
-            ? legacyWriteDisabledToastMessage()
+            ? legacyWriteDisabledToastMessage(t)
             : 'Failed to save all',
         ),
       );
@@ -253,11 +255,11 @@ export default function PartsPanel({
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
     } catch (err) {
       console.error('Failed to reload part:', err);
-      setError(formatInvokeErrorForToast(err, 'Failed to reload'));
+      setError(formatInvokeErrorForToast(err, 'Failed to reload', t));
       onWriteStatusChange?.(
         writeStatus.error(
           isLegacyWriteDisabledError(err)
-            ? legacyWriteDisabledToastMessage()
+            ? legacyWriteDisabledToastMessage(t)
             : `Failed to reload part ${partName}`,
         ),
       );
