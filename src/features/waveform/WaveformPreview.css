@@ -51,6 +51,56 @@
 
 .waveform-preview-actions {
   display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.waveform-preview-range {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.waveform-preview-range-label {
+  margin: 0;
+  color: var(--color-text-muted, #a7adb8);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.waveform-preview-range-fields {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.waveform-preview-range-field {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+  font-size: 0.78rem;
+  color: var(--color-text-muted, #a7adb8);
+}
+
+.waveform-preview-range-field input {
+  min-width: 0;
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--color-border-subtle, #353b45);
+  border-radius: 0.35rem;
+  background: #11151b;
+  color: inherit;
+  font: inherit;
+}
+
+.waveform-preview-range-actions {
+  margin-top: 0.15rem;
+}
+
+.waveform-preview-range-audio {
+  display: none;
 }
 
 .waveform-preview audio {

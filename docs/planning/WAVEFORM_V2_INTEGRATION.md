@@ -243,7 +243,7 @@ SliceWorkbench の job 状態 UI と **混在させない**。
 | --- | --- | --- |
 | 0 | **#122 MERGED** | M6 Library layout — **完了** |
 | 1 | **本設計の次 PR** | Library `v2_audio_waveform_query` + Inspector v2 表示 + 契約テスト |
-| 2 | ranged preview token | `v2_audio_preview_range_create` |
+| 2 | ranged preview token | `v2_audio_preview_range_create` — **MO-M7-LIBRARY-RANGE-PREVIEW-1（Draft PR）** |
 | 3 | cache 最適化 | WFM2 / multi-res pyramid（#104 エンジン、u64 string） |
 | 4 | zoom / scroll UI | Canvas / width-driven `targetPoints` |
 | 5+ | #105 AS-N* | WF2 安定後 |
@@ -301,13 +301,27 @@ Inspector で選択中サンプルについて、**フレーム address 可能�
 | Preview | **v1 先頭 60s** のまま（ranged preview は PR-2） |
 | キャンセル | Library 専用 generation（**spawn 前** `fetch_add`）+ frontend request id |
 
-**未実装（本 PR 外）:** ranged preview token、WFM2、zoom / Canvas、descriptor-relative cache。
+**未実装（QUERY PR 外）:** ranged preview token、WFM2、zoom / Canvas、descriptor-relative cache。
+
+### 13.3 MO-M7-LIBRARY-RANGE-PREVIEW-1（PR-2 到達点）
+
+| 項目 | 決定 |
+| --- | --- |
+| Create API | `v2_audio_preview_range_create` — `AudioFrameRange`（`startFrame` / `endFrameExclusive`） |
+| Read API | 既存 `v2_audio_preview_read`（one-shot） |
+| Token | `preview:v1:{hex}`、root + asset + range を束縛。TTL **120s**、同時 **8**（Library v1 と同じ） |
+| PCM 上限 | **60s / 32 MiB**（Slice region の 30s / 16 MiB とは別契約）。超過は **拒否**（truncate しない） |
+| Range 応答 | `sampleRate` + 確定 `range`（decimal string）。`truncated` は常に `false` |
+| Read 再検証 | live root + catalog identity + **ファイル SHA256**（`verify_source_unchanged`）。不一致時 token 破棄 |
+| UI | Inspector: 開始/終了フレーム、`Play selected range` / `Stop`。先頭 60s `Load preview` は維持 |
+| 未実装 | WFM2、Canvas/zoom、descriptor-relative cache、媒体 write |
+
+Legacy write containment（#125/#126）は引き続き有効。公開配布は **NOT AUTHORIZED**。
 
 ### 13.2 後続でよい
 
 - WFM2 prepare / async job UI（#104 `WaveformPreparation`）。
 - Zoom / scroll / Canvas（#104）。
-- Range preview token。
 - ADR-015 本文（Performance System は main 未収録 — ローカル草案のみ参照可）。
 - Mac 実サンプル視覚 QA、大規模 library 性能計測。
 

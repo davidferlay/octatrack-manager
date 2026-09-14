@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { AudioApi, LibrarySnapshot, MetadataApi } from "../../api";
 import { CatalogLibraryBrowser } from "./CatalogLibraryBrowser";
@@ -139,6 +139,7 @@ describe("CatalogLibraryBrowser", () => {
         channelPeaks: [[{ min: -0.5, max: 0.5 }]],
       }),
       createPreviewToken: vi.fn(),
+      createRangePreviewToken: vi.fn(),
       readPreview: vi.fn(),
     };
     const metadataClient: MetadataApi = {
@@ -180,6 +181,7 @@ describe("CatalogLibraryBrowser", () => {
         channelPeaks: [[{ min: -0.5, max: 0.5 }]],
       }),
       createPreviewToken: vi.fn(),
+      createRangePreviewToken: vi.fn(),
       readPreview: vi.fn(),
     };
     const metadataClient: MetadataApi = {
@@ -406,7 +408,17 @@ describe("CatalogLibraryBrowser", () => {
         channelPeaks: [[{ min: -0.5, max: 0.5 }]],
       }),
       createPreviewToken: vi.fn(),
-      readPreview: vi.fn(),
+      createRangePreviewToken: vi.fn().mockResolvedValue({
+        previewToken: "preview:v1:range",
+        expiresInSeconds: 120,
+        mimeType: "audio/wav",
+        byteLength: 4,
+        durationMillis: 500,
+        truncated: false,
+        sampleRate: 44100,
+        range: { startFrame: "0", endFrameExclusive: "44100" },
+      }),
+      readPreview: vi.fn().mockResolvedValue(new Uint8Array([82, 73, 70, 70]).buffer),
     };
     const metadataClient: MetadataApi = {
       loadManualAssetMetadata: vi.fn().mockResolvedValue({ tags: [], note: "" }),
@@ -431,13 +443,30 @@ describe("CatalogLibraryBrowser", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /sample-0\.wav/ }));
     await screen.findByRole("img", { name: "Audio waveform" });
+    await waitFor(() => expect(screen.getByLabelText("End frame (exclusive)")).toHaveValue("44100"));
     vi.mocked(audioClient.queryWaveform).mockClear();
+
+    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
+    await waitFor(() => expect(audioClient.createRangePreviewToken).toHaveBeenCalledWith(
+      "root-opaque",
+      "asset:v1:0",
+      expect.objectContaining({ startFrame: "0" }),
+    ));
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getByText("Page 2 of 2")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /sample-0\.wav/ })).not.toBeInTheDocument();
     expect(audioClient.queryWaveform).not.toHaveBeenCalled();
     expect(screen.getByRole("img", { name: "Audio waveform" })).toBeInTheDocument();
+
+    vi.mocked(audioClient.createRangePreviewToken).mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
+    await waitFor(() => expect(audioClient.createRangePreviewToken).toHaveBeenCalledWith(
+      "root-opaque",
+      "asset:v1:0",
+      expect.any(Object),
+    ));
   });
 
   it("reports shell inspector selection without rendering the inline column", () => {

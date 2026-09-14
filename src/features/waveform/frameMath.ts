@@ -14,6 +14,68 @@ export function durationSeconds(frameCount: string, sampleRate: number): number 
   return Number(frame(frameCount)) / sampleRate;
 }
 
+const MAX_SAFE_FRAME = BigInt(Number.MAX_SAFE_INTEGER);
+
+export function frameFitsJsNumber(value: string): boolean {
+  return frame(value) <= MAX_SAFE_FRAME;
+}
+
+export function durationLabelForFrame(frameCount: string, sampleRate: number): string | null {
+  if (!frameFitsJsNumber(frameCount)) return null;
+  const seconds = durationSeconds(frameCount, sampleRate);
+  if (!Number.isFinite(seconds)) return null;
+  const minutes = Math.floor(seconds / 60);
+  const remaining = Math.floor(seconds % 60);
+  return `${minutes}:${remaining.toString().padStart(2, "0")}`;
+}
+
+/** Library preview policy, matching ot-audio `create_preview_range`. */
+export const LIBRARY_PREVIEW_MAX_SECONDS = 60;
+export const LIBRARY_PREVIEW_MAX_BYTES = 32 * 1024 * 1024;
+
+export function maxLibraryPreviewFrames(sampleRate: number, channels: number): bigint {
+  const rate = Math.trunc(sampleRate);
+  const outputChannels = Math.min(2, Math.trunc(channels));
+  if (!Number.isFinite(rate) || rate <= 0 || outputChannels <= 0) {
+    return 0n;
+  }
+  const maxByDuration = BigInt(rate) * BigInt(LIBRARY_PREVIEW_MAX_SECONDS);
+  const bytesPerFrame = BigInt(outputChannels * 2);
+  const maxByBytes = BigInt(LIBRARY_PREVIEW_MAX_BYTES - 44) / bytesPerFrame;
+  return maxByDuration < maxByBytes ? maxByDuration : maxByBytes;
+}
+
+export function defaultLibraryPreviewEndFrame(
+  fileFrameCount: string,
+  sampleRate: number,
+  channels: number,
+): string {
+  const total = frame(fileFrameCount);
+  const limit = maxLibraryPreviewFrames(sampleRate, channels);
+  return (total < limit ? total : limit).toString();
+}
+
+export function validateFrameRange(
+  startFrame: string,
+  endFrameExclusive: string,
+  fileFrameCount: string,
+  sampleRate: number,
+  channels: number,
+): void {
+  const start = frame(startFrame);
+  const end = frame(endFrameExclusive);
+  const total = frame(fileFrameCount);
+  if (start >= end) {
+    throw new Error("Range is empty or inverted.");
+  }
+  if (end > total) {
+    throw new Error("Range extends beyond the file length.");
+  }
+  if (end - start > maxLibraryPreviewFrames(sampleRate, channels)) {
+    throw new Error("Range exceeds the 60 second or 32 MiB preview limit.");
+  }
+}
+
 export function positionInRange(value: string, startFrame: string, endFrameExclusive: string): number {
   const start = frame(startFrame);
   const end = frame(endFrameExclusive);

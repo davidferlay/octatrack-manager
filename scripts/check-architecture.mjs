@@ -193,6 +193,7 @@ const expectedV2Commands = [
   "v2_audio_onsets_start",
   "v2_audio_onsets_status",
   "v2_audio_preview_create",
+  "v2_audio_preview_range_create",
   "v2_audio_preview_read",
   "v2_audio_preview_region_create",
   "v2_audio_preview_region_read",
