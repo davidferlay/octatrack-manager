@@ -730,6 +730,31 @@ describe("WaveformPreview", () => {
     expect(screen.getByLabelText(tJa("waveform.endFrame"))).toHaveValue("2000");
   });
 
+  it("loads waveform when ResizeObserver is unavailable", async () => {
+    const previous = globalThis.ResizeObserver;
+    // @ts-expect-error test override
+    delete globalThis.ResizeObserver;
+    const client = api();
+    try {
+      render(
+        <WaveformPreview queryDebounceMs={0}
+          api={client}
+          rootId="root-opaque"
+          assetId="asset:v1:opaque"
+          displayName="kick.wav"
+        />,
+      );
+      await waitFor(() => expect(client.queryWaveform).toHaveBeenCalledWith(
+        "root-opaque",
+        "asset:v1:opaque",
+        { range: null, targetPoints: 640 },
+      ));
+    } finally {
+      globalThis.ResizeObserver = previous;
+      installWaveformPlotResizeObserverMock();
+    }
+  });
+
   it("skips queries at zero width and refetches when width returns", async () => {
     const client = api();
     render(

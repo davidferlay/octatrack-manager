@@ -322,7 +322,7 @@ Legacy write containment（#125/#126）は引き続き有効。公開配布は *
 
 | 項目 | 決定 |
 | --- | --- |
-| 計測 | `.waveform-preview-plot` コンテナの **CSS 幅**（`ResizeObserver`） |
+| 計測 | `.waveform-preview-plot` コンテナの **CSS 幅**（`ResizeObserver`）。未提供時は `getBoundingClientRect` + `window` resize、幅 0 なら **640px フォールバック**（macOS 10.13 WKWebView 等） |
 | `targetPoints` | 幅 px を 1:1 目安に **64 点量子化**し **32–4096** に clamp。`devicePixelRatio` では倍増しない |
 | 抑制 | 150ms debounce。同一 `rootId` / `assetId` / `range: null` / `targetPoints` では再 IPC しない |
 | stale | 既存 `waveformRequest` + 応答時 `targetPoints` 照合。解像度再取得中も peaks を空にしない |

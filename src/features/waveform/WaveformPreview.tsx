@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   audioApi,
   type AudioApi,
@@ -21,6 +21,7 @@ import {
   validateFrameRange,
 } from "./frameMath";
 import {
+  readPlotContainerWidthCss,
   targetPointsFromPlotWidthCss,
   WAVEFORM_QUERY_DEBOUNCE_MS,
 } from "./waveformTargetPoints";
@@ -161,18 +162,30 @@ export function WaveformPreview({
     headAudioRef.current?.pause();
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const element = plotContainerRef.current;
-    if (element === null || typeof ResizeObserver === "undefined") {
+    if (element === null) {
       return;
     }
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      const width = entry?.contentRect.width ?? 0;
-      setPlotWidthCss(width);
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
+
+    const publishWidth = (widthCss: number) => {
+      setPlotWidthCss(widthCss);
+    };
+
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver((entries) => {
+        const entry = entries[0];
+        publishWidth(entry?.contentRect.width ?? 0);
+      });
+      observer.observe(element);
+      publishWidth(readPlotContainerWidthCss(element));
+      return () => observer.disconnect();
+    }
+
+    const measure = () => publishWidth(readPlotContainerWidthCss(element));
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
   }, []);
 
   useEffect(() => {
