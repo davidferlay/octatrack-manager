@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { SampleUsageEdge } from '../../api'
+import { tJa } from '../../i18n/testStrings'
 import {
   edgesForRelativePath,
   relativePathKey,
@@ -89,10 +90,16 @@ describe('UsageGraphPanel', () => {
       />,
     )
 
-    expect(screen.getByLabelText('Usage graph')).toBeInTheDocument()
-    expect(screen.getByLabelText('Usage summary')).toHaveTextContent('2 used')
-    expect(screen.getByLabelText('Usage summary')).toHaveTextContent('1 referenced')
-    expect(screen.getByLabelText('Usage summary')).toHaveTextContent('1 missing')
+    expect(screen.getByLabelText(tJa('usage.aria'))).toBeInTheDocument()
+    expect(screen.getByLabelText(tJa('usage.summaryAria'))).toHaveTextContent(
+      tJa('usage.usedCount', { count: 2 }),
+    )
+    expect(screen.getByLabelText(tJa('usage.summaryAria'))).toHaveTextContent(
+      tJa('usage.referencedCount', { count: 1 }),
+    )
+    expect(screen.getByLabelText(tJa('usage.summaryAria'))).toHaveTextContent(
+      tJa('usage.missingCount', { count: 1 }),
+    )
     expect(
       screen.getByText(/PROJECT_A · Bank A \(1\) · S001 · Part 1 · T1 · Machine · Working/),
     ).toBeInTheDocument()
@@ -102,7 +109,7 @@ describe('UsageGraphPanel', () => {
     expect(
       screen.getByText(/PROJECT_A · Bank B \(2\) · F012 · Pattern 2 · T4 · Step 8 · Lock · Working/),
     ).toBeInTheDocument()
-    expect(screen.getByText('Missing')).toBeInTheDocument()
+    expect(screen.getByText(tJa('usage.badgeMissing'))).toBeInTheDocument()
     expect(screen.queryByText('SNARE.wav')).not.toBeInTheDocument()
     expect(screen.queryByText(/\/private\//)).not.toBeInTheDocument()
   })
@@ -116,7 +123,7 @@ describe('UsageGraphPanel', () => {
     )
 
     expect(
-      screen.getByText('Not referenced in any indexed project of this root.'),
+      screen.getByText(tJa('usage.empty')),
     ).toBeInTheDocument()
   })
 
@@ -125,7 +132,7 @@ describe('UsageGraphPanel', () => {
       <UsageGraphPanel relativePath="LIVE_SET/AUDIO/KICK.wav" edges={null} />,
     )
     expect(
-      screen.getByText('Not referenced in any indexed project of this root.'),
+      screen.getByText(tJa('usage.empty')),
     ).toBeInTheDocument()
   })
 })

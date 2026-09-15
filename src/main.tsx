@@ -10,11 +10,17 @@ import {
   ThemeProvider,
   applyStoredThemeBeforePaint,
 } from "./design-system";
+import {
+  LocaleProvider,
+  applyStoredLocaleBeforePaint,
+} from "./i18n";
 import "./design-system/tokens/index.css";
+import "./i18n/LanguageSwitcher.css";
 import '@fortawesome/fontawesome-free/css/all.min.css';
 
 // Apply persisted appearance before first paint so token consumers do not flash classic.
 applyStoredThemeBeforePaint();
+applyStoredLocaleBeforePaint();
 
 // The browser's own history-based scroll restoration fights HomePage's manual
 // save/restore (sessionStorage-keyed, see HomePage.tsx) on route changes -
@@ -37,6 +43,7 @@ document.addEventListener('keydown', (e) => {
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ThemeProvider>
+      <LocaleProvider>
       <ProjectsProvider>
         <TablePreferencesProvider>
           <HashRouter>
@@ -48,6 +55,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
           </HashRouter>
         </TablePreferencesProvider>
       </ProjectsProvider>
+      </LocaleProvider>
     </ThemeProvider>
   </React.StrictMode>,
 );

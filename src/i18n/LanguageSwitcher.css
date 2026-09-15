@@ -1,0 +1,22 @@
+.mo-language-switcher {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.mo-language-switcher__label {
+  font-size: 0.75rem;
+  color: var(--mo-text-muted, #a7adb8);
+  white-space: nowrap;
+}
+
+.mo-language-switcher__select {
+  min-width: 0;
+  max-width: 8rem;
+  padding: 0.25rem 0.35rem;
+  border-radius: var(--mo-radius-sm, 0.25rem);
+  border: 1px solid var(--mo-border, #353b45);
+  background: var(--mo-surface-2, #1a1f27);
+  color: inherit;
+  font: inherit;
+}

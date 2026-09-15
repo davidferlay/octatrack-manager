@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test'
+import { uiText } from './i18n'
 
 interface MockSet {
   name: string
@@ -149,7 +150,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: /scan/i }).click()
   await expect(page.getByText('PROJ_A')).toBeVisible()
-  await expect(page.getByText(/Legacy write commands are temporarily disabled/i)).toBeVisible()
+  await expect(page.getByText(uiText('ja', 'legacy.notice'))).toBeVisible()
 })
 
 // --- Project operations ---

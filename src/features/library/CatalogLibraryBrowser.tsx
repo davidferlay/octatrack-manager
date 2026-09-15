@@ -9,6 +9,7 @@ import type {
 } from "../../api";
 import { audioApi, metadataApi } from "../../api";
 import { Button } from "../../design-system";
+import { useTranslate, type TranslateFn } from "../../i18n";
 import { ManualAssetMetadataEditor } from "../metadata/ManualAssetMetadataEditor";
 import { ProjectWorkspace } from "../project-workspace";
 import { UsageGraphPanel } from "../usage";
@@ -149,6 +150,18 @@ function formatBytes(byteSize: number): string {
   return `${(byteSize / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function displaySourceLabel(source: SourceOption, t: TranslateFn): string {
+  if (source.kind === "standalone") return t("library.sourceStandalone");
+  if (source.kind === "unclassified") return t("library.sourceUnclassified");
+  return source.label;
+}
+
+function displayLocationLabel(location: LocationOption, t: TranslateFn): string {
+  if (location.kind === "audio_pool") return t("library.locationAudioPool");
+  if (location.kind === "unclassified") return t("library.locationUnknownScope");
+  return location.label;
+}
+
 export function CatalogLibraryBrowser({
   rootId,
   snapshot,
@@ -158,6 +171,7 @@ export function CatalogLibraryBrowser({
   onSelectedAssetChange,
   onBrowseContextChange,
 }: CatalogLibraryBrowserProps) {
+  const t = useTranslate();
   const sources = useMemo(() => sourceOptions(snapshot), [snapshot]);
   const [sourceKey, setSourceKey] = useState<string | null>(sources[0]?.key ?? null);
   const selectedSource = sources.find((source) => source.key === sourceKey) ?? sources[0];
@@ -202,8 +216,8 @@ export function CatalogLibraryBrowser({
       return;
     }
     onBrowseContextChange({
-      sourceLabel: selectedSource.label,
-      locationLabel: selectedLocation.label,
+      sourceLabel: displaySourceLabel(selectedSource, t),
+      locationLabel: displayLocationLabel(selectedLocation, t),
       locationCount: fileQuery.locationCount,
       matchingCount: fileQuery.matchingCount,
       hasSearch: search.trim() !== "",
@@ -215,6 +229,7 @@ export function CatalogLibraryBrowser({
     fileQuery.locationCount,
     fileQuery.matchingCount,
     search,
+    t,
   ]);
 
   useEffect(() => {
@@ -255,13 +270,13 @@ export function CatalogLibraryBrowser({
   }
 
   if (sources.length === 0) {
-    return <p className="catalog-library-empty">No catalog entries are available.</p>;
+    return <p className="catalog-library-empty">{t("library.noCatalogEntries")}</p>;
   }
 
   const emptyFilesMessage = locationFiles.length === 0
-    ? "No audio files indexed here."
+    ? t("library.noFilesHere")
     : search.trim() !== "" && fileQuery.matchingCount === 0
-      ? "No samples match this search."
+      ? t("library.noSearchMatches")
       : null;
 
   const detail = (
@@ -271,35 +286,38 @@ export function CatalogLibraryBrowser({
         shellInspector ? "catalog-library-detail--files-only" : "",
       ].filter(Boolean).join(" ")}
     >
-      <div className="catalog-library-column catalog-library-files" aria-label="Audio files">
-        <h4>Audio files</h4>
+      <div className="catalog-library-column catalog-library-files" aria-label={t("library.audioFilesAria")}>
+        <h4>{t("library.audioFilesHeading")}</h4>
         <div className="catalog-library-search">
           <label>
-            Search this location
+            {t("library.searchLabel")}
             <input
               type="search"
-              aria-label="Search samples in this location"
+              aria-label={t("library.searchAria")}
               value={search}
               onChange={(event) => changeSearch(event.target.value)}
-              placeholder="Name or folder…"
+              placeholder={t("library.searchPlaceholder")}
             />
           </label>
           <label>
-            Sort
+            {t("library.sortLabel")}
             <select
-              aria-label="Sort samples"
+              aria-label={t("library.sortAria")}
               value={sort}
               onChange={(event) => changeSort(event.target.value as CatalogFileSort)}
             >
-              <option value="name">Name</option>
-              <option value="size">Size · largest first</option>
+              <option value="name">{t("library.sortName")}</option>
+              <option value="size">{t("library.sortSize")}</option>
             </select>
           </label>
         </div>
         <p className="catalog-library-file-count" aria-live="polite">
           {search.trim() !== ""
-            ? `${fileQuery.matchingCount} matching · ${fileQuery.locationCount} in this location`
-            : `${fileQuery.locationCount} in this location`}
+            ? t("library.fileCountSearch", {
+                matching: fileQuery.matchingCount,
+                total: fileQuery.locationCount,
+              })
+            : t("library.fileCountLocation", { total: fileQuery.locationCount })}
         </p>
         <div className="catalog-library-options">
           {fileQuery.visible.map((file) => (
@@ -322,33 +340,36 @@ export function CatalogLibraryBrowser({
           )}
         </div>
         {fileQuery.lastPage > 0 && (
-          <nav className="catalog-library-pagination" aria-label="Sample pages">
+          <nav className="catalog-library-pagination" aria-label={t("library.paginationAria")}>
             <Button
               variant="secondary"
               disabled={fileQuery.page <= 0}
               onClick={() => setRequestedPage(Math.max(0, fileQuery.page - 1))}
             >
-              Previous
+              {t("library.paginationPrevious")}
             </Button>
             <span>
-              Page {fileQuery.page + 1} of {fileQuery.lastPage + 1}
+              {t("library.paginationPage", {
+                current: fileQuery.page + 1,
+                last: fileQuery.lastPage + 1,
+              })}
             </span>
             <Button
               variant="secondary"
               disabled={fileQuery.page >= fileQuery.lastPage}
               onClick={() => setRequestedPage(fileQuery.page + 1)}
             >
-              Next
+              {t("library.paginationNext")}
             </Button>
           </nav>
         )}
       </div>
 
       {!shellInspector && (
-        <div className="catalog-library-column catalog-library-inspector" aria-label="Asset inspector">
-          <h4>Inspector</h4>
+        <div className="catalog-library-column catalog-library-inspector" aria-label={t("library.assetInspectorAria")}>
+          <h4>{t("library.inspectorColumn")}</h4>
           {selectedFile === undefined ? (
-            <p className="catalog-library-empty">Select an audio file to edit local metadata.</p>
+            <p className="catalog-library-empty">{t("library.selectFileForMetadata")}</p>
           ) : (
             <div
               className="catalog-library-inspector-content"
@@ -414,15 +435,17 @@ export function CatalogLibraryBrowser({
     <section className="catalog-library" aria-labelledby="catalog-library-title">
       <div className="catalog-library-title-row">
         <div>
-          <p className="catalog-library-kicker">Catalog Library</p>
-          <h3 id="catalog-library-title">Browse indexed audio</h3>
+          <p className="catalog-library-kicker">{t("library.kicker")}</p>
+          <h3 id="catalog-library-title">{t("library.title")}</h3>
         </div>
-        <span className="catalog-library-count">{snapshot.audioFiles.length} files</span>
+        <span className="catalog-library-count">
+          {t("library.snapshotFileCount", { count: snapshot.audioFiles.length })}
+        </span>
       </div>
 
       <div className="catalog-library-layout">
-        <div className="catalog-library-column" aria-label="Sources">
-          <h4>Browse</h4>
+        <div className="catalog-library-column" aria-label={t("library.sourcesAria")}>
+          <h4>{t("library.browseColumn")}</h4>
           <div className="catalog-library-options">
             {sources.map((source) => (
               <button
@@ -432,15 +455,15 @@ export function CatalogLibraryBrowser({
                 key={source.key}
                 onClick={() => selectSource(source.key)}
               >
-                <span>{source.label}</span>
+                <span>{displaySourceLabel(source, t)}</span>
                 <span aria-hidden="true">›</span>
               </button>
             ))}
           </div>
         </div>
 
-        <div className="catalog-library-column" aria-label="Locations">
-          <h4>Locations</h4>
+        <div className="catalog-library-column" aria-label={t("library.locationsAria")}>
+          <h4>{t("library.locationsColumn")}</h4>
           <div className="catalog-library-options">
             {locations.map((location) => (
               <button
@@ -450,12 +473,12 @@ export function CatalogLibraryBrowser({
                 key={location.key}
                 onClick={() => selectLocation(location.key)}
               >
-                <span>{location.label}</span>
+                <span>{displayLocationLabel(location, t)}</span>
                 <span aria-hidden="true">›</span>
               </button>
             ))}
             {locations.length === 0 && (
-              <p className="catalog-library-empty">No locations indexed.</p>
+              <p className="catalog-library-empty">{t("library.noLocations")}</p>
             )}
           </div>
         </div>

@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { uiText } from "./i18n";
 
 test("read-only library supports attack review, boundary editing and undo", async ({ page }) => {
   await page.addInitScript(() => {
@@ -52,7 +53,7 @@ test("read-only library supports attack review, boundary editing and undo", asyn
     };
   });
   await page.goto("/");
-  await page.getByRole("button", { name: "Choose root..." }).click();
+  await page.getByRole("button", { name: uiText("ja", "sources.chooseRoot") }).click();
   await page.getByRole("button", { name: /LOOP\.wav/ }).click();
   const editor = page.getByRole("region", { name: "Auto slice LOOP.wav" });
   await editor.getByRole("button", { name: "Detect attacks" }).click();

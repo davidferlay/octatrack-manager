@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useTranslate } from '../../i18n'
 import './AudioLibrary.css'
 
 export type AudioLibraryScope = 'audio_pool' | 'unclassified'
@@ -11,10 +12,6 @@ export interface AudioLibraryProps {
   children?: ReactNode
 }
 
-function scopeTitle(scope: AudioLibraryScope): string {
-  return scope === 'audio_pool' ? 'Audio Pool' : 'Unclassified audio'
-}
-
 /**
  * AppShell Main region chrome for catalog Audio Library browsing
  * (Set Audio Pool / unclassified). Parallel to ProjectWorkspace.
@@ -25,6 +22,14 @@ export function AudioLibrary({
   fileCount,
   children,
 }: AudioLibraryProps) {
+  const t = useTranslate()
+  const scopeTitle =
+    scope === 'audio_pool' ? t('audioLibrary.poolTitle') : t('audioLibrary.unclassifiedTitle')
+  const filesInView =
+    fileCount === 1
+      ? t('audioLibrary.filesInView', { count: fileCount })
+      : t('audioLibrary.filesInViewPlural', { count: fileCount })
+
   return (
     <section
       className="mo-audio-library"
@@ -33,21 +38,21 @@ export function AudioLibrary({
     >
       <header className="mo-audio-library__header">
         <div>
-          <p className="mo-audio-library__kicker">Audio library</p>
+          <p className="mo-audio-library__kicker">{t('audioLibrary.kicker')}</p>
           <h3 id="mo-audio-library-title" className="mo-audio-library__title">
-            {scopeTitle(scope)}
+            {scopeTitle}
           </h3>
           {parentPath != null && parentPath !== '' && (
             <code className="mo-audio-library__path">{parentPath}</code>
           )}
         </div>
-        <ul className="mo-audio-library__meta" aria-label="Audio library summary">
+        <ul className="mo-audio-library__meta" aria-label={t('audioLibrary.summaryAria')}>
           <li data-present={scope === 'audio_pool'}>
-            {scope === 'audio_pool' ? 'Set audio pool' : 'Outside set/project'}
+            {scope === 'audio_pool'
+              ? t('audioLibrary.setPool')
+              : t('audioLibrary.outsideSetProject')}
           </li>
-          <li data-present={fileCount > 0}>
-            {fileCount} file{fileCount === 1 ? '' : 's'} in view
-          </li>
+          <li data-present={fileCount > 0}>{filesInView}</li>
         </ul>
       </header>
       {children != null && (

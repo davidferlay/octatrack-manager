@@ -84,6 +84,12 @@
   color: var(--color-text-muted, #a7adb8);
 }
 
+.waveform-preview-range-hint {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .waveform-preview-range-field input {
   min-width: 0;
   width: 100%;

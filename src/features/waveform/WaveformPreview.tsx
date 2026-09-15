@@ -8,9 +8,16 @@ import {
 } from "../../api";
 import { Button } from "../../design-system";
 import {
+  classifyFrameRangeError,
+  frameRangeErrorMessageKey,
+} from "../../i18n/frameRangeErrors";
+import {
+  formatFileDurationLabel,
+  formatFrameSpanDurationLabel,
+} from "../../i18n/formatSpanDuration";
+import { useTranslate, type TranslateFn } from "../../i18n";
+import {
   defaultLibraryPreviewEndFrame,
-  durationLabelForFrame,
-  durationSeconds,
   validateFrameRange,
 } from "./frameMath";
 import "./WaveformPreview.css";
@@ -58,11 +65,16 @@ export function waveformPath(window: AudioWaveformWindow): string {
   return waveformChannelPath(primary, primary.length);
 }
 
-function formatDuration(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
-  const minutes = Math.floor(seconds / 60);
-  const remaining = Math.floor(seconds % 60);
-  return `${minutes}:${remaining.toString().padStart(2, "0")}`;
+function formatUserFacingError(error: unknown, t: TranslateFn): string {
+  const code = classifyFrameRangeError(error);
+  if (code !== null) {
+    return t(frameRangeErrorMessageKey(code));
+  }
+  const detail = errorMessage(error);
+  if (detail === "Preview response failed validation.") {
+    return t("waveform.error.previewValidation");
+  }
+  return t("waveform.error.detail", { detail });
 }
 
 export function WaveformPreview({
@@ -71,6 +83,7 @@ export function WaveformPreview({
   displayName,
   api = audioApi,
 }: WaveformPreviewProps) {
+  const t = useTranslate();
   const [waveform, setWaveform] = useState<AudioWaveformWindow | null>(null);
   const [waveformError, setWaveformError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -214,8 +227,8 @@ export function WaveformPreview({
 
   const durationLabel = useMemo(() => {
     if (waveform === null) return null;
-    return formatDuration(durationSeconds(waveform.frameCount, waveform.sampleRate));
-  }, [waveform]);
+    return formatFileDurationLabel(waveform.frameCount, waveform.sampleRate, t);
+  }, [waveform, t]);
 
   const rangeDurationHint = useMemo(() => {
     if (waveform === null || rangeInvalid !== null) return null;
@@ -230,11 +243,22 @@ export function WaveformPreview({
     } catch {
       return null;
     }
-    const span = (
-      BigInt(rangeEndFrameExclusive) - BigInt(rangeStartFrame)
-    ).toString();
-    return durationLabelForFrame(span, waveform.sampleRate);
-  }, [rangeEndFrameExclusive, rangeInvalid, rangeStartFrame, waveform]);
+    return formatFrameSpanDurationLabel(
+      rangeStartFrame,
+      rangeEndFrameExclusive,
+      waveform.sampleRate,
+      t,
+    );
+  }, [rangeEndFrameExclusive, rangeInvalid, rangeStartFrame, waveform, t]);
+
+  const displayedWaveformError =
+    waveformError !== null ? formatUserFacingError(new Error(waveformError), t) : null;
+  const displayedRangeInvalid =
+    rangeInvalid !== null ? formatUserFacingError(new Error(rangeInvalid), t) : null;
+  const displayedPreviewError =
+    previewError !== null ? formatUserFacingError(new Error(previewError), t) : null;
+  const displayedRangeError =
+    rangeError !== null ? formatUserFacingError(new Error(rangeError), t) : null;
 
   async function loadPreview() {
     const request = previewRequest.current + 1;
@@ -370,18 +394,18 @@ export function WaveformPreview({
   const rangeControlsDisabled = waveform === null || rangeLoading;
 
   return (
-    <section className="waveform-preview" aria-label={`Waveform preview for ${displayName}`}>
+    <section className="waveform-preview" aria-label={t("waveform.ariaFor", { displayName })}>
       <div className="waveform-preview-heading">
-        <p>Waveform</p>
+        <p>{t("waveform.heading")}</p>
         {durationLabel !== null && <span>{durationLabel}</span>}
       </div>
 
       {waveform === null && waveformError === null && (
-        <p className="waveform-preview-status" role="status">Generating waveform...</p>
+        <p className="waveform-preview-status" role="status">{t("waveform.generating")}</p>
       )}
       {waveform !== null && (
         <svg
-          aria-label="Audio waveform"
+          aria-label={t("waveform.plotAria")}
           className="waveform-preview-plot"
           role="img"
           viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
@@ -392,16 +416,17 @@ export function WaveformPreview({
           ))}
         </svg>
       )}
-      {waveformError !== null && (
-        <p className="waveform-preview-error" role="alert">{waveformError}</p>
+      {displayedWaveformError !== null && (
+        <p className="waveform-preview-error" role="alert">{displayedWaveformError}</p>
       )}
 
-      <div className="waveform-preview-range" aria-label="Preview range">
-        <p className="waveform-preview-range-label">Range preview</p>
+      <div className="waveform-preview-range" aria-label={t("waveform.rangeAria")}>
+        <p className="waveform-preview-range-label">{t("waveform.rangeHeading")}</p>
         <div className="waveform-preview-range-fields">
           <label className="waveform-preview-range-field">
-            <span>Start frame</span>
+            <span>{t("waveform.startFrame")}</span>
             <input
+              aria-label={t("waveform.startFrame")}
               aria-invalid={rangeInvalid !== null}
               disabled={rangeControlsDisabled}
               inputMode="numeric"
@@ -410,23 +435,25 @@ export function WaveformPreview({
             />
           </label>
           <label className="waveform-preview-range-field">
-            <span>End frame (exclusive)</span>
+            <span>{t("waveform.endFrame")}</span>
             <input
+              aria-label={t("waveform.endFrame")}
               aria-invalid={rangeInvalid !== null}
               disabled={rangeControlsDisabled}
               inputMode="numeric"
               onChange={(event) => setRangeEndFrameExclusive(event.target.value)}
               value={rangeEndFrameExclusive}
             />
+            <span className="waveform-preview-range-hint">{t("waveform.endFrameHint")}</span>
           </label>
         </div>
         {rangeDurationHint !== null && (
           <p className="waveform-preview-notice" role="status">
-            Selected span: {rangeDurationHint}
+            {t("waveform.selectedSpan", { duration: rangeDurationHint })}
           </p>
         )}
-        {rangeInvalid !== null && (
-          <p className="waveform-preview-error" role="alert">{rangeInvalid}</p>
+        {displayedRangeInvalid !== null && (
+          <p className="waveform-preview-error" role="alert">{displayedRangeInvalid}</p>
         )}
         <div className="waveform-preview-actions waveform-preview-range-actions">
           <Button
@@ -435,7 +462,7 @@ export function WaveformPreview({
             disabled={rangeControlsDisabled || rangeInvalid !== null || rangePlaying}
             onClick={() => void playSelectedRange()}
           >
-            {rangeLoading ? "Preparing range..." : "Play selected range"}
+            {rangeLoading ? t("waveform.preparingRange") : t("waveform.playRange")}
           </Button>
           <Button
             type="button"
@@ -443,15 +470,15 @@ export function WaveformPreview({
             disabled={!rangePlaying && !rangeLoading}
             onClick={stopSelectedRange}
           >
-            Stop
+            {t("waveform.stop")}
           </Button>
         </div>
-        {rangeError !== null && (
-          <p className="waveform-preview-error" role="alert">{rangeError}</p>
+        {displayedRangeError !== null && (
+          <p className="waveform-preview-error" role="alert">{displayedRangeError}</p>
         )}
         <audio
           ref={rangeAudioRef}
-          aria-label={`Range preview ${displayName}`}
+          aria-label={t("waveform.rangePreviewAria", { displayName })}
           className="waveform-preview-range-audio"
           preload="none"
         />
@@ -459,13 +486,13 @@ export function WaveformPreview({
 
       <div className="waveform-preview-actions">
         <Button type="button" variant="secondary" disabled={previewing} onClick={loadPreview}>
-          {previewing ? "Preparing preview..." : "Load preview"}
+          {previewing ? t("waveform.preparingPreview") : t("waveform.loadPreview")}
         </Button>
       </div>
       {previewUrl !== null && (
         <audio
           ref={headAudioRef}
-          aria-label={`Preview ${displayName}`}
+          aria-label={t("waveform.previewAria", { displayName })}
           controls
           onPlay={stopSelectedRange}
           preload="metadata"
@@ -473,14 +500,12 @@ export function WaveformPreview({
         />
       )}
       {truncated && (
-        <p className="waveform-preview-notice">Preview is limited to the first 60 seconds.</p>
+        <p className="waveform-preview-notice">{t("waveform.truncatedNotice")}</p>
       )}
-      {previewError !== null && (
-        <p className="waveform-preview-error" role="alert">{previewError}</p>
+      {displayedPreviewError !== null && (
+        <p className="waveform-preview-error" role="alert">{displayedPreviewError}</p>
       )}
-      <p className="waveform-preview-boundary">
-        Peaks are cached locally. Preview access uses a one-shot, short-lived token.
-      </p>
+      <p className="waveform-preview-boundary">{t("waveform.boundary")}</p>
     </section>
   );
 }

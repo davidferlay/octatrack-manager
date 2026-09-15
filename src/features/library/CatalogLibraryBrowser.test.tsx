@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { AudioApi, LibrarySnapshot, MetadataApi } from "../../api";
+import { tJa } from "../../i18n/testStrings";
 import { CatalogLibraryBrowser } from "./CatalogLibraryBrowser";
 
 const snapshot: LibrarySnapshot = {
@@ -54,35 +55,35 @@ describe("CatalogLibraryBrowser", () => {
   it("browses Set Audio Pool and Project-local files without absolute paths", () => {
     render(<CatalogLibraryBrowser rootId="root-opaque" snapshot={snapshot} />);
 
-    const poolFiles = screen.getByLabelText("Audio files");
+    const poolFiles = screen.getByLabelText(tJa("library.audioFilesAria"));
     expect(within(poolFiles).getByText("POOL.wav")).toBeInTheDocument();
     expect(within(poolFiles).queryByText("PROJECT.wav")).not.toBeInTheDocument();
     expect(screen.queryByText("Project workspace")).not.toBeInTheDocument();
-    expect(screen.getByText("Audio library")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Audio Pool" })).toBeInTheDocument();
+    expect(screen.getByText(tJa("audioLibrary.kicker"))).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: tJa("audioLibrary.poolTitle") })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /PROJECT_A/ }));
-    const projectFiles = screen.getByLabelText("Audio files");
+    const projectFiles = screen.getByLabelText(tJa("library.audioFilesAria"));
     expect(within(projectFiles).getByText("PROJECT.wav")).toBeInTheDocument();
     expect(within(projectFiles).queryByText("POOL.wav")).not.toBeInTheDocument();
     expect(projectFiles).not.toHaveTextContent("/private/");
     expect(screen.getByRole("heading", { name: "PROJECT_A" })).toBeInTheDocument();
-    expect(screen.getByText("Project workspace")).toBeInTheDocument();
-    expect(screen.getByText("1 local sample")).toBeInTheDocument();
-    expect(screen.queryByText("Audio library")).not.toBeInTheDocument();
+    expect(screen.getByText(tJa("projectWorkspace.kicker"))).toBeInTheDocument();
+    expect(screen.getByText(tJa("projectWorkspace.localSamples", { count: 1 }))).toBeInTheDocument();
+    expect(screen.queryByText(tJa("audioLibrary.kicker"))).not.toBeInTheDocument();
   });
 
   it("keeps standalone Projects in a separate source", () => {
     render(<CatalogLibraryBrowser rootId="root-opaque" snapshot={snapshot} />);
 
     fireEvent.click(
-      within(screen.getByLabelText("Sources")).getByRole("button", { name: /Standalone/ }),
+      within(screen.getByLabelText(tJa("library.sourcesAria"))).getByRole("button", { name: /スタンドアロン/ }),
     );
 
     expect(
-      within(screen.getByLabelText("Locations")).getByRole("button", { name: /STANDALONE/ }),
+      within(screen.getByLabelText(tJa("library.locationsAria"))).getByRole("button", { name: /STANDALONE/ }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Audio files")).toHaveTextContent("STANDALONE.wav");
+    expect(screen.getByLabelText(tJa("library.audioFilesAria"))).toHaveTextContent("STANDALONE.wav");
   });
 
   it("orders files by display name when paths would sort differently", () => {
@@ -123,7 +124,7 @@ describe("CatalogLibraryBrowser", () => {
       />,
     );
 
-    expect(screen.getByText("No catalog entries are available.")).toBeInTheDocument();
+    expect(screen.getByText(tJa("library.noCatalogEntries"))).toBeInTheDocument();
   });
 
   it("clears the selected file when switching locations", async () => {
@@ -163,9 +164,9 @@ describe("CatalogLibraryBrowser", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /PROJECT_A/ }));
     expect(screen.queryByDisplayValue("kick")).not.toBeInTheDocument();
-    expect(screen.getByText("Select an audio file to edit local metadata.")).toBeInTheDocument();
-    expect(screen.getByText("Project workspace")).toBeInTheDocument();
-    expect(within(screen.getByLabelText("Sources")).getByRole("button", { name: /LIVE_SET/ })).toBeInTheDocument();
+    expect(screen.getByText(tJa("library.selectFileForMetadata"))).toBeInTheDocument();
+    expect(screen.getByText(tJa("projectWorkspace.kicker"))).toBeInTheDocument();
+    expect(within(screen.getByLabelText(tJa("library.sourcesAria"))).getByRole("button", { name: /LIVE_SET/ })).toBeInTheDocument();
   });
 
   it("opens manual metadata for the selected opaque AssetId", async () => {
@@ -203,7 +204,7 @@ describe("CatalogLibraryBrowser", () => {
     fireEvent.click(screen.getByRole("button", { name: /POOL\.wav/ }));
 
     expect(await screen.findByDisplayValue("kick")).toBeInTheDocument();
-    expect(screen.getByLabelText("Usage graph")).toBeInTheDocument();
+    expect(screen.getByLabelText(tJa("usage.aria"))).toBeInTheDocument();
     expect(metadataClient.loadManualAssetMetadata).toHaveBeenCalledWith(
       "root-opaque",
       "asset:v1:pool",
@@ -213,7 +214,7 @@ describe("CatalogLibraryBrowser", () => {
       "asset:v1:pool",
       { range: null, targetPoints: 640 },
     );
-    expect(screen.getByLabelText("Asset inspector")).not.toHaveTextContent("sha256:");
+    expect(screen.getByLabelText(tJa("library.assetInspectorAria"))).not.toHaveTextContent("sha256:");
   });
 
   it("steps pagination from the clamped page after the snapshot shrinks", () => {
@@ -240,9 +241,9 @@ describe("CatalogLibraryBrowser", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    expect(screen.getByText("Page 3 of 3")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: tJa("library.paginationNext") }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("library.paginationNext") }));
+    expect(screen.getByText(tJa("library.paginationPage", { current: 3, last: 3 }))).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /sample-200\.wav/ })).toBeInTheDocument();
 
     rerender(
@@ -252,14 +253,14 @@ describe("CatalogLibraryBrowser", () => {
         inspectorPlacement="shell"
       />,
     );
-    expect(screen.getByText("Page 2 of 2")).toBeInTheDocument();
+    expect(screen.getByText(tJa("library.paginationPage", { current: 2, last: 2 }))).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /sample-100\.wav/ })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Previous" }));
-    expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: tJa("library.paginationPrevious") }));
+    expect(screen.getByText(tJa("library.paginationPage", { current: 1, last: 2 }))).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /sample-000\.wav/ })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    expect(screen.getByText("Page 2 of 2")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: tJa("library.paginationNext") }));
+    expect(screen.getByText(tJa("library.paginationPage", { current: 2, last: 2 }))).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /sample-100\.wav/ })).toBeInTheDocument();
   });
 
@@ -280,15 +281,15 @@ describe("CatalogLibraryBrowser", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    expect(screen.getByText("Page 3 of 3")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: tJa("library.paginationNext") }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("library.paginationNext") }));
+    expect(screen.getByText(tJa("library.paginationPage", { current: 3, last: 3 }))).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Search samples in this location"), {
+    fireEvent.change(screen.getByLabelText(tJa("library.searchAria")), {
       target: { value: "keep-" },
     });
-    expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
-    expect(screen.getByText(/150 matching/)).toBeInTheDocument();
+    expect(screen.getByText(tJa("library.paginationPage", { current: 1, last: 2 }))).toBeInTheDocument();
+    expect(screen.getByText(tJa("library.fileCountSearch", { matching: 150, total: 250 }))).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /keep-000\.wav/ })).toBeInTheDocument();
   });
 
@@ -319,12 +320,12 @@ describe("CatalogLibraryBrowser", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    expect(screen.getByText("Page 3 of 3")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: tJa("library.paginationNext") }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("library.paginationNext") }));
+    expect(screen.getByText(tJa("library.paginationPage", { current: 3, last: 3 }))).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /PROJECT_A/ }));
-    expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
+    expect(screen.getByText(tJa("library.paginationPage", { current: 1, last: 2 }))).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /project-000\.wav/ })).toBeInTheDocument();
   });
 
@@ -345,14 +346,14 @@ describe("CatalogLibraryBrowser", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    expect(screen.getByText("Page 3 of 3")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: tJa("library.paginationNext") }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("library.paginationNext") }));
+    expect(screen.getByText(tJa("library.paginationPage", { current: 3, last: 3 }))).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Sort samples"), {
+    fireEvent.change(screen.getByLabelText(tJa("library.sortAria")), {
       target: { value: "size" },
     });
-    expect(screen.getByText("Page 1 of 3")).toBeInTheDocument();
+    expect(screen.getByText(tJa("library.paginationPage", { current: 1, last: 3 }))).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /sample-200\.wav/ })).toBeInTheDocument();
   });
 
@@ -380,16 +381,18 @@ describe("CatalogLibraryBrowser", () => {
       expect.objectContaining({ fileInstanceId: "fileinst:v1:0" }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    expect(screen.getByText("Page 2 of 2")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: tJa("library.paginationNext") }));
+    expect(screen.getByText(tJa("library.paginationPage", { current: 2, last: 2 }))).toBeInTheDocument();
     expect(onSelectedAssetChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ fileInstanceId: "fileinst:v1:0" }),
     );
 
-    fireEvent.change(screen.getByLabelText("Search samples in this location"), {
+    fireEvent.change(screen.getByLabelText(tJa("library.searchAria")), {
       target: { value: "sample-99" },
     });
-    expect(screen.getByText(/1 matching/)).toBeInTheDocument();
+    expect(
+      screen.getByText(tJa("library.fileCountSearch", { matching: 1, total: 101 })),
+    ).toBeInTheDocument();
     expect(onSelectedAssetChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ fileInstanceId: "fileinst:v1:0" }),
     );
@@ -442,26 +445,26 @@ describe("CatalogLibraryBrowser", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /sample-0\.wav/ }));
-    await screen.findByRole("img", { name: "Audio waveform" });
-    await waitFor(() => expect(screen.getByLabelText("End frame (exclusive)")).toHaveValue("44100"));
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
+    await waitFor(() => expect(screen.getByLabelText(tJa("waveform.endFrame"))).toHaveValue("44100"));
     vi.mocked(audioClient.queryWaveform).mockClear();
 
-    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.playRange") }));
     await waitFor(() => expect(audioClient.createRangePreviewToken).toHaveBeenCalledWith(
       "root-opaque",
       "asset:v1:0",
       expect.objectContaining({ startFrame: "0" }),
     ));
-    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.stop") }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    expect(screen.getByText("Page 2 of 2")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: tJa("library.paginationNext") }));
+    expect(screen.getByText(tJa("library.paginationPage", { current: 2, last: 2 }))).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /sample-0\.wav/ })).not.toBeInTheDocument();
     expect(audioClient.queryWaveform).not.toHaveBeenCalled();
-    expect(screen.getByRole("img", { name: "Audio waveform" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: tJa("waveform.plotAria") })).toBeInTheDocument();
 
     vi.mocked(audioClient.createRangePreviewToken).mockClear();
-    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.playRange") }));
     await waitFor(() => expect(audioClient.createRangePreviewToken).toHaveBeenCalledWith(
       "root-opaque",
       "asset:v1:0",

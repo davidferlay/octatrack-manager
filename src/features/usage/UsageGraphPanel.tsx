@@ -1,4 +1,5 @@
 import type { SampleUsageEdge } from '../../api'
+import { useTranslate } from '../../i18n'
 import './UsageGraphPanel.css'
 
 export interface UsageGraphPanelProps {
@@ -85,6 +86,7 @@ export function UsageGraphPanel({
   relativePath,
   edges = [],
 }: UsageGraphPanelProps) {
+  const t = useTranslate()
   const matched = edgesForRelativePath(edges, relativePath)
   const audibleCount = matched.filter((edge) => edge.audible).length
   const referencedCount = matched.length - audibleCount
@@ -93,22 +95,20 @@ export function UsageGraphPanel({
   ).length
 
   return (
-    <section className="mo-usage-graph" aria-label="Usage graph">
+    <section className="mo-usage-graph" aria-label={t('usage.aria')}>
       <div className="mo-usage-graph__heading">
-        <p>Usage</p>
-        <ul className="mo-usage-graph__summary" aria-label="Usage summary">
-          <li data-tone="audible">{audibleCount} used</li>
-          <li data-tone="referenced">{referencedCount} referenced</li>
+        <p>{t('usage.heading')}</p>
+        <ul className="mo-usage-graph__summary" aria-label={t('usage.summaryAria')}>
+          <li data-tone="audible">{t('usage.usedCount', { count: audibleCount })}</li>
+          <li data-tone="referenced">{t('usage.referencedCount', { count: referencedCount })}</li>
           {missingCount > 0 && (
-            <li data-tone="missing">{missingCount} missing</li>
+            <li data-tone="missing">{t('usage.missingCount', { count: missingCount })}</li>
           )}
         </ul>
       </div>
 
       {matched.length === 0 ? (
-        <p className="mo-usage-graph__empty">
-          Not referenced in any indexed project of this root.
-        </p>
+        <p className="mo-usage-graph__empty">{t('usage.empty')}</p>
       ) : (
         <ul className="mo-usage-graph__list">
           {matched.map((edge, index) => {
@@ -124,11 +124,11 @@ export function UsageGraphPanel({
                     className="mo-usage-graph__badge"
                     data-audible={edge.audible}
                   >
-                    {edge.audible ? 'Used' : 'Referenced'}
+                    {edge.audible ? t('usage.badgeUsed') : t('usage.badgeReferenced')}
                   </span>
                   {missing && (
                     <span className="mo-usage-graph__badge" data-tone="missing">
-                      Missing
+                      {t('usage.badgeMissing')}
                     </span>
                   )}
                 </span>
@@ -139,9 +139,7 @@ export function UsageGraphPanel({
         </ul>
       )}
 
-      <p className="mo-usage-graph__boundary">
-        Read-only catalog projection. Source media remains unchanged.
-      </p>
+      <p className="mo-usage-graph__boundary">{t('usage.boundary')}</p>
     </section>
   )
 }

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AudioApi, AudioWaveformWindow } from "../../api";
+import { tJa } from "../../i18n/testStrings";
 import { WaveformPreview, waveformChannelPath, waveformPath } from "./WaveformPreview";
 
 const waveformWindow: AudioWaveformWindow = {
@@ -73,13 +74,13 @@ describe("WaveformPreview", () => {
       />,
     );
 
-    expect(await screen.findByRole("img", { name: "Audio waveform" })).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: tJa("waveform.plotAria") })).toBeInTheDocument();
     expect(client.queryWaveform).toHaveBeenCalledWith(
       "root-opaque",
       "asset:v1:opaque",
       { range: null, targetPoints: 640 },
     );
-    expect(screen.getByText("0:01")).toBeInTheDocument();
+    expect(screen.getByText(tJa("duration.seconds", { seconds: 1 }))).toBeInTheDocument();
   });
 
   it("redeems a short-lived token before exposing preview bytes to audio", async () => {
@@ -93,7 +94,7 @@ describe("WaveformPreview", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Load preview" }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.loadPreview") }));
 
     await waitFor(() => expect(client.readPreview).toHaveBeenCalledWith(
       "root-opaque",
@@ -103,7 +104,7 @@ describe("WaveformPreview", () => {
       "root-opaque",
       "asset:v1:opaque",
     );
-    expect(await screen.findByLabelText("Preview kick.wav")).toHaveAttribute(
+    expect(await screen.findByLabelText(tJa("waveform.previewAria", { displayName: "kick.wav" }))).toHaveAttribute(
       "src",
       "blob:preview",
     );
@@ -158,10 +159,10 @@ describe("WaveformPreview", () => {
       />,
     );
 
-    expect(await screen.findByText("0:02")).toBeInTheDocument();
+    expect(await screen.findByText(tJa("duration.seconds", { seconds: 2 }))).toBeInTheDocument();
     resolveFirst?.(waveformWindow);
     await Promise.resolve();
-    expect(screen.getByText("0:02")).toBeInTheDocument();
+    expect(screen.getByText(tJa("duration.seconds", { seconds: 2 }))).toBeInTheDocument();
     expect(screen.queryByText("0:01")).not.toBeInTheDocument();
   });
 
@@ -184,10 +185,10 @@ describe("WaveformPreview", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Load preview" }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.loadPreview") }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Preview response failed validation.",
+      tJa("waveform.error.previewValidation"),
     );
     expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
@@ -206,7 +207,7 @@ describe("WaveformPreview", () => {
         displayName="kick.wav"
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Load preview" }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.loadPreview") }));
     await waitFor(() => expect(client.readPreview).toHaveBeenCalled());
 
     view.unmount();
@@ -241,13 +242,13 @@ describe("WaveformPreview", () => {
         displayName="kick.wav"
       />,
     );
-    await screen.findByRole("img", { name: "Audio waveform" });
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
 
-    fireEvent.change(screen.getByLabelText("Start frame"), { target: { value: "1000" } });
-    fireEvent.change(screen.getByLabelText("End frame (exclusive)"), {
+    fireEvent.change(screen.getByLabelText(tJa("waveform.startFrame")), { target: { value: "1000" } });
+    fireEvent.change(screen.getByLabelText(tJa("waveform.endFrame")), {
       target: { value: "2000" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.playRange") }));
 
     await waitFor(() => expect(client.createRangePreviewToken).toHaveBeenCalledWith(
       "root-opaque",
@@ -267,13 +268,13 @@ describe("WaveformPreview", () => {
         displayName="kick.wav"
       />,
     );
-    await screen.findByRole("img", { name: "Audio waveform" });
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
 
-    fireEvent.change(screen.getByLabelText("End frame (exclusive)"), {
+    fireEvent.change(screen.getByLabelText(tJa("waveform.endFrame")), {
       target: { value: "0" },
     });
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("empty or inverted");
+    expect(await screen.findByRole("alert")).toHaveTextContent(tJa("waveform.error.rangeEmpty"));
     expect(client.createRangePreviewToken).not.toHaveBeenCalled();
   });
 
@@ -303,8 +304,8 @@ describe("WaveformPreview", () => {
         displayName="first.wav"
       />,
     );
-    await screen.findByRole("img", { name: "Audio waveform" });
-    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.playRange") }));
 
     view.rerender(
       <WaveformPreview
@@ -348,9 +349,9 @@ describe("WaveformPreview", () => {
         displayName="kick.wav"
       />,
     );
-    await screen.findByRole("img", { name: "Audio waveform" });
-    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
-    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.playRange") }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.stop") }));
 
     resolveCreate?.();
     await waitFor(() => expect(client.createRangePreviewToken).toHaveBeenCalled());
@@ -401,10 +402,10 @@ describe("WaveformPreview", () => {
         displayName="kick.wav"
       />,
     );
-    await screen.findByRole("img", { name: "Audio waveform" });
-    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
-    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
-    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.playRange") }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.stop") }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.playRange") }));
 
     await waitFor(() => expect(client.readPreview).toHaveBeenCalledWith(
       "root-opaque",
@@ -463,15 +464,15 @@ describe("WaveformPreview", () => {
         displayName="kick.wav"
       />,
     );
-    await screen.findByRole("img", { name: "Audio waveform" });
-    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
-    expect(screen.getByRole("button", { name: "Preparing range..." })).toBeInTheDocument();
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.playRange") }));
+    expect(screen.getByRole("button", { name: tJa("waveform.preparingRange") })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
-    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.stop") }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.playRange") }));
     await waitFor(() => expect(screen.queryByRole("button", { name: "Preparing range..." })).not.toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.stop") }));
 
     resolveSlow?.();
     await Promise.resolve();
@@ -496,8 +497,8 @@ describe("WaveformPreview", () => {
         displayName="first.wav"
       />,
     );
-    await screen.findByRole("img", { name: "Audio waveform" });
-    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.playRange") }));
     await waitFor(() => expect(client.createRangePreviewToken).toHaveBeenCalled());
 
     view.rerender(
@@ -508,7 +509,7 @@ describe("WaveformPreview", () => {
         displayName="second.wav"
       />,
     );
-    await waitFor(() => expect(screen.getByLabelText("End frame (exclusive)")).toHaveValue("44100"));
+    await waitFor(() => expect(screen.getByLabelText(tJa("waveform.endFrame"))).toHaveValue("44100"));
     playSpy.mockClear();
 
     resolveRead?.();
@@ -527,11 +528,11 @@ describe("WaveformPreview", () => {
         displayName="kick.wav"
       />,
     );
-    await screen.findByRole("img", { name: "Audio waveform" });
-    fireEvent.click(screen.getByRole("button", { name: "Load preview" }));
-    await screen.findByLabelText("Preview kick.wav");
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.loadPreview") }));
+    await screen.findByLabelText(tJa("waveform.previewAria", { displayName: "kick.wav" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.playRange") }));
     await waitFor(() => expect(client.createRangePreviewToken).toHaveBeenCalled());
     expect(pauseSpy).toHaveBeenCalled();
   });
@@ -551,9 +552,9 @@ describe("WaveformPreview", () => {
         displayName="long.wav"
       />,
     );
-    await screen.findByRole("img", { name: "Audio waveform" });
-    expect(screen.getByLabelText("End frame (exclusive)")).toHaveValue("2646000");
-    expect(screen.getByRole("button", { name: "Play selected range" })).toBeEnabled();
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
+    expect(screen.getByLabelText(tJa("waveform.endFrame"))).toHaveValue("2646000");
+    expect(screen.getByRole("button", { name: tJa("waveform.playRange") })).toBeEnabled();
   });
 
   it("shows preview-limit feedback without calling the range preview API", async () => {
@@ -571,12 +572,12 @@ describe("WaveformPreview", () => {
         displayName="long.wav"
       />,
     );
-    await screen.findByRole("img", { name: "Audio waveform" });
-    fireEvent.change(screen.getByLabelText("End frame (exclusive)"), {
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
+    fireEvent.change(screen.getByLabelText(tJa("waveform.endFrame")), {
       target: { value: "2646001" },
     });
-    expect(await screen.findByRole("alert")).toHaveTextContent("60 second or 32 MiB");
-    expect(screen.getByRole("button", { name: "Play selected range" })).toBeDisabled();
+    expect(await screen.findByRole("alert")).toHaveTextContent(tJa("waveform.error.rangePreviewLimit"));
+    expect(screen.getByRole("button", { name: tJa("waveform.playRange") })).toBeDisabled();
     expect(client.createRangePreviewToken).not.toHaveBeenCalled();
   });
 
@@ -590,13 +591,13 @@ describe("WaveformPreview", () => {
         displayName="kick.wav"
       />,
     );
-    await screen.findByRole("img", { name: "Audio waveform" });
-    fireEvent.click(screen.getByRole("button", { name: "Load preview" }));
-    const head = await screen.findByLabelText("Preview kick.wav");
-    fireEvent.click(screen.getByRole("button", { name: "Play selected range" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Stop" })).toBeEnabled());
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.loadPreview") }));
+    const head = await screen.findByLabelText(tJa("waveform.previewAria", { displayName: "kick.wav" }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.playRange") }));
+    await waitFor(() => expect(screen.getByRole("button", { name: tJa("waveform.stop") })).toBeEnabled());
 
     fireEvent.play(head);
-    await waitFor(() => expect(screen.getByRole("button", { name: "Stop" })).toBeDisabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: tJa("waveform.stop") })).toBeDisabled());
   });
 });

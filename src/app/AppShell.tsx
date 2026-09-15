@@ -1,6 +1,6 @@
 import { type HTMLAttributes, type ReactNode } from 'react'
-import { PRODUCT_WORKSPACE_LABEL } from '../branding'
 import { SplitPane } from '../design-system'
+import { useTranslate } from '../i18n'
 import './AppShell.css'
 
 export interface AppShellProps extends HTMLAttributes<HTMLElement> {
@@ -37,11 +37,12 @@ export function AppShell({
   className,
   ...rest
 }: AppShellProps) {
+  const t = useTranslate()
   const merged = ['mo-app-shell', className].filter(Boolean).join(' ')
   const showInspector = inspector != null
 
   return (
-    <section className={merged} aria-label={PRODUCT_WORKSPACE_LABEL} {...rest}>
+    <section className={merged} aria-label={t('app.workspaceAria')} {...rest}>
       {contextBar != null && (
         <div className="mo-app-shell__context" data-testid="app-shell-context">
           {contextBar}

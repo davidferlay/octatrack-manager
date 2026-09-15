@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { RootSession } from '../../api'
 import { Button, StatusBadge } from '../../design-system'
+import { useTranslate } from '../../i18n'
 import './SourcesPane.css'
 
 export interface SourcesPaneProps {
@@ -31,6 +32,7 @@ export function SourcesPane({
   writeBlocked = false,
   children,
 }: SourcesPaneProps) {
+  const t = useTranslate()
   const writeEnabled = session?.mode === 'write_enabled' && session.capabilities.write
   const editDisabled =
     busy || writeBlocked || session === null || !session.capabilities.stableDeviceIdentity
@@ -38,36 +40,34 @@ export function SourcesPane({
   return (
     <div className="mo-sources-pane" aria-labelledby="mo-sources-title">
       <div className="mo-sources-pane__title-row">
-        <h2 id="mo-sources-title">Sources</h2>
+        <h2 id="mo-sources-title">{t('sources.title')}</h2>
         <StatusBadge tone={writeEnabled ? 'warning' : 'readonly'}>
-          {writeEnabled ? 'EDIT ENABLED' : 'READ ONLY'}
+          {writeEnabled ? t('sources.editEnabledBadge') : t('sources.readOnlyBadge')}
         </StatusBadge>
       </div>
-      <p className="mo-sources-pane__lede">
-        Registered Octatrack roots. Only the native picker may submit an absolute path.
-      </p>
+      <p className="mo-sources-pane__lede">{t('sources.lede')}</p>
 
       <div className="mo-sources-pane__actions">
         {session === null ? (
           <Button variant="secondary" disabled={busy} onClick={onRegister}>
-            {busy ? 'Registering...' : 'Choose root...'}
+            {busy ? t('sources.registering') : t('sources.chooseRoot')}
           </Button>
         ) : (
           <>
             <div
               className="mo-sources-pane__mode-toggle"
               role="group"
-              aria-label="Session UI mode"
+              aria-label={t('sources.sessionModeAria')}
             >
               <button
                 type="button"
                 className={`mo-sources-pane__mode-btn${!writeEnabled ? ' is-active' : ''}`}
                 disabled={busy || !writeEnabled}
                 aria-pressed={!writeEnabled}
-                title="Switch to read-only View mode"
+                title={t('sources.viewModeTitle')}
                 onClick={onDisableWrite}
               >
-                View
+                {t('sources.viewMode')}
               </button>
               <button
                 type="button"
@@ -76,18 +76,18 @@ export function SourcesPane({
                 aria-pressed={writeEnabled}
                 title={
                   writeBlocked
-                    ? 'Resolve recovery before enabling Edit mode'
+                    ? t('sources.editModeTitleBlockedRecovery')
                     : !session.capabilities.stableDeviceIdentity
-                      ? 'Stable device identity is required for Edit mode'
-                      : 'Switch to session Edit mode (session-limited writes)'
+                      ? t('sources.editModeTitleUnstableIdentity')
+                      : t('sources.editModeTitle')
                 }
                 onClick={onEnableWrite}
               >
-                Edit
+                {t('sources.editMode')}
               </button>
             </div>
             <Button variant="secondary" disabled={busy} onClick={onClose}>
-              {busy ? 'Working...' : 'Close root'}
+              {busy ? t('sources.working') : t('sources.closeRoot')}
             </Button>
           </>
         )}
@@ -100,26 +100,28 @@ export function SourcesPane({
       )}
 
       {session === null ? (
-        <p className="mo-sources-pane__empty">No root registered for this session.</p>
+        <p className="mo-sources-pane__empty">{t('sources.empty')}</p>
       ) : (
         <dl className="mo-sources-pane__summary">
           <div>
-            <dt>Source</dt>
+            <dt>{t('sources.summarySource')}</dt>
             <dd>{session.displayName}</dd>
           </div>
           <div>
-            <dt>Fingerprint</dt>
+            <dt>{t('sources.summaryFingerprint')}</dt>
             <dd>{session.deviceFingerprint.slice(0, 12)}</dd>
           </div>
           <div>
-            <dt>Mode</dt>
-            <dd>{writeEnabled ? 'Session-limited writes' : 'Read only'}</dd>
+            <dt>{t('sources.summaryMode')}</dt>
+            <dd>{writeEnabled ? t('sources.modeSessionWrites') : t('sources.modeReadOnly')}</dd>
           </div>
           {writeEnabled && (
             <div>
-              <dt>Write grant</dt>
+              <dt>{t('sources.summaryWriteGrant')}</dt>
               <dd>
-                {session.writeGrantExpiresInSeconds ?? 0} seconds remaining
+                {t('sources.writeGrantRemaining', {
+                  seconds: session.writeGrantExpiresInSeconds ?? 0,
+                })}
               </dd>
             </div>
           )}
@@ -127,10 +129,7 @@ export function SourcesPane({
       )}
 
       {writeEnabled && (
-        <p className="mo-sources-pane__write-warning">
-          Session-limited writes are enabled on this root. Additive copy uses the Change Drawer.
-          Rename apply requires a verified disposable clone.
-        </p>
+        <p className="mo-sources-pane__write-warning">{t('sources.writeWarning')}</p>
       )}
 
       {children}

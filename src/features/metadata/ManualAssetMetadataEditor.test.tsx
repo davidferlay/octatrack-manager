@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { MetadataApi } from "../../api";
+import { tJa } from "../../i18n/testStrings";
 import { ManualAssetMetadataEditor } from "./ManualAssetMetadataEditor";
 
 function fakeApi(): MetadataApi {
@@ -31,20 +32,20 @@ describe("ManualAssetMetadataEditor", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByLabelText("Tags (one per line)")).toHaveValue("808\nkick");
+      expect(screen.getByLabelText(tJa("metadata.tagsAria"))).toHaveValue("808\nkick");
     });
     expect(api.loadManualAssetMetadata).toHaveBeenCalledWith(
       "root-opaque",
       "asset:v1:opaque",
     );
 
-    fireEvent.change(screen.getByLabelText("Tags (one per line)"), {
+    fireEvent.change(screen.getByLabelText(tJa("metadata.tagsAria")), {
       target: { value: "warm\nkick" },
     });
-    fireEvent.change(screen.getByLabelText("Note"), {
+    fireEvent.change(screen.getByLabelText(tJa("metadata.noteAria")), {
       target: { value: "Layer for the live set" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save metadata" }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("metadata.save") }));
 
     await waitFor(() => {
       expect(api.replaceManualAssetMetadata).toHaveBeenCalledWith(
@@ -56,8 +57,8 @@ describe("ManualAssetMetadataEditor", () => {
         },
       );
     });
-    expect(await screen.findByText("Saved")).toBeInTheDocument();
-    expect(screen.getByLabelText("Tags (one per line)")).toHaveValue("kick\nwarm");
+    expect(await screen.findByText(tJa("metadata.saved"))).toBeInTheDocument();
+    expect(screen.getByLabelText(tJa("metadata.tagsAria"))).toHaveValue("kick\nwarm");
   });
 
   it("reports load failures and keeps the editor disabled", async () => {
@@ -78,7 +79,7 @@ describe("ManualAssetMetadataEditor", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Asset is no longer in this root snapshot",
     );
-    expect(screen.getByRole("button", { name: "Save metadata" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: tJa("metadata.save") })).toBeDisabled();
   });
 
   it("does not show metadata from a previously selected Asset after a load failure", async () => {
@@ -92,7 +93,7 @@ describe("ManualAssetMetadataEditor", () => {
       />,
     );
     await waitFor(() => {
-      expect(screen.getByLabelText("Tags (one per line)")).toHaveValue("808\nkick");
+      expect(screen.getByLabelText(tJa("metadata.tagsAria"))).toHaveValue("808\nkick");
     });
     vi.mocked(api.loadManualAssetMetadata).mockRejectedValueOnce(
       new Error("Asset is no longer in this root snapshot"),
@@ -110,8 +111,8 @@ describe("ManualAssetMetadataEditor", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Asset is no longer in this root snapshot",
     );
-    expect(screen.getByLabelText("Tags (one per line)")).toHaveValue("");
-    expect(screen.getByLabelText("Note")).toHaveValue("");
+    expect(screen.getByLabelText(tJa("metadata.tagsAria"))).toHaveValue("");
+    expect(screen.getByLabelText(tJa("metadata.noteAria"))).toHaveValue("");
   });
 
   it("uses null to clear an empty note", async () => {
@@ -126,10 +127,10 @@ describe("ManualAssetMetadataEditor", () => {
     );
     await screen.findByDisplayValue("Main live kick");
 
-    fireEvent.change(screen.getByLabelText("Note"), {
+    fireEvent.change(screen.getByLabelText(tJa("metadata.noteAria")), {
       target: { value: "   " },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save metadata" }));
+    fireEvent.click(screen.getByRole("button", { name: tJa("metadata.save") }));
 
     await waitFor(() => {
       expect(api.replaceManualAssetMetadata).toHaveBeenCalledWith(

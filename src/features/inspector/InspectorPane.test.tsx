@@ -1,15 +1,14 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import { tJa } from '../../i18n/testStrings'
 import { InspectorPane } from './InspectorPane'
 
 describe('InspectorPane', () => {
   it('shows empty guidance when no asset is selected', () => {
     render(<InspectorPane />)
-    expect(screen.getByLabelText('Inspector')).toBeInTheDocument()
-    expect(screen.getByText('Notes & details')).toBeInTheDocument()
-    expect(
-      screen.getByText('Select an audio file to inspect waveform, usage, and notes.'),
-    ).toBeInTheDocument()
+    expect(screen.getByLabelText(tJa('inspector.aria'))).toBeInTheDocument()
+    expect(screen.getByText(tJa('inspector.title'))).toBeInTheDocument()
+    expect(screen.getByText(tJa('inspector.empty'))).toBeInTheDocument()
   })
 
   it('renders asset label, relative path, and children without absolute paths', () => {

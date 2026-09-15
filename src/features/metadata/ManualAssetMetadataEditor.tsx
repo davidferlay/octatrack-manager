@@ -5,6 +5,7 @@ import {
   type MetadataApi,
 } from "../../api";
 import { Button } from "../../design-system";
+import { useTranslate } from "../../i18n";
 import "./ManualAssetMetadataEditor.css";
 
 interface ManualAssetMetadataEditorProps {
@@ -44,6 +45,7 @@ export function ManualAssetMetadataEditor({
   displayName,
   api = metadataApi,
 }: ManualAssetMetadataEditorProps) {
+  const t = useTranslate();
   const [tagsText, setTagsText] = useState("");
   const [note, setNote] = useState("");
   const [ready, setReady] = useState(false);
@@ -101,20 +103,20 @@ export function ManualAssetMetadataEditor({
   return (
     <form className="manual-asset-metadata" onSubmit={save}>
       <div className="manual-asset-metadata-heading">
-        <p>Asset metadata</p>
+        <p>{t("metadata.heading")}</p>
         <h4>{displayName}</h4>
       </div>
 
       {loading ? (
         <p className="manual-asset-metadata-status" role="status">
-          Loading metadata...
+          {t("metadata.loading")}
         </p>
       ) : (
         <>
           <label>
-            <span>Tags (one per line)</span>
+            <span>{t("metadata.tagsLabel")}</span>
             <textarea
-              aria-label="Tags (one per line)"
+              aria-label={t("metadata.tagsAria")}
               disabled={!ready || saving}
               rows={4}
               value={tagsText}
@@ -125,9 +127,9 @@ export function ManualAssetMetadataEditor({
             />
           </label>
           <label>
-            <span>Note</span>
+            <span>{t("metadata.noteLabel")}</span>
             <textarea
-              aria-label="Note"
+              aria-label={t("metadata.noteAria")}
               disabled={!ready || saving}
               maxLength={4096}
               rows={7}
@@ -140,11 +142,11 @@ export function ManualAssetMetadataEditor({
           </label>
           <div className="manual-asset-metadata-actions">
             <Button variant="secondary" disabled={!ready || saving} type="submit">
-              {saving ? "Saving..." : "Save metadata"}
+              {saving ? t("metadata.saving") : t("metadata.save")}
             </Button>
             {saved && (
               <span className="manual-asset-metadata-saved" role="status">
-                Saved
+                {t("metadata.saved")}
               </span>
             )}
           </div>
@@ -156,9 +158,7 @@ export function ManualAssetMetadataEditor({
           {error}
         </p>
       )}
-      <p className="manual-asset-metadata-boundary">
-        Stored in the local catalog. The source media remains unchanged.
-      </p>
+      <p className="manual-asset-metadata-boundary">{t("metadata.boundary")}</p>
     </form>
   );
 }

@@ -314,16 +314,18 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 
 ## 6. 次のCodex作業
 
-### 6.0 現在の次作業（2026-09-14）
+### 6.0 現在の次作業（2026-09-15）
 
-**作業ID:** `MO-M7-LIBRARY-RANGE-PREVIEW-1`（製品 PR。Draft 提出。merge しない）
+**作業ID:** `MO-UI-I18N-LIBRARY-1`（製品 PR。Draft 提出。merge しない）
 
-GitHub `main` 基準（#126 merge）: `91f5dcffe9d1ab6d2ec264ad715ce113fd77b535`。
+GitHub `main` 基準（#127 merge）: `5771bad`。
 
-Library Inspector に **フレーム指定の区間試聴** を追加。`v2_audio_preview_range_create`
-+ 既存 `v2_audio_preview_read`。先頭 60s の v1 preview は維持。legacy write containment（#125/#126）は有効のまま。RC8 Gate C PASS / M5 COMPLETE の凍結記録は変更しない。今回の CI を RC8 製品証拠に置き換えない。
+Library / Inspector 向け **ja/en 翻訳基盤**（新規 npm 依存なし）と日本語既定 UI、表示専用の区間時間ラベル。
+正本: `docs/I18N.md`。RC8 Gate C PASS / M5 COMPLETE の凍結記録は変更しない。
 
-**次作業（製品 PR）:** WFM2 / Canvas / zoom、`OperationsDialog`、#105 Auto Slice 残機能。#103 / #104 / #105 は reopen しない。
+**Library range preview:** **MERGED**（#127、`MO-M7-LIBRARY-RANGE-PREVIEW-1`）。
+
+**次作業（製品 PR）:** WFM2 / Canvas / zoom、`OperationsDialog`、残 UI 翻訳（Clone/Rename/Change、Slice workbench 等）、#105 Auto Slice 残機能。#103 / #104 / #105 は reopen しない。
 
 **履歴 — RC8 closeout docs:** `MO-RC8-GATE-C-M5-CLOSEOUT-DOCS-1`（docs 記録。試験は追加しない）
 
@@ -338,8 +340,8 @@ reference-safe）。Human Gate C は正式連続試験の **PASS** を維持。�
 
 **M6 Library Workspace layout:** **MERGED**（#122、`bed38a46f1c8e644b4bfaae2d1aaac1a3f290eb6`）。
 **Library Waveform v2 query:** **MERGED**（#124、`MO-M7-WAVEFORM-V2-LIBRARY-QUERY-1`）。
-**Library range preview:** `MO-M7-LIBRARY-RANGE-PREVIEW-1` — `v2_audio_preview_range_create`、
-Inspector 区間 UI、契約正本: `docs/planning/WAVEFORM_V2_INTEGRATION.md` §13.3。
+**Library range preview:** **MERGED**（#127）。契約正本: `docs/planning/WAVEFORM_V2_INTEGRATION.md` §13.3。
+**Library i18n foundation:** `MO-UI-I18N-LIBRARY-1` — `docs/I18N.md`。
 
 非連続セッションの FILE NOT FOUND は歴史的 STOP として
 `docs/testing/MO_RC8_STATIC_LINK_INVESTIGATION.md` に残す。原因は未解決。
