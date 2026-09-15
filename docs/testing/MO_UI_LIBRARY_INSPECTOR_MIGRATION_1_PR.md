@@ -6,7 +6,7 @@
 | --- | --- |
 | Base (`origin/main` after #132) | `bb9b81484eebd941f8b477fdd23c9824101bce6e` |
 | FIX-2 (dependency #132) | `e0e3f24` |
-| Final head | _(fill immediately after push)_ |
+| Final head | `777a909` |
 
 ## Dependency
 
